@@ -8,9 +8,9 @@ It is made of a core and extensions. The core knows only Herdr. What an agent wr
 
 One rule comes before the others: nothing false is shown as true. A piece of data that something cannot read is `null`, and the page writes "unknown".
 
-something is young. No version is tagged yet: its name, the keys of its state and its routes may still change.
+something is young. No version is tagged yet: its name, the keys of its state and its routes may still change. Where it is going is in the [roadmap](#roadmap).
 
-**Contents:** [Run](#run) · [Plug in a page](#plug-in-a-page) · [The state](#the-state) · [The routes](#the-routes) · [What something knows of each harness](#what-something-knows-of-each-harness) · [Writing an extension](#writing-an-extension) · [How it is made](#how-it-is-made) · [Prove](#prove) · [When it does not work](#when-it-does-not-work) · [Security](#security) · [Contributing](#contributing)
+**Contents:** [Run](#run) · [Plug in a page](#plug-in-a-page) · [The state](#the-state) · [The routes](#the-routes) · [What something knows of each harness](#what-something-knows-of-each-harness) · [Writing an extension](#writing-an-extension) · [How it is made](#how-it-is-made) · [Prove](#prove) · [When it does not work](#when-it-does-not-work) · [Roadmap](#roadmap) · [Security](#security) · [Contributing](#contributing)
 
 ## The diagram
 
@@ -29,7 +29,15 @@ The core asks Herdr which agents exist and what state they are in. A harness's e
 
 ## Run
 
-To see it first, without Herdr and without any agent:
+With a coding agent, paste this to it:
+
+```text
+Set up something for me: read https://raw.githubusercontent.com/emiwltz/something/main/skills/something/SKILL.md and follow it.
+```
+
+The agent first says what it is about to do and to install, with the addresses to look at, and asks once whether that suits you. Then it checks Python and Herdr, installs Herdr if it is missing, gets something, starts it, opens the page and says what you are looking at. In an agent that has skills, `skills/something/SKILL.md` can be installed as a skill named `something`.
+
+By hand, to see it first, without Herdr and without any agent:
 
 ```sh
 git clone https://github.com/emiwltz/something.git
@@ -248,6 +256,8 @@ page/
   something.js        the page's tools
   index.html      the blank page
   example.json    the state and the conversations of the example mode
+skills/
+  something/SKILL.md  the way in for a coding agent: set something up, show it, use it
 tests/            one file per module and per extension
 ```
 
@@ -274,8 +284,35 @@ The tests call neither the real Herdr nor any model: they set up a fake socket a
 - **A harness has everything at `null` although its extension exists**: `extensions`, in the state, says whether it is loaded, and if not why.
 - **The page stays empty**: look at something's terminal. If it is stopped, restart it.
 - **The page stays empty inside another program's frame or preview pane**: something's answers refuse to be shown in a frame by anything but its own pages. Open the address in a browser tab.
+- **Python answers "No module named something"**: start it from the repository's folder, the one that holds this README.
 - **The page answers "host or origin refused"**: something only answers at the address it prints. Open exactly `http://127.0.0.1:8780/` or `http://localhost:8780/`; through a tunnel or a proxy, keep the same port number.
 - **The port does not open**: something says why and stops. A something that is already running may hold it: use that one, or stop it. Or choose another port with `--port`. `lsof -nP -iTCP:8780 -sTCP:LISTEN` on macOS, `ss -ltnp` on Linux, say who holds a port.
+
+## Roadmap
+
+Where something is going, in this order. These are directions, not promises: nothing here has a date, and the three priorities of [AGENTS.md](AGENTS.md) (stable, minimal, clear) decide what gets in. To work on one of them, open an issue first.
+
+**First: the first five minutes.** Someone who arrives should see their agents on a page without reading this whole README.
+
+- A skill to hand to a coding agent: it says what it is about to do, installs Herdr if it is missing, gets something, starts it, opens the page and says what you are looking at. A first one is in `skills/something/`.
+- A first page that is good to read at a glance: who is waiting for you first, one line per agent, the details on demand. The blank page shows everything without design: it is a starting point, not a page to keep open all day.
+- Still one HTML file, without dependency or build step, that you copy, change or replace: no interface is imposed. Whether the new page replaces the blank one or sits next to it is not decided.
+
+**Then: more from the page and from the sessions.**
+
+- Answer an agent's question from the page, instead of in its pane.
+- Read what is not read yet, like the goal of Claude Code (`/goal`), and follow the settings that move a harness's folders (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `XDG_DATA_HOME`).
+- Readers for more harnesses. An extension is one file: see "Writing an extension".
+
+**A first version.**
+
+- A final name: `something` is a working one.
+- The contract of this README, frozen at the first tag: from there, the keys of the state, the routes, the tools of `something.js` and what an extension declares only grow.
+- A full trial on Linux, in a fresh machine, with agents at work.
+
+**Later: without Herdr.** Today Herdr is required: it says which agents exist and in what state, and it types the messages. Reading the agents of a machine without it is to be looked at after the rest.
+
+Not planned: a coordinator, roles, memories, orchestration. something stays a link between your agents and your page.
 
 ## Security
 
