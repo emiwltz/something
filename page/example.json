@@ -1,0 +1,451 @@
+{
+  "state": {
+    "generated": "2026-10-07T09:30:00+02:00", "example": true,
+    "herdr": {"connected": true, "version": "0.9.3", "protocol": 22}, "error": null,
+    "agents": [
+      {
+        "id": "w1K:p1", "name": null, "harness": "claude", "state": "working", "since": "2026-10-07T09:24:10+02:00",
+        "title": "Cart redesign", "cwd": "~/Projects/bookshop", "workspace": "bookshop", "focused": true,
+        "session": {
+          "id": "5b2e9c14-7a3d-4f60-b1c8-2e9d4a6f0c31",
+          "path": "~/.claude/projects/-Users-example-Projects-bookshop/5b2e9c14-7a3d-4f60-b1c8-2e9d4a6f0c31.jsonl"
+        },
+        "model": "claude-opus-5-5", "effort": "high",
+        "context": {"tokens": 86400, "window": null, "percent": null}, "cost": 2.3817,
+        "tool": {"name": "Bash", "since": "2026-10-07T09:29:41+02:00"}, "request": null,
+        "todos": [
+          {"text": "Read how the total is computed", "status": "done", "phase": null},
+          {"text": "Fix the discount applied twice", "status": "in_progress", "phase": null},
+          {"text": "Add a test of the total", "status": "pending", "phase": null}
+        ],
+        "goal": null,
+        "subagents": [
+          {
+            "id": "a41f7c92e03b5d68", "name": "Find where the total is computed", "type": "Explore",
+            "parent": "w1K:p1", "state": "done", "model": "claude-haiku-4-5", "start": "2026-10-07T09:24:31+02:00",
+            "end": "2026-10-07T09:26:02+02:00"
+          },
+          {
+            "id": "a9d03e57b81c2f46", "name": "Run the cart tests", "type": "general-purpose",
+            "parent": "w1K:p1", "state": "working", "model": "claude-sonnet-5-5",
+            "start": "2026-10-07T09:27:15+02:00", "end": null
+          },
+          {
+            "id": "a2c68b14f5907e3d", "name": "Reread the failing test", "type": "general-purpose",
+            "parent": "w1K:p1", "state": "failed", "model": null, "start": "2026-10-07T09:28:40+02:00",
+            "end": "2026-10-07T09:29:05+02:00"
+          }
+        ],
+        "activity": "2026-10-07T09:29:52+02:00", "read_error": null
+      },
+      {
+        "id": "w1K:p2", "name": "reviewer", "harness": "omp", "state": "blocked",
+        "since": "2026-10-07T09:27:36+02:00", "title": "Review the home page", "cwd": "~/Projects/bookshop",
+        "workspace": "bookshop", "focused": false,
+        "session": {
+          "id": "0199e2a4-6c1b-7d35-9f0e-4b8a2c6d1e57",
+          "path": "~/.omp/agent/sessions/-Projects-bookshop/2026-10-07T07-05-12-318Z_0199e2a4-6c1b-7d35-9f0e-4b8a2c6d1e57.jsonl"
+        },
+        "model": "anthropic/claude-sonnet-5-5", "effort": "medium",
+        "context": {"tokens": 41200, "window": 200000, "percent": 21}, "cost": 1.4206,
+        "tool": {"name": "ask", "since": "2026-10-07T09:27:35+02:00"},
+        "request": {
+          "kind": "question",
+          "questions": [
+            {
+              "question": "Which font for the home page headings?",
+              "options": ["Keep the current font", "Switch to a serif font"],
+              "multi": false
+            },
+            {
+              "question": "Which sections to show on a phone?",
+              "options": ["New arrivals", "Staff picks", "Events"], "multi": true
+            }
+          ]
+        },
+        "todos": [
+          {"text": "List the texts that are too long", "status": "done", "phase": "Review"},
+          {"text": "Choose the heading font", "status": "in_progress", "phase": "Review"},
+          {"text": "Shorten the banner", "status": "pending", "phase": "Fixes"},
+          {"text": "Publish the page", "status": "blocked", "phase": "Fixes"}
+        ],
+        "goal": {
+          "objective": "Make the home page readable on a phone", "status": "active", "tokens": 152000,
+          "seconds": 1260
+        },
+        "subagents": [], "activity": "2026-10-07T09:27:36+02:00", "read_error": null
+      },
+      {
+        "id": "w1K:p4", "name": null, "harness": "codex", "state": "blocked", "since": "2026-10-07T09:28:54+02:00",
+        "title": "Payment tests", "cwd": "~/Projects/bookshop", "workspace": "bookshop", "focused": false,
+        "session": {
+          "id": "0199e2f7-41c8-7b02-a6d3-9e5f1c7b2a48",
+          "path": "~/.codex/sessions/2026/10/07/rollout-2026-10-07T08-41-03-0199e2f7-41c8-7b02-a6d3-9e5f1c7b2a48.jsonl"
+        },
+        "model": "gpt-5.5-codex", "effort": "medium",
+        "context": {"tokens": 23800, "window": 272000, "percent": 9}, "cost": null,
+        "tool": {"name": "shell", "since": "2026-10-07T09:28:53+02:00"}, "request": null,
+        "todos": [], "goal": null, "subagents": [], "activity": "2026-10-07T09:28:53+02:00", "read_error": null
+      },
+      {
+        "id": "w2R:p1", "name": null, "harness": "opencode", "state": "done", "since": "2026-10-07T09:21:44+02:00",
+        "title": "Import the recipes", "cwd": "~/Projects/recipes", "workspace": "recipes", "focused": false,
+        "session": {"id": "ses_6f2a9c41d7b3e85a0c1f4d92", "path": "~/.local/share/opencode/opencode.db"},
+        "model": "anthropic/claude-sonnet-5-5", "effort": null,
+        "context": {"tokens": 58900, "window": 200000, "percent": 29}, "cost": 0.6142, "tool": null,
+        "request": null,
+        "todos": [
+          {"text": "Read the recipes file", "status": "done", "phase": null},
+          {"text": "Import the ingredients", "status": "done", "phase": null}
+        ],
+        "goal": null, "subagents": [], "activity": "2026-10-07T09:21:43+02:00", "read_error": null
+      },
+      {
+        "id": "w2R:p2", "name": null, "harness": "gemini", "state": "idle", "since": null,
+        "title": "Translate the units", "cwd": "~/Projects/recipes", "workspace": "recipes", "focused": false,
+        "session": null, "model": null, "effort": null, "context": null, "cost": null, "tool": null,
+        "request": null, "todos": null, "goal": null, "subagents": null, "activity": null, "read_error": null
+      },
+      {
+        "id": "w2R:p3", "name": null, "harness": "pi", "state": "unknown", "since": "2026-10-07T09:12:30+02:00",
+        "title": "pi", "cwd": "~/Projects/recipes", "workspace": "recipes", "focused": false, "session": null,
+        "model": null, "effort": null, "context": null, "cost": null, "tool": null, "request": null, "todos": null,
+        "goal": null, "subagents": null, "activity": null,
+        "read_error": "the pane does not safely link to any session"
+      }
+    ],
+    "events": [
+      {"n": 1, "t": "2026-10-07T09:12:30+02:00", "kind": "appeared", "agent": "w2R:p3", "text": "pi appeared"},
+      {"n": 2, "t": "2026-10-07T09:16:08+02:00", "kind": "gone", "agent": "w2R:p4", "text": "claude is gone"},
+      {"n": 3, "t": "2026-10-07T09:21:44+02:00", "kind": "done", "agent": "w2R:p1", "text": "opencode is done"},
+      {"n": 4, "t": "2026-10-07T09:24:10+02:00", "kind": "state", "agent": "w1K:p1", "text": "claude is working"},
+      {
+        "n": 5, "t": "2026-10-07T09:27:36+02:00", "kind": "blocked", "agent": "w1K:p2",
+        "text": "reviewer is waiting for your answer"
+      },
+      {
+        "n": 6, "t": "2026-10-07T09:28:54+02:00", "kind": "blocked", "agent": "w1K:p4",
+        "text": "codex is waiting for your answer"
+      }
+    ],
+    "extensions": [
+      {
+        "name": "draft", "harness": null,
+        "error": "HARNESS is missing, the name of the harness the extension can read"
+      },
+      {"name": "claude", "harness": "claude", "error": null},
+      {"name": "codex", "harness": "codex", "error": null},
+      {"name": "omp", "harness": "omp", "error": null},
+      {"name": "opencode", "harness": "opencode", "error": null},
+      {"name": "pi", "harness": "pi", "error": null}
+    ],
+    "snapshot": {
+      "version": "0.9.3", "protocol": 22, "focused_workspace_id": "w1K", "focused_tab_id": "w1K:t1",
+      "focused_pane_id": "w1K:p1",
+      "workspaces": [
+        {
+          "workspace_id": "w1K", "number": 1, "label": "bookshop", "focused": true, "pane_count": 4, "tab_count": 2,
+          "active_tab_id": "w1K:t1", "agent_status": "blocked"
+        },
+        {
+          "workspace_id": "w2R", "number": 2, "label": "recipes", "focused": false, "pane_count": 3, "tab_count": 2,
+          "active_tab_id": "w2R:t1", "agent_status": "done"
+        }
+      ],
+      "tabs": [
+        {
+          "tab_id": "w1K:t1", "workspace_id": "w1K", "number": 1, "label": "cart", "focused": true, "pane_count": 2,
+          "agent_status": "blocked"
+        },
+        {
+          "tab_id": "w1K:t2", "workspace_id": "w1K", "number": 2, "label": "payment", "focused": false,
+          "pane_count": 2, "agent_status": "blocked"
+        },
+        {
+          "tab_id": "w2R:t1", "workspace_id": "w2R", "number": 1, "label": "import", "focused": false,
+          "pane_count": 2, "agent_status": "done"
+        },
+        {
+          "tab_id": "w2R:t2", "workspace_id": "w2R", "number": 2, "label": "draft", "focused": false,
+          "pane_count": 1, "agent_status": "unknown"
+        }
+      ],
+      "panes": [
+        {
+          "pane_id": "w1K:p1", "terminal_id": "term_example0000001", "workspace_id": "w1K", "tab_id": "w1K:t1",
+          "focused": true, "cwd": "/Users/example/Projects/bookshop",
+          "foreground_cwd": "/Users/example/Projects/bookshop", "agent": "claude",
+          "terminal_title": "✳ Cart redesign", "terminal_title_stripped": "Cart redesign",
+          "agent_status": "working",
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 1840, "viewport_rows": 42},
+          "revision": 912
+        },
+        {
+          "pane_id": "w1K:p2", "terminal_id": "term_example0000002", "workspace_id": "w1K", "tab_id": "w1K:t1",
+          "focused": false, "cwd": "/Users/example/Projects/bookshop",
+          "foreground_cwd": "/Users/example/Projects/bookshop", "agent": "omp",
+          "terminal_title": "Review the home page", "terminal_title_stripped": "Review the home page",
+          "agent_status": "blocked",
+          "agent_session": {
+            "source": "herdr:omp", "agent": "omp", "kind": "path",
+            "value": "/Users/example/.omp/agent/sessions/-Projects-bookshop/2026-10-07T07-05-12-318Z_0199e2a4-6c1b-7d35-9f0e-4b8a2c6d1e57.jsonl"
+          },
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 620, "viewport_rows": 42},
+          "revision": 388
+        },
+        {
+          "pane_id": "w1K:p3", "terminal_id": "term_example0000003", "workspace_id": "w1K", "tab_id": "w1K:t2",
+          "focused": false, "cwd": "/Users/example/Projects/bookshop",
+          "foreground_cwd": "/Users/example/Projects/bookshop", "terminal_title": "zsh",
+          "terminal_title_stripped": "zsh", "agent_status": "unknown",
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 12, "viewport_rows": 42},
+          "revision": 57
+        },
+        {
+          "pane_id": "w1K:p4", "terminal_id": "term_example0000004", "workspace_id": "w1K", "tab_id": "w1K:t2",
+          "focused": false, "cwd": "/Users/example/Projects/bookshop",
+          "foreground_cwd": "/Users/example/Projects/bookshop", "agent": "codex",
+          "terminal_title": "Payment tests", "terminal_title_stripped": "Payment tests",
+          "agent_status": "blocked",
+          "agent_session": {
+            "source": "herdr:codex", "agent": "codex", "kind": "id", "value": "0199e2f7-41c8-7b02-a6d3-9e5f1c7b2a48"
+          },
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 310, "viewport_rows": 42},
+          "revision": 203
+        },
+        {
+          "pane_id": "w2R:p1", "terminal_id": "term_example0000005", "workspace_id": "w2R", "tab_id": "w2R:t1",
+          "focused": false, "cwd": "/Users/example/Projects/recipes",
+          "foreground_cwd": "/Users/example/Projects/recipes", "agent": "opencode",
+          "terminal_title": "Import the recipes", "terminal_title_stripped": "Import the recipes",
+          "agent_status": "done",
+          "agent_session": {
+            "source": "herdr:opencode", "agent": "opencode", "kind": "id", "value": "ses_6f2a9c41d7b3e85a0c1f4d92"
+          },
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 975, "viewport_rows": 42},
+          "revision": 641
+        },
+        {
+          "pane_id": "w2R:p2", "terminal_id": "term_example0000006", "workspace_id": "w2R", "tab_id": "w2R:t1",
+          "focused": false, "cwd": "/Users/example/Projects/recipes",
+          "foreground_cwd": "/Users/example/Projects/recipes", "agent": "gemini",
+          "terminal_title": "Translate the units", "terminal_title_stripped": "Translate the units",
+          "agent_status": "idle",
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 140, "viewport_rows": 42},
+          "revision": 96
+        },
+        {
+          "pane_id": "w2R:p3", "terminal_id": "term_example0000007", "workspace_id": "w2R", "tab_id": "w2R:t2",
+          "focused": false, "cwd": "/Users/example/Projects/recipes",
+          "foreground_cwd": "/Users/example/Projects/recipes", "agent": "pi", "terminal_title": "pi",
+          "terminal_title_stripped": "pi", "agent_status": "unknown",
+          "scroll": {"offset_from_bottom": 0, "max_offset_from_bottom": 0, "viewport_rows": 42},
+          "revision": 4
+        }
+      ],
+      "layouts": [
+        {
+          "workspace_id": "w1K", "tab_id": "w1K:t1", "zoomed": false,
+          "area": {"x": 0, "y": 0, "width": 142, "height": 42}, "focused_pane_id": "w1K:p1",
+          "panes": [
+            {"pane_id": "w1K:p1", "focused": true, "rect": {"x": 0, "y": 0, "width": 71, "height": 42}},
+            {"pane_id": "w1K:p2", "focused": false, "rect": {"x": 71, "y": 0, "width": 71, "height": 42}}
+          ],
+          "splits": [
+            {
+              "id": "split_0_root", "direction": "right", "ratio": 0.5,
+              "rect": {"x": 0, "y": 0, "width": 142, "height": 42}
+            }
+          ]
+        },
+        {
+          "workspace_id": "w1K", "tab_id": "w1K:t2", "zoomed": false,
+          "area": {"x": 0, "y": 0, "width": 142, "height": 42}, "focused_pane_id": "w1K:p4",
+          "panes": [
+            {"pane_id": "w1K:p4", "focused": true, "rect": {"x": 0, "y": 0, "width": 142, "height": 21}},
+            {"pane_id": "w1K:p3", "focused": false, "rect": {"x": 0, "y": 21, "width": 142, "height": 21}}
+          ],
+          "splits": [
+            {
+              "id": "split_0_root", "direction": "down", "ratio": 0.5,
+              "rect": {"x": 0, "y": 0, "width": 142, "height": 42}
+            }
+          ]
+        },
+        {
+          "workspace_id": "w2R", "tab_id": "w2R:t1", "zoomed": false,
+          "area": {"x": 0, "y": 0, "width": 142, "height": 42}, "focused_pane_id": "w2R:p1",
+          "panes": [
+            {"pane_id": "w2R:p1", "focused": true, "rect": {"x": 0, "y": 0, "width": 71, "height": 42}},
+            {"pane_id": "w2R:p2", "focused": false, "rect": {"x": 71, "y": 0, "width": 71, "height": 42}}
+          ],
+          "splits": [
+            {
+              "id": "split_0_root", "direction": "right", "ratio": 0.5,
+              "rect": {"x": 0, "y": 0, "width": 142, "height": 42}
+            }
+          ]
+        },
+        {
+          "workspace_id": "w2R", "tab_id": "w2R:t2", "zoomed": false,
+          "area": {"x": 0, "y": 0, "width": 142, "height": 42}, "focused_pane_id": "w2R:p3",
+          "panes": [{"pane_id": "w2R:p3", "focused": true, "rect": {"x": 0, "y": 0, "width": 142, "height": 42}}],
+          "splits": []
+        }
+      ],
+      "agents": [
+        {
+          "terminal_id": "term_example0000001", "agent": "claude", "terminal_title": "✳ Cart redesign",
+          "terminal_title_stripped": "Cart redesign", "agent_status": "working", "workspace_id": "w1K",
+          "tab_id": "w1K:t1", "pane_id": "w1K:p1", "focused": true, "state_change_seq": 23,
+          "cwd": "/Users/example/Projects/bookshop", "foreground_cwd": "/Users/example/Projects/bookshop",
+          "revision": 912
+        },
+        {
+          "terminal_id": "term_example0000002", "agent": "omp", "name": "reviewer",
+          "terminal_title": "Review the home page", "terminal_title_stripped": "Review the home page",
+          "agent_status": "blocked", "screen_detection_skipped": true,
+          "agent_session": {
+            "source": "herdr:omp", "agent": "omp", "kind": "path",
+            "value": "/Users/example/.omp/agent/sessions/-Projects-bookshop/2026-10-07T07-05-12-318Z_0199e2a4-6c1b-7d35-9f0e-4b8a2c6d1e57.jsonl"
+          },
+          "workspace_id": "w1K", "tab_id": "w1K:t1", "pane_id": "w1K:p2", "focused": false, "state_change_seq": 10,
+          "cwd": "/Users/example/Projects/bookshop", "foreground_cwd": "/Users/example/Projects/bookshop",
+          "revision": 388
+        },
+        {
+          "terminal_id": "term_example0000004", "agent": "codex", "terminal_title": "Payment tests",
+          "terminal_title_stripped": "Payment tests", "agent_status": "blocked",
+          "agent_session": {
+            "source": "herdr:codex", "agent": "codex", "kind": "id", "value": "0199e2f7-41c8-7b02-a6d3-9e5f1c7b2a48"
+          },
+          "workspace_id": "w1K", "tab_id": "w1K:t2", "pane_id": "w1K:p4", "focused": false, "state_change_seq": 7,
+          "completion_seq": 6,
+          "cwd": "/Users/example/Projects/bookshop", "foreground_cwd": "/Users/example/Projects/bookshop",
+          "revision": 203
+        },
+        {
+          "terminal_id": "term_example0000005", "agent": "opencode", "terminal_title": "Import the recipes",
+          "terminal_title_stripped": "Import the recipes", "agent_status": "done",
+          "agent_session": {
+            "source": "herdr:opencode", "agent": "opencode", "kind": "id", "value": "ses_6f2a9c41d7b3e85a0c1f4d92"
+          },
+          "workspace_id": "w2R", "tab_id": "w2R:t1", "pane_id": "w2R:p1", "focused": false, "state_change_seq": 17,
+          "cwd": "/Users/example/Projects/recipes", "foreground_cwd": "/Users/example/Projects/recipes",
+          "revision": 641
+        },
+        {
+          "terminal_id": "term_example0000006", "agent": "gemini", "terminal_title": "Translate the units",
+          "terminal_title_stripped": "Translate the units", "agent_status": "idle", "workspace_id": "w2R",
+          "tab_id": "w2R:t1", "pane_id": "w2R:p2", "focused": false, "state_change_seq": 3,
+          "cwd": "/Users/example/Projects/recipes", "foreground_cwd": "/Users/example/Projects/recipes",
+          "revision": 96
+        },
+        {
+          "terminal_id": "term_example0000007", "agent": "pi", "terminal_title": "pi",
+          "terminal_title_stripped": "pi", "agent_status": "unknown", "workspace_id": "w2R", "tab_id": "w2R:t2",
+          "pane_id": "w2R:p3", "focused": false, "state_change_seq": 1, "cwd": "/Users/example/Projects/recipes",
+          "foreground_cwd": "/Users/example/Projects/recipes", "revision": 4
+        }
+      ]
+    }
+  },
+  "conversations": {
+    "w1K:p1": {
+      "turns": [
+        {
+          "id": "7d1c3a90-5e42-4b6f-8a17-c2e09f4d6b31", "t": "2026-10-07T09:10:05+02:00", "from": "user",
+          "text": "The cart total is wrong as soon as a discount applies. Find out why.",
+          "replies": [
+            {
+              "t": "2026-10-07T09:11:48+02:00",
+              "text": "The discount is subtracted twice: once when the total is computed, once in the display. The computation is right, it is the display that is wrong."
+            }
+          ],
+          "tools": [
+            {"name": "Grep", "target": "discount"},
+            {"name": "Read", "target": "/Users/example/Projects/bookshop/src/cart.js"}
+          ],
+          "end": "2026-10-07T09:11:50+02:00"
+        },
+        {
+          "id": "e84b5f27-1c96-4d03-b7a8-3f6d0e9c2a54", "t": "2026-10-07T09:24:10+02:00", "from": "user",
+          "text": "Fix the display and add a test.",
+          "replies": [
+            {
+              "t": "2026-10-07T09:26:20+02:00",
+              "text": "I am removing the second discount from the display, then I will run the cart tests."
+            }
+          ],
+          "tools": [
+            {"name": "Agent", "target": "Find where the total is computed"},
+            {"name": "Edit", "target": "/Users/example/Projects/bookshop/src/display.js"},
+            {"name": "TaskUpdate", "target": null},
+            {"name": "Bash", "target": "npm test -- cart"}
+          ],
+          "end": null
+        }
+      ],
+      "older": false, "before": null
+    },
+    "w1K:p2": {
+      "turns": [
+        {
+          "id": "3fa81c06", "t": "2026-10-07T09:05:12+02:00", "from": "user",
+          "text": "Review the home page as on a phone and tell me what gets in the way of reading.",
+          "replies": [
+            {
+              "t": "2026-10-07T09:19:30+02:00",
+              "text": "Three things get in the way: the banner takes half the screen, the headings are too tight, and the events section slips under the footer."
+            },
+            {"t": "2026-10-07T09:27:34+02:00", "text": "Before fixing anything, I have two questions for you."}
+          ],
+          "tools": [
+            {"name": "read", "target": "/Users/example/Projects/bookshop/pages/home.html"},
+            {"name": "todo", "target": null},
+            {"name": "ask", "target": null}
+          ],
+          "end": null
+        }
+      ],
+      "older": false, "before": null
+    },
+    "w1K:p4": {
+      "turns": [
+        {
+          "id": "0199e2f7-52d0-7c11-8e4a-6b3f9d1c7e25", "t": "2026-10-07T08:41:03+02:00", "from": "user",
+          "text": "Run the payment tests and summarize what fails.",
+          "replies": [{"t": "2026-10-07T08:52:15+02:00", "text": "All twelve tests pass. Nothing fails."}],
+          "tools": [{"name": "CommandExecution", "target": "npm test -- payment"}], "end": "2026-10-07T08:52:17+02:00"
+        },
+        {
+          "id": "0199e31a-9c47-7d32-b5e8-2a6c4f8e1d73", "t": "2026-10-07T09:28:40+02:00", "from": "user",
+          "text": "Delete the fixtures of the old payment provider.",
+          "replies": [{"t": "2026-10-07T09:28:52+02:00", "text": "I remove the three fixture files."}],
+          "tools": [], "end": null
+        }
+      ],
+      "older": false, "before": null
+    },
+    "w2R:p1": {
+      "turns": [
+        {
+          "id": "msg_8c2e5a19f4d7b603", "t": "2026-10-07T09:14:20+02:00", "from": "user",
+          "text": "Import the recipes from the CSV file into the database.",
+          "replies": [
+            {
+              "t": "2026-10-07T09:21:40+02:00",
+              "text": "Forty-two recipes imported, with their ingredients. Two rows without a title were skipped."
+            }
+          ],
+          "tools": [
+            {"name": "read", "target": "/Users/example/Projects/recipes/data/recipes.csv"},
+            {"name": "bash", "target": "python3 import_recipes.py data/recipes.csv"}
+          ],
+          "end": "2026-10-07T09:21:43+02:00"
+        }
+      ],
+      "older": false, "before": null
+    }
+  }
+}

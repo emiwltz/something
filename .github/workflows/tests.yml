@@ -1,0 +1,29 @@
+# The suite on machines that are not the author's: macOS and Linux, the oldest Python the README promises and a
+# recent one. Nothing is installed besides the two runtimes: something has no dependency.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false        # one machine that fails does not hide what the others say
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.9", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: python -m unittest discover -s tests
+      - run: node --test tests/test_something_js.mjs
