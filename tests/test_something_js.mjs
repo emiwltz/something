@@ -1,6 +1,7 @@
 // The tests of page/something.js, without a browser or a server: a fake `fetch` and a fake `EventSource` are set on
-// globalThis, then the file is loaded afresh for each test. At the end, those of the blank page: its script
-// runs on a fake document and a fake Something; and that of page/example.json.
+// globalThis, then the file is loaded afresh for each test. At the end, those of the two pages, the blank one and
+// the one that shows everything: their scripts run on a fake document and a fake Something; and that of
+// page/example.json.
 // Run: node --test tests/test_something_js.mjs
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -378,7 +379,7 @@ test("conversation: the parameters go into the request", async () => {
   await assert.rejects(Something.conversation("w9:p9"), { message: "unknown agent" });
 });
 
-// ——— The blank page: the script of page/index.html, on a fake document and a fake Something ———
+// ——— The page of everything: the script of page/everything.html, on a fake document and a fake Something
 
 // A fake element: just what the page uses. textContent returns the text of everything it contains.
 class FakeElement {
@@ -413,8 +414,9 @@ class FakeElement {
   }
 }
 
-const SCRIPT = readFileSync(new URL("../page/index.html", import.meta.url), "utf8")
-  .match(/<script>([\s\S]*?)<\/script>/)[1];
+const source = (file) => readFileSync(new URL(`../page/${file}`, import.meta.url), "utf8");
+const script = (file) => source(file).match(/<script>([\s\S]*?)<\/script>/)[1];
+const SCRIPT = script("everything.html");
 const agent = (id, more = {}) => ({
   id, name: null, harness: "claude", state: "idle", session: { id: "s1", path: "~/s1.jsonl" }, read_error: null,
   context: null, tool: null, request: null, todos: [], goal: null, subagents: [], activity: TIME, ...more,
@@ -537,7 +539,7 @@ test("page: the answer to a send applies to the agent that stayed open", async (
     own.push(await load().send("w1:p1", "hello").then(() => assert.fail("sent"), (error) => error.message));
   }
   assert.deepEqual(own, ["something does not answer", "something answered badly (200)"]);
-  // The others come from the core, where the blank page reads these very words: change them in both places.
+  // The others come from the core, where the pages read these very words: change them in all three places.
   const core = ["herdr.py", "server.py"].map((file) => readFileSync(require.resolve(`../something/${file}`), "utf8"));
   for (const words of ['"socket missing"', '"connection refused"', "Herdr does not answer: "]) {
     assert.ok(core.join("\n").includes(words), `${words} is no longer written by the core`);
@@ -603,15 +605,171 @@ test("page: a number keeps four decimals, and what is not known steps back", () 
     ["none", "unknown", "none found"]);
 });
 
-// What the tests above cannot see: they run the script on a fake document that makes up any element asked for.
-test("page: each element the script asks for is in the HTML, and the page asks the server for no icon", () => {
-  const html = readFileSync(new URL("../page/index.html", import.meta.url), "utf8");
-  const declared = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
-  const asked = new Set([...SCRIPT.matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1]));
-  assert.equal(new Set(declared).size, declared.length, "an id is declared once");
-  assert.deepEqual([...asked].filter((id) => !declared.includes(id)), []);
-  assert.ok(asked.size > 10);
-  assert.match(html, /<link rel="icon" href="data:,">/);    // without it, a browser asks for /favicon.ico: a 404
+// What the tests of the pages cannot see: they run a script on a fake document that makes up any element asked for.
+test("pages: each element a script asks for is in its HTML, and no page asks the server for an icon", () => {
+  for (const file of ["index.html", "everything.html"]) {
+    const html = source(file);
+    const declared = [...html.matchAll(/\sid="([^"]+)"/g)].map((match) => match[1]);
+    const asked = new Set([...script(file).matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1]));
+    assert.equal(new Set(declared).size, declared.length, `${file}: an id is declared once`);
+    assert.deepEqual([...asked].filter((id) => !declared.includes(id)), [], file);
+    assert.ok(asked.size > 10, file);
+    assert.match(html, /<link rel="icon" href="data:,">/);    // without it, a browser asks for /favicon.ico: a 404
+  }
+});
+
+// ——— The blank page: the script of page/index.html. An agent's name, its messages, a field to write to it
+
+// Opens the blank page on these agents; `turns`: what each agent's conversation returns, by id (an Error: the
+// server's refusal); `more`: other keys of the state. Returns $, `give` (another state arrives), `pick` (an agent is
+// chosen in the selector), `submit`, the `sends` and the `reads` asked for, the `options` and the `messages` shown.
+function blank(agents, turns = {}, more = {}) {
+  const byId = new Map();
+  const $ = (id) => byId.get(id) ?? byId.set(id, new FakeElement("div")).get(id);
+  const sends = [], reads = [];
+  let watcher;
+  const Something = {
+    watch: (fn, onLost) => (watcher = { fn, onLost }),
+    conversation: async (id, options) => {
+      reads.push({ id, ...options });
+      if (turns[id] instanceof Error) throw turns[id];
+      return { turns: turns[id] ?? [], older: false, before: null };
+    },
+    send: (id, text) => new Promise((ok, refuse) => sends.push({ id, text, ok, refuse })),
+  };
+  const document = { getElementById: $, createElement: (tag) => new FakeElement(tag) };
+  new Function("document", "Something", script("index.html"))(document, Something);
+  const give = (list) => watcher.fn(state({ herdr: { connected: true, version: "0.9.3", protocol: 22 },
+                                            agents: list, ...more }));
+  give(agents);
+  return {
+    $, give, sends, reads,
+    pick: (id) => { $("agent").value = id; $("agent").listeners.change(); },
+    submit: () => $("write").listeners.submit({ preventDefault() {} }),
+    lost: (sentence) => watcher.onLost(sentence),
+    options: () => $("agent").children.map((option) => [option.value, option.textContent]),
+    messages: () => $("messages").children.map((element) => element.textContent),
+  };
+}
+
+test("blank page: the selector names the agents, a dot before those that wait for you", async () => {
+  const { $, options, give } = blank([
+    agent("w1:p1", { title: "Cart" }),
+    agent("w1:p2", { name: "reviewer", harness: "omp", state: "blocked" }),
+    agent("w1:p3", { title: "Tests", state: "blocked" }),
+    agent("w1:p4", { harness: null }),
+  ]);
+  assert.deepEqual(options(), [     // two agents that would read the same also say their title
+    ["w1:p1", "claude · Cart"], ["w1:p2", "● reviewer"], ["w1:p3", "● claude · Tests"], ["w1:p4", "w1:p4"]]);
+  assert.equal($("agent").value, "w1:p1");      // the first one is chosen
+  assert.deepEqual([$("waiting").textContent, $("waiting").hidden], ["● 2 wait for you", false]);
+  assert.equal($("to").textContent, "Write to claude · Cart");
+  give([agent("w1:p1"), agent("w1:p2", { state: "blocked" })]);
+  assert.deepEqual(options(), [["w1:p1", "claude · w1:p1"], ["w1:p2", "● claude · w1:p2"]]);    // no title: the id
+  assert.equal($("waiting").textContent, "● 1 waits for you");
+  give([agent("w1:p1")]);
+  assert.deepEqual([options(), $("waiting").hidden], [[["w1:p1", "claude"]], true]);
+  await breathe();
+});
+
+test("blank page: the messages of the chosen agent, who said what, then those of another", async () => {
+  const turn = (text, ...replies) => ({ id: text, t: TIME, from: "user", text, end: null,
+                                        replies: replies.map((reply) => ({ t: TIME, text: reply })),
+                                        tools: [{ name: "Bash", target: "ls" }] });
+  const { $, pick, reads, messages } = blank(
+    [agent("w1:p1"), agent("w1:p2", { name: "reviewer" }), agent("w1:p3", { harness: "gemini", session: null })],
+    { "w1:p1": [turn("hello", "hi", "what next?"), { ...turn("a notification"), from: "system" }],
+      "w1:p3": new Error("this agent is not linked to any session: no conversation") });
+  await breathe();
+  assert.deepEqual(messages(), ["you", "hello", "claude", "hi", "claude", "what next?", "system", "a notification"]);
+  assert.deepEqual(reads, [{ id: "w1:p1", turns: 10, before: undefined }]);
+  $("text").value = "for the first";
+  pick("w1:p2");
+  await breathe();
+  assert.deepEqual([messages(), $("unreadable").textContent], [[], "No message yet."]);
+  assert.equal($("text").value, "");            // what was typed for another agent does not follow
+  assert.equal($("to").textContent, "Write to reviewer");
+  pick("w1:p3");
+  await breathe();
+  assert.equal($("unreadable").textContent, "this agent is not linked to any session: no conversation");
+});
+
+test("blank page: the selector is rebuilt only when it changes, the messages read when the agent wrote", async () => {
+  const later = "2026-10-07T07:05:00+02:00";
+  const { $, give, reads } = blank([agent("w1:p1"), agent("w1:p2")]);
+  await breathe();
+  const built = $("agent").children;
+  give([agent("w1:p1", { activity: later }), agent("w1:p2")]);
+  await breathe();
+  assert.equal($("agent").children, built, "a list that is open is not rebuilt under the hand");
+  assert.equal(reads.length, 2, "the chosen agent wrote: its messages are read again");
+  give([agent("w1:p1", { activity: later }), agent("w1:p2", { state: "blocked", activity: later })]);
+  await breathe();
+  assert.notEqual($("agent").children, built);
+  assert.equal(reads.length, 2, "another agent wrote: nothing to read again");
+  assert.equal($("agent").value, "w1:p1");      // the choice holds when the list is rebuilt
+  give([agent("w1:p2")]);
+  await breathe();
+  assert.equal($("agent").value, "w1:p2");      // the chosen agent is gone: the first of those that remain
+  assert.deepEqual(reads.at(-1), { id: "w1:p2", turns: 10, before: undefined });
+});
+
+test("blank page: a send says its outcome, and a refusal is the server's sentence", async () => {
+  const { $, pick, submit, sends } = blank([agent("w1:p1"), agent("w1:p2", { name: "reviewer" })]);
+  await breathe();
+  $("text").value = "hello";
+  let done = submit();
+  assert.deepEqual([sends[0].id, sends[0].text, $("send").disabled, $("feedback").textContent],
+    ["w1:p1", "hello", true, "Sending…"]);
+  sends[0].ok({ ok: true });
+  await done;
+  assert.deepEqual([$("text").value, $("feedback").textContent, $("send").disabled], ["", "Sent to claude.", false]);
+
+  $("text").value = "again";
+  done = submit();
+  sends[1].refuse(new Error("this agent is waiting for an answer in its pane: "
+    + "something does not write over a question"));
+  await done;
+  assert.equal($("text").value, "again");       // a refused message stays in the field
+  assert.match($("feedback").textContent, /^this agent is waiting for an answer in its pane/);
+
+  done = submit();                              // without an answer, the message may have left
+  sends[2].refuse(new Error("Herdr does not answer: timed out (~/herdr.sock)"));
+  await done;
+  assert.equal($("feedback").textContent, "Herdr does not answer: timed out (~/herdr.sock)"
+    + ". The message may have left all the same: look at the pane before sending it again.");
+  done = submit();                              // a failure before anything was written to Herdr leaves no doubt
+  sends[3].refuse(new Error("Herdr does not answer: socket missing (~/herdr.sock)"));
+  await done;
+  assert.equal($("feedback").textContent, "Herdr does not answer: socket missing (~/herdr.sock)");
+
+  done = submit();                              // another agent chosen while the message leaves
+  pick("w1:p2");
+  $("text").value = "for the second";
+  sends[4].refuse(new Error("unknown agent"));
+  await done;
+  assert.deepEqual([$("feedback").textContent, $("text").value], ["To claude: unknown agent", "for the second"]);
+});
+
+test("blank page: no agent, Herdr down, the example, the server gone", async () => {
+  let page = blank([]);
+  assert.deepEqual(
+    [page.$("none").textContent, page.$("none").hidden, page.$("write").hidden, page.$("agent").disabled],
+    ["No agent in Herdr: start one in a pane, it shows up here.", false, true, true]);
+  assert.deepEqual([page.$("waiting").hidden, page.$("example").hidden, page.$("outage").hidden], [true, true, true]);
+
+  const missing = "Herdr does not answer: socket missing (~/.config/herdr/herdr.sock)";
+  page = blank([], {}, { herdr: { connected: false, version: null, protocol: null }, error: missing });
+  assert.equal(page.$("none").textContent, "Unknown: Herdr is not connected.");
+  assert.equal(page.$("outage").textContent,
+    `${missing}. Is a Herdr session running? something keeps asking, and comes back by itself.`);
+
+  page = blank([agent("w1:p1")], {}, { example: true });
+  assert.deepEqual([page.$("example").hidden, page.$("none").hidden, page.$("write").hidden], [false, true, false]);
+  page.lost("something no longer answers");
+  assert.equal(page.$("outage").textContent,
+    "something no longer answers. What is shown dates from the last state received.");
+  await breathe();
 });
 
 test("page: an outage of Herdr says what to look at, another failure is said as is", () => {

@@ -46,7 +46,10 @@ class Skill(unittest.TestCase):
         tools = (ROOT / "page" / "something.js").read_text(encoding="utf-8")
         for tool in re.findall(r"`Something\.(\w+)`", SKILL):
             self.assertRegex(tools, rf"\b{tool}\b", tool)
-        self.assertTrue((ROOT / "page" / "index.html").is_file())
+        pages = set(re.findall(r"`page/([a-z]+\.html)`", SKILL))
+        self.assertEqual(pages, {"index.html", "everything.html"})
+        for page in pages:
+            self.assertTrue((ROOT / "page" / page).is_file(), page)
         self.assertIn("skills/something/SKILL.md", README, "the README says where the skill is")
 
 

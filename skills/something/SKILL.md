@@ -31,16 +31,16 @@ Do these in order, and tell the person in one line what each step found.
 
 Short, in your own words:
 
-- Each agent of the Herdr session is on the page with its state: working, blocked, done or idle, and unknown when Herdr does not say. "blocked" means it is waiting for them; the count above the agents says those first.
-- For the harnesses something has a reader for (Claude Code, Codex, OMP, OpenCode, pi), the page also shows the model, the context, the todos, the tool in progress, the question asked and the conversation. What something cannot read is written "unknown": it never guesses.
-- "Open its conversation" shows the last turns, and the field under them writes to that agent.
-- This is the blank page: everything, without design, in English. It is one file, `page/index.html`, made to be copied and rebuilt. Offer to build theirs.
-- In example mode nothing is real: six made-up agents, and no message is sent. A few lines look like failures (an extension "not loaded", a "log not read", an agent in an unknown state): they are part of the example, to show how something says what goes wrong.
+- The selector at the top lists the agents of the Herdr session by name. A dot marks those that are waiting for them, and the page says how many.
+- Under it, what was said with the agent they choose: their own messages ("you") and the agent's replies, for the harnesses something has a reader for (Claude Code, Codex, OMP, OpenCode, pi). Then a field to write to that agent: the message goes into its pane through Herdr. Herdr does not write over a question an agent is asking: that one is answered in its pane.
+- This is the blank page, in English: the least, on purpose. It is one file, `page/index.html`, made to be copied and built on. Offer to build theirs.
+- `/everything.html` shows what else something knows of each agent: its state, its model, its context, its todos, the tool in progress, the question asked, the events. What something cannot read is written "unknown" there: it never guesses.
+- In example mode nothing is real: six made-up agents, and no message is sent. On the page of everything a few lines look like failures (an extension "not loaded", a "log not read", an agent in an unknown state): they are part of the example, to show how something says what goes wrong.
 
 ## Use it
 
 - **What is running, without a page.** `python3 -m something --once` prints the state as JSON and exits (with 1 if Herdr could not be read). The keys are in the README, "The state". A value that could not be read is `null`: say "unknown", never zero and never "none".
-- **Build a page.** Copy `page/index.html` to `page/<name>.html` and keep what serves the person: it is then served at `http://127.0.0.1:8780/<name>.html`. A page uses `Something.watch`, `Something.onEvent`, `Something.conversation` and `Something.send`, from `/something.js` (README, "Plug in a page"). No dependency, no build step. What an agent wrote goes in with `textContent`, never as HTML. Build against `--example`: it covers the cases without any agent running.
+- **Build a page.** Copy `page/index.html` to `page/<name>.html` and build on it: it is then served at `http://127.0.0.1:8780/<name>.html`. `page/everything.html` shows each key of the state and each tool at work: take from it what the person asks for. A page uses `Something.watch`, `Something.onEvent`, `Something.conversation` and `Something.send`, from `/something.js` (README, "Plug in a page"). No dependency, no build step. What an agent wrote goes in with `textContent`, never as HTML. Build against `--example`: it covers the cases without any agent running.
 - **Read another harness.** An extension is one file in `extensions/` (README, "Writing an extension").
 
 ## When it does not work

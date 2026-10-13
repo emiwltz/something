@@ -6,7 +6,7 @@ Herdr is the terminal workspace your coding agents run in. something runs next t
 
 It is made of a core and extensions. The core knows only Herdr. What an agent writes in its session files (its model, its todos, its conversation) is read by an extension: one file per harness, that you drop in to add it and delete to remove it. A harness is the program that runs an agent: Claude Code, Codex, OpenCode, OMP, pi.
 
-One rule comes before the others: nothing false is shown as true. A piece of data that something cannot read is `null`, and the page writes "unknown".
+One rule comes before the others: nothing false is shown as true. A piece of data that something cannot read is `null`, and a page writes "unknown".
 
 something is young. No version is tagged yet: its name, the keys of its state and its routes may still change. Where it is going is in the [roadmap](#roadmap).
 
@@ -45,7 +45,7 @@ cd something
 python3 -m something --example                # http://127.0.0.1:8780/: six made-up agents
 ```
 
-Open the address in a browser. The blank page shows the six agents, two of them waiting for you, and the conversation of the four whose session is read. Ctrl+C stops something.
+Open the address in a browser. The blank page lets you choose one of the six agents, read what was said and write to it; a dot marks the two that are waiting for you. Ctrl+C stops something.
 
 With your own agents, start a Herdr session (`herdr`, then your agents in its panes), then, from the repository's folder:
 
@@ -91,7 +91,10 @@ A file dropped in `page/` is served at the root of the server if it is of one of
 | `Something.conversation(id, { turns, before })` | Returns `{ agent, turns, older, before }` (a promise): the last turns of an agent's conversation, or those before the cursor `before`. |
 | `Something.send(id, text)` | Sends a message to an agent. The promise fails with a readable sentence if the message was not sent. One doubt: when the sentence starts with "Herdr does not answer" or "something does not answer", or says that something answered badly, the message may have left all the same, unless it says "socket missing" or "connection refused". Look at the pane before sending it again. |
 
-`page/index.html` is the blank page: it shows each tool at work, without design. Copy it to start yours.
+Two pages come with something:
+
+- `page/index.html`, the blank page, shows the least: a selector of the agents, with a dot before those that wait for you, the messages of the one you choose, and a field to write to it. Copy it to start yours.
+- `page/everything.html`, served at `/everything.html`, shows each key of the state and each tool of `something.js` at work, without design. Take from it what your page needs.
 
 ## The state
 
@@ -254,7 +257,8 @@ extensions/       one reader per harness, one file each
   _reading.py     their toolbox: read the end of a log, follow it, open a database without writing anything
 page/
   something.js        the page's tools
-  index.html      the blank page
+  index.html      the blank page: choose an agent, read, write
+  everything.html every key of the state at work, without design
   example.json    the state and the conversations of the example mode
 skills/
   something/SKILL.md  the way in for a coding agent: set something up, show it, use it
@@ -295,8 +299,8 @@ Where something is going, in this order. These are directions, not promises: not
 **First: the first five minutes.** Someone who arrives should see their agents on a page without reading this whole README.
 
 - A skill to hand to a coding agent: it says what it is about to do, installs Herdr if it is missing, gets something, starts it, opens the page and says what you are looking at. A first one is in `skills/something/`.
-- A first page that is good to read at a glance: who is waiting for you first, one line per agent, the details on demand. The blank page shows everything without design: it is a starting point, not a page to keep open all day.
-- Still one HTML file, without dependency or build step, that you copy, change or replace: no interface is imposed. Whether the new page replaces the blank one or sits next to it is not decided.
+- A first page that shows the least: choose an agent, read what was said, write to it. It is `page/index.html`: one HTML file, without dependency or build step, that you copy and build from. No interface is imposed.
+- What is left: try both with people who arrive, and remove what stops them.
 
 **Then: more from the page and from the sessions.**
 

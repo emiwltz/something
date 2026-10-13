@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>something · everything</title>
+  <link rel="icon" href="data:,">   <!-- no icon: without this line, the browser asks the server for one -->
+  <!-- Everything something knows, and each tool of something.js at work, without design.
+       The page to start from is index.html, which shows the least: take from this one what yours needs. -->
+  <style>
+    /* Enough to read, nothing more. Light and dark follow the system setting. */
+    :root { color-scheme: light dark; --muted: #595959; --rule: #c8c8c8; --alert: #b3261e; }
+    @media (prefers-color-scheme: dark) { :root { --muted: #a8a8a8; --rule: #4a4a4a; --alert: #ffb4ab; } }
+    body {
+      font: 100%/1.5 system-ui, sans-serif; max-width: 46rem; margin: 0 auto; padding: 1rem;
+      overflow-wrap: anywhere;          /* a long path or identifier does not make the page overflow */
+    }
+    h1, h2, h3 { line-height: 1.25; }
+    article, #turns > li { border-top: 1px solid var(--rule); padding: .5rem 0 1rem; }
+    dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .1rem 1rem; margin: 0 0 .75rem; }
+    dt, small { color: var(--muted); }
+    dd { margin: 0; }
+    ul { margin: 0; padding-left: 1.2rem; }
+    #turns { list-style: none; padding: 0; }
+    #raw { margin-top: 1rem; }
+    #turns p, blockquote, pre { white-space: pre-wrap; }
+    blockquote { margin: .5rem 0; padding-left: .75rem; border-left: 2px solid var(--rule); }
+    small { display: block; font-size: inherit; }
+    button, textarea { font: inherit; }
+    button { padding: .35rem .8rem; }
+    textarea { display: block; box-sizing: border-box; width: 100%; margin: .25rem 0 .5rem; }
+    #outage {                           /* the outage stays in view, wherever one is in the page */
+      position: sticky; top: 0; margin: 0; padding: .5rem 0;
+      background: Canvas; color: var(--alert); font-weight: 600;
+    }
+    .stale { opacity: .5; }             /* what stays on screen when the server no longer answers */
+    .waiting { color: var(--alert); }   /* an agent that waits for you */
+    .absent { color: var(--muted); }    /* what is not known, or not there, steps back */
+  </style>
+</head>
+<body>
+  <h1>something · everything</h1>
+  <p id="outage" role="alert" hidden></p>
+
+  <main id="page">
+    <p>Everything something knows, laid out without design: each key of the state, each tool of
+      <code>something.js</code>. The page to start from is <a href="/">the blank page</a>, which shows the least:
+      take from this one what yours needs. The README says how, in "Plug in a page".</p>
+    <p id="example" hidden><strong>Example data.</strong> Nothing below is real, the line about Herdr included:
+      something is running in example mode and reaches neither Herdr nor any agent.</p>
+    <p id="herdr">Waiting for the first state…</p>
+    <p id="latest">No event since this page was opened.</p>
+
+    <h2>Agents</h2>
+    <p id="count" hidden></p>
+    <div id="agents"></div>
+
+    <section id="conversation" hidden>
+      <h2 id="who"></h2>
+      <button id="older" type="button" hidden>Older turns</button>
+      <ul id="turns"></ul>
+      <p id="unreadable" role="status"></p>
+      <form id="write">
+        <label for="text">Write to it</label>
+        <textarea id="text" rows="3" required></textarea>
+        <button id="send">Send</button>
+        <p id="feedback" role="status"></p>
+      </form>
+    </section>
+
+    <h2>Last events</h2>
+    <div id="events"></div>
+
+    <h2>Herdr</h2>
+    <div id="tree"></div>
+
+    <h2>Extensions</h2>
+    <div id="extensions"></div>
+
+    <details id="raw">
+      <summary>The raw state</summary>
+      <pre id="json"></pre>
+    </details>
+  </main>
+
+  <script src="/something.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    let chosen = null;      // the id of the agent whose conversation is open
+    let activity = null;    // its last known write, to know when to read its conversation again
+    let wentBack = false;   // true as soon as older turns are shown
+    let cursor = null;      // what to pass to `before` to go back further
+    let reads = 0;          // only the last read asked for is shown
+
+    // Says a value of the state. What something could not read is null and is written "unknown", never zero or empty.
+    function say(value) {
+      if (value == null) return "unknown";
+      if (typeof value === "boolean") return value ? "yes" : "no";
+      // Four decimals at most, those of a cost: with the three of the default, a small cost would read "$0".
+      return typeof value === "number" ? value.toLocaleString("en-GB", { maximumFractionDigits: 4 }) : value;
+    }
+    const time = (iso) => (iso ? new Date(iso).toLocaleTimeString("en-GB") : "unknown");
+
+    // Makes an element. The text goes in through textContent: what an agent writes stays text, never HTML.
+    function el(tag, text, ...children) {
+      const element = document.createElement(tag);
+      if (text != null) element.textContent = text;
+      element.append(...children);
+      return element;
+    }
+
+    // What is not known ("unknown") or not there ("none"), in a muted colour: what is known stands out.
+    function absent(word) {
+      const span = el("span", word);
+      span.className = "absent";
+      return span;
+    }
+
+    // A list of the state, one sentence per item. An empty list says "none"; null is not an empty list.
+    function list(items, sentence) {
+      if (!items) return absent("unknown");
+      return items.length ? el("ul", null, ...items.map((x) => el("li", sentence(x)))) : absent("none");
+    }
+
+    const todo = (t) => `${t.status} · ${t.text}${t.phase ? ` (${t.phase})` : ""}`;
+    const subagent = (s) =>
+      `${say(s.name)} · ${say(s.type)} · ${s.state} · ${say(s.model)} · from ${time(s.start)} to ${time(s.end)}`;
+    const question = (q) =>
+      `${q.question} — ${(q.options ?? []).join(" / ")}${q.multi ? " (several choices)" : ""}`;
+
+    function request(r) {
+      if (!r) return null;
+      if (r.kind === "permission") return `permission · tool: ${say(r.tool)}`;
+      return r.questions?.length ? list(r.questions, question) : "question · unknown";      // asked, but not read
+    }
+
+    // An agent: all the fields of the state, in the README's order, and the button that opens its conversation.
+    function card(a) {
+      const c = a.context, t = a.tool, g = a.goal;
+      // Log read (a session, `read_error` null): tool and request at null mean "none". Except the request of an
+      // agent that is blocked, or whose state is not known: it may be waiting for you, and not every log says for
+      // what. A goal at null is "none found": for some harnesses the reader does not read it (README, "The state").
+      // Log not read: null, like any value that is not known.
+      const read = a.session && !a.read_error;
+      const none = (word = "none") => (read ? absent(word) : null);
+      const rows = [
+        ["id", a.id], ["name", a.name], ["harness", a.harness], ["state", a.state], ["since", time(a.since)],
+        ["title", a.title], ["cwd", a.cwd], ["workspace", a.workspace], ["focused", a.focused],
+        ["session", a.session && `${a.session.id} · ${a.session.path}`],
+        ["model", a.model], ["effort", a.effort],
+        ["context", c && `${say(c.tokens)} tokens · window: ${say(c.window)} · percent: ${say(c.percent)}`],
+        ["cost", a.cost == null ? null : `$${say(a.cost)}`],
+        ["tool", t ? `${t.name} · since: ${time(t.since)}` : none()],
+        ["request", request(a.request) ?? (["blocked", "unknown"].includes(a.state) ? null : none())],
+        ["todos", list(a.todos, todo)],
+        ["goal",
+          g ? `${g.objective} · ${g.status} · tokens: ${say(g.tokens)} · seconds: ${say(g.seconds)}`
+            : none("none found")],
+        ["subagents", list(a.subagents, subagent)],
+        ["activity", time(a.activity)],
+      ];
+      if (a.read_error) rows.push(["log not read", a.read_error]);
+
+      const fields = el("dl");
+      for (const [name, value] of rows) {
+        const shown = value ?? absent("unknown");
+        fields.append(el("dt", name), shown instanceof Node ? el("dd", null, shown) : el("dd", say(shown)));
+      }
+      const button = el("button", "Open its conversation");
+      button.onclick = () => openConversation(a);
+      const waiting = a.state === "blocked";
+      const heading = el("h3",
+        `${a.name ?? a.id} · ${say(a.harness)} · ${a.state}${waiting ? ": it waits for you" : ""}`);
+      if (waiting) heading.className = "waiting";
+      return el("article", null, heading, fields, button);
+    }
+
+    // How many agents are in each state, those that wait for you first: "1 blocked · 2 working".
+    const count = (agents) => ["blocked", "working", "done", "idle", "unknown"]
+      .map((state) => [agents.filter((a) => a.state === state).length, state])
+      .filter(([number]) => number)
+      .map((pair) => pair.join(" "))
+      .join(" · ");
+
+    // Herdr's tree: `snapshot` is served as Herdr writes it, with its own keys. Each workspace, its tabs, their
+    // panes; a pane without an agent is a terminal. null: Herdr is not connected.
+    function tree(s) {
+      if (!s) return el("span", "unknown");
+      const pane = (p) => el("li", `${p.pane_id} · ${p.agent ?? "terminal"}`);
+      const tab = (t) => el("li", `tab ${t.label}`,
+        el("ul", null, ...s.panes.filter((p) => p.tab_id === t.tab_id).map(pane)));
+      const workspace = (w) => el("li", w.label,
+        el("ul", null, ...s.tabs.filter((t) => t.workspace_id === w.workspace_id).map(tab)));
+      return el("ul", null, ...s.workspaces.map(workspace));
+    }
+
+    const extension = (x) =>
+      `${x.name} · harness: ${say(x.harness)}${x.error ? ` · not loaded: ${x.error}` : ""}`;
+
+    // ——— Something.watch: the state comes right away, then at each change ———
+    Something.watch((state) => {
+      const h = state.herdr;
+      // The outage a newcomer meets first: no Herdr session is running yet.
+      const hint = state.error?.startsWith("Herdr does not answer")
+        ? ". Is a Herdr session running? something keeps asking, and comes back by itself." : "";
+      $("outage").textContent = (state.error ?? "") + hint;
+      $("outage").hidden = !state.error;
+      $("page").classList.remove("stale");
+      $("example").hidden = !state.example;
+      // The state only comes when it changes: its time is that of the last change heard, not of the last poll.
+      $("herdr").textContent = `Herdr ${h.connected ? "connected" : "not connected"} · ` +
+        `version: ${say(h.version)} · protocol: ${say(h.protocol)} · ` +
+        `last state received: poll of ${time(state.generated)}`;
+      // Without Herdr, an empty list does not mean "no agent": we do not know.
+      const empty = el("p", h.connected ? "No agent in Herdr: start one in a pane, it shows up here."
+        : "Unknown: Herdr is not connected.");
+      $("agents").replaceChildren(...(state.agents.length ? state.agents.map(card) : [empty]));
+      $("count").textContent = count(state.agents);
+      $("count").hidden = !state.agents.length;
+      const last = state.events.slice(-10).reverse();
+      $("events").replaceChildren(list(last, (e) => `${time(e.t)} · ${e.text}`));
+      $("extensions").replaceChildren(list(state.extensions, extension));
+
+      // The open conversation is read again when its agent has written, as long as you have not gone back in time.
+      const opened = state.agents.find((a) => a.id === chosen);
+      if (opened && !wentBack && opened.activity !== activity) {
+        activity = opened.activity;
+        read();
+      }
+      // Last: if Herdr one day changes the shape of its snapshot, the rest of the page is already up to date.
+      $("tree").replaceChildren(tree(state.snapshot));
+    }, (sentence) => {
+      // The server no longer answers: the page says so, and shows that what stays on screen is old.
+      $("outage").textContent = `${sentence}. What is shown dates from the last poll received.`;
+      $("outage").hidden = false;
+      $("page").classList.add("stale");
+    });
+
+    // ——— Something.onEvent: only what has just happened, without replaying the past ———
+    Something.onEvent((event) => {
+      $("latest").textContent = `Last event received, at ${time(event.t)}: ${event.text}`;
+    });
+
+    // ——— Something.state: a read on demand, here to see the state as the server returns it ———
+    $("raw").addEventListener("toggle", async () => {
+      if (!$("raw").open) return;
+      try {
+        $("json").textContent = JSON.stringify(await Something.state(), null, 2);
+      } catch (error) {
+        $("json").textContent = error.message;
+      }
+    });
+
+    // ——— Something.conversation: the chosen agent's last turns, then older ones with `before` ———
+    function turn(t) {
+      const li = el("li", null, el("small", `${t.from} · ${time(t.t)} · end: ${time(t.end)}`), el("p", t.text),
+        ...t.replies.map((r) => el("blockquote", r.text)));
+      if (t.tools.length) {
+        li.append(el("details", null, el("summary", `Tools: ${t.tools.length}`),
+          list(t.tools, (tool) => (tool.target == null ? tool.name : `${tool.name} ${tool.target}`))));
+      }
+      return li;
+    }
+
+    async function read(before) {
+      const mine = ++reads;
+      try {
+        const response = await Something.conversation(chosen, { turns: 10, before });
+        if (mine !== reads) return;     // a more recent read was asked for in the meantime
+        if (before) $("turns").prepend(...response.turns.map(turn));
+        else $("turns").replaceChildren(...response.turns.map(turn));
+        cursor = response.before;
+        $("older").hidden = !(response.older && cursor);
+        $("unreadable").textContent = "";
+      } catch (error) {
+        if (mine === reads) $("unreadable").textContent = error.message;
+      }
+    }
+
+    function openConversation(agent) {
+      if (agent.id !== chosen) $("text").value = "";    // what was typed for another agent does not follow
+      chosen = agent.id;
+      activity = agent.activity;
+      wentBack = false;
+      $("who").textContent = `Conversation of ${agent.name ?? agent.id}`;
+      $("turns").replaceChildren();
+      $("older").hidden = true;
+      $("unreadable").textContent = $("feedback").textContent = "";
+      $("conversation").hidden = false;
+      $("conversation").scrollIntoView();
+      read();
+    }
+
+    $("older").onclick = () => { wentBack = true; read(cursor); };
+
+    // ——— Something.send: send a message; if it is not sent, the server's sentence is shown as is ———
+    $("write").addEventListener("submit", async (submission) => {
+      submission.preventDefault();
+      const agent = chosen;
+      $("send").disabled = true;        // no double send while the message is leaving
+      $("feedback").textContent = "Sending…";
+      // The outcome is always said, even if another agent was opened meanwhile: a failure nobody sees would pass
+      // for a message sent. It then names the agent the message was for, and the field of the other is left alone.
+      const elsewhere = () => (agent === chosen ? "" : `Message to ${agent}: `);
+      try {
+        await Something.send(agent, $("text").value);
+        if (agent === chosen) $("text").value = "";
+        $("feedback").textContent = `Message sent to ${agent}.`;
+      } catch (error) {
+        // Without an answer, the message may have left all the same, unless the failure came before anything was
+        // written to Herdr (README, `Something.send`).
+        const doubt = /^(Herdr|something) does not answer|^something answered badly/.test(error.message)
+          && !/^Herdr does not answer: (socket missing|connection refused) \(/.test(error.message);
+        $("feedback").textContent = elsewhere() + error.message
+          + (doubt ? ". The message may have left all the same: look at the pane before sending it again." : "");
+      }
+      $("send").disabled = false;
+    });
+  </script>
+</body>
+</html>
