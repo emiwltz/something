@@ -1,0 +1,18 @@
+# The tests on a Mac that is not the author's, at each push: something v2 builds and its core passes.
+# The Mac shell needs a screen, so the window itself is checked by hand (`swift run something --self-test`).
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift build
+      - run: swift test

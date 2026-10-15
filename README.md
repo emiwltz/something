@@ -61,3 +61,13 @@ Tests/                     tests of the core
 A page talks to something with one protocol: it sends `{"method": ..., "params": ...}` and gets `{"result": ...}` or `{"error": ...}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.
 
 This repository is local and private: it has no remote.
+
+## Security
+
+something opens no port and listens on nothing: the window and the agents talk inside the app. A page cannot reach the Internet, and cannot draw the windows that ask you: every message to an agent, and every permission an agent asks, waits for your click. The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A page is code your agent wrote: read what you open.
+
+To report a weakness without making it public, use "Report a vulnerability" in the Security tab of the repository.
+
+## License
+
+[MIT](LICENSE).
