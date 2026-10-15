@@ -1,29 +1,30 @@
-import XCTest
+import Foundation
+import Testing
 @testable import SomethingCore
 
 /// Messages shaped like codex app-server 0.162's (keys checked against its schema and a real run, values invented).
-final class CodexStreamTests: XCTestCase {
+struct CodexStreamTests {
     func fresh() -> Agent { Agent(id: "codex-1", name: "try", harness: "codex", folder: "/Users/example/try") }
 
-    func testTheThreadGivesModelAndMode() {
+    @Test func testTheThreadGivesModelAndMode() {
         var agent = fresh()
         let thread = CodexStream.threadStarted(["model": "example-model", "approvalPolicy": "on-request",
                                                 "sandbox": ["type": "workspaceWrite"], "cwd": "/Users/example/try",
                                                 "thread": ["id": "th1", "status": ["type": "idle"]]], to: &agent)
-        XCTAssertEqual(thread, "th1")
-        XCTAssertEqual(agent.model, "example-model")
-        XCTAssertEqual(agent.mode, "on-request")
-        XCTAssertEqual(agent.status, "idle")
+        #expect(thread == "th1")
+        #expect(agent.model == "example-model")
+        #expect(agent.mode == "on-request")
+        #expect(agent.status == "idle")
     }
 
-    func testAGranularPolicyIsNamedNotGuessed() {
+    @Test func testAGranularPolicyIsNamedNotGuessed() {
         var agent = fresh()
         _ = CodexStream.threadStarted(["approvalPolicy": ["granular": ["rules": true]], "thread": ["id": "th1"]], to: &agent)
-        XCTAssertEqual(agent.mode, "granular")
-        XCTAssertNil(agent.model)
+        #expect(agent.mode == "granular")
+        #expect(agent.model == nil)
     }
 
-    func testATurnIsRead() {
+    @Test func testATurnIsRead() {
         var agent = fresh()
         for message: [String: Any] in [
             ["method": "turn/started", "params": ["threadId": "th1", "turn": ["id": "t1", "status": "inProgress"]]],
@@ -35,23 +36,23 @@ final class CodexStreamTests: XCTestCase {
         ] {
             CodexStream.apply(message, to: &agent)
         }
-        XCTAssertEqual(agent.status, "working")
+        #expect(agent.status == "working")
         CodexStream.apply(["method": "turn/completed", "params": ["threadId": "th1", "turn": ["id": "t1", "status": "completed", "items": []]]], to: &agent)
-        XCTAssertEqual(agent.status, "idle")
-        XCTAssertEqual(agent.messages, [Message(from: "agent", text: "Ready.")])
-        XCTAssertNil(agent.error)
+        #expect(agent.status == "idle")
+        #expect(agent.messages == [Message(from: "agent", text: "Ready.")])
+        #expect(agent.error == nil)
     }
 
-    func testAFailedTurnKeepsItsError() {
+    @Test func testAFailedTurnKeepsItsError() {
         var agent = fresh()
         CodexStream.apply(["method": "turn/completed", "params": ["turn": ["status": "failed", "error": ["message": "Example failure."]]]], to: &agent)
-        XCTAssertEqual(agent.error, "Example failure.")
+        #expect(agent.error == "Example failure.")
     }
 
-    func testAnErrorThatWillBeRetriedIsNotShown() {
+    @Test func testAnErrorThatWillBeRetriedIsNotShown() {
         var agent = fresh()
         CodexStream.apply(["method": "error", "params": ["willRetry": true, "error": ["message": "Example blip."]]], to: &agent)
-        XCTAssertNil(agent.error)
+        #expect(agent.error == nil)
     }
 
     let askToRun: [String: Any] = [
@@ -61,41 +62,41 @@ final class CodexStreamTests: XCTestCase {
                    "availableDecisions": ["accept", "acceptForSession", "decline", "cancel"]],
     ]
 
-    func testACommandApprovalMakesTheAgentWait() {
+    @Test func testACommandApprovalMakesTheAgentWait() {
         var agent = fresh()
         CodexStream.apply(askToRun, to: &agent)
-        XCTAssertEqual(agent.status, "waiting")
-        XCTAssertEqual(agent.request, PermissionRequest(id: "7", tool: "a command", about: "/bin/zsh -lc \"printf 'hi' > hello.txt\"",
+        #expect(agent.status == "waiting")
+        #expect(agent.request == PermissionRequest(id: "7", tool: "a command", about: "/bin/zsh -lc \"printf 'hi' > hello.txt\"",
                                                         always: "allow it for the rest of this conversation"))
     }
 
-    func testNoAlwaysWhenCodexDoesNotOfferIt() {
+    @Test func testNoAlwaysWhenCodexDoesNotOfferIt() {
         var agent = fresh()
         var message = askToRun
         var params = message["params"] as! [String: Any]
         params["availableDecisions"] = ["accept", "decline"]
         message["params"] = params
         CodexStream.apply(message, to: &agent)
-        XCTAssertNil(agent.request?.always)
+        #expect(agent.request?.always == nil)
     }
 
-    func testAResolvedRequestIsCleared() {
+    @Test func testAResolvedRequestIsCleared() {
         var agent = fresh()
         CodexStream.apply(askToRun, to: &agent)
         CodexStream.apply(["method": "serverRequest/resolved", "params": ["threadId": "th1", "requestId": 7]], to: &agent)
-        XCTAssertNil(agent.request)
+        #expect(agent.request == nil)
     }
 
-    func testAnswersUseCodexWords() {
-        XCTAssertEqual(CodexStream.decision(.once), "accept")
-        XCTAssertEqual(CodexStream.decision(.always), "acceptForSession")
-        XCTAssertEqual(CodexStream.decision(.deny), "decline")
+    @Test func testAnswersUseCodexWords() {
+        #expect(CodexStream.decision(.once) == "accept")
+        #expect(CodexStream.decision(.always) == "acceptForSession")
+        #expect(CodexStream.decision(.deny) == "decline")
     }
 
-    func testATurnCarriesTheText() {
+    @Test func testATurnCarriesTheText() {
         let message = CodexStream.turnStart(id: 3, thread: "th1", text: "hello")
-        XCTAssertTrue(JSONSerialization.isValidJSONObject(message))
+        #expect(JSONSerialization.isValidJSONObject(message))
         let input = (message["params"] as? [String: Any])?["input"] as? [[String: Any]]
-        XCTAssertEqual(input?.first?["text"] as? String, "hello")
+        #expect(input?.first?["text"] as? String == "hello")
     }
 }

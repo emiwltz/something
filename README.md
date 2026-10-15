@@ -8,7 +8,7 @@ It follows [something](https://github.com/emiwltz/something), which stays frozen
 
 ## Run
 
-Needs a Mac with Apple's command line tools (`xcode-select --install`, free; already there if `git` works).
+Needs a Mac with Apple's command line tools (`xcode-select --install`, free; already there if `git` works). Xcode itself is not needed. Then, for each agent you want to launch, that agent installed and signed in as you use it in a terminal: `claude`, `codex`, `opencode`, `pi`.
 
 ```sh
 swift run something                 # builds, then opens the window and the menu bar icon
@@ -17,10 +17,18 @@ swift run something --self-test     # checks the window is on screen, the page a
 swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
 # add --ask "<message>" to send your own; --answer once|always|deny answers its permission requests without a window,
 # --click "<button>" shows the windows and has something click that button itself; --force-ask makes Codex and OpenCode ask before acting; --model <model> picks OpenCode's or pi's model for the conversation
-swift test                          # the tests of the core
+swift test                          # the tests of the core (with Xcode installed; without it, see below)
 ```
 
 Nothing is signed with a paid Apple account: what is built on the machine itself is not blocked by macOS.
+
+With the command line tools alone, Swift Testing is installed but `swift test` does not find it by itself; give it the way:
+
+```sh
+T=/Library/Developer/CommandLineTools/Library/Developer
+swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks \
+  -Xlinker -rpath -Xlinker $T/Frameworks -Xlinker -rpath -Xlinker $T/usr/lib
+```
 
 ## Pages
 

@@ -1,8 +1,9 @@
-import XCTest
+import Foundation
+import Testing
 @testable import SomethingCore
 
 /// Events shaped like Claude Code 2.1's stream-json output (keys checked against a real run, text invented).
-final class ClaudeStreamTests: XCTestCase {
+struct ClaudeStreamTests {
     func events() -> [[String: Any]] {
         [
             ["type": "system", "subtype": "hook_started", "session_id": "s1"],
@@ -18,52 +19,52 @@ final class ClaudeStreamTests: XCTestCase {
 
     func fresh() -> Agent { Agent(id: "claude-1", name: "try", harness: "claude", folder: "/Users/example/try") }
 
-    func testATurnIsRead() {
+    @Test func testATurnIsRead() {
         var agent = fresh()
-        XCTAssertNil(agent.model)
-        XCTAssertNil(agent.status)
+        #expect(agent.model == nil)
+        #expect(agent.status == nil)
         for event in events() { ClaudeStream.apply(event, to: &agent) }
-        XCTAssertEqual(agent.model, "claude-example-1")
-        XCTAssertEqual(agent.mode, "default")
-        XCTAssertEqual(agent.status, "idle")
-        XCTAssertEqual(agent.messages, [Message(from: "agent", text: "Ready.")])
-        XCTAssertNil(agent.error)
+        #expect(agent.model == "claude-example-1")
+        #expect(agent.mode == "default")
+        #expect(agent.status == "idle")
+        #expect(agent.messages == [Message(from: "agent", text: "Ready.")])
+        #expect(agent.error == nil)
     }
 
-    func testUnknownEventsChangeNothing() {
+    @Test func testUnknownEventsChangeNothing() {
         var agent = fresh()
         ClaudeStream.apply(["type": "something_new", "model": "nope"], to: &agent)
-        XCTAssertEqual(agent, fresh())
+        #expect(agent == fresh())
     }
 
-    func testAnErrorResultIsKept() {
+    @Test func testAnErrorResultIsKept() {
         var agent = fresh()
         ClaudeStream.apply(["type": "result", "subtype": "error_during_execution", "is_error": true,
                             "result": "Example failure."], to: &agent)
-        XCTAssertEqual(agent.error, "Example failure.")
+        #expect(agent.error == "Example failure.")
     }
 
-    func testASyntheticMessageIsAnErrorNotAReply() {
+    @Test func testASyntheticMessageIsAnErrorNotAReply() {
         var agent = fresh()
         ClaudeStream.apply(events()[1], to: &agent)
         ClaudeStream.apply(["type": "assistant", "session_id": "s1",
                             "message": ["model": "<synthetic>", "role": "assistant",
                                         "content": [["type": "text", "text": "Example: this key was refused."]]]],
                            to: &agent)
-        XCTAssertEqual(agent.error, "Example: this key was refused.")
-        XCTAssertTrue(agent.messages.isEmpty)
-        XCTAssertEqual(agent.model, "claude-example-1", "the synthetic model is not the agent's model")
+        #expect(agent.error == "Example: this key was refused.")
+        #expect(agent.messages.isEmpty)
+        #expect(agent.model == "claude-example-1", "the synthetic model is not the agent's model")
     }
 
-    func testClaudeIsLaunchedWithoutInheritedAPICredentials() {
+    @Test func testClaudeIsLaunchedWithoutInheritedAPICredentials() {
         let inherited = ["PATH": "/usr/bin", "HOME": "/Users/example",
                          "ANTHROPIC_API_KEY": "example-not-a-key", "ANTHROPIC_AUTH_TOKEN": "example-not-a-token",
                          "ANTHROPIC_MODEL": "claude-example-1"]
         let env = inherited.filter { !ClaudeSession.credentials.contains($0.key) }
-        XCTAssertNil(env["ANTHROPIC_API_KEY"])
-        XCTAssertNil(env["ANTHROPIC_AUTH_TOKEN"])
-        XCTAssertEqual(env["PATH"], "/usr/bin")
-        XCTAssertEqual(env["ANTHROPIC_MODEL"], "claude-example-1", "other settings are the person's and stay")
+        #expect(env["ANTHROPIC_API_KEY"] == nil)
+        #expect(env["ANTHROPIC_AUTH_TOKEN"] == nil)
+        #expect(env["PATH"] == "/usr/bin")
+        #expect(env["ANTHROPIC_MODEL"] == "claude-example-1", "other settings are the person's and stay")
     }
 
     /// A permission request shaped like Claude Code 2.1's (keys checked against a real run, values invented).
@@ -75,61 +76,61 @@ final class ClaudeStreamTests: XCTestCase {
                     "permission_suggestions": [["type": "setMode", "mode": "acceptEdits", "destination": "session"]]],
     ]
 
-    func testAPermissionRequestMakesTheAgentWait() {
+    @Test func testAPermissionRequestMakesTheAgentWait() {
         var agent = fresh()
         ClaudeStream.apply(askToWrite, to: &agent)
-        XCTAssertEqual(agent.status, "waiting")
-        XCTAssertEqual(agent.request, PermissionRequest(id: "r1", tool: "Write", about: "hello.txt",
+        #expect(agent.status == "waiting")
+        #expect(agent.request == PermissionRequest(id: "r1", tool: "Write", about: "hello.txt",
                                                         always: "switch to mode \"acceptEdits\" for this conversation"))
     }
 
-    func testAWithdrawnRequestIsCleared() {
+    @Test func testAWithdrawnRequestIsCleared() {
         var agent = fresh()
         ClaudeStream.apply(askToWrite, to: &agent)
         ClaudeStream.apply(["type": "control_cancel_request", "request_id": "r1"], to: &agent)
-        XCTAssertNil(agent.request)
-        XCTAssertEqual(agent.status, "working")
+        #expect(agent.request == nil)
+        #expect(agent.status == "working")
     }
 
-    func testOtherControlRequestsAreNotPermissions() {
+    @Test func testOtherControlRequestsAreNotPermissions() {
         var agent = fresh()
         ClaudeStream.apply(["type": "control_request", "request_id": "r2", "request": ["subtype": "hook_callback"]], to: &agent)
-        XCTAssertNil(agent.request)
+        #expect(agent.request == nil)
     }
 
     func answer(_ answer: PermissionAnswer) throws -> [String: Any] {
         let line = ClaudeStream.permissionLine(id: "r1", request: askToWrite["request"] as! [String: Any], answer: answer)
-        XCTAssertTrue(JSONSerialization.isValidJSONObject(line))
-        XCTAssertEqual(line["type"] as? String, "control_response")
-        let outer = try XCTUnwrap(line["response"] as? [String: Any])
-        XCTAssertEqual(outer["request_id"] as? String, "r1")
-        return try XCTUnwrap(outer["response"] as? [String: Any])
+        #expect(JSONSerialization.isValidJSONObject(line))
+        #expect(line["type"] as? String == "control_response")
+        let outer = try #require(line["response"] as? [String: Any])
+        #expect(outer["request_id"] as? String == "r1")
+        return try #require(outer["response"] as? [String: Any])
     }
 
-    func testAllowingOncePassesTheInputBackUnchanged() throws {
+    @Test func testAllowingOncePassesTheInputBackUnchanged() throws {
         let response = try answer(.once)
-        XCTAssertEqual(response["behavior"] as? String, "allow")
-        XCTAssertEqual((response["updatedInput"] as? [String: Any])?["content"] as? String, "hi\n")
-        XCTAssertNil(response["updatedPermissions"])
+        #expect(response["behavior"] as? String == "allow")
+        #expect((response["updatedInput"] as? [String: Any])?["content"] as? String == "hi\n")
+        #expect(response["updatedPermissions"] == nil)
     }
 
-    func testAlwaysPassesClaudesOwnSuggestionBack() throws {
+    @Test func testAlwaysPassesClaudesOwnSuggestionBack() throws {
         let response = try answer(.always)
-        let permissions = try XCTUnwrap(response["updatedPermissions"] as? [[String: Any]])
-        XCTAssertEqual(permissions.first?["mode"] as? String, "acceptEdits")
+        let permissions = try #require(response["updatedPermissions"] as? [[String: Any]])
+        #expect(permissions.first?["mode"] as? String == "acceptEdits")
     }
 
-    func testDenyingSaysWhoRefused() throws {
+    @Test func testDenyingSaysWhoRefused() throws {
         let response = try answer(.deny)
-        XCTAssertEqual(response["behavior"] as? String, "deny")
-        XCTAssertNotNil(response["message"] as? String)
-        XCTAssertNil(response["updatedInput"])
+        #expect(response["behavior"] as? String == "deny")
+        #expect(response["message"] as? String != nil)
+        #expect(response["updatedInput"] == nil)
     }
 
-    func testTheUserLineCarriesTheText() throws {
+    @Test func testTheUserLineCarriesTheText() throws {
         let line = ClaudeStream.userLine("hello")
-        XCTAssertTrue(JSONSerialization.isValidJSONObject(line))
-        XCTAssertEqual(line["type"] as? String, "user")
-        XCTAssertEqual((line["message"] as? [String: Any])?["content"] as? String, "hello")
+        #expect(JSONSerialization.isValidJSONObject(line))
+        #expect(line["type"] as? String == "user")
+        #expect((line["message"] as? [String: Any])?["content"] as? String == "hello")
     }
 }

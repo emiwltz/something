@@ -46,7 +46,10 @@ open class AgentProcess {
             self.update {
                 $0.status = "stopped"
                 $0.request = nil
-                if process.terminationStatus != 0 && $0.error == nil {
+                if process.terminationStatus == 127 {
+                    // /usr/bin/env found no such program: say it in words a newcomer can act on.
+                    $0.error = AgentProcess.notInstalled(self.program)
+                } else if process.terminationStatus != 0 && $0.error == nil {
                     let line = said.split(separator: "\n").last.map(String.init)
                     $0.error = line ?? "The agent stopped (exit code \(process.terminationStatus))."
                 }
@@ -55,9 +58,16 @@ open class AgentProcess {
         do {
             try process.run()
         } catch {
-            throw BridgeError("\(agent.harness) could not start: is `\(process.arguments?.first ?? "")` installed and on the PATH?")
+            throw BridgeError(AgentProcess.notInstalled(program))
         }
         started()
+    }
+
+    /// The program something runs for this agent ("claude", "codex", ...).
+    public var program: String { process.arguments?.first ?? "the agent" }
+
+    static func notInstalled(_ program: String) -> String {
+        "`\(program)` is not installed, or something cannot find it in your PATH. Install it, then launch the agent again."
     }
 
     /// Sends a message from the person. Throws a `BridgeError` when the agent has stopped.
