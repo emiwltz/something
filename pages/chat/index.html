@@ -1,0 +1,98 @@
+<!doctype html>
+<!-- The first page: nearly blank on purpose. Choose an agent, read what was said, write to it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>something</title>
+<style>
+  :root { color-scheme: light dark; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  body { margin: 0; padding: 24px; display: flex; flex-direction: column; gap: 12px; height: 100vh; box-sizing: border-box; }
+  header { display: flex; gap: 8px; align-items: center; }
+  #about { opacity: .65; font-size: 13px; }
+  #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .from { font-weight: 600; }
+  form { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; font: inherit; padding: 6px 8px; }
+  #status { opacity: .65; font-size: 13px; min-height: 1.5em; }
+  #problem { border-left: 3px solid #c0392b; padding: 6px 10px; background: rgba(192, 57, 43, .1); }
+  #waiting { border-left: 3px solid #d68910; padding: 6px 10px; background: rgba(214, 137, 16, .12); }
+</style>
+<script src="something://app/something.js"></script>
+</head>
+<body>
+<header>
+  <select id="agents" aria-label="Agent"></select>
+  <button class="launch" data-harness="claude" type="button">Launch Claude Code…</button>
+  <button class="launch" data-harness="codex" type="button">Launch Codex…</button>
+  <button class="launch" data-harness="opencode" type="button">Launch OpenCode…</button>
+  <button class="launch" data-harness="pi" type="button">Launch pi…</button>
+</header>
+<div id="about"></div>
+<div id="problem" role="alert" hidden></div>
+<div id="waiting" role="status" hidden></div>
+<div id="messages"></div>
+<form id="write">
+  <input id="text" type="text" placeholder="Write to the agent" autocomplete="off">
+  <button type="submit">Send</button>
+</form>
+<div id="status"></div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let current = null;
+
+  function show(state) {
+    const select = $("agents");
+    if (!current && state.agents.length) current = state.agents[0].id;
+    select.replaceChildren(...state.agents.map(function (agent) {
+      const option = new Option(agent.name + " (" + agent.harness + ")", agent.id);
+      option.selected = agent.id === current;
+      return option;
+    }));
+    select.hidden = !state.agents.length;
+    const agent = state.agents.find((a) => a.id === current);
+    $("write").hidden = !agent;
+    $("problem").hidden = !(agent && agent.error);
+    $("problem").textContent = agent && agent.error ? agent.harness + " says: " + agent.error : "";
+    const request = agent && agent.request;
+    $("waiting").hidden = !request;
+    $("waiting").textContent = request ? "Waiting for you: may it use " + request.tool +
+      (request.about ? " (" + request.about + ")" : "") + "? Answer in the window something opened." : "";
+    if (!agent) {
+      $("about").textContent = "No agent yet. Launch one, or build your own page from this one.";
+      $("messages").replaceChildren();
+      return;
+    }
+    const unknown = (value) => value === null ? "unknown" : value;
+    $("about").textContent = [agent.folder, "model " + unknown(agent.model), "mode " + unknown(agent.mode),
+      unknown(agent.status)].join(" · ");
+    $("messages").replaceChildren(...agent.messages.map(function (message) {
+      const line = document.createElement("div");
+      const from = document.createElement("span");
+      from.className = "from";
+      from.textContent = (message.from === "you" ? "you" : agent.name) + ": ";
+      line.append(from, message.text);
+      return line;
+    }));
+    $("messages").scrollTop = $("messages").scrollHeight;
+  }
+
+  function said(error) { $("status").textContent = error ? error.message : ""; }
+
+  something.subscribe(show);
+  something.state().then(show).catch(said);
+  $("agents").onchange = function () { current = this.value; something.state().then(show); };
+  document.querySelectorAll(".launch").forEach(function (button) {
+    button.onclick = function () {
+      something.launch(button.dataset.harness)
+        .then(function (id) { current = id; said(); return something.state(); }).then(show).catch(said);
+    };
+  });
+  $("write").onsubmit = function (event) {
+    event.preventDefault();
+    const text = $("text").value;
+    something.send(current, text).then(function () { $("text").value = ""; said(); }).catch(said);
+  };
+</script>
+</body>
+</html>
