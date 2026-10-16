@@ -1,5 +1,6 @@
 // Checks something runs from the command line, then quits. Typing the command is the consent:
-//   --self-test                     the window is on screen, the page answers, its memory works, the network is closed
+//   --self-test                     the window is on screen, ⌘V pastes in the page, the page answers, its memory works,
+//                                   the network is closed
 //   --try claude|codex|opencode|pi --in <folder>  launch that agent there and send one message
 //       --ask <text>                the message (default: a one-word reply)
 //       --answer once|always|deny   answer its permission requests without a window
@@ -31,7 +32,40 @@ extension Shell {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard arguments.contains("--self-test") else { return }
         // Give the window a moment to reach the screen, then report what is really there.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.report() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.checkPaste() }
+    }
+
+    /// Presses ⌘V as a keyboard would, through the menu, into the page's first text field, and reads what
+    /// arrived. The person's clipboard is put back as it was.
+    func checkPaste() {
+        let board = NSPasteboard.general
+        let saved: [NSPasteboardItem] = (board.pasteboardItems ?? []).map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types { if let data = item.data(forType: type) { copy.setData(data, forType: type) } }
+            return copy
+        }
+        let sample = "first line\nsecond line"
+        board.clearContents()
+        board.setString(sample, forType: .string)
+        window.makeFirstResponder(web)
+        web.evaluateJavaScript("""
+            const field = document.querySelector('textarea, input[type=text]');
+            field?.closest('[hidden]')?.removeAttribute('hidden');
+            field?.focus();
+            """) { _, _ in
+            let press = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                         windowNumber: self.window.windowNumber, context: nil, characters: "v",
+                                         charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9)!
+            _ = NSApp.mainMenu?.performKeyEquivalent(with: press)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.web.evaluateJavaScript("document.querySelector('textarea, input[type=text]')?.value ?? null") { value, _ in
+                    board.clearContents()
+                    board.writeObjects(saved)
+                    self.pasted = (value as? String) == sample
+                    self.report()
+                }
+            }
+        }
     }
 
     func report() {
@@ -49,8 +83,9 @@ extension Shell {
             let answer = (try? result.get()) as? String
             print("window visible: \(self.window.isVisible), on screen: \(onScreen)")
             print("menu bar icon: \(self.statusItem.button?.image != nil)")
+            print("paste with ⌘V: \(self.pasted ? "two lines arrived" : "nothing arrived")")
             print("page \(self.page): \(answer ?? "no answer")")
-            let good = self.window.isVisible && answer?.contains("\"kept\":1") == true
+            let good = self.window.isVisible && self.pasted && answer?.contains("\"kept\":1") == true
                 && answer?.contains("\"network\":\"blocked\"") == true
             exit(good ? 0 : 1)
         }

@@ -22,6 +22,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
     var window: NSWindow!
     var web: WKWebView!
     var store: PageStore?
+    var pasted = false
 
     static func option(_ name: String) -> String? {
         arguments.firstIndex(of: name).flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
@@ -30,6 +31,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
     var state: State { State(agents: sessions.map(\.agent)) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = Shell.mainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "circle.grid.2x2", accessibilityDescription: "something")
         statusItem.menu = NSMenu()
@@ -54,6 +56,27 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         // A page your agent is writing reloads as soon as it saves.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
         startChecks()
+    }
+
+    /// The menus every Mac app has. Without an Edit menu, ⌘V, ⌘C, ⌘X and ⌘A do nothing in a page.
+    static func mainMenu() -> NSMenu {
+        let main = NSMenu()
+        let app = NSMenu()
+        app.addItem(withTitle: "Quit something", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        for submenu in [app, edit] {
+            let item = NSMenuItem()
+            item.submenu = submenu
+            main.addItem(item)
+        }
+        return main
     }
 
     // Closing the window keeps something in the menu bar, with its agents.

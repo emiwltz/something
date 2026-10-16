@@ -13,7 +13,7 @@ Needs a Mac with Apple's command line tools (`xcode-select --install`, free; alr
 ```sh
 swift run something                 # builds, then opens the window and the menu bar icon
 swift run something --page <name>    # opens the page pages/<name>/ (default: chat)
-swift run something --self-test     # checks the window is on screen, the page answers, its memory works and the network is closed
+swift run something --self-test     # checks the window is on screen, ⌘V pastes, the page answers, its memory works, the network is closed
 swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
 # add --ask "<message>" to send your own; --answer once|always|deny answers its permission requests without a window,
 # --click "<button>" shows the windows and has something click that button itself; --force-ask makes Codex and OpenCode ask before acting; --model <model> picks OpenCode's or pi's model for the conversation

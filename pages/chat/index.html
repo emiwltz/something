@@ -13,7 +13,8 @@
   #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
   .from { font-weight: 600; }
   form { display: flex; gap: 8px; }
-  input[type=text] { flex: 1; font: inherit; padding: 6px 8px; }
+  textarea { flex: 1; font: inherit; padding: 6px 8px; resize: vertical; }
+  form { align-items: flex-end; }
   #status { opacity: .65; font-size: 13px; min-height: 1.5em; }
   #problem { border-left: 3px solid #c0392b; padding: 6px 10px; background: rgba(192, 57, 43, .1); }
   #waiting { border-left: 3px solid #d68910; padding: 6px 10px; background: rgba(214, 137, 16, .12); }
@@ -33,7 +34,7 @@
 <div id="waiting" role="status" hidden></div>
 <div id="messages"></div>
 <form id="write">
-  <input id="text" type="text" placeholder="Write to the agent" autocomplete="off">
+  <textarea id="text" rows="3" placeholder="Write to the agent (Enter sends, Shift+Enter for a new line)"></textarea>
   <button type="submit">Send</button>
 </form>
 <div id="status"></div>
@@ -88,6 +89,13 @@
         .then(function (id) { current = id; said(); return something.state(); }).then(show).catch(said);
     };
   });
+  // Enter sends, Shift+Enter starts a new line: a long prompt can be pasted with its lines.
+  $("text").onkeydown = function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      $("write").requestSubmit();
+    }
+  };
   $("write").onsubmit = function (event) {
     event.preventDefault();
     const text = $("text").value;
