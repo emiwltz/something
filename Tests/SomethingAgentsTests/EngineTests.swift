@@ -256,7 +256,11 @@ import SomethingCore
             try engine.launch("pi", folder: place.work.path, model: nil, mode: "plan", effort: nil)
         }
         // pi given a missing file would start an empty conversation there: the file is checked before pi is looked for.
-        for missing in ["/Users/example/.pi/agent/sessions/--Users-example-shop--/missing.jsonl", "relative.jsonl", place.work.path] {
+        // Nor is a file that is not a pi conversation (its first line is no session header).
+        let other = place.work.appendingPathComponent("notes.jsonl"), empty = place.work.appendingPathComponent("empty.jsonl")
+        try Data(#"{"type":"message","cwd":"/Users/example/shop"}"#.utf8).write(to: other)
+        try Data().write(to: empty)
+        for missing in ["/Users/example/.pi/agent/sessions/--Users-example-shop--/missing.jsonl", "relative.jsonl", place.work.path, other.path, empty.path] {
             #expect(throws: CodedError("THREAD_NOT_FOUND", "pi has no saved conversation with this id on this Mac.")) {
                 try engine.launch(PiDriver.self, folder: place.work.path, model: nil, mode: nil, effort: nil, planB: false, resume: missing)
             }

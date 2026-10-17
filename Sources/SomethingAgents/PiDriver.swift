@@ -25,13 +25,19 @@ public final class PiDriver: Driver {
         return Command(arguments: arguments)
     }
 
-    /// Throws THREAD_NOT_FOUND unless `file` is an absolute path to a file: a pi conversation can be continued only
-    /// from its file, which pi writes at the first message.
-    static func resumable(_ file: String) throws {
-        var folder: ObjCBool = false
-        guard file.hasPrefix("/"), FileManager.default.fileExists(atPath: file, isDirectory: &folder), !folder.boolValue else {
-            throw CodedError("THREAD_NOT_FOUND", "pi has no saved conversation with this id on this Mac.")
-        }
+    /// Returns the folder a resume of the conversation file `file` runs in: the `cwd` of its header line, which a
+    /// resumed pi uses whatever folder it was started in (V). Throws THREAD_NOT_FOUND unless `file` is an absolute
+    /// path to a pi conversation, which pi writes at the first message. Only the header line is read.
+    static func resumable(_ file: String) throws -> String {
+        let missing = CodedError("THREAD_NOT_FOUND", "pi has no saved conversation with this id on this Mac.")
+        guard file.hasPrefix("/"), let handle = FileHandle(forReadingAtPath: file) else { throw missing }
+        defer { try? handle.close() }
+        let start = (try? handle.read(upToCount: 64 * 1024)) ?? nil
+        guard let header = start?.split(separator: UInt8(ascii: "\n"), maxSplits: 1, omittingEmptySubsequences: false).first,
+              let entry = (try? JSONSerialization.jsonObject(with: Data(header))) as? [String: Any],
+              entry["type"] as? String == "session", let folder = entry["cwd"] as? String, folder.hasPrefix("/")
+        else { throw missing }
+        return folder
     }
 
     private let launch: Launch
@@ -45,22 +51,44 @@ public final class PiDriver: Driver {
     /// True from agent_start until agent_settled: retries, compaction and queued messages come between agent_end and
     /// agent_settled, and only agent_settled means nothing more happens on its own (notes 4).
     private var running = false
-    /// An interrupt asked before the run started, and one sent whose run has not settled yet.
-    private var abortAsked = false, aborting = false
-    /// The last assistant message's stopReason and error, which say how the run ended.
-    private var stop: String?, stopError: String?
+    /// An interrupt asked before the run started.
+    private var abortAsked = false
+    /// An abort sent whose run has not settled yet.
+    private var aborting = false
+    /// The last assistant message's stopReason, which says how the run ended.
+    private var stop: String?
+    /// The last assistant message's error, or a failed retry's.
+    private var stopError: String?
     /// Tool runs not finished yet, by pi's toolCallId.
     private var tools: [String: Item] = [:]
-    private var models: [[String: Any]]?, levels: [String]?, model: String?
-    /// Values `set` asked for, sent one at a time: set_model may change the thinking level, so the level goes after
-    /// it, and get_state reads both back once both were answered.
-    private var settings: [(key: String, value: String)] = [], asked: [(key: String, value: String)] = []
-    /// True while a set_model or set_thinking_level waits for its answer.
-    private var setting = false
+    /// The models pi has a key for, as get_available_models gives them; nil until it answered.
+    private var models: [[String: Any]]?
+    /// The thinking levels of the model in use; nil until pi said.
+    private var levels: [String]?
+    /// The model in force, "provider/id", as get_state last reported it.
+    private var model: String?
+    /// Values `set` asked for and not sent yet, sent one at a time: set_model may change the thinking level, so the
+    /// level goes after it.
+    private var unsent: [(key: String, value: String)] = []
+    /// Values sent, which get_state reads back once none is left to send.
+    private var sent: [(key: String, value: String)] = []
+    /// How many items this agent showed, for their ids.
     private var count = 0
-    private var heard = false, over = false
+    /// True once pi wrote a line: a launch that fails writes none.
+    private var heard = false
+    /// True once the program's end was told.
+    private var over = false
 
-    private enum Call { case state, models, levels, prompt(String), steer(String), set(String, String), readBack([(key: String, value: String)]), clearQueue, abort }
+    private enum Call {
+        case state, models, levels
+        case prompt(String), steer(String)
+        case set(String, String)
+        case readBack([(key: String, value: String)])
+        case clearQueue, abort
+    }
+
+    /// True while a set_model or set_thinking_level waits for its answer.
+    private var setting: Bool { calls.values.contains { if case .set = $0 { true } else { false } } }
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
@@ -84,7 +112,8 @@ public final class PiDriver: Driver {
         case "message_end": ended(message["message"] as? [String: Any] ?? [:])
         case "tool_execution_start", "tool_execution_end": tool(message, done: type == "tool_execution_end")
         case "auto_retry_end" where message["success"] as? Bool == false:
-            (stop, stopError) = ("error", message["finalError"] as? String ?? stopError)
+            stop = "error"
+            stopError = message["finalError"] as? String ?? stopError
         case "extension_error": emit(.error(AgentError(code: "AGENT_ERROR", message: "A pi extension failed: \(message["error"] as? String ?? "no reason given").")))
         case "extension_ui_request": dialog(message)
         default: break   // a newer pi's lines must not break an older something
@@ -109,10 +138,13 @@ public final class PiDriver: Driver {
     }
 
     /// pi applies a model and a thinking level at once; the state shows them once get_state reads them back. Throws
-    /// NOT_SUPPORTED for a mode (`limits`), AGENT_STOPPED.
+    /// NOT_SUPPORTED for a mode (`limits`), VALUE_NOT_OFFERED for a model that is not "provider/id", AGENT_STOPPED.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
         if mode != nil { throw CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!) }
-        settings += [("model", model), ("effort", effort)].compactMap { key, value in value.map { (key, $0) } }
+        if let model, model.split(separator: "/", maxSplits: 1).count != 2 {
+            throw CodedError("VALUE_NOT_OFFERED", "pi names a model provider/id, such as one of the agent's options.model.")
+        }
+        unsent += [("model", model), ("effort", effort)].compactMap { key, value in value.map { (key, $0) } }
         if !setting { try nextSetting() }
         return "now"
     }
@@ -152,6 +184,10 @@ public final class PiDriver: Driver {
             levels = data["levels"] as? [String]
             emit(.options(options()))
         case .set: try? nextSetting()
+        case .prompt where data["disposition"] as? String == "handled" && !running:
+            // An extension ran the message as its command: no run comes, so the turn something opened ends here.
+            abortAsked = false
+            emit(.turnEnded(.done))
         case .prompt, .steer, .clearQueue, .abort: break   // the run's events say what became of them
         }
     }
@@ -159,17 +195,21 @@ public final class PiDriver: Driver {
     /// pi refused a command; each says what became of what was asked.
     private func refused(_ call: Call, _ words: String) {
         switch call {
-        case .state, .models, .levels, .clearQueue: break   // the values stay as last known
-        case .readBack: asked = []
+        case .state, .models, .levels, .readBack: break   // the values stay as last known
+        case .clearQueue:
+            emit(.error(AgentError(code: "AGENT_ERROR", message: "pi kept the messages it had queued: \(words)")))
         case .prompt(let text):
+            let refusal = AgentError(code: "AGENT_ERROR", message: "pi refused the message “\(Launched.short(text))”: \(PiDriver.plain(words))")
+            // A steer written as a run settled may have started a run of its own: that turn goes on.
+            guard !running else { return emit(.error(refusal)) }
             // The run this message would open never started: an interrupt asked for it is moot, and what was held
             // for it goes on.
             abortAsked = false
-            emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "pi refused the message “\(Launched.short(text))”: \(PiDriver.plain(words))"))))
+            emit(.turnEnded(.failed(refusal)))
         case .steer(let text):
             emit(.error(AgentError(code: "AGENT_ERROR", message: "pi did not take the message “\(Launched.short(text))”: \(PiDriver.plain(words))")))
         case .set(let key, let value):
-            asked.removeAll { $0.key == key }
+            sent.removeAll { $0.key == key }
             emit(.error(AgentError(code: "VALUE_NOT_OFFERED", message: "pi refused \(value) as its \(key): \(words)")))
             try? nextSetting()
         case .abort:
@@ -207,7 +247,8 @@ public final class PiDriver: Driver {
     private func started() {
         guard !running else { return }
         running = true
-        (stop, stopError) = (nil, nil)
+        stop = nil
+        stopError = nil
         emit(.turnStarted(id: nil))
         if abortAsked {
             abortAsked = false
@@ -242,7 +283,8 @@ public final class PiDriver: Driver {
             let text = content as? String ?? PiDriver.texts(content, "text", "text")
             append("message", "person", text)
         case "assistant":
-            (stop, stopError) = (message["stopReason"] as? String, message["errorMessage"] as? String)
+            stop = message["stopReason"] as? String
+            stopError = message["errorMessage"] as? String
             append("thought", "agent", PiDriver.texts(message["content"], "thinking", "thinking"))
             append("message", "agent", PiDriver.texts(message["content"], "text", "text"))
         default: break
@@ -277,22 +319,20 @@ public final class PiDriver: Driver {
 
     // MARK: Helpers
 
+    /// Sends the next value `set` asked for or, once none is left, the get_state that reads them back.
     private func nextSetting() throws {
-        setting = false
-        guard !settings.isEmpty else {
-            guard !asked.isEmpty else { return }
-            let values = asked
-            asked = []
+        guard !unsent.isEmpty else {
+            guard !sent.isEmpty else { return }
+            let values = sent
+            sent = []
             return try invoke(.readBack(values), ["type": "get_state"])
         }
-        let (key, value) = settings.removeFirst()
-        asked.append((key, value))
-        setting = true
+        let (key, value) = unsent.removeFirst()
+        sent.append((key, value))
         if key == "effort" { return try invoke(.set(key, value), ["type": "set_thinking_level", "level": value]) }
-        // A model is "provider/id"; an id may hold slashes of its own, a provider none.
+        // A model is "provider/id" (checked in `set`); an id may hold slashes of its own, a provider none.
         let parts = value.split(separator: "/", maxSplits: 1).map(String.init)
-        let provider = parts.count == 2 ? parts[0] : models?.first { $0["id"] as? String == value }?["provider"] as? String ?? ""
-        try invoke(.set(key, value), ["type": "set_model", "provider": provider, "modelId": parts.count == 2 ? parts[1] : value])
+        try invoke(.set(key, value), ["type": "set_model", "provider": parts[0], "modelId": parts[1]])
     }
 
     /// The models pi has a key for, and the thinking levels of the one in use; nil until pi said.

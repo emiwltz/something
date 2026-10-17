@@ -14,6 +14,8 @@ final class FakeResponsesAPI {
     private var count = 0
     /// Whether the chat completions call pi's tool (`bash`) rather than OpenCode's.
     var pi = false
+    /// The command pi's run-wait tool call runs: a duration no other program uses, so a trial can tell it is gone.
+    static let piWait = "sleep 30.25"
 
     init() throws {
         socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
@@ -63,7 +65,7 @@ final class FakeResponsesAPI {
         if let toolOutput { return .message("Invented summary: \(toolOutput.prefix(40))", slow: false) }
         if last.contains("run-sleep") { return .message(Array(repeating: "tick", count: 40).joined(separator: " "), slow: true) }
         if pi, last.contains("run-echo") { return .call(name: "bash", arguments: ["command": "touch invented.txt"]) }
-        if pi, last.contains("run-wait") { return .call(name: "bash", arguments: ["command": "sleep 30"]) }
+        if pi, last.contains("run-wait") { return .call(name: "bash", arguments: ["command": FakeResponsesAPI.piWait]) }
         if opencode, last.contains("run-echo") {
             return .call(name: "shell", arguments: ["command": "touch invented.txt", "description": "Invented: make a file"])
         }

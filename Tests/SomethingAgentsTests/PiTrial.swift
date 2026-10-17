@@ -1,11 +1,14 @@
 // Trial T-4: PiDriver against the REAL pi program, which talks to FakeResponsesAPI's Chat Completions instead of a
 // model. It runs only when asked, since it needs pi on this Mac:
 //
-//   SOMETHING_TRIAL_PI=$HOME/.local/bin/pi swift test --filter PiTrial
+//   SOMETHING_TRIAL_PI=$HOME/.pi/agent/install/releases/<version>/node_modules/.bin/pi swift test --filter PiTrial
 //
+// That is the program pi's launcher ($HOME/.local/bin/pi) runs. Given the launcher, pi also touches its install folder
+// in ~/.pi at each start, which the check below rightly refuses.
 // Each case gets a throwaway HOME and pi agent folder (PI_CODING_AGENT_DIR) under $TMPDIR, deleted after, whatever the
 // case's outcome. Its models.json declares one OpenAI-compatible provider that points at the fake, with a made-up key,
-// and PI_OFFLINE stops pi's own catalog refreshes, so nothing reaches a real model or the person's ~/.pi.
+// and PI_OFFLINE stops pi's own catalog refreshes, so nothing reaches a real model or the person's ~/.pi: each case
+// compares the names and modification dates under ~/.pi before and after (no file is read).
 // SOMETHING_TRIAL_RECORD=<folder> also writes each case as an exchange in the format of Tests/Exchanges/pi, its paths
 // made /Users/example, without the lines the driver never reads that carry pi's system prompt (message_update, the
 // system message, agent_end's copy of the run): the raw material of a replay.
@@ -26,6 +29,8 @@ import SomethingCore
     private let owner: Bool
     private let note: [String: Any]
     private let stopAsked: Stopped
+    /// The person's ~/.pi when the case began.
+    private let realPi: [String: Date]
 
     var work: URL { root.appendingPathComponent("work/shop") }
 
@@ -33,6 +38,7 @@ import SomethingCore
     init(_ name: String, model: String? = nil, effort: String? = nil, resume file: String? = nil, after: PiRun? = nil) throws {
         self.name = name
         owner = after == nil
+        realPi = PiRun.realPi()
         note = ["model": model, "effort": effort, "resume": file].compactMapValues { $0 }
         api = try after?.api ?? FakeResponsesAPI()
         api.pi = true
@@ -49,8 +55,9 @@ import SomethingCore
         let settings = ["defaultProvider": "fake", "defaultModel": "fake-1"]
         try JSONSerialization.data(withJSONObject: settings).write(to: root.appendingPathComponent("agent/settings.json"))
         let program = trialPi!
-        let launch = Launch(agent: "pi-1", folder: root.appendingPathComponent("work/shop").path, model: model, effort: effort,
-                            thread: file ?? "", resume: file != nil)
+        // A resumed pi runs in its conversation's folder, as the engine launches it.
+        let folder = try file.map(PiDriver.resumable) ?? root.appendingPathComponent("work/shop").path
+        let launch = Launch(agent: "pi-1", folder: folder, model: model, effort: effort, thread: file ?? "", resume: file != nil)
         // pi's launcher is a shell script that runs node from the PATH.
         let node = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init)
             .first { FileManager.default.isExecutableFile(atPath: "\($0)/node") } ?? "/usr/bin"
@@ -133,19 +140,46 @@ import SomethingCore
         let stopped = DispatchSemaphore(value: 0)
         spawn.stop(cap: 2) { stopped.signal() }
         _ = stopped.wait(timeout: .now() + 3)
+        if PiRun.realPi() != realPi { Issue.record("\(name): the person's ~/.pi changed during the case") }
         guard owner else { return }
         api.stop()
         try? FileManager.default.removeItem(at: root)
     }
 
-    /// No process of the trial's home is left.
-    func nothingLeft() throws -> Bool {
-        let left = Process()
-        left.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        left.arguments = ["-f", root.path]
-        try left.run()
-        left.waitUntilExit()
-        return left.terminationStatus == 1
+    /// Each name under the person's ~/.pi with its modification date; their contents are never read.
+    static func realPi() -> [String: Date] {
+        let home = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".pi")
+        var found: [String: Date] = [:]
+        let names = FileManager.default.enumerator(at: home, includingPropertiesForKeys: [.contentModificationDateKey])
+        while let url = names?.nextObject() as? URL {
+            found[url.path] = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        }
+        return found
+    }
+
+    /// True once no process of pi's group (Spawn gives it its own) is left, within two seconds.
+    func nothingLeft() async throws -> Bool {
+        let group = spawn.pid
+        for _ in 0..<40 {
+            if kill(-group, 0) == -1 && errno == ESRCH { return true }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
+    }
+
+    /// True once no process runs `command`, within two seconds.
+    static func gone(_ command: String) async throws -> Bool {
+        for _ in 0..<40 {
+            let left = Process()
+            left.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+            left.arguments = ["-fx", command]
+            left.standardOutput = FileHandle.nullDevice
+            try left.run()
+            left.waitUntilExit()
+            if left.terminationStatus == 1 { return true }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return false
     }
 
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway
@@ -175,7 +209,8 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         let run = try PiRun("turn")
         defer { run.cleanup() }
         try await run.until("the state") { run.state.thread != nil && run.state.model != nil && run.state.options.effort != nil }
-        #expect(run.state.thread?.hasPrefix(run.root.appendingPathComponent("agent/sessions").path) == true || run.state.thread?.contains("/agent/sessions/") == true)
+        let sessions = run.root.appendingPathComponent("agent/sessions").resolvingSymlinksInPath().path + "/"
+        #expect(run.state.thread.map { URL(fileURLWithPath: $0).resolvingSymlinksInPath().path.hasPrefix(sessions) } == true, "pi writes in the throwaway folder")
         #expect((run.state.model, run.state.mode) == ("fake/fake-1", nil))
         #expect(run.state.options.model?.map(\.value) == ["fake/fake-1", "fake/fake-2"])
         #expect(run.state.options.mode == [])
@@ -251,7 +286,9 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         try await run.until("the interrupted turn") { run.turns == ["interrupted"] && run.state.state == "interrupted" }
         #expect(run.items.first { $0.kind == "tool" }?.tool?.status == "failed")
         #expect(run.state.error == nil)
+        #expect(try await PiRun.gone(FakeResponsesAPI.piWait), "the abort ends the tool's command")
         try await run.finish()
+        #expect(try await run.nothingLeft(), "no process of the trial is left")
     }
 
     /// Each value is read back with get_state; one pi does not take is said, and the value in force stays.
@@ -289,8 +326,10 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         try await first.until("a reply") { first.turns == ["done"] && first.state.state == "idle" }
         let file = try #require(first.state.thread)
         try await first.finish()
-        #expect(throws: Never.self) { try PiDriver.resumable(file) }
+        let folder = try PiDriver.resumable(file)
+        #expect(URL(fileURLWithPath: folder).resolvingSymlinksInPath() == first.work.resolvingSymlinksInPath(), "the header names the first run's folder")
         let run = try PiRun("resume", resume: file, after: first)
+        #expect(run.state.folder == folder)
         defer { run.cleanup() }
         #expect(run.state.thread == file, "a resumed conversation is known before pi answers")
         try await run.until("the state") { run.state.model != nil }
@@ -312,6 +351,6 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         #expect(took < 3, "the input's end, without SIGTERM: \(took) s")
         #expect(run.state.state == "interrupted")
         #expect(run.state.error == nil)
-        #expect(try run.nothingLeft(), "no process of the trial is left")
+        #expect(try await run.nothingLeft(), "no process of the trial is left")
     }
 }

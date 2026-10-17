@@ -173,6 +173,54 @@ import SomethingCore
         #expect(replay.fold.turns.map(\.state) == ["interrupted"])
     }
 
+    /// A message an extension ran as its command starts no run: the turn ends at its answer, and what was held goes.
+    @Test func aMessageAnExtensionHandled() throws {
+        let replay = Self.pi()
+        #expect(try replay.agent.send("/invented-command", when: "next") == "started")
+        #expect(try replay.agent.send("Queued: then the docs.", when: "next") == "queued")
+        replay.feed(["id": "s4", "type": "response", "command": "prompt", "success": true, "data": ["disposition": "handled"]])
+        #expect(replay.fold.agent.queue.isEmpty)
+        #expect(replay.lines(from: 4).first?["message"] as? String == "Queued: then the docs.")
+    }
+
+    /// pi takes any thinking level and keeps the closest its model supports: the read-back says so.
+    @Test func anEffortPiKeptOtherwise() throws {
+        let replay = Self.pi()
+        #expect(try replay.agent.driver.set(model: nil, mode: nil, effort: "high") == "now")
+        #expect(replay.lines(from: 3).map { $0["type"] as? String } == ["set_thinking_level"])
+        replay.feed(["id": "s4", "type": "response", "command": "set_thinking_level", "success": true])
+        #expect(replay.lines(from: 4).map { $0["type"] as? String } == ["get_state"])
+        replay.feed(["id": "s5", "type": "response", "command": "get_state", "success": true,
+                     "data": ["model": ["provider": "fake", "id": "fake-1"], "thinkingLevel": "off", "sessionFile": "/Users/example/.pi/agent/sessions/--Users-example-shop--/b.jsonl"]])
+        #expect(replay.fold.agent.error == AgentError(code: "VALUE_NOT_OFFERED", message: "pi kept off as its effort, not high."))
+        #expect(replay.fold.agent.effort == "off")
+        #expect(throws: CodedError("VALUE_NOT_OFFERED", "pi names a model provider/id, such as one of the agent's options.model.")) {
+            try replay.agent.driver.set(model: "fake-2", mode: nil, effort: nil)
+        }
+    }
+
+    /// A refused clear_queue is said: what pi queued would go with the next prompt.
+    @Test func aQueuePiKept() throws {
+        let replay = Self.pi()
+        _ = try replay.agent.send("Hello there.", when: "next")
+        replay.feed(["type": "agent_start"])
+        #expect(try replay.agent.interrupt())
+        #expect(replay.lines(from: 4).map { $0["type"] as? String } == ["clear_queue", "abort"])
+        replay.feed(["id": "s5", "type": "response", "command": "clear_queue", "success": false, "error": "Invented failure"])
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "pi kept the messages it had queued: Invented failure"))
+    }
+
+    /// A resume runs in the folder the conversation's header names; a file that is no pi conversation is refused.
+    @Test func whereAResumeRuns() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pi-header-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("a.jsonl")
+        let lines = #"{"type":"session","version":3,"id":"01a1","timestamp":"2026-10-17T09:00:00Z","cwd":"/Users/example/shop"}"# + "\n" + #"{"type":"message"}"# + "\n"
+        try Data(lines.utf8).write(to: file)
+        #expect(try PiDriver.resumable(file.path) == "/Users/example/shop")
+    }
+
     /// A wrong --model or --session ends pi before it answers, with one line on its error output.
     @Test func aLaunchThatFails() {
         let replay = Self.pi()

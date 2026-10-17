@@ -172,10 +172,11 @@ public final class Engine {
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
     /// With `resume`, the program continues that conversation in `folder` (Codex, OpenCode and pi so far); a pi
-    /// conversation is its file, which must exist (THREAD_NOT_FOUND).
+    /// conversation is its file, which must exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
-        if type is PiDriver.Type, let resume { try PiDriver.resumable(resume) }
+        // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
+        let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
         let program = try programs.find(type.kind)
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
