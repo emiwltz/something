@@ -54,13 +54,16 @@ struct Ran {
             ["check"], ["check", "a", "b"], ["check", "a", "--refuse"], ["check", "a", "--state"],
             ["check", "a", "--refuse", "--json"], ["check", "a", "--fast"],
         ]
+        #expect(Command.parse(["morning-review"]) == .wrong(
+            "something does not know \"morning-review\": to open the space morning-review, type something open morning-review, and type something --help to see what it does."))
         for words in wrong {
             guard case .wrong(let sentence) = Command.parse(words) else {
                 Issue.record("\(words) was not refused")
                 continue
             }
             // One sentence that says what to type next.
-            #expect(sentence.contains("something") && !sentence.contains("\n"), "\(words): \(sentence)")
+            let next = sentence.lowercased().contains("type something ") || sentence.contains("for example: something ")
+            #expect(next && !sentence.contains("\n"), "\(words): \(sentence)")
         }
     }
 
@@ -77,15 +80,54 @@ struct Ran {
         defer { home.remove() }
         try home.space("board", page(nil, "<p>Invented.</p>"))
         let version = Ran(["--version"], home)
-        #expect(version.status == 0 && version.out == "something \(Resources.version)\n" && version.err.isEmpty)
+        #expect(version.status == 0 && version.out.hasPrefix("something ") && version.err.isEmpty)
         #expect(Ran(["--help"], home).out.hasPrefix("Usage:"))
         let wrong = Ran(["open"], home)
         #expect(wrong.status == 2 && wrong.out.isEmpty && wrong.err.contains("Usage:"))
         let check = Ran(["check", "board"], home)
-        #expect(check.status == 1 && check.err.contains("not in this version yet"))
+        #expect(check.status == 2 && check.err.contains("not in this version yet"))
         // Routed to SomethingAgents, which has no hook and no trial yet: their own statuses come back.
         #expect(Ran(["hook", "permission"], home).status == 2)
         #expect(Ran(["try", "claude"], home).status == 2)
+    }
+
+    /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".
+    @Test func theVersionIsTheBundles() throws {
+        let home = Home()
+        defer { home.remove() }
+        let bare = home.root.appendingPathComponent("bare.app")
+        try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
+        #expect(Resources.version(of: try #require(Bundle(path: bare.path))) == "dev")
+        let packaged = home.root.appendingPathComponent("example.app")
+        try FileManager.default.createDirectory(at: packaged.appendingPathComponent("Contents"), withIntermediateDirectories: true)
+        try PropertyListSerialization.data(fromPropertyList: ["CFBundleShortVersionString": "9.8.7"], format: .xml, options: 0)
+            .write(to: packaged.appendingPathComponent("Contents/Info.plist"))
+        #expect(Resources.version(of: try #require(Bundle(path: packaged.path))) == "9.8.7")
+    }
+
+    /// The app passes on the terminal's settings, not the markers of the agent or the terminal it was started in.
+    @Test func theAppGetsTheTerminalsEnvironmentWithoutItsMarkers() {
+        let terminal = ["PATH": "/Users/example/bin:/usr/bin", "HOME": "/Users/example", "CODEX_HOME": "/Users/example/.codex-work",
+                        "CLAUDECODE": "1", "CLAUDE_CODE_ENTRYPOINT": "cli", "TMUX_PANE": "%3", "TERM_SESSION_ID": "w0t0p0:EXAMPLE"]
+        #expect(LaunchServices.inherited(terminal) == ["PATH": "/Users/example/bin:/usr/bin", "HOME": "/Users/example",
+                                                       "CODEX_HOME": "/Users/example/.codex-work"])
+    }
+
+    /// A space handed by its path is the one already open by its name: the window is fronted, not reopened.
+    @Test func aSpaceIsTheSameHoweverItsPathIsWritten() throws {
+        let home = Home()
+        defer { home.remove() }
+        try FileManager.default.createDirectory(at: home.places.spaces, withIntermediateDirectories: true)
+        let spaces = Spaces(root: home.places.spaces)
+        let board = try spaces.new("board", from: Home.share.appendingPathComponent("template.html"), folder: true)
+        let link = home.root.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: home.places.spaces)
+        for written in [board.location.path + "/", link.appendingPathComponent("board").path] {
+            let byPath = try #require(spaces.locate(written), "\(written)")
+            #expect(App.same(board, byPath), "\(written)")
+        }
+        let other = try home.space("garden", page(nil, "<p>Invented.</p>"))
+        #expect(!App.same(board, other))
     }
 
     @Test func startAndOpenGoThroughTheDoor() throws {

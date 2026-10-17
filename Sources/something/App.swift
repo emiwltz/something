@@ -88,7 +88,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Opens `space` in the space window, or fronts it when it is the open one. Returns what went wrong, or nil.
     func open(_ space: Space) -> String? {
-        if let current, current.space == space {
+        if let current, App.same(current.space, space) {
             current.show()
             return nil
         }
@@ -111,6 +111,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } catch {
             return (error as? SpaceError)?.message ?? "\(error)"
         }
+    }
+
+    /// Whether two spaces are one, however their paths are written: SpaceWindow's `kept` compares them the same way.
+    static func same(_ one: Space, _ other: Space) -> Bool {
+        one.location.resolvingSymlinksInPath().path == other.location.resolvingSymlinksInPath().path
     }
 
     /// Who asks, for a panel ("Claude Code “shop”, working in /Users/example/code/shop, asks…"): the agent's name and

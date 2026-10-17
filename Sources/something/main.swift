@@ -16,6 +16,12 @@ let words = Array(CommandLine.arguments.dropFirst())
 let command = Command.parse(words)
 let inProcess = Bundle.main.bundleIdentifier == nil
 if Command.isApp(words, parent: getppid()) || inProcess && command == .start {
+    // LaunchServices keeps one app, but `something --app` typed in a terminal does not go through it.
+    if let id = Bundle.main.bundleIdentifier,
+       let other = NSRunningApplication.runningApplications(withBundleIdentifier: id).first(where: { $0.processIdentifier != getpid() }) {
+        other.activate(options: [])
+        exit(0)
+    }
     runApp(opening: nil)
 } else if inProcess, case .open(let name) = command {
     runApp(opening: name)

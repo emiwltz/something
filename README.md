@@ -33,13 +33,13 @@ something                       start something, or bring it to the front
 something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
 something new <name> [--folder] make a space from the template (with --folder, <name>/index.html, which can hold more files)
 something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
-something check <name|path> ... test a space without showing it (not in this version yet: it says so)
+something check <name|path> ... test a space without showing it (not in this version yet: it says so, with status 2)
 something --version
 ```
 
 Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the words were wrong. A new space never inherits the answers a deleted space of the same name left.
 
-Installed, something is `something.app` with the command beside it. The command hands what you ask to the app through macOS (LaunchServices), which keeps one copy of the app running: `something` starts it, or brings it to the front, with your terminal's environment, so the agents it launches find the programs your terminal finds; `something open` hands it the space. Started from Finder or the Dock, the app is the app. Double-clicking an export (`.something`) imports it in Home. Run from the clone (`swift run`), there is no `.app`, and `something` and `something open` run the app in the terminal's own process.
+Installed, something is `something.app` with the command beside it. The command hands what you ask to the app through macOS (LaunchServices), which keeps one copy of the app running: `something` starts it, or brings it to the front, with your terminal's environment, so the agents it launches find the programs and the settings your terminal finds (less the variables that only say where the terminal runs, such as CLAUDECODE or TMUX, which would make an agent think it is nested); `something open` hands it the space. Started from Finder or the Dock, the app is the app. Double-clicking an export (`.something`) imports it in Home. Run from the clone (`swift run`), there is no `.app`, and `something` and `something open` run the app in the terminal's own process.
 
 `tools/make-app.sh <prefix> <version> [<program>]` assembles `<prefix>/something.app` from `packaging/Info.plist`, the program (built with `swift build -c release` when none is given) and `share/`, and signs it ad hoc, without an Apple account. The version is written in the app's Info.plist only, and `something --version` reads it there; run from the clone it says `dev`.
 

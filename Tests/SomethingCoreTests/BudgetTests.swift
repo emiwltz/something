@@ -4,9 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    /// The app's budget was raised from 1,700 to 1,950 with the command (slice 8), pending Emi's word: AGENTS.md
-    /// calls it a soft budget he may raise, and still says 1,700.
-    static let core = 1_700, driver = 600, reader = 400, agentsShared = 400, app = 1_950
+    static let core = 1_700, driver = 600, reader = 400, agentsShared = 400, app = 1_700
     /// The drivers that still carry their V1 names; new ones end in Driver.swift.
     static let v1Drivers: Set<String> = ["Claude.swift", "Codex.swift", "ACP.swift", "Pi.swift"]
 
@@ -52,7 +50,15 @@ enum Budget {
         for target in ["SomethingCore", "SomethingAgents", "something"] {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
         }
-        #expect(Budget.problems(under: root).isEmpty, "\(Budget.problems(under: root))")
+        let problems = Budget.problems(under: root)
+        let app = problems.filter { $0.hasPrefix("The Mac app") }
+        #expect(problems.count == app.count, "\(problems)")
+        // The app went over its soft budget with the command (slice 8). Whether to raise it, in AGENTS.md and here
+        // together, or to trim the app, is Emi's decision; until then the overrun shows in every run, and this known
+        // issue fails the day the app is back under budget, so that it is removed.
+        withKnownIssue("The Mac app is over the 1,700 lines AGENTS.md gives it, until Emi decides") {
+            #expect(app.isEmpty, "\(app)")
+        }
     }
 
     @Test func filesInSubfoldersAreCounted() throws {
@@ -80,7 +86,7 @@ enum Budget {
             ("SomethingAgents", "PiReader.swift", 401, "PiReader.swift has 401 lines; a reader has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_701, "SomethingCore has 1701 lines; its budget is 1700."),
-            ("something", "App.swift", 1_951, "The Mac app has 1951 lines; its budget is 1950."),
+            ("something", "App.swift", 1_701, "The Mac app has 1701 lines; its budget is 1700."),
         ]
         for item in cases {
             for (count, expected) in [(item.lines - 1, [String]()), (item.lines, [item.problem])] {

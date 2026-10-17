@@ -1,7 +1,7 @@
 // The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
 // hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
 // sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the
-// words were wrong.
+// words were wrong or nothing could run.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -50,6 +50,9 @@ enum Command: Equatable {
         case "check": return Check.parse(rest)
         case "hook" where rest.first == "permission": return .hook(words)
         case "try": return .trial(words)
+        // `something <name>` was how a space opened before 1.0.
+        case let name where rest.isEmpty && Spaces.isName(name):
+            return .wrong("something does not know \"\(name)\": to open the space \(name), type something open \(name), and type something --help to see what it does.")
         default: return .wrong("something does not know \"\(words.joined(separator: " "))\". Type something --help to see what it does.")
         }
     }
@@ -84,7 +87,7 @@ enum Command: Equatable {
                     The guide for the coding agent that writes your spaces:
                       \(Command.stable(guide).path)
                     Give your agent this path. It says how a space is written (an HTML page in \(places.spaces.path)), \
-                    what it may ask for, and how to test it with something check <name>.
+                    and what it may ask for.
                     """, false)
                 return 0
             }
@@ -101,8 +104,9 @@ enum Command: Equatable {
             say(Command.usage, false)
             return 0
         case .check:
+            // 2, check's own status when nothing could run (contract 9): 1 would say the space has errors.
             say("something check is not in this version yet. Until it is, open the space with something open <name> to see it.", true)
-            return 1
+            return 2
         case .hook(let words):
             return PermissionHook.main(words)
         case .trial(let words):
@@ -159,7 +163,7 @@ struct Check: Equatable {
                 }
                 if word == "--refuse" { check.refuse.append(value) } else { check.state = value }
             case let flag where flag.hasPrefix("-"):
-                return .wrong("something check does not know \(flag).")
+                return .wrong("something check does not know \(flag). Type something --help to see its options.")
             default: spaces.append(word)
             }
         }
@@ -177,7 +181,7 @@ protocol Door {
 
 /// The app's .app through LaunchServices, which keeps one instance: it starts the app, or fronts the running one,
 /// and hands it the space as `application(_:open:)`. The app gets the terminal's environment, so the agents it
-/// launches find the programs the terminal finds.
+/// launches find the programs and the folders the terminal finds, less what only says where the terminal runs.
 struct LaunchServices: Door {
     let app: URL
 
@@ -194,8 +198,23 @@ struct LaunchServices: Door {
     private func configuration() -> NSWorkspace.OpenConfiguration {
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = ["--app"]
-        configuration.environment = ProcessInfo.processInfo.environment
+        configuration.environment = LaunchServices.inherited(ProcessInfo.processInfo.environment)
         return configuration
+    }
+
+    /// The variables an agent, a terminal or a multiplexer sets for what runs inside it. The app outlives the
+    /// terminal it was started from, often an agent's shell: a Claude it launches with CLAUDECODE thinks it is
+    /// nested and refuses to start, and one with CLAUDE_CODE_ENTRYPOINT records the wrong origin in its session.
+    static let markers: Set<String> = [
+        "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SSE_PORT",
+        "CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "PI_CODING_AGENT", "AI_AGENT",
+        "TERM_SESSION_ID", "ITERM_SESSION_ID", "TMUX", "TMUX_PANE",
+    ]
+
+    /// `environment` without the markers. Settings such as CODEX_HOME or CLAUDE_CONFIG_DIR stay: the agents and
+    /// their readers need them.
+    static func inherited(_ environment: [String: String]) -> [String: String] {
+        environment.filter { !markers.contains($0.key) }
     }
 
     /// LaunchServices answers on a queue of its own, so the main thread can wait for it.

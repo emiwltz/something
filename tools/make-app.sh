@@ -16,6 +16,10 @@ if [[ $# -lt 2 || $# -gt 3 ]]; then
 fi
 prefix=$1
 version=$2
+if [[ -z $prefix || -z $version ]]; then
+  echo "The prefix and the version must not be empty, for example: tools/make-app.sh /tmp/example 1.0.0" >&2
+  exit 2
+fi
 repository=$(cd "$(dirname "$0")/.." && pwd)
 if [[ $# -eq 3 ]]; then
   executable=$3

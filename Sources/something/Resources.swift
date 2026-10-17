@@ -7,7 +7,12 @@ import SomethingCore
 enum Resources {
     /// This engine's version, for `--version` and every export: the one make-app.sh wrote in the .app's Info.plist,
     /// the only place it is kept; "dev" when something runs from its clone.
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    static let version = version(of: .main)
+
+    /// The CFBundleShortVersionString of `bundle`, or "dev" when it has none.
+    static func version(of bundle: Bundle) -> String {
+        bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
 
     /// The share/ folder. Fails with a sentence when it cannot be found: without it there is no page to show.
     static let share: URL = {

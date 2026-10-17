@@ -55,5 +55,7 @@ import Testing
 
     @Test func makeAppRefusesWrongUse() throws {
         #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["/Users/example/prefix"]).status == 2)
+        // An unset variable in a formula or a CI job must not become /something.app.
+        #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["", "1.0.0"], quiet: true).status == 2)
     }
 }
