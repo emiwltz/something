@@ -62,10 +62,16 @@ public final class Engine {
     private var stopping: Set<String> = []
     private var count = 0
 
+    /// The agents started elsewhere: the readers, on their timer once `start` was called.
+    lazy var watch = Watch(readers: Watch.readers(environment))
+    /// What the watch saw last, before the dedupe.
+    private var seen = Seen()
+
     /// Starts watching this Mac. `often` is true while a space is open. Called again, it only changes the cadence:
     /// the programs are looked for once.
     public func start(often: Bool) {
         self.often = often
+        watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) }
         guard !looked else { return }
         looked = true
         // Reading the login shell can take 3 s: never on the main queue.
@@ -79,11 +85,25 @@ public final class Engine {
     public var state: State {
         let kinds = Programs.kinds.map { kind in
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
-                        seen: nil, reader: "none", note: nil))
+                        seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
-        let folds = launched.map(\.agent.queue.fold)
-        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent),
-                     threads: folds.compactMap(\.thread), requests: folds.flatMap(\.requests))
+        let folds = launched.map(\.agent.queue.fold), elsewhere = elsewhere
+        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + elsewhere.agents,
+                     threads: folds.compactMap(\.thread) + elsewhere.threads, requests: folds.flatMap(\.requests))
+    }
+
+    /// The agents the watch saw, but those something launched: the groups of its children and the conversations
+    /// its drivers reported are left out (design 4.3).
+    private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
+        Watch.elsewhere(seen, groups: Set(launched.map(\.spawn.pid).filter { $0 > 0 }), keys: Set(launched.compactMap(\.agent.agent.thread)), now: Date())
+    }
+
+    /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.
+    func saw(_ seen: Seen) {
+        let before = elsewhere, kinds = self.seen.kinds
+        self.seen = seen
+        let after = elsewhere
+        if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { changed() }
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without

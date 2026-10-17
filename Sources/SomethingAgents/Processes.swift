@@ -1,0 +1,153 @@
+// Processes: one snapshot of this Mac's processes per tick, read with libproc and sysctl, never by starting a program
+// (design 4.2, step 1). Every process gives its parent, its group and its start time. Only those whose name a reader
+// knows give their arguments and folder, and only the candidates a reader asks for give their open files: reading
+// those of every process would cost far more than a tick may.
+import Darwin
+import Foundation
+
+/// One process, as a snapshot saw it.
+public struct Running: Equatable, Sendable {
+    public var pid: Int32
+    public var parent: Int32
+    /// Its process group: something starts each agent in a group of its own, whose id is the agent's pid.
+    public var group: Int32
+    public var started: Date
+    /// The name the system gives it (up to 32 characters), which is the program's file name for most programs.
+    public var name: String
+    /// Its arguments, the program's first; nil when they were not read (a name no reader knows) or not readable.
+    public var arguments: [String]?
+    /// Its working folder; nil when not read.
+    public var folder: String?
+
+    public init(pid: Int32, parent: Int32, group: Int32, started: Date, name: String, arguments: [String]? = nil, folder: String? = nil) {
+        (self.pid, self.parent, self.group, self.started, self.name) = (pid, parent, group, started, name)
+        (self.arguments, self.folder) = (arguments, folder)
+    }
+}
+
+/// The processes of one tick. Tests build one by hand, with invented processes.
+public struct Snapshot {
+    public let processes: [Int32: Running]
+    private let files: (Int32) -> [String]?
+
+    /// `files` gives the paths a process holds open, or nil when they cannot be read.
+    public init(_ processes: [Running], files: @escaping (Int32) -> [String]? = { _ in nil }) {
+        self.processes = Dictionary(processes.map { ($0.pid, $0) }) { first, _ in first }
+        self.files = files
+    }
+
+    public subscript(pid: Int32) -> Running? { processes[pid] }
+
+    /// The paths `pid` holds open now, or nil when they cannot be read. Each call reads them again: ask for a
+    /// candidate only.
+    public func openFiles(_ pid: Int32) -> [String]? { files(pid) }
+}
+
+/// Takes snapshots. Arguments are kept per pid and start time, since a process does not change them once started
+/// (a reused pid has another start time); everything else is read again at each snapshot.
+public final class Processes {
+    /// The names whose arguments and folder are read.
+    let known: Set<String>
+    private var kept: [Int32: (started: Date, arguments: [String]?)] = [:]
+
+    public init(known: Set<String>) { self.known = known }
+
+    /// The processes running now. A process that ends during the read is left out; the list is empty only when the
+    /// system refuses to give it.
+    public func snapshot() -> Snapshot {
+        var processes: [Running] = []
+        for pid in Processes.pids() {
+            guard var process = Processes.info(pid) else { continue }
+            if known.contains(process.name) {
+                if let entry = kept[pid], entry.started == process.started {
+                    process.arguments = entry.arguments
+                } else {
+                    process.arguments = Processes.arguments(pid)
+                    kept[pid] = (process.started, process.arguments)
+                }
+                process.folder = Processes.folder(pid)
+            }
+            processes.append(process)
+        }
+        let alive = Set(processes.map(\.pid))
+        kept = kept.filter { alive.contains($0.key) }
+        return Snapshot(processes, files: Processes.openFiles)
+    }
+
+    /// Every pid on this Mac, or none when the system refuses.
+    static func pids() -> [Int32] {
+        // The list can grow between the two calls: room is left for more.
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return [] }
+        var pids = [Int32](repeating: 0, count: Int(count) + 64)
+        let found = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
+        return found > 0 ? Array(pids.prefix(Int(found))).filter { $0 > 0 } : []
+    }
+
+    /// The process `pid` without its arguments and folder, or nil when it is gone or hidden from this user.
+    static func info(_ pid: Int32) -> Running? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        let started = Date(timeIntervalSince1970: TimeInterval(info.pbi_start_tvsec) + TimeInterval(info.pbi_start_tvusec) / 1_000_000)
+        var name = withUnsafeBytes(of: info.pbi_name) { text($0) }
+        if name.isEmpty { name = withUnsafeBytes(of: info.pbi_comm) { text($0) } }
+        return Running(pid: pid, parent: Int32(info.pbi_ppid), group: Int32(info.pbi_pgid), started: started, name: name)
+    }
+
+    /// The arguments of `pid`, the program's first, or nil when the system does not give them (another user's process).
+    static func arguments(_ pid: Int32) -> [String]? {
+        var mib = [CTL_KERN, KERN_ARGMAX], longest: Int32 = 0, size = MemoryLayout<Int32>.size
+        guard sysctl(&mib, 2, &longest, &size, nil, 0) == 0, longest > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: Int(longest))
+        mib = [CTL_KERN, KERN_PROCARGS2, pid]
+        size = buffer.count
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0, size > MemoryLayout<Int32>.size else { return nil }
+        // The layout: the count of arguments, the program's path, padding zeros, then the arguments, then the environment.
+        let count = buffer.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
+        var index = MemoryLayout<Int32>.size
+        while index < size, buffer[index] != 0 { index += 1 }
+        while index < size, buffer[index] == 0 { index += 1 }
+        var arguments: [String] = []
+        while arguments.count < count, index < size {
+            let end = buffer[index..<size].firstIndex(of: 0) ?? size
+            arguments.append(String(decoding: buffer[index..<end], as: UTF8.self))
+            index = end + 1
+        }
+        return arguments.count == count ? arguments : nil
+    }
+
+    /// The working folder of `pid`, or nil when the system does not give it.
+    static func folder(_ pid: Int32) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        let path = withUnsafeBytes(of: info.pvi_cdir.vip_path) { text($0) }
+        return path.isEmpty ? nil : path
+    }
+
+    /// The paths of the files `pid` holds open, or nil when the system does not give them.
+    static func openFiles(_ pid: Int32) -> [String]? {
+        let needed = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard needed > 0 else { return nil }
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        // Files opened between the two calls are missed; room is left for some.
+        var descriptors = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(needed) / stride + 16)
+        let got = descriptors.withUnsafeMutableBytes { proc_pidinfo(pid, PROC_PIDLISTFDS, 0, $0.baseAddress, Int32($0.count)) }
+        guard got > 0 else { return nil }
+        var paths: [String] = []
+        for descriptor in descriptors.prefix(Int(got) / stride) where descriptor.proc_fdtype == PROX_FDTYPE_VNODE {
+            var vnode = vnode_fdinfowithpath()
+            let size = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
+            guard proc_pidfdinfo(pid, descriptor.proc_fd, PROC_PIDFDVNODEPATHINFO, &vnode, size) == size else { continue }
+            let path = withUnsafeBytes(of: vnode.pvip.vip_path) { text($0) }
+            if !path.isEmpty { paths.append(path) }
+        }
+        return paths
+    }
+
+    /// A C string held in a fixed-size field: its bytes up to the first zero.
+    private static func text(_ bytes: UnsafeRawBufferPointer) -> String {
+        String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
+    }
+}
