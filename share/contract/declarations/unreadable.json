@@ -1,0 +1,17 @@
+{
+  "about": "JSON that does not parse blocks the display.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "broken",
+  "form": "file",
+  "files": {
+    "broken.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{ \"contract\": 1, \"rights\": [\"state\", }\n</script>\n<p>Hello.</p>\n"
+  },
+  "expect": {
+    "displays": false,
+    "problems": [
+      "DECLARATION_UNREADABLE"
+    ],
+    "declaration": null,
+    "unavailable": []
+  }
+}

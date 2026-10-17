@@ -1,0 +1,153 @@
+{
+  "comment": [
+    "The shape of contract 1: every key of every object a space receives, and what its value may be.",
+    "The guide (share/guide.md) says what each key means; the engine's tests check the state example and the fixtures against it.",
+    "types: each type is an object whose keys are the keys of that JSON object, and whose values list the allowed values.",
+    "An allowed value is one of: null, boolean, integer, string, object (any JSON object, not covered by the contract),",
+    "a type name from types, [X] (an array of X), {X} (an object whose values are all X, keys free), or =word (that exact string).",
+    "Every key is always present, and no other key is allowed, except: a key written ?key may be absent (declarations only).",
+    "Within contract 1 this file only grows: keys, types and words are added, never removed or renamed."
+  ],
+  "contract": 1,
+  "root": "State",
+  "types": {
+    "State": {
+      "contract": ["integer"],
+      "at": ["string"],
+      "kinds": ["Kinds"],
+      "agents": ["[Agent]"],
+      "threads": ["[Thread]"],
+      "requests": ["[Request]"]
+    },
+    "Kinds": {
+      "claude": ["Kind"],
+      "codex": ["Kind"],
+      "opencode": ["Kind"],
+      "pi": ["Kind"],
+      "omp": ["Kind"]
+    },
+    "Kind": {
+      "launch": ["boolean"],
+      "installed": ["boolean", "null"],
+      "tested": ["string"],
+      "seen": ["string", "null"],
+      "reader": ["=ok", "=changed", "=unreadable", "=none"],
+      "note": ["string", "null"]
+    },
+    "Agent": {
+      "id": ["string"],
+      "kind": ["=claude", "=codex", "=opencode", "=pi", "=omp", "=other"],
+      "name": ["string", "null"],
+      "origin": ["=launched", "=elsewhere"],
+      "folder": ["string", "null"],
+      "pid": ["integer", "null"],
+      "alive": ["boolean", "null"],
+      "evidence": ["=child", "=registry", "=lock", "=open-file", "=claim", "=cwd", "=recent-write", "=process", "null"],
+      "state": ["=idle", "=working", "=waiting", "=done", "=error", "=interrupted", "=unknown"],
+      "waiting": ["=permission", "=answer", "=none", "null"],
+      "thread": ["string", "null"],
+      "model": ["string", "null"],
+      "mode": ["string", "null"],
+      "effort": ["string", "null"],
+      "options": ["Options"],
+      "queue": ["[Queued]"],
+      "can": ["Can"],
+      "because": ["{string}"],
+      "error": ["AgentError", "null"],
+      "started": ["string", "null"],
+      "updated": ["string", "null"],
+      "detail": ["object"]
+    },
+    "Options": {
+      "model": ["[Option]", "null"],
+      "mode": ["[Option]", "null"],
+      "effort": ["[Option]", "null"]
+    },
+    "Option": {
+      "value": ["string"],
+      "label": ["string"]
+    },
+    "Queued": {
+      "id": ["string"],
+      "text": ["string"],
+      "at": ["string"]
+    },
+    "Can": {
+      "send": ["boolean"],
+      "steer": ["boolean"],
+      "queue": ["boolean"],
+      "interrupt": ["boolean"],
+      "model": ["boolean"],
+      "mode": ["boolean"],
+      "effort": ["boolean"],
+      "resume": ["boolean"]
+    },
+    "AgentError": {
+      "code": ["string"],
+      "message": ["string"]
+    },
+    "Thread": {
+      "id": ["string"],
+      "agent": ["string"],
+      "title": ["string", "null"],
+      "started": ["string", "null"],
+      "complete": ["boolean"],
+      "turns": ["[Turn]"]
+    },
+    "Turn": {
+      "id": ["string"],
+      "state": ["=working", "=done", "=error", "=interrupted", "=unknown"],
+      "started": ["string", "null"],
+      "ended": ["string", "null"],
+      "items": ["[Item]"]
+    },
+    "Item": {
+      "id": ["string"],
+      "kind": ["=message", "=thought", "=tool", "=subagent"],
+      "author": ["=person", "=agent"],
+      "text": ["string"],
+      "at": ["string"],
+      "truncated": ["boolean"],
+      "tool": ["Tool", "null"],
+      "decision": ["Decision", "null"]
+    },
+    "Tool": {
+      "name": ["string"],
+      "status": ["=running", "=done", "=failed", "null"]
+    },
+    "Decision": {
+      "by": ["=person", "=hook", "=rule", "=mode"],
+      "outcome": ["=allowed", "=denied"]
+    },
+    "Request": {
+      "id": ["string"],
+      "agent": ["string"],
+      "kind": ["=permission", "=question"],
+      "tool": ["string", "null"],
+      "about": ["string", "null"],
+      "at": ["string"]
+    },
+    "Granted": {
+      "rights": ["[string]"],
+      "refused": ["[string]"],
+      "unavailable": ["[string]"],
+      "limits": ["{[string]}"],
+      "agents": ["SeeAll", "Folders"],
+      "folder": ["string", "null"]
+    },
+    "SeeAll": {
+      "see": ["=all"]
+    },
+    "Folders": {
+      "folders": ["[string]"]
+    },
+    "Declaration": {
+      "?contract": ["integer"],
+      "?title": ["string"],
+      "?description": ["string"],
+      "?agents": ["SeeAll", "Folders"],
+      "?rights": ["[string]"],
+      "?folder": ["string"]
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "about": "A folder space with a block and something.json: something.json is used.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "board",
+  "form": "folder",
+  "files": {
+    "index.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{ \"contract\": 1, \"title\": \"From the block\" }\n</script>\n<p>Hello.</p>\n",
+    "something.json": "{ \"contract\": 1, \"title\": \"Board\", \"rights\": [\"state\"] }\n"
+  },
+  "expect": {
+    "displays": true,
+    "problems": [
+      "DECLARATION_TWICE"
+    ],
+    "declaration": {
+      "contract": 1,
+      "title": "Board",
+      "description": null,
+      "agents": {
+        "folders": []
+      },
+      "rights": [
+        "state"
+      ],
+      "folder": null
+    },
+    "unavailable": []
+  }
+}

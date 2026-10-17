@@ -1,0 +1,111 @@
+{
+  "contract": 1,
+  "at": "2026-10-17T09:00:04Z",
+  "kinds": {
+    "claude":   { "launch": true,  "installed": true,  "tested": "2.1.299", "seen": "2.1.301", "reader": "ok",      "note": null },
+    "codex":    { "launch": true,  "installed": true,  "tested": "0.163.0", "seen": "0.163.0", "reader": "ok",      "note": null },
+    "opencode": { "launch": true,  "installed": false, "tested": "2.0.20",  "seen": null,      "reader": "none",    "note": null },
+    "pi":       { "launch": true,  "installed": true,  "tested": "1.0.0",   "seen": "1.0.0",   "reader": "ok",      "note": null },
+    "omp":      { "launch": false, "installed": true,  "tested": "18.8.6",  "seen": "18.9.0",  "reader": "changed", "note": "OMP's session files changed shape; its agents are shown as processes only." }
+  },
+  "agents": [
+    {
+      "id": "a1",
+      "kind": "claude",
+      "name": "shop",
+      "origin": "launched",
+      "folder": "/Users/example/code/shop",
+      "pid": 50123,
+      "alive": true,
+      "evidence": "child",
+      "state": "waiting",
+      "waiting": "permission",
+      "thread": "c0ffee00-0000-4000-8000-000000000001",
+      "model": "claude-example-model",
+      "mode": "default",
+      "effort": null,
+      "options": {
+        "model": [{ "value": "claude-example-model", "label": "Example model" }],
+        "mode":  [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
+        "effort": null
+      },
+      "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
+      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": false, "resume": false },
+      "because": { "effort": "Claude Code offers no way to change effort during a session.", "resume": "This conversation is already open here." },
+      "error": null,
+      "started": "2026-10-17T08:55:00Z",
+      "updated": "2026-10-17T09:00:03Z",
+      "detail": {}
+    },
+    {
+      "id": "e1",
+      "kind": "codex",
+      "name": "Fix the login form",
+      "origin": "elsewhere",
+      "folder": "/Users/example/code/blog",
+      "pid": null,
+      "alive": false,
+      "evidence": "process",
+      "state": "done",
+      "waiting": "none",
+      "thread": "019a0000-0000-7000-8000-000000000002",
+      "model": "gpt-example",
+      "mode": null,
+      "effort": "medium",
+      "options": { "model": null, "mode": null, "effort": null },
+      "queue": [],
+      "can": { "send": false, "steer": false, "queue": false, "interrupt": false, "model": false, "mode": false, "effort": false, "resume": true },
+      "because": { "send": "This agent was started outside something; something only reads it. Continue it here to write to it." },
+      "error": null,
+      "started": "2026-10-17T07:10:00Z",
+      "updated": "2026-10-17T07:42:00Z",
+      "detail": {}
+    },
+    {
+      "id": "p1",
+      "kind": "other",
+      "name": "gemini",
+      "origin": "elsewhere",
+      "folder": "/Users/example/code/notes",
+      "pid": 50999,
+      "alive": true,
+      "evidence": "process",
+      "state": "unknown",
+      "waiting": null,
+      "thread": null,
+      "model": null, "mode": null, "effort": null,
+      "options": { "model": null, "mode": null, "effort": null },
+      "queue": [],
+      "can": { "send": false, "steer": false, "queue": false, "interrupt": false, "model": false, "mode": false, "effort": false, "resume": false },
+      "because": { "send": "something has no reader for this agent; it only sees its process." },
+      "error": null,
+      "started": "2026-10-17T08:30:00Z",
+      "updated": null,
+      "detail": {}
+    }
+  ],
+  "threads": [
+    {
+      "id": "c0ffee00-0000-4000-8000-000000000001",
+      "agent": "a1",
+      "title": "shop",
+      "started": "2026-10-17T08:55:00Z",
+      "complete": true,
+      "turns": [
+        {
+          "id": "c0ffee00-0000-4000-8000-000000000001#1",
+          "state": "working",
+          "started": "2026-10-17T08:59:50Z",
+          "ended": null,
+          "items": [
+            { "id": "i1", "kind": "message", "author": "person", "text": "Add a dark mode to the cart page.", "at": "2026-10-17T08:59:50Z", "truncated": false, "tool": null, "decision": null },
+            { "id": "i2", "kind": "tool", "author": "agent", "text": "npm test", "at": "2026-10-17T09:00:01Z", "truncated": false, "tool": { "name": "Bash", "status": "running" }, "decision": null }
+          ]
+        }
+      ]
+    }
+  ],
+  "requests": [
+    { "id": "r1", "agent": "a1", "kind": "permission", "tool": "Bash", "about": "npm test", "at": "2026-10-17T09:00:01Z" }
+  ]
+}

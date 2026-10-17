@@ -25,7 +25,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         arguments.firstIndex(of: name).flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
     }
 
-    var state: State { State(agents: sessions.map(\.agent)) }
+    var state: V1State { V1State(agents: sessions.map(\.agent)) }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = Shell.mainMenu()
@@ -187,7 +187,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         return session
     }
 
-    func changed(_ session: AgentProcess, _ agent: Agent) {
+    func changed(_ session: AgentProcess, _ agent: V1Agent) {
         pushState()
         askPermission(of: session, agent)
         checkTurn(of: session, agent)
@@ -195,7 +195,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
 
     /// Shows the agent's permission request in a native window, once per request. A page sees that the
     /// agent waits (`request` in the state) but cannot answer for the person.
-    func askPermission(of session: AgentProcess, _ agent: Agent) {
+    func askPermission(of session: AgentProcess, _ agent: V1Agent) {
         guard let request = agent.request, !asked.contains(request.id) else { return }
         asked.insert(request.id)
         let answer: PermissionAnswer

@@ -18,7 +18,7 @@ struct ClaudeStreamTests {
         ]
     }
 
-    func fresh() -> Agent { Agent(id: "claude-1", name: "try", harness: "claude", folder: "/Users/example/try") }
+    func fresh() -> V1Agent { V1Agent(id: "claude-1", name: "try", harness: "claude", folder: "/Users/example/try") }
 
     @Test func testATurnIsRead() {
         var agent = fresh()

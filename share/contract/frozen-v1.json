@@ -1,0 +1,56 @@
+{
+  "comment": [
+    "What contract 1 promises never to remove or rename. The tests fail when one of these disappears from shape.json,",
+    "codes.json or the guide. Adding is free; removing or renaming is a new contract number, and Emi's decision."
+  ],
+  "contract": 1,
+  "keys": {
+    "State": ["contract", "at", "kinds", "agents", "threads", "requests"],
+    "Kinds": ["claude", "codex", "opencode", "pi", "omp"],
+    "Kind": ["launch", "installed", "tested", "seen", "reader", "note"],
+    "Agent": ["id", "kind", "name", "origin", "folder", "pid", "alive", "evidence", "state", "waiting", "thread",
+              "model", "mode", "effort", "options", "queue", "can", "because", "error", "started", "updated", "detail"],
+    "Options": ["model", "mode", "effort"],
+    "Option": ["value", "label"],
+    "Queued": ["id", "text", "at"],
+    "Can": ["send", "steer", "queue", "interrupt", "model", "mode", "effort", "resume"],
+    "AgentError": ["code", "message"],
+    "Thread": ["id", "agent", "title", "started", "complete", "turns"],
+    "Turn": ["id", "state", "started", "ended", "items"],
+    "Item": ["id", "kind", "author", "text", "at", "truncated", "tool", "decision"],
+    "Tool": ["name", "status"],
+    "Decision": ["by", "outcome"],
+    "Request": ["id", "agent", "kind", "tool", "about", "at"],
+    "Granted": ["rights", "refused", "unavailable", "limits", "agents", "folder"],
+    "Declaration": ["contract", "title", "description", "agents", "rights", "folder"]
+  },
+  "words": {
+    "Kind.reader": ["ok", "changed", "unreadable", "none"],
+    "Agent.kind": ["claude", "codex", "opencode", "pi", "omp", "other"],
+    "Agent.origin": ["launched", "elsewhere"],
+    "Agent.evidence": ["child", "registry", "lock", "open-file", "claim", "cwd", "recent-write", "process"],
+    "Agent.state": ["idle", "working", "waiting", "done", "error", "interrupted", "unknown"],
+    "Agent.waiting": ["permission", "answer", "none"],
+    "Turn.state": ["working", "done", "error", "interrupted", "unknown"],
+    "Item.kind": ["message", "thought", "tool", "subagent"],
+    "Item.author": ["person", "agent"],
+    "Tool.status": ["running", "done", "failed"],
+    "Decision.by": ["person", "hook", "rule", "mode"],
+    "Decision.outcome": ["allowed", "denied"],
+    "Request.kind": ["permission", "question"]
+  },
+  "functions": ["contract", "granted", "state", "on", "send", "interrupt", "set", "launch", "resume", "store.get", "store.set", "open"],
+  "events": ["change", "granted"],
+  "rights": ["state", "send", "launch", "store"],
+  "codes": [
+    "BAD_PARAMS", "UNKNOWN_METHOD", "UNKNOWN_EVENT", "NO_HOST", "RIGHT_NOT_GRANTED", "AGENT_NOT_FOUND", "READ_ONLY_AGENT",
+    "NOT_SUPPORTED", "VALUE_NOT_OFFERED", "AGENT_STOPPED", "FOLDER_NOT_GRANTED", "NOT_INSTALLED", "INTERPRETER_NOT_FOUND",
+    "LAUNCH_FAILED", "THREAD_NOT_FOUND", "STILL_RUNNING", "HELD_ELSEWHERE", "REFUSED", "BUSY", "STORE_FULL", "AGENT_ERROR",
+    "SPACE_NOT_FOUND", "NO_WINDOW_SERVER", "STATE_FILE_UNREADABLE", "DECLARATION_UNREADABLE", "CONTRACT_TOO_NEW",
+    "SCRIPT_ERROR", "PROMISE_REJECTED", "RESOURCE_MISSING", "LOAD_FAILED", "LOAD_TIMEOUT", "PAGE_CRASHED",
+    "DECLARATION_MISSING", "DECLARATION_TWICE", "CONTRACT_MISSING", "SCOPE_INVALID", "UNKNOWN_RIGHT", "RIGHT_UNAVAILABLE",
+    "RIGHT_NOT_DECLARED", "RIGHT_REFUSED", "RESOURCE_BLOCKED", "NAVIGATION_BLOCKED", "BRIDGE_ERROR", "CONSOLE_ERROR",
+    "FOLDER_MISSING", "TOO_HEAVY", "UNKNOWN_KEY",
+    "IMPORT_NOT_A_SPACE", "IMPORT_TOO_NEW", "IMPORT_UNSAFE_PATH", "IMPORT_TOO_BIG"
+  ]
+}

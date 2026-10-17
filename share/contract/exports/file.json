@@ -1,0 +1,24 @@
+{
+  "about": "A single-file space, without its data.",
+  "comment": "An export case: a .something document (one JSON document: its files in base64, its memory or null) and what an import must do with it. ok true lists the files the space gets; ok false names the code.",
+  "export": {
+    "format": "something-space",
+    "contract": 1,
+    "exported": "2026-10-17T12:00:00Z",
+    "app": "1.0.0",
+    "name": "morning-review",
+    "form": "file",
+    "files": {
+      "morning-review.html": "PCFkb2N0eXBlIGh0bWw+Cjx0aXRsZT5Nb3JuaW5nIHJldmlldzwvdGl0bGU+CjxzY3JpcHQgdHlwZT0iYXBwbGljYXRpb24vanNvbiIgaWQ9InNvbWV0aGluZyI+eyAiY29udHJhY3QiOiAxIH08L3NjcmlwdD4KPHA+SW52ZW50ZWQgcGFnZS48L3A+Cg=="
+    },
+    "data": null
+  },
+  "expect": {
+    "ok": true,
+    "name": "morning-review",
+    "files": [
+      "morning-review.html"
+    ],
+    "data": null
+  }
+}

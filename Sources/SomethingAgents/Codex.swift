@@ -12,7 +12,7 @@ public enum CodexStream {
 
     /// Folds one notification or request from Codex into what is known of the agent.
     /// Messages it does not know are ignored: a newer Codex must not break an older something.
-    public static func apply(_ message: [String: Any], to agent: inout Agent) {
+    public static func apply(_ message: [String: Any], to agent: inout V1Agent) {
         let params = message["params"] as? [String: Any] ?? [:]
         switch message["method"] as? String {
         case "turn/started":
@@ -50,7 +50,7 @@ public enum CodexStream {
     }
 
     /// Folds the answer to `thread/start` into the agent and returns the thread's id, or nil when there is none.
-    public static func threadStarted(_ result: [String: Any], to agent: inout Agent) -> String? {
+    public static func threadStarted(_ result: [String: Any], to agent: inout V1Agent) -> String? {
         agent.model = result["model"] as? String
         // Codex's mode is its approval policy: "untrusted", "on-request", "never", or a finer set of rules.
         agent.mode = (result["approvalPolicy"] as? String) ?? (result["approvalPolicy"] != nil ? "granular" : nil)
@@ -83,7 +83,7 @@ public final class CodexSession: AgentProcess {
     /// `threadOptions` are added to `thread/start`; empty, Codex uses the person's own configuration.
     public init(id: String, folder: URL, threadOptions: [String: Any] = [:]) {
         self.threadOptions = threadOptions
-        super.init(agent: Agent(id: id, name: folder.lastPathComponent, harness: "codex", folder: folder.path),
+        super.init(agent: V1Agent(id: id, name: folder.lastPathComponent, harness: "codex", folder: folder.path),
                    arguments: ["codex", "app-server"])
     }
 

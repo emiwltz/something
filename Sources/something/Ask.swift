@@ -29,7 +29,7 @@ enum Ask {
 
     enum Consent { case once, always, refused }
 
-    static func send(_ text: String, to agent: Agent) -> Consent {
+    static func send(_ text: String, to agent: V1Agent) -> Consent {
         let alert = NSAlert()
         alert.messageText = "Send this message to \(name(of: agent.harness)) in “\(agent.name)”?"
         alert.informativeText = String(text.prefix(400))
@@ -43,7 +43,7 @@ enum Ask {
         }
     }
 
-    static func permission(_ request: PermissionRequest, of agent: Agent) -> PermissionAnswer {
+    static func permission(_ request: PermissionRequest, of agent: V1Agent) -> PermissionAnswer {
         let alert = NSAlert()
         alert.messageText = "\(name(of: agent.harness)) in “\(agent.name)” asks to use \(request.tool)."
         alert.informativeText = request.about ?? ""

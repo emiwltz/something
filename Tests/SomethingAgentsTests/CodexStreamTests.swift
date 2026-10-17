@@ -5,7 +5,7 @@ import SomethingCore
 
 /// Messages shaped like codex app-server 0.162's (keys checked against its schema and a real run, values invented).
 struct CodexStreamTests {
-    func fresh() -> Agent { Agent(id: "codex-1", name: "try", harness: "codex", folder: "/Users/example/try") }
+    func fresh() -> V1Agent { V1Agent(id: "codex-1", name: "try", harness: "codex", folder: "/Users/example/try") }
 
     @Test func testTheThreadGivesModelAndMode() {
         var agent = fresh()

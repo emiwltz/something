@@ -1,0 +1,34 @@
+{
+  "about": "Everything that is only a warning or an information: the space still opens.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "sketch",
+  "form": "file",
+  "files": {
+    "sketch.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{ \"title\": \"Sketch\", \"agents\": \"everything\", \"rights\": [\"state\", \"sendd\", \"launch:omp\", \"state\"], \"colour\": \"blue\" }\n</script>\n<p>Hello.</p>\n"
+  },
+  "expect": {
+    "displays": true,
+    "problems": [
+      "CONTRACT_MISSING",
+      "RIGHT_UNAVAILABLE",
+      "SCOPE_INVALID",
+      "UNKNOWN_KEY",
+      "UNKNOWN_RIGHT"
+    ],
+    "declaration": {
+      "contract": 1,
+      "title": "Sketch",
+      "description": null,
+      "agents": {
+        "folders": []
+      },
+      "rights": [
+        "state"
+      ],
+      "folder": null
+    },
+    "unavailable": [
+      "launch:omp"
+    ]
+  }
+}

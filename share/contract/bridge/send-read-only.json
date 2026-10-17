@@ -1,0 +1,44 @@
+{
+  "about": "send to an agent started elsewhere.",
+  "comment": "A bridge case: one request as the page side sends it ({contract, id, method, params}), against state-example.json, with the rights in granted. A result is compared whole; an error by its code only, since its message is free (one sentence that says what to do).",
+  "state": "state-example.json",
+  "granted": {
+    "rights": [
+      "state",
+      "send"
+    ],
+    "refused": [],
+    "unavailable": [],
+    "limits": {
+      "claude": [
+        "effort"
+      ],
+      "opencode": [
+        "steer"
+      ],
+      "pi": [
+        "mode"
+      ]
+    },
+    "agents": {
+      "see": "all"
+    },
+    "folder": "/Users/example/code/shop"
+  },
+  "request": {
+    "contract": 1,
+    "id": 1,
+    "method": "send",
+    "params": {
+      "agent": "e1",
+      "text": "Hello.",
+      "when": "next"
+    }
+  },
+  "answer": {
+    "id": 1,
+    "error": {
+      "code": "READ_ONLY_AGENT"
+    }
+  }
+}

@@ -1,69 +1,319 @@
-# Writing a page for something
+# Building a space for something
 
-*For the coding agent a person asks to build them a page. Read this file whole before writing.*
+*For the coding agent a person asks to build them a space. Read this file whole before writing.*
 
-something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode and pi for now) and shows one page in its window. The person decides what that page is: a dashboard, a chat, a small game where the agents talk, a Tamagotchi. You write it.
+something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), reads the ones started
+elsewhere, and shows **spaces**: HTML pages the person asked you to write. A dashboard, a chat, a board of who is
+waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Later chapters add
+examples and the steps to try a space.
 
-## Where a page lives
+*Status: something 1.0 is being built. The window of this repository still serves the earlier page
+(`share/template.html`); the engine that serves this contract comes in the next versions of the app.*
 
-For now the window shows one page, `share/template.html` in something's folder, a plain chat. The person may edit it, or copy their own page over it; spaces of their own, folders where each page lives, come in a later version.
+Rules that hold everywhere:
 
-The window reloads by itself each time that file is saved, so you can work and they can watch.
+- **The contract only grows.** Within version 1, keys, functions, rights, words and codes are added, never removed or
+  renamed. Ignore keys and words you do not know.
+- **Every key is always present.** What is not known is `null`. Show "unknown", never a zero, an empty string or a guess.
+- **Inability is said before the call**: `can`, `because`, `granted.limits`, `granted.unavailable`. Read them and hide
+  what cannot be done. A call made anyway fails with a named code; nothing falls back silently.
+- `detail` objects are specific to one harness and outside this promise. Your space must work without them.
 
-Plain HTML, CSS and JavaScript in that one file. No build step: what you write is what runs.
+The same contract as data, for tests: `share/contract/` (`state-example.json`, `shape.json`, `codes.json`).
 
-## Talking to something
+## Where a space lives
 
-Load the tools first, then use `window.something`:
+- A single file: `~/something/spaces/<name>.html`.
+- A folder: `~/something/spaces/<name>/index.html`, with its own scripts, styles and images next to it.
+- Its memory: `~/something/data/<name>.json` (see "Memory").
+
+`<name>` is lowercase letters, digits and `-`.
+
+**A space has no network.** It loads only its own files, inline code, `data:` and `blob:` URLs: no CDN, no web font,
+no `fetch` to the Internet. Embed a library in the space at an exact version. `localStorage` works but is emptied when
+the window closes: the memory is the only lasting state.
+
+## The declaration
+
+Put this block in the page (or in the folder's `index.html`):
 
 ```html
-<script src="something://app/something.js"></script>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Morning review",
+  "description": "What my agents did overnight, and who is waiting.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send:claude", "launch:codex", "store"],
+  "folder": "~/code/shop"
+}
+</script>
 ```
 
-| Tool | What it does |
-|---|---|
-| `something.state()` | A promise of the whole state (below). |
-| `something.subscribe(fn)` | Calls `fn(state)` each time the state changes: a message, a status, a request. |
-| `something.launch("claude")` | Asks the person for a folder, then launches Claude Code (or `"codex"`, `"opencode"`, `"pi"`) there. Resolves to the agent's id. |
-| `something.send(agentId, text)` | Asks the person first, in a window of the Mac, then sends. Rejects when they refuse. |
-| `something.store.get(key)` / `store.set(key, value)` | The page's own memory, kept between launches. JSON values; `null` removes. |
+A folder space may instead put the same object in `something.json`. If both exist, `something.json` is used (warning
+`DECLARATION_TWICE`).
 
-Every promise rejects with an `Error` whose message is one sentence for the person: show it.
+| Key | What it says | When absent |
+|---|---|---|
+| `contract` | The contract you wrote for: `1`. | Read as `1`, warning `CONTRACT_MISSING` |
+| `title` | Shown in Home, the window title and the consent window. | The file or folder name |
+| `description` | One sentence, shown in the consent window. | Nothing shown |
+| `agents` | `{"see":"all"}`, or `{"folders":["~/code/shop"]}`: agents working in those folders or inside them. | Only the agents this space launched |
+| `rights` | What the space asks for (see "Rights"). | No right |
+| `folder` | Where the agents this space launches work. | The person picks one when a `launch` right is asked |
+
+Only JSON that does not parse (`DECLARATION_UNREADABLE`) or a `contract` higher than something knows
+(`CONTRACT_TOO_NEW`) stops the space from opening. Anything else is a warning and the space opens. The smallest
+declaration is `{ "contract": 1 }`.
+
+## Rights
+
+| Right | Allows |
+|---|---|
+| `state` | Read the agents in scope. |
+| `send` | `send`, `interrupt` and `set` on agents this space can write to; `send:claude` limits it to one kind. |
+| `launch` | `launch` and `resume` (which is "continue here"), in the granted folder; `launch:codex` limits it to one kind. |
+| `store` | The space's own memory. |
+
+Kinds for a right: `claude`, `codex`, `opencode`, `pi`. `open` needs no right: each link is confirmed by the person.
+
+At the first opening, a window of the Mac lists what you declared, in plain words; the person allows or refuses each
+line. Refusals are remembered, and rights can be revoked at any time. **So never assume a right: read
+`something.granted`**, and listen to `"granted"` for changes.
 
 ## The state
 
+`something.state()` and every `"change"` callback give the whole object, limited to the space's scope. It is pushed
+at most four times a second, only when it changed. A shortened example (the full one is
+`share/contract/state-example.json`):
+
 ```json
 {
+  "contract": 1,
+  "at": "2026-10-17T09:00:04Z",
+  "kinds": {
+    "claude": { "launch": true, "installed": true, "tested": "2.1.299", "seen": "2.1.301", "reader": "ok", "note": null },
+    "omp": { "launch": false, "installed": true, "tested": "18.8.6", "seen": "18.9.0", "reader": "changed",
+             "note": "OMP's session files changed shape; its agents are shown as processes only." }
+  },
   "agents": [
     {
-      "id": "claude-1",
-      "name": "my-project",
-      "harness": "claude",
-      "folder": "/Users/example/my-project",
-      "status": "waiting",
-      "model": "claude-example-1",
-      "mode": "default",
-      "messages": [
-        { "from": "you", "text": "Add a README." },
-        { "from": "agent", "text": "I will write README.md." }
-      ],
-      "request": { "id": "r1", "tool": "Write", "about": "README.md" },
-      "error": null
+      "id": "a1", "kind": "claude", "name": "shop", "origin": "launched", "folder": "/Users/example/code/shop",
+      "pid": 50123, "alive": true, "evidence": "child", "state": "waiting", "waiting": "permission",
+      "thread": "c0ffee00-0000-4000-8000-000000000001",
+      "model": "claude-example-model", "mode": "default", "effort": null,
+      "options": { "model": [{ "value": "claude-example-model", "label": "Example model" }], "mode": null, "effort": null },
+      "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
+      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": false, "resume": false },
+      "because": { "effort": "Claude Code offers no way to change effort during a session." },
+      "error": null, "started": "2026-10-17T08:55:00Z", "updated": "2026-10-17T09:00:03Z", "detail": {}
     }
+  ],
+  "threads": [
+    {
+      "id": "c0ffee00-0000-4000-8000-000000000001", "agent": "a1", "title": "shop",
+      "started": "2026-10-17T08:55:00Z", "complete": true,
+      "turns": [
+        {
+          "id": "c0ffee00-0000-4000-8000-000000000001#1", "state": "working",
+          "started": "2026-10-17T08:59:50Z", "ended": null,
+          "items": [
+            { "id": "i1", "kind": "message", "author": "person", "text": "Add a dark mode to the cart page.",
+              "at": "2026-10-17T08:59:50Z", "truncated": false, "tool": null, "decision": null }
+          ]
+        }
+      ]
+    }
+  ],
+  "requests": [
+    { "id": "r1", "agent": "a1", "kind": "permission", "tool": "Bash", "about": "npm test", "at": "2026-10-17T09:00:01Z" }
   ]
 }
 ```
 
-- `harness`: `"claude"`, `"codex"`, `"opencode"` or `"pi"`.
-- `mode`: the agent's own setting for what it may do without asking: Claude's permission mode (`"default"`, `"acceptEdits"`, `"plan"`…), Codex's approval policy (`"untrusted"`, `"on-request"`, `"never"`, `"granular"`), OpenCode's agent (`"build"`, `"plan"`). pi has no such setting and never asks: its `mode` is always `null`.
-- `status`: `"working"`, `"waiting"` (on `request`), `"idle"` or `"stopped"`.
-- `request`: the permission the agent waits on, or `null`. The person answers it in a window of the Mac; a page cannot.
-- `error`: what went wrong, in one sentence, or `null`.
-- **`null` means unknown.** Show "unknown", never a zero or a guess. Every key is always there.
+### `kinds`: one entry per harness
 
-## Rules
+`claude`, `codex`, `opencode`, `pi`, `omp`. `launch`: something can launch it. `installed`: its program was found
+(or `null`). `tested`: the newest version something was proven on; `seen`: the newest found on this Mac, or `null`.
+`reader`: `ok`, `changed` (its files changed shape: its agents show as processes only), `unreadable`, or `none`
+(nothing of this kind here). `note`: one sentence for the person when something is off, or `null`.
 
-- **No network.** A page cannot load anything from the Internet: no CDN, no fonts, no fetch. Write everything in the page itself. What the page shows of the agents stays on the machine.
-- **Writing is the person's word.** `send` may be refused; a permission is never answered by a page. Show that an agent waits, and say where to answer.
-- **Show failures.** A rejected promise, an `error` in the state: put the sentence on screen.
-- **Do not change** `share/something.js`, `share/guide.md` or anything else in something's folder: they belong to something. Only `share/template.html` is the page.
+### Agent
+
+| Key | What it holds |
+|---|---|
+| `id` | Opaque, stable while the agent is listed. Do not parse it. |
+| `kind` | `claude`, `codex`, `opencode`, `pi`, `omp`, or `other` (a known program something cannot read: only its process is seen). Show a kind you do not know as "other agent". |
+| `name` | The conversation's title, else the folder's last part, else the program name; or `null`. |
+| `origin` | `launched` by something, or started `elsewhere` and only read. |
+| `folder`, `pid` | Where it works, its process; each may be `null`. |
+| `alive` | `true`: a living process holds the conversation. `false`: proven ended. `null`: nothing proves either. |
+| `evidence` | Why `alive` is what it is: `child`, `registry`, `lock`, `open-file`, `claim`, `cwd` (the weakest), `recent-write`, `process`; or `null`. |
+| `state` | A state word (below). |
+| `waiting` | `permission`, `answer`, `none`, or `null` when no source can say. |
+| `thread` | The id of its conversation in `threads`, what `resume` takes; or `null`. |
+| `model`, `mode`, `effort` | What the agent last reported, never what was asked; each may be `null`. |
+| `options` | `{model, mode, effort}`: each a list of `{value, label}` the agent offers, or `null`. |
+| `queue` | `[{id, text, at}]`: messages something holds for the agent's next turn. |
+| `can` | `send steer queue interrupt model mode effort resume`: what a call would do now. Always booleans. |
+| `because` | For a false entry of `can` worth explaining: one sentence. Show it next to the hidden button. |
+| `error` | `{code, message}` or `null`: the agent's last error, in its own words when they are clear. |
+| `started`, `updated` | ISO 8601 times, or `null`. `updated` is the last activity seen. |
+| `detail` | Harness-specific facts. Not part of the contract. |
+
+### State words
+
+| Word | Means |
+|---|---|
+| `idle` | Alive, no turn running. |
+| `working` | A turn is running. |
+| `waiting` | Alive and waiting for the person; `waiting` says for what (`permission` or `answer`). |
+| `done` | Ended normally. |
+| `error` | The last turn or the process failed; `error` says why. |
+| `interrupted` | The last turn was stopped before its end, or the process vanished mid-turn. |
+| `unknown` | No source can say. Show "unknown", never "idle". |
+
+`state` is `"waiting"` exactly when `waiting` is `"permission"` or `"answer"`. An agent seen elsewhere with no
+living process proven shows `unknown`, or `working` when its conversation was written in the last two minutes.
+
+### Threads, turns, items, requests
+
+- **Thread** `{id, agent, title, started, complete, turns}`: an agent's current conversation, its last 10 turns.
+  `complete` is false when older turns were left out.
+- **Turn** `{id, state, started, ended, items}`: `state` is `working`, `done`, `error`, `interrupted` or `unknown`. Its
+  last 50 items.
+- **Item** `{id, kind, author, text, at, truncated, tool, decision}`: `kind` is `message`, `thought`, `tool` or
+  `subagent`; `author` is `person` or `agent`. `text` holds at most 4,000 characters; `truncated` says it was cut.
+  `tool` is `{name, status}` (`running`, `done`, `failed` or `null`) for a tool item, else `null`. `decision` is
+  `{by, outcome}` when the agent's own stream says who decided a permission (`by`: `person`, `hook`, `rule`, `mode`;
+  `outcome`: `allowed`, `denied`), else `null`. Today only Claude Code launched by something says it.
+- **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
+  the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and
+  say "answer in the window of something".
+
+What is outside the scope is absent: agents, and their threads and requests. Without the `state` right, `state()`
+still answers, with only the agents this space launched. Agents seen elsewhere stay listed while alive, and for 24
+hours after their last activity.
+
+### What each kind can do once launched
+
+| kind | send | steer | queue | interrupt | model | mode | effort |
+|---|---|---|---|---|---|---|---|
+| claude | yes | yes | yes | yes | yes | yes (permission modes) | no |
+| codex | yes | yes | yes | yes | yes (next turn) | yes (approval policy) | yes (next turn) |
+| opencode | yes | no | yes | yes | yes | yes (agents such as build, plan) | yes |
+| pi | yes | yes | yes | yes | yes | no | yes (thinking level) |
+
+An agent seen elsewhere can only be resumed ("continue here"), for `claude` and `codex`, once no other process holds
+its conversation. Read `can` rather than this table: it is what holds now.
+
+## The bridge: `something.js`
+
+something injects `something.js` before your scripts: `window.something` is there when they run. Every function
+returns a promise. A rejected promise carries an `Error` with `.code` (a code below) and `.message` (one sentence that
+says what to do): put the sentence on screen.
+
+| Function | Gives | Right |
+|---|---|---|
+| `something.contract` | `1` (a property) | none |
+| `something.granted` | Granted (below), a property set before your scripts run | none |
+| `something.state()` | The state | `state` (without it: only the agents this space launched) |
+| `something.on(event, fn)` | `"change"`: `fn(state)`; `"granted"`: `fn(granted)`. Returns a function that unsubscribes. | none |
+| `something.send(agent, text, {when})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` | `send` |
+| `something.interrupt(agent)` | `{interrupted}`: true, or false if no turn was running. The agent's `queue` is emptied either way. | `send` |
+| `something.set(agent, {model, mode, effort})` | `{applied}`: `now` or `next-turn`. At least one key, values from `options`. | `send` |
+| `something.launch(kind, {folder, model, mode, effort})` | The new agent's `id`. All optional; `folder` is the granted one or inside it. | `launch` |
+| `something.resume(kind, threadId)` | The agent's `id`; it runs in the thread's own folder. | `launch` |
+| `something.store.get(path)` | The value at `path`, or `null` | `store` |
+| `something.store.set(path, value)` | `null`. A `null` value removes the key. | `store` |
+| `something.open(url)` | true if the person opened the link, false if they cancelled. `https:`, `http:` or `mailto:`. | none |
+
+`on` with another event throws `UNKNOWN_EVENT` at once.
+
+**`when` in `send`:**
+
+- `"next"` (the default): after the current turn ends. something holds the message itself (it shows in `queue`) and
+  hands it over when the agent finishes its turn.
+- `"now"`: into the running turn, at the agent's earliest safe point, without stopping it (steer). Check `can.steer`.
+- On an idle agent, both start a turn: `delivery` is `"started"`.
+- `"unconfirmed"`: the agent took the message but did not confirm within 10 seconds; the state will show what happened.
+
+A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
+window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`.
+
+```js
+const off = something.on("change", (state) => render(state));
+const agent = (await something.state()).agents.find((a) => a.can.send);
+if (agent) {
+  try {
+    const { delivery } = await something.send(agent.id, "Then run the tests.", { when: "next" });
+    note(`Message ${delivery}.`);
+  } catch (error) {
+    note(error.message); // one sentence for the person; error.code says which case
+  }
+}
+```
+
+### Granted
+
+```json
+{
+  "rights": ["state", "send:claude", "store"],
+  "refused": ["launch:codex"],
+  "unavailable": ["launch:omp"],
+  "limits": { "claude": ["effort"], "opencode": ["steer"], "pi": ["mode"] },
+  "agents": { "see": "all" },
+  "folder": "/Users/example/code/shop"
+}
+```
+
+`rights`: what the person allowed. `refused`: what they refused. `unavailable`: rights something cannot honour.
+`limits`: per kind, what its agents can never do here, so you can hide a button before any agent exists. `agents`: the
+scope in force. `folder`: the folder for launches, or `null`.
+
+### Error codes
+
+| Code | When |
+|---|---|
+| `BAD_PARAMS` | A parameter is missing or of the wrong type. |
+| `UNKNOWN_METHOD` | The function is not in this contract. |
+| `UNKNOWN_EVENT` | `on` with an event other than `change` or `granted`. |
+| `NO_HOST` | The page is not open in something (opened directly in a browser, for example). |
+| `RIGHT_NOT_GRANTED` | The right was not declared, was refused, or was revoked. |
+| `AGENT_NOT_FOUND` | No such agent in this space's scope. |
+| `READ_ONLY_AGENT` | A write to an agent started elsewhere. |
+| `NOT_SUPPORTED` | This agent cannot do it: its `can` says false. |
+| `VALUE_NOT_OFFERED` | `set` with a value not in `options`, or the agent replied with a different value. |
+| `AGENT_STOPPED` | The agent has ended. |
+| `FOLDER_NOT_GRANTED` | `launch` with a folder outside the granted one. |
+| `NOT_INSTALLED` | The agent's program was not found on this Mac. |
+| `INTERPRETER_NOT_FOUND` | The program was found, but what it needs to run (`node`, for example) was not. |
+| `LAUNCH_FAILED` | The program started and stopped at once; the message carries its first error line. |
+| `THREAD_NOT_FOUND` | No conversation with this id can be resumed. |
+| `STILL_RUNNING` | Another process still holds this conversation; the message says which and what to do. |
+| `HELD_ELSEWHERE` | A background service of the agent holds it (Codex); the message names the person's gesture. |
+| `REFUSED` | The person said no in a window of the Mac. |
+| `BUSY` | A link confirmation is already open for this space. |
+| `STORE_FULL` | The memory would exceed 5 MB. |
+| `AGENT_ERROR` | The agent refused the request; its words are kept in the message. |
+
+Each code's sentence of what to do is in `share/contract/codes.json`.
+
+## Memory
+
+One JSON object per space, `~/something/data/<name>.json`, through `store`. A path is keys joined by `/`:
+`store.get("a/b")` is `doc.a.b` or `null`, and `store.get("")` is the whole document. Writes are whole and atomic.
+Limit: 5 MB (`STORE_FULL`).
+
+```js
+const seen = (await something.store.get("seen")) ?? [];
+await something.store.set("seen", [...seen, "a1"]);
+```
+
+## What the person sees of your space
+
+- **The journal.** Every write of your space (`send`, `interrupt`, `set`, `launch`, `resume`, `open`), successful or
+  not, adds a line to its journal, shown in its card in Home. It never leaves the Mac.
+- **Export.** The person can export your space as one `.something` file (JSON: its files in base64, and its memory
+  only if they choose so). It never carries the rights they gave, the journal, or anything read from an agent. On
+  another Mac, the space asks for its rights again and fills with that Mac's agents.

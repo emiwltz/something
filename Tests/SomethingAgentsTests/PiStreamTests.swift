@@ -5,7 +5,7 @@ import SomethingCore
 
 /// Events shaped like pi 1.0's RPC mode (keys checked against a real run, values invented).
 struct PiStreamTests {
-    func fresh() -> Agent { Agent(id: "pi-1", name: "try", harness: "pi", folder: "/Users/example/try") }
+    func fresh() -> V1Agent { V1Agent(id: "pi-1", name: "try", harness: "pi", folder: "/Users/example/try") }
 
     @Test func testTheStateGivesTheModel() {
         var agent = fresh()

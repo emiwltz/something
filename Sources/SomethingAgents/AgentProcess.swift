@@ -12,9 +12,9 @@ public enum PermissionAnswer: Equatable, Sendable {
 }
 
 open class AgentProcess {
-    public private(set) var agent: Agent
+    public private(set) var agent: V1Agent
     /// Called on a background queue after each change.
-    public var onChange: ((Agent) -> Void)?
+    public var onChange: ((V1Agent) -> Void)?
     private let process = Process()
     private let input = Pipe()
     private let output = Pipe()
@@ -23,7 +23,7 @@ open class AgentProcess {
     private let lock = NSLock()
 
     /// `removing` and `adding` change the person's environment for this program only.
-    public init(agent: Agent, arguments: [String], removing: Set<String> = [], adding: [String: String] = [:]) {
+    public init(agent: V1Agent, arguments: [String], removing: Set<String> = [], adding: [String: String] = [:]) {
         self.agent = agent
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = arguments
@@ -92,7 +92,7 @@ open class AgentProcess {
     }
 
     /// Changes what is known of the agent, then tells `onChange`.
-    public func update(_ change: (inout Agent) -> Void) {
+    public func update(_ change: (inout V1Agent) -> Void) {
         lock.lock()
         change(&agent)
         let now = agent

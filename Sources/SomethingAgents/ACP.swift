@@ -6,7 +6,7 @@ import SomethingCore
 public enum ACPStream {
     /// Folds one notification or request from an ACP agent into what is known of the agent.
     /// Messages it does not know are ignored: a newer agent must not break an older something.
-    public static func apply(_ message: [String: Any], to agent: inout Agent) {
+    public static func apply(_ message: [String: Any], to agent: inout V1Agent) {
         let params = message["params"] as? [String: Any] ?? [:]
         switch message["method"] as? String {
         case "session/update":
@@ -41,7 +41,7 @@ public enum ACPStream {
     }
 
     /// Folds the answer to `session/new` into the agent and returns the session's id, or nil when there is none.
-    public static func sessionStarted(_ result: [String: Any], to agent: inout Agent) -> String? {
+    public static func sessionStarted(_ result: [String: Any], to agent: inout V1Agent) -> String? {
         if let modes = result["modes"] as? [String: Any] { agent.mode = modes["currentModeId"] as? String }
         if let models = result["models"] as? [String: Any] { agent.model = models["currentModelId"] as? String }
         read(options: result["configOptions"] as? [[String: Any]], into: &agent)
@@ -50,7 +50,7 @@ public enum ACPStream {
     }
 
     /// Model and mode, from the options an agent says it has (OpenCode: "model", "mode", "thought_level").
-    static func read(options: [[String: Any]]?, into agent: inout Agent) {
+    static func read(options: [[String: Any]]?, into agent: inout V1Agent) {
         for option in options ?? [] {
             switch option["category"] as? String {
             case "model": agent.model = option["currentValue"] as? String
@@ -87,7 +87,7 @@ public final class ACPSession: AgentProcess {
     public init(id: String, folder: URL, harness: String, arguments: [String],
                 settings: [String: String] = [:], adding environment: [String: String] = [:]) {
         self.settings = settings
-        super.init(agent: Agent(id: id, name: folder.lastPathComponent, harness: harness, folder: folder.path),
+        super.init(agent: V1Agent(id: id, name: folder.lastPathComponent, harness: harness, folder: folder.path),
                    arguments: arguments, adding: environment)
     }
 

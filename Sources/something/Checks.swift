@@ -93,7 +93,7 @@ extension Shell {
     }
 
     /// In --try, quits once the agent's turn is over and says what came back.
-    func checkTurn(of session: AgentProcess, _ agent: Agent) {
+    func checkTurn(of session: AgentProcess, _ agent: V1Agent) {
         guard Shell.option("--try") != nil,
               agent.status == "idle" && (agent.messages.count > 1 || agent.error != nil || !asked.isEmpty)
                 || agent.status == "stopped" else { return }

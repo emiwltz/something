@@ -1,4 +1,5 @@
-// The state the window shows: what is known about the agents, and null for what is not.
+// V1's state, still what the V1 drivers fill and the template page reads; Contract.swift is contract 1's.
+// The V1 prefix keeps both apart until the drivers move to events and this file goes.
 // Foundation only: this file must build on any platform Swift runs on.
 import Foundation
 
@@ -39,7 +40,7 @@ extension PermissionRequest: Codable {
     }
 }
 
-public struct Agent: Equatable, Sendable {
+public struct V1Agent: Equatable, Sendable {
     public var id: String
     public var name: String
     /// The program that runs the agent: "claude", later "codex", "opencode", "pi".
@@ -74,7 +75,7 @@ public struct Agent: Equatable, Sendable {
     }
 }
 
-extension Agent: Codable {
+extension V1Agent: Codable {
     private enum Key: String, CodingKey { case id, name, harness, folder, status, model, mode, messages, request, error }
 
     // JSONEncoder drops nil values by default. A page must see `null`, so that a missing key
@@ -94,10 +95,10 @@ extension Agent: Codable {
     }
 }
 
-public struct State: Codable, Equatable, Sendable {
-    public var agents: [Agent]
+public struct V1State: Codable, Equatable, Sendable {
+    public var agents: [V1Agent]
 
-    public init(agents: [Agent] = []) {
+    public init(agents: [V1Agent] = []) {
         self.agents = agents
     }
 }

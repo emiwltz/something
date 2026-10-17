@@ -5,7 +5,7 @@ import SomethingCore
 
 /// Messages shaped like OpenCode 2.0's ACP server (keys checked against a real run, values invented).
 struct ACPStreamTests {
-    func fresh() -> Agent { Agent(id: "opencode-1", name: "try", harness: "opencode", folder: "/Users/example/try") }
+    func fresh() -> V1Agent { V1Agent(id: "opencode-1", name: "try", harness: "opencode", folder: "/Users/example/try") }
 
     @Test func testTheSessionGivesModelAndMode() {
         var agent = fresh()

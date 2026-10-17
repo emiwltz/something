@@ -6,7 +6,7 @@ import SomethingCore
 public enum PiStream {
     /// Folds one event or response from pi into what is known of the agent.
     /// Events it does not know are ignored: a newer pi must not break an older something.
-    public static func apply(_ event: [String: Any], to agent: inout Agent) {
+    public static func apply(_ event: [String: Any], to agent: inout V1Agent) {
         switch event["type"] as? String {
         case "response":
             if event["success"] as? Bool == false {
@@ -52,7 +52,7 @@ public enum PiStream {
 public final class PiSession: AgentProcess {
     /// `model` is passed to pi for this conversation; nil, pi uses the person's configuration.
     public init(id: String, folder: URL, model: String? = nil) {
-        super.init(agent: Agent(id: id, name: folder.lastPathComponent, harness: "pi", folder: folder.path),
+        super.init(agent: V1Agent(id: id, name: folder.lastPathComponent, harness: "pi", folder: folder.path),
                    arguments: ["pi", "--mode", "rpc"] + (model.map { ["--model", $0] } ?? []))
     }
 

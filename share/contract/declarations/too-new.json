@@ -1,0 +1,17 @@
+{
+  "about": "A contract higher than the engine knows blocks the display.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "future",
+  "form": "file",
+  "files": {
+    "future.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{ \"contract\": 2, \"title\": \"From the future\" }\n</script>\n<p>Hello.</p>\n"
+  },
+  "expect": {
+    "displays": false,
+    "problems": [
+      "CONTRACT_TOO_NEW"
+    ],
+    "declaration": null,
+    "unavailable": []
+  }
+}

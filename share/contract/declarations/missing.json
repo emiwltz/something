@@ -1,0 +1,26 @@
+{
+  "about": "No declaration at all: the space opens with no right.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "plain",
+  "form": "file",
+  "files": {
+    "plain.html": "<!doctype html>\n<title>Plain</title>\n<p>No declaration here.</p>\n"
+  },
+  "expect": {
+    "displays": true,
+    "problems": [
+      "DECLARATION_MISSING"
+    ],
+    "declaration": {
+      "contract": 1,
+      "title": "plain",
+      "description": null,
+      "agents": {
+        "folders": []
+      },
+      "rights": [],
+      "folder": null
+    },
+    "unavailable": []
+  }
+}

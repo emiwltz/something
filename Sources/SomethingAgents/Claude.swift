@@ -6,7 +6,7 @@ import SomethingCore
 public enum ClaudeStream {
     /// Folds one event of Claude Code's output into what is known of the agent.
     /// Events it does not know are ignored: a newer Claude must not break an older something.
-    public static func apply(_ event: [String: Any], to agent: inout Agent) {
+    public static func apply(_ event: [String: Any], to agent: inout V1Agent) {
         switch event["type"] as? String {
         case "system" where event["subtype"] as? String == "init":
             agent.model = event["model"] as? String
@@ -80,7 +80,7 @@ public final class ClaudeSession: AgentProcess {
     public init(id: String, folder: URL) {
         // `--permission-prompt-tool stdio` makes Claude send its permission requests on this channel
         // instead of refusing them; the SDKs pass it, the CLI's help does not list it.
-        super.init(agent: Agent(id: id, name: folder.lastPathComponent, harness: "claude", folder: folder.path),
+        super.init(agent: V1Agent(id: id, name: folder.lastPathComponent, harness: "claude", folder: folder.path),
                    arguments: ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json",
                                "--verbose", "--permission-prompt-tool", "stdio"],
                    removing: ClaudeSession.credentials)

@@ -1,0 +1,29 @@
+{
+  "about": "Every key, as in the contract's example.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "morning-review",
+  "form": "file",
+  "files": {
+    "morning-review.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{\n  \"contract\": 1,\n  \"title\": \"Morning review\",\n  \"description\": \"What my agents did overnight, and who is waiting.\",\n  \"agents\": {\n    \"see\": \"all\"\n  },\n  \"rights\": [\n    \"state\",\n    \"send:claude\",\n    \"launch:codex\",\n    \"store\"\n  ],\n  \"folder\": \"~/code/shop\"\n}\n</script>\n<p>Hello.</p>\n"
+  },
+  "expect": {
+    "displays": true,
+    "problems": [],
+    "declaration": {
+      "contract": 1,
+      "title": "Morning review",
+      "description": "What my agents did overnight, and who is waiting.",
+      "agents": {
+        "see": "all"
+      },
+      "rights": [
+        "state",
+        "send:claude",
+        "launch:codex",
+        "store"
+      ],
+      "folder": "~/code/shop"
+    },
+    "unavailable": []
+  }
+}

@@ -6,7 +6,7 @@ import Foundation
 /// What the shell around the core must provide. Each platform asks the person in its own way:
 /// `launch` lets them choose a folder, `send` asks their consent before anything reaches an agent.
 public protocol BridgeHost {
-    var state: State { get }
+    var state: V1State { get }
     /// Starts an agent and returns its id. Throws a `BridgeError` when the person declines or it cannot start.
     func launch(harness: String) throws -> String
     /// Sends a message to an agent. Throws a `BridgeError` when the person declines or the agent is gone.
@@ -57,7 +57,7 @@ public enum Bridge {
     }
 
     /// The state as plain JSON objects, the shape a page receives.
-    public static func json(_ state: State) -> Any {
+    public static func json(_ state: V1State) -> Any {
         // Encoding these types cannot fail: they hold only strings, optionals and arrays.
         let data = try! JSONEncoder().encode(state)
         return try! JSONSerialization.jsonObject(with: data)

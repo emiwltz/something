@@ -4,7 +4,7 @@ import Testing
 
 /// A host that records what the bridge asked of it.
 final class FakeHost: BridgeHost {
-    var state = State()
+    var state = V1State()
     var sent: [(String, String)] = []
     var refuse = false
     var store: PageStore? = nil
@@ -23,7 +23,7 @@ final class FakeHost: BridgeHost {
 struct BridgeTests {
     @Test func testUnknownValuesAreNullNotMissing() throws {
         let host = FakeHost()
-        host.state = State(agents: [Agent(id: "a1", name: "docs", harness: "claude", folder: "/Users/example/docs")])
+        host.state = V1State(agents: [V1Agent(id: "a1", name: "docs", harness: "claude", folder: "/Users/example/docs")])
         let answer = Bridge.answer(["method": "state"], host: host)
         let agents = try #require((answer["result"] as? [String: Any])?["agents"] as? [[String: Any]])
         #expect(agents.count == 1)

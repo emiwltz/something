@@ -6,7 +6,7 @@ import SomethingCore
 struct AgentProcessTests {
     /// A newcomer without the agent installed must read what to do, not a message from /usr/bin/env.
     @Test func aMissingProgramSaysWhatToDo() async throws {
-        let session = AgentProcess(agent: Agent(id: "x-1", name: "try", harness: "x", folder: NSTemporaryDirectory()),
+        let session = AgentProcess(agent: V1Agent(id: "x-1", name: "try", harness: "x", folder: NSTemporaryDirectory()),
                                    arguments: ["something-example-no-such-program"])
         try session.start()
         for _ in 0..<100 where session.agent.status != "stopped" { try await Task.sleep(nanoseconds: 50_000_000) }

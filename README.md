@@ -50,8 +50,8 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 ## How it is made
 
 ```text
-share/                     what the window serves: something.js (the tools a page uses), template.html (the page shown), guide.md (the guide for the agent that writes pages)
-Sources/SomethingCore/     the state, the bridge, the page memory: Foundation only, so it can build on Linux and Windows; meant to name no agent (the contract types to come finish it)
+share/                     what the window serves: something.js (the tools a page uses), template.html (the page shown), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
+Sources/SomethingCore/     contract 1's state (Contract, StateMap) beside V1's, the bridge, the page memory: Foundation only, so it can build on Linux and Windows; meant to name no agent (V1's state still does, until it goes)
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi)
 Sources/something/         the Mac app: menu bar, window, something:// pages, native windows; carries, asks, decides nothing
 Tests/                     SomethingCoreTests (with the budgets and the publishable scan) and SomethingAgentsTests
