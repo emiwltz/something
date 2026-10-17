@@ -12,7 +12,6 @@ Needs a Mac with Apple's command line tools (`xcode-select --install`, free; alr
 
 ```sh
 swift run something                 # builds, then opens the window and the menu bar icon
-swift run something --page <name>    # opens the page pages/<name>/ (default: chat)
 swift run something --self-test     # checks the window is on screen, ⌘V pastes, the page answers, its memory works, the network is closed
 swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
 # add --ask "<message>" to send your own; --answer once|deny answers its permission requests without a window,
@@ -32,7 +31,7 @@ swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks
 
 ## Pages
 
-The window shows one page, a folder of `pages/` with an `index.html`; the menu bar icon lists them. Your coding agent writes them: point it to [pages/AGENTS.md](pages/AGENTS.md), the guide written for it. A page reloads each time a file of it is saved. Pages load their files from `something://` addresses and cannot reach the Internet. Each page has a small memory of its own (`.store.json` in its folder). `pages/chat/` is the first page; your own pages stay out of this repository's history.
+For now the window shows one page, `share/template.html`, a plain chat; spaces of your own, written by your coding agent, come next. The guide written for that agent is [share/guide.md](share/guide.md). The page reloads each time its file is saved. It loads its files from `something://` addresses and cannot reach the Internet. It has a small memory of its own, `~/something/data/template.json`.
 
 ## The first page
 
@@ -51,11 +50,11 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 ## How it is made
 
 ```text
-web/                       something.js: the tools a page uses, plain JavaScript, reusable by any host
-pages/                     the pages, and AGENTS.md, the guide for the agent that writes them
-Sources/SomethingCore/     the state, the bridge, the page memory, and one driver per protocol (AgentProcess, Claude, Codex, ACP, Pi): Foundation only, so it can build on Linux and Windows
-Sources/something/         the Mac shell: menu bar, window, something:// pages, native windows; carries, asks, decides nothing
-Tests/                     tests of the core
+share/                     what the window serves: something.js (the tools a page uses), template.html (the page shown), guide.md (the guide for the agent that writes pages)
+Sources/SomethingCore/     the state, the bridge, the page memory: Foundation only, names no agent, so it can build on Linux and Windows
+Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi)
+Sources/something/         the Mac app: menu bar, window, something:// pages, native windows; carries, asks, decides nothing
+Tests/                     SomethingCoreTests (with the budgets and the publishable scan) and SomethingAgentsTests
 ```
 
 A page talks to something with one protocol: it sends `{"method": ..., "params": ...}` and gets `{"result": ...}` or `{"error": ...}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.

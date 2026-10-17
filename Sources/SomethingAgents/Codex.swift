@@ -2,6 +2,7 @@
 // its input and output. something starts its own private server, one per conversation, and never joins
 // the server a Codex in a terminal may share.
 import Foundation
+import SomethingCore
 
 public enum CodexStream {
     /// The permission requests Codex sends, and how a person knows them.

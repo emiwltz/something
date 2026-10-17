@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import SomethingCore
+@testable import SomethingAgents
+import SomethingCore
 
 /// Events shaped like pi 1.0's RPC mode (keys checked against a real run, values invented).
 struct PiStreamTests {

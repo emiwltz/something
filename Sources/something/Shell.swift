@@ -1,19 +1,16 @@
 // The Mac shell: an icon in the menu bar, one window showing a page, the agents, and the bridge between
 // them. It asks the person through Ask.swift; what a page receives is decided in SomethingCore.
 import AppKit
+import SomethingAgents
 import SomethingCore
 import WebKit
 
-// The repository holds web/ (something's own files) and pages/ (the pages). Found from this source file's
-// place, which holds while something runs with `swift run` from its clone.
-let repository = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 let arguments = CommandLine.arguments
 
 final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMessageHandlerWithReply,
                    WKNavigationDelegate, BridgeHost {
-    let pagesFolder = repository.appendingPathComponent("pages")
-    var page = Shell.option("--page") ?? "chat"
+    // Until spaces exist, the window shows share/template.html, served as something://app/template.html.
+    let page = "template"
     var pageStamp = Date.distantPast
     var sessions: [AgentProcess] = []
     var alwaysAllowed: Set<String> = []
@@ -38,7 +35,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         statusItem.menu?.delegate = self
 
         let config = WKWebViewConfiguration()
-        config.setURLSchemeHandler(PageScheme(app: repository.appendingPathComponent("web"), pages: pagesFolder),
+        config.setURLSchemeHandler(PageScheme(app: Resources.share),
                                    forURLScheme: "something")
         config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "something")
         web = WKWebView(frame: .zero, configuration: config)
@@ -51,7 +48,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         window.contentView = web
         window.center()
 
-        open(page: page)
+        openPage()
         showWindow()
         // A page your agent is writing reloads as soon as it saves.
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.reloadIfChanged() }
@@ -97,50 +94,38 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    // MARK: Pages
+    // MARK: The page
 
-    /// The pages: folders of pages/ that hold an index.html.
-    var pageNames: [String] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: pagesFolder.path)) ?? []
-        return names.filter { FileManager.default.fileExists(atPath: pagesFolder.appendingPathComponent("\($0)/index.html").path) }.sorted()
-    }
+    var pageFile: URL { Resources.share.appendingPathComponent("\(page).html") }
 
-    func open(page name: String) {
-        guard pageNames.contains(name) else {
-            fail("No page \"\(name)\" in \(pagesFolder.path). A page is a folder there with an index.html.")
+    func openPage() {
+        guard FileManager.default.fileExists(atPath: pageFile.path) else {
+            fail("No page at \(pageFile.path). Reinstall something, or restore share/ in its clone.")
         }
-        page = name
-        store = PageStore(file: pagesFolder.appendingPathComponent("\(name)/.store.json"))
-        window.title = "something · \(name)"
-        pageStamp = stamp(of: name)
-        web.load(URLRequest(url: URL(string: "something://pages/\(name)/")!))
+        // The page's memory lives in the person's data folder: share/ is part of something, and read-only in the app.
+        // $HOME first, so that a trial with a throwaway home never touches the person's own folder.
+        let home = ProcessInfo.processInfo.environment["HOME"].map { URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
+        let data = home.appendingPathComponent("something/data")
+        try? FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+        store = PageStore(file: data.appendingPathComponent("\(page).json"))
+        window.title = "something · \(page)"
+        pageStamp = stamp()
+        web.load(URLRequest(url: URL(string: "something://app/\(page).html")!))
     }
 
-    @objc func choosePage(_ item: NSMenuItem) { open(page: item.title); showWindow() }
-
-    /// The latest change among the page's files, hidden files (its memory) left out.
-    func stamp(of name: String) -> Date {
-        let folder = pagesFolder.appendingPathComponent(name)
-        let files = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.contentModificationDateKey],
-                                                   options: [.skipsHiddenFiles])
-        return (files?.allObjects as? [URL] ?? []).compactMap {
-            try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        }.max() ?? .distantPast
+    func stamp() -> Date {
+        (try? pageFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
 
     func reloadIfChanged() {
-        let now = stamp(of: page)
+        let now = stamp()
         if now != pageStamp { pageStamp = now; web.reload() }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(withTitle: "Open the window", action: #selector(showWindow), keyEquivalent: "")
-        menu.addItem(.separator())
-        for name in pageNames {
-            let item = menu.addItem(withTitle: name, action: #selector(choosePage(_:)), keyEquivalent: "")
-            item.state = name == page ? .on : .off
-        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit something", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }

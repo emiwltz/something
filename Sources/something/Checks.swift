@@ -8,6 +8,7 @@
 //       --model <model>             OpenCode, pi: use this model for the conversation
 //       --click <button title>      or show the windows and click that button from inside something
 import AppKit
+import SomethingAgents
 import SomethingCore
 import WebKit
 

@@ -1,5 +1,5 @@
-# The tests on a Mac that is not the author's, at each push: something v2 builds and its core passes.
-# The Mac shell needs a screen, so the window itself is checked by hand (`swift run something --self-test`).
+# The tests on a Mac that is not the author's, at each push: something builds and its suite passes.
+# The window itself needs a screen, so it is checked by hand (`swift run something --self-test`).
 name: tests
 
 on:
@@ -13,6 +13,6 @@ jobs:
   tests:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - run: swift build
       - run: swift test

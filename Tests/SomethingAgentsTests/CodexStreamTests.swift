@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import SomethingCore
+@testable import SomethingAgents
+import SomethingCore
 
 /// Messages shaped like codex app-server 0.162's (keys checked against its schema and a real run, values invented).
 struct CodexStreamTests {

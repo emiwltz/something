@@ -2,6 +2,7 @@
 // input and output, whose news is folded into one `Agent`. Each harness (Claude.swift, Codex.swift)
 // says how to start it and how to read and answer it.
 import Foundation
+import SomethingCore
 
 /// The person's answer to a permission request.
 /// Only "once" or "deny": something never writes a lasting rule into an agent's settings.

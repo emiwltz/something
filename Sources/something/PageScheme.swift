@@ -1,18 +1,16 @@
 // Serves pages at something:// addresses, so that every page gets the same rules: its own files and
-// something.js, nothing from the network. something://app/ is web/, something://pages/<name>/ is a page.
+// something.js, nothing from the network. something://app/ is share/.
 import Foundation
 import WebKit
 
 final class PageScheme: NSObject, WKURLSchemeHandler {
     let app: URL
-    let pages: URL
     /// Scripts, styles, images and fetches only from something:// (and inline, data:, blob:).
     /// A page cannot reach the Internet, so what it shows of the agents stays on the machine.
     static let policy = "default-src something: 'unsafe-inline' data: blob:"
 
-    init(app: URL, pages: URL) {
+    init(app: URL) {
         self.app = app
-        self.pages = pages
     }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
@@ -29,14 +27,10 @@ final class PageScheme: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 
-    /// The file an address points to, or nil when it points outside web/ and pages/.
+    /// The file an address points to, or nil when it points outside share/.
     func file(for url: URL) -> URL? {
-        let root: URL
-        switch url.host {
-        case "app": root = app
-        case "pages": root = pages
-        default: return nil
-        }
+        guard url.host == "app" else { return nil }
+        let root = app
         var file = root.appendingPathComponent(url.path).standardizedFileURL
         var isFolder: ObjCBool = false
         if FileManager.default.fileExists(atPath: file.path, isDirectory: &isFolder), isFolder.boolValue {

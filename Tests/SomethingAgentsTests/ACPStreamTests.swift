@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import SomethingCore
+@testable import SomethingAgents
+import SomethingCore
 
 /// Messages shaped like OpenCode 2.0's ACP server (keys checked against a real run, values invented).
 struct ACPStreamTests {

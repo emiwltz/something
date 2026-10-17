@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import SomethingCore
+@testable import SomethingAgents
+import SomethingCore
 
 struct AgentProcessTests {
     /// A newcomer without the agent installed must read what to do, not a message from /usr/bin/env.

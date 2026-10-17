@@ -1,6 +1,7 @@
 // The native windows that ask the person: send a message, allow a tool, quit with agents running.
 // A page cannot draw them, so a page cannot answer them.
 import AppKit
+import SomethingAgents
 import SomethingCore
 
 enum Ask {

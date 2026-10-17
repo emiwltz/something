@@ -1,6 +1,7 @@
 // Claude Code, launched by something through its official channel: `claude -p` with JSON lines
 // in and out (the channel Anthropic's SDKs use). One program per conversation.
 import Foundation
+import SomethingCore
 
 public enum ClaudeStream {
     /// Folds one event of Claude Code's output into what is known of the agent.

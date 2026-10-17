@@ -1,7 +1,2 @@
 .build/
 .swiftpm/
-# Pages your agent writes live here and stay yours; only the guide and the first template are part of something.
-pages/*
-!pages/AGENTS.md
-!pages/chat/
-.store.json

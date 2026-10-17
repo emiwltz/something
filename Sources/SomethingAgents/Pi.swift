@@ -1,6 +1,7 @@
 // pi, launched by something through its official channel: `pi --mode rpc`, JSON lines in and out.
 // One program per conversation. pi never asks permission, by design: it has no request to show.
 import Foundation
+import SomethingCore
 
 public enum PiStream {
     /// Folds one event or response from pi into what is known of the agent.

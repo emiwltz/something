@@ -1,6 +1,7 @@
 // Agents that speak ACP, the Agent Client Protocol: JSON-RPC in lines on the agent's input and output.
 // One protocol for many agents; something uses it for OpenCode (`opencode acp`), and later for others.
 import Foundation
+import SomethingCore
 
 public enum ACPStream {
     /// Folds one notification or request from an ACP agent into what is known of the agent.

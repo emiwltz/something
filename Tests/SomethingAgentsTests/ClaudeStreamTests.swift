@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import SomethingCore
+@testable import SomethingAgents
+import SomethingCore
 
 /// Events shaped like Claude Code 2.1's stream-json output (keys checked against a real run, text invented).
 struct ClaudeStreamTests {
