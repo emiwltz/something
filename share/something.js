@@ -42,10 +42,13 @@
     return params;
   }
 
-  // A listener that throws must not stop the others; its error still reaches the console as uncaught.
+  // A listener that throws must not stop the others; its error still reaches the page as uncaught, with its file
+  // and line: reportError keeps them, where a throw from this injected script would reach the page as "Script error.".
   function tell(event, value) {
     listeners[event].slice().forEach(function (fn) {
-      try { fn(value); } catch (error) { setTimeout(function () { throw error; }); }
+      try { fn(value); } catch (error) {
+        if (typeof reportError === "function") reportError(error); else setTimeout(function () { throw error; });
+      }
     });
   }
 

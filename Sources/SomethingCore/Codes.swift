@@ -129,6 +129,8 @@ public struct Report: Encodable {
     public var calls: [JSONValue] = [], console: [JSONValue] = []
     public var size: Size?
     public var snapshot: String?, journal: [JournalLine]?, ms: Int?
+    /// A sentence about the journal for the human output: why it is null, or that older lines were left out.
+    public var journalNote: String?
 
     public init(space: String, path: String) { (self.space, self.path) = (space, path) }
 
@@ -186,6 +188,7 @@ public struct Report: Encodable {
             let words = [line.at, line.action, line.agent, line.kind, line.when, line.text.map { "\"\($0)\"" }].compactMap { $0 }
             lines.append(row("journal", words.joined(separator: " ") + ": " + line.result))
         }
+        if let journalNote { lines.append(row("journal", journalNote)) }
         let ended = exitStatus == 2 ? " The check could not run to its end: fix the fatal problem first." : ""
         lines.append("  \(count(errors, "error")), \(count(warnings, "warning")).\(ended)")
         return lines.joined(separator: "\n") + "\n"

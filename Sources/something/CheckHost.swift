@@ -75,8 +75,21 @@ final class CheckHost: BridgeHost {
         }
     }
 
+    /// What an unhandled rejection of the page says: RIGHT_REFUSED when it is the answer to a call that --refuse
+    /// refused (the page threw instead of adapting to granted), PROMISE_REJECTED for any other.
+    func problem(_ rejection: CheckPage.Rejection, refused: [String]) -> Problem {
+        let refusedCall = rejection.code == "RIGHT_NOT_GRANTED" && calls.contains { call in
+            guard let error = call.answer["error"] as? [String: Any], error["code"] as? String == "RIGHT_NOT_GRANTED",
+                  let message = error["message"] as? String, rejection.message.hasSuffix(message),
+                  let right = needs(call) else { return false }
+            return Rights.covers(refused, right)
+        }
+        return refusedCall ? Problem("RIGHT_REFUSED", "A call to a refused right was not caught: \(rejection.message)")
+            : Problem("PROMISE_REJECTED", rejection.message)
+    }
+
     /// What the calls say about the space, each problem once. A call refused because of `--refuse` is not one: the
-    /// page is expected to meet it, and whether it threw instead shows in its unhandled rejections (RIGHT_REFUSED).
+    /// page is expected to meet it, and whether it threw instead shows in its unhandled rejections (`problem`).
     func problems(refused: [String]) -> [Problem] {
         var problems: [Problem] = []
         for call in calls {

@@ -12,10 +12,10 @@ extension Check {
     /// would take the focus when it starts.
     @MainActor func main(places: Places, share: URL, say: (String, Bool) -> Void) -> Int32 {
         let runner = CheckRunner(places: places, share: share)
-        var report: Report?
+        var outcome: Result<Report, SpaceError>?
         if runner.windowServer { NSApplication.shared.setActivationPolicy(.prohibited) }
         Task { @MainActor in
-            report = await runner.run(self)
+            do { outcome = .success(try await runner.run(self)) } catch { outcome = .failure(error as? SpaceError ?? SpaceError("\(error)")) }
             guard runner.windowServer else { return }
             NSApp.stop(nil)
             // run() returns once it has handled an event after stop().
@@ -23,10 +23,24 @@ extension Check {
                                                context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: false)
         }
         // requestAnimationFrame fires only while AppKit runs the app; without a window server there is no app to run.
-        if runner.windowServer { NSApp.run() } else { while report == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) } }
-        let text = json ? (try? report!.json()).map { String(decoding: $0, as: UTF8.self) } ?? "{}" : report!.text(home: places.home.path)
+        if runner.windowServer {
+            NSApp.run()
+        } else {
+            while outcome == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
+        }
+        let report: Report
+        switch outcome {
+        case .success(let done): report = done
+        case .failure(let wrong): say(wrong.message, true); return 2
+        case nil: say("The check stopped before it had a report.", true); return 2
+        }
+        var text = report.text(home: places.home.path)
+        if json {
+            guard let data = try? report.json() else { say("The report could not be written as JSON.", true); return 2 }
+            text = String(decoding: data, as: UTF8.self)
+        }
         say(text.hasSuffix("\n") ? String(text.dropLast()) : text, false)
-        return report!.exitStatus
+        return report.exitStatus
     }
 }
 
@@ -46,10 +60,11 @@ final class CheckRunner {
 
     init(places: Places, share: URL) { (self.places, self.share) = (places, share) }
 
-    /// The report of one check. Never throws: what went wrong is a problem of the report.
-    func run(_ check: Check) async -> Report {
+    /// The report of one check: what went wrong with the space is a problem of the report. Throws a `SpaceError`
+    /// when a --refuse word names no right the space declares, as wrong words of the command.
+    func run(_ check: Check) async throws -> Report {
         let start = Date()
-        var report = await checked(check)
+        var report = try await checked(check)
         // Fatal problems first, then errors, warnings and information, each in the order it was found.
         let order: [Level] = [.fatal, .error, .warning, .info]
         report.problems = order.flatMap { level in report.problems.filter { $0.level == level } }
@@ -57,7 +72,7 @@ final class CheckRunner {
         return report
     }
 
-    private func checked(_ check: Check) async -> Report {
+    private func checked(_ check: Check) async throws -> Report {
         guard let space = Spaces(root: places.spaces).locate(check.space) else {
             let path = check.space.contains("/") ? URL(fileURLWithPath: check.space) : places.spaces.appendingPathComponent(check.space)
             var report = Report(space: check.space, path: path.path)
@@ -69,24 +84,33 @@ final class CheckRunner {
         var report = Report(space: space.name, path: space.location.path)
         let kept = SpaceWindow.isKept(space, places)
         report.size = space.size()
-        if check.journal { report.journal = kept ? ((try? Journal(folder: places.journals).last(100, space: space.name)) ?? []) : [] }
+        if check.journal { journal(of: space, kept: kept, into: &report) }
         let reading = Declaration.read(space, home: places.home)
-        (report.declaration, report.problems) = (reading.declaration, reading.problems)
+        report.declaration = reading.declaration
+        report.problems = reading.problems
         // The app does not display such a space, so there is nothing to render.
         guard let declaration = reading.declaration else { return report }
+        // The person answers each declared right as a whole, so a refusal names a declared right or a whole kind of them.
+        for word in check.refuse where !declaration.rights.contains(where: { Rights.covers([word], $0) }) {
+            let rights = declaration.rights.isEmpty ? "it declares none" : "it declares: \(declaration.rights.joined(separator: ", "))"
+            throw SpaceError("--refuse \(word) names no right the space declares (\(rights)); refuse a right as it is declared.")
+        }
         let refused = declaration.rights.filter { Rights.covers(check.refuse, $0) }
         var grant = Grant(declared: Asked(declaration), at: "")
-        (grant.granted, grant.refused) = (declaration.rights.filter { !refused.contains($0) }, refused)
-        grant.folder = declaration.folder.flatMap { Declaration.expand($0, home: CheckRunner.invented) } ?? CheckRunner.invented.appendingPathComponent("code").path
+        grant.granted = declaration.rights.filter { !refused.contains($0) }
+        grant.refused = refused
+        let folder = declaration.folder.flatMap { Declaration.expand($0, home: CheckRunner.invented) }
+        grant.folder = folder ?? CheckRunner.invented.appendingPathComponent("code").path
         let granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: CheckRunner.invented)
-        (report.rights.granted, report.rights.refused) = (granted.rights, granted.refused)
-        (report.rights.unavailable, report.rights.unknown) = (reading.unavailable, reading.unknown)
+        report.rights.granted = granted.rights
+        report.rights.refused = granted.refused
+        report.rights.unavailable = reading.unavailable
+        report.rights.unknown = reading.unknown
         let state: State
         do { state = try read(check.state) } catch {
             report.problems.append(Problem("STATE_FILE_UNREADABLE", (error as? SpaceError)?.message ?? "\(error)"))
             return report
         }
-        report.received = CheckRunner.received(Rights.visible(state, granted, launched: []), source: check.state ?? "invented")
         guard windowServer else {
             report.problems.append(Problem("NO_WINDOW_SERVER", "This session has no window server (an agent's sandbox has none), "
                                            + "so the page was not loaded; the declaration and the files were checked."))
@@ -103,16 +127,10 @@ final class CheckRunner {
             report.problems += rendered.problems
             report.console = rendered.console
             report.snapshot = rendered.snapshot?.path
-            // An unhandled rejection of a call --refuse refused is the page throwing instead of adapting to granted.
-            for rejection in rendered.rejections {
-                let refusedCall = rejection.code == "RIGHT_NOT_GRANTED" && host.calls.contains { call in
-                    (call.answer["error"] as? [String: Any])?["code"] as? String == "RIGHT_NOT_GRANTED" && host.needs(call).map { Rights.covers(refused, $0) } == true
-                }
-                let problem = refusedCall ? Problem("RIGHT_REFUSED", "A call to a refused right was not caught: \(rejection.message)")
-                    : Problem("PROMISE_REJECTED", rejection.message)
-                if !report.problems.contains(problem) { report.problems.append(problem) }
-            }
-            report.problems += host.problems(refused: refused).filter { !report.problems.contains($0) }
+            // Only what reached the page is said as received.
+            if rendered.pushed { report.received = CheckRunner.received(Rights.visible(state, granted, launched: []), source: check.state ?? "invented") }
+            let found = rendered.rejections.map { host.problem($0, refused: refused) } + host.problems(refused: refused)
+            for problem in found where !report.problems.contains(problem) { report.problems.append(problem) }
             report.calls = host.recorded
         } catch {
             // Without its bridge or its network lock, a space is not opened, in the app as here.
@@ -120,6 +138,20 @@ final class CheckRunner {
         }
         return report
     }
+
+    /// The space's last journal lines, or null with the reason; the person's journal is read, never written.
+    private func journal(of space: Space, kept: Bool, into report: inout Report) {
+        guard kept else { return report.journal = [] }
+        do {
+            let lines = try Journal(folder: places.journals).last(Self.journalLines + 1, space: space.name)
+            report.journal = Array(lines.suffix(Self.journalLines))
+            if lines.count > Self.journalLines { report.journalNote = "the last \(Self.journalLines) lines; older ones are left out" }
+        } catch {
+            report.journalNote = "not read: \((error as? SpaceError)?.message ?? "\(error)")"
+        }
+    }
+
+    static let journalLines = 100
 
     /// The state the page receives: the --state file, or the invented one of share/contract. Throws a `SpaceError`
     /// that says why it does not read.
@@ -158,9 +190,13 @@ final class CheckRunner {
 /// fire requestAnimationFrame), transparent, deaf to the mouse and unable to become key.
 @MainActor
 final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
+    /// An unhandled rejection: its code when the reason has one, and its text.
+    struct Rejection { let code: String?, message: String }
     struct Rendered {
-        var problems: [Problem] = [], console: [JSONValue] = [], rejections: [(code: String?, message: String)] = []
+        var problems: [Problem] = [], console: [JSONValue] = [], rejections: [Rejection] = []
         var snapshot: URL?
+        /// Whether the state was handed to the page.
+        var pushed = false
     }
 
     let space: Space, host: CheckHost, scheme: Scheme
@@ -193,15 +229,22 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         scheme.missed = { [weak self] url in self?.missed(url) }
     }
 
-    /// Loads, paints and photographs the page, all within `seconds`, then closes it.
+    /// How long the page is still heard after its snapshot: a timer or a late answer may still throw.
+    static let settling: TimeInterval = 0.5
+
+    /// Loads, paints and photographs the page, all within `seconds`, then listens a little longer and closes it.
     func render(within seconds: TimeInterval, snapshot file: URL) async -> Rendered {
         let screen = NSScreen.main?.frame ?? .zero
         let window = NSWindow(contentRect: NSRect(x: screen.minX, y: screen.minY, width: 900, height: 640), styleMask: .borderless,
                               backing: .buffered, defer: false)
-        (window.alphaValue, window.ignoresMouseEvents, window.hasShadow, window.isReleasedWhenClosed) = (0, true, false, false)
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+        window.hasShadow = false
+        window.isReleasedWhenClosed = false
         window.collectionBehavior = [.transient, .ignoresCycle]
         window.contentView = web
         window.orderFrontRegardless()
+        let deadline = Date().addingTimeInterval(seconds)
         let timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
             Task { @MainActor in self?.end(.late) }
         }
@@ -222,6 +265,7 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             }
             if let frame, let data = try? Rights.visible(host.state, host.granted, launched: host.launched).json() {
                 web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
+                rendered.pushed = true
             }
             step = await next { web.callAsyncJavaScript("await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))",
                                                         arguments: [:], in: frame, in: .defaultClient) { [weak self] _ in self?.settle(.painted) } }
@@ -233,6 +277,8 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
                 try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
                 if (try? png.write(to: file, options: .atomic)) != nil { rendered.snapshot = file }
             }
+            let left = deadline.timeIntervalSinceNow
+            if left > 0 { try? await Task.sleep(nanoseconds: UInt64(min(CheckPage.settling, left) * 1_000_000_000)) }
         case .failed(let why): add(Problem("LOAD_FAILED", "The page did not load: \(why)"))
         case .crashed: add(Problem("PAGE_CRASHED", "The web process that ran the page ended before the check was done."))
         case .late:
@@ -277,13 +323,18 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// Before the page's scripts, in the space's frame: it reports the document's start, uncaught errors, failed
     /// loads of elements, unhandled rejections, loads the policy blocked, and the console, which keeps working. In the
-    /// app's page, it reports where the space's frame was refused to go.
+    /// app's page, it reports where the space's frame was refused to go, and what of the space's policy WebKit tells
+    /// only the app's page (code from a string).
     static let probe = """
         (function () {
           const handler = window.webkit.messageHandlers.check;
           const send = (message) => { try { handler.postMessage(message); } catch (error) {} };
-          // The app's page refuses to let the space's frame go anywhere but the space, and says so in its own document.
-          if (window === top) return addEventListener("securitypolicyviolation", (event) => send({ type: "navigation", url: event.blockedURI }));
+          // The app's page refuses to let the space's frame go anywhere but the space (its frame-src), and says so in its
+          // own document.
+          if (window === top) {
+            return addEventListener("securitypolicyviolation", (event) =>
+              send({ type: event.effectiveDirective === "frame-src" ? "navigation" : "blocked", url: event.blockedURI }));
+          }
           if (parent !== top) return;
           const text = (value) => {
             if (typeof value === "string") return value;
@@ -311,21 +362,28 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "check", let body = message.body as? [String: Any] else { return }
         let words = { (key: String) in String((body[key] as? String ?? "").prefix(2_000)) }
-        if message.frameInfo.isMainFrame, words("type") == "navigation" {
-            return add(Problem("NAVIGATION_BLOCKED", "The page tried to go to \(words("url"))."))
+        if message.frameInfo.isMainFrame {
+            switch words("type") {
+            case "navigation": add(Problem("NAVIGATION_BLOCKED", "The page tried to go to \(words("url"))."))
+            case "blocked": blocked(words("url"))
+            default: break
+            }
+            return
         }
         guard SpaceWindow.isSpace(message.frameInfo) else { return }
         switch words("type") {
         case "start": started = started || words("url").hasPrefix("\(Scheme.name)://\(Scheme.host)/")
         case "error":
             let file = place(words("file"))
-            add(Problem("SCRIPT_ERROR", words("message"), where: file.isEmpty ? nil : Where(file: file, line: body["line"] as? Int, column: body["column"] as? Int)))
+            // WebKit hides what an error says when it comes from a script that is not the page's own.
+            let message = words("message") == "Script error." && file.isEmpty
+                ? "An error was thrown from code something runs for the page (a listener of something.on, or a script "
+                    + "that tried to change the address of the app's page); WebKit does not say its file and line."
+                : words("message")
+            add(Problem("SCRIPT_ERROR", message, where: file.isEmpty ? nil : Where(file: file, line: body["line"] as? Int, column: body["column"] as? Int)))
         case "resource": loadFailed(words("url"))
-        case "blocked":
-            let url = words("url")
-            add(Problem("RESOURCE_BLOCKED", ["eval", "inline"].contains(url) ? "The page ran code from a string (eval or new Function), which a space cannot do."
-                : "\(url) was blocked: a space loads only its own files."))
-        case "rejection": rendered.rejections.append((body["code"] as? String, words("message")))
+        case "blocked": blocked(words("url"))
+        case "rejection": rendered.rejections.append(Rejection(code: body["code"] as? String, message: words("message")))
         case "console":
             guard rendered.console.count < 200 else { return }
             rendered.console.append(.object(["level": .string(words("level")), "text": .string(words("text"))]))
@@ -341,11 +399,14 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         return path.isEmpty ? space.page.lastPathComponent : path
     }
 
+    private func blocked(_ url: String) {
+        add(Problem("RESOURCE_BLOCKED", ["eval", "inline"].contains(url) ? "The page ran code from a string (eval or new Function), which a space cannot do."
+            : "\(url) was blocked: a space loads only its own files."))
+    }
+
     private func loadFailed(_ address: String) {
         guard !address.isEmpty else { return }
-        if URL(string: address)?.scheme == Scheme.name { missed(URL(string: address)!) } else {
-            add(Problem("RESOURCE_BLOCKED", "\(address) was blocked: a space loads only its own files."))
-        }
+        if URL(string: address)?.scheme == Scheme.name { missed(URL(string: address)!) } else { blocked(address) }
     }
 
     /// An address of the space that is none of its files. The page itself is LOAD_FAILED, said once it loaded.

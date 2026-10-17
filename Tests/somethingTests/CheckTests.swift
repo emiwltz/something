@@ -10,9 +10,10 @@ import Testing
 import WebKit
 @testable import something
 
-/// One run of `something check` in `home`: its status, its standard output, and that output read as JSON when it is.
+/// One run of `something check` in `home`: its status, its standard output and error, and the output read as JSON
+/// when it is. Throws when the program cannot start; a run longer than 30 seconds is ended and fails the test.
 struct Checked {
-    let status: Int32, out: String
+    let status: Int32, out: String, err: String
     var json: [String: Any] { (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? [String: Any] ?? [:] }
     var codes: [String] { (json["problems"] as? [[String: Any]] ?? []).compactMap { $0["code"] as? String } }
 
@@ -23,12 +24,21 @@ struct Checked {
         var environment = ProcessInfo.processInfo.environment
         (environment["HOME"], environment["TMPDIR"]) = (home.root.path, home.root.appendingPathComponent("tmp").path)
         process.environment = environment
-        let out = Pipe()
-        (process.standardOutput, process.standardError) = (out, FileHandle.nullDevice)
+        let out = Pipe(), err = Pipe()
+        process.standardOutput = out
+        process.standardError = err
         try process.run()
+        // A run that never returns would hang the whole suite: it is ended, and the test says which one it was.
+        let deadline = DispatchWorkItem { process.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
         let data = out.fileHandleForReading.readDataToEndOfFile()
+        let errors = err.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        (status, self.out) = (process.terminationStatus, String(decoding: data, as: UTF8.self))
+        deadline.cancel()
+        status = process.terminationStatus
+        self.out = String(decoding: data, as: UTF8.self)
+        self.err = String(decoding: errors, as: UTF8.self)
+        #expect(process.terminationReason == .exit, "something check \(words.joined(separator: " ")) ran over 30 seconds and was ended.")
     }
 }
 
@@ -83,6 +93,10 @@ extension Home {
         ("RIGHT_REFUSED", { try $0.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
                                                         "<script>something.send(\"a1\", \"Hello.\");</script>")) }, ["--refuse", "send"]),
         ("RESOURCE_BLOCKED", { try $0.space("x", declared("<img src=\"https://example.com/logo.png\">")) }, []),
+        // Code from a string breaks the space's policy, which WebKit reports only to the app's page.
+        ("RESOURCE_BLOCKED", { try $0.space("x", declared("<script>try { eval(\"1\"); } catch (error) {}</script>")) }, []),
+        // An error after the snapshot is still heard.
+        ("SCRIPT_ERROR", { try $0.space("x", declared("<script>setTimeout(() => { throw new Error(\"Invented late failure.\"); }, 50);</script>")) }, []),
         ("NAVIGATION_BLOCKED", { try $0.space("x", declared("<script>location.href = \"https://example.com/\";</script>")) }, []),
         ("BRIDGE_ERROR", { try $0.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
                                                        "<script>something.send(\"zz\", \"Hello.\").catch(() => {});</script>")) }, []),
@@ -171,6 +185,41 @@ extension Home {
         #expect((checked.json["rights"] as? [String: Any])?["refused"] as? [String] == ["send"])
     }
 
+    /// RIGHT_REFUSED is only for the rejection of a refused call: a caught refused call and an uncaught undeclared
+    /// one give the undeclared one's codes, and the check fails.
+    @Test func onlyARefusedCallIsRightRefused() throws {
+        let home = Home()
+        defer { home.remove() }
+        try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
+                                     "<script>something.send(\"a1\", \"Hello.\").catch(() => {}); something.launch(\"pi\");</script>"))
+        let checked = try Checked(["x", "--json", "--refuse", "send"], home)
+        #expect(checked.codes == ["PROMISE_REJECTED", "RIGHT_NOT_DECLARED"] && checked.status == 1, "\(checked.out)")
+    }
+
+    /// A --refuse word must name a declared right as it is declared, or nothing would be refused.
+    @Test func refuseNamesADeclaredRight() throws {
+        let home = Home()
+        defer { home.remove() }
+        try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]", "<p>Invented.</p>"))
+        for word in ["sned", "send:claude"] {
+            let checked = try Checked(["x", "--refuse", word], home)
+            #expect(checked.status == 2 && checked.out.isEmpty, "\(checked.out)")
+            #expect(checked.err == "--refuse \(word) names no right the space declares (it declares: state, send); refuse a right as it is declared.\n")
+        }
+    }
+
+    /// An error thrown in a listener of something.on keeps its file and line.
+    @Test func aListenerErrorSaysWhere() throws {
+        let home = Home()
+        defer { home.remove() }
+        try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\"]",
+                                     "<script>\nsomething.on(\"change\", (state) => { state.agnets.length; });\n</script>"))
+        let checked = try Checked(["x", "--json"], home)
+        let problem = (checked.json["problems"] as? [[String: Any]])?.first
+        #expect(checked.codes == ["SCRIPT_ERROR"] && (problem?["where"] as? [String: Any])?["file"] as? String == "x.html", "\(checked.out)")
+        #expect((problem?["where"] as? [String: Any])?["line"] as? Int == 2, "\(checked.out)")
+    }
+
     /// --state gives the page another state, named as the source; a broken one stops the check (status 2).
     @Test func stateGivesAnotherState() throws {
         let home = Home()
@@ -205,6 +254,19 @@ extension Home {
         let human = try Checked(["x", "--journal"], home)
         #expect(human.out.contains("\n  journal   2026-10-17T09:00:02Z send a1 claude next \"Then run the tests.\": ok\n"), "\(human.out)")
         #expect(try Checked(["x", "--json"], home).json["journal"] is NSNull)
+
+        // Over 100 lines, the human output says the older ones are left out.
+        for _ in 0..<100 { try Journal(folder: home.places.journals).append(line, space: "x") }
+        let long = try Checked(["x", "--journal"], home)
+        #expect(long.out.components(separatedBy: "\n  journal   2026").count == 101, "\(long.out)")
+        #expect(long.out.contains("\n  journal   the last 100 lines; older ones are left out\n"))
+
+        // A journal that cannot be read is null, and the human output says why.
+        let file = Journal(folder: home.places.journals).file("x")
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
+        #expect(try Checked(["x", "--json", "--journal"], home).json["journal"] is NSNull)
+        #expect(try Checked(["x", "--journal"], home).out.contains("\n  journal   not read: The journal in \(file.path) cannot be read.\n"))
     }
 
     /// 0 with warnings only, 1 with an error, 2 when the check could not run.
@@ -234,11 +296,12 @@ extension Home {
         try home.space("x", declared("\"colour\": \"blue\"", "<script>agnets.length;</script>"))
         let runner = runner(home)
         runner.windowServer = false
-        let report = await runner.run(Check(space: "x"))
+        let report = try await runner.run(Check(space: "x"))
         #expect(report.problems.map(\.code) == ["NO_WINDOW_SERVER", "UNKNOWN_KEY"] && report.exitStatus == 2)
-        #expect(report.snapshot == nil && report.calls.isEmpty && report.received?.agents == 0)
+        // The page received nothing: it was not loaded.
+        #expect(report.snapshot == nil && report.calls.isEmpty && report.received == nil)
         try home.space("clean", declared("<p>Invented.</p>"))
-        #expect(await runner.run(Check(space: "clean")).problems.map(\.code) == ["NO_WINDOW_SERVER"])
+        #expect(try await runner.run(Check(space: "clean")).problems.map(\.code) == ["NO_WINDOW_SERVER"])
     }
 
     /// Ends the web process of `web` as a crash would. WebKit says its process only through a private key, which
@@ -257,7 +320,7 @@ extension Home {
         var web: WKWebView?
         runner.created = { web = $0 }
         runner.timeout = 1
-        let report = await runner.run(Check(space: "x"))
+        let report = try await runner.run(Check(space: "x"))
         // The page's process still loops; it ends with the web view only when it is killed.
         if let web { CheckTests.kill(web) }
         #expect(report.problems.map(\.code) == ["LOAD_TIMEOUT"] && report.exitStatus == 1, "\(report.problems)")
@@ -271,7 +334,7 @@ extension Home {
         let runner = runner(home)
         var killed = false
         runner.loaded = { killed = CheckTests.kill($0) }
-        let report = await runner.run(Check(space: "x"))
+        let report = try await runner.run(Check(space: "x"))
         try #require(killed, "This WebKit does not say the pid of its web process.")
         #expect(report.problems.map(\.code) == ["PAGE_CRASHED"] && report.exitStatus == 1, "\(report.problems)")
     }

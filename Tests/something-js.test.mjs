@@ -113,6 +113,15 @@ test("a listener that throws does not stop the next one", () => {
   assert.deepEqual(uncaught, ["Invented failure."]);
 });
 
+test("where the page has reportError, a listener's error reaches it with its own file and line", () => {
+  const reported = [];
+  const window = { webkit: { messageHandlers: { something: { postMessage: () => Promise.resolve({}) } } } };
+  vm.runInNewContext(source, { window, setTimeout: () => assert.fail("no timer"), reportError: (error) => reported.push(error.message) });
+  window.something.on("change", () => { throw new Error("Invented failure."); });
+  window.something._push({});
+  assert.deepEqual(reported, ["Invented failure."]);
+});
+
 test("send, set and launch leave out what is not given (the engine defaults when to next), store.set sends null for undefined", async () => {
   const { something, sent } = page(() => ({ result: null }));
   await something.send("a1", "Hello.");
