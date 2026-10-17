@@ -17,13 +17,11 @@ public struct Space: Equatable, Sendable {
     /// Every file of the space, hidden files and folders left out, by path relative to the space, sorted.
     public func files() -> [(path: String, url: URL)] {
         guard form == .folder else { return [(location.lastPathComponent, location)] }
-        let keys: [URLResourceKey] = [.isRegularFileKey]
-        let walk = FileManager.default.enumerator(at: location, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
-        let root = location.resolvingSymlinksInPath().path + "/"
-        return (walk?.allObjects as? [URL] ?? [])
-            .filter { (try? $0.resourceValues(forKeys: Set(keys)).isRegularFile) == true }
-            // The folder is resolved (/var is /private/var), the file itself is not: a link keeps its own name.
-            .map { (String(($0.deletingLastPathComponent().resolvingSymlinksInPath().path + "/" + $0.lastPathComponent).dropFirst(root.count)), $0) }
+        // Relative paths from the walk itself: an absolute URL may come back resolved (/private/var for /var).
+        let paths = FileManager.default.enumerator(atPath: location.path)?.allObjects as? [String] ?? []
+        return paths.filter { !$0.split(separator: "/").contains { $0.hasPrefix(".") } }
+            .map { (path: $0, url: location.appendingPathComponent($0)) }
+            .filter { (try? $0.url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
             .sorted { $0.path < $1.path }
     }
 
@@ -86,13 +84,14 @@ public struct Spaces: Sendable {
     public func named(_ name: String) -> Space? {
         guard Self.isName(name) else { return nil }
         let folder = root.appendingPathComponent(name), file = root.appendingPathComponent("\(name).html")
-        if FileManager.default.fileExists(atPath: folder.appendingPathComponent("index.html").path) {
+        if isFile(folder.appendingPathComponent("index.html")) {
             return Space(name: name, form: .folder, location: folder)
         }
         return isFile(file) ? Space(name: name, form: .file, location: file) : nil
     }
 
     /// A space by name, or by the path of its .html file or its folder (anywhere, any name); nil when there is none.
+    /// Memory and journal go by name and belong to spaces under the root, so a caller gives a space outside it neither.
     public func locate(_ nameOrPath: String) -> Space? {
         guard nameOrPath.contains("/") || nameOrPath.hasSuffix(".html") else { return named(nameOrPath) }
         let url = URL(fileURLWithPath: nameOrPath).standardizedFileURL

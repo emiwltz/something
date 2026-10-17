@@ -27,6 +27,7 @@ func write(_ text: String, _ path: String, under root: URL) throws {
         try write("<p>Invented.</p>", "both.html", under: root)
         try write("<p>Invented.</p>", "both/index.html", under: root)
         try write("<p>No index.</p>", "empty/page.html", under: root)
+        try write("<p>An index that is a folder.</p>", "odd/index.html/page.html", under: root)
         try write("<p>Bad name.</p>", "My Notes.html", under: root)
         try write("<p>Bad name.</p>", "Upper.html", under: root)
         try write("hidden", ".DS_Store", under: root)
@@ -36,7 +37,7 @@ func write(_ text: String, _ path: String, under root: URL) throws {
         #expect(spaces.named("notes") == Space(name: "notes", form: .file, location: root.appendingPathComponent("notes.html")))
         #expect(spaces.named("board")?.page == root.appendingPathComponent("board/index.html"))
         #expect(spaces.named("both")?.form == .folder)
-        #expect(spaces.named("empty") == nil && spaces.named("Upper") == nil && spaces.named("../notes") == nil)
+        #expect(spaces.named("empty") == nil && spaces.named("odd") == nil && spaces.named("Upper") == nil && spaces.named("../notes") == nil)
         #expect(Spaces(root: root.appendingPathComponent("nowhere")).list().isEmpty)
     }
 

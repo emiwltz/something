@@ -86,11 +86,47 @@ import Testing
         #expect(codes(#"{"contract": 1.5}"#) == ["CONTRACT_TOO_NEW"])
         #expect(codes(#"{"contract": 1, "rights": "state"}"#) == ["UNKNOWN_RIGHT"])
         #expect(codes(#"{"contract": 1, "agents": {"folders": "~/code"}}"#) == ["SCOPE_INVALID"])
+        #expect(codes(#"{"contract": 1, "agents": {"folders": ["~/code", "code/shop"]}}"#) == ["SCOPE_INVALID"])
+        #expect(codes(#"{"contract": 1, "agents": {"folders": ["~", "~/code", "/Users/example/code"]}}"#).isEmpty)
+        func message(_ json: String) -> String? {
+            Declaration.read(html: nil, json: Data(json.utf8), name: "x", page: "index.html").problems.first?.message
+        }
+        #expect(message(#"{"contract": 0}"#) == "contract is 0, not the whole number 1; it is read as 1.")
+        #expect(message(#"{"contract": null}"#) == "contract is null, not the whole number 1; it is read as 1.")
+        #expect(message(#"{"contract": "1"}"#) == #"contract is "1", not the whole number 1; it is read as 1."#)
         #expect(codes(#"{"contract": 1, "rights": ["state:claude", "send:", "send:gemini", "send:codex", 3]}"#)
                 == ["UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT"])
         let reading = Declaration.read(html: nil, json: Data(#"{"contract": 1, "rights": ["send", "launch:pi", "send:omp"]}"#.utf8),
                                        name: "x", page: "index.html")
         #expect(reading.declaration?.rights == ["send", "launch:pi"] && reading.unavailable == ["send:omp"])
+    }
+
+    @Test func aBlockInsideAnHtmlCommentDoesNotCount() {
+        let html = #"<!-- <script type="application/json" id="something">{"contract": 1, "title": "Old"}</script> -->"#
+        #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html").problems.map(\.code) == ["DECLARATION_MISSING"])
+        let after = html + #"<script type="application/json" id="something">{"contract": 1, "title": "New"}</script>"#
+        #expect(Declaration.read(html: after, json: nil, name: "notes", page: "notes.html").declaration?.title == "New")
+    }
+
+    @Test func aRelativeFolderIsSaidToBeRelative() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write(#"<script type="application/json" id="something">{"contract": 1, "folder": "code/shop"}</script>"#, "notes.html", under: root)
+        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root).problems
+        #expect(problems.map(\.code) == ["FOLDER_MISSING"])
+        #expect(problems.first?.message == "folder is code/shop: it must be absolute or start with ~, for example ~/code/shop.")
+    }
+
+    @Test func aPageThatCannotBeReadIsNotSaidToHaveNoBlock() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try write(#"<script type="application/json" id="something">{"contract": 1}</script>"#, "notes.html", under: root)
+        let page = root.appendingPathComponent("notes.html")
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: page.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: page.path) }
+        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root).problems
+        #expect(problems.map(\.code) == ["DECLARATION_MISSING"])
+        #expect(problems.first?.message.hasPrefix("notes.html could not be read (") == true, "\(problems)")
     }
 
     @Test func pathsExpandFromHome() {

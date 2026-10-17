@@ -77,6 +77,7 @@ import Testing
         let lines = try journal.last(10, space: "notes")
         #expect(lines.count == 2 && lines[0].text?.count == Journal.characters && lines[1].result == "REFUSED")
         #expect(try journal.last(1, space: "notes") == [lines[1]])
+        #expect(try journal.last(0, space: "notes").isEmpty && journal.last(-1, space: "notes").isEmpty)
         let written = try String(contentsOf: journal.file("notes"), encoding: .utf8).split(separator: "\n")
         #expect(written.last == #"{"action":"open","at":"2026-10-17T09:00:03Z","result":"REFUSED"}"#)
     }

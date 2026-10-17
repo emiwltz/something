@@ -1,0 +1,19 @@
+{
+  "about": "A folder space with a block and a something.json that does not parse: both problems, and the space does not display.",
+  "comment": "A declaration case: the files of an invented space, and what an engine must find. problems lists codes, sorted; declaration is what is in force once defaults are applied (null when the space does not display).",
+  "name": "board",
+  "form": "folder",
+  "files": {
+    "index.html": "<!doctype html>\n<title>Example</title>\n<script type=\"application/json\" id=\"something\">\n{ \"contract\": 1 }\n</script>\n<p>Hello.</p>\n",
+    "something.json": "{ \"contract\": 1, \"title\": \"Board\"\n"
+  },
+  "expect": {
+    "displays": false,
+    "problems": [
+      "DECLARATION_TWICE",
+      "DECLARATION_UNREADABLE"
+    ],
+    "declaration": null,
+    "unavailable": []
+  }
+}

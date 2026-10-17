@@ -1,12 +1,15 @@
 // What a space keeps between openings: its memory, one JSON object per space (~/something/data/<name>.json), read
 // and written by path; and its journal, one JSON line per write action, in a folder the engine chooses, never
-// exported. Folders are parameters so tests never touch a real home.
+// exported. Folders are parameters so tests never touch a real home. Both are keyed by the space's name, so they
+// belong to the spaces under the root only; a space located elsewhere by path has neither. Neither takes a lock: a
+// read, change and write is not atomic across callers, so callers serialize the calls on one space (the app makes
+// them on the main actor).
 import Foundation
 
 public struct Memory: Sendable {
     public let file: URL
     /// Above this the memory is STORE_FULL. Decimal megabytes, as for the weight of a space.
-    public static let limit = 5_000_000
+    public static let limit = Size.heavy
 
     public init(folder: URL, space: String) { file = folder.appendingPathComponent("\(space).json") }
 
@@ -132,8 +135,10 @@ public struct Journal: Sendable {
     }
 
     /// The last `count` lines of the space's journal, oldest first; empty when it has none.
-    /// A line that does not decode is left out. Throws a `SpaceError` when the file exists but cannot be read.
+    /// A line that does not decode is left out, so fewer than `count` may come back: the engine wrote every line, and
+    /// only a hand edit breaks one. Throws a `SpaceError` when the file exists but cannot be read.
     public func last(_ count: Int, space: String) throws -> [JournalLine] {
+        guard count > 0 else { return [] }
         let url = file(space)
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         guard let data = try? Data(contentsOf: url) else { throw SpaceError("The journal in \(url.path) cannot be read.") }

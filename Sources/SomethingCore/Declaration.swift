@@ -38,19 +38,27 @@ public struct DeclarationReading: Equatable, Sendable {
 extension Declaration {
     /// Reads the declaration of `space` from its files. Adds what only the disk can tell: a declared folder missing
     /// on this Mac (`~` is `home`), and a space heavier than 5 MB. Never throws: a file that cannot be read is a
-    /// declaration that is missing or unreadable.
+    /// declaration that is missing or unreadable, and the problem's message says it could not be read.
     public static func read(_ space: Space, home: URL) -> DeclarationReading {
         let page = space.page.lastPathComponent
-        let html = (try? Data(contentsOf: space.page)).map { String(decoding: $0, as: UTF8.self) }
+        var html: String?, pageError: String?
+        do { html = String(decoding: try Data(contentsOf: space.page), as: UTF8.self) } catch { pageError = error.localizedDescription }
         let file = space.location.appendingPathComponent("something.json")
         let json = space.form == .folder && FileManager.default.fileExists(atPath: file.path) ? (try? Data(contentsOf: file)) ?? Data() : nil
         var reading = read(html: html, json: json, name: space.name, page: page)
+        // A page that is there but cannot be read may well have a block: saying it has none would be false.
+        if let pageError, FileManager.default.fileExists(atPath: space.page.path), let i = reading.problems.firstIndex(where: { $0.code == "DECLARATION_MISSING" }) {
+            reading.problems[i] = Problem("DECLARATION_MISSING", "\(page) could not be read (\(pageError)); the space opens with no right.", where: Where(file: page))
+        }
         guard let declaration = reading.declaration else { return reading }
         if let folder = declaration.folder {
             var isFolder: ObjCBool = false
-            let path = expand(folder, home: home)
-            if path == nil || !FileManager.default.fileExists(atPath: path!, isDirectory: &isFolder) || !isFolder.boolValue {
-                reading.problems.append(Problem("FOLDER_MISSING", "The folder \(folder) does not exist on this Mac."))
+            if let path = expand(folder, home: home) {
+                if !FileManager.default.fileExists(atPath: path, isDirectory: &isFolder) || !isFolder.boolValue {
+                    reading.problems.append(Problem("FOLDER_MISSING", "The folder \(folder) does not exist on this Mac."))
+                }
+            } else {
+                reading.problems.append(Problem("FOLDER_MISSING", "folder is \(folder): it must be absolute or start with ~, for example ~/code/shop."))
             }
         }
         let size = space.size()
@@ -101,17 +109,19 @@ extension Declaration {
         case let number as NSNumber where !isBool(number) && !isFloat(number) && number.intValue == known:
             break
         case let other?:
-            problems.append(Problem("CONTRACT_MISSING", "contract is \(other), not a contract number; it is read as 1."))
+            problems.append(Problem("CONTRACT_MISSING", "contract is \(Self.written(other)), not the whole number 1; it is read as 1."))
         }
+        // A title, description or folder that is not text is left out without a problem: contract 1 has no code for it.
         if let title = object["title"] as? String { declaration.title = title }
         declaration.description = object["description"] as? String
         declaration.folder = object["folder"] as? String
         if let agents = object["agents"] {
             let data = try? JSONSerialization.data(withJSONObject: agents, options: .fragmentsAllowed)
-            if let scope = data.flatMap({ try? JSONDecoder().decode(Scope.self, from: $0) }) {
+            let scope = data.flatMap { try? JSONDecoder().decode(Scope.self, from: $0) }
+            if let scope, !scope.hasRelativeFolder {
                 declaration.agents = scope
             } else {
-                problems.append(Problem("SCOPE_INVALID", "agents is neither {\"see\": \"all\"} nor {\"folders\": [...]}; the space sees only the agents it launches."))
+                problems.append(Problem("SCOPE_INVALID", "agents is neither {\"see\": \"all\"} nor {\"folders\": [...]} of paths that are absolute or start with ~; the space sees only the agents it launches."))
             }
         }
         switch object["rights"] {
@@ -126,7 +136,7 @@ extension Declaration {
                 }
             }
         case let other?:
-            problems.append(Problem("UNKNOWN_RIGHT", "rights is \(other), not a list of words; no right is asked."))
+            problems.append(Problem("UNKNOWN_RIGHT", "rights is \(Self.written(other)), not a list of words; no right is asked."))
         }
         problems += reading.unavailable.map { Problem("RIGHT_UNAVAILABLE", "\"\($0)\" is a right this engine cannot honour.") }
         problems += reading.unknown.map { Problem("UNKNOWN_RIGHT", "\"\($0)\" is not a right of contract 1.") }
@@ -149,8 +159,11 @@ extension Declaration {
 
     /// The text of the first <script type="application/json" id="something"> in `html`, whatever the order, case and
     /// quoting of its attributes; nil when there is none. A script without that type is code the page runs, not a
-    /// declaration, so it does not count.
+    /// declaration, so it does not count; nor does a block inside an HTML comment, which the page does not hold.
+    /// When there are several blocks the first wins, without a warning.
     static func block(in html: String) -> String? {
+        let comment = try! NSRegularExpression(pattern: #"<!--.*?-->"#, options: .dotMatchesLineSeparators)
+        let html = comment.stringByReplacingMatches(in: html, range: NSRange(html.startIndex..., in: html), withTemplate: "")
         let script = try! NSRegularExpression(pattern: #"<script\b([^>]*)>(.*?)</script\s*>"#, options: [.caseInsensitive, .dotMatchesLineSeparators])
         let attribute = try! NSRegularExpression(pattern: #"([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?"#)
         for match in script.matches(in: html, range: NSRange(html.startIndex..., in: html)) {
@@ -176,6 +189,11 @@ extension Declaration {
         return path.hasPrefix("/") ? path : nil
     }
 
+    /// A value as JSON writes it, so a message shows "1" as text and true as true.
+    private static func written(_ value: Any) -> String {
+        (try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .withoutEscapingSlashes])).map { String(decoding: $0, as: UTF8.self) } ?? "\(value)"
+    }
+
     private static func add(_ word: String, to list: inout [String]) {
         if !list.contains(word) { list.append(word) }
     }
@@ -183,4 +201,12 @@ extension Declaration {
     /// JSON's true and false arrive as numbers; objCType tells them apart, on every platform Foundation runs on.
     private static func isBool(_ number: NSNumber) -> Bool { String(cString: number.objCType) == "c" }
     private static func isFloat(_ number: NSNumber) -> Bool { ["d", "f"].contains(String(cString: number.objCType)) }
+}
+
+extension Scope {
+    /// A folder the contract does not allow: neither absolute nor starting with ~ (contract 2).
+    var hasRelativeFolder: Bool {
+        guard case .folders(let folders) = self else { return false }
+        return folders.contains { Declaration.expand($0, home: URL(fileURLWithPath: "/")) == nil }
+    }
 }
