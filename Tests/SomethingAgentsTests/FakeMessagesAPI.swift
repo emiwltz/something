@@ -11,6 +11,7 @@ final class FakeMessagesAPI {
     private let lock = NSLock()
     private var texts: [String] = []
     private var efforts: [String?] = []
+    private var results: [String] = []
     private var count = 0
 
     /// What the script answers to the person's last words; tools only on the trigger words, so nothing else runs.
@@ -55,6 +56,9 @@ final class FakeMessagesAPI {
     /// The person's texts, in the order the program sent them to the model (each request's last one).
     var received: [String] { lock.withLock { texts } }
 
+    /// The tool results the program sent the model (their text is the invented script's, or an invented answer).
+    var toolResults: [String] { lock.withLock { results } }
+
     /// The effort each request asked of the model, where the program put one.
     var effortsAsked: [String?] { lock.withLock { efforts } }
 
@@ -90,6 +94,7 @@ final class FakeMessagesAPI {
         let blocks = lock.withLock { () -> [[String: Any]] in
             texts.append(last)
             efforts.append(FakeMessagesAPI.effort(body))
+            if let toolResult { results.append(toolResult) }
             count += 1
             return FakeMessagesAPI.reply(to: last, toolResult: toolResult)
         }

@@ -3,9 +3,11 @@
 //
 //   SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter ClaudeTrial
 //
-// Each case gets a throwaway HOME under $TMPDIR, deleted after, whatever the case's outcome. `--bare` is added to
-// the launch line here only: it makes Claude read no OAuth login and no Keychain, so the made-up key "test-key" is the
-// only credential it has; `--tools` names AskUserQuestion, which `--bare` leaves out.
+// Each case gets a throwaway HOME and CLAUDE_CONFIG_DIR under $TMPDIR, deleted after, whatever the case's outcome:
+// no login is there, so the made-up key "test-key", given for the trial only, is the only credential Claude has, and
+// ANTHROPIC_BASE_URL sends every request to the fake. No `--bare`: under it Claude runs no hook given in --settings
+// and offers no AskUserQuestion, so plan B and the question could not be proven. `--tools` keeps Claude to the tools
+// the script uses.
 // SOMETHING_TRIAL_RECORD=<folder> also writes each case's lines there, the raw material of Tests/Exchanges/claude.
 import Foundation
 import Testing
@@ -23,7 +25,7 @@ final class Stopped: @unchecked Sendable { var done = false }
     var asked = false
 
     /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool.
-    init(_ name: String, mode: String = "default", planB: Bool = false) throws {
+    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false) throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
@@ -31,7 +33,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
         let program = trialClaude!
-        let launch = Launch(agent: "claude-trial", folder: work.path, mode: mode)
+        let launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
         var spool: PermissionSpool?
         var command = ClaudeDriver.command(launch)
         if planB {
@@ -47,7 +49,7 @@ final class Stopped: @unchecked Sendable { var done = false }
                            "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
                            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"]
         environment.merge(command.adding) { _, added in added }
-        spawn = Spawn(path: program, arguments: command.arguments + ["--bare", "--tools", "Bash,Edit,Read,AskUserQuestion"], folder: work.path, environment: environment)
+        spawn = Spawn(path: program, arguments: command.arguments + ["--tools", "Bash,Edit,Read,AskUserQuestion"], folder: work.path, environment: environment)
         var record: (Bool, Data) -> Void = { _, _ in }
         agent = try Engine.start(ClaudeDriver.self, launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
         record = { [weak self] written, line in
@@ -114,10 +116,11 @@ final class Stopped: @unchecked Sendable { var done = false }
     }
 }
 
-/// The claude program the trial runs, when asked for.
-let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
+/// The claude program the trial runs, when asked for and there.
+let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
-@Suite(.serialized, .enabled(if: trialClaude != nil)) @MainActor struct ClaudeTrial {
+@Suite(.serialized, .enabled(if: trialClaude != nil, "T-1 needs Claude Code: set SOMETHING_TRIAL_CLAUDE to its program's path."))
+@MainActor struct ClaudeTrial {
 
     @Test func aTurnStartsAndEnds() async throws {
         let run = try ClaudeRun("turn")
@@ -159,9 +162,8 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         try await run.finish()
     }
 
-    /// Not run: under `--bare`, which keeps the trial away from the Keychain, Claude 2.1.296 offers only Bash, Edit
-    /// and Read, and `--tools` cannot add AskUserQuestion. The question path is proven by replay only.
-    @Test(.disabled("AskUserQuestion is not offered under --bare")) func aQuestionIsAnswered() async throws {
+    /// The answer goes back as `updatedInput.answers`, and the model reads it in the tool's result.
+    @Test func aQuestionIsAnswered() async throws {
         let run = try ClaudeRun("question")
         defer { run.cleanup() }
         _ = try run.agent.send("Please ask-me something.", when: "next")
@@ -173,6 +175,9 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         #expect(prompt.questions.first?.options == ["Blue", "Green"])
         #expect(try run.agent.answer(request.id, .choice([["Green"]])))
         try await run.until("the end of the turn") { run.state.state == "idle" && run.api.received.count >= 2 }
+        let answer = try #require(run.lines.last { $0.written && $0.line.contains("updatedInput") }?.line)
+        #expect(answer.contains(#""answers":{"Which colour for the invented button?":"Green"}"#), "\(answer)")
+        #expect(run.api.toolResults.contains { $0.contains("Green") }, "tool results: \(run.api.toolResults)")
         try await run.finish()
     }
 
@@ -262,26 +267,27 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         try await run.finish()
     }
 
-    /// Whether Claude takes an effort through apply_flag_settings; the driver keeps `can.effort` false until it does.
-    @Test func effortThroughFlagSettings() async throws {
-        let run = try ClaudeRun("effort")
+    /// The effort given at launch reaches the model; one set during the session does from the next request.
+    @Test func anEffortIsGivenAndSet() async throws {
+        let run = try ClaudeRun("effort", effort: "high")
         defer { run.cleanup() }
+        try await run.until("the efforts") { run.state.options.effort != nil }
+        #expect(run.state.options.effort?.map(\.value).contains("low") == true)
         _ = try run.agent.send("Hello there.", when: "next")
-        try await run.until("a reply") { run.state.state == "idle" && run.api.received.count == 1 }
-        try run.spawn.write(Data(#"{"request":{"settings":{"effortLevel":"low"},"subtype":"apply_flag_settings"},"request_id":"trial-effort","type":"control_request"}"#.utf8))
-        try await run.until("an answer") { run.lines.contains { !$0.written && $0.line.contains("trial-effort") } }
-        let answer = try #require(run.lines.first { !$0.written && $0.line.contains("trial-effort") }?.line)
-        #expect(answer.contains(#""subtype":"success""#), "\(answer)")
+        try await run.until("a reply") { run.state.state == "idle" && !run.api.received.isEmpty }
+        #expect(run.api.effortsAsked.last == "high", "efforts asked: \(run.api.effortsAsked)")
+        let asked = run.api.received.count
+        #expect(try run.agent.driver.set(model: nil, mode: nil, effort: "low") == "now")
+        try await run.until("the effort") { run.state.effort == "low" }
         _ = try run.agent.send("Hello again.", when: "next")
-        try await run.until("a reply") { run.state.state == "idle" && run.api.received.count == 2 }
+        try await run.until("a reply") { run.state.state == "idle" && run.api.received.count > asked }
         #expect(run.api.effortsAsked.last == "low", "efforts asked: \(run.api.effortsAsked)")
         try await run.finish()
     }
 
-    /// Not run: under `--bare`, which keeps the trial away from the Keychain, Claude 2.1.296 runs no hook given in
-    /// `--settings` (its help says so, and this case saw the request denied at once, the hook never started). Plan B
-    /// is proven with a fake Claude that runs the real hook command (PlanBTests); these two need a run without --bare.
-    @Test(.disabled("--bare skips hooks given in --settings: Claude 2.1.296 denied without running the hook")) func planBAllowsOnce() async throws {
+    /// Plan B against the real Claude: its PermissionRequest hook, given in --settings, runs the real hook command,
+    /// which asks through the spool.
+    @Test func planBAllowsOnce() async throws {
         let run = try ClaudeRun("plan-b-once", planB: true)
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
@@ -293,7 +299,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         try await run.finish()
     }
 
-    @Test(.disabled("--bare skips hooks given in --settings: Claude 2.1.296 denied without running the hook")) func planBDenies() async throws {
+    @Test func planBDenies() async throws {
         let run = try ClaudeRun("plan-b-deny", planB: true)
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")

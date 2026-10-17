@@ -9,6 +9,8 @@ final class FakeMac {
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("programs-\(UUID().uuidString)").path
     var home: String { "\(root)/home" }
     var shellRan: Bool { FileManager.default.fileExists(atPath: "\(root)/shell-ran") }
+    /// The words each run of the fake shell was given, in order.
+    var shellRuns: [String] { ((try? String(contentsOfFile: "\(root)/shell-runs", encoding: .utf8)) ?? "").split(separator: "\n").map(String.init) }
 
     init() throws { try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true) }
     deinit { try? FileManager.default.removeItem(atPath: root) }
@@ -28,6 +30,7 @@ final class FakeMac {
         let script = """
             #!/bin/sh
             : > "\(root)/shell-ran"
+            echo "$*" >> "\(root)/shell-runs"
             \(before)
             echo '<<something-decoy>>/Users/example/decoy'
             case " $* " in *" -i "*) PATH='\(interactive.map { "\(root)/\($0)" }.joined(separator: ":"))' ;;
@@ -125,7 +128,8 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(code { _ = try programs.find("opencode") } ==
                 CodedError("NOT_INSTALLED", "OpenCode was not found on this Mac. To install it, type in Terminal: brew install opencode"))
         #expect(programs.installed("opencode") == false)
-        #expect(programs.installed("omp") == nil)
+        #expect(programs.installed("omp") == false)
+        #expect(programs.installed("amp") == nil)
         #expect(code { _ = try programs.find("omp") }?.code == "NOT_INSTALLED")
     }
 
@@ -181,6 +185,30 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(programs.installed("codex") == nil)
         try "".write(toFile: "\(mac.root)/ready", atomically: true, encoding: .utf8)
         #expect(programs.installed("codex") == true)
+    }
+
+    /// An npm install under nvm puts the program on an interactive shell's PATH only: it is looked for there, and
+    /// that read is kept.
+    @Test func aProgramOnlyAnInteractiveShellFindsIsFound() throws {
+        let mac = try FakeMac()
+        try mac.program("nvm/pi", "#!/usr/bin/env node")
+        try mac.program("nvm/node")
+        let programs = mac.programs(["SHELL": try mac.shell(login: ["login"], interactive: ["login", "nvm"])])
+        #expect(programs.installed("pi") == true)
+        let pi = try programs.find("pi")
+        #expect(pi.path == "\(mac.root)/nvm/pi")
+        #expect(pi.folders.first == "\(mac.root)/nvm")
+        #expect(mac.shellRuns.filter { $0.contains("-i") }.count == 1)
+    }
+
+    /// An interactive shell that fails is not tried again for each program.
+    @Test func aFailedInteractiveReadIsKept() throws {
+        let mac = try FakeMac()
+        let shell = try mac.shell(login: ["login"], interactive: ["login"], before: #"case " $* " in *" -i "*) exit 1 ;; esac"#)
+        let programs = mac.programs(["SHELL": shell])
+        #expect(programs.installed("codex") == false)
+        #expect(programs.installed("omp") == false)
+        #expect(mac.shellRuns.filter { $0.contains("-i") }.count == 1)
     }
 
     @Test func theFirstLineNamesTheInterpreter() throws {

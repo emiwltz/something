@@ -22,15 +22,17 @@ public struct Program: Equatable, Sendable {
 }
 
 public final class Programs {
-    /// The kinds something looks for. Any other kind is unknown here (nil, never false).
-    public static let kinds = ["claude", "codex", "opencode", "pi"]
+    /// The kinds something looks for. Any other kind is unknown here (nil, never false). omp's file is looked for,
+    /// to say whether it is installed; something does not launch it.
+    public static let kinds = ["claude", "codex", "opencode", "pi", "omp"]
 
-    /// What to type to install each one, in Terminal.
+    /// What to type to install each kind something launches, in Terminal. pi's is its README's (1.0.0), and
+    /// `npm view` gives that package name.
     static let install: [String: (name: String, command: String)] = [
         "claude": ("Claude Code", "brew install --cask claude-code"),
         "codex": ("Codex", "brew install --cask codex"),
         "opencode": ("OpenCode", "brew install opencode"),
-        "pi": ("pi", "npm install -g @earendil-works/pi-coding-agent"),
+        "pi": ("pi", "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"),
     ]
     /// Interpreters a program needs that its first line does not name: pi's own launcher is a shell script that
     /// starts a node script.
@@ -44,8 +46,9 @@ public final class Programs {
     var systemFolders = ["/opt/homebrew/bin", "/usr/local/bin"]
     private let home: String
     private let lock = NSLock()
-    /// The login shell's folders by `interactive`, kept after the first read that worked; a failed one is tried again.
-    private var shellFolders: [Bool: [String]] = [:]
+    /// The login shell's folders by `interactive`, kept once read. A failed login read is tried again; a failed
+    /// interactive one is kept (as nil), since an interactive shell that hangs once, on a prompt, hangs every time.
+    private var shellFolders: [Bool: [String]?] = [:]
 
     /// `environment` is the person's: the Terminal's when something was started from one, else the app's own.
     public init(environment: [String: String]) {
@@ -59,7 +62,9 @@ public final class Programs {
         guard Programs.kinds.contains(kind) else { return nil }
         let search = folders(interactive: false)
         if first(kind, in: search.list) != nil { return true }
-        return search.known ? false : nil
+        guard search.known else { return nil }
+        // nvm and similar tools put what they installed on the PATH only in an interactive shell.
+        return first(kind, in: folders(interactive: true).list) != nil
     }
 
     /// The program to launch for `kind`. Throws NOT_INSTALLED when no file is found (or for an unknown kind), and
@@ -70,7 +75,13 @@ public final class Programs {
             throw CodedError("NOT_INSTALLED", "something does not know how to launch \(kind).")
         }
         var search = folders(interactive: false)
-        guard let path = first(kind, in: search.list) else {
+        var found = first(kind, in: search.list)
+        if found == nil, search.known {
+            // nvm and similar tools put what they installed (and node) on the PATH only in an interactive shell.
+            let interactive = folders(interactive: true)
+            if let path = first(kind, in: interactive.list) { (search, found) = (interactive, path) }
+        }
+        guard let path = found else {
             if !search.known { throw CodedError("NOT_INSTALLED", unread(name)) }
             throw CodedError("NOT_INSTALLED", "\(name) was not found on this Mac. To install it, type in Terminal: \(command)")
         }
@@ -154,12 +165,12 @@ public final class Programs {
         return words.dropFirst().first { !$0.hasPrefix("-") && !$0.contains("=") }
     }
 
-    /// The login shell's PATH folders (`-l`, and `-i` too when `interactive`), kept once read; nil when the shell is
-    /// not absolute, fails, prints no marker or takes longer than 3 s.
+    /// The login shell's PATH folders (`-l`, and `-i` too when `interactive`), kept as `shellFolders` says; nil when
+    /// the shell is not absolute, fails, prints no marker or takes longer than 3 s.
     func shell(interactive: Bool) -> [String]? {
         if let kept = lock.withLock({ shellFolders[interactive] }) { return kept }
-        guard let folders = readShell(interactive: interactive) else { return nil }
-        lock.withLock { shellFolders[interactive] = folders }
+        let folders = readShell(interactive: interactive)
+        if folders != nil || interactive { lock.withLock { shellFolders[interactive] = .some(folders) } }
         return folders
     }
 

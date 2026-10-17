@@ -68,7 +68,7 @@ import SomethingCore
         #expect(engine.state.kinds["claude"]?.launch == true)
         #expect(engine.state.kinds["claude"]?.tested == ClaudeDriver.tested)
         #expect(engine.state.kinds["codex"]?.launch == false)
-        #expect(engine.limits["claude"] == ["effort"])
+        #expect(engine.limits["claude"] == nil, "Claude has no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -95,6 +95,41 @@ import SomethingCore
         }
     }
 
+    /// The modes that make an agent ask less are confirmed by the person; an unknown mode is too.
+    @Test func whichModesLowerAsking() {
+        let engine = Engine(environment: [:])
+        for mode in ["acceptEdits", "auto", "dontAsk", "bypassPermissions"] { #expect(engine.lowersAsking(mode: mode, kind: "claude")) }
+        for mode in ["default", "manual", "plan"] { #expect(!engine.lowersAsking(mode: mode, kind: "claude")) }
+        #expect(engine.lowersAsking(mode: "never", kind: "codex") && !engine.lowersAsking(mode: "on-request", kind: "codex"))
+        #expect(!engine.lowersAsking(mode: "build", kind: "opencode") && !engine.lowersAsking(mode: "plan", kind: "opencode"))
+        #expect(engine.lowersAsking(mode: "invented-agent", kind: "opencode"))
+        #expect(engine.lowersAsking(mode: "anything", kind: "other"))
+    }
+
+    /// start(often:) again changes the cadence only: the programs are looked for once.
+    @Test func startIsCalledAgain() async throws {
+        let place = try Place()
+        let engine = Engine(environment: place.environment)
+        var changes = 0
+        engine.changed = { changes += 1 }
+        engine.start(often: false)
+        engine.start(often: true)
+        #expect(engine.often)
+        try await until("the programs") { engine.state.kinds["claude"]?.installed == true }
+        engine.start(often: true)
+        engine.start(often: false)
+        #expect(!engine.often)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        #expect(changes == 1)
+        #expect(engine.state.kinds["omp"]?.installed != nil, "omp's file is looked for")
+    }
+
+    /// Plan B's spools are in the person's Application Support, never in $TMPDIR, which a sandboxed agent may write.
+    @Test func theSpoolsAreNotInTheTemporaryFolder() {
+        #expect(Spool.root.hasSuffix("/Library/Application Support/something/spool"))
+        #expect(!Spool.root.hasPrefix(NSTemporaryDirectory()))
+    }
+
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
         let engine = Engine(environment: place.environment)
@@ -102,8 +137,8 @@ import SomethingCore
         #expect(throws: CodedError("VALUE_NOT_OFFERED", "bypassPermissions is not a mode something offers for claude; pick one of default, acceptEdits, plan, auto, dontAsk.")) {
             try engine.launch("claude", folder: place.work.path, model: nil, mode: "bypassPermissions", effort: nil)
         }
-        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot change Claude Code's effort yet.")) {
-            try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: "low")
+        #expect(throws: CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")) {
+            try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: "")
         }
         #expect(throws: CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")) {
             try engine.launch("claude", folder: place.work.path, model: "--dangerously-skip-permissions", mode: nil, effort: nil)

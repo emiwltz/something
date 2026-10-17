@@ -197,12 +197,13 @@ final class Replay {
         #expect(!ClaudeDriver.modes.contains { $0.value == "bypassPermissions" })
     }
 
-    @Test func aFreshAgentCanDoAllButEffort() {
+    @Test func aFreshAgentCanDoAll() {
         let agent = Replay().fold.agent
         var can = Can()
-        (can.send, can.steer, can.queue, can.interrupt, can.model, can.mode) = (true, true, true, true, true, true)
+        (can.send, can.steer, can.queue, can.interrupt, can.model, can.mode, can.effort) = (true, true, true, true, true, true, true)
         #expect(agent.can == can)
-        #expect(agent.because == ["effort": "something cannot change Claude Code's effort yet."])
+        #expect(agent.because.isEmpty)
+        #expect(agent.options.effort == nil, "no effort is offered before Claude lists its models")
         #expect((agent.origin, agent.thread, agent.name) == ("launched", "5b2e0000-0000-4000-8000-000000000001", "shop"))
     }
 
@@ -258,7 +259,34 @@ final class Replay {
                                                               "error": "Invented: cannot set permission mode.", "error_code": "invalid_mode"]])
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Claude Code refused the new mode: Invented: cannot set permission mode."))
         #expect(replay.fold.agent.mode == nil, "only what Claude confirms is shown")
-        #expect(throws: CodedError.self) { try replay.agent.driver.set(model: nil, mode: nil, effort: "low") }
+    }
+
+    /// The efforts offered are the model's, from `initialize`; one is set with apply_flag_settings, and shown once
+    /// Claude took it. A new model brings its own efforts.
+    @Test func anEffortIsOfferedAndSet() throws {
+        let replay = Replay()
+        let initialize = ["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": [
+            "current_permission_mode": "default", "models": [
+                ["value": "default", "resolvedModel": "claude-example", "displayName": "Default", "supportedEffortLevels": ["low", "high"]],
+                ["value": "small", "resolvedModel": "claude-small-example", "displayName": "Small"]]]]] as [String: Any]
+        replay.feed(initialize)
+        #expect(replay.fold.agent.options.effort == [Option(value: "low", label: "Low"), Option(value: "high", label: "High")])
+        #expect(try replay.agent.driver.set(model: nil, mode: nil, effort: "low") == "now")
+        let sent = try #require(replay.lines().last)
+        #expect(sent["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["effortLevel": "low"]])
+        #expect(replay.fold.agent.effort == nil, "only what Claude confirms is shown")
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(sent["request_id"] as? String)]])
+        #expect(replay.fold.agent.effort == "low")
+        _ = try replay.agent.driver.set(model: "small", mode: nil, effort: nil)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(replay.lines().last?["request_id"] as? String)]])
+        #expect(replay.fold.agent.options.effort == nil, "this model lists no effort")
+        _ = try replay.agent.send("Hello.", when: "next")
+        #expect(try replay.agent.driver.set(model: nil, mode: nil, effort: "high") == "next-turn")
+    }
+
+    @Test func aLaunchPassesItsEffort() {
+        let command = ClaudeDriver.command(Launch(agent: "claude-1", folder: "/Users/example/shop", effort: "high"))
+        #expect(command.arguments.last == "--effort=high")
     }
 
     @Test func aModelSetDuringATurnAppliesNextTurn() throws {

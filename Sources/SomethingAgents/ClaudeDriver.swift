@@ -8,9 +8,9 @@ import SomethingCore
 public final class ClaudeDriver: Driver {
     public static let kind = "claude"
     public static let tested = "2.1.296"
-    /// Trial T-1 showed that Claude takes an effort (`--effort`, and `apply_flag_settings` with `effortLevel` during a
-    /// session); it stays a limit until the guide and contract 1's table say Claude can, which is Emi's decision.
-    public static let limits = ["effort": "something cannot change Claude Code's effort yet."]
+    /// None: trial T-1 showed that Claude takes an effort at launch (`--effort`) and during a session
+    /// (`apply_flag_settings` with `effortLevel`, from its next request to the model).
+    public static let limits: [String: String] = [:]
     /// Removed from the environment Claude Code gets: a key left in a shell profile overrides the subscription the
     /// person signed in with, and a dead one makes every message fail.
     public static let credentials: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
@@ -43,6 +43,7 @@ public final class ClaudeDriver: Driver {
         arguments += ["--include-hook-events", "--permission-mode", launch.mode ?? "default", "--session-id", launch.thread]
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
+        if let effort = launch.effort { arguments.append("--effort=\(effort)") }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
     }
 
@@ -69,6 +70,10 @@ public final class ClaudeDriver: Driver {
     private var outcome: Outcome?
     private var interrupting = false
     private var heard = false
+    /// The models `initialize` listed, and the one in use as Claude names it there (an option's value): the efforts
+    /// offered are that model's.
+    private var models: [[String: Any]]?
+    private var model: String
     /// Plan B's answer: writes a decision for a spool uuid. Set by the engine.
     var hookReply: ((String, [String: Any]) -> PermissionSpool.Delivery)?
     /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
@@ -78,11 +83,12 @@ public final class ClaudeDriver: Driver {
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
+        model = launch.model ?? "default"
     }
 
     /// `initialize` is optional, but its answer lists the models this account offers.
     public func begin() throws {
-        emit(.options(options(models: nil)))
+        emit(.options(options()))
         try control("initialize", [:])
     }
 
@@ -129,13 +135,14 @@ public final class ClaudeDriver: Driver {
         try control("interrupt", ["cancel_queued": true])
     }
 
-    /// A new mode applies at once; a new model from the next turn on. What is returned is what Claude was asked:
-    /// only the state, once Claude reports the new value, says it applied, and a refusal comes as the agent's error.
+    /// A new mode applies at once; a new model or effort from Claude's next request to the model, which is the next
+    /// turn when one runs. What is returned is what Claude was asked: only the state, once Claude reports the new
+    /// value, says it applied, and a refusal comes as the agent's error.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
-        if effort != nil { throw CodedError("NOT_SUPPORTED", ClaudeDriver.limits["effort"]!) }
         if let mode { try control("set_permission_mode", ["mode": mode], value: mode) }
         if let model { try control("set_model", ["model": model], value: model) }
-        return model != nil && turnOpen ? "next-turn" : "now"
+        if let effort { try control("apply_flag_settings", ["settings": ["effortLevel": effort]], value: effort) }
+        return (model != nil || effort != nil) && turnOpen ? "next-turn" : "now"
     }
 
     public func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
@@ -338,11 +345,17 @@ public final class ClaudeDriver: Driver {
         let payload = response["response"] as? [String: Any] ?? [:]
         switch asked.subtype {
         case "initialize":
-            emit(.options(options(models: payload["models"] as? [[String: Any]])))
+            models = payload["models"] as? [[String: Any]]
+            emit(.options(options()))
             if let mode = payload["current_permission_mode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
         // set_model's success says nothing of the model in use: the next `init` or reply names it, so nothing is
-        // reported here (an alias such as "opus" is not a model).
+        // reported here (an alias such as "opus" is not a model). The efforts offered become the new model's.
+        case "set_model":
+            model = asked.value ?? model
+            emit(.options(options()))
         case "set_permission_mode": emit(.reported(model: nil, mode: payload["mode"] as? String ?? asked.value, effort: nil))
+        // Claude took the setting; its success carries no value, and no later frame names the effort.
+        case "apply_flag_settings": emit(.reported(model: nil, mode: nil, effort: asked.value))
         default: break
         }
     }
@@ -402,12 +415,16 @@ public final class ClaudeDriver: Driver {
 
     private func id(_ claudeID: String) -> String { "\(launch.agent):\(claudeID)" }
 
-    private func options(models: [[String: Any]]?) -> Options {
+    /// The efforts are those of the model in use, as `initialize` listed them; nil until it did, or when Claude
+    /// names none for that model (an older Claude), so a space cannot ask for one.
+    private func options() -> Options {
         var options = Options()
         options.mode = ClaudeDriver.modes
         options.model = models?.compactMap { model in
             (model["value"] as? String).map { Option(value: $0, label: model["displayName"] as? String ?? $0) }
         }
+        let current = models?.first { $0["value"] as? String == model || $0["resolvedModel"] as? String == model }
+        options.effort = (current?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: $0.capitalized) } }
         return options
     }
 
@@ -425,7 +442,8 @@ public final class ClaudeDriver: Driver {
 
     /// The start of the sentence for a control request Claude refused.
     static let refusals = ["initialize": "Claude Code refused to start the session", "interrupt": "Claude Code refused to stop the turn",
-                           "set_model": "Claude Code refused the new model", "set_permission_mode": "Claude Code refused the new mode"]
+                           "set_model": "Claude Code refused the new model", "set_permission_mode": "Claude Code refused the new mode",
+                           "apply_flag_settings": "Claude Code refused the new effort"]
 
     /// Who let a tool run or stopped it, as the tool's result says (`tool_result_meta`, seen on 2.1.296): its own
     /// settings ("config") are a rule; the person's answers are known already, from `answer`.

@@ -53,14 +53,18 @@ public final class Engine {
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
     private var looked = false
+    /// Whether a space is open, which the readers' cadence will follow (slices 16 to 18).
+    private(set) var often = false
     /// The agents something launched, in launch order, with their program.
     private var launched: [(agent: Launched, spawn: Spawn)] = []
     /// The agents whose stop something asked for: their end is no failure.
     private var stopping: Set<String> = []
     private var count = 0
 
-    /// Starts watching this Mac. `often` is true while a space is open.
+    /// Starts watching this Mac. `often` is true while a space is open. Called again, it only changes the cadence:
+    /// the programs are looked for once.
     public func start(often: Bool) {
+        self.often = often
         guard !looked else { return }
         looked = true
         // Reading the login shell can take 3 s: never on the main queue.
@@ -81,8 +85,22 @@ public final class Engine {
                      threads: folds.compactMap(\.thread), requests: folds.flatMap(\.requests))
     }
 
-    /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2.
-    public var limits: [String: [String]] { Engine.drivers.mapValues { $0.limits.keys.sorted() } }
+    /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without
+    /// any is left out.
+    public var limits: [String: [String]] { Engine.drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
+
+    /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
+    /// asks the person first (contract 4.1). Every mode is taken as one that lowers asking, but those known to ask
+    /// as much or more: a mode something does not know (a newer program's, an OpenCode agent the person wrote) is
+    /// confirmed rather than guessed.
+    public func lowersAsking(mode: String, kind: String) -> Bool { !(Engine.asksAsMuch[kind] ?? []).contains(mode) }
+
+    /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
+    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports,
+    /// "manual" the one its help gives now. Codex 0.163: `--ask-for-approval` offers on-request and never. OpenCode
+    /// 2.0.20: a mode is an agent; build and plan ask as the person's settings say, and only `--auto`, which something
+    /// never passes, asks less. pi 1.0.0 takes no mode, and never asks.
+    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "manual", "plan"], "codex": ["on-request"], "opencode": ["build", "plan"]]
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }
@@ -111,7 +129,7 @@ public final class Engine {
     }
 
     /// Starts an agent of `kind` in `folder` and returns its id. Throws NOT_SUPPORTED for a kind without a driver or
-    /// a value its kind never takes, BAD_PARAMS for an empty model or one that starts with "-", VALUE_NOT_OFFERED for a
+    /// a value its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED for a
     /// mode it does not offer (never one that skips every permission), NOT_INSTALLED, INTERPRETER_NOT_FOUND,
     /// LAUNCH_FAILED.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
@@ -121,6 +139,9 @@ public final class Engine {
         }
         if let model, model.isEmpty || model.hasPrefix("-") {
             throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
+        }
+        if let effort, effort.isEmpty || effort.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
         }
         if let mode, !type.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")

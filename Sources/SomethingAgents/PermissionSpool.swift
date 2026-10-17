@@ -21,9 +21,12 @@ enum Spool {
     /// The hook answers a minute before Claude would kill it, so a request left alone ends as a deny it says.
     static let hookTimeout: TimeInterval = 3540
 
-    /// Where the spools are: $TMPDIR/something. Each launch gets <agent>-<conversation id> in it, since two
-    /// something running at once (the app and a `something try`) may both have a claude-1.
-    static let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("something")
+    /// Where the spools are: ~/Library/Application Support/something/spool, never $TMPDIR, which a sandboxed agent
+    /// (Codex in workspace-write) may write, and could then answer Claude's requests. Each launch gets
+    /// <agent>-<conversation id> in it, since two something running at once (the app and a `something try`) may both
+    /// have a claude-1.
+    static let root = ((FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.path
+        ?? NSHomeDirectory() + "/Library/Application Support") as NSString).appendingPathComponent("something/spool")
 
     /// Writes `data` to `path` with mode 0600 through a temporary name, so a reader never sees half of it. Returns
     /// false when the folder refused it.
