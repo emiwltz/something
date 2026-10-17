@@ -11,8 +11,8 @@ It follows [something](https://github.com/emiwltz/something), which stays frozen
 Needs a Mac with Apple's command line tools (`xcode-select --install`, free; already there if `git` works). Xcode itself is not needed. Then, for each agent you want to launch, that agent installed and signed in as you use it in a terminal: `claude`, `codex`, `opencode`, `pi`.
 
 ```sh
-swift run something                 # builds, then opens your default space (or Home) and the menu bar icon
-swift run something morning-review  # opens ~/something/spaces/morning-review.html (or its folder); a path works too
+swift run something                      # builds, then opens your default space (or Home) and the menu bar icon
+swift run something open morning-review  # opens ~/something/spaces/morning-review.html (or its folder); a path works too
 swift test                          # the tests: core, agents, the app's window in WebKit, budgets, publishable scan (with Xcode installed; without it, see below)
 ```
 
@@ -26,9 +26,26 @@ swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks
   -Xlinker -rpath -Xlinker $T/Frameworks -Xlinker -rpath -Xlinker $T/usr/lib
 ```
 
+## The command
+
+```text
+something                       start something, or bring it to the front
+something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
+something new <name> [--folder] make a space from the template (with --folder, <name>/index.html, which can hold more files)
+something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
+something check <name|path> ... test a space without showing it (not in this version yet: it says so)
+something --version
+```
+
+Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the words were wrong. A new space never inherits the answers a deleted space of the same name left.
+
+Installed, something is `something.app` with the command beside it. The command hands what you ask to the app through macOS (LaunchServices), which keeps one copy of the app running: `something` starts it, or brings it to the front, with your terminal's environment, so the agents it launches find the programs your terminal finds; `something open` hands it the space. Started from Finder or the Dock, the app is the app. Double-clicking an export (`.something`) imports it in Home. Run from the clone (`swift run`), there is no `.app`, and `something` and `something open` run the app in the terminal's own process.
+
+`tools/make-app.sh <prefix> <version> [<program>]` assembles `<prefix>/something.app` from `packaging/Info.plist`, the program (built with `swift build -c release` when none is given) and `share/`, and signs it ad hoc, without an Apple account. The version is written in the app's Info.plist only, and `something --version` reads it there; run from the clone it says `dev`.
+
 ## Spaces
 
-A space is an HTML page your coding agent writes: `~/something/spaces/<name>.html`, or a folder `<name>/index.html` with its own files. The guide written for that agent is [share/guide.md](share/guide.md). Without a space named on the command line, something opens your default space; without one, `agents` while it is your only space; otherwise Home. At its first start it makes `~/something/spaces` and `~/something/data`.
+A space is an HTML page your coding agent writes: `~/something/spaces/<name>.html`, or a folder `<name>/index.html` with its own files. The guide written for that agent is [share/guide.md](share/guide.md). Without a space to open, something opens your default space; without one, `agents` while it is your only space; otherwise Home. At its first start it makes `~/something/spaces` and `~/something/data`.
 
 - **No network.** A space loads only its own files, served at `something://space/`, inline code, `data:` and `blob:`. Every other address is blocked, four times: the space runs in a sandboxed frame of something's own page, which lets that frame hold nothing but the space; a content security policy on every file; a content rule list; and a navigation policy that cancels every page change outside the space. `window.open` opens nothing, and a frame inside the space holds inline content (`srcdoc`), never another file of the space.
 - **Links ask.** A link you click, or one the space opens with `something.open`, shows a window of the Mac: "Open", "Cancel" or "Block links until reload"; one at a time.
@@ -61,8 +78,9 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 share/                     something.js (contract 1's bridge, injected into every space), template.html (the start of a new space), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
 Sources/SomethingCore/     contract 1: the state (Contract, StateMap, Events), spaces, declarations, rights, the bridge, memory and journal, codes. Foundation only, so it can build on Linux and Windows; it names no agent beyond the kinds a right may name
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi) and V1's state they still fill
-Sources/something/         the Mac app: menu bar, Home and the space card, the start, the space window (something:// scheme, network lock, reload), its bridge host, native windows and the permission and question panels; carries, asks, decides nothing
-Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights; Home, the card and its revocations, the start, the panels), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
+packaging/, tools/         the app's Info.plist and make-app.sh, which assembles and signs something.app
+Sources/something/         the command (start, open, new, guide, and the routes to check, hook and try) and the Mac app: menu bar, Home and the space card, the start, the space window (something:// scheme, network lock, reload), its bridge host, native windows and the permission and question panels; carries, asks, decides nothing
+Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the command's words and statuses; make-app.sh into a temporary folder, run through a wrapper like Homebrew's, its signature verified; the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights; Home, the card and its revocations, the start, the panels), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
 ```
 
 A space talks to something with one protocol: it sends `{"contract": 1, "id": ..., "method": ..., "params": ...}` and gets `{"id": ..., "result": ...}` or `{"id": ..., "error": {"code": ..., "message": ...}}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.

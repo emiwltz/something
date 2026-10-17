@@ -1,0 +1,214 @@
+// The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
+// hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
+// sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the
+// words were wrong.
+import AppKit
+import SomethingAgents
+import SomethingCore
+
+enum Command: Equatable {
+    case start, open(String), new(String, folder: Bool), guide(print: Bool), version, help
+    case check(Check), hook([String]), trial([String])
+    case wrong(String)
+
+    static let usage = """
+        Usage:
+          something                       start something, or bring it to the front
+          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
+          something new <name> [--folder] make a space from the template (a folder holds more than one file)
+          something guide [--print]       where the guide for the coding agent that writes your spaces is
+          something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
+          something --version
+        """
+
+    /// Whether this process is the app: the command passes --app to LaunchServices, and Finder, the Dock or
+    /// Spotlight start the app with launchd (pid 1) as its parent and no words. Words make it the command, whoever
+    /// its parent is: a hook whose agent ended is reparented to launchd too.
+    static func isApp(_ words: [String], parent: pid_t) -> Bool { words.first == "--app" || parent == 1 && words.isEmpty }
+
+    /// What the words after `something` ask for; `.wrong` with a sentence when they ask for nothing it knows.
+    static func parse(_ words: [String]) -> Command {
+        guard let first = words.first else { return .start }
+        let rest = Array(words.dropFirst())
+        switch first {
+        case "open":
+            guard rest.count == 1, !rest[0].hasPrefix("-") else {
+                return .wrong("something open takes one space, for example: something open morning-review")
+            }
+            return .open(rest[0])
+        case "new":
+            let names = rest.filter { $0 != "--folder" }
+            guard names.count == 1, !names[0].hasPrefix("-"), rest.count - names.count <= 1 else {
+                return .wrong("something new takes the name of the new space, for example: something new morning-review")
+            }
+            return .new(names[0], folder: names.count < rest.count)
+        case "guide":
+            guard rest.isEmpty || rest == ["--print"] else { return .wrong("Type something guide, or something guide --print to read it here.") }
+            return .guide(print: !rest.isEmpty)
+        case "--version" where rest.isEmpty: return .version
+        case "--help", "-h", "help": return .help
+        case "check": return Check.parse(rest)
+        case "hook" where rest.first == "permission": return .hook(words)
+        case "try": return .trial(words)
+        default: return .wrong("something does not know \"\(words.joined(separator: " "))\". Type something --help to see what it does.")
+        }
+    }
+
+    /// Does what was asked and returns the exit status. `door` reaches the app; `say` prints to the terminal, on
+    /// standard error when its second argument is true.
+    func run(places: Places, share: URL, door: Door, say: (String, Bool) -> Void) -> Int32 {
+        switch self {
+        case .start:
+            return door.start().map { say($0, true); return 1 } ?? 0
+        case .open(let name):
+            guard let space = Spaces(root: places.spaces).locate(name) else {
+                say(Spaces.isName(name)
+                    ? "There is no space \(name) in \(places.spaces.path). Type something new \(name) to make it."
+                    : "There is no space at \(name): give a space's .html file, a folder with an index.html, or the name of a space.", true)
+                return 1
+            }
+            return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
+        case .new(let name, let folder):
+            do {
+                let space = try Command.new(name, folder: folder, places: places, template: share.appendingPathComponent("template.html"))
+                say("Made \(space.page.path). Open it with: something open \(name)", false)
+                return 0
+            } catch {
+                say(Home.words(error), true)
+                return 1
+            }
+        case .guide(let print):
+            let guide = share.appendingPathComponent("guide.md")
+            guard print else {
+                say("""
+                    The guide for the coding agent that writes your spaces:
+                      \(Command.stable(guide).path)
+                    Give your agent this path. It says how a space is written (an HTML page in \(places.spaces.path)), \
+                    what it may ask for, and how to test it with something check <name>.
+                    """, false)
+                return 0
+            }
+            guard let text = try? String(contentsOf: guide, encoding: .utf8) else {
+                say("The guide cannot be read at \(guide.path). Reinstall something.", true)
+                return 1
+            }
+            say(text, false)
+            return 0
+        case .version:
+            say("something \(Resources.version)", false)
+            return 0
+        case .help:
+            say(Command.usage, false)
+            return 0
+        case .check:
+            say("something check is not in this version yet. Until it is, open the space with something open <name> to see it.", true)
+            return 1
+        case .hook(let words):
+            return PermissionHook.main(words)
+        case .trial(let words):
+            return Trial.main(words)
+        case .wrong(let sentence):
+            say(sentence + "\n\n" + Command.usage, true)
+            return 2
+        }
+    }
+
+    /// Makes the space `name` from the template and returns it. A new space never inherits the answers a deleted
+    /// space of the same name left in the grants file (contract 5). Throws a `SpaceError` when the name is not free
+    /// or a file cannot be written; then no space is left.
+    static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
+        let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
+        do {
+            var file = try AppFile.read(places.grants)
+            if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
+        } catch {
+            try? FileManager.default.removeItem(at: space.location)
+            throw error
+        }
+        return space
+    }
+
+    /// The path that stays the same across upgrades. Homebrew installs in <prefix>/Cellar/something/<version>/ and
+    /// keeps <prefix>/opt/something pointing at the current version; any other path is returned as it is.
+    static func stable(_ url: URL) -> URL {
+        let parts = url.pathComponents
+        guard let cellar = parts.lastIndex(of: "Cellar"), cellar + 3 < parts.count else { return url }
+        let opt = NSString.path(withComponents: Array(parts[..<cellar]) + ["opt", parts[cellar + 1]] + parts[(cellar + 3)...])
+        return FileManager.default.fileExists(atPath: opt) ? URL(fileURLWithPath: opt) : url
+    }
+}
+
+/// `something check`'s words (contract 9). The check itself comes in slice 9.
+struct Check: Equatable {
+    var space: String
+    var json = false, journal = false
+    var refuse: [String] = [], state: String?
+
+    /// The check the words ask for, or `.wrong` with a sentence.
+    static func parse(_ words: [String]) -> Command {
+        var spaces: [String] = [], check = Check(space: "")
+        var rest = words[...]
+        while let word = rest.popFirst() {
+            switch word {
+            case "--json": check.json = true
+            case "--journal": check.journal = true
+            case "--refuse", "--state":
+                guard let value = rest.popFirst(), !value.hasPrefix("-") else {
+                    return .wrong(word == "--refuse" ? "--refuse takes a right, for example: something check morning-review --refuse send"
+                        : "--state takes a file, for example: something check morning-review --state state.json")
+                }
+                if word == "--refuse" { check.refuse.append(value) } else { check.state = value }
+            case let flag where flag.hasPrefix("-"):
+                return .wrong("something check does not know \(flag).")
+            default: spaces.append(word)
+            }
+        }
+        guard spaces.count == 1 else { return .wrong("something check takes one space, for example: something check morning-review") }
+        check.space = spaces[0]
+        return .check(check)
+    }
+}
+
+/// How the command reaches the app. Each returns nil when it worked, or the sentence that says what went wrong.
+protocol Door {
+    func start() -> String?
+    func deliver(_ space: URL) -> String?
+}
+
+/// The app's .app through LaunchServices, which keeps one instance: it starts the app, or fronts the running one,
+/// and hands it the space as `application(_:open:)`. The app gets the terminal's environment, so the agents it
+/// launches find the programs the terminal finds.
+struct LaunchServices: Door {
+    let app: URL
+
+    func start() -> String? {
+        wait("something could not be started") { NSWorkspace.shared.openApplication(at: app, configuration: configuration(), completionHandler: $0) }
+    }
+
+    func deliver(_ space: URL) -> String? {
+        wait("The space could not be handed to something") {
+            NSWorkspace.shared.open([space], withApplicationAt: app, configuration: configuration(), completionHandler: $0)
+        }
+    }
+
+    private func configuration() -> NSWorkspace.OpenConfiguration {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = ["--app"]
+        configuration.environment = ProcessInfo.processInfo.environment
+        return configuration
+    }
+
+    /// LaunchServices answers on a queue of its own, so the main thread can wait for it.
+    private func wait(_ failure: String, _ ask: (@escaping (NSRunningApplication?, Error?) -> Void) -> Void) -> String? {
+        let answered = DispatchSemaphore(value: 0)
+        var problem: Error?
+        ask { _, error in
+            problem = error
+            answered.signal()
+        }
+        guard answered.wait(timeout: .now() + 30) == .success else {
+            return "\(failure): macOS did not answer within 30 seconds. Try again, or open \(app.path) in Finder."
+        }
+        return problem.map { "\(failure): \($0.localizedDescription) Try again, or open \(app.path) in Finder." }
+    }
+}

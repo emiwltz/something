@@ -106,23 +106,28 @@ public struct Spaces: Sendable {
         return Space(name: url.deletingPathExtension().lastPathComponent, form: .file, location: url)
     }
 
-    /// Writes a new single-file space, a copy of `template`, and returns it.
-    /// Throws a `SpaceError` when the name breaks the rule, is taken, or the file cannot be written.
-    public func new(_ name: String, from template: URL) throws -> Space {
+    /// Writes a new space, a copy of `template`: <name>.html, or <name>/index.html when `folder` is true, so the
+    /// space can hold more files. Returns it. Throws a `SpaceError` when the name breaks the rule, is taken, or the
+    /// file cannot be written.
+    public func new(_ name: String, from template: URL, folder: Bool = false) throws -> Space {
         guard Self.isName(name) else {
             throw SpaceError("\"\(name)\" is not a space name: use lowercase letters, digits and -, for example morning-review.")
         }
-        let file = root.appendingPathComponent("\(name).html")
         if named(name) != nil || FileManager.default.fileExists(atPath: root.appendingPathComponent(name).path) {
             throw SpaceError("A space named \(name) already exists in \(root.path); choose another name.")
         }
+        let space = folder ? Space(name: name, form: .folder, location: root.appendingPathComponent(name))
+            : Space(name: name, form: .file, location: root.appendingPathComponent("\(name).html"))
         do {
-            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try Data(contentsOf: template).write(to: file, options: .withoutOverwriting)
+            try FileManager.default.createDirectory(at: space.page.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(contentsOf: template).write(to: space.page, options: .withoutOverwriting)
         } catch {
-            throw SpaceError("The space \(name) could not be written to \(file.path): \(error.localizedDescription)")
+            // The folder was not there before (checked above): an empty one left behind would take the name.
+            if folder { try? FileManager.default.removeItem(at: space.location) }
+            throw SpaceError("The space \(name) could not be written to \(space.page.path): \(error.localizedDescription)")
         }
-        return Space(name: name, form: .file, location: file)
+        // As `named` gives it, so the two compare equal (a folder's URL ends with a slash once it exists).
+        return named(name) ?? space
     }
 
     private func isFile(_ url: URL) -> Bool {

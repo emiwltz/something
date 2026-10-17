@@ -137,11 +137,14 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         }
     }
 
-    /// Reads a .something file the person chooses and makes it a new space, selected. It has no grant: what the
-    /// grants file kept for the name it gets is dropped before anything is written, so a grants file that cannot be
-    /// changed leaves no space, and the space asks for its rights at its first opening (contract 5).
     @objc func importChosen() {
-        guard let url = ask.importFile() else { return }
+        if let url = ask.importFile() { importSpace(from: url) }
+    }
+
+    /// Reads the .something file at `url` and makes it a new space, selected. It has no grant: what the grants file
+    /// kept for the name it gets is dropped before anything is written, so a grants file that cannot be changed
+    /// leaves no space, and the space asks for its rights at its first opening (contract 5).
+    func importSpace(from url: URL) {
         do {
             // Mapped, not loaded: a huge file is refused by Export.read for its size without being read.
             let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))

@@ -1,5 +1,5 @@
 // The Mac app: the menu bar icon (Home, the open space, Quit), the Edit menu, one Engine, Home, one space window at a
-// time, the permission and question panels, the state pushed at most four times a second, and quitting, which asks
+// time, the spaces and exports LaunchServices hands it, the permission and question panels, the state pushed at most four times a second, and quitting, which asks
 // first while agents something launched run, then stops them.
 import AppKit
 import SomethingAgents
@@ -20,6 +20,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var pushing = false
     /// Lockdown's rule list, compiled before the first window opens.
     var rules: WKContentRuleList?
+    /// What LaunchServices handed the app before it was ready to open anything; nil once it is.
+    var handed: [URL]? = []
 
     init(opening: String?) {
         self.opening = opening
@@ -45,11 +47,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             home.forgetGone()
+            let early = handed ?? []
+            handed = nil
             if let opening {
                 guard let space = Spaces(root: places.spaces).locate(opening) else {
                     fail("There is no space \(opening): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")
                 }
                 if let problem = open(space) { fail(problem) }
+            } else if !early.isEmpty {
+                early.forEach(receive)
             } else if let space = FirstRun.first(places) {
                 // A default space that cannot open says why, and Home shows in its place.
                 if let problem = open(space) {
@@ -60,6 +66,24 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 home.show()
             }
         }
+    }
+
+    /// `something open`, a double click on an export, or a file dropped on the Dock icon. It may come before the app
+    /// is ready, and then waits for it.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        if handed != nil { handed?.append(contentsOf: urls) } else { urls.forEach(receive) }
+    }
+
+    /// Imports an export into Home, or opens a space.
+    func receive(_ url: URL) {
+        if url.pathExtension == "something" {
+            home.show()
+            return home.importSpace(from: url)
+        }
+        guard let space = Spaces(root: places.spaces).locate(url.path) else {
+            return ask.tell("\(url.path) is not a space: something opens an .html file, a folder with an index.html, or an export (.something).")
+        }
+        if let problem = open(space) { ask.tell(problem) }
     }
 
     /// Opens `space` in the space window, or fronts it when it is the open one. Returns what went wrong, or nil.

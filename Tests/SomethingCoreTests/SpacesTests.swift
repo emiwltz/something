@@ -102,6 +102,21 @@ func write(_ text: String, _ path: String, under root: URL) throws {
         #expect(spaces.named("other") == nil)
     }
 
+    @Test func newMakesAFolderSpaceWhenAsked() throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let template = ContractFiles.root.appendingPathComponent("share/template.html")
+        let spaces = Spaces(root: root.appendingPathComponent("spaces"))
+        let space = try spaces.new("garden", from: template, folder: true)
+        #expect(space == spaces.named("garden"))
+        #expect(space.form == .folder && space.page.lastPathComponent == "index.html")
+        #expect(try Data(contentsOf: space.page) == Data(contentsOf: template))
+        #expect(throws: SpaceError.self) { try spaces.new("garden", from: template) }
+        // A template that cannot be read leaves no empty folder holding the name.
+        #expect(throws: SpaceError.self) { try spaces.new("other", from: root.appendingPathComponent("missing.html"), folder: true) }
+        #expect(!FileManager.default.fileExists(atPath: spaces.root.appendingPathComponent("other").path))
+    }
+
     @Test func sizesReadAsFinderWritesThem() {
         #expect(Size.words(812) == "812 bytes")
         #expect(Size.words(48_211) == "48 KB")
