@@ -7,9 +7,9 @@
     "exported": "2026-10-17T12:00:00Z",
     "app": "1.0.0",
     "name": "morning-review",
-    "form": "file",
+    "form": "folder",
     "files": {
-      "morning-review.html": "PCFkb2N0eXBlIGh0bWw+Cjx0aXRsZT5Nb3JuaW5nIHJldmlldzwvdGl0bGU+CjxzY3JpcHQgdHlwZT0iYXBwbGljYXRpb24vanNvbiIgaWQ9InNvbWV0aGluZyI+eyAiY29udHJhY3QiOiAxIH08L3NjcmlwdD4KPHA+SW52ZW50ZWQgcGFnZS48L3A+Cg==",
+      "index.html": "PCFkb2N0eXBlIGh0bWw+Cjx0aXRsZT5Nb3JuaW5nIHJldmlldzwvdGl0bGU+CjxzY3JpcHQgdHlwZT0iYXBwbGljYXRpb24vanNvbiIgaWQ9InNvbWV0aGluZyI+eyAiY29udHJhY3QiOiAxIH08L3NjcmlwdD4KPHA+SW52ZW50ZWQgcGFnZS48L3A+Cg==",
       "../outside.html": "PCFkb2N0eXBlIGh0bWw+Cjx0aXRsZT5Nb3JuaW5nIHJldmlldzwvdGl0bGU+CjxzY3JpcHQgdHlwZT0iYXBwbGljYXRpb24vanNvbiIgaWQ9InNvbWV0aGluZyI+eyAiY29udHJhY3QiOiAxIH08L3NjcmlwdD4KPHA+SW52ZW50ZWQgcGFnZS48L3A+Cg=="
     },
     "data": null

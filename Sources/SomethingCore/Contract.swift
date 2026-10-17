@@ -10,17 +10,17 @@ public protocol EveryKey: Encodable {}
 
 extension EveryKey {
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: Key.self)
+        var container = encoder.container(keyedBy: NameKey.self)
         for child in Mirror(reflecting: self).children {
             guard let name = child.label, let value = child.value as? any Encodable else {
                 preconditionFailure("\(Self.self) has a property that cannot be encoded")
             }
-            try container.encode(value, forKey: Key(name))
+            try container.encode(value, forKey: NameKey(name))
         }
     }
 }
 
-struct Key: CodingKey {
+struct NameKey: CodingKey {
     let stringValue: String
     init(_ name: String) { stringValue = name }
     init?(stringValue: String) { self.stringValue = stringValue }
@@ -37,10 +37,10 @@ public struct State: Codable, Equatable, Sendable, EveryKey {
     public var at: String
     public var kinds: [String: Kind]
     public var agents: [Agent]
-    public var threads: [Thread]
+    public var threads: [AgentThread]
     public var requests: [Request]
 
-    public init(at: String, kinds: [String: Kind], agents: [Agent] = [], threads: [Thread] = [], requests: [Request] = []) {
+    public init(at: String, kinds: [String: Kind], agents: [Agent] = [], threads: [AgentThread] = [], requests: [Request] = []) {
         (self.at, self.kinds, self.agents, self.threads, self.requests) = (at, kinds, agents, threads, requests)
     }
 }
@@ -54,6 +54,10 @@ public struct Kind: Codable, Equatable, Sendable, EveryKey {
     /// "ok", "changed", "unreadable" or "none".
     public var reader: String
     public var note: String?
+
+    public init(launch: Bool, installed: Bool?, tested: String, seen: String?, reader: String, note: String?) {
+        (self.launch, self.installed, self.tested, self.seen, self.reader, self.note) = (launch, installed, tested, seen, reader, note)
+    }
 }
 
 public struct Agent: Codable, Equatable, Sendable, EveryKey {
@@ -102,6 +106,7 @@ public struct Options: Codable, Equatable, Sendable, EveryKey {
 public struct Option: Codable, Equatable, Sendable, EveryKey {
     public var value: String
     public var label: String
+    public init(value: String, label: String) { (self.value, self.label) = (value, label) }
 }
 
 /// A message something holds for the agent's next turn.
@@ -109,6 +114,7 @@ public struct Queued: Codable, Equatable, Sendable, EveryKey {
     public var id: String
     public var text: String
     public var at: String
+    public init(id: String, text: String, at: String) { (self.id, self.text, self.at) = (id, text, at) }
 }
 
 /// What a call would do now. Always booleans: false until something proves the agent can.
@@ -121,10 +127,12 @@ public struct Can: Codable, Equatable, Sendable, EveryKey {
 public struct AgentError: Codable, Equatable, Sendable, EveryKey {
     public var code: String
     public var message: String
+    public init(code: String, message: String) { (self.code, self.message) = (code, message) }
 }
 
-/// The agent's current conversation, its last `Limits.turns` turns.
-public struct Thread: Codable, Equatable, Sendable, EveryKey {
+/// The agent's current conversation, its last `Limits.turns` turns: `Thread` in the contract, renamed here so it does
+/// not clash with Foundation.Thread.
+public struct AgentThread: Codable, Equatable, Sendable, EveryKey {
     public var id: String
     public var agent: String
     public var title: String?
@@ -180,6 +188,7 @@ public struct Tool: Codable, Equatable, Sendable, EveryKey {
     public var name: String
     /// "running", "done", "failed", or nil.
     public var status: String?
+    public init(name: String, status: String?) { (self.name, self.status) = (name, status) }
 }
 
 /// Who decided a permission, when the agent's own stream says it.
@@ -188,6 +197,7 @@ public struct Decision: Codable, Equatable, Sendable, EveryKey {
     public var by: String
     /// "allowed" or "denied".
     public var outcome: String
+    public init(by: String, outcome: String) { (self.by, self.outcome) = (by, outcome) }
 }
 
 /// A permission or a question waiting for the person in a native window. A space sees it and never answers it.
@@ -199,6 +209,10 @@ public struct Request: Codable, Equatable, Sendable, EveryKey {
     public var tool: String?
     public var about: String?
     public var at: String
+
+    public init(id: String, agent: String, kind: String, tool: String?, about: String?, at: String) {
+        (self.id, self.agent, self.kind, self.tool, self.about, self.at) = (id, agent, kind, tool, about, at)
+    }
 }
 
 /// What the person allowed this space, and what can never be done here.
@@ -219,10 +233,10 @@ public enum Scope: Codable, Equatable, Sendable {
     case folders([String])
 
     public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: Key.self)
-        if let folders = try container.decodeIfPresent([String].self, forKey: Key("folders")) {
+        let container = try decoder.container(keyedBy: NameKey.self)
+        if let folders = try container.decodeIfPresent([String].self, forKey: NameKey("folders")) {
             self = .folders(folders)
-        } else if try container.decodeIfPresent(String.self, forKey: Key("see")) == "all" {
+        } else if try container.decodeIfPresent(String.self, forKey: NameKey("see")) == "all" {
             self = .all
         } else {
             throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
@@ -231,15 +245,16 @@ public enum Scope: Codable, Equatable, Sendable {
     }
 
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: Key.self)
+        var container = encoder.container(keyedBy: NameKey.self)
         switch self {
-        case .all: try container.encode("all", forKey: Key("see"))
-        case .folders(let folders): try container.encode(folders, forKey: Key("folders"))
+        case .all: try container.encode("all", forKey: NameKey("see"))
+        case .folders(let folders): try container.encode(folders, forKey: NameKey("folders"))
         }
     }
 }
 
-/// Any JSON value, for `detail`, which the contract does not shape.
+/// Any JSON value, for `detail`, which the contract does not shape. Numbers are Doubles: an integer above 2^53 loses
+/// precision, which is acceptable outside the contract.
 public enum JSONValue: Codable, Equatable, Sendable {
     case null, bool(Bool), number(Double), string(String), array([JSONValue]), object([String: JSONValue])
 

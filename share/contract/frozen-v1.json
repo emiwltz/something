@@ -1,7 +1,7 @@
 {
   "comment": [
     "What contract 1 promises never to remove or rename. The tests fail when one of these disappears from shape.json,",
-    "codes.json or the guide. Adding is free; removing or renaming is a new contract number, and Emi's decision."
+    "codes.json or the guide (rightKinds: the guide's line \"Kinds for a right\"). Adding is free; removing or renaming is a new contract number, and Emi's decision."
   ],
   "contract": 1,
   "keys": {
@@ -22,7 +22,16 @@
     "Decision": ["by", "outcome"],
     "Request": ["id", "agent", "kind", "tool", "about", "at"],
     "Granted": ["rights", "refused", "unavailable", "limits", "agents", "folder"],
-    "Declaration": ["contract", "title", "description", "agents", "rights", "folder"]
+    "SeeAll": ["see"],
+    "Folders": ["folders"],
+    "Declaration": ["contract", "title", "description", "agents", "rights", "folder"],
+    "InForce": ["contract", "title", "description", "agents", "rights", "folder"],
+    "SendOptions": ["when"],
+    "Delivery": ["delivery"],
+    "Interrupted": ["interrupted"],
+    "Applied": ["applied"],
+    "JournalLine": ["at", "action", "agent", "kind", "when", "text", "result"],
+    "Export": ["format", "contract", "exported", "app", "name", "form", "files", "data"]
   },
   "words": {
     "Kind.reader": ["ok", "changed", "unreadable", "none"],
@@ -37,11 +46,19 @@
     "Tool.status": ["running", "done", "failed"],
     "Decision.by": ["person", "hook", "rule", "mode"],
     "Decision.outcome": ["allowed", "denied"],
-    "Request.kind": ["permission", "question"]
+    "Request.kind": ["permission", "question"],
+    "SeeAll.see": ["all"],
+    "SendOptions.when": ["next", "now"],
+    "Delivery.delivery": ["started", "steered", "queued", "unconfirmed"],
+    "Applied.applied": ["now", "next-turn"],
+    "JournalLine.action": ["send", "interrupt", "set", "launch", "resume", "open"],
+    "Export.format": ["something-space"],
+    "Export.form": ["file", "folder"]
   },
   "functions": ["contract", "granted", "state", "on", "send", "interrupt", "set", "launch", "resume", "store.get", "store.set", "open"],
   "events": ["change", "granted"],
   "rights": ["state", "send", "launch", "store"],
+  "rightKinds": ["claude", "codex", "opencode", "pi"],
   "codes": [
     "BAD_PARAMS", "UNKNOWN_METHOD", "UNKNOWN_EVENT", "NO_HOST", "RIGHT_NOT_GRANTED", "AGENT_NOT_FOUND", "READ_ONLY_AGENT",
     "NOT_SUPPORTED", "VALUE_NOT_OFFERED", "AGENT_STOPPED", "FOLDER_NOT_GRANTED", "NOT_INSTALLED", "INTERPRETER_NOT_FOUND",

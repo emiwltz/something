@@ -45,7 +45,8 @@ struct Shape {
         case "null": return value is NSNull ? [] : wrong
         case "boolean": return Shape.isBool(value) ? [] : wrong
         case "integer":
-            guard let number = value as? NSNumber, !Shape.isBool(value), number.doubleValue == number.doubleValue.rounded() else { return wrong }
+            // 1.0 is written as a float: a space would see a number that is not an integer.
+            guard let number = value as? NSNumber, !Shape.isBool(value), !CFNumberIsFloatType(number) else { return wrong }
             return []
         case "string": return value is String ? [] : wrong
         case "object": return value is [String: Any] ? [] : wrong
@@ -96,17 +97,23 @@ enum Frozen {
         }
         for (place, words) in (frozen["words"] as? [String: [String]] ?? [:]).sorted(by: { $0.key < $1.key }) {
             let parts = place.split(separator: ".").map(String.init)
-            let allowed = types[parts[0]]?[parts[1]] ?? []
+            let allowed = types[parts[0]]?[parts[1]] ?? types[parts[0]]?["?" + parts[1]] ?? []
             missing += words.filter { !allowed.contains("=\($0)") }.map { "word \($0) of \(place) is not in shape.json" }
         }
         for function in frozen["functions"] as? [String] ?? [] where !guide.contains("`something.\(function)") {
             missing.append("function something.\(function) is not in the guide")
         }
-        for event in frozen["events"] as? [String] ?? [] where !guide.contains("\"\(event)\"") {
+        // Events are looked for in the row of `something.on` only: a quoted word elsewhere proves nothing.
+        let onRow = guide.split(separator: "\n").first { $0.hasPrefix("| `something.on(") } ?? ""
+        for event in frozen["events"] as? [String] ?? [] where !onRow.contains("\"\(event)\"") {
             missing.append("event \"\(event)\" is not in the guide")
         }
         for right in frozen["rights"] as? [String] ?? [] where !guide.contains("| `\(right)` |") {
             missing.append("right \(right) is not in the guide's table of rights")
+        }
+        let kindsLine = guide.split(separator: "\n").first { $0.hasPrefix("Kinds for a right:") } ?? ""
+        for kind in frozen["rightKinds"] as? [String] ?? [] where !kindsLine.contains("`\(kind)`") {
+            missing.append("right kind \(kind) is not in the guide")
         }
         let described = codes["codes"] as? [String: [String: Any]] ?? [:]
         for code in frozen["codes"] as? [String] ?? [] {
@@ -163,7 +170,7 @@ enum Frozen {
         let item = Item(id: "i1", kind: "tool", author: "agent", text: "ls", at: "2026-10-17T09:00:00Z",
                         tool: Tool(name: "Bash", status: nil))
         let turn = Turn(id: "t1", state: "unknown", started: nil, ended: nil, items: [item])
-        let thread = SomethingCore.Thread(id: "th1", agent: "a1", title: nil, started: nil, turns: [turn])
+        let thread = AgentThread(id: "th1", agent: "a1", title: nil, started: nil, turns: [turn])
         let request = Request(id: "r1", agent: "a1", kind: "question", tool: nil, about: nil, at: "2026-10-17T09:00:00Z")
         let kinds = Dictionary(uniqueKeysWithValues: ["claude", "codex", "opencode", "pi", "omp"].map { ($0, kind) })
         let state = State(at: "2026-10-17T09:00:00Z", kinds: kinds, agents: [agent], threads: [thread], requests: [request])
@@ -195,9 +202,23 @@ enum Frozen {
         #expect(turn.items.count == Limits.items && turn.items.first?.id == "i6")
 
         let turns = (1...12).map { Turn(id: "t\($0)", state: "done", started: nil, ended: nil, items: []) }
-        let thread = SomethingCore.Thread(id: "th", agent: "a1", title: nil, started: nil, turns: turns)
+        let thread = AgentThread(id: "th", agent: "a1", title: nil, started: nil, turns: turns)
         #expect(thread.turns.count == Limits.turns && thread.turns.first?.id == "t3" && !thread.complete)
-        #expect(SomethingCore.Thread(id: "th", agent: "a1", title: nil, started: nil, turns: Array(turns.prefix(10))).complete)
+        #expect(AgentThread(id: "th", agent: "a1", title: nil, started: nil, turns: Array(turns.prefix(10))).complete)
+    }
+
+    /// The journal line of contract 7, as written there, fits JournalLine.
+    @Test func theJournalLineHasItsShape() throws {
+        let line = #"{"at":"2026-10-17T09:00:02Z","action":"send","agent":"a1","kind":"claude","when":"next","text":"Then run the tests.","result":"ok"}"#
+        let object = try JSONSerialization.jsonObject(with: Data(line.utf8))
+        #expect(shape.problems(object, type: "JournalLine").isEmpty, "\(shape.problems(object, type: "JournalLine"))")
+        #expect(shape.problems(["at": "2026-10-17T09:00:02Z", "action": "open", "result": "ok"], type: "JournalLine").isEmpty)
+    }
+
+    @Test func anIntegerIsNotWrittenAsAFloat() throws {
+        let numbers = try #require(try JSONSerialization.jsonObject(with: Data(#"[1, 1.0]"#.utf8)) as? [Any])
+        #expect(shape.problems(numbers[0], token: "integer", at: "n").isEmpty)
+        #expect(!shape.problems(numbers[1], token: "integer", at: "n").isEmpty)
     }
 
     @Test func scopeReadsBothShapes() throws {
@@ -212,7 +233,8 @@ enum Frozen {
         #expect(missing.isEmpty, "\(missing)")
     }
 
-    /// A removal anywhere fails: a key from shape.json, a word, a code from codes.json, a function or a right from the guide.
+    /// A removal anywhere fails: a key from shape.json, a word, a code from codes.json, and from the guide a function,
+    /// an event, a right, a right's kind or a bridge code.
     @Test func aRemovalFails() throws {
         let frozen = try ContractFiles.object("frozen-v1.json")
         let codes = try ContractFiles.object("codes.json")
@@ -227,19 +249,25 @@ enum Frozen {
         fewerCodes["codes"] = table
         let guide = ContractFiles.guide.replacingOccurrences(of: "`something.resume", with: "`something.continue")
             .replacingOccurrences(of: "| `store` |", with: "| `memory` |")
+            .replacingOccurrences(of: "`\"granted\"`: `fn(granted)`", with: "`\"rights\"`: `fn(granted)`")
+            .replacingOccurrences(of: "| `BUSY` |", with: "| `OCCUPIED` |")
+            .replacingOccurrences(of: "Kinds for a right: `claude`, `codex`, `opencode`, `pi`.", with: "Kinds for a right: `claude`, `codex`, `opencode`.")
         let missing = Frozen.missing(frozen: frozen, shape: shape, codes: fewerCodes, guide: guide)
         #expect(missing == [
             "key Agent.pid is not in shape.json",
             "word interrupted of Agent.state is not in shape.json",
             "function something.resume is not in the guide",
+            "event \"granted\" is not in the guide",
             "right store is not in the guide's table of rights",
+            "right kind pi is not in the guide",
+            "bridge code BUSY is not in the guide",
             "code TOO_HEAVY is not in codes.json",
         ])
     }
 
     @Test func frozenTypesMatchTheShapeTypes() throws {
         let frozen = try #require(try ContractFiles.object("frozen-v1.json")["keys"] as? [String: [String]])
-        #expect(Set(frozen.keys) == Set(shape.types.keys.filter { !["SeeAll", "Folders"].contains($0) }))
+        #expect(Set(frozen.keys) == Set(shape.types.keys))
     }
 
     @Test func everyCodeHasALevelAndAFix() throws {
@@ -269,15 +297,31 @@ enum Frozen {
             let named = (expect["problems"] as? [String] ?? []) + [expect["code"] as? String, (expect["error"] as? [String: Any])?["code"] as? String].compactMap { $0 }
             for code in named { #expect(codes[code] != nil, "\(name) names \(code), which codes.json does not know") }
         }
+        let results = ["send": "Delivery", "interrupt": "Interrupted", "set": "Applied"]
         for name in bridge {
             let fixture = try ContractFiles.object(name)
             let granted = try #require(fixture["granted"])
             #expect(shape.problems(granted, type: "Granted").isEmpty, "\(name): \(shape.problems(granted, type: "Granted"))")
+            let request = try #require(fixture["request"] as? [String: Any])
+            let params = request["params"] as? [String: Any] ?? [:]
+            if request["method"] as? String == "send", let when = params["when"] {
+                #expect(shape.problems(["when": when], type: "SendOptions").isEmpty, "\(name): when is \(when)")
+            }
+            guard let result = (fixture["answer"] as? [String: Any])?["result"], let method = request["method"] as? String else { continue }
+            let type = try #require(results[method], "\(name): no result type for \(method)")
+            #expect(shape.problems(result, type: type).isEmpty, "\(name): \(shape.problems(result, type: type))")
         }
         for name in declarations {
             let declaration = try ContractFiles.object(name)["expect"].flatMap { ($0 as? [String: Any])?["declaration"] as? [String: Any] }
             guard let declaration else { continue }
-            #expect(Set(declaration.keys) == ["contract", "title", "description", "agents", "rights", "folder"], "\(name)")
+            #expect(shape.problems(declaration, type: "InForce").isEmpty, "\(name): \(shape.problems(declaration, type: "InForce"))")
+        }
+        // Every export but the one that is not an export of something has the shape of one.
+        for name in exports {
+            let fixture = try ContractFiles.object(name)
+            guard (fixture["expect"] as? [String: Any])?["code"] as? String != "IMPORT_NOT_A_SPACE" else { continue }
+            let export = try #require(fixture["export"])
+            #expect(shape.problems(export, type: "Export").isEmpty, "\(name): \(shape.problems(export, type: "Export"))")
         }
     }
 }

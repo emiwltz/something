@@ -19,7 +19,8 @@ public enum StateMap {
         /// true: a turn is running; false: the last turn closed; nil: no turn seen.
         public var turnOpen: Bool?
         public var waiting: Waiting = .unknown
-        /// The conversation was closed normally (an end marker).
+        /// The conversation was closed normally (an end marker). Read only when `alive` is false, where it wins over
+        /// a turn left open: a reader that sees the marker but cannot prove the process gone sets `alive` to false.
         public var ended = false
         /// The last turn or the process failed.
         public var failed = false
@@ -55,8 +56,8 @@ public enum StateMap {
             let state = facts.turnOpen == true ? "working" : facts.failed ? "error" : facts.aborted ? "interrupted" : "idle"
             return Result(state: state, waiting: waiting, evidence: facts.evidence)
         case false?:
-            // A turn left open by a process that is gone did not end normally.
-            let state = facts.failed ? "error" : facts.aborted || facts.turnOpen == true ? "interrupted" : "done"
+            // A turn left open by a process that is gone did not end normally, unless the conversation says it closed.
+            let state = facts.failed ? "error" : facts.ended ? "done" : facts.aborted || facts.turnOpen == true ? "interrupted" : "done"
             return Result(state: state, waiting: "none", evidence: facts.evidence)
         case nil:
             // Without a holder nobody can say the agent waits; only "none" from the source survives.

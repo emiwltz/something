@@ -1,5 +1,5 @@
 {
-  "about": "A message for the next turn of a launched agent that is working: something holds it.",
+  "about": "A message for the next turn of a launched agent that waits on a permission: something holds it.",
   "comment": "A bridge case: one request as the page side sends it ({contract, id, method, params}), against state-example.json, with the rights in granted. A result is compared whole; an error by its code only, since its message is free (one sentence that says what to do).",
   "state": "state-example.json",
   "granted": {

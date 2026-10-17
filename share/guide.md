@@ -66,6 +66,10 @@ Only JSON that does not parse (`DECLARATION_UNREADABLE`) or a `contract` higher 
 (`CONTRACT_TOO_NEW`) stops the space from opening. Anything else is a warning and the space opens. The smallest
 declaration is `{ "contract": 1 }`.
 
+Folders in `agents` are absolute or start with `~`, and match whole path components: `~/code/shop` covers
+`~/code/shop/api` but not `~/code/shopping`. Under a folder scope, an agent whose `folder` is `null` is hidden. The
+agents this space launched are always in scope.
+
 ## Rights
 
 | Right | Allows |
@@ -76,6 +80,8 @@ declaration is `{ "contract": 1 }`.
 | `store` | The space's own memory. |
 
 Kinds for a right: `claude`, `codex`, `opencode`, `pi`. `open` needs no right: each link is confirmed by the person.
+A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows but
+cannot honour (`launch:omp`, `send:omp`) goes to `granted.unavailable` (warning `RIGHT_UNAVAILABLE`).
 
 At the first opening, a window of the Mac lists what you declared, in plain words; the person allows or refuses each
 line. Refusals are remembered, and rights can be revoked at any time. **So never assume a right: read
@@ -102,7 +108,11 @@ at most four times a second, only when it changed. A shortened example (the full
       "pid": 50123, "alive": true, "evidence": "child", "state": "waiting", "waiting": "permission",
       "thread": "c0ffee00-0000-4000-8000-000000000001",
       "model": "claude-example-model", "mode": "default", "effort": null,
-      "options": { "model": [{ "value": "claude-example-model", "label": "Example model" }], "mode": null, "effort": null },
+      "options": {
+        "model": [{ "value": "claude-example-model", "label": "Example model" }],
+        "mode": [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
+        "effort": null
+      },
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
       "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": false, "resume": false },
       "because": { "effort": "Claude Code offers no way to change effort during a session." },
@@ -173,8 +183,9 @@ at most four times a second, only when it changed. A shortened example (the full
 | `interrupted` | The last turn was stopped before its end, or the process vanished mid-turn. |
 | `unknown` | No source can say. Show "unknown", never "idle". |
 
-`state` is `"waiting"` exactly when `waiting` is `"permission"` or `"answer"`. An agent seen elsewhere with no
-living process proven shows `unknown`, or `working` when its conversation was written in the last two minutes.
+`state` is `"waiting"` exactly when `waiting` is `"permission"` or `"answer"`. When nothing proves whether its process
+lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn was written in the last two minutes
+(`evidence: "recent-write"`); it is never `idle`.
 
 ### Threads, turns, items, requests
 
@@ -183,7 +194,8 @@ living process proven shows `unknown`, or `working` when its conversation was wr
 - **Turn** `{id, state, started, ended, items}`: `state` is `working`, `done`, `error`, `interrupted` or `unknown`. Its
   last 50 items.
 - **Item** `{id, kind, author, text, at, truncated, tool, decision}`: `kind` is `message`, `thought`, `tool` or
-  `subagent`; `author` is `person` or `agent`. `text` holds at most 4,000 characters; `truncated` says it was cut.
+  `subagent`; `author` is `person` or `agent`. `text` holds at most 4,000 characters, counted as a person sees them (an emoji is one, though
+  `text.length` may say two); `truncated` says it was cut.
   `tool` is `{name, status}` (`running`, `done`, `failed` or `null`) for a tool item, else `null`. `decision` is
   `{by, outcome}` when the agent's own stream says who decided a permission (`by`: `person`, `hook`, `rule`, `mode`;
   `outcome`: `allowed`, `denied`), else `null`. Today only Claude Code launched by something says it.

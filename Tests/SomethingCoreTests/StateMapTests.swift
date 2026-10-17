@@ -20,6 +20,7 @@ import Testing
             ("alive, last turn failed", Facts(alive: true, evidence: "child", turnOpen: false, waiting: .nothing, failed: true), "error", "none", "child"),
             ("alive, last turn aborted", Facts(alive: true, evidence: "child", turnOpen: false, waiting: .nothing, aborted: true), "interrupted", "none", "child"),
             ("ended, end marker", Facts(alive: false, evidence: "process", ended: true), "done", "none", "process"),
+            ("ended, end marker after an open turn", Facts(alive: false, evidence: "process", turnOpen: true, ended: true), "done", "none", "process"),
             ("ended, turn closed", Facts(alive: false, evidence: "process", turnOpen: false), "done", "none", "process"),
             ("ended, turn left open", Facts(alive: false, evidence: "process", turnOpen: true), "interrupted", "none", "process"),
             ("ended, aborted", Facts(alive: false, evidence: "child", turnOpen: false, aborted: true), "interrupted", "none", "child"),

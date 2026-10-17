@@ -5,7 +5,10 @@
     "types: each type is an object whose keys are the keys of that JSON object, and whose values list the allowed values.",
     "An allowed value is one of: null, boolean, integer, string, object (any JSON object, not covered by the contract),",
     "a type name from types, [X] (an array of X), {X} (an object whose values are all X, keys free), or =word (that exact string).",
-    "Every key is always present, and no other key is allowed, except: a key written ?key may be absent (declarations only).",
+    "Every key is always present, and no other key is allowed, except: a key written ?key may be absent.",
+    "Only what a person or a call writes has such keys: a Declaration as written (InForce is the same once defaults apply),",
+    "send's SendOptions, and a JournalLine, whose agent, kind, when and text depend on the action.",
+    "Delivery, Interrupted and Applied are the results of send, interrupt and set; Export is a .something document.",
     "Within contract 1 this file only grows: keys, types and words are added, never removed or renamed."
   ],
   "contract": 1,
@@ -148,6 +151,45 @@
       "?agents": ["SeeAll", "Folders"],
       "?rights": ["[string]"],
       "?folder": ["string"]
+    },
+    "InForce": {
+      "contract": ["integer"],
+      "title": ["string"],
+      "description": ["string", "null"],
+      "agents": ["SeeAll", "Folders"],
+      "rights": ["[string]"],
+      "folder": ["string", "null"]
+    },
+    "SendOptions": {
+      "?when": ["=next", "=now"]
+    },
+    "Delivery": {
+      "delivery": ["=started", "=steered", "=queued", "=unconfirmed"]
+    },
+    "Interrupted": {
+      "interrupted": ["boolean"]
+    },
+    "Applied": {
+      "applied": ["=now", "=next-turn"]
+    },
+    "JournalLine": {
+      "at": ["string"],
+      "action": ["=send", "=interrupt", "=set", "=launch", "=resume", "=open"],
+      "?agent": ["string"],
+      "?kind": ["string"],
+      "?when": ["=next", "=now"],
+      "?text": ["string"],
+      "result": ["string"]
+    },
+    "Export": {
+      "format": ["=something-space"],
+      "contract": ["integer"],
+      "exported": ["string"],
+      "app": ["string"],
+      "name": ["string"],
+      "form": ["=file", "=folder"],
+      "files": ["{string}"],
+      "data": ["object", "null"]
     }
   }
 }
