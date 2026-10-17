@@ -1,7 +1,7 @@
 {"begin":true}
 {"something":{"request":{"subtype":"initialize"},"request_id":"something-1","type":"control_request"}}
 {"send":"Please run-sleep for me.","when":"next","delivery":"started"}
-{"something":{"message":{"content":"Please run-sleep for me.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*"}}
+{"something":{"message":{"content":"Please run-sleep for me.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*add93b3a-fd30-4bb6-8464-b147115d7e30"}}
 {"claude":{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","session_state":"idle","capabilities":["ui_surface_v1"],"claude_code_version":"2.1.296","pid":4242,"models":[{"value":"default","resolvedModel":"claude-opus-5-5","displayName":"Default (recommended)","description":"Use the default model (currently Opus 5.5) · $4/$20 per Mtok","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"],"supportsAdaptiveThinking":true,"supportsFastMode":true,"supportsAutoMode":true},{"value":"sonnet","resolvedModel":"claude-sonnet-5-5","displayName":"Sonnet","description":"Sonnet 5.5 · Efficient for routine tasks · $2/$10 per Mtok","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"],"supportsAdaptiveThinking":true,"supportsAutoMode":true}]},"pending_permission_requests":[],"pending_user_dialog_requests":[]}}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"running","uuid":"5e74bdcd-1378-4828-936b-98cd59ffe010","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"add93b3a-fd30-4bb6-8464-b147115d7e30","state":"queued","uuid":"a05f0d72-d7a9-4c53-8812-0c9b5bf562ce","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
@@ -18,7 +18,7 @@
 {"send":"Queued: then the docs.","when":"next","delivery":"queued"}
 {"send":"Queued: and the tests.","when":"next","delivery":"queued"}
 {"check":{"queue":["Queued: then the docs.","Queued: and the tests."]}}
-{"something":{"message":{"content":"Steered: use the small one.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*"}}
+{"something":{"message":{"content":"Steered: use the small one.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*67a0739f-ea7e-4060-8e20-4556de626ac9"}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"running","uuid":"0d75d966-a491-4feb-8b98-0afce6882637","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"67a0739f-ea7e-4060-8e20-4556de626ac9","state":"queued","uuid":"f5051e7a-3529-4d18-95d5-805d48c86b39","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_fake1","type":"tool_result","content":"(Bash completed with no output)","is_error":false}]},"parent_tool_use_id":null,"session_id":"5b2e0000-0000-4000-8000-000000000003","uuid":"2220067f-8293-4356-899c-3222f85a19e0","timestamp":"2026-10-17T19:38:20.177Z","tool_use_result":{"stdout":"","stderr":"","interrupted":false,"isImage":false,"noOutputExpected":false},"tool_result_meta":[{"id":"toolu_fake1","permission_decision":{"decision":"accept","source":"user_temporary"}}]}}
@@ -29,7 +29,7 @@
 {"claude":{"type":"command_lifecycle","command_uuid":"add93b3a-fd30-4bb6-8464-b147115d7e30","state":"completed","uuid":"7b5a7db6-bf58-4464-b4c9-86e580915d86","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"9e8edf62-9bd2-440c-a3bd-a01d40228eff","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"check":{"state":"working","queue":["Queued: and the tests."]}}
-{"something":{"message":{"content":"Queued: then the docs.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*"}}
+{"something":{"message":{"content":"Queued: then the docs.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*5617debe-1d3f-4b27-82a0-56ee5ecae0f0"}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"running","uuid":"cd9ca3d2-7420-43b9-8cb9-edd07995869e","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"5617debe-1d3f-4b27-82a0-56ee5ecae0f0","state":"queued","uuid":"f0e9b446-b1d9-45d3-b102-5d892847fd87","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"5617debe-1d3f-4b27-82a0-56ee5ecae0f0","state":"started","uuid":"2eb50197-d6b4-4f71-a165-1f5376a1dbc7","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
@@ -39,7 +39,7 @@
 {"claude":{"type":"command_lifecycle","command_uuid":"5617debe-1d3f-4b27-82a0-56ee5ecae0f0","state":"completed","uuid":"066487e7-9924-4751-9ac9-8c948ad8ec09","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"5bf43a7b-245a-45a7-a7eb-56fd4cb22616","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"check":{"state":"working","queue":[]}}
-{"something":{"message":{"content":"Queued: and the tests.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*"}}
+{"something":{"message":{"content":"Queued: and the tests.","role":"user"},"origin":{"kind":"human"},"parent_tool_use_id":null,"priority":"next","type":"user","uuid":"*155b19b4-f4a7-49ac-ad3a-4da8d857d2bf"}}
 {"claude":{"type":"system","subtype":"session_state_changed","state":"running","uuid":"b086fe38-c143-471c-8d5d-17f0031403f5","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"155b19b4-f4a7-49ac-ad3a-4da8d857d2bf","state":"queued","uuid":"e15dab88-6537-4b34-84bb-3f45ef5c238e","session_id":"5b2e0000-0000-4000-8000-000000000003"}}
 {"claude":{"type":"command_lifecycle","command_uuid":"155b19b4-f4a7-49ac-ad3a-4da8d857d2bf","state":"started","uuid":"5004b60a-50e9-495d-9253-e28ea6ebe6c0","session_id":"5b2e0000-0000-4000-8000-000000000003"}}

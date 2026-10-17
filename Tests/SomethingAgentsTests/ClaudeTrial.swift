@@ -3,9 +3,9 @@
 //
 //   SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter ClaudeTrial
 //
-// Each case gets a throwaway HOME under $TMPDIR, deleted after. `--bare` is added to the launch line here only: it
-// makes Claude read no OAuth login and no Keychain, so the made-up key "test-key" is the only credential it has;
-// `--tools` names AskUserQuestion, which `--bare` leaves out.
+// Each case gets a throwaway HOME under $TMPDIR, deleted after, whatever the case's outcome. `--bare` is added to
+// the launch line here only: it makes Claude read no OAuth login and no Keychain, so the made-up key "test-key" is the
+// only credential it has; `--tools` names AskUserQuestion, which `--bare` leaves out.
 // SOMETHING_TRIAL_RECORD=<folder> also writes each case's lines there, the raw material of Tests/Exchanges/claude.
 import Foundation
 import Testing
@@ -53,9 +53,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         let end = Date().addingTimeInterval(seconds)
         while !condition() {
             guard Date() < end else {
-                save()
-                spawn.stop(cap: 2) { [root] in try? FileManager.default.removeItem(at: root) }
-                api.stop()
+                cleanup()
                 Issue.record("\(name): timed out waiting for \(what); state \(state.state), error \(String(describing: state.error)); stderr: \(spawn.errorTail.suffix(400))")
                 throw CancellationError()
             }
@@ -73,14 +71,37 @@ final class Stopped: @unchecked Sendable { var done = false }
         try? text.write(toFile: "\(folder)/\(name).log", atomically: true, encoding: .utf8)
     }
 
-    /// Stops the program by the ladder and removes the throwaway home.
+    /// Stops the program by the ladder, and waits for its end.
     func finish() async throws {
         let stopped = Stopped()
         spawn.stop(cap: 8) { stopped.done = true }
         try await until("the end", seconds: 12) { state.alive == false && stopped.done }
+        cleanup()
+    }
+
+    private var cleaned = false
+
+    /// Stops what the case started and removes the throwaway home; once, from wherever the case ended.
+    func cleanup() {
+        guard !cleaned else { return }
+        cleaned = true
         save()
+        // Waited for here, so the home is gone before the test process may end.
+        let stopped = DispatchSemaphore(value: 0)
+        spawn.stop(cap: 2) { stopped.signal() }
+        _ = stopped.wait(timeout: .now() + 3)
         api.stop()
         try? FileManager.default.removeItem(at: root)
+    }
+
+    /// The model Claude resolves an option to, from its answer to `initialize`.
+    func resolved(_ option: String) -> String? {
+        for line in lines where !line.written && line.line.contains("resolvedModel") {
+            let frame = (try? JSONSerialization.jsonObject(with: Data(line.line.utf8))) as? [String: Any]
+            let models = ((frame?["response"] as? [String: Any])?["response"] as? [String: Any])?["models"] as? [[String: Any]]
+            if let model = models?.first(where: { $0["value"] as? String == option }) { return model["resolvedModel"] as? String }
+        }
+        return nil
     }
 }
 
@@ -91,6 +112,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
 
     @Test func aTurnStartsAndEnds() async throws {
         let run = try ClaudeRun("turn")
+        defer { run.cleanup() }
         #expect(try run.agent.send("Hello there.", when: "next") == "started")
         try await run.until("a reply") { run.items.contains { $0.author == "agent" && $0.kind == "message" } && run.state.state == "idle" }
         #expect(run.state.model != nil)
@@ -103,13 +125,14 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
 
     @Test func aPermissionIsAllowedOnce() async throws {
         let run = try ClaudeRun("permission-once")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
         #expect(run.state.state == "waiting")
         #expect(run.state.waiting == "permission")
         let request = try #require(run.request)
         #expect(request.tool == "Bash")
-        #expect(try run.agent.driver.answer(request.id, .once))
+        #expect(try run.agent.answer(request.id, .once))
         try await run.until("the end of the turn") { run.state.state == "idle" && run.items.contains { $0.tool?.status == "done" } }
         #expect(run.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "allowed"))
         try await run.finish()
@@ -117,9 +140,10 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
 
     @Test func aPermissionIsDenied() async throws {
         let run = try ClaudeRun("deny")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
-        #expect(try run.agent.driver.answer(run.request!.id, .deny))
+        #expect(try run.agent.answer(try #require(run.request).id, .deny))
         try await run.until("the end of the turn") { run.state.state == "idle" }
         #expect(run.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "denied"))
         #expect(run.items.first { $0.kind == "tool" }?.tool?.status == "failed")
@@ -130,23 +154,25 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
     /// and Read, and `--tools` cannot add AskUserQuestion. The question path is proven by replay only.
     @Test(.disabled("AskUserQuestion is not offered under --bare")) func aQuestionIsAnswered() async throws {
         let run = try ClaudeRun("question")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please ask-me something.", when: "next")
         try await run.until("a question") { run.request != nil }
         let request = try #require(run.request)
         #expect(request.kind == "question")
         #expect(run.state.waiting == "answer")
-        let prompt = try #require(run.agent.driver.prompt(request.id))
+        let prompt = try #require(run.agent.prompt(request.id))
         #expect(prompt.questions.first?.options == ["Blue", "Green"])
-        #expect(try run.agent.driver.answer(request.id, .choice([["Green"]])))
+        #expect(try run.agent.answer(request.id, .choice([["Green"]])))
         try await run.until("the end of the turn") { run.state.state == "idle" && run.api.received.count >= 2 }
         try await run.finish()
     }
 
     @Test func aSteerJoinsTheTurnAndAQueuedMessageWaits() async throws {
         let run = try ClaudeRun("steer-queue")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please run-sleep for me.", when: "next")
         try await run.until("a permission") { run.request != nil }
-        _ = try run.agent.driver.answer(run.request!.id, .once)
+        _ = try run.agent.answer(try #require(run.request).id, .once)
         try await run.until("the tool to run") { run.state.state == "working" && run.items.contains { $0.tool?.status == "running" } }
         #expect(try run.agent.send("Steered: use the small one.", when: "now") == "steered")
         #expect(try run.agent.send("Queued: then the docs.", when: "next") == "queued")
@@ -163,9 +189,10 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
 
     @Test func anInterruptStopsATool() async throws {
         let run = try ClaudeRun("interrupt")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please run-sleep for me.", when: "next")
         try await run.until("a permission") { run.request != nil }
-        _ = try run.agent.driver.answer(run.request!.id, .once)
+        _ = try run.agent.answer(try #require(run.request).id, .once)
         try await run.until("the tool to run") { run.items.contains { $0.tool?.status == "running" } }
         _ = try run.agent.send("Queued: dropped.", when: "next")
         #expect(try run.agent.interrupt())
@@ -176,25 +203,52 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         try await run.finish()
     }
 
+    /// A steer Claude still holds is dropped by the interrupt (`cancel_queued`): never read, never shown.
+    @Test func anInterruptDropsASteer() async throws {
+        let run = try ClaudeRun("steer-interrupt")
+        defer { run.cleanup() }
+        _ = try run.agent.send("Please run-sleep for me.", when: "next")
+        try await run.until("a permission") { run.request != nil }
+        _ = try run.agent.answer(try #require(run.request).id, .once)
+        try await run.until("the tool to run") { run.items.contains { $0.tool?.status == "running" } }
+        #expect(try run.agent.send("Steered: dropped by the interrupt.", when: "now") == "steered")
+        try await run.until("the steer to be written") { run.lines.contains { $0.written && $0.line.contains("Steered: dropped") } }
+        let steer = try #require(run.lines.last { $0.written && $0.line.contains("Steered: dropped") }?.line)
+        let uuid = try #require(((try? JSONSerialization.jsonObject(with: Data(steer.utf8))) as? [String: Any])?["uuid"] as? String)
+        #expect(try run.agent.interrupt())
+        try await run.until("the interrupted turn") { run.agent.queue.fold.turns.last?.state == "interrupted" && run.state.state == "interrupted" }
+        try await run.until("the steer's fate") { run.lines.contains { !$0.written && $0.line.contains(uuid) && $0.line.contains("command_lifecycle") && $0.line.contains(#""state":"cancelled""#) } }
+        #expect(!run.items.contains { $0.text.contains("Steered: dropped") })
+        #expect(!run.api.received.contains { $0.contains("Steered: dropped") })
+        #expect(run.state.error == nil)
+        try await run.finish()
+    }
+
     @Test func anInterruptWithdrawsARequest() async throws {
         let run = try ClaudeRun("withdrawn")
+        defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
-        let id = run.request!.id
+        let id = try #require(run.request).id
         #expect(try run.agent.interrupt())
         try await run.until("the request to close") { run.request == nil && run.agent.queue.fold.turns.last?.state == "interrupted" }
-        #expect(run.agent.driver.prompt(id) == nil)
+        #expect(run.agent.prompt(id) == nil)
         #expect(run.lines.contains { !$0.written && $0.line.contains("control_cancel_request") })
         try await run.finish()
     }
 
     @Test func modeAndModelAreSet() async throws {
         let run = try ClaudeRun("set")
+        defer { run.cleanup() }
         try await run.until("the models") { run.state.options.model != nil }
         #expect(try run.agent.driver.set(model: nil, mode: "plan", effort: nil) == "now")
         try await run.until("the mode") { run.state.mode == "plan" }
-        let model = try #require(run.state.options.model?.first { $0.value != "default" }?.value)
-        #expect(try run.agent.driver.set(model: model, mode: nil, effort: nil) == "now")
+        let option = try #require(run.state.options.model?.first { $0.value != "default" }?.value)
+        let model = try #require(run.resolved(option))
+        #expect(run.state.model != model)
+        #expect(try run.agent.driver.set(model: option, mode: nil, effort: nil) == "now")
+        // set_model's success names no model: the next reply, from the model Claude asked for, does.
+        _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("the model") { run.state.model == model }
         try await run.finish()
     }
@@ -202,18 +256,22 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
     /// Whether Claude takes an effort through apply_flag_settings; the driver keeps `can.effort` false until it does.
     @Test func effortThroughFlagSettings() async throws {
         let run = try ClaudeRun("effort")
+        defer { run.cleanup() }
         _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && run.api.received.count == 1 }
         try run.spawn.write(Data(#"{"request":{"settings":{"effortLevel":"low"},"subtype":"apply_flag_settings"},"request_id":"trial-effort","type":"control_request"}"#.utf8))
         try await run.until("an answer") { run.lines.contains { !$0.written && $0.line.contains("trial-effort") } }
+        let answer = try #require(run.lines.first { !$0.written && $0.line.contains("trial-effort") }?.line)
+        #expect(answer.contains(#""subtype":"success""#), "\(answer)")
         _ = try run.agent.send("Hello again.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && run.api.received.count == 2 }
-        print("T-1 effort asked of the model, before and after apply_flag_settings: \(run.api.effortsAsked)")
+        #expect(run.api.effortsAsked.last == "low", "efforts asked: \(run.api.effortsAsked)")
         try await run.finish()
     }
 
     @Test func endSessionStopsCleanly() async throws {
         let run = try ClaudeRun("stop")
+        defer { run.cleanup() }
         _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && run.items.contains { $0.author == "agent" } }
         try await run.finish()

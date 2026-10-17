@@ -28,7 +28,8 @@ public final class ClaudeDriver: Driver {
         var arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                          "--permission-prompt-tool", "stdio", "--include-hook-events",
                          "--permission-mode", launch.mode ?? "default", "--session-id", launch.thread]
-        if let model = launch.model { arguments += ["--model", model] }
+        // One argument, so a model is never read as an option.
+        if let model = launch.model { arguments.append("--model=\(model)") }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
     }
 
@@ -43,7 +44,10 @@ public final class ClaudeDriver: Driver {
     private var decisions: [String: Decision] = [:]
     /// Control requests something sent and not yet answered, by request id: their subtype and the value asked.
     private var sent: [String: (subtype: String, value: String?)] = [:]
-    private var count = 0
+    /// Messages something wrote and Claude has not finished with, by the uuid each line carries.
+    private var messages: [String: (text: String, steer: Bool, started: Bool)] = [:]
+    /// How many messages and control requests something wrote, for their ids.
+    private var messagesWritten = 0, controlsWritten = 0
     private var turnOpen = false
     /// Whether Claude says when a turn starts and ends; until it does, `system/init` and `result` mark turns.
     private var statesSeen = false
@@ -76,6 +80,7 @@ public final class ClaudeDriver: Driver {
             guard let raw = frame["request_id"] as? String, asks.removeValue(forKey: id(raw)) != nil else { return }
             emit(.requestClosed(id: id(raw)))
         case "control_response": response(frame["response"] as? [String: Any] ?? [:])
+        case "command_lifecycle": lifecycle(frame)
         default: break   // a newer Claude's frames must not break an older something
         }
     }
@@ -83,14 +88,19 @@ public final class ClaudeDriver: Driver {
     /// Priority "next": Claude reads the message after the running tool calls, in the same turn, or starts a turn
     /// with it. Never "now", which may interrupt the turn; never left out, since the default depends on a flag on
     /// Anthropic's side. `origin` human: an unattributed message fails Claude's own trust checks.
+    /// The uuid lets Claude say what became of the message (`command_lifecycle`).
     public func deliver(_ text: String, steer: Bool) throws {
-        // A message that starts a turn opens it here, so the person's words are the turn's first item; Claude's
-        // own `running` then changes nothing.
-        if !steer { turn(open: true) }
+        let uuid = UUID().uuidString.lowercased()
         try send(["type": "user", "message": ["role": "user", "content": text], "parent_tool_use_id": NSNull(),
-                  "uuid": UUID().uuidString.lowercased(), "priority": "next", "origin": ["kind": "human"]])
-        count += 1
-        emit(.itemAppended(Item(id: "\(launch.thread)/person/\(count)", kind: "message", author: "person", text: text, at: now())))
+                  "uuid": uuid, "priority": "next", "origin": ["kind": "human"]])
+        messages[uuid] = (text, steer, false)
+        // A steer is shown once Claude takes it in: until then it may still be dropped unread. A message that starts
+        // a turn opens it here, so the person's words are the turn's first item; Claude's own `running` then
+        // changes nothing.
+        if !steer {
+            turn(open: true)
+            appendPerson(text)
+        }
     }
 
     /// `cancel_queued` drops the steered messages Claude still holds, as an interrupt empties something's own queue.
@@ -99,7 +109,8 @@ public final class ClaudeDriver: Driver {
         try control("interrupt", ["cancel_queued": true])
     }
 
-    /// A new mode applies at once; a new model from the next turn on.
+    /// A new mode applies at once; a new model from the next turn on. What is returned is what Claude was asked:
+    /// only the state, once Claude reports the new value, says it applied, and a refusal comes as the agent's error.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
         if effort != nil { throw CodedError("NOT_SUPPORTED", ClaudeDriver.limits["effort"]!) }
         if let mode { try control("set_permission_mode", ["mode": mode], value: mode) }
@@ -115,6 +126,9 @@ public final class ClaudeDriver: Driver {
         guard let ask = asks[request] else { return false }
         let input = ask.request["input"] as? [String: Any] ?? [:]
         let question = ask.prompt.request.kind == "question"
+        if case .choice(let chosen) = answer, chosen.count != ask.prompt.questions.count {
+            throw CodedError("BAD_PARAMS", "Answer each of the \(ask.prompt.questions.count) questions, in their order.")
+        }
         var allowed: [String: Any]?   // nil: a deny, or an answer that does not fit the request
         switch (answer, question) {
         case (.once, false): allowed = input
@@ -184,10 +198,11 @@ public final class ClaudeDriver: Driver {
             let text = blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
             return emit(.error(AgentError(code: "AGENT_ERROR", message: text.isEmpty ? "Claude Code could not answer." : text)))
         }
-        if let model = message["model"] as? String { emit(.reported(model: model, mode: nil, effort: nil)) }
-        // One frame per block, several frames per message: the frame's own uuid tells the items apart.
-        let frameID = frame["uuid"] as? String ?? message["id"] as? String ?? "\(launch.thread)/\(count)"
+        // A subagent's frames carry the tool call that started it; its model (often a smaller one) is not the agent's.
         let sub = !(frame["parent_tool_use_id"] is NSNull) && frame["parent_tool_use_id"] != nil
+        if !sub, let model = message["model"] as? String { emit(.reported(model: model, mode: nil, effort: nil)) }
+        // One frame per block, several frames per message: the frame's own uuid tells the items apart.
+        let frameID = frame["uuid"] as? String ?? message["id"] as? String ?? "\(launch.thread)/\(UUID().uuidString.lowercased())"
         for (index, block) in blocks.enumerated() {
             let at = now()
             switch block["type"] as? String {
@@ -227,7 +242,7 @@ public final class ClaudeDriver: Driver {
         } else {
             let errors = (frame["errors"] as? [String] ?? []).joined(separator: " ")
             let text = errors.isEmpty ? frame["result"] as? String ?? "" : errors
-            outcome = .failed(AgentError(code: "AGENT_ERROR", message: text.isEmpty ? "Claude Code ended its turn with an error (\(reason))." : text))
+            outcome = .failed(AgentError(code: "AGENT_ERROR", message: text.isEmpty ? "Claude Code ended its turn with an error\(reason.isEmpty ? "" : " (\(reason))")." : text))
         }
         if !statesSeen { turn(open: false) }
     }
@@ -253,7 +268,8 @@ public final class ClaudeDriver: Driver {
     private func response(_ response: [String: Any]) {
         guard let raw = response["request_id"] as? String, let asked = sent.removeValue(forKey: raw) else { return }
         guard response["subtype"] as? String == "success" else {
-            let words = response["error"] as? String ?? "Claude Code refused \(asked.subtype)."
+            let refused = ClaudeDriver.refusals[asked.subtype] ?? "Claude Code refused what something asked"
+            let words = (response["error"] as? String).map { "\(refused): \($0)" } ?? "\(refused)."
             return emit(.error(AgentError(code: "AGENT_ERROR", message: words)))
         }
         let payload = response["response"] as? [String: Any] ?? [:]
@@ -261,14 +277,41 @@ public final class ClaudeDriver: Driver {
         case "initialize":
             emit(.options(options(models: payload["models"] as? [[String: Any]])))
             if let mode = payload["current_permission_mode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
-        // Claude's success is its word that the new value is in use; set_model answers with no payload.
-        case "set_model": emit(.reported(model: asked.value, mode: nil, effort: nil))
+        // set_model's success says nothing of the model in use: the next `init` or reply names it, so nothing is
+        // reported here (an alias such as "opus" is not a model).
         case "set_permission_mode": emit(.reported(model: nil, mode: payload["mode"] as? String ?? asked.value, effort: nil))
         default: break
         }
     }
 
+    /// What became of a message something wrote (msg_lifecycle_v1, seen on 2.1.296). `cancelled` also ends a message
+    /// Claude had read, when its turn is interrupted: only one dropped before `started` was never read.
+    private func lifecycle(_ frame: [String: Any]) {
+        guard let uuid = frame["command_uuid"] as? String, let message = messages[uuid] else { return }
+        switch frame["state"] as? String {
+        case "started":
+            messages[uuid]?.started = true
+            if message.steer { appendPerson(message.text) }
+        case "completed": messages[uuid] = nil
+        case "cancelled", "discarded", "refused":
+            messages[uuid] = nil
+            // An interrupt drops the steers Claude holds, as the person asked (cancel_queued): nothing to say.
+            guard !message.started, !interrupting else { return }
+            let error = AgentError(code: "AGENT_ERROR", message: "Claude Code dropped the message “\(Launched.short(message.text))” without reading it.")
+            if message.steer { return emit(.error(error)) }
+            // The turn this message opened never started on Claude's side.
+            outcome = .failed(error)
+            turn(open: false)
+        default: break
+        }
+    }
+
     // MARK: Helpers
+
+    private func appendPerson(_ text: String) {
+        messagesWritten += 1
+        emit(.itemAppended(Item(id: "\(launch.thread)/person/\(messagesWritten)", kind: "message", author: "person", text: text, at: now())))
+    }
 
     private func turn(open: Bool) {
         guard open != turnOpen else { return }
@@ -299,8 +342,8 @@ public final class ClaudeDriver: Driver {
     }
 
     private func control(_ subtype: String, _ fields: [String: Any], value: String? = nil) throws {
-        count += 1
-        let id = "something-\(count)"
+        controlsWritten += 1
+        let id = "something-\(controlsWritten)"
         sent[id] = (subtype, value)
         try send(["type": "control_request", "request_id": id, "request": fields.merging(["subtype": subtype]) { a, _ in a }])
     }
@@ -309,6 +352,10 @@ public final class ClaudeDriver: Driver {
     private func send(_ object: [String: Any]) throws {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
+
+    /// The start of the sentence for a control request Claude refused.
+    static let refusals = ["initialize": "Claude Code refused to start the session", "interrupt": "Claude Code refused to stop the turn",
+                           "set_model": "Claude Code refused the new model", "set_permission_mode": "Claude Code refused the new mode"]
 
     /// Who let a tool run or stopped it, as the tool's result says (`tool_result_meta`, seen on 2.1.296): its own
     /// settings ("config") are a rule; the person's answers are known already, from `answer`.

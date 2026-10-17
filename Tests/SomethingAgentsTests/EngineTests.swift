@@ -105,6 +105,9 @@ import SomethingCore
         #expect(throws: CodedError("NOT_SUPPORTED", "something cannot change Claude Code's effort yet.")) {
             try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: "low")
         }
+        #expect(throws: CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")) {
+            try engine.launch("claude", folder: place.work.path, model: "--dangerously-skip-permissions", mode: nil, effort: nil)
+        }
         #expect(throws: CodedError("AGENT_NOT_FOUND", "No agent claude-9 was launched by something; use an id from the latest state.")) {
             try engine.interrupt("claude-9")
         }

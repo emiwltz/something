@@ -5,7 +5,8 @@
 import Foundation
 import SomethingCore
 
-/// What a launch asks for. `model` and `mode` are already checked by the bridge (a mode that asks less was confirmed).
+/// What a launch asks for. The bridge confirmed a mode that asks less; Engine.launch checked that the mode is offered
+/// and that the model is no empty word and no option.
 public struct Launch: Equatable, Sendable {
     /// The id something gives the agent, opaque to spaces.
     public var agent: String
@@ -16,7 +17,12 @@ public struct Launch: Equatable, Sendable {
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
                 thread: String = UUID().uuidString.lowercased()) {
-        (self.agent, self.folder, self.model, self.mode, self.effort, self.thread) = (agent, folder, model, mode, effort, thread)
+        self.agent = agent
+        self.folder = folder
+        self.model = model
+        self.mode = mode
+        self.effort = effort
+        self.thread = thread
     }
 }
 
@@ -53,7 +59,8 @@ public protocol Driver: AnyObject {
     func set(model: String?, mode: String?, effort: String?) throws -> String
     /// What a native window shows for an open request; nil once it closed.
     func prompt(_ request: String) -> Prompt?
-    /// Answers an open request; returns false when it was no longer open. Throws AGENT_STOPPED.
+    /// Answers an open request; returns false when it was no longer open. Throws AGENT_STOPPED, or BAD_PARAMS for an
+    /// answer that does not fit the request (a choice with one entry per question).
     func answer(_ request: String, _ answer: Answer) throws -> Bool
     /// The line that asks the program to end by itself, the first step of the stop ladder; nil when closing its
     /// input is the way. Read from any thread: it must not depend on the driver's state.
@@ -66,24 +73,22 @@ extension Driver {
     /// A launched agent before its first event: everything it can do, but for its kind's limits.
     static func fresh(_ launch: Launch) -> Agent {
         var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
-        (agent.folder, agent.name, agent.thread) = (launch.folder, (launch.folder as NSString).lastPathComponent, launch.thread)
+        agent.folder = launch.folder
+        agent.name = (launch.folder as NSString).lastPathComponent
+        agent.thread = launch.thread
         var can = Can()
-        (can.send, can.steer, can.queue, can.interrupt) = (true, true, true, true)
-        (can.model, can.mode, can.effort) = (true, true, true)
-        for key in limits.keys {
-            switch key {
-            case "steer": can.steer = false
-            case "queue": can.queue = false
-            case "model": can.model = false
-            case "mode": can.mode = false
-            case "effort": can.effort = false
-            default: break
-            }
-        }
-        (agent.can, agent.because) = (can, limits)
+        for key in ["send", "steer", "queue", "interrupt", "model", "mode", "effort"] { can[keyPath: canKeys[key]!] = true }
+        // A key outside `canKeys` is a typo in a driver: it must fail the tests, not be dropped.
+        for key in limits.keys { can[keyPath: canKeys[key]!] = false }
+        agent.can = can
+        agent.because = limits
         return agent
     }
 }
+
+/// Each `can` entry by its name in the contract. `resume` is false here: a launched agent is running.
+let canKeys: [String: WritableKeyPath<Can, Bool>] = ["send": \.send, "steer": \.steer, "queue": \.queue, "interrupt": \.interrupt,
+                                                    "model": \.model, "mode": \.mode, "effort": \.effort, "resume": \.resume]
 
 /// One agent something launched: its driver and its held queue, on one queue (the engine's main queue). Events from
 /// the driver are folded here, and a held message goes out when a turn ends.
@@ -113,11 +118,29 @@ final class Launched {
     /// Folds one event; a message held for the next turn goes out when the turn it waited for ended.
     func record(_ event: AgentEvent) {
         if let next = queue.record(event, at: now()) {
-            // A program that stopped reading takes nothing more; its end comes as `stopped`.
-            try? driver.deliver(next.text, steer: false)
+            do { try driver.deliver(next.text, steer: false) } catch {
+                // The program stopped reading; its end comes as `stopped`, but the message must not vanish unsaid.
+                _ = queue.record(.error(AgentError(code: "AGENT_ERROR", message: "The held message “\(Launched.short(next.text))” was not sent: the agent stopped reading.")), at: now())
+            }
         }
         changed()
     }
+
+    /// What a native window shows for `request`, while the state still lists it: a request the fold closed (the
+    /// agent stopped, Claude withdrew it) is closed, whatever the driver still holds.
+    func prompt(_ request: String) -> Prompt? {
+        guard queue.fold.requests.contains(where: { $0.id == request }) else { return nil }
+        return driver.prompt(request)
+    }
+
+    /// Answers `request` when it is still open. Returns false when it was not. Throws as Driver.answer.
+    func answer(_ request: String, _ answer: Answer) throws -> Bool {
+        guard prompt(request) != nil else { return false }
+        return try driver.answer(request, answer)
+    }
+
+    /// The start of a message, to name it in a sentence.
+    static func short(_ text: String) -> String { text.count > 40 ? String(text.prefix(40)) + "…" : text }
 
     /// `send` of contract 4.1. Returns the delivery. Throws AGENT_STOPPED, BAD_PARAMS for an unknown `when`.
     func send(_ text: String, when: String) throws -> String {

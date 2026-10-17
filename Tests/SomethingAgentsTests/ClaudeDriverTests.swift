@@ -1,7 +1,8 @@
 // ClaudeDriver, replayed over Tests/Exchanges/claude: each file is an exchange recorded in trial T-1 against the real
 // claude program and a fake model (invented text, paths made /Users/example), with the calls something made in
 // between. The replay runs Launched, the code the engine runs, with no process: Claude's lines go in, and every line
-// the driver writes must be the next one the exchange recorded ("*" matches any uuid something made up).
+// the driver writes must be the next one the exchange recorded ("*" matches any uuid something made up; "*<uuid>"
+// also stands for it in Claude's later lines, which named the uuid of the recording).
 import Foundation
 import Testing
 @testable import SomethingAgents
@@ -10,6 +11,8 @@ import SomethingCore
 final class Replay {
     var written: [Data] = []
     var agent: Launched!
+    /// Recorded uuid → the one something made up this time.
+    var bound: [String: String] = [:]
 
     init(mode: String = "default") {
         let launch = Launch(agent: "claude-1", folder: "/Users/example/shop", mode: mode, thread: "5b2e0000-0000-4000-8000-000000000001")
@@ -26,7 +29,9 @@ final class Replay {
     }
 
     func feed(_ frame: [String: Any]) {
-        agent.driver.receive(try! JSONSerialization.data(withJSONObject: frame))
+        var line = String(decoding: try! JSONSerialization.data(withJSONObject: frame), as: UTF8.self)
+        for (recorded, made) in bound { line = line.replacingOccurrences(of: recorded, with: made) }
+        agent.driver.receive(Data(line.utf8))
     }
 
     /// Plays an exchange file; each mismatch is an issue that names the file and the line.
@@ -44,7 +49,7 @@ final class Replay {
                 guard read < replay.written.count else { Issue.record("\(at): nothing was written"); continue }
                 let actual = replay.lines(from: read)[0]
                 read += 1
-                #expect(Replay.matches(expected, actual), "\(at): wrote \(String(decoding: replay.written[read - 1], as: UTF8.self))")
+                #expect(replay.matches(expected, actual), "\(at): wrote \(String(decoding: replay.written[read - 1], as: UTF8.self))")
             }
             if let text = row["send"] as? String {
                 #expect(try replay.agent.send(text, when: row["when"] as! String) == row["delivery"] as! String, "\(at)")
@@ -53,7 +58,7 @@ final class Replay {
             if let request = row["answer"] as? String {
                 let with: Answer = row["with"] as? String == "once" ? .once : row["with"] as? String == "deny" ? .deny
                     : .choice(row["with"] as? [[String]] ?? [])
-                #expect(try replay.agent.driver.answer(request, with), "\(at): the request was not open")
+                #expect(try replay.agent.answer(request, with), "\(at): the request was not open")
             }
             if let set = row["set"] as? [String: String] {
                 #expect(try replay.agent.driver.set(model: set["model"], mode: set["mode"], effort: nil) == row["applied"] as? String, "\(at)")
@@ -76,13 +81,16 @@ final class Replay {
         if let queue = check["queue"] as? [String] { #expect(agent.queue.map(\.text) == queue, "\(at)") }
     }
 
-    /// Equal JSON, but for the string "*", which matches any string.
-    static func matches(_ expected: Any, _ actual: Any) -> Bool {
+    /// Equal JSON, but for a string starting with "*", which matches any string ("*<uuid>" binds that uuid to it).
+    func matches(_ expected: Any, _ actual: Any) -> Bool {
         switch (expected, actual) {
         case (let e as [String: Any], let a as [String: Any]):
             return Set(e.keys) == Set(a.keys) && e.allSatisfy { key, value in matches(value, a[key]!) }
         case (let e as [Any], let a as [Any]): return e.count == a.count && zip(e, a).allSatisfy { matches($0, $1) }
-        case (let e as String, let a as String): return e == "*" || e == a
+        case (let e as String, let a as String):
+            guard e.hasPrefix("*") else { return e == a }
+            if e.count > 1 { bound[String(e.dropFirst())] = a }
+            return true
         default: return (expected as? NSObject) == (actual as? NSObject)
         }
     }
@@ -143,6 +151,16 @@ final class Replay {
         let replay = try Replay.play("interrupt")
         #expect(replay.fold.turns.last?.state == "interrupted")
         #expect(replay.fold.agent.error == nil, "an interrupt the person asked for is no error")
+        // Claude cancels the message it had read with its turn: it stays in the thread.
+        #expect(replay.items.first?.text == "Please run-sleep for me.")
+    }
+
+    /// Recorded in T-1: the steer Claude still held is cancelled by the interrupt (`cancel_queued`) before it started.
+    @Test func aSteerDroppedByAnInterrupt() throws {
+        let replay = try Replay.play("steer-interrupt")
+        #expect(replay.items.filter { $0.author == "person" }.map(\.text) == ["Please run-sleep for me."], "a steer never read is never shown")
+        #expect(replay.fold.turns.map(\.state) == ["interrupted"])
+        #expect(replay.fold.agent.error == nil, "the person asked for it")
     }
 
     @Test func withdrawn() throws {
@@ -154,7 +172,7 @@ final class Replay {
     @Test func setModeAndModel() throws {
         let replay = try Replay.play("set")
         #expect(replay.fold.agent.mode == "plan")
-        #expect(replay.fold.agent.model == "opus")
+        #expect(replay.fold.agent.model == nil, "set_model's success names no model: the alias asked for is not shown")
         #expect(replay.fold.agent.options.model?.map(\.value) == ["default", "sonnet"])
         #expect(replay.fold.agent.options.mode?.map(\.value) == ["default", "acceptEdits", "plan", "auto", "dontAsk"])
     }
@@ -173,7 +191,7 @@ final class Replay {
         let command = ClaudeDriver.command(launch)
         #expect(command.arguments == ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                                       "--permission-prompt-tool", "stdio", "--include-hook-events", "--permission-mode", "default",
-                                      "--session-id", "5b2e0000-0000-4000-8000-000000000001", "--model", "sonnet"])
+                                      "--session-id", "5b2e0000-0000-4000-8000-000000000001", "--model=sonnet"])
         #expect(command.adding == ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"])
         #expect(command.removing == ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
         #expect(!ClaudeDriver.modes.contains { $0.value == "bypassPermissions" })
@@ -236,9 +254,9 @@ final class Replay {
     @Test func aRefusedSettingIsTheAgentsError() throws {
         let replay = Replay()
         _ = try replay.agent.driver.set(model: nil, mode: "plan", effort: nil)
-        replay.feed(["type": "control_response", "response": ["subtype": "error", "request_id": "something-1",
+        replay.feed(["type": "control_response", "response": ["subtype": "error", "request_id": "something-2",
                                                               "error": "Invented: cannot set permission mode.", "error_code": "invalid_mode"]])
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Invented: cannot set permission mode."))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Claude Code refused the new mode: Invented: cannot set permission mode."))
         #expect(replay.fold.agent.mode == nil, "only what Claude confirms is shown")
         #expect(throws: CodedError.self) { try replay.agent.driver.set(model: nil, mode: nil, effort: "low") }
     }
@@ -260,6 +278,56 @@ final class Replay {
         other.agent.ended(code: 143, errors: "", asked: true)
         #expect(other.fold.agent.error == nil, "a stop something asked for is no failure")
         #expect(other.fold.agent.state == "done")
+    }
+
+    @Test func aSubagentsModelIsNotTheAgents() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "assistant", "uuid": "u1", "parent_tool_use_id": NSNull(), "message": ["model": "claude-example", "content": [["type": "text", "text": "Invented."]]]])
+        replay.feed(["type": "assistant", "uuid": "u2", "parent_tool_use_id": "toolu_x", "message": ["model": "claude-other", "content": [["type": "text", "text": "Invented, deeper."]]]])
+        #expect(replay.fold.agent.model == "claude-example")
+        #expect(replay.items.last?.kind == "subagent")
+    }
+
+    /// A steer is shown once Claude takes it in; one Claude drops unread is never shown, and is an error unless an
+    /// interrupt asked for it.
+    @Test func aSteerIsShownOnceClaudeReadsIt() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        #expect(try replay.agent.send("Steered: invented.", when: "now") == "steered")
+        let steer = try #require(replay.lines().last?["uuid"] as? String)
+        #expect(replay.items.map(\.text) == ["Hello."])
+        replay.feed(["type": "command_lifecycle", "command_uuid": steer, "state": "queued"])
+        replay.feed(["type": "command_lifecycle", "command_uuid": steer, "state": "started"])
+        #expect(replay.items.map(\.text) == ["Hello.", "Steered: invented."])
+
+        #expect(try replay.agent.send("Steered: dropped.", when: "now") == "steered")
+        let dropped = try #require(replay.lines().last?["uuid"] as? String)
+        replay.feed(["type": "command_lifecycle", "command_uuid": dropped, "state": "discarded"])
+        #expect(replay.items.map(\.text) == ["Hello.", "Steered: invented."])
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Claude Code dropped the message “Steered: dropped.” without reading it."))
+    }
+
+    @Test func aRequestClosesWithTheAgentsEnd() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Please run-echo now.", when: "next")
+        replay.feed(["type": "control_request", "request_id": "p-1", "request": ["subtype": "can_use_tool", "tool_name": "Bash", "tool_use_id": "toolu_example", "input": ["command": "echo invented"]]])
+        #expect(replay.agent.prompt("claude-1:p-1") != nil)
+        replay.agent.ended(code: 0, errors: "", asked: true)
+        #expect(replay.agent.prompt("claude-1:p-1") == nil, "nobody is left to answer it: its window closes")
+        #expect(try replay.agent.answer("claude-1:p-1", .once) == false)
+    }
+
+    @Test func aChoiceAnswersEveryQuestion() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Please ask-me something.", when: "next")
+        replay.feed(["type": "control_request", "request_id": "q-1", "request": ["subtype": "can_use_tool", "tool_name": "AskUserQuestion", "tool_use_id": "toolu_example",
+                     "input": ["questions": [["question": "Which colour?", "options": [["label": "Blue"]]], ["question": "Which size?", "options": [["label": "Small"]]]]]]])
+        let written = replay.written.count
+        #expect(throws: CodedError("BAD_PARAMS", "Answer each of the 2 questions, in their order.")) { try replay.agent.answer("claude-1:q-1", .choice([["Blue"]])) }
+        #expect(replay.written.count == written, "nothing is sent")
+        #expect(replay.agent.prompt("claude-1:q-1") != nil, "the question is still open")
     }
 
     @Test func aDecisionByARuleIsShown() throws {

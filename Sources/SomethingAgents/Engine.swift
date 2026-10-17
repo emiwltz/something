@@ -85,12 +85,13 @@ public final class Engine {
     public var limits: [String: [String]] { Engine.drivers.mapValues { $0.limits.keys.sorted() } }
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
-    public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.driver.prompt(request) }.first }
+    public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }
 
-    /// The person's answer, from a native window. A request that closed meanwhile is left as it is.
+    /// The person's answer, from a native window. A request that closed meanwhile is left as it is, and so is one
+    /// the answer does not fit (its window stays open).
     public func answer(_ request: String, _ answer: Answer) {
-        guard let agent = launched.first(where: { $0.agent.driver.prompt(request) != nil })?.agent else { return }
-        _ = try? agent.driver.answer(request, answer)
+        guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return }
+        _ = try? agent.answer(request, answer)
     }
 
     // What a space asks through the bridge (SomethingCore/Bridge.swift checked the call first). Each throws a
@@ -110,12 +111,16 @@ public final class Engine {
     }
 
     /// Starts an agent of `kind` in `folder` and returns its id. Throws NOT_SUPPORTED for a kind without a driver or
-    /// a value its kind never takes, VALUE_NOT_OFFERED for a mode it does not offer (never one that skips every
-    /// permission), NOT_INSTALLED, INTERPRETER_NOT_FOUND, LAUNCH_FAILED.
+    /// a value its kind never takes, BAD_PARAMS for an empty model or one that starts with "-", VALUE_NOT_OFFERED for a
+    /// mode it does not offer (never one that skips every permission), NOT_INSTALLED, INTERPRETER_NOT_FOUND,
+    /// LAUNCH_FAILED.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
         guard let type = Engine.drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
         for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
             if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
+        }
+        if let model, model.isEmpty || model.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
         }
         if let mode, !type.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
