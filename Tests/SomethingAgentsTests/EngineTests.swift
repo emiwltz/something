@@ -1,6 +1,6 @@
-// Engine for launched agents, end to end, with a fake `claude`: a /bin/sh script in a throwaway folder that speaks
-// the stream-json lines of the real one (keys as recorded in Tests/Exchanges/claude, text invented) and writes the
-// arguments and environment it was given to a file, so the launch line can be checked.
+// Engine for launched agents, end to end, with a fake `claude` and a fake `codex`: /bin/sh scripts in a throwaway
+// folder that speak the lines of the real ones (keys as recorded in Tests/Exchanges, text invented) and write the
+// arguments (and environment) they were given to a file, so the launch line can be checked.
 import Foundation
 import Testing
 @testable import SomethingAgents
@@ -28,6 +28,29 @@ import SomethingCore
     done
     """#
 
+    /// A fake `codex app-server`: answers each call by its id, as 0.163.0 does (Tests/Exchanges/codex), text invented.
+    static let fakeCodex = #"""
+    #!/bin/sh
+    printf '%s\n' "$@" > "$FAKE_OUT/arguments"
+    thread='"threadId":"01a14bae-0000-7000-8000-000000000001"'
+    while IFS= read -r line; do
+      id=$(printf '%s' "$line" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
+      case "$line" in
+        *'"method":"initialize"'*) echo "{\"id\":$id,\"result\":{\"userAgent\":\"something/0.163.0\"}}" ;;
+        *'"method":"thread/start"'*) echo "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"01a14bae-0000-7000-8000-000000000001\"},\"model\":\"fake-model\",\"approvalPolicy\":\"untrusted\",\"reasoningEffort\":null}}" ;;
+        *'"method":"model/list"'*) echo "{\"id\":$id,\"result\":{\"data\":[{\"id\":\"fake-model\",\"model\":\"fake-model\",\"displayName\":\"Fake\",\"hidden\":false,\"supportedReasoningEfforts\":[{\"reasoningEffort\":\"low\",\"description\":\"Invented.\"}]}]}}" ;;
+        *'"method":"turn/start"'*)
+          echo "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"t1\",\"status\":\"inProgress\",\"items\":[]}}}"
+          echo "{\"method\":\"thread/status/changed\",\"params\":{$thread,\"status\":{\"type\":\"active\",\"activeFlags\":[]}}}"
+          echo "{\"method\":\"turn/started\",\"params\":{$thread,\"turn\":{\"id\":\"t1\",\"status\":\"inProgress\"}}}"
+          echo "{\"method\":\"item/completed\",\"params\":{$thread,\"item\":{\"type\":\"userMessage\",\"id\":\"u1\",\"content\":[{\"type\":\"text\",\"text\":\"Hello.\"}]}}}"
+          echo "{\"method\":\"item/completed\",\"params\":{$thread,\"item\":{\"type\":\"agentMessage\",\"id\":\"m1\",\"text\":\"Invented reply.\",\"phase\":null}}}"
+          echo "{\"method\":\"thread/status/changed\",\"params\":{$thread,\"status\":{\"type\":\"idle\"}}}"
+          echo "{\"method\":\"turn/completed\",\"params\":{$thread,\"turn\":{\"id\":\"t1\",\"status\":\"completed\"}}}" ;;
+      esac
+    done
+    """#
+
     final class Place {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("engine-\(UUID().uuidString)")
         var bin: URL { root.appendingPathComponent("bin") }
@@ -43,6 +66,9 @@ import SomethingCore
             let program = bin.appendingPathComponent("claude")
             try EngineTests.fake.write(to: program, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+            let codex = bin.appendingPathComponent("codex")
+            try EngineTests.fakeCodex.write(to: codex, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codex.path)
         }
 
         deinit { try? FileManager.default.removeItem(at: root) }
@@ -67,8 +93,9 @@ import SomethingCore
         #expect(engine.state.agents.map(\.id) == [id])
         #expect(engine.state.kinds["claude"]?.launch == true)
         #expect(engine.state.kinds["claude"]?.tested == ClaudeDriver.tested)
-        #expect(engine.state.kinds["codex"]?.launch == false)
-        #expect(engine.limits["claude"] == nil, "Claude has no limit left")
+        #expect(engine.state.kinds["codex"]?.launch == true)
+        #expect(engine.state.kinds["opencode"]?.launch == false)
+        #expect(engine.limits["claude"] == nil && engine.limits["codex"] == nil, "Claude and Codex have no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -93,6 +120,29 @@ import SomethingCore
         #expect(throws: CodedError("AGENT_STOPPED", "The agent has ended; launch or resume it to go on.")) {
             try engine.deliver("Late.", to: id, when: "next")
         }
+    }
+
+    /// Codex through the engine: launched with its mode, a turn, its input closed at the stop, which ends it cleanly.
+    @Test func aLaunchedCodexTalksAndStops() async throws {
+        let place = try Place()
+        #expect(try Programs(environment: place.environment).find("codex").path == place.bin.appendingPathComponent("codex").path)
+        let engine = Engine(environment: place.environment)
+        let id = try engine.launch("codex", folder: place.work.path, model: nil, mode: "untrusted", effort: nil)
+        #expect(id == "codex-1")
+        try await until("the thread") { engine.state.agents.first?.thread != nil && engine.state.agents.first?.options.model != nil }
+        #expect(engine.state.agents.first?.mode == "untrusted")
+        #expect(engine.state.agents.first?.options.effort?.map(\.value) == ["low"])
+        #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
+        try await until("the reply") { engine.state.threads.first?.turns.first?.state == "done" }
+        #expect(engine.state.threads.first?.turns.first?.items.map(\.text) == ["Hello.", "Invented reply."])
+        #expect(try engine.set(id, model: nil, mode: "on-request", effort: nil) == "next-turn")
+        let arguments = try String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8)
+        #expect(arguments == "app-server\n")
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+        #expect(engine.state.agents.first?.state == "done")
+        #expect(engine.state.agents.first?.error == nil)
     }
 
     /// The modes that make an agent ask less are confirmed by the person; an unknown mode is too.
@@ -135,7 +185,9 @@ import SomethingCore
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
         let engine = Engine(environment: place.environment)
-        #expect(throws: CodedError.self) { try engine.launch("codex", folder: place.work.path, model: nil, mode: nil, effort: nil) }
+        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch opencode yet.")) {
+            try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        }
         #expect(throws: CodedError("VALUE_NOT_OFFERED", "bypassPermissions is not a mode something offers for claude; pick one of default, acceptEdits, plan, auto, dontAsk.")) {
             try engine.launch("claude", folder: place.work.path, model: nil, mode: "bypassPermissions", effort: nil)
         }

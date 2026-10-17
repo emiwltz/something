@@ -1,7 +1,7 @@
 // The engine: every agent on this Mac in one contract 1 State, and the hands on the ones something launched.
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
-// agents: its public API is what the app may use. It drives the agents something launched (Claude Code so far), on
-// the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
+// agents: its public API is what the app may use. It drives the agents something launched (Claude Code and Codex so
+// far), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
 // Agents started elsewhere come with the readers (slices 16 to 18); until then resume answers NOT_SUPPORTED.
 import Foundation
 import SomethingCore
@@ -46,7 +46,7 @@ public final class Engine {
     }
 
     /// The kinds something can launch, by their driver.
-    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self]
+    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self]
 
     private let environment: [String: String]
     private let programs: Programs
@@ -164,11 +164,13 @@ public final class Engine {
     var spools = Spool.root
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
+    /// With `resume`, the program continues that conversation in `folder` (Codex only so far).
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
-                record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
+                resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let program = try programs.find(type.kind)
         count += 1
-        let launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
+        var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
+        if let resume { (launch.thread, launch.resume) = (resume, true) }
         let started = try start(type, launch, program, planB: planB, record: record)
         launched.append(started)
         changed()
@@ -186,6 +188,8 @@ public final class Engine {
                           environment: program.environment(environment, adding: command.adding, removing: command.removing))
         let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
         agent.changed = { [weak self] in self?.changed() }
+        // A Codex that cannot open its conversation is told to end.
+        (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
             claude.fallback = { [weak self, weak spawn] in
                 guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }

@@ -12,17 +12,21 @@ public struct Launch: Equatable, Sendable {
     public var agent: String
     public var folder: String
     public var model: String?, mode: String?, effort: String?
-    /// The conversation id the program starts with, when the driver picks it before the launch (Claude's --session-id).
+    /// The conversation id the program starts with, when the driver picks it before the launch (Claude's --session-id),
+    /// or the one it continues when `resume` is true.
     public var thread: String
+    /// Whether the launch continues the conversation `thread` instead of starting one.
+    public var resume: Bool
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
-                thread: String = UUID().uuidString.lowercased()) {
+                thread: String = UUID().uuidString.lowercased(), resume: Bool = false) {
         self.agent = agent
         self.folder = folder
         self.model = model
         self.mode = mode
         self.effort = effort
         self.thread = thread
+        self.resume = resume
     }
 }
 
@@ -43,6 +47,9 @@ public protocol Driver: AnyObject {
     static var modes: [Option] { get }
     /// Whether an effort can be set only when `options.effort` lists levels; false by default.
     static var effortOnlyWhenOffered: Bool { get }
+    /// Whether the launch picks the conversation id (`Launch.thread`) for the program; true by default. When false,
+    /// the thread is unknown until the program names it, unless the launch resumes one.
+    static var picksThread: Bool { get }
     static func command(_ launch: Launch) -> Command
 
     /// `write` hands one whole line (without its newline) to the program and throws AGENT_STOPPED once it no longer
@@ -73,13 +80,14 @@ public protocol Driver: AnyObject {
 
 extension Driver {
     public static var effortOnlyWhenOffered: Bool { false }
+    public static var picksThread: Bool { true }
 
     /// A launched agent before its first event: everything it can do, but for its kind's limits.
     static func fresh(_ launch: Launch) -> Agent {
         var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
         agent.folder = launch.folder
         agent.name = (launch.folder as NSString).lastPathComponent
-        agent.thread = launch.thread
+        agent.thread = picksThread || launch.resume ? launch.thread : nil
         var can = Can()
         for key in ["send", "steer", "queue", "interrupt", "model", "mode", "effort"] { can[keyPath: canKeys[key]!] = true }
         // A key outside `canKeys` is a typo in a driver: it must fail the tests, not be dropped.
