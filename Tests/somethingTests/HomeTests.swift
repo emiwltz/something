@@ -253,6 +253,39 @@ import Testing
         #expect(home.selected?.name == "board-2" && home.selected?.form == .folder)
         #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
+
+        // A grants file that does not read: the grant cannot be dropped, so nothing is written, and that is said.
+        try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
+        let before = try FileManager.default.contentsOfDirectory(atPath: test.places.spaces.path).sorted()
+        home.importChosen()
+        #expect(ask.told.count == 1 && ask.told.last?.hasPrefix("board.something was not imported. The grants in") == true, "\(ask.told)")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: test.places.spaces.path).sorted() == before, "no space left")
+        #expect(!FileManager.default.fileExists(atPath: Memory(folder: test.places.data, space: "board-3").file.path))
+    }
+
+    @Test func anExportNamesTheLinksItLeftOutAndRefusesALinkedMemory() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let folder = test.places.spaces.appendingPathComponent("board")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try page(nil, "<p>An invented board.</p>").write(to: folder.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        let outside = test.root.appendingPathComponent(".claude.json")
+        try #"{"note": "invented"}"#.write(to: outside, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("notes.json"), withDestinationURL: outside)
+        let saved = test.root.appendingPathComponent("board.something")
+        ask.saveTo = saved
+        let home = home(test, ask)
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        home.exportSelected()
+        #expect(FileManager.default.fileExists(atPath: saved.path))
+        #expect(ask.told == ["board was exported without notes.json: a link to somewhere else is never exported. Replace a link with the file itself to export it."])
+
+        try FileManager.default.removeItem(at: saved)
+        try FileManager.default.createDirectory(at: test.places.data, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: Memory(folder: test.places.data, space: "board").file, withDestinationURL: outside)
+        home.exportSelected()
+        #expect(ask.shown.isEmpty && !FileManager.default.fileExists(atPath: saved.path), "a linked memory is never read")
+        #expect(ask.told.count == 2 && ask.told[1].hasPrefix("board was not exported.") && ask.told[1].contains("is a link"), "\(ask.told)")
     }
 
     @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {
@@ -275,8 +308,18 @@ import Testing
         #expect(try AppFile.read(test.places.grants).spaces["notes"] != nil)
         // Deleted, or renamed, in Finder: the next look forgets its answers, so a new space of that name asks again.
         try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("notes.html"))
+        // A folder whose index.html is being rewritten, and a spaces folder that is not there, keep their answers.
+        let board = test.places.spaces.appendingPathComponent("board")
+        try FileManager.default.createDirectory(at: board, withIntermediateDirectories: true)
+        file = try AppFile.read(test.places.grants)
+        file.spaces["board"] = answered(declared: ["store"], granted: ["store"])
+        try file.write(test.places.grants)
         home.reload()
-        #expect(try AppFile.read(test.places.grants).spaces.isEmpty)
+        #expect(try AppFile.read(test.places.grants).spaces.keys.sorted() == ["board"])
+        try FileManager.default.removeItem(at: test.places.spaces)
+        home.reload()
+        #expect(try AppFile.read(test.places.grants).spaces.keys.sorted() == ["board"])
+        #expect(ask.told.count == 1, "\(ask.told)")
     }
 
     @Test func theStartMakesItsFoldersAndChoosesWhatToShow() throws {

@@ -333,5 +333,6 @@ await something.store.set("seen", [...seen, "a1"]);
   not, adds a line to its journal, shown in its card in Home. It never leaves the Mac.
 - **Export.** The person can export your space as one `.something` file (JSON: its files in base64, and its memory
   only if they choose so). It never carries the rights they gave, the journal, or anything read from an agent, and
-  a file of your space that is a link to somewhere else is left out. Keep a space under 20 MB and 500 files, or it
-  cannot be imported. On another Mac, the space asks for its rights again and fills with that Mac's agents.
+  a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
+  export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
+  exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.

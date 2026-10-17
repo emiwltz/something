@@ -122,7 +122,9 @@ final class NativeAsk: Asking {
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
         let alert = NSAlert()
         alert.messageText = "Export “\(space)” with its data?"
-        alert.informativeText = "Its memory holds \(keys.joined(separator: ", ")) (\(Size.words(bytes))). "
+        // Ten keys at most: a memory of hundreds would make the window taller than the screen.
+        let shown = keys.prefix(10).joined(separator: ", ") + (keys.count > 10 ? " and \(keys.count - 10) more" : "")
+        alert.informativeText = "Its memory holds \(shown) (\(Size.words(bytes))). "
             + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac."
         alert.addButton(withTitle: "Without data")
         alert.addButton(withTitle: "With its data").keyEquivalent = ""

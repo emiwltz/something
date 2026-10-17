@@ -2,6 +2,7 @@
 // the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
 // Make default and Show in Finder act on the selected space; Import makes a new one; New is shown, disabled, until it
 // exists. A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
+// A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it).
 import AppKit
 import SomethingCore
 
@@ -46,27 +47,36 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         let kept = (selected?.name, selectedSample?.name)
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
-        do {
-            preferred = try Home.forgetGone(places).default
-            told = nil
-        } catch {
-            preferred = nil
-            let message = (error as? SpaceError)?.message ?? "\(error)"
-            if message != told { ask.tell(message) }
-            told = message
-        }
+        preferred = forgetGone()
         Home.reselect(table, spaces, kept.0)
         Home.reselect(sampleTable, samples, kept.1)
         exampleSection.forEach { $0.isHidden = samples.isEmpty }
         update()
     }
 
-    /// Drops the grants of every name that no longer is a space of the spaces folder (deleted, or renamed in Finder),
-    /// and returns the grants file. Throws a `SpaceError` when the file does not read or cannot be written.
+    /// Drops the grants of the spaces that are gone and returns the default space's name, or nil. A grants file
+    /// that does not read or cannot be written is said once, until it reads again: reload runs at each look.
     @discardableResult
+    func forgetGone() -> String? {
+        do {
+            let file = try Home.forgetGone(places)
+            told = nil
+            return file.default
+        } catch {
+            let message = (error as? SpaceError)?.message ?? "\(error)"
+            if message != told { ask.tell(message) }
+            told = message
+            return nil
+        }
+    }
+
+    /// Drops the grants of every name whose file and folder are both gone from the spaces folder (deleted, or renamed
+    /// in Finder), and returns the grants file. A spaces folder that cannot be listed drops nothing.
+    /// Throws a `SpaceError` when the grants file does not read or cannot be written.
     static func forgetGone(_ places: Places) throws -> AppFile {
         var file = try AppFile.read(places.grants)
-        let gone = file.spaces.keys.filter { Spaces(root: places.spaces).named($0) == nil }
+        guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return file }
+        let gone = file.spaces.keys.filter { !there.contains($0) && !there.contains("\($0).html") }
         guard !gone.isEmpty else { return file }
         gone.forEach { file.spaces[$0] = nil }
         try file.write(places.grants)
@@ -107,9 +117,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     @objc func exportSelected() {
         guard let space = selected else { return }
         do {
-            let memory = try Memory(folder: places.data, space: space.name).get("") as? [String: Any] ?? [:]
             var data: [String: Any]?
-            if !memory.isEmpty {
+            if let memory = try Export.memory(space.name, in: places.data) {
                 let bytes = try JSONSerialization.data(withJSONObject: memory, options: .sortedKeys).count
                 guard let with = ask.withData(space.name, keys: memory.keys.sorted(), bytes: bytes) else { return }
                 data = with ? memory : nil
@@ -119,23 +128,29 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             do { try document.write(to: url, options: .atomic) } catch {
                 throw SpaceError("The export could not be written to \(url.path): \(error.localizedDescription)")
             }
+            let links = Export.links(space)
+            if !links.isEmpty {
+                ask.tell("\(space.name) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
+            }
         } catch {
             ask.tell("\(space.name) was not exported. \(Home.words(error))")
         }
     }
 
     /// Reads a .something file the person chooses and makes it a new space, selected. It has no grant: what the
-    /// grants file kept for its name is dropped first, so it asks for its rights at its first opening (contract 5).
+    /// grants file kept for the name it gets is dropped before anything is written, so a grants file that cannot be
+    /// changed leaves no space, and the space asks for its rights at its first opening (contract 5).
     @objc func importChosen() {
         guard let url = ask.importFile() else { return }
         do {
-            let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            guard bytes <= Export.limit else { throw CodedError("IMPORT_TOO_BIG", "This file weighs \(Size.words(bytes)); an import takes at most 20 MB.") }
-            let received = try Export.read(try Data(contentsOf: url))
-            try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
-            let space = try Export.place(received, in: Spaces(root: places.spaces), memory: places.data)
+            // Mapped, not loaded: a huge file is refused by Export.read for its size without being read.
+            let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))
+            let folder = Spaces(root: places.spaces)
+            let name = try Export.freeName(received, in: folder, memory: places.data)
             var file = try AppFile.read(places.grants)
-            if file.spaces.removeValue(forKey: space.name) != nil { try file.write(places.grants) }
+            if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
+            try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
+            let space = try Export.place(received, as: name, in: folder, memory: places.data)
             reload()
             if let row = spaces.firstIndex(where: { $0.name == space.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
         } catch {

@@ -31,6 +31,11 @@ import Testing
         return try JSONSerialization.data(withJSONObject: object)
     }
 
+    /// Places `received` under the name an import gives it.
+    func place(_ received: Received, _ place: Place) throws -> Space {
+        try Export.place(received, as: try Export.freeName(received, in: place.spaces, memory: place.data), in: place.spaces, memory: place.data)
+    }
+
     func code(_ document: Data) -> String? {
         do { _ = try Export.read(document); return nil } catch { return (error as? CodedError)?.code ?? "\(error)" }
     }
@@ -65,7 +70,7 @@ import Testing
         #expect(object["exported"] as? String == "2026-10-17T12:00:00Z" && object["app"] as? String == "1.0.0-test")
         #expect(object["data"] is NSNull && object["form"] as? String == "file" && object["contract"] as? Int == 1)
 
-        let placed = try Export.place(try Export.read(document), in: to.spaces, memory: to.data)
+        let placed = try place(try Export.read(document), to)
         #expect(placed == to.spaces.named("morning-review"))
         #expect(try Data(contentsOf: placed.location) == Data(contentsOf: space.location))
         #expect(to.everything == ["something", "something/spaces", "something/spaces/morning-review.html"], "no memory, no staging folder left")
@@ -85,10 +90,37 @@ import Testing
 
         let received = try Export.read(try Export.document(space, data: data, app: "1.0.0-test"))
         #expect(received.files.keys.sorted() == ["img/logo.svg", "index.html"], "a hidden file is not part of the space")
-        let placed = try Export.place(received, in: to.spaces, memory: to.data)
+        let placed = try place(received, to)
         #expect(placed.form == .folder && placed.files().map(\.path) == ["img/logo.svg", "index.html"])
         for file in space.files() { #expect(try Data(contentsOf: placed.location.appendingPathComponent(file.path)) == Data(contentsOf: file.url)) }
         #expect(try Memory(folder: to.data, space: "board").get("") as? NSDictionary == data as NSDictionary)
+    }
+
+    @Test func aFileSpaceMakesTheRoundTripWithItsData() throws {
+        let from = Place(), to = Place()
+        defer { from.remove(); to.remove() }
+        try from.write("<!doctype html><title>Invented</title>", "something/spaces/today.html")
+        try Memory(folder: from.data, space: "today").set("done", ["Water the invented plant"])
+        let space = try #require(from.spaces.named("today"))
+        let data = try #require(try Export.memory("today", in: from.data))
+        let placed = try place(try Export.read(try Export.document(space, data: data, app: "1.0.0-test")), to)
+        #expect(placed.form == .file && placed.name == "today")
+        #expect(try Data(contentsOf: placed.location) == Data(contentsOf: space.location))
+        #expect(try Memory(folder: to.data, space: "today").get("done") as? [String] == ["Water the invented plant"])
+        #expect(try Export.memory("nothing", in: from.data) == nil, "no memory: nothing to carry")
+    }
+
+    @Test func anExportTooBigOrWithTooManyFilesIsRefusedBeforeItIsSaved() throws {
+        let place = Place()
+        defer { place.remove() }
+        try place.write("<p>invented</p>", "something/spaces/many/index.html")
+        for index in 1...500 { try place.write("// \(index)", "something/spaces/many/f\(index).js") }
+        #expect(throws: SpaceError.self) { try Export.document(try #require(place.spaces.named("many")), data: nil, app: "1.0.0-test") }
+
+        try place.write("<p>invented</p>", "something/spaces/heavy/index.html")
+        // 15.1 MB of files weigh over 20 MB in base64.
+        try Data(count: 15_100_000).write(to: place.spaces.root.appendingPathComponent("heavy/video.bin"))
+        #expect(throws: SpaceError.self) { try Export.document(try #require(place.spaces.named("heavy")), data: nil, app: "1.0.0-test") }
     }
 
     @Test func everyHostileDocumentIsRefusedWithItsReason() throws {
@@ -110,6 +142,8 @@ import Testing
             ("IMPORT_UNSAFE_PATH", try document { $0["files"] = ["index.html": x, "./index.html": x] }),
             ("IMPORT_UNSAFE_PATH", try document { $0["files"] = ["index.html": x, "img/": x] }),
             ("IMPORT_UNSAFE_PATH", try document { $0["files"] = ["index.html": x, "": x] }),
+            ("IMPORT_UNSAFE_PATH", try document { $0["files"] = ["index.html": x, ".git/config": x] }),
+            ("IMPORT_UNSAFE_PATH", try document { $0["files"] = ["index.html": x, "img/.hidden.js": x] }),
             ("IMPORT_TOO_BIG", try document { object in
                 object["files"] = Dictionary(uniqueKeysWithValues: (0...500).map { ("f\($0).js", x) }) }),
             ("IMPORT_TOO_BIG", Data(count: Export.limit + 1)),
@@ -123,14 +157,15 @@ import Testing
         defer { place.remove() }
         try place.write("<p>mine</p>", "something/spaces/notes/index.html")
         try place.write("{\"kept\": true}", "something/data/notes-2.json")
-        let placed = try Export.place(try Export.read(try document()), in: place.spaces, memory: place.data)
+        let placed = try self.place(try Export.read(try document()), place)
         #expect(placed.name == "notes-3", "notes is a space, and notes-2 a memory left behind: neither is taken over")
         #expect(try String(contentsOf: place.root.appendingPathComponent("something/spaces/notes/index.html"), encoding: .utf8) == "<p>mine</p>")
 
         let before = place.everything
         let heavy = try Export.read(try document { $0["data"] = ["text": String(repeating: "a", count: Memory.limit)] })
-        #expect(throws: CodedError.self) { try Export.place(heavy, in: place.spaces, memory: place.data) }
+        #expect(throws: CodedError.self) { try self.place(heavy, place) }
         #expect(place.everything == before)
+        #expect(throws: SpaceError.self, "a name taken in the meantime") { try Export.place(heavy, as: "notes", in: place.spaces, memory: place.data) }
     }
 
     /// Criterion 7: a space can link to an agent's session, but nothing of the session reaches its export.
@@ -149,10 +184,11 @@ import Testing
         try Memory(folder: place.data, space: "board").set("seen", ["a1"])
 
         let space = try #require(place.spaces.named("board"))
-        let data = try #require(try Memory(folder: place.data, space: "board").get("") as? [String: Any])
+        let data = try #require(try Export.memory("board", in: place.data))
         let document = try Export.document(space, data: data, app: "1.0.0-test")
         let received = try Export.read(document)
         #expect(received.files.keys.sorted() == ["index.html"])
+        #expect(Export.links(space) == ["claude", "session.jsonl"], "what was left out can be named")
         let everything = [document] + Array(received.files.values) + [try JSONSerialization.data(withJSONObject: received.data ?? [:])]
         for bytes in everything { #expect(!String(decoding: bytes, as: UTF8.self).contains("planted-7f3c")) }
 
@@ -161,5 +197,18 @@ import Testing
                                                    withDestinationURL: place.root.appendingPathComponent(session))
         let linked = try #require(place.spaces.named("linked"))
         #expect(throws: SpaceError.self) { try Export.document(linked, data: nil, app: "1.0.0-test") }
+
+        // A folder space whose index.html is a link to the session is refused too.
+        try place.write("<p>invented</p>", "something/spaces/relay/style.css")
+        try FileManager.default.createSymbolicLink(at: place.spaces.root.appendingPathComponent("relay/index.html"),
+                                                   withDestinationURL: place.root.appendingPathComponent(session))
+        let relay = try #require(place.spaces.named("relay"))
+        #expect(throws: SpaceError.self) { try Export.document(relay, data: nil, app: "1.0.0-test") }
+
+        // A memory that is a link to an agent's file (an invented ~/.claude.json) is refused, not read.
+        try place.write("{\"projects\": {\"note\": \"\(planted)\"}}", ".claude.json")
+        try FileManager.default.createSymbolicLink(at: place.data.appendingPathComponent("relay.json"),
+                                                   withDestinationURL: place.root.appendingPathComponent(".claude.json"))
+        #expect(throws: SpaceError.self) { try Export.memory("relay", in: place.data) }
     }
 }
