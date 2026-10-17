@@ -8,7 +8,7 @@ import WebKit
 let arguments = CommandLine.arguments
 
 final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMessageHandlerWithReply,
-                   WKNavigationDelegate, BridgeHost {
+                   WKNavigationDelegate, V1BridgeHost {
     // Until spaces exist, the window shows share/template.html, served as something://app/template.html.
     let page = "template"
     var pageStamp = Date.distantPast
@@ -130,7 +130,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         menu.addItem(withTitle: "Quit something", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
-    // MARK: BridgeHost: what the bridge asks of this shell
+    // MARK: V1BridgeHost: what the bridge asks of this shell
 
     static let harnesses = ["claude", "codex", "opencode", "pi"]
 
@@ -211,14 +211,14 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
 
     /// Tells the page the state changed; something.js passes it to the page's subscribers.
     func pushState() {
-        guard let data = try? JSONSerialization.data(withJSONObject: Bridge.json(state)) else { return }
+        guard let data = try? JSONSerialization.data(withJSONObject: V1Bridge.json(state)) else { return }
         web.evaluateJavaScript("window.something && something._changed(\(String(decoding: data, as: UTF8.self)))")
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
         let request = message.body as? [String: Any] ?? [:]
-        replyHandler(Bridge.answer(request, host: self), nil)
+        replyHandler(V1Bridge.answer(request, host: self), nil)
     }
 
     func fail(_ message: String) -> Never {

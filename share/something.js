@@ -1,35 +1,78 @@
-// The tools a page uses to talk to something. Plain JavaScript, no dependency.
-// The same file works in any host that implements the bridge (Bridge.swift):
-// today the Mac window, through WebKit's "something" message handler. Load it from something://app/something.js.
+// The bridge a space talks to something through: contract 1, section 4. Plain JavaScript, no dependency.
+// The engine injects it before the page's scripts, then calls _granted and _push. Any engine that answers the
+// transport of contract 4.4 can host it; on the Mac the transport is WebKit's "something" message handler.
 (function () {
-  const subscribers = [];
+  "use strict";
+  const listeners = { change: [], granted: [] };
+  let granted = { rights: [], refused: [], unavailable: [], limits: {}, agents: { folders: [] }, folder: null };
+  let next = 1;
+
+  // An Error with a code of contract 4.3, so a page can branch on .code and show .message.
+  function failure(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function host() {
+    const webkit = window.webkit;
+    return webkit && webkit.messageHandlers && webkit.messageHandlers.something;
+  }
 
   function call(method, params) {
-    const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.something;
+    const handler = host();
     if (!handler) {
-      return Promise.reject(new Error("No something host here. Open this page with the `something` command."));
+      return Promise.reject(failure("NO_HOST", "This page is not open in something; open the space in something to reach its agents."));
     }
-    return handler.postMessage({ method: method, params: params || {} }).then(function (answer) {
-      if (answer && "error" in answer) throw new Error(answer.error);
-      return answer.result;
+    return Promise.resolve(handler.postMessage({ contract: 1, id: next++, method: method, params: params }))
+      .then(function (answer) {
+        if (answer && answer.error) throw failure(answer.error.code, answer.error.message);
+        return answer && answer.result !== undefined ? answer.result : null;
+      });
+  }
+
+  // Keys left undefined are left out: the engine reads a missing key as "not given".
+  function given(params, values, keys) {
+    keys.forEach(function (key) { if (values && values[key] !== undefined) params[key] = values[key]; });
+    return params;
+  }
+
+  // A listener that throws must not stop the others; its error still reaches the console as uncaught.
+  function tell(event, value) {
+    listeners[event].slice().forEach(function (fn) {
+      try { fn(value); } catch (error) { setTimeout(function () { throw error; }); }
     });
   }
 
-  window.something = {
-    /** A snapshot of the whole state. What is not known is null. */
-    state: function () { return call("state"); },
-    /** Calls fn(state) each time the state changes. */
-    subscribe: function (fn) { subscribers.push(fn); },
-    /** Launches an agent; something asks the person for the folder. Resolves to the agent's id. */
-    launch: function (harness) { return call("launch", { harness: harness || "claude" }); },
-    /** Sends a message; something asks the person first. Rejects when they refuse. */
-    send: function (agent, text) { return call("send", { agent: agent, text: text }); },
-    /** The page's own memory, kept between launches: store.get(key), store.set(key, value). null removes. */
-    store: {
-      get: function (key) { return call("store.get", { key: key }); },
-      set: function (key, value) { return call("store.set", { key: key, value: value === undefined ? null : value }); },
+  const something = {
+    state: function () { return call("state", {}); },
+    on: function (event, fn) {
+      if (!Object.prototype.hasOwnProperty.call(listeners, event)) {
+        throw failure("UNKNOWN_EVENT", "something.on takes \"change\" or \"granted\", not " + JSON.stringify(event) + ".");
+      }
+      if (typeof fn !== "function") throw failure("BAD_PARAMS", "something.on needs a function to call.");
+      listeners[event].push(fn);
+      return function () {
+        const at = listeners[event].indexOf(fn);
+        if (at >= 0) listeners[event].splice(at, 1);
+      };
     },
-    /** Called by the host. Not for pages. */
-    _changed: function (state) { subscribers.forEach(function (fn) { fn(state); }); },
+    // Without `when` the engine holds the message for the next turn ("next", the default).
+    send: function (agent, text, options) { return call("send", given({ agent: agent, text: text }, options, ["when"])); },
+    interrupt: function (agent) { return call("interrupt", { agent: agent }); },
+    set: function (agent, values) { return call("set", given({ agent: agent }, values, ["model", "mode", "effort"])); },
+    launch: function (kind, options) { return call("launch", given({ kind: kind }, options, ["folder", "model", "mode", "effort"])); },
+    resume: function (kind, threadId) { return call("resume", { kind: kind, thread: threadId }); },
+    store: Object.freeze({
+      get: function (path) { return call("store.get", { path: path }); },
+      set: function (path, value) { return call("store.set", { path: path, value: value === undefined ? null : value }); },
+    }),
+    open: function (url) { return call("open", { url: url }); },
+    // For the engine only: a new state, and new rights (a revocation reaches an open space this way).
+    _push: function (state) { tell("change", state); },
+    _granted: function (value) { granted = value; tell("granted", value); },
   };
+  Object.defineProperty(something, "contract", { value: 1, enumerable: true });
+  Object.defineProperty(something, "granted", { get: function () { return granted; }, enumerable: true });
+  window.something = Object.freeze(something);
 })();

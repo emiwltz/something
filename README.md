@@ -50,14 +50,14 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 ## How it is made
 
 ```text
-share/                     what the window serves: something.js (the tools a page uses), template.html (the page shown), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
-Sources/SomethingCore/     contract 1's state (Contract, StateMap) beside V1's, the bridge, the page memory: Foundation only, so it can build on Linux and Windows; meant to name no agent (V1's state still does, until it goes)
-Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi)
-Sources/something/         the Mac app: menu bar, window, something:// pages, native windows; carries, asks, decides nothing
-Tests/                     SomethingCoreTests (with the budgets and the publishable scan) and SomethingAgentsTests
+share/                     what the window serves: something.js (contract 1's bridge for spaces), v1.js (the tools the template page still uses), template.html (the page shown), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
+Sources/SomethingCore/     contract 1: the state (Contract, StateMap, Events), spaces, declarations, rights, the bridge, memory and journal, codes. Foundation only, so it can build on Linux and Windows; it names no agent beyond the kinds a right may name
+Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi) and V1's state they still fill
+Sources/something/         the Mac app: menu bar, window, something:// pages, native windows, V1's bridge for the template page; carries, asks, decides nothing
+Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
 ```
 
-A page talks to something with one protocol: it sends `{"method": ..., "params": ...}` and gets `{"result": ...}` or `{"error": ...}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.
+A space talks to something with one protocol: it sends `{"contract": 1, "id": ..., "method": ..., "params": ...}` and gets `{"id": ..., "result": ...}` or `{"id": ..., "error": {"code": ..., "message": ...}}`; the template page still speaks V1's `{"method", "params"}` until the space window replaces it. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.
 
 This repository is local and private: it has no remote.
 

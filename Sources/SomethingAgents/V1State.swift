@@ -1,7 +1,13 @@
-// V1's state, still what the V1 drivers fill and the template page reads; Contract.swift is contract 1's.
-// The V1 prefix keeps both apart until the drivers move to events and this file goes.
-// Foundation only: this file must build on any platform Swift runs on.
+// V1's state and error, still what the V1 drivers fill and throw and the template page reads; Contract.swift is
+// contract 1's. It sits here, out of the core, so the V1 leftovers do not eat the core's budget; it goes when the
+// drivers move to events (slices 10 to 15).
 import Foundation
+
+/// A V1 failure, said in one sentence; contract 1 failures are `CodedError`s.
+public struct BridgeError: Error, Equatable {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+}
 
 public struct Message: Codable, Equatable, Sendable {
     /// "you" or "agent".
