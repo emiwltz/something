@@ -183,7 +183,7 @@ extension Declaration {
     }
 
     /// An absolute path for a declared one: `~` is `home`; nil for a relative path, which the contract does not allow.
-    static func expand(_ path: String, home: URL) -> String? {
+    public static func expand(_ path: String, home: URL) -> String? {
         if path == "~" { return home.path }
         if path.hasPrefix("~/") { return home.path + path.dropFirst() }
         return path.hasPrefix("/") ? path : nil

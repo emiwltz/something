@@ -1,0 +1,51 @@
+// The something:// scheme serves a space's own files and nothing else: no climbing out of its folder, by `..` or by
+// a link, no hidden file, no file next to a single-file space.
+import Foundation
+import SomethingCore
+import Testing
+@testable import something
+
+@Suite struct SchemeTests {
+    func url(_ text: String) -> URL { URL(string: text)! }
+
+    @Test func aFolderSpaceServesItsFilesOnly() throws {
+        let home = Home()
+        defer { home.remove() }
+        let folder = home.places.spaces.appendingPathComponent("board")
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("lib"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        for name in ["index.html", "lib/chart.js", "lib/index.html", ".git/config", ".env"] {
+            try "invented".write(to: folder.appendingPathComponent(name), atomically: true, encoding: .utf8)
+        }
+        let secret = home.root.appendingPathComponent("secret.txt")
+        try "invented secret".write(to: secret, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("out.txt"), withDestinationURL: secret)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("up"), withDestinationURL: home.root)
+        let scheme = Scheme(space: try #require(Spaces(root: home.places.spaces).named("board")))
+        let real = folder.resolvingSymlinksInPath()
+
+        #expect(scheme.page == url("something://space/"))
+        #expect(scheme.file(for: url("something://space/")) == real.appendingPathComponent("index.html"))
+        #expect(scheme.file(for: url("something://space/lib/chart.js")) == real.appendingPathComponent("lib/chart.js"))
+        #expect(scheme.file(for: url("something://space/lib/")) == real.appendingPathComponent("lib/index.html"))
+        for refused in ["something://space/../secret.txt", "something://space/%2e%2e/secret.txt", "something://space/lib/..%2F..%2Fsecret.txt",
+                        "something://space/out.txt", "something://space/up/secret.txt", "something://space/.git/config",
+                        "something://space/.env", "something://space/missing.js", "something://other/index.html",
+                        "https://space/index.html"] {
+            #expect(scheme.file(for: url(refused)) == nil, "\(refused)")
+        }
+    }
+
+    @Test func aSingleFileSpaceServesOnlyItself() throws {
+        let home = Home()
+        defer { home.remove() }
+        let space = try home.space("today", "<p>invented</p>")
+        try "invented".write(to: home.places.spaces.appendingPathComponent("other.html"), atomically: true, encoding: .utf8)
+        let scheme = Scheme(space: space)
+        #expect(scheme.page == url("something://space/today.html"))
+        #expect(scheme.file(for: url("something://space/today.html")) == space.location)
+        #expect(scheme.file(for: url("something://space/")) == space.location)
+        #expect(scheme.file(for: url("something://space/other.html")) == nil)
+        #expect(scheme.file(for: url("something://space/../spaces/other.html")) == nil)
+    }
+}

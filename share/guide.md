@@ -7,8 +7,8 @@ elsewhere, and shows **spaces**: HTML pages the person asked you to write. A das
 waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Later chapters add
 examples and the steps to try a space.
 
-*Status: something 1.0 is being built. The window of this repository still serves the earlier page
-(`share/template.html`); the engine that serves this contract comes in the next versions of the app.*
+*Status: something 1.0 is being built. The app opens a space and serves this contract, but it knows no agent yet:
+the state lists none and a launch answers `NOT_SUPPORTED` until the drivers arrive in the next versions.*
 
 Rules that hold everywhere:
 
@@ -241,6 +241,9 @@ says what to do): put the sentence on screen.
 | `something.open(url)` | true if the person opened the link, false if they cancelled. `https:`, `http:` or `mailto:`. | none |
 
 `on` with another event throws `UNKNOWN_EVENT` at once.
+
+A link the person clicks (`<a href="https://…">`, `http:` or `mailto:`) opens the same confirmation window by itself.
+Call `something.open` for a link your code opens, not from the click handler of such a link: that would ask twice.
 
 **`when` in `send`:**
 

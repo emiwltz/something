@@ -2,7 +2,7 @@
 
 A Mac app you start with one command in the terminal. It opens a real window, launches your coding agents through their official channels, always shows you their permission requests, and lets your own agent draw the interface you want in that window.
 
-It is young. Today it launches Claude Code, Codex, OpenCode or pi in a folder you choose, shows what they say, sends them your messages after asking you, and shows you their permission requests. Another agent that speaks ACP takes one line to add. The design file (in French, private) is the reference: https://claude.ai/artifact/GwPKPZoVZRASAzkF4ELbeR
+It is young. Today it opens a space (an HTML page) in a window locked off the network, asks you which rights the space may have, and answers it through `something.js`. Its engine is being rewritten: until the drivers arrive, it knows no agent, and a launch answers `NOT_SUPPORTED`. The design file (in French, private) is the reference: https://claude.ai/artifact/GwPKPZoVZRASAzkF4ELbeR
 
 It follows [something](https://github.com/emiwltz/something), which stays frozen as it is.
 
@@ -11,12 +11,9 @@ It follows [something](https://github.com/emiwltz/something), which stays frozen
 Needs a Mac with Apple's command line tools (`xcode-select --install`, free; already there if `git` works). Xcode itself is not needed. Then, for each agent you want to launch, that agent installed and signed in as you use it in a terminal: `claude`, `codex`, `opencode`, `pi`.
 
 ```sh
-swift run something                 # builds, then opens the window and the menu bar icon
-swift run something --self-test     # checks the window is on screen, ⌘V pastes, the page answers, its memory works, the network is closed
-swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
-# add --ask "<message>" to send your own; --answer once|deny answers its permission requests without a window,
-# --click "<button>" shows the windows and has something click that button itself; --force-ask makes Codex and OpenCode ask before acting; --model <model> picks OpenCode's or pi's model for the conversation
-swift test                          # the tests: core, agents, budgets, publishable scan (with Xcode installed; without it, see below)
+swift run something                 # builds, then opens the template space and the menu bar icon
+swift run something morning-review  # opens ~/something/spaces/morning-review.html (or its folder); a path works too
+swift test                          # the tests: core, agents, the app's window in WebKit, budgets, publishable scan (with Xcode installed; without it, see below)
 ```
 
 Nothing is signed with a paid Apple account: what is built on the machine itself is not blocked by macOS.
@@ -29,15 +26,21 @@ swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks
   -Xlinker -rpath -Xlinker $T/Frameworks -Xlinker -rpath -Xlinker $T/usr/lib
 ```
 
-## Pages
+## Spaces
 
-For now the window shows one page, `share/template.html`, a plain chat; spaces of your own, written by your coding agent, come next. The guide written for that agent is [share/guide.md](share/guide.md). The page reloads each time its file is saved. It loads its files from `something://` addresses and cannot reach the Internet. It has a small memory of its own, `~/something/data/template.json`; `--self-test` writes a key there and removes it, so the file stays.
+A space is an HTML page your coding agent writes: `~/something/spaces/<name>.html`, or a folder `<name>/index.html` with its own files. The guide written for that agent is [share/guide.md](share/guide.md). Without a space named on the command line, the window shows `share/template.html`, a plain chat.
 
-## The first page
+- **No network.** A space loads only its own files, served at `something://space/`, inline code, `data:` and `blob:`. Every other address is blocked, three times: a content security policy on every file, a content rule list, and a navigation policy that cancels every page change outside the space. `window.open` opens nothing.
+- **Links ask.** A link you click, or one the space opens with `something.open`, shows a window of the Mac: "Open", "Cancel" or "Block links until reload"; one at a time.
+- **Rights ask.** At the first opening, a window of the Mac lists what the space declares (see the agents, write to them, launch them, keep a memory), each to tick or not, and the folder its agents will work in. A folder that is not on this Mac is said, and you can choose another. Your answers are kept in `~/Library/Application Support/something/app.json`; afterwards something asks only for what the space adds. A mode that makes an agent ask less (accepting edits by itself, never asking) always asks you again.
+- **Its own storage.** `localStorage` works and is emptied when the window closes; no space reads another's. A space in `~/something/spaces` keeps a memory, `~/something/data/<name>.json`, and a journal of what it asked agents to do, next to the grants.
+- **Live.** The window reloads when a file of the space changes, and asks again if its declaration asks for more.
 
-In the window, "Launch Claude Code…", "Launch Codex…", "Launch OpenCode…" or "Launch pi…" asks for a folder, then the page shows the agent, its model and its messages. Each message you write is shown to you in a window of the Mac before it leaves ("Send", "Always for this agent", "Don't send"): a page can read, writing is your word. Closing the window keeps something in the menu bar with its agents; quitting stops them, after asking.
+Closing the window keeps something in the menu bar; quitting stops the agents it launched, after asking.
 
-When an agent asks before acting ("may it write hello.txt?", "may it run this command?"), something shows the question in a window of the Mac: "Allow once" or "Deny" (also Escape). There is no "always": something never writes a lasting rule into an agent's settings. An agent asks only what its own settings do not already allow (Claude's permission mode, Codex's approval policy, OpenCode's permissions), so your settings are respected as they are. The page shows that the agent waits, but cannot answer for you.
+## Agents (being rewritten)
+
+What follows is how the previous drivers launched each agent; the new engine (slices 10 to 18) keeps these channels. Every permission an agent asks will wait for your click in a window of the Mac, "Allow once" or "Deny": a space sees that the agent waits, and can never answer for you.
 
 Claude Code is launched as `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio`, the channel Anthropic's SDKs use (the last option is what the SDKs pass to receive permission requests; Claude's help does not list it). It runs with your own Claude Code settings, in the folder you chose, without `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` from your environment, so that it uses the account you signed in with.
 
@@ -50,20 +53,20 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 ## How it is made
 
 ```text
-share/                     what the window serves: something.js (contract 1's bridge for spaces), v1.js (the tools the template page still uses), template.html (the page shown), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
+share/                     something.js (contract 1's bridge, injected into every space), template.html (the space shown by default), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
 Sources/SomethingCore/     contract 1: the state (Contract, StateMap, Events), spaces, declarations, rights, the bridge, memory and journal, codes. Foundation only, so it can build on Linux and Windows; it names no agent beyond the kinds a right may name
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi) and V1's state they still fill
-Sources/something/         the Mac app: menu bar, window, something:// pages, native windows, V1's bridge for the template page; carries, asks, decides nothing
-Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
+Sources/something/         the Mac app: menu bar, the space window (something:// scheme, network lock, reload), its bridge host, native windows; carries, asks, decides nothing
+Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
 ```
 
-A space talks to something with one protocol: it sends `{"contract": 1, "id": ..., "method": ..., "params": ...}` and gets `{"id": ..., "result": ...}` or `{"id": ..., "error": {"code": ..., "message": ...}}`; the template page still speaks V1's `{"method", "params"}` until the space window replaces it. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.
+A space talks to something with one protocol: it sends `{"contract": 1, "id": ..., "method": ..., "params": ...}` and gets `{"id": ..., "result": ...}` or `{"id": ..., "error": {"code": ..., "message": ...}}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.
 
 This repository is local and private: it has no remote.
 
 ## Security
 
-something opens no port and listens on nothing: the window and the agents talk inside the app. A page cannot reach the Internet, and cannot draw the windows that ask you: every message to an agent, and every permission an agent asks, waits for your click. The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A page is code your agent wrote: read what you open.
+something opens no port and listens on nothing: the window and the agents talk inside the app. A space cannot reach the Internet, and cannot draw the windows that ask you: every right it has, every link it opens, every mode that makes an agent ask less, and every permission an agent asks, waits for your click. One gap is known: a link inside a closed shadow root (a part of a page hidden from scripts outside it), clicked by the page's own script, makes WebKit open one connection to the link's server before something cancels the visit; nothing is sent or received on it, but the server, and the name lookup before it, see that it happened. The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A page is code your agent wrote: read what you open.
 
 To report a weakness without making it public, use "Report a vulnerability" in the Security tab of the repository.
 
