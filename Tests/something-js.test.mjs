@@ -1,4 +1,4 @@
-// The tests of share/something.js, on node's own test runner, no dependency: `node --test Tests/`.
+// The tests of share/something.js, on node's own test runner, no dependency: `node --test Tests/something-js.test.mjs`.
 // Each case of share/contract/bridge/ is played through a fake host: the page's call must send exactly the
 // fixture's request, and the fixture's answer must come back as the result or as an error with its code.
 // This checks the JavaScript half of the contract on its own, whatever engine answers.
