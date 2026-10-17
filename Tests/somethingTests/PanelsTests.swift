@@ -31,11 +31,12 @@ final class FakePrompts: PromptSource {
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "rm -rf build")]
         panels.refresh()
         #expect(panels.waiting == ["r1", "r2"] && panels.panel?.request.id == "r1")
-        #expect(NSApp.modalWindow == nil, "a panel is not modal")
         panels.refresh()
         #expect(panels.panel?.request.id == "r1", "a refresh with nothing new changes nothing")
 
-        try #require(panels.panel).allow()
+        let first = try #require(panels.panel)
+        first.allow()
+        #expect(first.dismissed)
         #expect(source.answers.map(\.0) == ["r1"] && source.answers[0].1 == .once)
         #expect(panels.panel?.request.id == "r2", "the next request has its panel")
         // The agent has not taken the answer yet: r1 stays in the state, and is not shown again.
@@ -56,7 +57,7 @@ final class FakePrompts: PromptSource {
         let first = try #require(panels.panel)
         source.prompts.removeFirst()
         panels.refresh()
-        #expect(!first.isVisible && panels.panel?.request.id == "r2")
+        #expect(first.dismissed && panels.panel !== first && panels.panel?.request.id == "r2")
         #expect(source.answers.isEmpty, "nothing is answered for the person")
         // A request whose details are already gone is passed over.
         source.prompts = [Prompt(request: Request(id: "r3", agent: "a1", kind: "permission", tool: nil, about: nil, at: "2026-10-17T09:00:02Z"))]

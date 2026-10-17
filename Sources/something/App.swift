@@ -32,7 +32,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.menu = NSMenu()
         item.menu?.delegate = self
         statusItem = item
-        home.open = { [weak self] space in self?.open(space).map { self?.ask.tell($0) } }
+        home.open = { [weak self] space in
+            if let problem = self?.open(space) { self?.ask.tell(problem) }
+        }
         home.card.kinds = { [weak self] in self?.engine.state.kinds ?? [:] }
         home.card.window = { [weak self] name in self?.current.flatMap { $0.kept && $0.space.name == name ? $0 : nil } }
         panels.who = { [weak self] request in self?.who(request) ?? "An agent" }
@@ -64,11 +66,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             current.show()
             return nil
         }
-        guard let rules else { return nil }
+        guard let rules else { return "something is still starting; try again in a moment." }
         do {
             let window = try SpaceWindow(space: space, places: places, engine: engine, ask: ask, share: Resources.share, rules: rules)
             // Closing its window closes the space; a space whose window was never shown is closed directly.
-            if let current { current.window?.close() ?? current.close() }
+            if let shown = current?.window {
+                shown.close()
+            } else {
+                current?.close()
+            }
             window.closed = { [weak self] closed in
                 if self?.current === closed { self?.current = nil }
             }
@@ -84,10 +90,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Who asks, for a panel ("Claude Code “shop”, working in /Users/example/code/shop, asks…"): the agent's name and
     /// folder, and the open space when it launched the agent.
     func who(_ request: Request) -> String {
-        let agent = engine.state.agents.first { $0.id == request.agent }
-        var words = Ask.name(of: agent?.kind ?? "agent")
-        if let name = agent?.name { words += " “\(name)”" }
-        if let folder = agent?.folder { words += ", working in \(folder)," }
+        guard let agent = engine.state.agents.first(where: { $0.id == request.agent }) else { return "An agent" }
+        var words = Ask.name(of: agent.kind)
+        if let name = agent.name { words += " “\(name)”" }
+        if let folder = agent.folder { words += ", working in \(folder)," }
         if let current, current.launched.contains(request.agent) { words += " launched by “\(current.title)”," }
         return words
     }

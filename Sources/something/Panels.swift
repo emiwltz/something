@@ -50,7 +50,12 @@ final class Panels {
             }
             let shown = PromptPanel(prompt, who: who(prompt.request)) { [weak self] answer in self?.decide(first, answer) }
             panel = shown
-            if shows { shown.orderFrontRegardless() }
+            if shows {
+                shown.orderFrontRegardless()
+                // Key, so that Escape reaches it while the person is in something. It takes no keys from another app:
+                // a key typed there for that app must never answer a permission.
+                shown.makeKey()
+            }
         }
     }
 
@@ -62,9 +67,13 @@ final class Panels {
         refresh()
     }
 
+    /// Puts the panel away. It is released only after the current event: a button of the panel may be the one
+    /// running, and a window released inside its own control's action can crash AppKit.
     private func dismiss() {
-        panel?.orderOut(nil)
+        let old = panel
         panel = nil
+        old?.dismiss()
+        DispatchQueue.main.async { withExtendedLifetime(old) {} }
     }
 }
 
@@ -72,6 +81,8 @@ final class Panels {
 final class PromptPanel: NSPanel {
     let request: Request
     let decide: (Answer) -> Void
+    /// Set once the panel was put away, answered or withdrawn.
+    private(set) var dismissed = false
     /// For a question: the boxes of each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
 
@@ -146,8 +157,14 @@ final class PromptPanel: NSPanel {
     /// Escape denies.
     override func cancelOperation(_ sender: Any?) { deny() }
 
+    func dismiss() {
+        orderOut(nil)
+        dismissed = true
+    }
+
     @objc func allow() { decide(.once) }
     @objc func deny() { decide(.deny) }
     @objc func reply() { decide(.choice(choice)) }
+    /// Does nothing: AppKit groups radio buttons by a shared action, and only that grouping is needed.
     @objc func chose() {}
 }

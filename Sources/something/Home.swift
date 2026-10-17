@@ -18,6 +18,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     private var exampleSection: [NSView] = []
     private var actions: [NSButton] = []
     private var window: NSWindow?
+    /// The last failure to read the grants file that was said: reload runs each time the window becomes key, and a
+    /// failure said again at each time would bring its own window back without end.
+    private var told: String?
 
     /// `examples` is share/examples, which may not exist.
     init(places: Places, examples: URL, ask: Asking) {
@@ -42,13 +45,24 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         let kept = (selected?.name, selectedSample?.name)
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
-        preferred = (try? AppFile.read(places.grants))?.default
-        for (list, names, name) in [(table, spaces.map(\.name), kept.0), (sampleTable, samples.map(\.name), kept.1)] {
-            list.reloadData()
-            if let row = names.firstIndex(where: { $0 == name }) { list.selectRowIndexes([row], byExtendingSelection: false) }
+        do {
+            preferred = try AppFile.read(places.grants).default
+            told = nil
+        } catch {
+            preferred = nil
+            let message = (error as? SpaceError)?.message ?? "\(error)"
+            if message != told { ask.tell(message) }
+            told = message
         }
+        Home.reselect(table, spaces, kept.0)
+        Home.reselect(sampleTable, samples, kept.1)
         exampleSection.forEach { $0.isHidden = samples.isEmpty }
         update()
+    }
+
+    private static func reselect(_ list: NSTableView, _ spaces: [Space], _ name: String?) {
+        list.reloadData()
+        if let row = spaces.firstIndex(where: { $0.name == name }) { list.selectRowIndexes([row], byExtendingSelection: false) }
     }
 
     func show() {
@@ -58,7 +72,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    @objc func openSelected() { selected.map(open) }
+    @objc func openSelected() {
+        if let space = selected { open(space) }
+    }
 
     /// Makes the selected space the one the app opens at its start.
     @objc func makeDefault() {
@@ -73,15 +89,24 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         reload()
     }
 
-    @objc func showInFinder() { selected.map { reveal($0.location) } }
+    @objc func showInFinder() {
+        if let space = selected { reveal(space.location) }
+    }
 
     /// Copies the selected example into the spaces folder, under its own name, and selects the copy. A copy has no
-    /// grant: it asks its rights at its first opening, like any received space.
+    /// grant: answers left in the grants file by a space of the same name, deleted in Finder, are forgotten first, as
+    /// a received space never inherits rights by name (contract 5). It asks its rights at its first opening.
     @objc func makeACopy() {
         guard let sample = selectedSample else { return }
         let target = places.spaces.appendingPathComponent(sample.location.lastPathComponent)
         guard Spaces(root: places.spaces).named(sample.name) == nil, !FileManager.default.fileExists(atPath: target.path) else {
             return ask.tell("A space named \(sample.name) already exists in \(places.spaces.path); rename it to make a new copy.")
+        }
+        do {
+            var file = try AppFile.read(places.grants)
+            if file.spaces.removeValue(forKey: sample.name) != nil { try file.write(places.grants) }
+        } catch {
+            return ask.tell("The example \(sample.name) was not copied. \((error as? SpaceError)?.message ?? "\(error)")")
         }
         do {
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)

@@ -28,6 +28,9 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// The answers for a space opened by path, kept for the life of the window only: kept in app.json under its path,
     /// they would pass to whatever file lands at that path later, and a space never inherits rights (contract 5).
     private var held: Grant?
+    /// The declaration as the last load read it: the one the person was asked about. A switch in the card applies
+    /// new answers to it, never to a newer file that no rights window has shown yet.
+    private var reading: DeclarationReading?
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
@@ -91,6 +94,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         pushed = nil
         linksBlocked = false
         let reading = Declaration.read(space, home: places.home)
+        self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         if let declaration = reading.declaration {
             title = declaration.title
@@ -120,10 +124,15 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// Applies the person's answers as the grants file now keeps them, without asking and without a reload: the page
     /// hears a `granted` event, and the bridge answers by the new rights from its next call. The space's card calls it
     /// when a right is switched (contract 5: a revocation reaches an open space as a `granted` event).
+    /// When the grants file does not read, the rights in force stay as they are and the failure is said.
     func regrant() {
-        let reading = Declaration.read(space, home: places.home)
-        guard blocked.isEmpty, reading.declaration != nil else { return }
-        let grant = kept ? (try? AppFile.read(places.grants))?.spaces[space.name] : held
+        guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
+        var grant = held
+        if kept {
+            do { grant = try AppFile.read(places.grants).spaces[space.name] } catch {
+                return ask.tell((error as? SpaceError)?.message ?? "\(error)")
+            }
+        }
         granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: places.home)
         inject()
         web.evaluateJavaScript("window.something && something._granted(\(String(decoding: encoded(granted), as: UTF8.self)))")

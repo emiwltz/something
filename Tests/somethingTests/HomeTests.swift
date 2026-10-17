@@ -18,6 +18,15 @@ import Testing
         return home
     }
 
+    /// A grant as the rights window leaves it, for a declaration of `declared`.
+    func answered(declared: [String], granted: [String]) -> Grant {
+        var declaration = Declaration(name: "invented")
+        declaration.rights = declared
+        var grant = Grant(declared: Asked(declaration), at: "2026-10-17T09:00:00Z")
+        grant.granted = granted
+        return grant
+    }
+
     @Test func aRevokedRightReachesTheOpenSpace() async throws {
         let test = Home(), ask = FakeAsk()
         defer { test.remove() }
@@ -34,7 +43,7 @@ import Testing
         home.card.window = { $0 == "notes" ? window : nil }
         home.table.selectRowIndexes([0], byExtendingSelection: false)
         #expect(home.card.space == space)
-        #expect(home.card.rights.map(\.right) == ["state", "store"] && home.card.rights.allSatisfy(\.allowed))
+        #expect(home.card.rights.map(\.right) == ["state", "store"] && home.card.rights.allSatisfy { $0.standing == .allowed })
 
         home.card.set("store", allowed: false)
         for _ in 0..<100 where try await run(window.web, "return heard.length") as? Int != 1 { await wait(0.05) }
@@ -43,7 +52,7 @@ import Testing
         #expect(try await run(window.web, "try { await something.store.get('word') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
         let grant = try #require(try AppFile.read(test.places.grants).spaces["notes"])
         #expect(grant.granted == ["state"] && grant.refused == ["store"])
-        #expect(home.card.rights.map(\.allowed) == [true, false])
+        #expect(home.card.rights.map(\.standing) == [.allowed, .refused])
 
         // Switched on again: the memory answers again, with what it kept.
         home.card.set("store", allowed: true)
@@ -52,23 +61,104 @@ import Testing
         #expect(ask.questions.count == 1, "a switch is the person's answer: nothing more is asked")
     }
 
-    @Test func askAgainForgetsTheAnswersAndAsksNow() async throws {
+    @Test func askAgainClearsTheRefusalsOnlyAndAsksThemNow() async throws {
         let test = Home(), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("board", page(#"{"contract": 1, "rights": ["store"]}"#, "<script>window.done = true</script>"))
+        let space = try test.space("board", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
         defer { window.close() }
-        window.open()
+        ask.answer = { _ in RightsAnswer(allowed: ["state"], refused: ["store"], folder: nil, remap: [:]) }
+        window.load()
         let home = home(test, ask)
         home.card.window = { _ in window }
         home.table.selectRowIndexes([0], byExtendingSelection: false)
-        #expect(home.card.rights.count == 1)
+        #expect(home.card.rights.map(\.standing) == [.allowed, .refused])
+
+        // "Not now": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
         ask.answer = nil
         home.card.askAgain()
-        #expect(ask.questions.map(\.rights) == [["store"], ["store"]])
-        #expect(try AppFile.read(test.places.grants).spaces["board"] == nil)
-        #expect(home.card.rights.isEmpty, "a space not answered has no switch")
-        #expect(window.granted.rights.isEmpty)
+        #expect(ask.questions.map(\.rights) == [["state", "store"], ["store"]])
+        let grant = try #require(try AppFile.read(test.places.grants).spaces["board"])
+        #expect(grant.granted == ["state"] && grant.refused.isEmpty)
+        #expect(window.granted.rights == ["state"])
+        #expect(home.card.rights.map(\.standing) == [.allowed, .notAnswered(inForce: [])])
+
+        // Answered: the card shows the new answer at once.
+        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
+        home.card.askAgain()
+        #expect(home.card.rights.map(\.standing) == [.allowed, .allowed])
+        #expect(window.granted.rights == ["state", "store"])
+    }
+
+    @Test func aSwitchChangesOnlyItsOwnRight() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        // "send" was allowed; the space now declares one right per kind, and a launch it was never asked about.
+        try test.space("shop", page(#"{"contract": 1, "rights": ["send:claude", "send:codex", "launch:claude"]}"#, ""))
+        var file = AppFile()
+        let grant = answered(declared: ["send"], granted: ["send"])
+        file.spaces["shop"] = grant
+        try file.write(test.places.grants)
+        let home = home(test, ask)
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        #expect(home.card.rights.map(\.standing) == [.allowed, .allowed, .notAnswered(inForce: [])])
+
+        home.card.set("send:claude", allowed: false)
+        let after = try #require(try AppFile.read(test.places.grants).spaces["shop"])
+        #expect(after.granted == ["send:codex"] && after.refused == ["send:claude"])
+        #expect(home.card.rights.map(\.standing) == [.refused, .allowed, .notAnswered(inForce: [])])
+    }
+
+    @Test func aWiderRightDeclaredLaterShowsWhatIsInForce() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        try test.space("shop", page(#"{"contract": 1, "rights": ["send"]}"#, ""))
+        var file = AppFile()
+        let grant = answered(declared: ["send:claude"], granted: ["send:claude"])
+        file.spaces["shop"] = grant
+        try file.write(test.places.grants)
+        let home = home(test, ask)
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        #expect(home.card.rights.map(\.standing) == [.notAnswered(inForce: ["send:claude"])], "neither on nor off: not asked yet")
+    }
+
+    @Test func aGrantsFileThatDoesNotReadIsSaid() async throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "<script>window.done = true</script>"))
+        let window = try await test.window(space, ask)
+        defer { window.close() }
+        window.load()
+        #expect(window.granted.rights == ["store"])
+        try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
+
+        let home = home(test, ask)
+        home.reload()
+        #expect(ask.told.count == 1 && ask.told[0].hasPrefix("The grants in"), "said once, not at each reload: \(ask.told)")
+        #expect(FirstRun.first(test.places) == nil, "no default can be read: Home")
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        #expect(home.card.problem?.hasPrefix("The grants in") == true && home.card.rights.isEmpty)
+
+        window.regrant()
+        #expect(window.granted.rights == ["store"], "the rights in force stay")
+        #expect(ask.told.count == 2)
+    }
+
+    @Test func aSwitchAppliesOnlyTheDeclarationThePersonWasAsked() async throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"], "agents": {"folders": []}}"#,
+                                                 "<script>window.done = true</script>"))
+        let window = try await test.window(space, ask)
+        defer { window.close() }
+        window.load()
+        // The file widens its scope; the reload that would ask has not run yet.
+        try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"], "agents": {"see": "all"}}"#, ""))
+        let home = home(test, ask)
+        home.card.window = { _ in window }
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        home.card.set("store", allowed: false)
+        #expect(window.granted.rights == ["state"] && window.granted.agents == .folders([]))
     }
 
     @Test func theCardShowsTheJournalAndTheReadersNotes() throws {
@@ -108,6 +198,11 @@ import Testing
         home.showInFinder()
         #expect(revealed == [test.places.spaces.appendingPathComponent("today.html")])
 
+        // Answers left by a space named game that was deleted in Finder: the copy must not inherit them.
+        var file = try AppFile.read(test.places.grants)
+        let old = answered(declared: ["store"], granted: ["store"])
+        file.spaces["game"] = old
+        try file.write(test.places.grants)
         let examples = test.root.appendingPathComponent("examples/game")
         try FileManager.default.createDirectory(at: examples, withIntermediateDirectories: true)
         try page(nil, "<p>An invented game.</p>").write(to: examples.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
@@ -116,6 +211,8 @@ import Testing
         home.sampleTable.selectRowIndexes([0], byExtendingSelection: false)
         home.makeACopy()
         #expect(Spaces(root: test.places.spaces).named("game")?.form == .folder)
+        #expect(try AppFile.read(test.places.grants).spaces["game"] == nil, "a copy has no grant")
+        #expect(try AppFile.read(test.places.grants).default == "today")
         #expect(home.selected?.name == "game")
         home.makeACopy()
         #expect(home.selectedSample?.name == "game")
