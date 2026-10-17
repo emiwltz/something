@@ -5,6 +5,9 @@ import Foundation
 import SomethingCore
 
 enum Resources {
+    /// This engine's version, written in every export. Pending the version of slice 8's `--version`.
+    static let version = "1.0.0-dev"
+
     /// The share/ folder. Fails with a sentence when it cannot be found: without it there is no page to show.
     static let share: URL = {
         if Bundle.main.bundleIdentifier != nil, let resources = Bundle.main.resourceURL {

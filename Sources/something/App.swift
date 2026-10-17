@@ -43,6 +43,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
             do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
+            // A space deleted or renamed while the app was not running loses its grants before any space opens.
+            _ = try? Home.forgetGone(places)
             if let opening {
                 guard let space = Spaces(root: places.spaces).locate(opening) else {
                     fail("There is no space \(opening): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")

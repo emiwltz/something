@@ -47,6 +47,11 @@ final class FakeAsk: Asking {
     /// Runs while the link window would be open.
     var during: ((URL) -> Void)?
     var lowers = false
+    /// The export window's answer (false is "Without data"), and the keys it was shown each time.
+    var withData: Bool? = false
+    var shown: [[String]] = []
+    /// Where the save panel saves, and the file the open panel chooses; nil cancels.
+    var saveTo: URL?, chosen: URL?
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
@@ -61,6 +66,12 @@ final class FakeAsk: Asking {
         during?(url)
         return link
     }
+    func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
+        shown.append(keys)
+        return withData
+    }
+    func saveAs(_ name: String) -> URL? { saveTo }
+    func importFile() -> URL? { chosen }
     func tell(_ message: String) { told.append(message) }
 }
 

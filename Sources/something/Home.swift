@@ -1,6 +1,7 @@
 // Home (design 5): the spaces of the spaces folder in a table, the card of the selected one beside it, and below,
-// the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Make
-// default and Show in Finder act on the selected space; New, Import and Export are shown, disabled, until they exist.
+// the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
+// Make default and Show in Finder act on the selected space; Import makes a new one; New is shown, disabled, until it
+// exists. A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
 import AppKit
 import SomethingCore
 
@@ -46,7 +47,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
         do {
-            preferred = try AppFile.read(places.grants).default
+            preferred = try Home.forgetGone(places).default
             told = nil
         } catch {
             preferred = nil
@@ -58,6 +59,18 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         Home.reselect(sampleTable, samples, kept.1)
         exampleSection.forEach { $0.isHidden = samples.isEmpty }
         update()
+    }
+
+    /// Drops the grants of every name that no longer is a space of the spaces folder (deleted, or renamed in Finder),
+    /// and returns the grants file. Throws a `SpaceError` when the file does not read or cannot be written.
+    @discardableResult
+    static func forgetGone(_ places: Places) throws -> AppFile {
+        var file = try AppFile.read(places.grants)
+        let gone = file.spaces.keys.filter { Spaces(root: places.spaces).named($0) == nil }
+        guard !gone.isEmpty else { return file }
+        gone.forEach { file.spaces[$0] = nil }
+        try file.write(places.grants)
+        return file
     }
 
     private static func reselect(_ list: NSTableView, _ spaces: [Space], _ name: String?) {
@@ -87,6 +100,53 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             ask.tell((error as? SpaceError)?.message ?? "\(error)")
         }
         reload()
+    }
+
+    /// Saves the selected space as a .something file. Its memory goes with it only when the person says so, after
+    /// seeing its keys and size; grants and journal never do (contract 8).
+    @objc func exportSelected() {
+        guard let space = selected else { return }
+        do {
+            let memory = try Memory(folder: places.data, space: space.name).get("") as? [String: Any] ?? [:]
+            var data: [String: Any]?
+            if !memory.isEmpty {
+                let bytes = try JSONSerialization.data(withJSONObject: memory, options: .sortedKeys).count
+                guard let with = ask.withData(space.name, keys: memory.keys.sorted(), bytes: bytes) else { return }
+                data = with ? memory : nil
+            }
+            let document = try Export.document(space, data: data, app: Resources.version)
+            guard let url = ask.saveAs("\(space.name).something") else { return }
+            do { try document.write(to: url, options: .atomic) } catch {
+                throw SpaceError("The export could not be written to \(url.path): \(error.localizedDescription)")
+            }
+        } catch {
+            ask.tell("\(space.name) was not exported. \(Home.words(error))")
+        }
+    }
+
+    /// Reads a .something file the person chooses and makes it a new space, selected. It has no grant: what the
+    /// grants file kept for its name is dropped first, so it asks for its rights at its first opening (contract 5).
+    @objc func importChosen() {
+        guard let url = ask.importFile() else { return }
+        do {
+            let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            guard bytes <= Export.limit else { throw CodedError("IMPORT_TOO_BIG", "This file weighs \(Size.words(bytes)); an import takes at most 20 MB.") }
+            let received = try Export.read(try Data(contentsOf: url))
+            try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
+            let space = try Export.place(received, in: Spaces(root: places.spaces), memory: places.data)
+            var file = try AppFile.read(places.grants)
+            if file.spaces.removeValue(forKey: space.name) != nil { try file.write(places.grants) }
+            reload()
+            if let row = spaces.firstIndex(where: { $0.name == space.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
+        } catch {
+            ask.tell("\(url.lastPathComponent) was not imported. \(Home.words(error))")
+        }
+    }
+
+    /// The sentence of a failure, with its code when it has one.
+    static func words(_ error: Error) -> String {
+        if let coded = error as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
+        return (error as? SpaceError)?.message ?? error.localizedDescription
     }
 
     @objc func showInFinder() {
@@ -153,9 +213,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             }
             return button
         }
-        actions = [button("Open", #selector(openSelected)), button("Make default", #selector(makeDefault)),
-                   button("Show in Finder", #selector(showInFinder))]
-        let bar = NSStackView(views: [actions[0], button("New", nil), button("Import", nil), button("Export", nil), actions[1], actions[2]])
+        actions = [button("Open", #selector(openSelected)), button("Export", #selector(exportSelected)),
+                   button("Make default", #selector(makeDefault)), button("Show in Finder", #selector(showInFinder))]
+        let bar = NSStackView(views: [actions[0], button("New", nil), button("Import", #selector(importChosen))] + actions[1...])
         let label = Card.header("Examples, read-only")
         let copy = button("Make a copy", #selector(makeACopy))
         exampleSection = [label, Home.scroll(sampleTable, height: 120), copy]

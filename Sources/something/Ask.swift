@@ -1,8 +1,10 @@
 // The native windows that ask the person: the rights a space declares, a mode that makes an agent ask less, a link a
-// space wants to open, quitting while agents run. A space cannot draw them, so a space cannot answer them. Each one
+// space wants to open, whether an export carries the space's memory, where to save or find a .something file,
+// quitting while agents run. A space cannot draw them, so a space cannot answer them. Each one
 // names the space it is about. Space windows ask through `Asking`, so their tests answer without a window.
 import AppKit
 import SomethingCore
+import UniformTypeIdentifiers
 
 /// What the rights window asks about one space: only what changed since the person last answered (contract 5).
 struct RightsQuestion: Equatable {
@@ -40,6 +42,13 @@ protocol Asking: AnyObject {
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
     /// What the person chose for `url`. "Open" has already opened it in their browser or mail app.
     func link(_ url: URL, space: String) -> LinkChoice
+    /// Whether the export of `space` carries its memory, shown with its keys and its size: false ("Without data", the
+    /// default) or true; nil when the person cancels.
+    func withData(_ space: String, keys: [String], bytes: Int) -> Bool?
+    /// Where to save `name` (a .something file); nil when the person cancels.
+    func saveAs(_ name: String) -> URL?
+    /// The .something file to import; nil when the person cancels.
+    func importFile() -> URL?
     /// Says a failure that has no window of its own.
     func tell(_ message: String)
 }
@@ -108,6 +117,36 @@ final class NativeAsk: Asking {
         case .alertThirdButtonReturn: return .block
         default: return .cancel
         }
+    }
+
+    func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
+        let alert = NSAlert()
+        alert.messageText = "Export “\(space)” with its data?"
+        alert.informativeText = "Its memory holds \(keys.joined(separator: ", ")) (\(Size.words(bytes))). "
+            + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac."
+        alert.addButton(withTitle: "Without data")
+        alert.addButton(withTitle: "With its data").keyEquivalent = ""
+        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
+        switch Ask.run(alert) {
+        case .alertFirstButtonReturn: return false
+        case .alertSecondButtonReturn: return true
+        default: return nil
+        }
+    }
+
+    func saveAs(_ name: String) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = name
+        NSApp.activate(ignoringOtherApps: true)
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    func importFile() -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json]
+        NSApp.activate(ignoringOtherApps: true)
+        return panel.runModal() == .OK ? panel.url : nil
     }
 
     func tell(_ message: String) {

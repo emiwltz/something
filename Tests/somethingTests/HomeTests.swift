@@ -219,6 +219,66 @@ import Testing
         #expect(ask.told.count == 1 && ask.told[0].hasPrefix("A space named game already exists"), "\(ask.told)")
     }
 
+    @Test func exportAsksForTheDataAndImportStartsWithoutGrants() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let folder = test.places.spaces.appendingPathComponent("board")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try page(#"{"contract": 1, "rights": ["store"]}"#, "<p>An invented board.</p>").write(to: folder.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        try Memory(folder: test.places.data, space: "board").set("seen", ["a1"])
+        let saved = test.root.appendingPathComponent("board.something")
+        let home = home(test, ask)
+        home.table.selectRowIndexes([0], byExtendingSelection: false)
+
+        ask.withData = nil
+        ask.saveTo = saved
+        home.exportSelected()
+        #expect(ask.shown == [["seen"]] && !FileManager.default.fileExists(atPath: saved.path), "cancelled: nothing saved")
+        ask.withData = false
+        home.exportSelected()
+        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
+        #expect(without["data"] is NSNull && without["name"] as? String == "board", "Without data is the default answer")
+        ask.withData = true
+        home.exportSelected()
+        let with = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
+        #expect(with["data"] as? NSDictionary == ["seen": ["a1"]])
+
+        // Answers kept under the name the import will give: the received space must not inherit them.
+        var file = try AppFile.read(test.places.grants)
+        file.spaces["board-2"] = answered(declared: ["store"], granted: ["store"])
+        try file.write(test.places.grants)
+        ask.chosen = saved
+        home.importChosen()
+        #expect(ask.told.isEmpty, "\(ask.told)")
+        #expect(home.selected?.name == "board-2" && home.selected?.form == .folder)
+        #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
+        #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
+    }
+
+    @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        try test.space("notes", page(nil, ""))
+        let home = home(test, ask)
+        let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: Home.share.appendingPathComponent("contract/exports/unsafe-path.json"))) as? [String: Any]
+        let chosen = test.root.appendingPathComponent("unsafe.something")
+        try JSONSerialization.data(withJSONObject: try #require(fixture?["export"])).write(to: chosen)
+        ask.chosen = chosen
+        home.importChosen()
+        #expect(ask.told.count == 1 && ask.told[0].contains("(IMPORT_UNSAFE_PATH)"), "\(ask.told)")
+        #expect(home.spaces.map(\.name) == ["notes"])
+
+        var file = try AppFile.read(test.places.grants)
+        file.spaces["notes"] = answered(declared: ["store"], granted: ["store"])
+        try file.write(test.places.grants)
+        home.reload()
+        #expect(try AppFile.read(test.places.grants).spaces["notes"] != nil)
+        // Deleted, or renamed, in Finder: the next look forgets its answers, so a new space of that name asks again.
+        try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("notes.html"))
+        home.reload()
+        #expect(try AppFile.read(test.places.grants).spaces.isEmpty)
+    }
+
     @Test func theStartMakesItsFoldersAndChoosesWhatToShow() throws {
         let test = Home()
         defer { test.remove() }
