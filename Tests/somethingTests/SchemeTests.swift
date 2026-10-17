@@ -60,5 +60,11 @@ import Testing
         #expect(shell.contains(#"src="something://space/today.html""#))
         #expect(Scheme.shell == url("something://app/") && scheme.file(for: Scheme.shell) == nil)
         #expect(Scheme.shellPolicy.contains("frame-src something://space") && !Scheme.shellPolicy.contains("*"))
+        // A name that HTML would read as an entity is escaped, so the frame asks for the file that is there.
+        // A space opened by path may have any name.
+        let file = home.root.appendingPathComponent("a&lt.html")
+        try "<p>invented</p>".write(to: file, atomically: true, encoding: .utf8)
+        let odd = Scheme(space: try #require(Spaces(root: home.places.spaces).locate(file.path)))
+        #expect(String(decoding: odd.shellPage, as: UTF8.self).contains(#"src="something://space/a&amp;lt.html""#))
     }
 }

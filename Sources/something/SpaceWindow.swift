@@ -32,8 +32,9 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// The declaration as the last load read it: the one the person was asked about. A switch in the card applies
     /// new answers to it, never to a newer file that no rights window has shown yet.
     private var reading: DeclarationReading?
-    /// The frame that holds the space, once the app's page has asked to load it: the only frame something answers and
-    /// pushes to. nil before, and while the space is blocked.
+    /// The frame that holds the space, once the app's page has asked to load it: pushes and `granted` go to it. The
+    /// bridge and the link window answer the frame `isSpace` recognizes, which the navigation policy makes this same
+    /// frame. nil before, while the space is blocked, and from each new load of the app's page until its frame asks.
     private(set) var frame: WKFrameInfo?
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
@@ -235,7 +236,14 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url, let target = action.targetFrame else { return decisionHandler(.cancel) }
-        if target.isMainFrame { return decisionHandler(url.scheme == Scheme.name && url.host == Scheme.app ? .allow : .cancel) }
+        if target.isMainFrame {
+            guard url.scheme == Scheme.name && url.host == Scheme.app else { return decisionHandler(.cancel) }
+            // A new app's page, whatever loads it (load(), WebKit's Reload, a restart after the web content process
+            // ended): its frame is a new one, and it must be taken for the space again.
+            frame = nil
+            pushed = nil
+            return decisionHandler(.allow)
+        }
         if url.scheme == Scheme.name && url.host == Scheme.host {
             // The app's page loads the space, the first frame to load; then the space may go to another of its pages.
             // A frame inside the space may not hold a file of the space, so the bridge can tell the space's frame

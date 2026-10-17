@@ -158,7 +158,8 @@ import WebKit
 
     /// The one gap left (README, "Security"): a real click on a link that opens a new window (target="_blank") inside a
     /// closed shadow root, where no script of something sees it, makes WebKit open one connection to the link's server
-    /// before the sandbox refuses the window. Marked as known, so the run says when WebKit stops doing it.
+    /// before the sandbox refuses the window. Marked as known: when WebKit stops doing it, Swift Testing reports that
+    /// the known issue was not recorded, and this test and the README's paragraph are updated.
     @Test func theKnownGap() async throws {
         let home = Home(), listener = try Listener()
         defer { home.remove(); listener.stop() }
@@ -175,7 +176,7 @@ import WebKit
         try await ready(window)
         try Offscreen(window.web).click(x: 450, y: 320)
         await wait(1)
-        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root", isIntermittent: true) {
+        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root") {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
     }
@@ -416,6 +417,27 @@ import WebKit
         #expect(ask.told.count == 1 && ask.questions.isEmpty)
         #expect(window.granted.rights.isEmpty)
         #expect(try String(contentsOf: home.places.grants, encoding: .utf8) == "{ not json")
+    }
+
+    /// A reload that something did not start (WebKit's Reload, a restart after the web content process ended) gives
+    /// the app's page a new frame: it is taken for the space, and pushes reach it.
+    @Test func aReloadByWebKitFindsTheSpaceAgain() async throws {
+        let home = Home()
+        defer { home.remove() }
+        let window = try await home.window(try home.space("again", page(nil, """
+            <script>window.changes = 0; something.on("change", () => window.changes += 1); window.done = true</script>
+            """)))
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        let before = try #require(window.frame)
+        window.web.reload()
+        #expect(await wait(until: { window.frame != nil && window.frame !== before }))
+        try await ready(window)
+        #expect(try await run(window, "return window.done === true && window.changes === 0") as? Bool == true)
+        window.push()
+        for _ in 0..<100 where try await run(window, "return window.changes") as? Int != 1 { await wait(0.05) }
+        #expect(try await run(window, "return window.changes") as? Int == 1)
     }
 
     @Test func theWindowReloadsWhenTheSpaceChanges() async throws {

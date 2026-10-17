@@ -9,9 +9,11 @@ import Testing
 import WebKit
 @testable import something
 
-/// Whether this session has a window server: WebKit's views and AppKit's windows need one. A Mac where someone is
-/// logged in has one, GitHub's macOS runners too; a session opened over ssh before anyone logs in has none.
-let windowServer = CGSessionCopyCurrentDictionary() != nil
+/// Whether the window suites run: WebKit's views and AppKit's windows need a window server. A Mac where someone is
+/// logged in has one, GitHub's macOS runners too; a session opened over ssh before anyone logs in has none, and the
+/// suites are skipped there. On CI they always run, so a runner without a window server fails instead of passing
+/// while the lockdown test never ran.
+let windowServer = CGSessionCopyCurrentDictionary() != nil || ProcessInfo.processInfo.environment["CI"] != nil
 let windowServerMissing: Comment = "This session has no window server, and WebKit and AppKit windows cannot run without one."
 
 /// A home in the temporary folder, removed by `remove()`; the person's own folders are never touched.

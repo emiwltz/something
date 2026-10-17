@@ -39,20 +39,27 @@ final class Scheme: NSObject, WKURLSchemeHandler {
         Data("""
             <!doctype html><html><head><meta charset="utf-8"><style>html, body, iframe { margin: 0; border: 0; width: 100%; \
             height: 100%; display: block; }</style></head><body><iframe sandbox="allow-scripts allow-same-origin allow-forms"
-            src="\(page.absoluteString)"></iframe></body></html>
+            src="\(Scheme.attribute(page.absoluteString))"></iframe></body></html>
             """.utf8)
+    }
+
+    /// `text` as the value of a quoted HTML attribute: a file named `a&lt.html` stays that name.
+    static func attribute(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "\"", with: "&quot;")
     }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let url = task.request.url else { return task.didFailWithError(URLError(.badURL)) }
-        let type: String, policy: String, data: Data
         if url == Scheme.shell {
-            (type, policy, data) = ("text/html; charset=utf-8", Scheme.shellPolicy, shellPage)
-        } else if let file = file(for: url), let bytes = try? Data(contentsOf: file) {
-            (type, policy, data) = (Scheme.type(of: file), Scheme.policy, bytes)
-        } else {
+            return respond(task, url, type: "text/html; charset=utf-8", policy: Scheme.shellPolicy, data: shellPage)
+        }
+        guard let file = file(for: url), let data = try? Data(contentsOf: file) else {
             return task.didFailWithError(URLError(.fileDoesNotExist))
         }
+        respond(task, url, type: Scheme.type(of: file), policy: Scheme.policy, data: data)
+    }
+
+    private func respond(_ task: WKURLSchemeTask, _ url: URL, type: String, policy: String, data: Data) {
         let headers = ["Content-Type": type, "Content-Security-Policy": policy, "Cache-Control": "no-store"]
         task.didReceive(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!)
         task.didReceive(data)
