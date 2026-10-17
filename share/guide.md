@@ -4,8 +4,8 @@
 
 something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), reads the ones started
 elsewhere, and shows **spaces**: HTML pages the person asked you to write. A dashboard, a chat, a board of who is
-waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Later chapters add
-examples and the steps to try a space.
+waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Its last section says
+how to check a space; later chapters add examples.
 
 *Status: something 1.0 is being built. The app opens a space and serves this contract, but it knows no agent yet:
 the state lists none and a launch answers `NOT_SUPPORTED` until the drivers arrive in the next versions.*
@@ -339,3 +339,32 @@ await something.store.set("seen", [...seen, "a1"]);
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
   exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
+
+## Checking your space
+
+```sh
+something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
+```
+
+Run it after each change. It loads your space as the app does (same `something://` address, same network lock, same
+`something.js`) in a window nobody sees, and reports what went wrong, each problem with its code, its place and what
+to do. Exit status: `0` no error (warnings allowed), `1` errors, `2` the check could not run.
+
+- **An invented state**, `share/contract/state-example.json`, or the file given with `--state` (it must keep every
+  key). Never the person's agents: what the check prints may leave the Mac with your context. In your declaration, `~`
+  stands here for `/Users/example`, the invented state's home, so a scope written with `~` meets its agents.
+- **Every right you declare is granted**, except those named with `--refuse`: run once with `--refuse send` (or another
+  right) to see that your page reads `something.granted` and hides what was refused instead of throwing.
+- **Calls are answered** as the engine would answer them, and reach no agent: a launch returns an id such as
+  `check-1` that no state lists, `open` answers `false` (as if the person cancelled), and the memory is a throwaway
+  one, empty at the start. Each call is listed with its answer (for `state`, the ids of the agents your page saw).
+- **What it reports**: uncaught errors with file, line and column, unhandled rejections, `console.error`, missing files,
+  loads and navigations the lock blocked, calls a real engine would reject, rights you use without declaring, a
+  declaration that does not read, a page that does not load within 15 seconds or whose process ends. `--json` gives
+  the same as one JSON object, with the console and a snapshot (a PNG of the page after it painted).
+- `--journal` adds the last 100 lines of your space's real journal.
+- **In a sandbox without a window server** (where many coding agents run their commands), only the declaration and the
+  files are checked, and `NO_WINDOW_SERVER` says so: ask the person to run the check, or run it outside the sandbox.
+
+Its codes and their sentences are in `share/contract/codes.json`; the `--json` shape is
+`share/contract/check-example.json`.

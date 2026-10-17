@@ -26,6 +26,9 @@ if Command.isApp(words, parent: getppid()) || inProcess && command == .start {
 } else if inProcess, case .open(let name) = command {
     runApp(opening: name)
 }
-exit(command.run(places: .person, share: Resources.share, door: LaunchServices(app: Bundle.main.bundleURL)) { text, problem in
-    (problem ? FileHandle.standardError : FileHandle.standardOutput).write(Data((text + "\n").utf8))
+// This is the main thread; check runs a window, which AppKit allows there only.
+exit(MainActor.assumeIsolated {
+    command.run(places: .person, share: Resources.share, door: LaunchServices(app: Bundle.main.bundleURL)) { text, problem in
+        (problem ? FileHandle.standardError : FileHandle.standardOutput).write(Data((text + "\n").utf8))
+    }
 })

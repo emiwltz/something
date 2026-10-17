@@ -53,9 +53,9 @@ enum Budget {
         let problems = Budget.problems(under: root)
         let app = problems.filter { $0.hasPrefix("The Mac app") }
         #expect(problems.count == app.count, "\(problems)")
-        // The app went over its soft budget with the command (slice 8). Whether to raise it, in AGENTS.md and here
-        // together, or to trim the app, is Emi's decision; until then the overrun shows in every run, and this known
-        // issue fails the day the app is back under budget, so that it is removed.
+        // The app went over its soft budget with the command (slice 8) and check (slice 9). Whether to raise it, in
+        // AGENTS.md and here together, or to trim the app, is Emi's decision; until then the overrun shows in every run,
+        // and this known issue fails the day the app is back under budget, so that it is removed.
         withKnownIssue("The Mac app is over the 1,700 lines AGENTS.md gives it, until Emi decides") {
             #expect(app.isEmpty, "\(app)")
         }

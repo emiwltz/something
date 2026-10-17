@@ -19,6 +19,8 @@ final class Scheme: NSObject, WKURLSchemeHandler {
     static let shellPolicy = "default-src 'none'; style-src 'unsafe-inline'; frame-src something://space"
 
     let space: Space
+    /// Told each address the space asked for that is none of its files; the check reports it.
+    var missed: (URL) -> Void = { _ in }
 
     init(space: Space) {
         self.space = space
@@ -54,6 +56,7 @@ final class Scheme: NSObject, WKURLSchemeHandler {
             return respond(task, url, type: "text/html; charset=utf-8", policy: Scheme.shellPolicy, data: shellPage)
         }
         guard let file = file(for: url), let data = try? Data(contentsOf: file) else {
+            missed(url)
             return task.didFailWithError(URLError(.fileDoesNotExist))
         }
         respond(task, url, type: Scheme.type(of: file), policy: Scheme.policy, data: data)

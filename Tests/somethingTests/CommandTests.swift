@@ -13,7 +13,7 @@ final class FakeDoor: Door {
 }
 
 /// One run of the command in a throwaway home: its status and what it printed, on standard output and error.
-struct Ran {
+@MainActor struct Ran {
     var status: Int32, out = "", err = ""
     init(_ words: [String], _ home: Home, _ door: FakeDoor = FakeDoor()) {
         var out = "", err = ""
@@ -24,7 +24,7 @@ struct Ran {
     }
 }
 
-@Suite struct CommandTests {
+@MainActor @Suite struct CommandTests {
     @Test func theWordsAreRead() {
         let cases: [([String], Command)] = [
             ([], .start),
@@ -84,8 +84,7 @@ struct Ran {
         #expect(Ran(["--help"], home).out.hasPrefix("Usage:"))
         let wrong = Ran(["open"], home)
         #expect(wrong.status == 2 && wrong.out.isEmpty && wrong.err.contains("Usage:"))
-        let check = Ran(["check", "board"], home)
-        #expect(check.status == 2 && check.err.contains("not in this version yet"))
+        // check runs a window of its own, through the program itself: CheckTests.swift.
         // Routed to SomethingAgents, which has no hook and no trial yet: their own statuses come back.
         #expect(Ran(["hook", "permission"], home).status == 2)
         #expect(Ran(["try", "claude"], home).status == 2)

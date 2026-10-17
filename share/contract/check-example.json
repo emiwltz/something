@@ -1,0 +1,22 @@
+{
+  "check": 1,
+  "contract": 1,
+  "space": "morning-review",
+  "path": "/Users/example/something/spaces/morning-review.html",
+  "ok": false,
+  "errors": 1,
+  "warnings": 1,
+  "declaration": { "contract": 1, "title": "Morning review", "description": null, "agents": { "see": "all" }, "rights": ["state", "send:claude"], "folder": null },
+  "rights": { "granted": ["state", "send:claude"], "refused": [], "unavailable": [], "unknown": ["sendd"] },
+  "received": { "source": "invented", "agents": 3, "states": { "working": 1, "waiting": 1, "unknown": 1 }, "requests": 1, "nullKeys": ["effort", "pid"] },
+  "problems": [
+    { "code": "SCRIPT_ERROR", "level": "error", "message": "ReferenceError: agnets is not defined", "fix": "Fix the code at this line; the page stops running at this error.", "where": { "file": "morning-review.html", "line": 12, "column": 5 } },
+    { "code": "UNKNOWN_RIGHT", "level": "warning", "message": "\"sendd\" is not a right of contract 1.", "fix": "Use one of: state, send, launch, store, optionally with :kind.", "where": null }
+  ],
+  "calls": [ { "method": "send", "params": { "agent": "a1", "text": "Hello", "when": "next" }, "answer": { "delivery": "queued" } } ],
+  "console": [ { "level": "warn", "text": "No agent yet." } ],
+  "size": { "bytes": 48211, "files": 1 },
+  "snapshot": "/private/var/folders/xx/example/T/something-check/morning-review.png",
+  "journal": null,
+  "ms": 480
+}

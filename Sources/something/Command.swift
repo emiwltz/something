@@ -1,7 +1,7 @@
 // The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
 // hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
 // sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the
-// words were wrong or nothing could run.
+// words were wrong or nothing could run; check has its own (contract 9).
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -59,7 +59,7 @@ enum Command: Equatable {
 
     /// Does what was asked and returns the exit status. `door` reaches the app; `say` prints to the terminal, on
     /// standard error when its second argument is true.
-    func run(places: Places, share: URL, door: Door, say: (String, Bool) -> Void) -> Int32 {
+    @MainActor func run(places: Places, share: URL, door: Door, say: (String, Bool) -> Void) -> Int32 {
         switch self {
         case .start:
             return door.start().map { say($0, true); return 1 } ?? 0
@@ -103,10 +103,8 @@ enum Command: Equatable {
         case .help:
             say(Command.usage, false)
             return 0
-        case .check:
-            // 2, check's own status when nothing could run (contract 9): 1 would say the space has errors.
-            say("something check is not in this version yet. Until it is, open the space with something open <name> to see it.", true)
-            return 2
+        case .check(let check):
+            return check.main(places: places, share: share, say: say)
         case .hook(let words):
             return PermissionHook.main(words)
         case .trial(let words):
@@ -142,7 +140,7 @@ enum Command: Equatable {
     }
 }
 
-/// `something check`'s words (contract 9). The check itself comes in slice 9.
+/// `something check`'s words (contract 9). The check itself is in Check.swift.
 struct Check: Equatable {
     var space: String
     var json = false, journal = false

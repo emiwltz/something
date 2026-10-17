@@ -33,11 +33,14 @@ something                       start something, or bring it to the front
 something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
 something new <name> [--folder] make a space from the template (with --folder, <name>/index.html, which can hold more files)
 something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
-something check <name|path> ... test a space without showing it (not in this version yet: it says so, with status 2)
+something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
+                                test a space as the app loads it, unseen, against an invented state
 something --version
 ```
 
-Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the words were wrong. A new space never inherits the answers a deleted space of the same name left.
+Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the words were wrong (check has its own: 0 no error, 1 errors, 2 it could not run).
+
+`something check` is for the agent that writes your spaces ([share/guide.md](share/guide.md), "Checking your space"). It loads the space with the same scheme, network lock and `something.js` as the app, in a borderless, transparent window that ignores the mouse: it is on screen, because WebKit paints only there, but never in the Dock nor in front, and the process stays an app macOS keeps in the background for the few seconds the check lasts (15 at most). The page gets the invented state of `share/contract/state-example.json` (or `--state <file>`), never your agents, since the output may leave the Mac with the agent's context; every declared right is granted except those named with `--refuse`; write calls are answered as the engine would answer them and reach no agent, `open` answers false, the memory is a throwaway one and the journal is not written. It reports each problem with its code (`share/contract/codes.json`), the calls with their answers, the console, and a snapshot PNG in `$TMPDIR/something-check/`; `--journal` adds the space's last 100 journal lines. Without a window server (an agent's sandbox has none), only the declaration and the files are checked, and `NO_WINDOW_SERVER` says so. A new space never inherits the answers a deleted space of the same name left.
 
 Installed, something is `something.app` with the command beside it. The command hands what you ask to the app through macOS (LaunchServices), which keeps one copy of the app running: `something` starts it, or brings it to the front, with your terminal's environment, so the agents it launches find the programs and the settings your terminal finds (less the variables that only say where the terminal runs, such as CLAUDECODE or TMUX, which would make an agent think it is nested); `something open` hands it the space. Started from Finder or the Dock, the app is the app. Double-clicking an export (`.something`) imports it in Home. Run from the clone (`swift run`), there is no `.app`, and `something` and `something open` run the app in the terminal's own process.
 
@@ -79,7 +82,7 @@ share/                     something.js (contract 1's bridge, injected into ever
 Sources/SomethingCore/     contract 1: the state (Contract, StateMap, Events), spaces, declarations, rights, the bridge, memory and journal, codes. Foundation only, so it can build on Linux and Windows; it names no agent beyond the kinds a right may name
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi) and V1's state they still fill
 packaging/, tools/         the app's Info.plist and make-app.sh, which assembles and signs something.app
-Sources/something/         the command (start, open, new, guide, and the routes to check, hook and try) and the Mac app: menu bar, Home and the space card, the start, the space window (something:// scheme, network lock, reload), its bridge host, native windows and the permission and question panels; carries, asks, decides nothing
+Sources/something/         the command (start, open, new, guide, check, and the routes to hook and try) and the Mac app: menu bar, Home and the space card, the start, the space window (something:// scheme, network lock, reload), its bridge host, native windows and the permission and question panels; carries, asks, decides nothing
 Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the command's words and statuses; make-app.sh into a temporary folder, run through a wrapper like Homebrew's, its signature verified; the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights; Home, the card and its revocations, the start, the panels), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
 ```
 

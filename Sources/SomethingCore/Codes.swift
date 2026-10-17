@@ -1,6 +1,6 @@
 // Every code of contract 1 with its level and its sentence (a copy of share/contract/codes.json, which a test keeps
 // equal), the problems that carry them, and the report of `something check` as a person reads it and as --json gives it.
-// The report is only formatted here; the check that fills it runs in the app.
+// The report is only formatted here; the check that fills it runs in the app (Check.swift).
 import Foundation
 
 public enum Level: String, Codable, Sendable { case fatal, error, warning, info }
@@ -181,7 +181,13 @@ public struct Report: Encodable {
             lines.append(row("", problem.fix))
         }
         if let snapshot { lines.append(row("snapshot", short(snapshot))) }
-        lines.append("  \(count(errors, "error")), \(count(warnings, "warning")).")
+        if journal?.isEmpty == true { lines.append(row("journal", "empty: the space has done nothing to an agent")) }
+        for line in journal ?? [] {
+            let words = [line.at, line.action, line.agent, line.kind, line.when, line.text.map { "\"\($0)\"" }].compactMap { $0 }
+            lines.append(row("journal", words.joined(separator: " ") + ": " + line.result))
+        }
+        let ended = exitStatus == 2 ? " The check could not run to its end: fix the fatal problem first." : ""
+        lines.append("  \(count(errors, "error")), \(count(warnings, "warning")).\(ended)")
         return lines.joined(separator: "\n") + "\n"
     }
 }

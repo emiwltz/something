@@ -77,10 +77,16 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     }
 
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
-        guard let known = SpaceWindow.modes[kind], !known.keeps.contains(mode) else { return true }
+        try SpaceWindow.lowers(mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
+    }
+
+    /// Whether `mode` makes agents of `kind` ask less, so the person must confirm it. Throws a `CodedError`
+    /// (VALUE_NOT_OFFERED) for a mode something never offers.
+    static func lowers(_ mode: String, kind: String) throws -> Bool {
+        guard let known = modes[kind], !known.keeps.contains(mode) else { return false }
         guard known.lowers.contains(mode) else {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
         }
-        return ask.lowers(mode, kind: kind, folder: folder, space: title)
+        return true
     }
 }
