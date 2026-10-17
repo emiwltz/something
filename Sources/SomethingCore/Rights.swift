@@ -105,14 +105,17 @@ public enum Rights {
     }
 
     /// What to ask at this opening: everything at the first one; afterwards only a right never answered, a scope wider
-    /// than the one answered, or a declared folder that changed. Refusals are remembered and not asked again.
+    /// than the one answered, or a declared folder that changed. Refusals are remembered and not asked again. The scope
+    /// says which agents `state` shows, so it is asked with `state` and only while `state` is declared and not refused.
     public static func toAsk(_ declaration: Declaration, since grant: Grant?) -> ToAsk {
         let answered = (grant?.granted ?? []) + (grant?.refused ?? [])
         let rights = declaration.rights.filter { !covers(answered, $0) }
         let launches = declaration.rights.contains { $0.hasPrefix("launch") && !covers(grant?.refused ?? [], $0) }
-        guard let grant else { return ToAsk(rights: rights, scope: true, folder: launches) }
+        let sees = declaration.rights.contains("state") && !covers(grant?.refused ?? [], "state")
+        guard let grant else { return ToAsk(rights: rights, scope: sees, folder: launches) }
         let folder = launches && (grant.folder == nil || declaration.folder != grant.declared.folder)
-        return ToAsk(rights: rights, scope: wider(declaration.agents, than: grant.declared.agents), folder: folder)
+        let scope = sees && (rights.contains("state") || wider(declaration.agents, than: grant.declared.agents))
+        return ToAsk(rights: rights, scope: scope, folder: folder)
     }
 
     /// The grant after the person answered: their allowed and refused rights replace earlier answers for the same

@@ -36,8 +36,8 @@ enum LinkChoice { case open, cancel, block }
 protocol Asking: AnyObject {
     /// The person's answers, or nil when they chose "Not now": nothing is remembered and the space gets nothing new.
     func rights(_ question: RightsQuestion) -> RightsAnswer?
-    /// true when the person lets the space put an agent of `kind` in `mode`, which makes it ask less.
-    func lowers(_ mode: String, kind: String, space: String) -> Bool
+    /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
+    func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
     /// What the person chose for `url`. "Open" has already opened it in their browser or mail app.
     func link(_ url: URL, space: String) -> LinkChoice
     /// Says a failure that has no window of its own.
@@ -75,8 +75,9 @@ final class NativeAsk: Asking {
         }
         lines.frame.size = lines.fittingSize
         alert.accessoryView = lines
-        alert.addButton(withTitle: "Allow what is ticked")
-        alert.addButton(withTitle: "Not now").keyEquivalent = "\u{1b}"
+        // Return keeps nothing: a refusal is remembered, so it takes a click on the button that says what it does.
+        alert.addButton(withTitle: "Allow what is ticked").keyEquivalent = ""
+        alert.addButton(withTitle: "Not now").keyEquivalent = "\r"
         let response = Ask.run(alert)
         withExtendedLifetime(choosers) {}
         guard response == .alertFirstButtonReturn else { return nil }
@@ -84,10 +85,10 @@ final class NativeAsk: Asking {
         return RightsAnswer(allowed: ticked, refused: question.rights.filter { !ticked.contains($0) }, folder: folder, remap: remap)
     }
 
-    func lowers(_ mode: String, kind: String, space: String) -> Bool {
+    func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Let “\(space)” put \(Ask.name(of: kind)) in the mode \(mode)?"
-        alert.informativeText = "In this mode the agent asks you less before it acts."
+        alert.messageText = "Let “\(space)” put \(Ask.name(of: kind)) in a mode where it \(Ask.words(forMode: mode)) (\(mode))?"
+        alert.informativeText = "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts."
         alert.addButton(withTitle: "Allow")
         alert.addButton(withTitle: "Don't allow").keyEquivalent = "\u{1b}"
         return Ask.run(alert) == .alertFirstButtonReturn
@@ -121,14 +122,16 @@ final class Chooser: NSObject {
     let label: NSTextField, chosen: (String) -> Void
 
     init(_ lines: NSStackView, _ text: String, button title: String, chosen: @escaping (String) -> Void) {
-        (label, self.chosen) = (NSTextField(wrappingLabelWithString: text), chosen)
+        label = NSTextField(wrappingLabelWithString: text)
+        self.chosen = chosen
         super.init()
         lines.addArrangedSubview(NSStackView(views: [label, NSButton(title: title, target: self, action: #selector(choose))]))
     }
 
     @objc func choose() {
         let panel = NSOpenPanel()
-        (panel.canChooseDirectories, panel.canChooseFiles) = (true, false)
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         label.stringValue = "Chosen: \(url.path)"
         chosen(url.path)
@@ -157,6 +160,13 @@ enum Ask {
         case "store": return "Keep a memory of its own on this Mac"
         default: return right
         }
+    }
+
+    /// What a mode that lowers asking lets the agent do, in plain words.
+    static func words(forMode mode: String) -> String {
+        ["acceptEdits": "edits files without asking you", "auto": "decides by itself what to ask you",
+         "dontAsk": "never asks you, and does only what your settings already allow",
+         "never": "never asks you before it runs a command"][mode] ?? "asks you less"
     }
 
     static func quit(stopping count: Int) -> Bool {

@@ -39,8 +39,18 @@ import WebKit
             <img src="\(base)/img"><iframe src="\(base)/iframe"></iframe>
             <form id="form" action="\(base)/form" method="post"><input name="a" value="b"></form>
             <a id="link" href="\(base)/link">link</a><a id="blank" target="_blank" href="\(base)/blank">blank</a>
+            <a id="real" href="\(base)/real-click" style="position: fixed; left: 0; top: 0; width: 200px; height: 200px; display: block">real</a>
+            <a id="ping" href="#here" ping="\(base)/ping">ping</a>
+            <link rel="preload" as="script" href="\(base)/preload"><link rel="modulepreload" href="\(base)/modulepreload">
+            <link rel="dns-prefetch" href="\(base)"><style>@import url(\(base)/css-import);</style>
+            <video src="\(base)/video"></video><audio src="\(base)/audio"></audio>
+            <object data="\(base)/object"></object><embed src="\(base)/embed">
+            <iframe id="framed" srcdoc="<a id='inner' href='\(base)/srcdoc-link'>inner</a>"></iframe>
+            <div id="host"></div>
             <script>
               const base = "\(base)";
+              const work = (name) => `fetch("${base}/${name}-worker").catch(() => {});
+                try { new WebSocket("ws://127.0.0.1:\(listener.port)/${name}-worker-socket"); } catch (e) {}`;
               const tries = [
                 () => fetch(base + "/fetch"),
                 () => fetch(base + "/fetch-no-cors", { mode: "no-cors" }),
@@ -55,8 +65,40 @@ import WebKit
                 () => document.getElementById("link").click(),
                 () => document.getElementById("blank").click(),
                 () => { location.href = base + "/location"; },
+                () => import(base + "/import.js"),
+                () => document.getElementById("ping").click(),
+                () => new Worker(URL.createObjectURL(new Blob([work("blob")], { type: "text/javascript" }))),
+                () => new Worker("data:text/javascript," + encodeURIComponent(work("data"))),
+                () => { const a = document.createElement("a"); a.href = base + "/detached"; a.click(); },
+                () => { const a = document.createElement("a"); a.href = base + "/detached-event"; a.dispatchEvent(new MouseEvent("click")); },
+                () => { const a = document.createElement("area"); a.href = base + "/detached-area"; a.click(); },
+                () => {
+                  const root = document.getElementById("host").attachShadow({ mode: "closed" });
+                  root.innerHTML = `<a href="${base}/shadow"><span>shadow</span></a>`;
+                  root.querySelector("span").click();
+                },
+                () => {
+                  // A frame of its own gives a page fresh prototypes, made before something's could be put in place.
+                  const frame = document.createElement("iframe");
+                  document.body.append(frame);
+                  const a = frame.contentDocument.createElement("a");
+                  a.href = base + "/fresh-frame";
+                  frame.contentDocument.body.append(a);
+                  frame.contentWindow.HTMLElement.prototype.click.call(a);
+                  const b = document.createElement("a");
+                  b.href = base + "/fresh-prototype";
+                  frame.contentWindow.HTMLElement.prototype.click.call(b);
+                  window.freshClicked = true;
+                },
+                () => {
+                  const frame = document.getElementById("framed");
+                  const inner = () => frame.contentDocument && frame.contentDocument.getElementById("inner");
+                  const go = () => { inner().click(); window.innerClicked = true; };
+                  if (inner()) go(); else frame.addEventListener("load", go);
+                },
               ];
               for (const attempt of tries) { try { const p = attempt(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+              try { eval("1"); window.evaluated = true; } catch (error) { window.evaluated = false; }
               // What a space may load still loads: its own file and an inline image.
               const dot = new Image();
               dot.src = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
@@ -69,28 +111,65 @@ import WebKit
         try await ready(window.web)
         #expect(try await run(window.web, "return window.done") as? Bool == true, "the page did not run its tries")
         #expect(try await run(window.web, "return window.own") as? [Bool] == [true, true], "the space's own loads failed")
+        #expect(try await run(window.web, "return window.evaluated") as? Bool == false, "eval is refused, as the guide says")
+        // A real click of the mouse, sent to the view of a window that is never shown.
+        let offscreen = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 640), styleMask: .borderless,
+                                 backing: .buffered, defer: false)
+        offscreen.alphaValue = 0
+        offscreen.contentView = window.web
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: 50, y: 590), modifierFlags: [],
+                                                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: offscreen.windowNumber,
+                                                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            type == .leftMouseDown ? window.web.mouseDown(with: event) : window.web.mouseUp(with: event)
+        }
         await wait(3)
+        #expect(try await run(window.web, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
         #expect(listener.hits.count == 1, "reached: \(listener.hits.dropFirst().joined(separator: " | "))")
         // A clicked link goes to the link window instead, which the person cancelled here.
-        #expect(ask.links.map(\.path) == ["/link", "/blank"])
+        #expect(ask.links.map(\.path) == ["/link", "/blank", "/real-click"])
         #expect(window.web.url?.scheme == "something")
     }
 
+    /// Every space has the same origin, something://space, so each window has its own data store. Two spaces open at
+    /// the same time share nothing: no storage, no cookie, no database, no cache, no message between windows.
     @Test func noSpaceReadsAnothersStorage() async throws {
         let home = Home(), ask = FakeAsk()
         defer { home.remove() }
-        let a = try await home.window(try home.space("space-a", page(nil, "<script>window.done = true</script>")), ask)
+        let listening = "<script>window.heard = []; new BroadcastChannel('kept').onmessage = (e) => heard.push(e.data); window.done = true</script>"
+        let a = try await home.window(try home.space("space-a", page(nil, listening)), ask)
         defer { a.close() }
-        a.open()
-        try await ready(a.web)
-        #expect(try await run(a.web, "localStorage.setItem('kept', 'from a'); return localStorage.getItem('kept')") as? String == "from a")
-        #expect(ask.questions.isEmpty, "a space that declares no right is asked nothing")
-
-        let b = try await home.window(try home.space("space-b", page(nil, "<script>window.done = true</script>")))
+        let b = try await home.window(try home.space("space-b", page(nil, listening)))
         defer { b.close() }
+        a.open()
         b.open()
+        try await ready(a.web)
         try await ready(b.web)
-        #expect(try await run(b.web, "return localStorage.getItem('kept')") == nil)
+        #expect(ask.questions.isEmpty, "a space that declares no right is asked nothing")
+        #expect(try await run(a.web, """
+            localStorage.setItem("kept", "from a");
+            document.cookie = "kept=from-a";
+            await new Promise((done, failed) => {
+              const opening = indexedDB.open("kept");
+              opening.onupgradeneeded = () => opening.result.createObjectStore("store");
+              opening.onsuccess = () => {
+                const writing = opening.result.transaction("store", "readwrite");
+                writing.objectStore("store").put("from a", "key");
+                writing.oncomplete = done;
+                writing.onerror = failed;
+              };
+              opening.onerror = failed;
+            });
+            if (self.caches) await (await caches.open("kept")).put("https://example.com/kept", new Response("from a"));
+            new BroadcastChannel("kept").postMessage("from a");
+            return [localStorage.getItem("kept"), (await indexedDB.databases()).map((d) => d.name).join()]
+            """) as? [String] == ["from a", "kept"])
+        await wait(0.5)
+        #expect(try await run(a.web, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
+        #expect(try await run(b.web, """
+            return [localStorage.getItem("kept"), document.cookie.includes("kept"), (await indexedDB.databases()).length,
+                    self.caches ? await caches.has("kept") : false, heard.length]
+            """) as? [AnyHashable] == [NSNull(), false, 0, false, 0])
 
         // Storage ends with the window: the same space, opened again, starts empty.
         a.close()
@@ -127,16 +206,22 @@ import WebKit
         #expect(framed == "refused", "a frame inside the space is not answered")
 
         // Links: one window at a time, and none after "Block links until reload". Each one is journaled.
+        // While the link window is open, its modal loop turns the run loop: the page's second call is answered then.
+        ask.during = { _ in
+            window.web.evaluateJavaScript("something.open('https://example.com/b').then((v) => window.nested = v, (e) => window.nested = e.code)")
+            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+        }
         #expect(try await run(window.web, "return await something.open('https://example.com/a')") as? Bool == false)
         #expect(ask.links == [URL(string: "https://example.com/a")!])
-        window.linkOpen = true
-        #expect(try await run(window.web, "try { await something.open('https://example.com/b') } catch (e) { return e.code }") as? String == "BUSY")
-        (window.linkOpen, ask.link) = (false, .block)
+        #expect(try await run(window.web, "return window.nested") as? String == "BUSY")
+        ask.during = nil
+        ask.link = .block
         #expect(try await run(window.web, "return await something.open('https://example.com/c')") as? Bool == false)
         #expect(try await run(window.web, "return await something.open('https://example.com/d')") as? Bool == false)
         #expect(ask.links.count == 2)
         let journal = try Journal(folder: home.places.journals).last(10, space: "bridge")
-        #expect(journal.map(\.result) == ["RIGHT_NOT_GRANTED", "ok", "BUSY", "ok", "ok"])
+        // The second call ends first, while the first one waits on the person.
+        #expect(journal.map(\.result) == ["RIGHT_NOT_GRANTED", "BUSY", "ok", "ok", "ok"])
     }
 
     @Test func aModeThatLowersAskingIsConfirmed() async throws {
@@ -145,11 +230,32 @@ import WebKit
         let ask = FakeAsk()
         let window = try await home.window(try home.space("modes", page(nil, "")), ask)
         defer { window.close() }
-        #expect(window.confirms(mode: "default", kind: "claude"))
-        #expect(!window.confirms(mode: "acceptEdits", kind: "claude"))
+        #expect(try window.confirms(mode: "default", kind: "claude", folder: "/Users/example/code/shop"))
+        #expect(try !window.confirms(mode: "acceptEdits", kind: "claude", folder: "/Users/example/code/shop"))
         ask.lowers = true
-        #expect(window.confirms(mode: "never", kind: "codex"))
+        #expect(try window.confirms(mode: "never", kind: "codex", folder: nil))
+        #expect(try window.confirms(mode: "plan", kind: "opencode", folder: nil), "OpenCode's modes are its agents")
         #expect(ask.modes == ["acceptEdits", "never"])
+        // Never offered, even with a click: a mode that never asks, and any mode something does not know.
+        for (mode, kind) in [("bypassPermissions", "claude"), ("acceptedits", "claude"), ("granular", "codex")] {
+            do {
+                _ = try window.confirms(mode: mode, kind: kind, folder: nil)
+                Issue.record("\(mode) was offered")
+            } catch { #expect((error as? CodedError)?.code == "VALUE_NOT_OFFERED") }
+        }
+        #expect(ask.modes.count == 2)
+    }
+
+    /// granted.limits is the table of contract 3.7, as the contract's own fixtures give it.
+    @Test func theLimitsAreTheContracts() throws {
+        let bridge = Home.share.appendingPathComponent("contract/bridge")
+        let cases = try FileManager.default.contentsOfDirectory(at: bridge, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }
+        #expect(!cases.isEmpty)
+        for file in cases {
+            let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+            let limits = (fixture?["granted"] as? [String: Any])?["limits"] as? [String: [String]]
+            #expect(limits == SpaceWindow.limits, "\(file.lastPathComponent)")
+        }
     }
 
     @Test func rightsAreAskedOnceAndRemembered() async throws {
@@ -191,6 +297,44 @@ import WebKit
         #expect(ask.questions.last?.folder == nil && ask.questions.last?.scope == nil)
     }
 
+    /// The scope is shown whenever `state` is asked, even when it was answered earlier with another right.
+    @Test func stateAddedLaterShowsItsScope() async throws {
+        let home = Home(), ask = FakeAsk()
+        defer { home.remove() }
+        let space = try home.space("later", page(#"{"contract": 1, "rights": ["store"], "agents": {"see": "all"}}"#, ""))
+        let first = try await home.window(space, ask)
+        first.open()
+        first.close()
+        #expect(ask.questions.last?.scope == nil, "without state, the scope shows nothing")
+        try page(#"{"contract": 1, "rights": ["store", "state"], "agents": {"see": "all"}}"#, "").write(to: space.location, atomically: true, encoding: .utf8)
+        let second = try await home.window(space, ask)
+        defer { second.close() }
+        second.open()
+        #expect(ask.questions.last?.rights == ["state"] && ask.questions.last?.scope == .all)
+    }
+
+    /// A space opened by path keeps its answers while its window is open, and nowhere else: a file that lands at the
+    /// same path later is asked again.
+    @Test func aSpaceOpenedByPathIsNotRemembered() async throws {
+        let home = Home(), ask = FakeAsk()
+        defer { home.remove() }
+        let file = home.root.appendingPathComponent("Downloads/board.html")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try page(#"{"contract": 1, "rights": ["state"]}"#, "<p>one</p>").write(to: file, atomically: true, encoding: .utf8)
+        let space = try #require(Spaces(root: home.places.spaces).locate(file.path))
+        let first = try await home.window(space, ask)
+        first.open()
+        #expect(ask.questions.count == 1 && first.granted.rights == ["state"])
+        first.load()
+        #expect(ask.questions.count == 1, "a reload asks nothing new")
+        first.close()
+        #expect(!FileManager.default.fileExists(atPath: home.places.grants.path))
+        let second = try await home.window(space, ask)
+        defer { second.close() }
+        second.open()
+        #expect(ask.questions.count == 2)
+    }
+
     @Test func aGrantsFileThatDoesNotReadIsLeftAndSaid() async throws {
         let home = Home()
         defer { home.remove() }
@@ -219,5 +363,12 @@ import WebKit
         #expect(await wait(until: { window.blocked.isEmpty }))
         try await ready(window.web)
         #expect(try await run(window.web, "return document.getElementById('word').textContent") as? String == "two")
+
+        // Blocked again: the page the person no longer sees stops running.
+        try page(#"{"contract": 2}"#, "<p id='word'>three</p>").write(to: space.location, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(10)], ofItemAtPath: space.location.path)
+        #expect(await wait(until: { !window.blocked.isEmpty }))
+        #expect(await wait(until: { !window.web.isLoading && window.web.url?.path == "/.blocked" }))
+        #expect(try await run(window.web, "return document.getElementById('word') === null && window.done === undefined") as? Bool == true)
     }
 }

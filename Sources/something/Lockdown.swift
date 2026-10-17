@@ -1,7 +1,7 @@
 // What keeps a space off the network beyond the scheme's policy (Scheme.swift) and the navigation policy
-// (SpaceWindow.swift): a content rule list, and a guard on links. Both close holes the lockdown test found: WebKit opens
+// (SpaceWindow.swift): a content rule list, and a guard on links. They close holes the lockdown test found: WebKit opens
 // a connection for <link rel="preconnect">, which no policy governs, and opens one to a clicked link's server before it
-// asks the navigation policy where it may go.
+// asks the navigation policy where it may go, whether the link is in the document or not.
 import Foundation
 import SomethingCore
 import WebKit
@@ -38,6 +38,43 @@ enum Lockdown {
               if (["http:", "https:", "mailto:"].includes(url.protocol)) webkit.messageHandlers.link.postMessage(url.href);
             }, true);
           }
+        })();
+        """
+
+    /// The guard cannot see a link the page's script activates where no event reaches the window: an element not in
+    /// the document, or inside a closed shadow root. In the page's own world, before its scripts, this makes such an
+    /// activation of a link outside the space do nothing. It keeps the functions it uses, so the page cannot change them.
+    static let activationScript = """
+        (function () {
+          const apply = Reflect.apply, Address = URL, get = (type, key) => Object.getOwnPropertyDescriptor(type.prototype, key).get;
+          const parentOf = get(Node, "parentNode"), typeOf = get(Node, "nodeType"), hostOf = get(ShadowRoot, "host");
+          const baseOf = get(Node, "baseURI"), eventType = get(Event, "type");
+          const matches = Element.prototype.matches, attribute = Element.prototype.getAttribute;
+          const click = HTMLElement.prototype.click, dispatch = EventTarget.prototype.dispatchEvent;
+          // Whether activating `node` would follow a link outside the space that the guard on the window cannot hear.
+          function unseen(node) {
+            let link = null, hidden = false;
+            for (;;) {
+              const type = apply(typeOf, node, []);
+              if (!link && type === 1 && apply(matches, node, ["a[href], area[href]"])) link = node;
+              const parent = apply(parentOf, node, []);
+              if (parent) { node = parent; continue; }
+              if (type !== 11) { hidden = hidden || type !== 9; break; }
+              hidden = true;
+              node = apply(hostOf, node, []);
+            }
+            if (!link || !hidden) return false;
+            try {
+              const url = new Address(apply(attribute, link, ["href"]), apply(baseOf, link, []));
+              return url.protocol !== "something:" && url.protocol !== "javascript:";
+            } catch (error) { return true; }
+          }
+          function isNode(value) { try { apply(typeOf, value, []); return true; } catch (error) { return false; } }
+          HTMLElement.prototype.click = function () { if (!unseen(this)) apply(click, this, []); };
+          EventTarget.prototype.dispatchEvent = function (event) {
+            if (apply(eventType, event, []) === "click" && isNode(this) && unseen(this)) return false;
+            return apply(dispatch, this, [event]);
+          };
         })();
         """
 

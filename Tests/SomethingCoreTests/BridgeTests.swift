@@ -40,7 +40,7 @@ final class FakeHost: BridgeHost {
     }
     func resume(_ kind: String, thread: String, of agent: Agent) throws -> String { calls.append("resume \(thread)"); return "n2" }
     func open(_ url: URL) throws -> Bool { calls.append("open \(url.absoluteString)"); return true }
-    func confirms(mode: String, kind: String) -> Bool { mode != "acceptEdits" || confirmsModes }
+    func confirms(mode: String, kind: String, folder: String?) -> Bool { mode != "acceptEdits" || confirmsModes }
 }
 
 /// The code of the answer, or "ok" for a result.

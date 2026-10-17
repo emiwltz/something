@@ -30,8 +30,9 @@ The same contract as data, for tests: `share/contract/` (`state-example.json`, `
 `<name>` is lowercase letters, digits and `-`.
 
 **A space has no network.** It loads only its own files, inline code, `data:` and `blob:` URLs: no CDN, no web font,
-no `fetch` to the Internet. Embed a library in the space at an exact version. `localStorage` works but is emptied when
-the window closes: the memory is the only lasting state.
+no `fetch` to the Internet. Embed a library in the space at an exact version. `eval` and `new Function` are refused,
+so pick a library that does not need them (Alpine.js and the full build of Vue do; the runtime build of Vue does not).
+`localStorage` works but is emptied when the window closes: the memory is the only lasting state.
 
 ## The declaration
 
@@ -254,7 +255,8 @@ Call `something.open` for a link your code opens, not from the click handler of 
 - `"unconfirmed"`: the agent took the message but did not confirm within 10 seconds; the state will show what happened.
 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
-window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`.
+window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
+`bypassPermissions`), or one something does not know, is never offered: `VALUE_NOT_OFFERED`, from `set` and `launch`.
 
 ```js
 const off = something.on("change", (state) => render(state));
@@ -298,7 +300,7 @@ scope in force. `folder`: the folder for launches, or `null`.
 | `AGENT_NOT_FOUND` | No such agent in this space's scope. |
 | `READ_ONLY_AGENT` | A write to an agent started elsewhere. |
 | `NOT_SUPPORTED` | This agent cannot do it: its `can` says false. |
-| `VALUE_NOT_OFFERED` | `set` with a value not in `options`, or the agent replied with a different value. |
+| `VALUE_NOT_OFFERED` | `set` with a value not in `options`, a mode never offered, or the agent replied with a different value. |
 | `AGENT_STOPPED` | The agent has ended. |
 | `FOLDER_NOT_GRANTED` | `launch` with a folder outside the granted one. |
 | `NOT_INSTALLED` | The agent's program was not found on this Mac. |

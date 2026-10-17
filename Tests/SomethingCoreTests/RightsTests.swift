@@ -67,6 +67,16 @@ struct RightsTests {
         let ask = Rights.toAsk(declaration(["state", "launch:claude"]), since: nil)
         #expect(ask == ToAsk(rights: ["state", "launch:claude"], scope: true, folder: true))
         #expect(Rights.toAsk(declaration(["state"]), since: nil).folder == false, "no launch right, no folder to choose")
+        #expect(!Rights.toAsk(declaration(["store"]), since: nil).scope, "without state, the scope shows nothing")
+    }
+
+    @Test func theScopeIsAskedWithState() {
+        let store = declaration(["store"], agents: .all)
+        let grant = Rights.answered(store, allowed: ["store"], refused: [], folder: nil, at: "2026-10-17T09:00:00Z", after: nil)
+        #expect(Rights.toAsk(declaration(["store", "state"], agents: .all), since: grant) == ToAsk(rights: ["state"], scope: true, folder: false),
+                "state added later shows the scope it sees, though the scope was answered with store")
+        let refused = Rights.answered(declaration(["state"]), allowed: [], refused: ["state"], folder: nil, at: "2026-10-17T09:00:00Z", after: nil)
+        #expect(Rights.toAsk(declaration(["state"], agents: .all), since: refused).isEmpty, "a refused state asks no scope, even a wider one")
     }
 
     @Test func laterOpeningsAskOnlyWhatChanged() {

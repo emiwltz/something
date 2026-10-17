@@ -57,10 +57,14 @@ final class Scheme: NSObject, WKURLSchemeHandler {
     }
 
     static func type(of file: URL) -> String {
+        // WebKit refuses a module script or a WebAssembly stream served as octet-stream.
         let types = ["html": "text/html; charset=utf-8", "js": "text/javascript; charset=utf-8",
+                     "mjs": "text/javascript; charset=utf-8", "wasm": "application/wasm",
                      "css": "text/css; charset=utf-8", "json": "application/json", "svg": "image/svg+xml",
                      "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif",
-                     "webp": "image/webp", "woff2": "font/woff2", "mp3": "audio/mpeg", "wav": "audio/wav"]
+                     "webp": "image/webp", "ico": "image/x-icon", "woff2": "font/woff2", "woff": "font/woff",
+                     "ttf": "font/ttf", "otf": "font/otf", "mp3": "audio/mpeg", "wav": "audio/wav",
+                     "mp4": "video/mp4", "webm": "video/webm"]
         return types[file.pathExtension.lowercased()] ?? "application/octet-stream"
     }
 }

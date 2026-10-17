@@ -27,8 +27,9 @@ public protocol BridgeHost: AnyObject {
     func resume(_ kind: String, thread: String, of agent: Agent) throws -> String
     /// Asks the person in a native window whether to open `url`; true when they opened it.
     func open(_ url: URL) throws -> Bool
-    /// true when `mode` does not make agents of `kind` ask less, or the person confirmed it in a native window.
-    func confirms(mode: String, kind: String) -> Bool
+    /// true when `mode` does not make agents of `kind` ask less, or the person confirmed it in a native window that
+    /// names the agent's `folder`. Throws a `CodedError` (VALUE_NOT_OFFERED) for a mode something never offers.
+    func confirms(mode: String, kind: String, folder: String?) throws -> Bool
 }
 
 public enum Bridge {
@@ -88,7 +89,7 @@ public enum Bridge {
                     throw CodedError("VALUE_NOT_OFFERED", "\(value) is not a \(key) this agent offers; pick one from options.\(key) in the state.")
                 }
             }
-            if let mode { try confirm(mode, agent.kind, host) }
+            if let mode { try confirm(mode, agent.kind, agent.folder, host) }
             return ["applied": try host.set(agent, model: model, mode: mode, effort: effort)]
         case "launch":
             let kind = try p.string("kind"), folder = try p.optional("folder"), model = try p.optional("model"), mode = try p.optional("mode"), effort = try p.optional("effort")
@@ -100,7 +101,7 @@ public enum Bridge {
             guard Rights.inside(target, root) else { throw CodedError("FOLDER_NOT_GRANTED", "\(target) is outside the folder granted for launches, \(root).") }
             let limits = granted.limits[kind] ?? [], given = [("model", model), ("mode", mode), ("effort", effort)]
             if let (key, _) = given.first(where: { $1 != nil && limits.contains($0) }) { throw CodedError("NOT_SUPPORTED", "\(kind) agents take no \(key) here; launch without it.") }
-            if let mode { try confirm(mode, kind, host) }
+            if let mode { try confirm(mode, kind, target, host) }
             line.agent = try host.launch(kind, folder: target, model: model, mode: mode, effort: effort)
             return line.agent!
         case "resume":
@@ -168,8 +169,8 @@ public enum Bridge {
         guard known.installed != false else { throw CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac; install it, then try again.") }
     }
 
-    static func confirm(_ mode: String, _ kind: String, _ host: BridgeHost) throws {
-        if !host.confirms(mode: mode, kind: kind) { throw CodedError("REFUSED", "The person did not allow the mode \(mode).") }
+    static func confirm(_ mode: String, _ kind: String, _ folder: String?, _ host: BridgeHost) throws {
+        if try !host.confirms(mode: mode, kind: kind, folder: folder) { throw CodedError("REFUSED", "The person did not allow the mode \(mode).") }
     }
 }
 

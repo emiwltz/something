@@ -22,7 +22,12 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     var linkOpen = false, linksBlocked = false
     var closed: (SpaceWindow) -> Void = { _ in }
     private let bridge: String, scheme: Scheme
-    private var stamp: Date?, timer: Timer?, pushed: State?
+    private var stamp: Date?
+    private var timer: Timer?
+    private var pushed: State?
+    /// The answers for a space opened by path, kept for the life of the window only: kept in app.json under its path,
+    /// they would pass to whatever file lands at that path later, and a space never inherits rights (contract 5).
+    private var held: Grant?
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
@@ -31,7 +36,12 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         guard let bridge = try? String(contentsOf: file, encoding: .utf8) else {
             throw SpaceError("something cannot read \(file.path); reinstall something, or restore share/ in its clone.")
         }
-        (self.space, self.places, self.engine, self.ask, self.bridge, title) = (space, places, engine, ask, bridge, space.name)
+        self.space = space
+        self.places = places
+        self.engine = engine
+        self.ask = ask
+        self.bridge = bridge
+        title = space.name
         let named = Spaces(root: places.spaces).named(space.name)?.location.resolvingSymlinksInPath().path
         kept = named == space.location.resolvingSymlinksInPath().path
         scheme = Scheme(space: space)
@@ -50,10 +60,6 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         web.navigationDelegate = self
         web.uiDelegate = self
     }
-
-    /// The key of this space's grant in app.json: its name in the spaces folder, its path elsewhere, so a space opened
-    /// by path never takes the rights of a space of the same name (a name holds no "/").
-    var grantKey: String { kept ? space.name : space.page.resolvingSymlinksInPath().path }
 
     /// Loads the space and watches its files: when one changes (checked each second), the space reloads.
     func open() {
@@ -81,39 +87,53 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// Reads the declaration, asks the rights that changed, then loads or reloads the page with the new `granted`;
     /// or, when the declaration keeps the space from being displayed, says why in the window.
     func load() {
-        (stamp, pushed, linksBlocked) = (space.stamp(), nil, false)
+        stamp = space.stamp()
+        pushed = nil
+        linksBlocked = false
         let reading = Declaration.read(space, home: places.home)
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         if let declaration = reading.declaration {
             title = declaration.title
-            granted = Rights.granted(reading, answer(declaration), limits: [:], home: places.home)
+            granted = Rights.granted(reading, answer(declaration), limits: SpaceWindow.limits, home: places.home)
             let controller = web.configuration.userContentController
             controller.removeAllUserScripts()
             let start = bridge + "\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n"
+            // Every frame gets the guards: a frame inside the space has links too. Only the page gets the bridge.
+            controller.addUserScript(WKUserScript(source: Lockdown.activationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
+            controller.addUserScript(WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
             controller.addUserScript(WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
-            controller.addUserScript(WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: Lockdown.world))
-            if web.url?.scheme == Scheme.name { web.reload() } else { web.load(URLRequest(url: scheme.page)) }
+            web.load(URLRequest(url: scheme.page))
+        } else {
+            // The page the person can no longer see stops: its scripts, its timers and its links. The empty page has
+            // an address of the space, as the navigation policy allows nothing else.
+            web.configuration.userContentController.removeAllUserScripts()
+            web.loadHTMLString("", baseURL: URL(string: "\(Scheme.name)://\(Scheme.host)/.blocked"))
         }
         present()
     }
 
-    /// The grant in force after this opening: the person is asked only what changed since they last answered, and
-    /// their answers are kept in the grants file. nil when nothing was ever answered or the file cannot be read.
+    /// The grant in force after this opening: the person is asked only what changed since they last answered. The
+    /// answers for a space of the spaces folder are kept in the grants file, by its name. nil when nothing was ever
+    /// answered or the file cannot be read.
     func answer(_ declaration: Declaration) -> Grant? {
-        var file: AppFile
-        do { file = try AppFile.read(places.grants) } catch {
-            ask.tell((error as? SpaceError)?.message ?? "\(error)")
-            return nil
+        var file = AppFile()
+        if kept {
+            do { file = try AppFile.read(places.grants) } catch {
+                ask.tell((error as? SpaceError)?.message ?? "\(error)")
+                return nil
+            }
         }
-        var grant = file.spaces[grantKey]
-        var toAsk = Rights.toAsk(declaration, since: grant)
-        // The scope only says which agents `state` shows: without that right, or with it refused, it asks nothing.
-        if !declaration.rights.contains("state") || grant?.refused.contains("state") == true { toAsk.scope = false }
+        var grant = kept ? file.spaces[space.name] : held
+        let toAsk = Rights.toAsk(declaration, since: grant)
         guard !toAsk.isEmpty, let answer = ask.rights(question(declaration, toAsk, grant)) else { return grant }
         grant = Rights.answered(declaration, allowed: answer.allowed, refused: answer.refused, folder: answer.folder,
                                 at: ISO8601DateFormatter().string(from: Date()), after: grant)
         grant?.remap.merge(answer.remap) { $1 }
-        file.spaces[grantKey] = grant
+        guard kept else {
+            held = grant
+            return grant
+        }
+        file.spaces[space.name] = grant
         do { try file.write(places.grants) } catch { ask.tell((error as? SpaceError)?.message ?? "\(error)") }
         return grant
     }
@@ -185,7 +205,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// A link the person clicked, from Lockdown's guard: it goes to the link window, unless one is open or links are
     /// blocked until the next reload.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, let text = message.body as? String, let url = URL(string: text) else { return }
+        guard message.frameInfo.isMainFrame, blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
     }
 

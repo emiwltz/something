@@ -32,28 +32,37 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.start(often: true)
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
-            openSpace()
+            if let problem = openSpace() { fail(problem) }
         }
     }
 
     /// Opens the space the app was started with, or fronts its window. Until Home exists, that is the template
-    /// (share/template.html) or the space named or given by path on the command line.
-    @objc func openSpace() {
+    /// (share/template.html) or the space named or given by path on the command line. Returns what went wrong, or nil.
+    func openSpace() -> String? {
         let path = opening ?? Resources.share.appendingPathComponent("template.html").path
         guard let space = Spaces(root: places.spaces).locate(path) else {
-            fail("There is no space \(path): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")
+            return "There is no space \(path): give the name of a space in \(places.spaces.path), or the path of its .html file or folder."
         }
-        if let open = windows.first(where: { $0.space == space }) { return open.show() }
-        guard let rules else { return }
+        if let open = windows.first(where: { $0.space == space }) {
+            open.show()
+            return nil
+        }
+        guard let rules else { return nil }
         do {
             let window = try SpaceWindow(space: space, places: places, engine: engine, ask: ask, share: Resources.share, rules: rules)
             window.closed = { [weak self] closed in self?.windows.removeAll { $0 === closed } }
             windows.append(window)
             window.open()
             window.show()
+            return nil
         } catch {
-            fail((error as? SpaceError)?.message ?? "\(error)")
+            return (error as? SpaceError)?.message ?? "\(error)"
         }
+    }
+
+    /// The menu bar's item: a failure is said in a window, and the app goes on, with its agents.
+    @objc func openFromMenu() {
+        if let problem = openSpace() { ask.tell(problem) }
     }
 
     /// The engine may change many times a second; the windows hear of it at most every quarter of a second.
@@ -89,7 +98,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(withTitle: "Open the window", action: #selector(openSpace), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Open the window", action: #selector(openFromMenu), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit something", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
@@ -105,8 +114,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return .terminateLater
     }
 
+    /// Ends the app at its start, before any agent was launched: in a window, which is all a person sees when the app
+    /// was not started from a terminal, and in the terminal. Later failures go through `ask.tell`, never here, so
+    /// that quitting always stops the agents.
     func fail(_ message: String) -> Never {
         FileHandle.standardError.write(Data((message + "\n").utf8))
+        ask.tell(message)
         exit(1)
     }
 }
