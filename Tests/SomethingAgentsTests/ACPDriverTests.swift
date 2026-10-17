@@ -107,10 +107,14 @@ import SomethingCore
         #expect(replay.fold.agent.alive == false)
     }
 
+    /// Killed during a turn, OpenCode leaves its claim (T-3): the end and the claim are said in one error.
     @Test func killed() throws {
-        let replay = try Replay.play("killed", kind: "opencode")
+        let folder = try ACPDriverTests.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let session = "ses_eb42d0ee4ffeck9Fs9cn1jngw7"
+        let replay = try Replay.play("killed", kind: "opencode", database: try ACPDriverTests.database(claimed: session, in: folder))
         #expect(replay.fold.agent.state == "error")
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137)."))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + ACPDriver.claimLeft(session)))
     }
 
     /// The ladder's first step cancels the running turn; the input is closed after its answer.
@@ -229,30 +233,95 @@ import SomethingCore
         #expect(ACPDriver.database([:]) == nil)
     }
 
-    /// The claim is read from session_v2.time_suspended, the column OpenCode 2.0.20 sets while a run holds the session.
-    @Test func aClaimLeftIsSaid() throws {
+    static func folder() throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("acp-claim-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
+        return folder
+    }
+
+    /// An OpenCode database in `folder` where `claimed` is marked as running and ses_released is not.
+    static func database(claimed: String, in folder: URL) throws -> String {
         let path = folder.appendingPathComponent("opencode.db").path
         var db: OpaquePointer?
-        #expect(sqlite3_open(path, &db) == SQLITE_OK)
-        #expect(sqlite3_exec(db, """
+        defer { sqlite3_close(db) }
+        try #require(sqlite3_open(path, &db) == SQLITE_OK)
+        try #require(sqlite3_exec(db, """
             CREATE TABLE session_v2 (id TEXT PRIMARY KEY, time_suspended INTEGER, idle_outcome TEXT);
-            INSERT INTO session_v2 VALUES ('\(Self.session)', 1792272961952, NULL), ('ses_released', NULL, 'interrupted');
+            INSERT INTO session_v2 VALUES ('\(claimed)', 1792272961952, NULL), ('ses_released', NULL, 'interrupted');
             """, nil, nil, nil) == SQLITE_OK)
-        sqlite3_close(db)
+        return path
+    }
+
+    /// The claim is read from session_v2.time_suspended, the column OpenCode 2.0.20 sets while a run holds the session.
+    @Test func theClaimIsRead() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let path = try Self.database(claimed: Self.session, in: folder)
         #expect(ACPDriver.claimed(Self.session, in: path) == true)
         #expect(ACPDriver.claimed("ses_released", in: path) == false)
         #expect(ACPDriver.claimed("ses_unknown", in: path) == nil)
         #expect(ACPDriver.claimed(Self.session, in: folder.appendingPathComponent("missing.db").path) == nil)
         #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("missing.db").path), "never created")
+    }
 
+    /// Only a turn of something's still open at the end makes the claim something's to say; a claim found otherwise
+    /// (an earlier crash, the person's own OpenCode) is left unsaid.
+    @Test func aClaimLeftIsSaidOnlyAfterAnOpenTurn() throws {
+        let folder = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let path = try Self.database(claimed: Self.session, in: folder)
+        func replay(prompting: Bool) throws -> Replay {
+            let replay = Self.opened()
+            try #require(replay.agent.driver as? ACPDriver).database = path
+            if prompting { _ = try replay.agent.send("Hello.", when: "next") }
+            return replay
+        }
+
+        let idle = try replay(prompting: false)
+        idle.agent.ended(code: 0, errors: "", asked: true)
+        #expect(idle.fold.agent.error == nil)
+        let crashed = try replay(prompting: false)
+        crashed.agent.ended(code: 1, errors: "", asked: false)
+        #expect(crashed.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 1)."))
+
+        let stopped = try replay(prompting: true)
+        stopped.agent.ended(code: 0, errors: "", asked: true)
+        #expect(stopped.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.claimLeft(Self.session)))
+        let killed = try replay(prompting: true)
+        killed.agent.ended(code: 137, errors: "", asked: false)
+        #expect(killed.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + ACPDriver.claimLeft(Self.session)))
+    }
+
+    /// A complete list without an effort (a model without variants) leaves no effort in use, not the last one.
+    @Test func anEffortNoLongerOfferedIsNone() throws {
         let replay = Self.opened()
-        let driver = try #require(replay.agent.driver as? ACPDriver)
-        driver.database = path
-        replay.agent.ended(code: 0, errors: "", asked: true)
-        driver.checkClaim()
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.claimLeft(Self.session)))
+        let model: [String: Any] = ["id": "model", "category": "model", "currentValue": "fake/fake-model",
+                                    "options": [["value": "fake/fake-model", "name": "fake/Fake Model"], ["value": "fake/other-model", "name": "fake/Other Model"]]]
+        replay.feed(Self.update(["sessionUpdate": "config_option_update", "configOptions": [model,
+            ["id": "effort", "category": "thought_level", "currentValue": "high", "options": [["value": "high", "name": "High"]]]]]))
+        #expect(replay.fold.agent.effort == "high")
+        #expect(try replay.agent.driver.set(model: "fake/other-model", mode: nil, effort: nil) == "now")
+        var other = model
+        other["currentValue"] = "fake/other-model"
+        replay.feed(["jsonrpc": "2.0", "id": 3, "result": ["configOptions": [other]]])
+        #expect(replay.fold.agent.model == "fake/other-model")
+        #expect(replay.fold.agent.effort == nil)
+        #expect(replay.agent.agent.can.effort == false)
+    }
+
+    /// Without a one-time allow, an allow cannot be sent: the refusal sent is the decision shown, and it is said.
+    @Test func anAllowNotOfferedIsARefusal() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(Self.update(["sessionUpdate": "tool_call", "toolCallId": "call_fake1", "title": "touch invented.txt", "kind": "execute", "status": "pending"]))
+        replay.feed(["jsonrpc": "2.0", "id": 0, "method": "session/request_permission", "params": ["sessionId": Self.session,
+            "options": [["kind": "allow_always", "name": "Always allow", "optionId": "always"], ["kind": "reject_once", "name": "Reject", "optionId": "reject"]],
+            "toolCall": ["toolCallId": "call_fake1", "title": "touch invented.txt", "kind": "execute", "rawInput": ["command": "touch invented.txt"]]]])
+        let request = try #require(replay.fold.requests.first?.id)
+        #expect(try replay.agent.answer(request, .once))
+        let reply = try #require(replay.lines().last?["result"] as? [String: Any])
+        #expect(reply["outcome"] as? [String: String] == ["outcome": "cancelled"], "never \"always\"")
+        #expect(replay.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "denied"))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.noAllowOnce))
     }
 }

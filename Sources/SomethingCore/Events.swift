@@ -11,6 +11,8 @@ public enum AgentEvent: Equatable, Sendable {
     case seen(alive: Bool?, evidence: String?, waiting: StateMap.Waiting, lastWrite: Date?)
     /// Values the agent itself reported; nil leaves a value as it was.
     case reported(model: String?, mode: String?, effort: String?)
+    /// All three values at once, from a harness's complete list of them: nil means the agent has none now.
+    case settings(model: String?, mode: String?, effort: String?)
     case options(Options)
     /// A turn began; `id` is the harness's own when it has one.
     case turnStarted(id: String?)
@@ -58,6 +60,7 @@ public struct Fold: Sendable {
         case .seen(let alive, let evidence, let waiting, let lastWrite): (facts.alive, facts.evidence, facts.waiting, facts.lastWrite) = (alive, evidence, waiting, lastWrite)
         case .reported(let model, let mode, let effort):
             (agent.model, agent.mode, agent.effort) = (model ?? agent.model, mode ?? agent.mode, effort ?? agent.effort)
+        case .settings(let model, let mode, let effort): (agent.model, agent.mode, agent.effort) = (model, mode, effort)
         case .options(let options): agent.options = options
         case .turnStarted(let id):
             count += 1

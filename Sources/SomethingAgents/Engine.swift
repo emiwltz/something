@@ -118,8 +118,14 @@ public final class Engine {
     // What a space asks through the bridge (SomethingCore/Bridge.swift checked the call first). Each throws a
     // `CodedError` with a code of contract 4.3.
 
-    /// Returns the delivery: "started", "steered" or "queued". Throws AGENT_NOT_FOUND, AGENT_STOPPED, BAD_PARAMS.
-    public func deliver(_ text: String, to agent: String, when: String) throws -> String { try running(agent).send(text, when: when) }
+    /// Returns the delivery: "started", "steered" or "queued". Throws AGENT_NOT_FOUND, AGENT_STOPPED (also once its
+    /// stop was asked), BAD_PARAMS.
+    public func deliver(_ text: String, to agent: String, when: String) throws -> String {
+        // A message during the stop would open a turn after the stop's interrupt, and the input would close in it.
+        let found = try running(agent)
+        guard !stopping.contains(agent) else { throw CodedError("AGENT_STOPPED", "The agent is stopping; launch or resume it to go on.") }
+        return try found.send(text, when: when)
+    }
 
     /// Returns whether a turn was running; the queue is emptied either way. Throws AGENT_NOT_FOUND, AGENT_STOPPED.
     public func interrupt(_ agent: String) throws -> Bool { try running(agent).interrupt() }
@@ -226,13 +232,6 @@ public final class Engine {
         }, now: Engine.now)
         // A Codex or an OpenCode that cannot open its conversation is told to end.
         (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
-        let goodbye = agent.driver.goodbye
-        spawn.graceful = { [weak spawn] in
-            guard let spawn, let goodbye, (try? spawn.write(goodbye)) != nil else { return }
-            record?(true, goodbye)
-            // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
-            while spawn.running { usleep(20_000) }
-        }
         if let opencode = agent.driver as? ACPDriver {
             opencode.quit = { [weak spawn] in spawn?.closeInput() }
             opencode.database = ACPDriver.database(spawn.environment)
@@ -240,6 +239,14 @@ public final class Engine {
             spawn.graceful = { [weak spawn, weak opencode] in
                 DispatchQueue.main.async { _ = try? agent.interrupt() }
                 while spawn?.running == true, opencode?.prompting == true { usleep(20_000) }
+            }
+        } else {
+            let goodbye = agent.driver.goodbye
+            spawn.graceful = { [weak spawn] in
+                guard let spawn, let goodbye, (try? spawn.write(goodbye)) != nil else { return }
+                record?(true, goodbye)
+                // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
+                while spawn.running { usleep(20_000) }
             }
         }
         if let spool {
@@ -264,7 +271,6 @@ public final class Engine {
                             spool?.stop()
                             DispatchQueue.main.async {
                                 agent.ended(code: code, errors: errors, asked: asked(launch.agent))
-                                (agent.driver as? ACPDriver)?.checkClaim()
                             }
                         })
         try agent.begin(pid: Int(spawn.pid))

@@ -196,6 +196,9 @@ import SomethingCore
         var stopped = false
         let begun = Date()
         engine.stopAll(within: 6) { stopped = true }
+        #expect(throws: CodedError("AGENT_STOPPED", "The agent is stopping; launch or resume it to go on."), "no turn opens after the stop's cancel") {
+            try engine.deliver("Too late.", to: id, when: "next")
+        }
         try await until("the stop") { stopped }
         #expect(Date().timeIntervalSince(begun) < 2, "the cancel's answer ends the first step at once")
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("cancels").path))

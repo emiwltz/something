@@ -175,9 +175,12 @@ final class Launched {
         return delivery.rawValue
     }
 
-    /// The program ended with `code`. When something asked it to stop, that is no failure, whatever the code.
+    /// The program ended with `code`. When something asked it to stop, that is no failure, whatever the code; an
+    /// OpenCode that still marks its conversation as running is said even then.
     func ended(code: Int32, errors: String, asked: Bool) {
-        if asked { record(.stopped(nil)) } else { driver.ended(code: code, errors: errors) }
+        guard asked else { return driver.ended(code: code, errors: errors) }
+        record(.stopped(nil))
+        (driver as? ACPDriver)?.checkClaim()
     }
 
     /// Empties the queue and stops the running turn. Returns whether a turn was running. Throws AGENT_STOPPED.

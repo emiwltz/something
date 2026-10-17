@@ -30,7 +30,9 @@ public final class ACPDriver: Driver {
         "OpenCode ended during a turn and left its conversation \(session) marked as running: the next time OpenCode's background service starts, it may continue that turn by itself. Open the conversation in OpenCode to finish or stop it."
     }
 
-    static let questionDismissed = "OpenCode dismissed its own question: over the channel something uses, OpenCode cannot ask. Tell it to write its questions as a plain message."
+    static let questionDismissed = "OpenCode tried to ask you a question, but when something launches it, OpenCode cannot show questions. Ask it to write its question in its reply instead."
+
+    static let noAllowOnce = "OpenCode offered no one-time allow for this request, and something never allows always: it was refused."
 
     private let launch: Launch
     private let write: (Data) throws -> Void
@@ -50,10 +52,17 @@ public final class ACPDriver: Driver {
     /// Open requests by the id something shows.
     private var asks: [String: Ask] = [:]
     /// Each tool call's name (the title of its first update), its item while it runs, and the person's decision on it.
-    private var names: [String: String] = [:], tools: [String: Item] = [:], decisions: [String: Decision] = [:]
+    private var names: [String: String] = [:]
+    private var tools: [String: Item] = [:]
+    private var decisions: [String: Decision] = [:]
     /// The text so far of each message OpenCode streams, by its messageId.
     private var texts: [String: String] = [:]
-    private var heard = false, over = false, sent = 0
+    /// Whether OpenCode wrote any line, which tells a failed start from a later end.
+    private var heard = false
+    /// Whether the end was already said.
+    private var over = false
+    /// Messages handed over so far, which names their items.
+    private var sent = 0
     /// Where OpenCode keeps its sessions, from the launch's environment; nil when unknown.
     var database: String?
     /// Closes the program's input, after which OpenCode exits: set by the engine, used when the launch cannot go on.
@@ -68,7 +77,10 @@ public final class ACPDriver: Driver {
     private struct Ask { var rpcID: Any, options: [[String: Any]], tool: String?, prompt: Prompt }
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
-        (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
+        self.launch = launch
+        self.write = write
+        self.emit = emit
+        self.now = now
         // The mode first, since an agent may bring its own model; the effort last, since the model decides the levels.
         settings = [("mode", launch.mode), ("model", launch.model), ("effort", launch.effort)].compactMap { key, value in value.map { (key, $0) } }
     }
@@ -130,14 +142,17 @@ public final class ACPDriver: Driver {
     public func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
 
     /// Allow and deny pick OpenCode's own once-only options by their kind, never "always", which would write a lasting
-    /// rule into OpenCode; a request without them is answered "cancelled", which OpenCode takes as a refusal.
+    /// rule into OpenCode; a request without them is answered "cancelled", which OpenCode takes as a refusal. The
+    /// decision shown is the one sent: an allow that could not be sent is a refusal, and the agent's error says why.
     public func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
         let kind = answer == .once ? "allow_once" : "reject_once"
         let option = ask.options.first { $0["kind"] as? String == kind }?["optionId"] as? String
         try send(["id": ask.rpcID, "result": ["outcome": option.map { ["outcome": "selected", "optionId": $0] } ?? ["outcome": "cancelled"]]])
         asks[request] = nil
-        if let tool = ask.tool { decide(tool, Decision(by: "person", outcome: answer == .once ? "allowed" : "denied")) }
+        let allowed = answer == .once && option != nil
+        if answer == .once, !allowed { emit(.error(AgentError(code: "AGENT_ERROR", message: ACPDriver.noAllowOnce))) }
+        if let tool = ask.tool { decide(tool, Decision(by: "person", outcome: allowed ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
         return true
     }
@@ -146,21 +161,33 @@ public final class ACPDriver: Driver {
     /// exits 0 at its end); never a signal first, which leaves the conversation marked as running.
     public var goodbye: Data? { nil }
 
+    /// An end nobody asked for. A claim left behind is said in the same error, after how OpenCode ended.
     public func ended(code: Int32, errors: String) {
         guard !over else { return }
         over = true
-        guard code != 0 else { return emit(.stopped(nil)) }
+        let claim = leftClaim()
+        guard code != 0 else { return emit(.stopped(claim.map { AgentError(code: "AGENT_ERROR", message: $0) })) }
         let lines = errors.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if !heard { return emit(.stopped(AgentError(code: "LAUNCH_FAILED", message: lines.first.map { "OpenCode could not start: \($0)" }
             ?? "OpenCode stopped at once (code \(code))."))) }
-        emit(.stopped(AgentError(code: "AGENT_ERROR", message: lines.last.map { "OpenCode ended: \($0)" } ?? "OpenCode ended (code \(code)).")))
+        let end = lines.last.map { "OpenCode ended: \($0)" } ?? "OpenCode ended (code \(code))."
+        emit(.stopped(AgentError(code: "AGENT_ERROR", message: claim.map { "\(end) \($0)" } ?? end)))
     }
 
-    /// After the end: when OpenCode's database still marks the conversation as running, the agent's error says so.
-    /// A database something cannot read leaves the error as it is.
+    /// After a stop something asked for, which is folded without `ended`: a claim left behind (the ladder ran out of
+    /// time before the cancel was answered) becomes the agent's error.
     func checkClaim() {
-        guard let session, let database, ACPDriver.claimed(session, in: database) == true else { return }
-        emit(.error(AgentError(code: "AGENT_ERROR", message: ACPDriver.claimLeft(session))))
+        guard !over, let claim = leftClaim() else { return }
+        emit(.error(AgentError(code: "AGENT_ERROR", message: claim)))
+    }
+
+    /// The claim sentence, when one of something's own turns was still open at the end and OpenCode's database still
+    /// marks the conversation as running; nil otherwise, and when the database cannot be read. A turn OpenCode
+    /// answered, done or cancelled, released its claim (T-3); a claim no open turn of something's took (an earlier
+    /// crash, the person's own OpenCode on the same conversation) is not something's to report.
+    private func leftClaim() -> String? {
+        guard prompting, let session, let database, ACPDriver.claimed(session, in: database) == true else { return nil }
+        return ACPDriver.claimLeft(session)
     }
 
     // MARK: OpenCode's lines
@@ -198,13 +225,7 @@ public final class ACPDriver: Driver {
             try? flush()
         case .prompt(let text):
             lock.withLock { pending = false }
-            for (id, var item) in tools {
-                item.tool?.status = nil   // a tool cut by the end of its turn never finishes
-                emit(.itemUpdated(item))
-                tools[id] = nil
-            }
-            // What a turn streamed belongs to it: the next one names new messages and tool calls.
-            (decisions, texts, names) = ([:], [:], [:])
+            forgetTurn()
             let cancelled = cancelAsked
             cancelAsked = false
             if error != nil {
@@ -274,6 +295,19 @@ public final class ACPDriver: Driver {
 
     // MARK: Helpers
 
+    /// What a turn streamed belongs to it: a tool cut by its end never finishes, and the next turn names new
+    /// messages and tool calls.
+    private func forgetTurn() {
+        for (id, var item) in tools {
+            item.tool?.status = nil
+            emit(.itemUpdated(item))
+        }
+        tools = [:]
+        decisions = [:]
+        texts = [:]
+        names = [:]
+    }
+
     /// Sends what waits, in order: the settings first, then the message, once the session exists.
     private func flush() throws {
         guard session != nil else { return }
@@ -291,7 +325,8 @@ public final class ACPDriver: Driver {
         try invoke(.set(key: key, value: value), "session/set_config_option", ["sessionId": session, "configId": key, "value": value])
     }
 
-    /// OpenCode's options for the session: the values in use and those offered, by their category.
+    /// OpenCode's options for the session: the values in use and those offered, by their category. Each list OpenCode
+    /// sends is complete, so a value it no longer lists is none: an effort is dropped with a model without variants.
     private func read(_ list: Any?) {
         guard let list = list as? [[String: Any]] else { return }
         func entry(_ category: String) -> [String: Any]? { list.first { $0["category"] as? String == category } }
@@ -301,9 +336,11 @@ public final class ACPDriver: Driver {
             }
         }
         var options = Options()
-        (options.model, options.mode, options.effort) = (choices(entry("model")), choices(entry("mode")), choices(entry("thought_level")))
+        options.model = choices(entry("model"))
+        options.mode = choices(entry("mode"))
+        options.effort = choices(entry("thought_level"))
         emit(.options(options))
-        emit(.reported(model: entry("model")?["currentValue"] as? String, mode: entry("mode")?["currentValue"] as? String,
+        emit(.settings(model: entry("model")?["currentValue"] as? String, mode: entry("mode")?["currentValue"] as? String,
                        effort: entry("thought_level")?["currentValue"] as? String))
     }
 
@@ -340,6 +377,8 @@ public final class ACPDriver: Driver {
 
     /// Whether OpenCode's database marks `session` as running (`time_suspended` set: the claim a run takes and
     /// releases at its end); nil when the database or the session cannot be read. Read only, never written.
+    /// TODO(slice 17): move onto SQLiteRO and the OpenCode reader's claim query, behind its schema guard, so that one
+    /// reader of session_v2 remains and a schema change is said rather than silently read as "unknown".
     static func claimed(_ session: String, in path: String) -> Bool? {
         var db: OpaquePointer?
         defer { sqlite3_close(db) }

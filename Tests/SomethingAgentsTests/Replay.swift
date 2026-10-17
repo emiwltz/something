@@ -61,7 +61,8 @@ final class Replay {
 
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
     /// "resume" makes a Codex or OpenCode launch that continues that thread, and "model" an OpenCode launch with that model.
-    static func play(_ name: String, kind: String = "claude") throws -> Replay {
+    /// `database` is the OpenCode database the driver reads at the end, as the engine sets it.
+    static func play(_ name: String, kind: String = "claude", database: String? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Exchanges/\(kind)/\(name).jsonl")
         let rows = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { text in
@@ -69,6 +70,7 @@ final class Replay {
         }
         let resume = rows.first?["resume"] as? String
         let replay = kind == "codex" ? codex(resume: resume) : kind == "opencode" ? opencode(model: rows.first?["model"] as? String, resume: resume) : Replay()
+        (replay.agent.driver as? ACPDriver)?.database = database
         var read = 0
         for (number, row) in rows.enumerated() {
             let at = "\(name).jsonl:\(number + 1)"

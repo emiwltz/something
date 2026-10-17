@@ -356,7 +356,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         try await Task.sleep(nanoseconds: 500_000_000)
         #expect(run.claimed == true, "a running turn holds the claim")
         run.kill()
-        try await run.until("the end") { run.state.alive == false && run.state.error?.message == ACPDriver.claimLeft(run.state.thread ?? "") }
+        try await run.until("the end") { run.state.alive == false && run.state.error?.message.hasSuffix(ACPDriver.claimLeft(run.state.thread ?? "")) == true }
         run.ended(137)
         #expect(run.claimed == true)
         #expect(run.state.state == "error", "a killed program is a failure")
