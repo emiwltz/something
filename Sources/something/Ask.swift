@@ -48,12 +48,7 @@ enum Ask {
         alert.informativeText = request.about ?? ""
         alert.addButton(withTitle: "Allow once")
         alert.addButton(withTitle: "Deny").keyEquivalent = "\u{1b}"
-        if let always = request.always { alert.addButton(withTitle: "Allow, and \(always)") }
-        switch run(alert) {
-        case .alertFirstButtonReturn: return .once
-        case .alertThirdButtonReturn: return .always
-        default: return .deny
-        }
+        return run(alert) == .alertFirstButtonReturn ? .once : .deny
     }
 
     static func quit(stopping count: Int) -> Bool {

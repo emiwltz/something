@@ -216,7 +216,7 @@ final class Shell: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMess
         let answer: PermissionAnswer
         if let scripted = scriptedAnswer {
             answer = scripted
-            print("asked: \(request.tool) \(request.about ?? "") · always would: \(request.always ?? "null") · answered: \(answer)")
+            print("asked: \(request.tool) \(request.about ?? "") · answered: \(answer)")
         } else {
             showWindow()
             answer = Ask.permission(request, of: agent)

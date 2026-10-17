@@ -3,7 +3,7 @@
 //                                   the network is closed
 //   --try claude|codex|opencode|pi --in <folder>  launch that agent there and send one message
 //       --ask <text>                the message (default: a one-word reply)
-//       --answer once|always|deny   answer its permission requests without a window
+//       --answer once|deny          answer its permission requests without a window
 //       --force-ask                 Codex, OpenCode: ask before every command or edit, whatever the configuration
 //       --model <model>             OpenCode, pi: use this model for the conversation
 //       --click <button title>      or show the windows and click that button from inside something
@@ -13,7 +13,7 @@ import WebKit
 
 extension Shell {
     var checking: Bool { arguments.contains("--self-test") || Shell.option("--try") != nil }
-    var scriptedAnswer: PermissionAnswer? { ["once": .once, "always": .always, "deny": .deny][Shell.option("--answer") ?? ""] }
+    var scriptedAnswer: PermissionAnswer? { ["once": .once, "deny": .deny][Shell.option("--answer") ?? ""] }
 
     func startChecks() {
         if let harness = Shell.option("--try") {

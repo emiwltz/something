@@ -29,12 +29,10 @@ public enum ACPStream {
         case "session/request_permission":
             guard let id = message["id"] else { return }
             let call = params["toolCall"] as? [String: Any] ?? [:]
-            let options = params["options"] as? [[String: Any]] ?? []
             agent.request = PermissionRequest(
                 id: "\(id)",
                 tool: (call["kind"] as? String) ?? "a tool",
-                about: call["title"] as? String,
-                always: options.contains { $0["kind"] as? String == "allow_always" } ? "always allow it" : nil)
+                about: call["title"] as? String)
             agent.status = "waiting"
         default:
             break
@@ -65,8 +63,7 @@ public enum ACPStream {
     public static func option(for answer: PermissionAnswer, among options: [[String: Any]]) -> String? {
         let kinds: [String] = switch answer {
         case .once: ["allow_once"]
-        case .always: ["allow_always", "allow_once"]
-        case .deny: ["reject_once", "reject_always"]
+        case .deny: ["reject_once"]
         }
         for kind in kinds {
             if let id = options.first(where: { $0["kind"] as? String == kind })?["optionId"] as? String { return id }

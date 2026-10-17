@@ -54,13 +54,13 @@ struct ACPStreamTests {
         var agent = fresh()
         ACPStream.apply(askToEdit, to: &agent)
         #expect(agent.status == "waiting")
-        #expect(agent.request == PermissionRequest(id: "0", tool: "edit", about: "hello.txt", always: "always allow it"))
+        #expect(agent.request == PermissionRequest(id: "0", tool: "edit", about: "hello.txt"))
     }
 
     @Test func testAnswersPickTheAgentsOwnOptions() {
         let options = (askToEdit["params"] as! [String: Any])["options"] as! [[String: Any]]
         #expect(ACPStream.option(for: .once, among: options) == "once")
-        #expect(ACPStream.option(for: .always, among: options) == "always")
+        #expect(!["always"].contains(ACPStream.option(for: .once, among: options)), "something never picks a lasting rule")
         #expect(ACPStream.option(for: .deny, among: options) == "reject")
         #expect(ACPStream.option(for: .deny, among: [["optionId": "once", "kind": "allow_once"]]) == nil, "without a way to refuse, the answer is to cancel, never to allow")
     }

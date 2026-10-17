@@ -4,10 +4,9 @@
 import Foundation
 
 /// The person's answer to a permission request.
+/// Only "once" or "deny": something never writes a lasting rule into an agent's settings.
 public enum PermissionAnswer: Equatable, Sendable {
     case once
-    /// Allow, and apply what the agent itself offers for "always" (a mode, a rule, the rest of the conversation).
-    case always
     case deny
 }
 

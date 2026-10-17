@@ -38,14 +38,10 @@ public enum CodexStream {
             }
         case let method? where approvals[method] != nil:
             guard let id = message["id"] else { return }
-            let offers = params["availableDecisions"] as? [String]
             agent.request = PermissionRequest(
                 id: "\(id)",
                 tool: approvals[method]!,
-                about: (params["command"] as? String) ?? (params["reason"] as? String),
-                // File changes always offer it; for the rest, Codex lists what it offers.
-                always: offers == nil || offers!.contains("acceptForSession")
-                    ? "allow it for the rest of this conversation" : nil)
+                about: (params["command"] as? String) ?? (params["reason"] as? String))
             agent.status = "waiting"
         default:
             break
@@ -65,7 +61,6 @@ public enum CodexStream {
     public static func decision(_ answer: PermissionAnswer) -> String {
         switch answer {
         case .once: return "accept"
-        case .always: return "acceptForSession"
         case .deny: return "decline"
         }
     }

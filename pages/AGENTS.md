@@ -54,7 +54,7 @@ Every promise rejects with an `Error` whose message is one sentence for the pers
         { "from": "you", "text": "Add a README." },
         { "from": "agent", "text": "I will write README.md." }
       ],
-      "request": { "id": "r1", "tool": "Write", "about": "README.md", "always": "switch to mode \"acceptEdits\" for this conversation" },
+      "request": { "id": "r1", "tool": "Write", "about": "README.md" },
       "error": null
     }
   ]

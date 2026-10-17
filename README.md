@@ -15,7 +15,7 @@ swift run something                 # builds, then opens the window and the menu
 swift run something --page <name>    # opens the page pages/<name>/ (default: chat)
 swift run something --self-test     # checks the window is on screen, ⌘V pastes, the page answers, its memory works, the network is closed
 swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
-# add --ask "<message>" to send your own; --answer once|always|deny answers its permission requests without a window,
+# add --ask "<message>" to send your own; --answer once|deny answers its permission requests without a window,
 # --click "<button>" shows the windows and has something click that button itself; --force-ask makes Codex and OpenCode ask before acting; --model <model> picks OpenCode's or pi's model for the conversation
 swift test                          # the tests of the core (with Xcode installed; without it, see below)
 ```
@@ -38,7 +38,7 @@ The window shows one page, a folder of `pages/` with an `index.html`; the menu b
 
 In the window, "Launch Claude Code…", "Launch Codex…", "Launch OpenCode…" or "Launch pi…" asks for a folder, then the page shows the agent, its model and its messages. Each message you write is shown to you in a window of the Mac before it leaves ("Send", "Always for this agent", "Don't send"): a page can read, writing is your word. Closing the window keeps something in the menu bar with its agents; quitting stops them, after asking.
 
-When an agent asks before acting ("may it write hello.txt?", "may it run this command?"), something shows the question in a window of the Mac: "Allow once", "Deny" (also Escape), or "Allow, and …" with what the agent itself offers for always: Claude Code's mode `acceptEdits` for this conversation, Codex's "for the rest of this conversation", OpenCode's "always allow". An agent asks only what its own settings do not already allow (Claude's permission mode, Codex's approval policy, OpenCode's permissions), so your settings are respected as they are. The page shows that the agent waits, but cannot answer for you.
+When an agent asks before acting ("may it write hello.txt?", "may it run this command?"), something shows the question in a window of the Mac: "Allow once" or "Deny" (also Escape). There is no "always": something never writes a lasting rule into an agent's settings. An agent asks only what its own settings do not already allow (Claude's permission mode, Codex's approval policy, OpenCode's permissions), so your settings are respected as they are. The page shows that the agent waits, but cannot answer for you.
 
 Claude Code is launched as `claude -p --input-format stream-json --output-format stream-json --verbose --permission-prompt-tool stdio`, the channel Anthropic's SDKs use (the last option is what the SDKs pass to receive permission requests; Claude's help does not list it). It runs with your own Claude Code settings, in the folder you chose, without `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` from your environment, so that it uses the account you signed in with.
 

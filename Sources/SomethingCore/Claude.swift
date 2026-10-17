@@ -30,12 +30,10 @@ public enum ClaudeStream {
             guard let id = event["request_id"] as? String,
                   let request = event["request"] as? [String: Any],
                   request["subtype"] as? String == "can_use_tool" else { return }
-            let suggestions = request["permission_suggestions"] as? [[String: Any]] ?? []
             agent.request = PermissionRequest(
                 id: id,
                 tool: (request["display_name"] as? String) ?? (request["tool_name"] as? String) ?? "a tool",
-                about: request["description"] as? String,
-                always: describe(suggestions))
+                about: request["description"] as? String)
             agent.status = "waiting"
         case "control_cancel_request":
             if agent.request?.id == event["request_id"] as? String {
@@ -53,30 +51,15 @@ public enum ClaudeStream {
         }
     }
 
-    /// Claude's own offer for "always", in words; nil when it offers none.
-    static func describe(_ suggestions: [[String: Any]]) -> String? {
-        let parts = suggestions.map { suggestion -> String in
-            switch suggestion["type"] as? String {
-            case "setMode": return "switch to mode \"\(suggestion["mode"] as? String ?? "?")\" for this conversation"
-            case "addRules": return "always allow this here"
-            default: return suggestion["type"] as? String ?? "?"
-            }
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: ", and ")
-    }
-
     /// The line that answers a `can_use_tool` request. `request` is the request as Claude sent it:
-    /// allowing passes its input back unchanged, and "always" passes back Claude's own suggestions.
+    /// allowing passes its input back unchanged, and never Claude's suggestions for a lasting rule.
     public static func permissionLine(id: String, request: [String: Any], answer: PermissionAnswer) -> [String: Any] {
-        var response: [String: Any]
+        let response: [String: Any]
         switch answer {
         case .deny:
             response = ["behavior": "deny", "message": "The person refused this in something."]
-        case .once, .always:
+        case .once:
             response = ["behavior": "allow", "updatedInput": request["input"] as? [String: Any] ?? [:]]
-            if answer == .always, let suggestions = request["permission_suggestions"] as? [[String: Any]] {
-                response["updatedPermissions"] = suggestions
-            }
         }
         return ["type": "control_response", "response": ["subtype": "success", "request_id": id, "response": response]]
     }
@@ -128,12 +111,6 @@ public final class ClaudeSession: AgentProcess {
         update {
             if $0.request?.id == id { $0.request = nil }
             $0.status = "working"
-            if answer == .always {
-                let suggestions = request["permission_suggestions"] as? [[String: Any]] ?? []
-                if let mode = suggestions.first(where: { $0["type"] as? String == "setMode" })?["mode"] as? String {
-                    $0.mode = mode
-                }
-            }
         }
     }
 }

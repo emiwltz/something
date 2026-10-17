@@ -20,26 +20,22 @@ public struct PermissionRequest: Equatable, Sendable {
     public var tool: String
     /// What the agent says it will do with it; nil when it says nothing.
     public var about: String?
-    /// What "always" would do, in the agent's own terms; nil when the agent offers no "always".
-    public var always: String?
 
-    public init(id: String, tool: String, about: String? = nil, always: String? = nil) {
+    public init(id: String, tool: String, about: String? = nil) {
         self.id = id
         self.tool = tool
         self.about = about
-        self.always = always
     }
 }
 
 extension PermissionRequest: Codable {
-    private enum Key: String, CodingKey { case id, tool, about, always }
+    private enum Key: String, CodingKey { case id, tool, about }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
         try c.encode(id, forKey: .id)
         try c.encode(tool, forKey: .tool)
         try c.encode(about, forKey: .about)
-        try c.encode(always, forKey: .always)
     }
 }
 

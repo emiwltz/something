@@ -80,8 +80,7 @@ struct ClaudeStreamTests {
         var agent = fresh()
         ClaudeStream.apply(askToWrite, to: &agent)
         #expect(agent.status == "waiting")
-        #expect(agent.request == PermissionRequest(id: "r1", tool: "Write", about: "hello.txt",
-                                                        always: "switch to mode \"acceptEdits\" for this conversation"))
+        #expect(agent.request == PermissionRequest(id: "r1", tool: "Write", about: "hello.txt"))
     }
 
     @Test func testAWithdrawnRequestIsCleared() {
@@ -112,12 +111,6 @@ struct ClaudeStreamTests {
         #expect(response["behavior"] as? String == "allow")
         #expect((response["updatedInput"] as? [String: Any])?["content"] as? String == "hi\n")
         #expect(response["updatedPermissions"] == nil)
-    }
-
-    @Test func testAlwaysPassesClaudesOwnSuggestionBack() throws {
-        let response = try answer(.always)
-        let permissions = try #require(response["updatedPermissions"] as? [[String: Any]])
-        #expect(permissions.first?["mode"] as? String == "acceptEdits")
     }
 
     @Test func testDenyingSaysWhoRefused() throws {

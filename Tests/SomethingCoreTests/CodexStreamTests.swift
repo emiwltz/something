@@ -66,18 +66,7 @@ struct CodexStreamTests {
         var agent = fresh()
         CodexStream.apply(askToRun, to: &agent)
         #expect(agent.status == "waiting")
-        #expect(agent.request == PermissionRequest(id: "7", tool: "a command", about: "/bin/zsh -lc \"printf 'hi' > hello.txt\"",
-                                                        always: "allow it for the rest of this conversation"))
-    }
-
-    @Test func testNoAlwaysWhenCodexDoesNotOfferIt() {
-        var agent = fresh()
-        var message = askToRun
-        var params = message["params"] as! [String: Any]
-        params["availableDecisions"] = ["accept", "decline"]
-        message["params"] = params
-        CodexStream.apply(message, to: &agent)
-        #expect(agent.request?.always == nil)
+        #expect(agent.request == PermissionRequest(id: "7", tool: "a command", about: "/bin/zsh -lc \"printf 'hi' > hello.txt\""))
     }
 
     @Test func testAResolvedRequestIsCleared() {
@@ -89,7 +78,6 @@ struct CodexStreamTests {
 
     @Test func testAnswersUseCodexWords() {
         #expect(CodexStream.decision(.once) == "accept")
-        #expect(CodexStream.decision(.always) == "acceptForSession")
         #expect(CodexStream.decision(.deny) == "decline")
     }
 
