@@ -1,0 +1,16 @@
+{"begin":true}
+{"something":{"request":{"subtype":"initialize"},"request_id":"something-1","type":"control_request"}}
+{"claude":{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","session_state":"idle","capabilities":["ui_surface_v1"],"claude_code_version":"2.1.296","pid":4242,"models":[{"value":"default","resolvedModel":"claude-opus-5-5","displayName":"Default (recommended)","description":"Use the default model (currently Opus 5.5) · $4/$20 per Mtok","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"],"supportsAdaptiveThinking":true,"supportsFastMode":true,"supportsAutoMode":true},{"value":"sonnet","resolvedModel":"claude-sonnet-5-5","displayName":"Sonnet","description":"Sonnet 5.5 · Efficient for routine tasks · $2/$10 per Mtok","supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"],"supportsAdaptiveThinking":true,"supportsAutoMode":true}]},"pending_permission_requests":[],"pending_user_dialog_requests":[]}}}
+{"set":{"mode":"plan"},"applied":"now"}
+{"something":{"request":{"mode":"plan","subtype":"set_permission_mode"},"request_id":"something-2","type":"control_request"}}
+{"claude":{"type":"control_response","response":{"subtype":"success","request_id":"something-2","response":{"mode":"plan"}}}}
+{"claude":{"type":"system","subtype":"status","status":null,"permissionMode":"plan","uuid":"67f5a2f2-0155-463b-91f5-ea16ead2a6e7","session_id":"5b2e0000-0000-4000-8000-000000000006"}}
+{"check":{"mode":"plan"}}
+{"set":{"model":"opus"},"applied":"now"}
+{"something":{"request":{"model":"opus","subtype":"set_model"},"request_id":"something-3","type":"control_request"}}
+{"claude":{"type":"control_response","response":{"subtype":"success","request_id":"something-3"}}}
+{"stop":true}
+{"something":{"request":{"subtype":"end_session"},"request_id":"something-end","type":"control_request"}}
+{"claude":{"type":"control_response","response":{"subtype":"success","request_id":"something-end"}}}
+{"ended":0}
+{"check":{"state":"done","alive":false,"requests":0,"queue":[]}}
