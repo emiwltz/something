@@ -30,12 +30,18 @@ final class Replay {
         Replay(CodexDriver.self, Launch(agent: "codex-1", folder: "/Users/example/shop", mode: mode, effort: effort, thread: resume ?? "", resume: resume != nil))
     }
 
+    /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given.
+    static func opencode(model: String? = nil, resume: String? = nil) -> Replay {
+        Replay(ACPDriver.self, Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil))
+    }
+
     private func start<D: Driver>(_ type: D.Type, _ launch: Launch) {
         agent = Launched(type, launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
         if let codex = agent.driver as? CodexDriver {
             codex.schedule = { [unowned self] _, work in scheduled.append(work) }
             codex.quit = { [unowned self] in quit = true }
         }
+        (agent.driver as? ACPDriver)?.quit = { [unowned self] in quit = true }
         try! agent.begin(pid: 4242)
     }
 
@@ -54,14 +60,15 @@ final class Replay {
     }
 
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
-    /// "resume" makes a Codex launch that continues that thread.
+    /// "resume" makes a Codex or OpenCode launch that continues that thread, and "model" an OpenCode launch with that model.
     static func play(_ name: String, kind: String = "claude") throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Exchanges/\(kind)/\(name).jsonl")
         let rows = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { text in
             try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
         }
-        let replay = kind == "codex" ? codex(resume: rows.first?["resume"] as? String) : Replay()
+        let resume = rows.first?["resume"] as? String
+        let replay = kind == "codex" ? codex(resume: resume) : kind == "opencode" ? opencode(model: rows.first?["model"] as? String, resume: resume) : Replay()
         var read = 0
         for (number, row) in rows.enumerated() {
             let at = "\(name).jsonl:\(number + 1)"
@@ -91,6 +98,8 @@ final class Replay {
                 due.forEach { $0() }
             }
             if row["stop"] != nil, let goodbye = replay.agent.driver.goodbye { replay.written.append(goodbye) }
+            // OpenCode's first step of the ladder is the engine's interrupt.
+            if row["stop"] != nil, replay.agent.driver is ACPDriver { _ = try replay.agent.interrupt() }
             if let code = row["ended"] as? Int { replay.agent.ended(code: Int32(code), errors: "", asked: row["stop"] != nil) }
             if let check = row["check"] as? [String: Any] { replay.check(check, at) }
         }

@@ -1,7 +1,7 @@
-// A fake of OpenAI's Responses API, for trial T-2: the real `codex` program talks to it instead of a model, through a
-// model provider declared in a throwaway CODEX_HOME. It listens on 127.0.0.1 on a port the system picks, answers
-// POST /v1/responses as the API streams (server-sent events, chunked), and plays a tiny invented script chosen by
-// keywords in the person's last message. It never reads, keeps or logs a request's headers (they carry the key): only
+// A fake of OpenAI's Responses API, for trial T-2, and of its Chat Completions API, for trial T-3: the real `codex` and
+// `opencode` programs talk to it instead of a model, through a model provider declared in a throwaway home. It listens
+// on 127.0.0.1 on a port the system picks, answers POST /v1/responses and POST /v1/chat/completions as the APIs stream
+// (server-sent events, chunked), and plays a tiny invented script chosen by keywords in the person's last message. It never reads, keeps or logs a request's headers (they carry the key): only
 // the length is taken from them, and only the JSON body is read.
 import Darwin
 import Foundation
@@ -56,9 +56,17 @@ final class FakeResponsesAPI {
     /// One step of the script: a message (slow: one word every quarter second), or a tool call.
     enum Step { case message(String, slow: Bool), call(name: String, arguments: [String: Any]) }
 
-    static func reply(to last: String, toolOutput: String?) -> Step {
+    /// `opencode` picks OpenCode's names for its tools.
+    static func reply(to last: String, toolOutput: String?, opencode: Bool = false) -> Step {
         if let toolOutput { return .message("Invented summary: \(toolOutput.prefix(40))", slow: false) }
         if last.contains("run-sleep") { return .message(Array(repeating: "tick", count: 40).joined(separator: " "), slow: true) }
+        if opencode, last.contains("run-echo") {
+            return .call(name: "shell", arguments: ["command": "touch invented.txt", "description": "Invented: make a file"])
+        }
+        if opencode, last.contains("ask-me") {
+            return .call(name: "question", arguments: ["questions": [["header": "Colour", "question": "Which colour for the invented button?",
+                                                                      "options": [["label": "Blue", "description": "Calm"], ["label": "Green", "description": "Fresh"]]]]])
+        }
         if last.contains("run-echo") {
             return .call(name: "exec_command", arguments: ["cmd": "touch invented.txt", "sandbox_permissions": "require_escalated",
                                                            "justification": "Invented: make a file"])
@@ -83,17 +91,38 @@ final class FakeResponsesAPI {
                 continue
             }
             let json = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
-            let (last, output) = FakeResponsesAPI.lastWords(json)
+            guard head.contains("/chat/completions") else {
+                let (last, output) = FakeResponsesAPI.lastWords(json)
+                let step = lock.withLock { () -> Step in
+                    texts.append(last)
+                    models.append(json["model"] as? String)
+                    efforts.append((json["reasoning"] as? [String: Any])?["effort"] as? String)
+                    if let output { outputs.append(output) }
+                    people.append((json["input"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "message" && $0["role"] as? String == "user" }.count)
+                    count += 1
+                    return FakeResponsesAPI.reply(to: last, toolOutput: output)
+                }
+                guard stream(client, step, number: lock.withLock { count }) else { return }
+                continue
+            }
+            // OpenCode asks for a title with a request that offers no tool: it is answered, never counted.
+            guard json["tools"] != nil else {
+                guard streamChat(client, .message("Invented title", slow: false), number: 0) else { return }
+                continue
+            }
+            let messages = json["messages"] as? [[String: Any]] ?? []
+            let last = FakeResponsesAPI.text(messages.last { $0["role"] as? String == "user" }?["content"])
+            let output = messages.last?["role"] as? String == "tool" ? FakeResponsesAPI.text(messages.last?["content"]) : nil
             let step = lock.withLock { () -> Step in
                 texts.append(last)
                 models.append(json["model"] as? String)
-                efforts.append((json["reasoning"] as? [String: Any])?["effort"] as? String)
+                efforts.append(json["reasoning_effort"] as? String)
                 if let output { outputs.append(output) }
-                people.append((json["input"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "message" && $0["role"] as? String == "user" }.count)
+                people.append(messages.filter { $0["role"] as? String == "user" }.count)
                 count += 1
-                return FakeResponsesAPI.reply(to: last, toolOutput: output)
+                return FakeResponsesAPI.reply(to: last, toolOutput: output, opencode: true)
             }
-            guard stream(client, step, number: lock.withLock { count }) else { return }
+            guard streamChat(client, step, number: lock.withLock { count }) else { return }
         }
     }
 
@@ -130,6 +159,46 @@ final class FakeResponsesAPI {
             if slow && event["type"] as? String == "response.output_text.delta" { usleep(250_000) }
         }
         return send(client, "0\r\n\r\n")
+    }
+
+    /// Streams one chat completion, as OpenAI-compatible providers do; false once the program hung up.
+    private func streamChat(_ client: Int32, _ step: Step, number: Int) -> Bool {
+        guard send(client, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nTransfer-Encoding: chunked\r\n\r\n") else { return false }
+        let base: [String: Any] = ["id": "chatcmpl-fake\(number)", "object": "chat.completion.chunk", "created": 1_792_272_400, "model": "fake"]
+        func choice(_ delta: [String: Any], _ finish: String?) -> [String: Any] {
+            base.merging(["choices": [["index": 0, "delta": delta, "finish_reason": finish.map { $0 as Any } ?? NSNull()]]]) { _, new in new }
+        }
+        var chunks: [(event: [String: Any], pause: Bool)] = []
+        let finish: String
+        switch step {
+        case .message(let text, let slow):
+            let words = text.split(separator: " ")
+            for (index, word) in words.enumerated() {
+                chunks.append((choice(["role": "assistant", "content": word + (index < words.count - 1 ? " " : "")], nil), slow))
+            }
+            finish = "stop"
+        case .call(let name, let arguments):
+            let arguments = String(decoding: try! JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys]), as: UTF8.self)
+            chunks.append((choice(["role": "assistant", "tool_calls": [["index": 0, "id": "call_fake\(number)", "type": "function",
+                                                                       "function": ["name": name, "arguments": arguments]]]], nil), false))
+            finish = "tool_calls"
+        }
+        var last = choice([:], finish)
+        last["usage"] = ["prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15]
+        chunks.append((last, false))
+        for (event, pause) in chunks {
+            let chunk = "data: \(String(decoding: try! JSONSerialization.data(withJSONObject: event), as: UTF8.self))\n\n"
+            guard send(client, "\(String(chunk.utf8.count, radix: 16))\r\n\(chunk)\r\n") else { return false }
+            if pause { usleep(250_000) }
+        }
+        let done = "data: [DONE]\n\n"
+        return send(client, "\(String(done.utf8.count, radix: 16))\r\n\(done)\r\n0\r\n\r\n")
+    }
+
+    /// A chat message's text: a string, or the text parts of a list.
+    static func text(_ content: Any?) -> String {
+        if let text = content as? String { return text }
+        return (content as? [[String: Any]] ?? []).compactMap { $0["text"] as? String }.joined(separator: "\n")
     }
 
     /// The next request on the connection: its request line and its body; nil once the program closed it.

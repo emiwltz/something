@@ -1,4 +1,4 @@
-// Engine for launched agents, end to end, with a fake `claude` and a fake `codex`: /bin/sh scripts in a throwaway
+// Engine for launched agents, end to end, with a fake `claude`, a fake `codex` and a fake `opencode`: /bin/sh scripts in a throwaway
 // folder that speak the lines of the real ones (keys as recorded in Tests/Exchanges, text invented) and write the
 // arguments (and environment) they were given to a file, so the launch line can be checked.
 import Foundation
@@ -54,6 +54,30 @@ import SomethingCore
     done
     """#
 
+    /// A fake `opencode acp`: answers each call by its id, as 2.0.20 does (Tests/Exchanges/opencode), text invented.
+    /// A message holding "wait" is answered only when something cancels it.
+    static let fakeOpenCode = #"""
+    #!/bin/sh
+    printf '%s\n' "$@" > "$FAKE_OUT/arguments"
+    session='"sessionId":"ses_invented0000000000000001"'
+    options='"configOptions":[{"id":"model","category":"model","currentValue":"fake/fake-model","options":[{"value":"fake/fake-model","name":"fake/Fake Model"}]}]'
+    while IFS= read -r line; do
+      id=$(printf '%s' "$line" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
+      case "$line" in
+        *'"method":"initialize"'*) echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"protocolVersion\":1}}" ;;
+        *'"method":"session/new"'*) echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{$session,$options}}" ;;
+        *'"method":"session/prompt"'*'wait'*) waiting=$id ;;
+        *'"method":"session/prompt"'*)
+          echo "{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{$session,\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m$id\",\"content\":{\"type\":\"text\",\"text\":\"Invented reply.\"}}}}"
+          echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"stopReason\":\"end_turn\"}}" ;;
+        *'"method":"session/cancel"'*)
+          echo cancel >> "$FAKE_OUT/cancels"
+          echo "{\"jsonrpc\":\"2.0\",\"id\":$waiting,\"result\":{\"stopReason\":\"cancelled\"}}" ;;
+      esac
+    done
+    echo closed > "$FAKE_OUT/closed"
+    """#
+
     final class Place {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("engine-\(UUID().uuidString)")
         var bin: URL { root.appendingPathComponent("bin") }
@@ -72,6 +96,9 @@ import SomethingCore
             let codex = bin.appendingPathComponent("codex")
             try EngineTests.fakeCodex.write(to: codex, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codex.path)
+            let opencode = bin.appendingPathComponent("opencode")
+            try EngineTests.fakeOpenCode.write(to: opencode, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: opencode.path)
         }
 
         deinit { try? FileManager.default.removeItem(at: root) }
@@ -97,8 +124,10 @@ import SomethingCore
         #expect(engine.state.kinds["claude"]?.launch == true)
         #expect(engine.state.kinds["claude"]?.tested == ClaudeDriver.tested)
         #expect(engine.state.kinds["codex"]?.launch == true)
-        #expect(engine.state.kinds["opencode"]?.launch == false)
+        #expect(engine.state.kinds["opencode"]?.launch == true)
+        #expect(engine.state.kinds["pi"]?.launch == false)
         #expect(engine.limits["claude"] == nil && engine.limits["codex"] == nil, "Claude and Codex have no limit left")
+        #expect(engine.limits["opencode"] == ["steer"])
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -148,6 +177,33 @@ import SomethingCore
         #expect(engine.state.agents.first?.error == nil)
     }
 
+    /// OpenCode through the engine: a turn, then a stop during a turn: the ladder cancels it, then closes the input,
+    /// and OpenCode ends without a signal.
+    @Test func aLaunchedOpenCodeTalksAndStopsByCancelling() async throws {
+        let place = try Place()
+        #expect(try Programs(environment: place.environment).find("opencode").path == place.bin.appendingPathComponent("opencode").path)
+        let engine = Engine(environment: place.environment)
+        let id = try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(id == "opencode-1")
+        try await until("the session") { engine.state.agents.first?.thread == "ses_invented0000000000000001" }
+        #expect(engine.state.agents.first?.model == "fake/fake-model")
+        #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
+        try await until("the reply") { engine.state.threads.first?.turns.first?.state == "done" }
+        #expect(engine.state.threads.first?.turns.first?.items.map(\.text) == ["Hello.", "Invented reply."])
+        #expect(try engine.deliver("Please wait.", to: id, when: "next") == "started")
+        #expect(throws: CodedError("NOT_SUPPORTED", ACPDriver.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
+        #expect(try String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8) == "acp\n")
+        var stopped = false
+        let begun = Date()
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+        #expect(Date().timeIntervalSince(begun) < 2, "the cancel's answer ends the first step at once")
+        #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("cancels").path))
+        #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("closed").path), "its input was closed: no signal")
+        #expect(engine.state.agents.first?.state == "interrupted")
+        #expect(engine.state.agents.first?.error == nil, "this home has no OpenCode database: no claim is said")
+    }
+
     /// The modes that make an agent ask less are confirmed by the person; an unknown mode is too.
     @Test func whichModesLowerAsking() {
         let engine = Engine(environment: [:])
@@ -188,8 +244,11 @@ import SomethingCore
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
         let engine = Engine(environment: place.environment)
-        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch opencode yet.")) {
-            try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch pi yet.")) {
+            try engine.launch("pi", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        }
+        #expect(throws: CodedError("VALUE_NOT_OFFERED", "auto is not a mode something offers for opencode; pick one of build, plan.")) {
+            try engine.launch("opencode", folder: place.work.path, model: nil, mode: "auto", effort: nil)
         }
         #expect(throws: CodedError("VALUE_NOT_OFFERED", "bypassPermissions is not a mode something offers for claude; pick one of default, acceptEdits, plan, auto, dontAsk.")) {
             try engine.launch("claude", folder: place.work.path, model: nil, mode: "bypassPermissions", effort: nil)

@@ -1,7 +1,7 @@
 // The engine: every agent on this Mac in one contract 1 State, and the hands on the ones something launched.
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
-// agents: its public API is what the app may use. It drives the agents something launched (Claude Code and Codex so
-// far), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
+// agents: its public API is what the app may use. It drives the agents something launched (Claude Code, Codex and
+// OpenCode so far), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
 // Agents started elsewhere come with the readers (slices 16 to 18); until then resume answers NOT_SUPPORTED.
 import Foundation
 import SomethingCore
@@ -46,7 +46,7 @@ public final class Engine {
     }
 
     /// The kinds something can launch, by their driver.
-    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self]
+    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self, "opencode": ACPDriver.self]
 
     private let environment: [String: String]
     private let programs: Programs
@@ -164,7 +164,7 @@ public final class Engine {
     var spools = Spool.root
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
-    /// With `resume`, the program continues that conversation in `folder` (Codex only so far).
+    /// With `resume`, the program continues that conversation in `folder` (Codex and OpenCode so far).
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let program = try programs.find(type.kind)
@@ -224,7 +224,7 @@ public final class Engine {
             try spawn.write(line)
             record?(true, line)
         }, now: Engine.now)
-        // A Codex that cannot open its conversation is told to end.
+        // A Codex or an OpenCode that cannot open its conversation is told to end.
         (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
         let goodbye = agent.driver.goodbye
         spawn.graceful = { [weak spawn] in
@@ -232,6 +232,15 @@ public final class Engine {
             record?(true, goodbye)
             // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
             while spawn.running { usleep(20_000) }
+        }
+        if let opencode = agent.driver as? ACPDriver {
+            opencode.quit = { [weak spawn] in spawn?.closeInput() }
+            opencode.database = ACPDriver.database(spawn.environment)
+            // OpenCode's graceful step is an interrupt and its answer, within Spawn's 3 s; the input is closed after.
+            spawn.graceful = { [weak spawn, weak opencode] in
+                DispatchQueue.main.async { _ = try? agent.interrupt() }
+                while spawn?.running == true, opencode?.prompting == true { usleep(20_000) }
+            }
         }
         if let spool {
             do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
@@ -253,7 +262,10 @@ public final class Engine {
                         ended: { [weak spawn] code in
                             let errors = spawn?.errorTail ?? ""
                             spool?.stop()
-                            DispatchQueue.main.async { agent.ended(code: code, errors: errors, asked: asked(launch.agent)) }
+                            DispatchQueue.main.async {
+                                agent.ended(code: code, errors: errors, asked: asked(launch.agent))
+                                (agent.driver as? ACPDriver)?.checkClaim()
+                            }
                         })
         try agent.begin(pid: Int(spawn.pid))
     }
