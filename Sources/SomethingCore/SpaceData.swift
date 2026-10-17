@@ -14,7 +14,7 @@ public struct Memory: Sendable {
     public init(folder: URL, space: String) { file = folder.appendingPathComponent("\(space).json") }
 
     /// ~/something/data under `home`.
-    public static func folder(home: URL) -> URL { home.appendingPathComponent("something/data") }
+    public static func folder(home: URL) -> URL { home.appendingPathComponent(Spaces.folders.data) }
 
     /// The value at `path` (keys joined by "/"; "" is the whole document), or nil when nothing is there.
     /// Throws BAD_PARAMS for a path with an empty key, and a `SpaceError` when the file is not a JSON object.

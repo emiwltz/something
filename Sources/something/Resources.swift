@@ -2,6 +2,7 @@
 // person (spaces, their memory, the grants and the journals). Inside the .app share/ is in Contents/Resources/share;
 // run from a clone (`swift run`), it is in the clone.
 import Foundation
+import SomethingCore
 
 enum Resources {
     /// The share/ folder. Fails with a sentence when it cannot be found: without it there is no page to show.
@@ -31,8 +32,8 @@ enum Resources {
 /// The folders something keeps for the person, all under one home, so a trial with a throwaway home touches nothing else.
 struct Places {
     let home: URL
-    var spaces: URL { home.appendingPathComponent("something/spaces") }
-    var data: URL { home.appendingPathComponent("something/data") }
+    var spaces: URL { Spaces.root(home: home) }
+    var data: URL { Memory.folder(home: home) }
     /// The engine's own folder, outside the folders agents edit (design 1): the grants and the journals.
     var support: URL { home.appendingPathComponent("Library/Application Support/something") }
     var grants: URL { support.appendingPathComponent("app.json") }

@@ -11,7 +11,7 @@ It follows [something](https://github.com/emiwltz/something), which stays frozen
 Needs a Mac with Apple's command line tools (`xcode-select --install`, free; already there if `git` works). Xcode itself is not needed. Then, for each agent you want to launch, that agent installed and signed in as you use it in a terminal: `claude`, `codex`, `opencode`, `pi`.
 
 ```sh
-swift run something                 # builds, then opens the template space and the menu bar icon
+swift run something                 # builds, then opens your default space (or Home) and the menu bar icon
 swift run something morning-review  # opens ~/something/spaces/morning-review.html (or its folder); a path works too
 swift test                          # the tests: core, agents, the app's window in WebKit, budgets, publishable scan (with Xcode installed; without it, see below)
 ```
@@ -28,7 +28,7 @@ swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks
 
 ## Spaces
 
-A space is an HTML page your coding agent writes: `~/something/spaces/<name>.html`, or a folder `<name>/index.html` with its own files. The guide written for that agent is [share/guide.md](share/guide.md). Without a space named on the command line, the window shows `share/template.html`, a plain chat.
+A space is an HTML page your coding agent writes: `~/something/spaces/<name>.html`, or a folder `<name>/index.html` with its own files. The guide written for that agent is [share/guide.md](share/guide.md). Without a space named on the command line, something opens your default space; without one, `agents` while it is your only space; otherwise Home. At its first start it makes `~/something/spaces` and `~/something/data`.
 
 - **No network.** A space loads only its own files, served at `something://space/`, inline code, `data:` and `blob:`. Every other address is blocked, three times: a content security policy on every file, a content rule list, and a navigation policy that cancels every page change outside the space. `window.open` opens nothing.
 - **Links ask.** A link you click, or one the space opens with `something.open`, shows a window of the Mac: "Open", "Cancel" or "Block links until reload"; one at a time.
@@ -36,7 +36,11 @@ A space is an HTML page your coding agent writes: `~/something/spaces/<name>.htm
 - **Its own storage.** `localStorage` works and is emptied when the window closes; no space reads another's. A space in `~/something/spaces` keeps a memory, `~/something/data/<name>.json`, and a journal of what it asked agents to do, next to the grants.
 - **Live.** The window reloads when a file of the space changes, and asks again if its declaration asks for more.
 
-Closing the window keeps something in the menu bar; quitting stops the agents it launched, after asking.
+- **Home** lists your spaces: Open, Make default (the one opened at start), Show in Finder. New, Import and Export are shown but not there yet. Examples, when something ships some, sit in their own read-only section with "Make a copy". Beside the list, the selected space's card: its rights with a switch each (switching one off reaches the open space at once, as a `granted` event), "Ask again" (forgets your answers and asks everything again), where it lives and where its agents work, the last 100 lines of its journal, and the readers' notes.
+- **One space at a time.** Opening another space closes the open one.
+- **Permissions and questions.** Each request of an agent something launched opens a panel of the Mac, one at a time in the order they came: "Allow once" or "Deny" (Escape denies), or the agent's question with its choices. The panels do not block the rest of the app, and a request the agent withdraws closes its panel.
+
+Closing the window keeps something in the menu bar (Home, the open space, Quit); quitting stops the agents it launched, after asking.
 
 ## Agents (being rewritten)
 
@@ -53,11 +57,11 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 ## How it is made
 
 ```text
-share/                     something.js (contract 1's bridge, injected into every space), template.html (the space shown by default), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
+share/                     something.js (contract 1's bridge, injected into every space), template.html (the start of a new space), guide.md (the guide for the agent that writes spaces: contract 1), contract/ (the same contract as data, read by the tests)
 Sources/SomethingCore/     contract 1: the state (Contract, StateMap, Events), spaces, declarations, rights, the bridge, memory and journal, codes. Foundation only, so it can build on Linux and Windows; it names no agent beyond the kinds a right may name
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi) and V1's state they still fill
-Sources/something/         the Mac app: menu bar, the space window (something:// scheme, network lock, reload), its bridge host, native windows; carries, asks, decides nothing
-Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
+Sources/something/         the Mac app: menu bar, Home and the space card, the start, the space window (something:// scheme, network lock, reload), its bridge host, native windows and the permission and question panels; carries, asks, decides nothing
+Tests/                     SomethingCoreTests (with the budgets and the publishable scan), SomethingAgentsTests, somethingTests (the space window in a WebKit view that is never shown: network lock, isolation, scheme, rights; Home, the card and its revocations, the start, the panels), and something-js.test.mjs (something.js on node's own test runner: `node --test Tests/something-js.test.mjs`)
 ```
 
 A space talks to something with one protocol: it sends `{"contract": 1, "id": ..., "method": ..., "params": ...}` and gets `{"id": ..., "result": ...}` or `{"id": ..., "error": {"code": ..., "message": ...}}`. What is not known is `null`, never missing and never a guess. Another machine would need only a new shell around the same core and the same pages.

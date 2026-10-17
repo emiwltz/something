@@ -95,13 +95,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         if let declaration = reading.declaration {
             title = declaration.title
             granted = Rights.granted(reading, answer(declaration), limits: SpaceWindow.limits, home: places.home)
-            let controller = web.configuration.userContentController
-            controller.removeAllUserScripts()
-            let start = bridge + "\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n"
-            // Every frame gets the guards: a frame inside the space has links too. Only the page gets the bridge.
-            controller.addUserScript(WKUserScript(source: Lockdown.activationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
-            controller.addUserScript(WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
-            controller.addUserScript(WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+            inject()
             web.load(URLRequest(url: scheme.page))
         } else {
             // The page the person can no longer see stops: its scripts, its timers and its links. The empty page has
@@ -110,6 +104,30 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             web.loadHTMLString("", baseURL: URL(string: "\(Scheme.name)://\(Scheme.host)/.blocked"))
         }
         present()
+    }
+
+    /// Puts the guards and the bridge, with the `granted` in force, before the scripts of every page the space loads.
+    private func inject() {
+        let controller = web.configuration.userContentController
+        controller.removeAllUserScripts()
+        let start = bridge + "\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n"
+        // Every frame gets the guards: a frame inside the space has links too. Only the page gets the bridge.
+        controller.addUserScript(WKUserScript(source: Lockdown.activationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
+        controller.addUserScript(WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
+        controller.addUserScript(WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+    }
+
+    /// Applies the person's answers as the grants file now keeps them, without asking and without a reload: the page
+    /// hears a `granted` event, and the bridge answers by the new rights from its next call. The space's card calls it
+    /// when a right is switched (contract 5: a revocation reaches an open space as a `granted` event).
+    func regrant() {
+        let reading = Declaration.read(space, home: places.home)
+        guard blocked.isEmpty, reading.declaration != nil else { return }
+        let grant = kept ? (try? AppFile.read(places.grants))?.spaces[space.name] : held
+        granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: places.home)
+        inject()
+        web.evaluateJavaScript("window.something && something._granted(\(String(decoding: encoded(granted), as: UTF8.self)))")
+        push()
     }
 
     /// The grant in force after this opening: the person is asked only what changed since they last answered. The

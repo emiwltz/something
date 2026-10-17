@@ -1,17 +1,21 @@
-// The Mac app: the menu bar icon, the Edit menu, one Engine for every space window, the state pushed to the windows
-// at most four times a second, and quitting, which stops the agents something launched.
+// The Mac app: the menu bar icon (Home, the open space, Quit), the Edit menu, one Engine, Home, one space window at a
+// time, the permission and question panels, the state pushed at most four times a second, and quitting, which asks
+// first while agents something launched run, then stops them.
 import AppKit
 import SomethingAgents
 import SomethingCore
 import WebKit
 
 final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    /// The space the app opens: a name in the spaces folder or a path; nil for the template.
+    /// The space named or given by path on the command line; nil to open what the start chooses (FirstRun.swift).
     let opening: String?
     let places = Places.person
     let engine = Engine(environment: ProcessInfo.processInfo.environment)
     let ask = NativeAsk()
-    var windows: [SpaceWindow] = []
+    /// The open space. One at a time (design 9): opening another closes it.
+    var current: SpaceWindow?
+    lazy var home = Home(places: places, examples: Resources.share.appendingPathComponent("examples"), ask: ask)
+    lazy var panels = Panels(source: engine)
     var statusItem: NSStatusItem?
     var pushing = false
     /// Lockdown's rule list, compiled before the first window opens.
@@ -28,30 +32,47 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.menu = NSMenu()
         item.menu?.delegate = self
         statusItem = item
+        home.open = { [weak self] space in self?.open(space).map { self?.ask.tell($0) } }
+        home.card.kinds = { [weak self] in self?.engine.state.kinds ?? [:] }
+        home.card.window = { [weak self] name in self?.current.flatMap { $0.kept && $0.space.name == name ? $0 : nil } }
+        panels.who = { [weak self] request in self?.who(request) ?? "An agent" }
         engine.changed = { [weak self] in self?.schedulePush() }
         engine.start(often: true)
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
-            if let problem = openSpace() { fail(problem) }
+            do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
+            if let opening {
+                guard let space = Spaces(root: places.spaces).locate(opening) else {
+                    fail("There is no space \(opening): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")
+                }
+                if let problem = open(space) { fail(problem) }
+            } else if let space = FirstRun.first(places) {
+                // A default space that cannot open says why, and Home shows in its place.
+                if let problem = open(space) {
+                    ask.tell(problem)
+                    home.show()
+                }
+            } else {
+                home.show()
+            }
         }
     }
 
-    /// Opens the space the app was started with, or fronts its window. Until Home exists, that is the template
-    /// (share/template.html) or the space named or given by path on the command line. Returns what went wrong, or nil.
-    func openSpace() -> String? {
-        let path = opening ?? Resources.share.appendingPathComponent("template.html").path
-        guard let space = Spaces(root: places.spaces).locate(path) else {
-            return "There is no space \(path): give the name of a space in \(places.spaces.path), or the path of its .html file or folder."
-        }
-        if let open = windows.first(where: { $0.space == space }) {
-            open.show()
+    /// Opens `space` in the space window, or fronts it when it is the open one. Returns what went wrong, or nil.
+    func open(_ space: Space) -> String? {
+        if let current, current.space == space {
+            current.show()
             return nil
         }
         guard let rules else { return nil }
         do {
             let window = try SpaceWindow(space: space, places: places, engine: engine, ask: ask, share: Resources.share, rules: rules)
-            window.closed = { [weak self] closed in self?.windows.removeAll { $0 === closed } }
-            windows.append(window)
+            // Closing its window closes the space; a space whose window was never shown is closed directly.
+            if let current { current.window?.close() ?? current.close() }
+            window.closed = { [weak self] closed in
+                if self?.current === closed { self?.current = nil }
+            }
+            current = window
             window.open()
             window.show()
             return nil
@@ -60,10 +81,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The menu bar's item: a failure is said in a window, and the app goes on, with its agents.
-    @objc func openFromMenu() {
-        if let problem = openSpace() { ask.tell(problem) }
+    /// Who asks, for a panel ("Claude Code “shop”, working in /Users/example/code/shop, asks…"): the agent's name and
+    /// folder, and the open space when it launched the agent.
+    func who(_ request: Request) -> String {
+        let agent = engine.state.agents.first { $0.id == request.agent }
+        var words = Ask.name(of: agent?.kind ?? "agent")
+        if let name = agent?.name { words += " “\(name)”" }
+        if let folder = agent?.folder { words += ", working in \(folder)," }
+        if let current, current.launched.contains(request.agent) { words += " launched by “\(current.title)”," }
+        return words
     }
+
+    @objc func showHome() { home.show() }
+
+    @objc func showCurrent() { current?.show() }
 
     /// The engine may change many times a second; the windows hear of it at most every quarter of a second.
     func schedulePush() {
@@ -71,7 +102,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pushing = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             self?.pushing = false
-            self?.windows.forEach { $0.push() }
+            self?.current?.push()
+            self?.panels.refresh()
         }
     }
 
@@ -98,13 +130,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        menu.addItem(withTitle: "Open the window", action: #selector(openFromMenu), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Home", action: #selector(showHome), keyEquivalent: "").target = self
+        if let current { menu.addItem(withTitle: current.title, action: #selector(showCurrent), keyEquivalent: "").target = self }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit something", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     // Closing the window keeps something in the menu bar, with its agents.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// A click on the Dock icon with no window open shows Home.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { home.show() }
+        return true
+    }
 
     /// Asks first when agents something launched still run, then stops them all before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

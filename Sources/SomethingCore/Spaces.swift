@@ -64,8 +64,12 @@ public struct Spaces: Sendable {
     public let root: URL
     public init(root: URL) { self.root = root }
 
+    /// The folders under the home that hold the spaces and their memory, the one place their names are written
+    /// (E-1: English names in place of the specification's `espaces` and `donnees`, pending Emi's word).
+    public static let folders = (spaces: "something/spaces", data: "something/data")
+
     /// ~/something/spaces under `home`.
-    public static func root(home: URL) -> URL { home.appendingPathComponent("something/spaces") }
+    public static func root(home: URL) -> URL { home.appendingPathComponent(folders.spaces) }
 
     /// Lowercase letters, digits and "-": a name that is the same on every disk and safe in a file name.
     public static func isName(_ name: String) -> Bool {
