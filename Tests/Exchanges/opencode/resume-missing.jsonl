@@ -1,0 +1,6 @@
+{"note":"Recorded in trial T-3 (opencode 2.0.20, a fake model, invented text, paths made /Users/example).","resume":"ses_invented000000000000000"}
+{"begin":true}
+{"something":{"id":1,"jsonrpc":"2.0","method":"initialize","params":{"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"protocolVersion":1}}}
+{"opencode":{"id":1,"jsonrpc":"2.0","result":{"agentCapabilities":{"_meta":{"opencode/child-session-updates":true},"loadSession":true,"mcpCapabilities":{"http":true,"sse":false},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"delete":{},"fork":{},"list":{},"resume":{}}},"agentInfo":{"name":"OpenCode","version":"2.0.20"},"authMethods":[{"description":"Run `opencode auth login` in the terminal","id":"opencode-login","name":"Login with opencode"}],"protocolVersion":1}}}
+{"something":{"id":2,"jsonrpc":"2.0","method":"session/resume","params":{"cwd":"/Users/example/shop","mcpServers":[],"sessionId":"ses_invented000000000000000"}}}
+{"opencode":{"error":{"code":-32602,"data":{"sessionId":"ses_invented000000000000000"},"message":"Invalid params: session not found: ses_invented000000000000000"},"id":2,"jsonrpc":"2.0"}}

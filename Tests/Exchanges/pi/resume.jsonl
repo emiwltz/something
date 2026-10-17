@@ -1,0 +1,21 @@
+{"note":"Recorded in trial T-4 (pi 1.0.0, a fake model, invented text, paths made /Users/example).","resume":"/Users/example/trial/agent/sessions/--Users-example-shop--/2026-10-17T22-20-46-008Z_01a14bf4-0637-7672-a0d2-cdc41e61f96d.jsonl"}
+{"begin":true}
+{"something":{"id":"s1","type":"get_state"}}
+{"something":{"id":"s2","type":"get_available_models"}}
+{"something":{"id":"s3","type":"get_available_thinking_levels"}}
+{"pi":{"command":"get_state","data":{"autoCompactionEnabled":true,"followUpMode":"one-at-a-time","isCompacting":false,"isStreaming":false,"messageCount":3,"model":{"api":"openai-completions","baseUrl":"http://127.0.0.1:49236/v1","contextWindow":32000,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0},"id":"fake-1","input":["text"],"maxTokens":4096,"name":"Fake One","provider":"fake","reasoning":true},"pendingMessageCount":0,"sessionFile":"/Users/example/trial/agent/sessions/--Users-example-shop--/2026-10-17T22-20-46-008Z_01a14bf4-0637-7672-a0d2-cdc41e61f96d.jsonl","sessionId":"01a14bf4-0637-7672-a0d2-cdc41e61f96d","steeringMode":"one-at-a-time","thinkingLevel":"medium"},"id":"s1","success":true,"type":"response"}}
+{"pi":{"command":"get_available_models","data":{"models":[{"api":"openai-completions","baseUrl":"http://127.0.0.1:49236/v1","contextWindow":32000,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0},"id":"fake-1","input":["text"],"maxTokens":4096,"name":"Fake One","provider":"fake","reasoning":true},{"api":"openai-completions","baseUrl":"http://127.0.0.1:49236/v1","contextWindow":32000,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0},"id":"fake-2","input":["text"],"maxTokens":4096,"name":"Fake Two","provider":"fake","reasoning":true}]},"id":"s2","success":true,"type":"response"}}
+{"pi":{"command":"get_available_thinking_levels","data":{"levels":["off","minimal","low","medium","high"]},"id":"s3","success":true,"type":"response"}}
+{"delivery":"started","send":"Hello again.","when":"next"}
+{"something":{"id":"s4","message":"Hello again.","type":"prompt"}}
+{"pi":{"command":"prompt","data":{"disposition":"started"},"id":"s4","success":true,"type":"response"}}
+{"pi":{"type":"agent_start"}}
+{"pi":{"type":"turn_start"}}
+{"pi":{"message":{"content":[{"text":"Hello again.","type":"text"}],"role":"user","timestamp":1792275646286},"type":"message_start"}}
+{"pi":{"message":{"content":[{"text":"Hello again.","type":"text"}],"role":"user","timestamp":1792275646286},"type":"message_end"}}
+{"pi":{"message":{"api":"openai-completions","content":[{"text":"Invented ","type":"text"}],"model":"fake-1","provider":"fake","role":"assistant","stopReason":"pending","timestamp":1792275646292,"usage":{"cacheRead":0,"cacheWrite":0,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0,"total":0},"input":0,"output":0,"totalTokens":0}},"type":"message_start"}}
+{"pi":{"message":{"api":"openai-completions","content":[{"text":"Invented reply number 5.","type":"text"}],"model":"fake-1","provider":"fake","rawStopReason":"stop","responseId":"chatcmpl-fake2","responseModel":"fake","role":"assistant","stopReason":"stop","thinkingLevel":"medium","timestamp":1792275646292,"usage":{"cacheRead":0,"cacheWrite":0,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0,"total":0},"input":10,"output":5,"reasoning":0,"totalTokens":15}},"type":"message_end"}}
+{"pi":{"message":{"api":"openai-completions","content":[{"text":"Invented reply number 5.","type":"text"}],"model":"fake-1","provider":"fake","rawStopReason":"stop","responseId":"chatcmpl-fake2","responseModel":"fake","role":"assistant","stopReason":"stop","thinkingLevel":"medium","timestamp":1792275646292,"usage":{"cacheRead":0,"cacheWrite":0,"cost":{"cacheRead":0,"cacheWrite":0,"input":0,"output":0,"total":0},"input":10,"output":5,"reasoning":0,"totalTokens":15}},"toolResults":[],"type":"turn_end"}}
+{"pi":{"type":"agent_settled"}}
+{"stop":true}
+{"ended":0}
