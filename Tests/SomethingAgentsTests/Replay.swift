@@ -35,6 +35,11 @@ final class Replay {
         Replay(ACPDriver.self, Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil))
     }
 
+    /// A pi launched in /Users/example/shop as agent pi-1, continuing the conversation file `resume` when given.
+    static func pi(model: String? = nil, effort: String? = nil, resume: String? = nil) -> Replay {
+        Replay(PiDriver.self, Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
+    }
+
     private func start<D: Driver>(_ type: D.Type, _ launch: Launch) {
         agent = Launched(type, launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
         if let codex = agent.driver as? CodexDriver {
@@ -60,7 +65,8 @@ final class Replay {
     }
 
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
-    /// "resume" makes a Codex or OpenCode launch that continues that thread, and "model" an OpenCode launch with that model.
+    /// "resume" makes a Codex, OpenCode or pi launch that continues that thread, "model" an OpenCode or pi launch with
+    /// that model, and "effort" a pi launch with that thinking level.
     /// `database` is the OpenCode database the driver reads at the end, as the engine sets it.
     static func play(_ name: String, kind: String = "claude", database: String? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -69,7 +75,9 @@ final class Replay {
             try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
         }
         let resume = rows.first?["resume"] as? String
-        let replay = kind == "codex" ? codex(resume: resume) : kind == "opencode" ? opencode(model: rows.first?["model"] as? String, resume: resume) : Replay()
+        let model = rows.first?["model"] as? String
+        let replay = kind == "codex" ? codex(resume: resume) : kind == "opencode" ? opencode(model: model, resume: resume)
+            : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay()
         (replay.agent.driver as? ACPDriver)?.database = database
         var read = 0
         for (number, row) in rows.enumerated() {

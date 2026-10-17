@@ -125,9 +125,11 @@ import SomethingCore
         #expect(engine.state.kinds["claude"]?.tested == ClaudeDriver.tested)
         #expect(engine.state.kinds["codex"]?.launch == true)
         #expect(engine.state.kinds["opencode"]?.launch == true)
-        #expect(engine.state.kinds["pi"]?.launch == false)
+        #expect(engine.state.kinds["pi"]?.launch == true)
+        #expect(engine.state.kinds["omp"]?.launch == false)
         #expect(engine.limits["claude"] == nil && engine.limits["codex"] == nil, "Claude and Codex have no limit left")
         #expect(engine.limits["opencode"] == ["steer"])
+        #expect(engine.limits["pi"] == ["mode"])
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -247,8 +249,17 @@ import SomethingCore
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
         let engine = Engine(environment: place.environment)
-        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch pi yet.")) {
-            try engine.launch("pi", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch omp yet.")) {
+            try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        }
+        #expect(throws: CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!)) {
+            try engine.launch("pi", folder: place.work.path, model: nil, mode: "plan", effort: nil)
+        }
+        // pi given a missing file would start an empty conversation there: the file is checked before pi is looked for.
+        for missing in ["/Users/example/.pi/agent/sessions/--Users-example-shop--/missing.jsonl", "relative.jsonl", place.work.path] {
+            #expect(throws: CodedError("THREAD_NOT_FOUND", "pi has no saved conversation with this id on this Mac.")) {
+                try engine.launch(PiDriver.self, folder: place.work.path, model: nil, mode: nil, effort: nil, planB: false, resume: missing)
+            }
         }
         #expect(throws: CodedError("VALUE_NOT_OFFERED", "auto is not a mode something offers for opencode; pick one of build, plan.")) {
             try engine.launch("opencode", folder: place.work.path, model: nil, mode: "auto", effort: nil)

@@ -1,7 +1,7 @@
 // The engine: every agent on this Mac in one contract 1 State, and the hands on the ones something launched.
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
-// agents: its public API is what the app may use. It drives the agents something launched (Claude Code, Codex and
-// OpenCode so far), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
+// agents: its public API is what the app may use. It drives the agents something launched (Claude Code, Codex,
+// OpenCode and pi), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
 // Agents started elsewhere come with the readers (slices 16 to 18); until then resume answers NOT_SUPPORTED.
 import Foundation
 import SomethingCore
@@ -46,7 +46,8 @@ public final class Engine {
     }
 
     /// The kinds something can launch, by their driver.
-    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self, "opencode": ACPDriver.self]
+    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self, "opencode": ACPDriver.self,
+                                                        "pi": PiDriver.self]
 
     private let environment: [String: String]
     private let programs: Programs
@@ -170,9 +171,11 @@ public final class Engine {
     var spools = Spool.root
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
-    /// With `resume`, the program continues that conversation in `folder` (Codex and OpenCode so far).
+    /// With `resume`, the program continues that conversation in `folder` (Codex, OpenCode and pi so far); a pi
+    /// conversation is its file, which must exist (THREAD_NOT_FOUND).
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
+        if type is PiDriver.Type, let resume { try PiDriver.resumable(resume) }
         let program = try programs.find(type.kind)
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)

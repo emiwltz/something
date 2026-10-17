@@ -1,5 +1,5 @@
-// A fake of OpenAI's Responses API, for trial T-2, and of its Chat Completions API, for trial T-3: the real `codex` and
-// `opencode` programs talk to it instead of a model, through a model provider declared in a throwaway home. It listens
+// A fake of OpenAI's Responses API, for trial T-2, and of its Chat Completions API, for trials T-3 and T-4: the real
+// `codex`, `opencode` and `pi` programs talk to it instead of a model, through a model provider declared in a throwaway home. It listens
 // on 127.0.0.1 on a port the system picks, answers POST /v1/responses and POST /v1/chat/completions as the APIs stream
 // (server-sent events, chunked), and plays a tiny invented script chosen by keywords in the person's last message. It never reads, keeps or logs a request's headers (they carry the key): only
 // the length is taken from them, and only the JSON body is read.
@@ -12,6 +12,8 @@ final class FakeResponsesAPI {
     private let lock = NSLock()
     private var texts: [String] = [], models: [String?] = [], efforts: [String?] = [], outputs: [String] = [], people: [Int] = []
     private var count = 0
+    /// Whether the chat completions call pi's tool (`bash`) rather than OpenCode's.
+    var pi = false
 
     init() throws {
         socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
@@ -56,10 +58,12 @@ final class FakeResponsesAPI {
     /// One step of the script: a message (slow: one word every quarter second), or a tool call.
     enum Step { case message(String, slow: Bool), call(name: String, arguments: [String: Any]) }
 
-    /// `opencode` picks OpenCode's names for its tools.
-    static func reply(to last: String, toolOutput: String?, opencode: Bool = false) -> Step {
+    /// `opencode` picks OpenCode's names for its tools, `pi` pi's.
+    static func reply(to last: String, toolOutput: String?, opencode: Bool = false, pi: Bool = false) -> Step {
         if let toolOutput { return .message("Invented summary: \(toolOutput.prefix(40))", slow: false) }
         if last.contains("run-sleep") { return .message(Array(repeating: "tick", count: 40).joined(separator: " "), slow: true) }
+        if pi, last.contains("run-echo") { return .call(name: "bash", arguments: ["command": "touch invented.txt"]) }
+        if pi, last.contains("run-wait") { return .call(name: "bash", arguments: ["command": "sleep 30"]) }
         if opencode, last.contains("run-echo") {
             return .call(name: "shell", arguments: ["command": "touch invented.txt", "description": "Invented: make a file"])
         }
@@ -120,7 +124,7 @@ final class FakeResponsesAPI {
                 if let output { outputs.append(output) }
                 people.append(messages.filter { $0["role"] as? String == "user" }.count)
                 count += 1
-                return FakeResponsesAPI.reply(to: last, toolOutput: output, opencode: true)
+                return FakeResponsesAPI.reply(to: last, toolOutput: output, opencode: !pi, pi: pi)
             }
             guard streamChat(client, step, number: lock.withLock { count }) else { return }
         }
