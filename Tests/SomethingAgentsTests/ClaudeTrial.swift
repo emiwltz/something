@@ -22,7 +22,8 @@ final class Stopped: @unchecked Sendable { var done = false }
     var lines: [(written: Bool, line: String)] = []
     var asked = false
 
-    init(_ name: String, mode: String = "default") throws {
+    /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool.
+    init(_ name: String, mode: String = "default", planB: Bool = false) throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
@@ -31,7 +32,15 @@ final class Stopped: @unchecked Sendable { var done = false }
         try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
         let program = trialClaude!
         let launch = Launch(agent: "claude-trial", folder: work.path, mode: mode)
-        let command = ClaudeDriver.command(launch)
+        var spool: PermissionSpool?
+        var command = ClaudeDriver.command(launch)
+        if planB {
+            let tools = root.appendingPathComponent("tools"), hook = tools.appendingPathComponent("something").path
+            try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+            try PlanBTests.buildHook(hook, in: tools)
+            spool = PermissionSpool(folder: root.appendingPathComponent("spool").path)
+            command = ClaudeDriver.command(launch, hook: [hook, "hook", "permission", "--spool", spool!.folder])
+        }
         var environment = ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
                            "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
                            "ANTHROPIC_BASE_URL": api.url, "ANTHROPIC_API_KEY": "test-key",
@@ -40,7 +49,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         environment.merge(command.adding) { _, added in added }
         spawn = Spawn(path: program, arguments: command.arguments + ["--bare", "--tools", "Bash,Edit,Read,AskUserQuestion"], folder: work.path, environment: environment)
         var record: (Bool, Data) -> Void = { _, _ in }
-        agent = try Engine.start(ClaudeDriver.self, launch, spawn, asked: { _ in false }, record: { record($0, $1) })
+        agent = try Engine.start(ClaudeDriver.self, launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
         record = { [weak self] written, line in
             DispatchQueue.main.async { self?.lines.append((written, String(decoding: line, as: UTF8.self))) }
         }
@@ -266,6 +275,32 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"]
         _ = try run.agent.send("Hello again.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && run.api.received.count == 2 }
         #expect(run.api.effortsAsked.last == "low", "efforts asked: \(run.api.effortsAsked)")
+        try await run.finish()
+    }
+
+    /// Not run: under `--bare`, which keeps the trial away from the Keychain, Claude 2.1.296 runs no hook given in
+    /// `--settings` (its help says so, and this case saw the request denied at once, the hook never started). Plan B
+    /// is proven with a fake Claude that runs the real hook command (PlanBTests); these two need a run without --bare.
+    @Test(.disabled("--bare skips hooks given in --settings: Claude 2.1.296 denied without running the hook")) func planBAllowsOnce() async throws {
+        let run = try ClaudeRun("plan-b-once", planB: true)
+        defer { run.cleanup() }
+        _ = try run.agent.send("Please run-echo now.", when: "next")
+        try await run.until("a permission") { run.request != nil }
+        #expect(run.request?.tool == "Bash")
+        #expect(try run.agent.answer(try #require(run.request).id, .once))
+        try await run.until("the end of the turn") { run.state.state == "idle" && run.items.contains { $0.tool?.status == "done" } }
+        #expect(run.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "allowed"))
+        try await run.finish()
+    }
+
+    @Test(.disabled("--bare skips hooks given in --settings: Claude 2.1.296 denied without running the hook")) func planBDenies() async throws {
+        let run = try ClaudeRun("plan-b-deny", planB: true)
+        defer { run.cleanup() }
+        _ = try run.agent.send("Please run-echo now.", when: "next")
+        try await run.until("a permission") { run.request != nil }
+        #expect(try run.agent.answer(try #require(run.request).id, .deny))
+        try await run.until("the end of the turn") { run.state.state == "idle" && run.items.contains { $0.tool?.status == "failed" } }
+        #expect(run.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "denied"))
         try await run.finish()
     }
 

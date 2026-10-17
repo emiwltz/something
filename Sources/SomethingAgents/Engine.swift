@@ -125,17 +125,53 @@ public final class Engine {
         if let mode, !type.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
         }
-        let program = try programs.find(kind)
+        return try launch(type, folder: folder, model: model, mode: mode, effort: effort, planB: false)
+    }
+
+    /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: this program, by its absolute path, with
+    /// `hook permission`; nil when that path is unknown, and plan B is then not offered.
+    public var hookCommand: [String]? = Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] }
+
+    /// Where plan B's spool folders go; a test's own folder in tests.
+    var spools = Spool.root
+
+    /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
+    func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
+                record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
+        let program = try programs.find(type.kind)
         count += 1
-        let launch = Launch(agent: "\(kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
-        let command = type.command(launch)
-        let spawn = Spawn(path: program.path, arguments: command.arguments, folder: folder,
-                          environment: program.environment(environment, adding: command.adding, removing: command.removing))
-        let agent = try Engine.start(type, launch, spawn) { [weak self] id in self?.stopping.contains(id) == true }
-        agent.changed = { [weak self] in self?.changed() }
-        launched.append((agent, spawn))
+        let launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
+        let started = try start(type, launch, program, planB: planB, record: record)
+        launched.append(started)
         changed()
         return launch.agent
+    }
+
+    /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude
+    /// that refuses plan A is launched again with plan B, under the same agent id and a new conversation id.
+    private func start(_ type: any Driver.Type, _ launch: Launch, _ program: Program, planB: Bool,
+                       record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
+        let spool = planB && type is ClaudeDriver.Type ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
+        guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "something cannot find its own program to answer Claude Code's permission requests.") }
+        let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? type.command(launch)
+        let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
+                          environment: program.environment(environment, adding: command.adding, removing: command.removing))
+        let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
+        agent.changed = { [weak self] in self?.changed() }
+        if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
+            claude.fallback = { [weak self, weak spawn] in
+                guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
+                var again = launch
+                again.thread = UUID().uuidString.lowercased()
+                guard let started = try? start(type, again, program, planB: true, record: record) else { return false }
+                // The first program's end now reaches a Launched no longer listed: it changes nothing.
+                spawn.stop()
+                launched[index] = started
+                changed()
+                return true
+            }
+        }
+        return (agent, spawn)
     }
 
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String { throw Engine.notYet }
@@ -150,7 +186,8 @@ public final class Engine {
     /// `asked` says, on the main queue, whether something asked this agent to stop; `record` sees every line, in
     /// (true) and out (false), for `something try --record`. Throws as Spawn.start does, and AGENT_STOPPED when the
     /// program closed its input at once.
-    static func start(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, asked: @escaping (String) -> Bool,
+    /// With `spool`, Claude's plan B: the spool starts before the program and stops after its end.
+    static func start(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
                       record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> Launched {
         let agent = Launched(type, launch, write: { [weak spawn] line in
             guard let spawn else { throw CodedError("AGENT_STOPPED", "The agent has ended; launch or resume it to go on.") }
@@ -164,13 +201,29 @@ public final class Engine {
             // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
             while spawn.running { usleep(20_000) }
         }
+        if let spool {
+            do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
+            let claude = agent.driver as? ClaudeDriver
+            claude?.hookReply = { [weak spool] uuid, decision in spool?.answer(uuid, decision) == true }
+            spool.asked = { [weak claude] uuid, request in claude?.hookAsked(uuid, request) }
+            spool.withdrawn = { [weak claude] uuid in claude?.hookWithdrawn(uuid) }
+        }
+        do { try startSpawn(type, launch, spawn, spool: spool, agent: agent, asked: asked, record: record) } catch {
+            spool?.stop()
+            throw error
+        }
+        return agent
+    }
+
+    private static func startSpawn(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool?, agent: Launched,
+                                   asked: @escaping (String) -> Bool, record: ((Bool, Data) -> Void)?) throws {
         try spawn.start(lines: { line in DispatchQueue.main.async { record?(false, line); agent.driver.receive(line) } },
                         ended: { [weak spawn] code in
                             let errors = spawn?.errorTail ?? ""
+                            spool?.stop()
                             DispatchQueue.main.async { agent.ended(code: code, errors: errors, asked: asked(launch.agent)) }
                         })
         try agent.begin(pid: Int(spawn.pid))
-        return agent
     }
 
     /// The launched agent `id`, while its program runs.
@@ -188,14 +241,15 @@ public final class Engine {
 }
 
 /// `something hook permission --spool <dir>`: Claude's plan B (design 4.1). Returns the exit status.
+/// `arguments` are the words after `something`, with or without `hook permission` in front. Returns 0 once a
+/// decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
 public enum PermissionHook {
-    public static func main(_ arguments: [String]) -> Int32 { 2 }
+    public static func main(_ arguments: [String]) -> Int32 { SpoolHook.main(arguments) }
 }
 
 /// `something try <kind> [--record <file>] [--plan-b]`: a developer's trial of one driver against a real agent.
 public enum Trial {
-    public static func main(_ arguments: [String]) -> Int32 {
-        FileHandle.standardError.write(Data("something try: no driver yet.\n".utf8))
-        return 2
-    }
+    /// `arguments` are the words after `something`, with or without `try` in front. Returns the exit status: 0 once
+    /// the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
+    public static func main(_ arguments: [String]) -> Int32 { DeveloperTrial.main(arguments) }
 }

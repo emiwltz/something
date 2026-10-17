@@ -24,10 +24,23 @@ public final class ClaudeDriver: Driver {
     /// pass it; the help does not list it). The mode is always explicit: without it a stranger's settings pick one,
     /// possibly `auto`. The environment variable makes Claude say when a turn starts and ends; it is set for this
     /// launch only.
-    public static func command(_ launch: Launch) -> Command {
-        var arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-                         "--permission-prompt-tool", "stdio", "--include-hook-events",
-                         "--permission-mode", launch.mode ?? "default", "--session-id", launch.thread]
+    public static func command(_ launch: Launch) -> Command { command(launch, hook: nil) }
+
+    /// Plan B, when `hook` is the command something answers Claude's hook with (`<abs>/something hook permission
+    /// --spool <dir>`): no prompt tool, and a PermissionRequest hook, passed in `--settings` for this launch only,
+    /// asks something through files instead (PermissionSpool.swift). Nothing is written in Claude's settings.
+    static func command(_ launch: Launch, hook: [String]?) -> Command {
+        var arguments = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"]
+        if let hook {
+            // Claude runs a hook's command through a shell: each word is quoted, so a space in a path stays inside it.
+            let line = hook.map { "'" + $0.replacingOccurrences(of: "'", with: #"'\''"#) + "'" }.joined(separator: " ")
+            let settings = ["hooks": ["PermissionRequest": [["matcher": "*", "hooks": [["type": "command", "command": line, "timeout": Spool.claudeTimeout]]]]]]
+            let json = (try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+            arguments += ["--settings", String(decoding: json, as: UTF8.self)]
+        } else {
+            arguments += ["--permission-prompt-tool", "stdio"]
+        }
+        arguments += ["--include-hook-events", "--permission-mode", launch.mode ?? "default", "--session-id", launch.thread]
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
@@ -38,7 +51,8 @@ public final class ClaudeDriver: Driver {
     private let emit: (AgentEvent) -> Void
     private let now: () -> String
     /// Open requests by the id something shows (the agent's id joined to Claude's, so two agents never share one).
-    private var asks: [String: (claudeID: String, request: [String: Any], prompt: Prompt)] = [:]
+    /// `hook` is true for a request that came through plan B's spool, whose claudeID is the spool's uuid.
+    private var asks: [String: (claudeID: String, request: [String: Any], prompt: Prompt, hook: Bool)] = [:]
     /// Tool items by Claude's tool_use id, kept to update when the tool ends or a decision is known.
     private var tools: [String: Item] = [:]
     private var decisions: [String: Decision] = [:]
@@ -55,6 +69,11 @@ public final class ClaudeDriver: Driver {
     private var outcome: Outcome?
     private var interrupting = false
     private var heard = false
+    /// Plan B's answer: writes a decision for a spool uuid, false when the hook was gone. Set by the engine.
+    var hookReply: ((String, [String: Any]) -> Bool)?
+    /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
+    /// Called once at most, when Claude refused `initialize` or did not know the prompt tool, before any message.
+    var fallback: (() -> Bool)?
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
@@ -142,9 +161,15 @@ public final class ClaudeDriver: Driver {
         let allow = allowed != nil
         let reply: [String: Any] = allowed.map { ["behavior": "allow", "updatedInput": $0] }
             ?? ["behavior": "deny", "message": question ? "The person chose not to answer." : "The person refused this in something."]
-        try send(["type": "control_response", "response": ["subtype": "success", "request_id": ask.claudeID, "response": reply]])
-        asks[request] = nil
-        if let tool = ask.request["tool_use_id"] as? String { decide(tool, Decision(by: "person", outcome: allow ? "allowed" : "denied")) }
+        if ask.hook {
+            asks[request] = nil
+            // A hook that ended meanwhile was withdrawn too: its window closes either way.
+            if hookReply?(ask.claudeID, reply) != true { emit(.requestClosed(id: request)); return false }
+        } else {
+            try send(["type": "control_response", "response": ["subtype": "success", "request_id": ask.claudeID, "response": reply]])
+            asks[request] = nil
+        }
+        if let tool = ask.request["tool_use_id"] as? String ?? hookTool(ask.request) { decide(tool, Decision(by: "person", outcome: allow ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
         return true
     }
@@ -158,6 +183,8 @@ public final class ClaudeDriver: Driver {
     public func ended(code: Int32, errors: String) {
         guard code != 0 else { return emit(.stopped(nil)) }
         let lines = errors.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        // An older Claude that does not know `stdio` as a prompt tool ends at once, naming the flag.
+        if !heard, errors.contains("permission-prompt-tool"), fallingBack() { return }
         // A program that ends before its first line could not start: its first error line says why.
         if !heard { return emit(.stopped(AgentError(code: "LAUNCH_FAILED", message: lines.first.map { "Claude Code could not start: \($0)" }
             ?? "Claude Code stopped at once (code \(code))."))) }
@@ -256,18 +283,42 @@ public final class ClaudeDriver: Driver {
             try? send(["type": "control_response", "response": ["subtype": "error", "request_id": raw, "error": "something does not handle \(subtype)."]])
             return
         }
+        open(raw, request, hook: false)
+    }
+
+    /// Plan B: Claude's hook asked through the spool. `asked` is the hook's input (tool_name, tool_input, ...), which
+    /// names no tool_use id: the tool is found by its name and input among the running ones.
+    func hookAsked(_ uuid: String, _ asked: [String: Any]) {
+        var request: [String: Any] = ["tool_name": asked["tool_name"] as? String ?? "a tool", "input": asked["tool_input"] as? [String: Any] ?? [:]]
+        request["tool_use_id"] = hookTool(request)
+        open(uuid, request, hook: true)
+    }
+
+    /// Plan B: the hook ended without an answer (Claude stopped it, or it gave up and denied).
+    func hookWithdrawn(_ uuid: String) {
+        guard asks.removeValue(forKey: id(uuid)) != nil else { return }
+        emit(.requestClosed(id: id(uuid)))
+    }
+
+    private func hookTool(_ request: [String: Any]) -> String? {
+        let name = request["tool_name"] as? String, text = ClaudeDriver.summary(request["input"])
+        return tools.first { $0.value.tool?.name == name && $0.value.text == text && $0.value.decision == nil }?.key
+    }
+
+    private func open(_ raw: String, _ request: [String: Any], hook: Bool) {
         let tool = request["tool_name"] as? String ?? "a tool", input = request["input"] as? [String: Any] ?? [:]
         let questions = tool == "AskUserQuestion" ? ClaudeDriver.questions(input) : []
         let shown = Request(id: id(raw), agent: launch.agent, kind: tool == "AskUserQuestion" ? "question" : "permission", tool: tool,
                             about: questions.first?.text ?? (input["command"] as? String) ?? (request["description"] as? String)
                                 ?? ClaudeDriver.summary(input), at: now())
-        asks[shown.id] = (raw, request, Prompt(request: shown, input: questions.isEmpty ? ClaudeDriver.shown(input) : nil, questions: questions))
+        asks[shown.id] = (raw, request, Prompt(request: shown, input: questions.isEmpty ? ClaudeDriver.shown(input) : nil, questions: questions), hook)
         emit(.requestOpened(shown))
     }
 
     private func response(_ response: [String: Any]) {
         guard let raw = response["request_id"] as? String, let asked = sent.removeValue(forKey: raw) else { return }
         guard response["subtype"] as? String == "success" else {
+            if asked.subtype == "initialize", fallingBack() { return }
             let refused = ClaudeDriver.refusals[asked.subtype] ?? "Claude Code refused what something asked"
             let words = (response["error"] as? String).map { "\(refused): \($0)" } ?? "\(refused)."
             return emit(.error(AgentError(code: "AGENT_ERROR", message: words)))
@@ -307,6 +358,13 @@ public final class ClaudeDriver: Driver {
     }
 
     // MARK: Helpers
+
+    /// Hands the launch to plan B when nothing was sent yet; true when the engine took it.
+    private func fallingBack() -> Bool {
+        guard let fallback, messagesWritten == 0, messages.isEmpty else { return false }
+        self.fallback = nil
+        return fallback()
+    }
 
     private func appendPerson(_ text: String) {
         messagesWritten += 1
