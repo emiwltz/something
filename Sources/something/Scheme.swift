@@ -1,15 +1,22 @@
 // Serves one space at something://space/: its single file, or the files of its folder, and nothing else. Every answer
 // carries the policy that forbids every network origin, so a space can load only its own files, inline code, data: and
-// blob:, and what it shows of the agents stays on the machine.
+// blob:, and what it shows of the agents stays on the machine. It also serves the app's own page, something://app/,
+// which holds the space in a sandboxed frame. A space is never the main frame: WebKit connects to the server of a link
+// the main frame follows before it asks where that frame may go, while a link the space's frame follows is refused by
+// this page's policy before any connection.
 import Foundation
 import SomethingCore
 import WebKit
 
 final class Scheme: NSObject, WKURLSchemeHandler {
-    static let name = "something", host = "space"
+    static let name = "something", host = "space", app = "app"
     /// `default-src` covers scripts, styles, images, fonts, media, frames, workers and every connection (fetch, XHR,
     /// WebSocket, EventSource, beacons); `form-action` is not covered by it, so it is said too.
     static let policy = "default-src something: 'unsafe-inline' data: blob:; form-action something:"
+
+    /// The policy of the app's page: it holds the space's frame and nothing else, and that frame may hold only the
+    /// space, so a link the space follows is refused before WebKit connects anywhere.
+    static let shellPolicy = "default-src 'none'; style-src 'unsafe-inline'; frame-src something://space"
 
     let space: Space
 
@@ -22,12 +29,31 @@ final class Scheme: NSObject, WKURLSchemeHandler {
         URL(string: "\(Scheme.name)://\(Scheme.host)/\(space.form == .file ? space.location.lastPathComponent : "")")!
     }
 
+    /// The address of the app's page around the space.
+    static let shell = URL(string: "\(name)://\(app)/")!
+
+    /// The app's page: the space's frame, filling the window. Another host is another origin, so the space cannot
+    /// reach it; the sandbox has neither allow-top-navigation nor allow-popups, so the space cannot replace it or open
+    /// a window.
+    var shellPage: Data {
+        Data("""
+            <!doctype html><html><head><meta charset="utf-8"><style>html, body, iframe { margin: 0; border: 0; width: 100%; \
+            height: 100%; display: block; }</style></head><body><iframe sandbox="allow-scripts allow-same-origin allow-forms"
+            src="\(page.absoluteString)"></iframe></body></html>
+            """.utf8)
+    }
+
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
-        guard let url = task.request.url, let file = file(for: url), let data = try? Data(contentsOf: file) else {
-            task.didFailWithError(URLError(.fileDoesNotExist))
-            return
+        guard let url = task.request.url else { return task.didFailWithError(URLError(.badURL)) }
+        let type: String, policy: String, data: Data
+        if url == Scheme.shell {
+            (type, policy, data) = ("text/html; charset=utf-8", Scheme.shellPolicy, shellPage)
+        } else if let file = file(for: url), let bytes = try? Data(contentsOf: file) {
+            (type, policy, data) = (Scheme.type(of: file), Scheme.policy, bytes)
+        } else {
+            return task.didFailWithError(URLError(.fileDoesNotExist))
         }
-        let headers = ["Content-Type": Scheme.type(of: file), "Content-Security-Policy": Scheme.policy, "Cache-Control": "no-store"]
+        let headers = ["Content-Type": type, "Content-Security-Policy": policy, "Cache-Control": "no-store"]
         task.didReceive(HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!)
         task.didReceive(data)
         task.didFinish()

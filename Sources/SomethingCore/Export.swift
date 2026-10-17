@@ -20,7 +20,8 @@ public enum Export {
     /// document, where base64 makes the files a third heavier: about 15 MB of files.
     public static let limit = 20_000_000, most = 500
 
-    /// The document for `space`: its regular files and `data`, the memory, or null. `app` is this engine's version.
+    /// The document for `space`: its regular files and `data`, the memory, or null. `app` is this engine's version;
+    /// `contract` is the one the space declares, so an engine that does not know it refuses the import.
     /// A link is never followed, so a link to an agent's session never travels; `links` names those left out.
     /// Throws a `SpaceError` when a file cannot be read, the space or its index.html is a link, or the document would
     /// be too big to import.
@@ -41,7 +42,7 @@ public enum Export {
             guard let bytes = try? Data(contentsOf: file.url) else { throw SpaceError("\(file.url.path) cannot be read, so \(space.name) was not exported.") }
             encoded[file.path] = bytes.base64EncodedString()
         }
-        let object: [String: Any] = ["format": format, "contract": Declaration.known, "exported": ISO8601DateFormatter().string(from: at),
+        let object: [String: Any] = ["format": format, "contract": Declaration.declared(in: space).contract, "exported": ISO8601DateFormatter().string(from: at),
                                      "app": app, "name": space.name, "form": space.form.rawValue, "files": encoded,
                                      "data": data.map { $0 as Any } ?? NSNull()]
         guard JSONSerialization.isValidJSONObject(object) else { throw SpaceError("The memory of \(space.name) is not JSON; it cannot be exported.") }

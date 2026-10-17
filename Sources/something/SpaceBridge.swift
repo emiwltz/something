@@ -19,11 +19,10 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     /// Engine does not say it yet, so the app keeps the table until it does.
     static let limits: [String: [String]] = ["claude": ["effort"], "opencode": ["steer"], "pi": ["mode"]]
 
-    /// Only the page of the open space is answered (contract 4.4): never a frame inside it, never another address.
+    /// Only the page of the open space is answered (contract 4.4): never a frame inside it, never the app's page.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        let from = message.frameInfo.request.url
-        guard message.frameInfo.isMainFrame, from?.scheme == Scheme.name, from?.host == Scheme.host, blocked.isEmpty,
+        guard isSpace(message.frameInfo), blocked.isEmpty,
               let request = message.body as? [String: Any] else {
             return replyHandler(nil, "something answers only the page of the open space.")
         }

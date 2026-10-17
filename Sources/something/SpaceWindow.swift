@@ -1,8 +1,9 @@
-// The window of one open space (design 5): one WKWebView with a new non-persistent data store at each opening,
-// something.js and the space's `granted` injected before its scripts, the something:// scheme as its only source,
-// every navigation away from it cancelled (a clicked http, https or mailto link goes to the link window), no new
-// window, and a reload when a file of the space changes. The rights are asked at the opening and at each reload,
-// before the page runs. What the space's calls do is in SpaceBridge.swift.
+// The window of one open space (design 5): one WKWebView with a new non-persistent data store at each opening, the
+// app's page (something://app/) holding the space in a sandboxed frame, something.js and the space's `granted`
+// injected in that frame before its scripts, the something:// scheme as its only source, every navigation away from
+// it cancelled (a clicked http, https or mailto link goes to the link window), no new window, and a reload when a file
+// of the space changes. The rights are asked at the opening and at each reload, before the page runs. What the
+// space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -31,6 +32,9 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// The declaration as the last load read it: the one the person was asked about. A switch in the card applies
     /// new answers to it, never to a newer file that no rights window has shown yet.
     private var reading: DeclarationReading?
+    /// The frame that holds the space, once the app's page has asked to load it: the only frame something answers and
+    /// pushes to. nil before, and while the space is blocked.
+    private(set) var frame: WKFrameInfo?
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
@@ -92,6 +96,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     func load() {
         stamp = space.stamp()
         pushed = nil
+        frame = nil
         linksBlocked = false
         let reading = Declaration.read(space, home: places.home)
         self.reading = reading
@@ -100,25 +105,26 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             title = declaration.title
             granted = Rights.granted(reading, answer(declaration), limits: SpaceWindow.limits, home: places.home)
             inject()
-            web.load(URLRequest(url: scheme.page))
+            web.load(URLRequest(url: Scheme.shell))
         } else {
             // The page the person can no longer see stops: its scripts, its timers and its links. The empty page has
-            // an address of the space, as the navigation policy allows nothing else.
+            // an address of the app, as the navigation policy allows nothing else.
             web.configuration.userContentController.removeAllUserScripts()
-            web.loadHTMLString("", baseURL: URL(string: "\(Scheme.name)://\(Scheme.host)/.blocked"))
+            web.loadHTMLString("", baseURL: URL(string: "\(Scheme.name)://\(Scheme.app)/.blocked"))
         }
         present()
     }
 
     /// Puts the guards and the bridge, with the `granted` in force, before the scripts of every page the space loads.
+    /// Every frame gets the guards: a frame inside the space has links too. WebKit injects in the main frame or in
+    /// every frame; the bridge goes to the space's frame only, the one whose parent is the app's page.
     private func inject() {
         let controller = web.configuration.userContentController
         controller.removeAllUserScripts()
-        let start = bridge + "\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n"
-        // Every frame gets the guards: a frame inside the space has links too. Only the page gets the bridge.
+        let start = "if (window !== top && parent === top) {\n\(bridge)\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n}\n"
         controller.addUserScript(WKUserScript(source: Lockdown.activationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
         controller.addUserScript(WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
-        controller.addUserScript(WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page))
+        controller.addUserScript(WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
     }
 
     /// Applies the person's answers as the grants file now keeps them, without asking and without a reload: the page
@@ -135,7 +141,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         }
         granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: places.home)
         inject()
-        web.evaluateJavaScript("window.something && something._granted(\(String(decoding: encoded(granted), as: UTF8.self)))")
+        if let frame { web.evaluateJavaScript("window.something && something._granted(\(String(decoding: encoded(granted), as: UTF8.self)))", in: frame, in: .page) }
         push()
     }
 
@@ -200,14 +206,14 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice
     /// is not sent again.
     func push() {
-        guard blocked.isEmpty else { return }
+        guard blocked.isEmpty, let frame else { return }
         let state = Rights.visible(engine.state, granted, launched: launched)
         var bare = state
         // `at` changes at every reading; only a change of what the space sees is worth a push.
         bare.at = ""
         guard bare != pushed, let data = try? state.json() else { return }
         pushed = bare
-        web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))")
+        web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
     }
 
     func encoded(_ granted: Granted) -> Data {
@@ -219,20 +225,37 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     // MARK: Navigation: something:// only
 
+    /// Whether `frame` is the space's: a frame of the app's page that holds a file of the space. A frame inside the
+    /// space never holds one (the navigation policy), so this is the space's frame and no other.
+    func isSpace(_ frame: WKFrameInfo?) -> Bool {
+        guard let frame, !frame.isMainFrame, let url = frame.request.url else { return false }
+        return url.scheme == Scheme.name && url.host == Scheme.host
+    }
+
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        let url = action.request.url, main = action.targetFrame?.isMainFrame ?? true
-        // about:blank and about:srcdoc frames are the page's own and inherit its policy.
-        if url?.scheme == Scheme.name || (url?.scheme == "about" && !main) { return decisionHandler(.allow) }
-        // A clicked link was handed over by Lockdown's guard before WebKit followed it; a redirect, a form, a refresh
-        // or a link the guard could not see (inside a closed shadow root) is only cancelled.
-        decisionHandler(.cancel)
+        guard let url = action.request.url, let target = action.targetFrame else { return decisionHandler(.cancel) }
+        if target.isMainFrame { return decisionHandler(url.scheme == Scheme.name && url.host == Scheme.app ? .allow : .cancel) }
+        if url.scheme == Scheme.name && url.host == Scheme.host {
+            // The app's page loads the space, the first frame to load; then the space may go to another of its pages.
+            // A frame inside the space may not hold a file of the space, so the bridge can tell the space's frame
+            // from the frames it holds.
+            if frame == nil, action.sourceFrame.isMainFrame {
+                frame = target
+                return decisionHandler(.allow)
+            }
+            return decisionHandler(isSpace(target) ? .allow : .cancel)
+        }
+        // about:blank and about:srcdoc frames are the space's own and inherit its policy. A clicked link was handed
+        // over by Lockdown's guard before WebKit followed it; the app's page lets the space's frame go nowhere else
+        // (Scheme.shellPolicy), and a redirect, a form or a refresh is only cancelled.
+        decisionHandler(url.scheme == "about" ? .allow : .cancel)
     }
 
     /// A link the person clicked, from Lockdown's guard: it goes to the link window, unless one is open or links are
-    /// blocked until the next reload.
+    /// blocked until the next reload. A link of a frame inside the space goes nowhere.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.frameInfo.isMainFrame, blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
+        guard isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
     }
 

@@ -48,4 +48,17 @@ import Testing
         #expect(scheme.file(for: url("something://space/other.html")) == nil)
         #expect(scheme.file(for: url("something://space/../spaces/other.html")) == nil)
     }
+
+    /// The app's page holds the space in a frame that may neither replace the page nor open a window, and is not a
+    /// file of the space.
+    @Test func theAppsPageHoldsTheSpaceInASandbox() throws {
+        let home = Home()
+        defer { home.remove() }
+        let scheme = Scheme(space: try home.space("today", "<p>invented</p>"))
+        let shell = String(decoding: scheme.shellPage, as: UTF8.self)
+        #expect(shell.contains(#"<iframe sandbox="allow-scripts allow-same-origin allow-forms""#))
+        #expect(shell.contains(#"src="something://space/today.html""#))
+        #expect(Scheme.shell == url("something://app/") && scheme.file(for: Scheme.shell) == nil)
+        #expect(Scheme.shellPolicy.contains("frame-src something://space") && !Scheme.shellPolicy.contains("*"))
+    }
 }

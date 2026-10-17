@@ -1,5 +1,7 @@
-# The tests on a Mac that is not the author's, at each push: something builds and its suite passes.
-# The window itself needs a screen, so it is checked by hand (`swift run something --self-test`).
+# The tests on a Mac that is not the author's, at each push: something builds, the whole Swift suite passes, and
+# something.js answers the contract's cases. The runner has a logged-in window server, so the window tests run there
+# too: the lockdown test (nothing reaches a listener on 127.0.0.1), isolation, the bridge, links, rights and reload,
+# in a real WKWebView that is never shown. Where no window server exists, those suites say so and are skipped.
 name: tests
 
 on:

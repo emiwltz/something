@@ -1,7 +1,9 @@
-// What keeps a space off the network beyond the scheme's policy (Scheme.swift) and the navigation policy
-// (SpaceWindow.swift): a content rule list, and a guard on links. They close holes the lockdown test found: WebKit opens
-// a connection for <link rel="preconnect">, which no policy governs, and opens one to a clicked link's server before it
-// asks the navigation policy where it may go, whether the link is in the document or not.
+// What keeps a space off the network beyond the scheme's policy, the app's page around the space (Scheme.swift) and the
+// navigation policy (SpaceWindow.swift): a content rule list, and a guard on links. They close holes the lockdown test
+// found: WebKit opens a connection for <link rel="preconnect">, which no policy governs, and opens one to the server of
+// a link that would open a new window (target="_blank") before the sandbox refuses the window, whether the link is in
+// the document or not. A link the space's own frame would follow is refused by the app's page before any connection.
+// The guard also hands each clicked link to the link window.
 import Foundation
 import SomethingCore
 import WebKit

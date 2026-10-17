@@ -1,5 +1,6 @@
 // What the app's tests share: a throwaway home with spaces in it, a person who answers without a window, a listener
 // on 127.0.0.1 that counts every connection, and the run loop turned until WebKit has answered. No window is shown.
+import AppKit
 import Darwin
 import Foundation
 import SomethingAgents
@@ -7,6 +8,11 @@ import SomethingCore
 import Testing
 import WebKit
 @testable import something
+
+/// Whether this session has a window server: WebKit's views and AppKit's windows need one. A Mac where someone is
+/// logged in has one, GitHub's macOS runners too; a session opened over ssh before anyone logs in has none.
+let windowServer = CGSessionCopyCurrentDictionary() != nil
+let windowServerMissing: Comment = "This session has no window server, and WebKit and AppKit windows cannot run without one."
 
 /// A home in the temporary folder, removed by `remove()`; the person's own folders are never touched.
 struct Home {
@@ -129,6 +135,31 @@ final class Listener {
     }
 }
 
+/// A borderless window at alpha 0, far off the screen, that holds a view to receive real clicks of the mouse. It is
+/// never ordered front, so it takes no focus.
+@MainActor
+struct Offscreen {
+    let window = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 640), styleMask: .borderless,
+                          backing: .buffered, defer: false)
+    let view: NSView
+
+    init(_ view: NSView) {
+        self.view = view
+        window.alphaValue = 0
+        window.contentView = view
+    }
+
+    /// A press and a release of the left button at `x`, `y` in the window (from its bottom left).
+    func click(x: Double, y: Double) throws {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: y), modifierFlags: [],
+                                                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            type == .leftMouseDown ? view.mouseDown(with: event) : view.mouseUp(with: event)
+        }
+    }
+}
+
 /// Waits, without blocking the main actor, until `condition` holds or `seconds` pass; whether it holds. The tests
 /// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on.
 @MainActor @discardableResult
@@ -138,18 +169,19 @@ func wait(_ seconds: Double = 10, until condition: () -> Bool = { false }) async
     return condition()
 }
 
-/// Runs `code` as the body of an async function in the page and returns what it returns.
+/// Runs `code` as the body of an async function in the space's frame (the app's page while the space is blocked)
+/// and returns what it returns.
 @MainActor
-func run(_ web: WKWebView, _ code: String) async throws -> Any? {
-    let value = try await web.callAsyncJavaScript(code, contentWorld: .page)
+func run(_ window: SpaceWindow, _ code: String) async throws -> Any? {
+    let value = try await window.web.callAsyncJavaScript(code, in: window.frame, contentWorld: .page)
     return value is NSNull ? nil : value
 }
 
-/// Waits for the page to finish loading and `window.done` to be true.
+/// Waits for the space to finish loading in its frame and `window.done` to be true.
 @MainActor
-func ready(_ web: WKWebView) async throws {
-    guard await wait(until: { !web.isLoading && web.url != nil }) else {
-        throw SpaceError("The page did not load: \(web.isLoading) \(String(describing: web.url)).")
+func ready(_ window: SpaceWindow) async throws {
+    guard await wait(until: { !window.web.isLoading && window.frame != nil }) else {
+        throw SpaceError("The space did not load: \(window.web.isLoading) \(String(describing: window.web.url)).")
     }
-    for _ in 0..<100 where try await run(web, "return window.done === true") as? Bool != true { await wait(0.05) }
+    for _ in 0..<100 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
 }

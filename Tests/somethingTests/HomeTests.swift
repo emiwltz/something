@@ -7,7 +7,7 @@ import SomethingCore
 import Testing
 @testable import something
 
-@MainActor @Suite(.serialized) struct HomeTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct HomeTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// Home on the test's home; `examples` is a folder of the test's home, which may not exist.
@@ -36,8 +36,8 @@ import Testing
         let window = try await test.window(space, ask)
         defer { window.close() }
         window.open()
-        try await ready(window.web)
-        #expect(try await run(window.web, "await something.store.set('word', 'invented'); return await something.store.get('word')") as? String == "invented")
+        try await ready(window)
+        #expect(try await run(window, "await something.store.set('word', 'invented'); return await something.store.get('word')") as? String == "invented")
 
         let home = home(test, ask)
         home.card.window = { $0 == "notes" ? window : nil }
@@ -46,18 +46,18 @@ import Testing
         #expect(home.card.rights.map(\.right) == ["state", "store"] && home.card.rights.allSatisfy { $0.standing == .allowed })
 
         home.card.set("store", allowed: false)
-        for _ in 0..<100 where try await run(window.web, "return heard.length") as? Int != 1 { await wait(0.05) }
-        #expect(try await run(window.web, "return heard") as? [String] == ["state"])
-        #expect(try await run(window.web, "return something.granted.refused") as? [String] == ["store"])
-        #expect(try await run(window.web, "try { await something.store.get('word') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
+        for _ in 0..<100 where try await run(window, "return heard.length") as? Int != 1 { await wait(0.05) }
+        #expect(try await run(window, "return heard") as? [String] == ["state"])
+        #expect(try await run(window, "return something.granted.refused") as? [String] == ["store"])
+        #expect(try await run(window, "try { await something.store.get('word') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
         let grant = try #require(try AppFile.read(test.places.grants).spaces["notes"])
         #expect(grant.granted == ["state"] && grant.refused == ["store"])
         #expect(home.card.rights.map(\.standing) == [.allowed, .refused])
 
         // Switched on again: the memory answers again, with what it kept.
         home.card.set("store", allowed: true)
-        for _ in 0..<100 where try await run(window.web, "return heard.length") as? Int != 2 { await wait(0.05) }
-        #expect(try await run(window.web, "return await something.store.get('word')") as? String == "invented")
+        for _ in 0..<100 where try await run(window, "return heard.length") as? Int != 2 { await wait(0.05) }
+        #expect(try await run(window, "return await something.store.get('word')") as? String == "invented")
         #expect(ask.questions.count == 1, "a switch is the person's answer: nothing more is asked")
     }
 

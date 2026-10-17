@@ -21,7 +21,7 @@ final class FakePrompts: PromptSource {
     }
 }
 
-@MainActor @Suite(.serialized) struct PanelsTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct PanelsTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     @Test func permissionsAreQueuedAndAnswered() throws {

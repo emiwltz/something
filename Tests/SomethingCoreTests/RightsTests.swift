@@ -68,6 +68,7 @@ struct RightsTests {
         #expect(ask == ToAsk(rights: ["state", "launch:claude"], scope: true, folder: true))
         #expect(Rights.toAsk(declaration(["state"]), since: nil).folder == false, "no launch right, no folder to choose")
         #expect(!Rights.toAsk(declaration(["store"]), since: nil).scope, "without state, the scope shows nothing")
+        #expect(Rights.toAsk(declaration([], agents: .all, folder: "~/code/shop"), since: nil).isEmpty, "a space with no right is asked nothing")
     }
 
     @Test func theScopeIsAskedWithState() {

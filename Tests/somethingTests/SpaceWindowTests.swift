@@ -8,7 +8,7 @@ import Testing
 import WebKit
 @testable import something
 
-@MainActor @Suite(.serialized) struct SpaceWindowTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct SpaceWindowTests {
     init() {
         // WebKit's processes talk to an application; this one never shows in the Dock and never takes the focus.
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -47,6 +47,22 @@ import WebKit
             <object data="\(base)/object"></object><embed src="\(base)/embed">
             <iframe id="framed" srcdoc="<a id='inner' href='\(base)/srcdoc-link'>inner</a>"></iframe>
             <div id="host"></div>
+            <a id="dispatched" href="\(base)/dispatched">dispatched</a><a id="top" target="_top" href="\(base)/top-link">top</a>
+            <a id="parent" target="_parent" href="\(base)/parent-link">parent</a>
+            <map name="map"><area id="area" href="\(base)/area" shape="rect" coords="0,0,10,10"></map><img usemap="#map" src="data:,">
+            <svg><a id="svg" href="\(base)/svg"><text y="10">svg</text></a></svg>
+            <div><template shadowrootmode="closed"><a id="declared" href="\(base)/declarative">declared</a>
+              <a id="declared-blank" target="_blank" href="\(base)/declarative-blank">declared</a>
+              <img src="data:," onerror="const root = this.getRootNode(); root.getElementById('declared').click();
+                root.getElementById('declared-blank').click(); window.declaredClicked = root !== document"></template></div>
+            <div id="real-shadow" style="position: fixed; left: 300px; top: 0; width: 200px; height: 200px"></div>
+            <div id="real-shadow-blank" style="position: fixed; left: 600px; top: 0; width: 200px; height: 200px"></div>
+            <script>
+              for (const [id, target, path] of [["real-shadow", "", "real-shadow"], ["real-shadow-blank", "_blank", "real-shadow-blank"]]) {
+                const root = document.getElementById(id).attachShadow({ mode: "closed" });
+                root.innerHTML = `<a target="${target}" href="\(base)/${path}" style="display: block; width: 200px; height: 200px">x</a>`;
+              }
+            </script>
             <script>
               const base = "\(base)";
               const work = (name) => `fetch("${base}/${name}-worker").catch(() => {});
@@ -72,10 +88,21 @@ import WebKit
                 () => { const a = document.createElement("a"); a.href = base + "/detached"; a.click(); },
                 () => { const a = document.createElement("a"); a.href = base + "/detached-event"; a.dispatchEvent(new MouseEvent("click")); },
                 () => { const a = document.createElement("area"); a.href = base + "/detached-area"; a.click(); },
+                () => document.getElementById("dispatched").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+                () => document.getElementById("area").click(),
+                () => document.getElementById("svg").querySelector("text").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+                () => document.getElementById("top").click(),
+                () => document.getElementById("parent").click(),
+                () => { top.location = base + "/top-location"; },
+                () => { top.location.href = base + "/top-href"; },
+                () => { parent.location.replace(base + "/parent-replace"); },
+                () => window.open(base + "/top-open", "_top"),
+                () => { const a = document.createElement("a"); a.href = base + "/detached-blank"; a.target = "_blank"; a.click(); },
                 () => {
                   const root = document.getElementById("host").attachShadow({ mode: "closed" });
-                  root.innerHTML = `<a href="${base}/shadow"><span>shadow</span></a>`;
+                  root.innerHTML = `<a href="${base}/shadow"><span>shadow</span></a><a target="_blank" href="${base}/shadow-blank">b</a>`;
                   root.querySelector("span").click();
+                  root.querySelector("[target]").click();
                 },
                 () => {
                   // A frame of its own gives a page fresh prototypes, made before something's could be put in place.
@@ -108,27 +135,49 @@ import WebKit
             """), ask)
         defer { window.close() }
         window.open()
-        try await ready(window.web)
-        #expect(try await run(window.web, "return window.done") as? Bool == true, "the page did not run its tries")
-        #expect(try await run(window.web, "return window.own") as? [Bool] == [true, true], "the space's own loads failed")
-        #expect(try await run(window.web, "return window.evaluated") as? Bool == false, "eval is refused, as the guide says")
-        // A real click of the mouse, sent to the view of a window that is never shown.
-        let offscreen = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 640), styleMask: .borderless,
-                                 backing: .buffered, defer: false)
-        offscreen.alphaValue = 0
-        offscreen.contentView = window.web
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            let event = try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: 50, y: 590), modifierFlags: [],
-                                                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: offscreen.windowNumber,
-                                                        context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-            type == .leftMouseDown ? window.web.mouseDown(with: event) : window.web.mouseUp(with: event)
+        try await ready(window)
+        #expect(try await run(window, "return window.done") as? Bool == true, "the page did not run its tries")
+        #expect(try await run(window, "return window.own") as? [Bool] == [true, true], "the space's own loads failed")
+        #expect(try await run(window, "return window.evaluated") as? Bool == false, "eval is refused, as the guide says")
+        #expect(try await run(window, "return window.declaredClicked") as? Bool == true, "the declarative shadow root's script ran")
+        // Real clicks of the mouse, sent to the view of a window that is never shown: on a link of the page, and on
+        // links inside closed shadow roots, where no script of something can see them.
+        let offscreen = Offscreen(window.web)
+        for x in [50.0, 400] {
+            try offscreen.click(x: x, y: 590)
+            await wait(0.3)
         }
         await wait(3)
-        #expect(try await run(window.web, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
+        #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
         #expect(listener.hits.count == 1, "reached: \(listener.hits.dropFirst().joined(separator: " | "))")
         // A clicked link goes to the link window instead, which the person cancelled here.
-        #expect(ask.links.map(\.path) == ["/link", "/blank", "/real-click"])
-        #expect(window.web.url?.scheme == "something")
+        #expect(ask.links.map(\.path) == ["/link", "/blank", "/dispatched", "/area", "/svg", "/top-link", "/parent-link", "/real-click"])
+        #expect(window.web.url == Scheme.shell, "the app's page is still the main frame")
+        #expect(try await run(window, "return location.origin + location.pathname") as? String == "something://space/lockdown.html")
+    }
+
+    /// The one gap left (README, "Security"): a real click on a link that opens a new window (target="_blank") inside a
+    /// closed shadow root, where no script of something sees it, makes WebKit open one connection to the link's server
+    /// before the sandbox refuses the window. Marked as known, so the run says when WebKit stops doing it.
+    @Test func theKnownGap() async throws {
+        let home = Home(), listener = try Listener()
+        defer { home.remove(); listener.stop() }
+        let window = try await home.window(try home.space("gap", page(nil, """
+            <div id="host" style="position: fixed; inset: 0"></div>
+            <script>
+              document.getElementById("host").attachShadow({ mode: "closed" }).innerHTML =
+                `<a target="_blank" href="http://127.0.0.1:\(listener.port)/gap" style="position: fixed; inset: 0">gap</a>`;
+              window.done = true;
+            </script>
+            """)))
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        try Offscreen(window.web).click(x: 450, y: 320)
+        await wait(1)
+        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root", isIntermittent: true) {
+            #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
+        }
     }
 
     /// Every space has the same origin, something://space, so each window has its own data store. Two spaces open at
@@ -143,10 +192,10 @@ import WebKit
         defer { b.close() }
         a.open()
         b.open()
-        try await ready(a.web)
-        try await ready(b.web)
+        try await ready(a)
+        try await ready(b)
         #expect(ask.questions.isEmpty, "a space that declares no right is asked nothing")
-        #expect(try await run(a.web, """
+        #expect(try await run(a, """
             localStorage.setItem("kept", "from a");
             document.cookie = "kept=from-a";
             await new Promise((done, failed) => {
@@ -165,8 +214,8 @@ import WebKit
             return [localStorage.getItem("kept"), (await indexedDB.databases()).map((d) => d.name).join()]
             """) as? [String] == ["from a", "kept"])
         await wait(0.5)
-        #expect(try await run(a.web, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
-        #expect(try await run(b.web, """
+        #expect(try await run(a, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
+        #expect(try await run(b, """
             return [localStorage.getItem("kept"), document.cookie.includes("kept"), (await indexedDB.databases()).length,
                     self.caches ? await caches.has("kept") : false, heard.length]
             """) as? [AnyHashable] == [NSNull(), false, 0, false, 0])
@@ -176,8 +225,8 @@ import WebKit
         let again = try await home.window(try #require(Spaces(root: home.places.spaces).named("space-a")))
         defer { again.close() }
         again.open()
-        try await ready(again.web)
-        #expect(try await run(again.web, "return localStorage.getItem('kept')") == nil)
+        try await ready(again)
+        #expect(try await run(again, "return localStorage.getItem('kept')") == nil)
     }
 
     @Test func theBridgeAnswersThePageAndOnlyThePage() async throws {
@@ -188,36 +237,56 @@ import WebKit
             <script>window.first = something.granted.rights.join(","); window.done = true</script>
             <iframe srcdoc="<script>webkit.messageHandlers.something.postMessage({contract: 1, id: 1, method: 'state', params: {}})
               .then(() => parent.framed = 'answered', (e) => parent.framed = 'refused')</script>"></iframe>
+            <iframe id="own" src="bridge.html"></iframe><iframe id="opened"></iframe><iframe id="named" name="named"></iframe>
+            <a id="into" href="bridge.html" target="named">into</a>
+            <script>
+              document.getElementById("into").click();
+              // A frame that the space writes itself takes the space's address; it is still not the space's frame.
+              const opened = document.getElementById("opened").contentDocument;
+              opened.open();
+              opened.write("<script>webkit.messageHandlers.something.postMessage({contract: 1, id: 1, method: 'state', params: {}})" +
+                ".then(() => parent.opened = 'answered', (e) => parent.opened = 'refused')<\\/script>");
+              opened.close();
+            </script>
             """)), ask)
         defer { window.close() }
         window.open()
-        try await ready(window.web)
-        #expect(try await run(window.web, "return window.first") as? String == "state,store", "granted is set before the page's scripts")
-        #expect(try await run(window.web, "return something.contract") as? Int == 1)
-        #expect(try await run(window.web, "return (await something.state()).contract") as? Int == 1)
-        #expect(try await run(window.web, "await something.store.set('a/b', 2); return await something.store.get('a')") as? [String: Int] == ["b": 2])
+        try await ready(window)
+        #expect(try await run(window, "return window.first") as? String == "state,store", "granted is set before the page's scripts")
+        #expect(try await run(window, "return something.contract") as? Int == 1)
+        #expect(try await run(window, "return (await something.state()).contract") as? Int == 1)
+        #expect(try await run(window, "await something.store.set('a/b', 2); return await something.store.get('a')") as? [String: Int] == ["b": 2])
         #expect(FileManager.default.fileExists(atPath: home.places.data.appendingPathComponent("bridge.json").path))
-        #expect(try await run(window.web, "try { await something.send('a1', 'invented') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
+        #expect(try await run(window, "try { await something.send('a1', 'invented') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
         var framed: String?
         for _ in 0..<100 where framed == nil {
-            framed = try await run(window.web, "return window.framed ?? null") as? String
+            framed = try await run(window, "return window.framed ?? null") as? String
             await wait(0.05)
         }
         #expect(framed == "refused", "a frame inside the space is not answered")
+        #expect(try await run(window, "return window.opened ?? null") as? String == "refused", "nor a frame the space wrote")
+        #expect(try await run(window, "return document.getElementById('own').contentWindow.location.href") as? String == "about:blank",
+                "a frame inside the space never holds a file of the space")
+        #expect(try await run(window, "return document.getElementById('named').contentWindow.location.href") as? String == "about:blank",
+                "not even through a link that targets it")
+        #expect(try await run(window, "try { return parent.document.title } catch (e) { return e.name }") as? String == "SecurityError",
+                "the space cannot reach the app's page")
+        #expect(try await run(window, "return typeof something") as? String == "object")
 
         // Links: one window at a time, and none after "Block links until reload". Each one is journaled.
         // While the link window is open, its modal loop turns the run loop: the page's second call is answered then.
         ask.during = { _ in
-            window.web.evaluateJavaScript("something.open('https://example.com/b').then((v) => window.nested = v, (e) => window.nested = e.code)")
+            window.web.evaluateJavaScript("something.open('https://example.com/b').then((v) => window.nested = v, (e) => window.nested = e.code)",
+                                          in: window.frame, in: .page)
             RunLoop.main.run(until: Date().addingTimeInterval(0.5))
         }
-        #expect(try await run(window.web, "return await something.open('https://example.com/a')") as? Bool == false)
+        #expect(try await run(window, "return await something.open('https://example.com/a')") as? Bool == false)
         #expect(ask.links == [URL(string: "https://example.com/a")!])
-        #expect(try await run(window.web, "return window.nested") as? String == "BUSY")
+        #expect(try await run(window, "return window.nested") as? String == "BUSY")
         ask.during = nil
         ask.link = .block
-        #expect(try await run(window.web, "return await something.open('https://example.com/c')") as? Bool == false)
-        #expect(try await run(window.web, "return await something.open('https://example.com/d')") as? Bool == false)
+        #expect(try await run(window, "return await something.open('https://example.com/c')") as? Bool == false)
+        #expect(try await run(window, "return await something.open('https://example.com/d')") as? Bool == false)
         #expect(ask.links.count == 2)
         let journal = try Journal(folder: home.places.journals).last(10, space: "bridge")
         // The second call ends first, while the first one waits on the person.
@@ -271,7 +340,7 @@ import WebKit
         let first = try await home.window(space, ask)
         defer { first.close() }
         first.open()
-        try await ready(first.web)
+        try await ready(first)
         first.close()
         #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, rights: ["state", "store", "launch:codex"],
                                                  scope: .folders(["~/code/shop", "~/code/blog"]), missing: ["~/code/blog"],
@@ -361,14 +430,14 @@ import WebKit
         // The file system keeps seconds; a date in the future makes the change visible at once.
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(5)], ofItemAtPath: space.location.path)
         #expect(await wait(until: { window.blocked.isEmpty }))
-        try await ready(window.web)
-        #expect(try await run(window.web, "return document.getElementById('word').textContent") as? String == "two")
+        try await ready(window)
+        #expect(try await run(window, "return document.getElementById('word').textContent") as? String == "two")
 
         // Blocked again: the page the person no longer sees stops running.
         try page(#"{"contract": 2}"#, "<p id='word'>three</p>").write(to: space.location, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(10)], ofItemAtPath: space.location.path)
         #expect(await wait(until: { !window.blocked.isEmpty }))
         #expect(await wait(until: { !window.web.isLoading && window.web.url?.path == "/.blocked" }))
-        #expect(try await run(window.web, "return document.getElementById('word') === null && window.done === undefined") as? Bool == true)
+        #expect(try await run(window, "return document.getElementById('word') === null && window.done === undefined") as? Bool == true)
     }
 }

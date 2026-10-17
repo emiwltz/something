@@ -76,6 +76,25 @@ import Testing
         #expect(to.everything == ["something", "something/spaces", "something/spaces/morning-review.html"], "no memory, no staging folder left")
     }
 
+    /// The document carries the contract the space declares: an engine that does not know it refuses the import.
+    @Test func theContractIsTheOneTheSpaceDeclares() throws {
+        let from = Place()
+        defer { from.remove() }
+        let declared = ["none": "<p>invented</p>", "one": #"<script type="application/json" id="something">{"contract": 1}</script>"#,
+                        "two": #"<script type="application/json" id="something">{"contract": 2}</script>"#,
+                        "half": #"<script type="application/json" id="something">{"contract": 1.5}</script>"#,
+                        "word": #"<script type="application/json" id="something">{"contract": "one"}</script>"#]
+        for (name, html) in declared { try from.write(html, "something/spaces/\(name).html") }
+        try from.write(#"{"contract": 2}"#, "something/spaces/board/something.json")
+        try from.write("<p>invented</p>", "something/spaces/board/index.html")
+        for (name, contract) in [("none", 1), ("one", 1), ("two", 2), ("half", 2), ("word", 1), ("board", 2)] {
+            let document = try Export.document(try #require(from.spaces.named(name)), data: nil, app: "1.0.0-test")
+            let object = try #require(try JSONSerialization.jsonObject(with: document) as? [String: Any])
+            #expect(object["contract"] as? Int == contract, "\(name)")
+            #expect(code(document) == (contract == 1 ? nil : "IMPORT_TOO_NEW"), "\(name)")
+        }
+    }
+
     @Test func aFolderSpaceMakesTheRoundTripWithItsData() throws {
         let from = Place(), to = Place()
         defer { from.remove(); to.remove() }

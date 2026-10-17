@@ -33,6 +33,9 @@ public struct DeclarationReading: Equatable, Sendable {
     /// Known rights this engine cannot honour, and words that are not rights: each once, in the declared order.
     public var unavailable: [String] = [], unknown: [String] = []
     public var problems: [Problem] = []
+    /// The contract the space declares, as its export carries it: the number of its `contract` key (a fraction
+    /// rounded up), 1 when it declares none or a value that is not a number above 1.
+    public var contract = 1
 }
 
 extension Declaration {
@@ -40,16 +43,7 @@ extension Declaration {
     /// on this Mac (`~` is `home`), and a space heavier than 5 MB. Never throws: a file that cannot be read is a
     /// declaration that is missing or unreadable, and the problem's message says it could not be read.
     public static func read(_ space: Space, home: URL) -> DeclarationReading {
-        let page = space.page.lastPathComponent
-        var html: String?, pageError: String?
-        do { html = String(decoding: try Data(contentsOf: space.page), as: UTF8.self) } catch { pageError = error.localizedDescription }
-        let file = space.location.appendingPathComponent("something.json")
-        let json = space.form == .folder && FileManager.default.fileExists(atPath: file.path) ? (try? Data(contentsOf: file)) ?? Data() : nil
-        var reading = read(html: html, json: json, name: space.name, page: page)
-        // A page that is there but cannot be read may well have a block: saying it has none would be false.
-        if let pageError, FileManager.default.fileExists(atPath: space.page.path), let i = reading.problems.firstIndex(where: { $0.code == "DECLARATION_MISSING" }) {
-            reading.problems[i] = Problem("DECLARATION_MISSING", "\(page) could not be read (\(pageError)); the space opens with no right.", where: Where(file: page))
-        }
+        var reading = declared(in: space)
         guard let declaration = reading.declaration else { return reading }
         if let folder = declaration.folder {
             var isFolder: ObjCBool = false
@@ -64,6 +58,21 @@ extension Declaration {
         let size = space.size()
         if size.bytes > Size.heavy {
             reading.problems.append(Problem("TOO_HEAVY", "The space weighs \(Size.words(size.bytes)); the limit is 5 MB."))
+        }
+        return reading
+    }
+
+    /// What the files of `space` declare, before what only the disk can tell.
+    static func declared(in space: Space) -> DeclarationReading {
+        let page = space.page.lastPathComponent
+        var html: String?, pageError: String?
+        do { html = String(decoding: try Data(contentsOf: space.page), as: UTF8.self) } catch { pageError = error.localizedDescription }
+        let file = space.location.appendingPathComponent("something.json")
+        let json = space.form == .folder && FileManager.default.fileExists(atPath: file.path) ? (try? Data(contentsOf: file)) ?? Data() : nil
+        var reading = read(html: html, json: json, name: space.name, page: page)
+        // A page that is there but cannot be read may well have a block: saying it has none would be false.
+        if let pageError, FileManager.default.fileExists(atPath: space.page.path), let i = reading.problems.firstIndex(where: { $0.code == "DECLARATION_MISSING" }) {
+            reading.problems[i] = Problem("DECLARATION_MISSING", "\(page) could not be read (\(pageError)); the space opens with no right.", where: Where(file: page))
         }
         return reading
     }
@@ -105,6 +114,8 @@ extension Declaration {
             problems.append(Problem("CONTRACT_MISSING", "The declaration has no contract key; it is read as 1."))
         case let number as NSNumber where !isBool(number) && number.doubleValue > Double(known):
             reading.problems.append(Problem("CONTRACT_TOO_NEW", "The space was written for contract \(number); this engine knows contract \(known)."))
+            // A contract too large for an Int is still too new everywhere.
+            reading.contract = number.doubleValue < Double(Int.max) ? Int(number.doubleValue.rounded(.up)) : Int.max
             return reading
         case let number as NSNumber where !isBool(number) && !isFloat(number) && number.intValue == known:
             break
