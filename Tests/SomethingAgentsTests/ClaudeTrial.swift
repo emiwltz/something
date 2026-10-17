@@ -40,7 +40,8 @@ final class Stopped: @unchecked Sendable { var done = false }
             let tools = root.appendingPathComponent("tools"), hook = tools.appendingPathComponent("something").path
             try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
             try PlanBTests.buildHook(hook, in: tools)
-            spool = PermissionSpool(folder: root.appendingPathComponent("spool").path)
+            // The product's own path shape, space included, so the hook command's quoting meets the real shell.
+            spool = PermissionSpool(folder: root.appendingPathComponent("Application Support/spool/claude-trial-\(launch.thread)").path)
             command = ClaudeDriver.command(launch, hook: [hook, "hook", "permission", "--spool", spool!.folder])
         }
         var environment = ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
@@ -271,10 +272,11 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     @Test func anEffortIsGivenAndSet() async throws {
         let run = try ClaudeRun("effort", effort: "high")
         defer { run.cleanup() }
-        try await run.until("the efforts") { run.state.options.effort != nil }
-        #expect(run.state.options.effort?.map(\.value).contains("low") == true)
         _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && !run.api.received.isEmpty }
+        // The efforts are known once Claude names the model it runs, which its first turn does.
+        #expect(run.state.options.effort?.map(\.value).contains("low") == true, "model \(String(describing: run.state.model))")
+        #expect(run.state.can.effort)
         #expect(run.api.effortsAsked.last == "high", "efforts asked: \(run.api.effortsAsked)")
         let asked = run.api.received.count
         #expect(try run.agent.driver.set(model: nil, mode: nil, effort: "low") == "now")

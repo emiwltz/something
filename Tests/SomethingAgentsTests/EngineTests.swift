@@ -101,6 +101,8 @@ import SomethingCore
         for mode in ["acceptEdits", "auto", "dontAsk", "bypassPermissions"] { #expect(engine.lowersAsking(mode: mode, kind: "claude")) }
         for mode in ["default", "manual", "plan"] { #expect(!engine.lowersAsking(mode: mode, kind: "claude")) }
         #expect(engine.lowersAsking(mode: "never", kind: "codex") && !engine.lowersAsking(mode: "on-request", kind: "codex"))
+        #expect(!engine.lowersAsking(mode: "untrusted", kind: "codex"))
+        #expect(engine.lowersAsking(mode: "default", kind: "pi"), "pi takes no mode: one asked for is confirmed, never guessed")
         #expect(!engine.lowersAsking(mode: "build", kind: "opencode") && !engine.lowersAsking(mode: "plan", kind: "opencode"))
         #expect(engine.lowersAsking(mode: "invented-agent", kind: "opencode"))
         #expect(engine.lowersAsking(mode: "anything", kind: "other"))

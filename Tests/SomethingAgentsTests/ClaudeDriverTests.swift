@@ -270,7 +270,13 @@ final class Replay {
                 ["value": "default", "resolvedModel": "claude-example", "displayName": "Default", "supportedEffortLevels": ["low", "high"]],
                 ["value": "small", "resolvedModel": "claude-small-example", "displayName": "Small"]]]]] as [String: Any]
         replay.feed(initialize)
+        #expect(replay.fold.agent.options.effort == nil, "the person's settings may pick another model than default")
+        #expect(replay.agent.agent.can.effort == false)
+        #expect(replay.agent.agent.because["effort"] == "This model offers no effort level.")
+        replay.feed(["type": "assistant", "parent_tool_use_id": NSNull(), "message": ["model": "claude-example", "content": []]])
         #expect(replay.fold.agent.options.effort == [Option(value: "low", label: "Low"), Option(value: "high", label: "High")])
+        #expect(replay.agent.agent.can.effort == true)
+        #expect(replay.agent.agent.because["effort"] == nil)
         #expect(try replay.agent.driver.set(model: nil, mode: nil, effort: "low") == "now")
         let sent = try #require(replay.lines().last)
         #expect(sent["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["effortLevel": "low"]])
@@ -280,8 +286,23 @@ final class Replay {
         _ = try replay.agent.driver.set(model: "small", mode: nil, effort: nil)
         replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(replay.lines().last?["request_id"] as? String)]])
         #expect(replay.fold.agent.options.effort == nil, "this model lists no effort")
+        #expect(replay.agent.agent.can.effort == false)
         _ = try replay.agent.send("Hello.", when: "next")
         #expect(try replay.agent.driver.set(model: nil, mode: nil, effort: "high") == "next-turn")
+    }
+
+    /// Launched without a model, Claude runs the one the person's settings name: its init says which, and the
+    /// efforts offered are that one's (none, for the small model here). Claude's own words for a level are kept.
+    @Test func theEffortsAreThoseOfTheModelClaudeRuns() throws {
+        let replay = Replay()
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["models": [
+            ["value": "default", "resolvedModel": "claude-example", "displayName": "Default", "supportedEffortLevels": ["xhigh", "turbo"]],
+            ["value": "small", "resolvedModel": "claude-small-example", "displayName": "Small"]]]]] as [String: Any])
+        replay.feed(["type": "system", "subtype": "init", "model": "claude-small-example", "permissionMode": "default"])
+        #expect(replay.fold.agent.options.effort == nil)
+        #expect(replay.agent.agent.can.effort == false)
+        replay.feed(["type": "system", "subtype": "init", "model": "claude-example", "permissionMode": "default"])
+        #expect(replay.fold.agent.options.effort == [Option(value: "xhigh", label: "Extra high"), Option(value: "turbo", label: "turbo")])
     }
 
     @Test func aLaunchPassesItsEffort() {

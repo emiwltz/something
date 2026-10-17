@@ -41,6 +41,8 @@ public protocol Driver: AnyObject {
     static var limits: [String: String] { get }
     /// The modes a launch or `set` may choose; empty when the kind has none.
     static var modes: [Option] { get }
+    /// Whether an effort can be set only when `options.effort` lists levels; false by default.
+    static var effortOnlyWhenOffered: Bool { get }
     static func command(_ launch: Launch) -> Command
 
     /// `write` hands one whole line (without its newline) to the program and throws AGENT_STOPPED once it no longer
@@ -70,6 +72,8 @@ public protocol Driver: AnyObject {
 }
 
 extension Driver {
+    public static var effortOnlyWhenOffered: Bool { false }
+
     /// A launched agent before its first event: everything it can do, but for its kind's limits.
     static func fresh(_ launch: Launch) -> Agent {
         var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
@@ -107,7 +111,16 @@ final class Launched {
         emit = { [weak self] event in self?.record(event) }
     }
 
-    var agent: Agent { queue.fold.agent }
+    /// The agent as the state shows it: the fold's, with `can.effort` false while no effort is offered to a kind
+    /// that takes only those (contract: `can` says what a call would do now).
+    var agent: Agent {
+        var agent = queue.fold.agent
+        if type(of: driver).effortOnlyWhenOffered, agent.can.effort, agent.options.effort == nil {
+            agent.can.effort = false
+            agent.because["effort"] = "This model offers no effort level."
+        }
+        return agent
+    }
 
     /// The program started as `pid`: the agent is alive, and the driver writes its first lines. Throws AGENT_STOPPED.
     func begin(pid: Int?) throws {

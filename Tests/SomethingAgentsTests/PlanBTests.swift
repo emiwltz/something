@@ -281,6 +281,32 @@ import SomethingCore
         try await until("the end") { agent.agent.alive == false }
     }
 
+    /// A spool left by a something that ended (its heartbeat names a pid gone) is removed at the next start, with the
+    /// request it held; a live one and one still being made are kept.
+    @Test func aLeftoverSpoolIsRemovedAtTheNextStart() throws {
+        let place = try Place()
+        let ended = Process()
+        ended.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try ended.run()
+        ended.waitUntilExit()
+        let manager = FileManager.default
+        func spool(_ name: String, pid: pid_t?) throws -> String {
+            let folder = place.spools.appendingPathComponent(name).path
+            try manager.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            if let pid { manager.createFile(atPath: "\(folder)/heartbeat", contents: Data("\(pid)\n".utf8)) }
+            return folder
+        }
+        let left = try spool("claude-1-left", pid: ended.processIdentifier)
+        manager.createFile(atPath: "\(left)/5b2e0000-0000-4000-8000-0000000000bb.ask.json", contents: Data(#"{"pid":1,"request":{}}"#.utf8))
+        let live = try spool("claude-1-live", pid: getpid())
+        let making = try spool("claude-1-making", pid: nil)
+        let spool = PermissionSpool(folder: place.spools.appendingPathComponent("claude-2-x").path)
+        try spool.start()
+        defer { spool.stop() }
+        #expect(!manager.fileExists(atPath: left))
+        #expect(manager.fileExists(atPath: live) && manager.fileExists(atPath: making))
+    }
+
     /// The heartbeat stops while the hook waits: it denies within a moment, not at its timeout.
     @Test func heartbeatStopsWhileWaiting() async throws {
         let place = try Place()

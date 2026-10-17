@@ -76,12 +76,12 @@ public final class Engine {
 
     /// The whole state, before any space's scope is applied.
     public var state: State {
-        let kinds = ["claude", "codex", "opencode", "pi", "omp"].map { kind in
+        let kinds = Programs.kinds.map { kind in
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: nil, reader: "none", note: nil))
         }
         let folds = launched.map(\.agent.queue.fold)
-        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: folds.map(\.agent),
+        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent),
                      threads: folds.compactMap(\.thread), requests: folds.flatMap(\.requests))
     }
 
@@ -97,10 +97,13 @@ public final class Engine {
 
     /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
     /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports,
-    /// "manual" the one its help gives now. Codex 0.163: `--ask-for-approval` offers on-request and never. OpenCode
-    /// 2.0.20: a mode is an agent; build and plan ask as the person's settings say, and only `--auto`, which something
-    /// never passes, asks less. pi 1.0.0 takes no mode, and never asks.
-    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "manual", "plan"], "codex": ["on-request"], "opencode": ["build", "plan"]]
+    /// "manual" the one its help gives now. Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
+    /// which older versions offered, asks more. OpenCode 2.0.20: a mode is an agent; build and plan ask as the
+    /// person's settings say, and only `--auto`, which something never passes, asks less. pi 1.0.0 takes no mode and
+    /// never asks: it is not listed, so any mode for pi (as for a kind not known here) counts as lowering asking, which
+    /// is safe, since the bridge refuses a mode pi does not take before any confirmation.
+    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "manual", "plan"], "codex": ["on-request", "untrusted"],
+                                                    "opencode": ["build", "plan"]]
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }

@@ -201,14 +201,28 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(mac.shellRuns.filter { $0.contains("-i") }.count == 1)
     }
 
-    /// An interactive shell that fails is not tried again for each program.
+    /// An interactive shell that fails is not tried again for each program, and what only it could have found is
+    /// not known to be missing.
     @Test func aFailedInteractiveReadIsKept() throws {
         let mac = try FakeMac()
         let shell = try mac.shell(login: ["login"], interactive: ["login"], before: #"case " $* " in *" -i "*) exit 1 ;; esac"#)
         let programs = mac.programs(["SHELL": shell])
-        #expect(programs.installed("codex") == false)
-        #expect(programs.installed("omp") == false)
+        #expect(programs.installed("codex") == nil)
+        #expect(programs.installed("omp") == nil)
+        #expect(code { _ = try programs.find("codex") }?.message.hasSuffix("start it from Terminal by typing: something") == true)
         #expect(mac.shellRuns.filter { $0.contains("-i") }.count == 1)
+    }
+
+    /// From a Terminal, the PATH is the interactive shell's already: a program missing from it is missing, and the
+    /// person's startup files are not run to look again.
+    @Test func fromATerminalAMissingProgramRunsNoShell() throws {
+        let mac = try FakeMac()
+        try mac.program("nvm/pi")
+        let shell = try mac.shell(login: ["login"], interactive: ["nvm"])
+        let programs = mac.programs(["PATH": "\(mac.root)/term:/usr/bin:/bin", "SHELL": shell])
+        #expect(programs.installed("pi") == false)
+        #expect(code { _ = try programs.find("pi") }?.message.hasSuffix("@earendil-works/pi-coding-agent") == true)
+        #expect(mac.shellRuns.isEmpty)
     }
 
     @Test func theFirstLineNamesTheInterpreter() throws {

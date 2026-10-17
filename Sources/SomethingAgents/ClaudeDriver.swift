@@ -11,6 +11,8 @@ public final class ClaudeDriver: Driver {
     /// None: trial T-1 showed that Claude takes an effort at launch (`--effort`) and during a session
     /// (`apply_flag_settings` with `effortLevel`, from its next request to the model).
     public static let limits: [String: String] = [:]
+    /// Claude refuses an effort its model does not list: `can.effort` follows `options.effort`.
+    public static let effortOnlyWhenOffered = true
     /// Removed from the environment Claude Code gets: a key left in a shell profile overrides the subscription the
     /// person signed in with, and a dead one makes every message fail.
     public static let credentials: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
@@ -70,10 +72,11 @@ public final class ClaudeDriver: Driver {
     private var outcome: Outcome?
     private var interrupting = false
     private var heard = false
-    /// The models `initialize` listed, and the one in use as Claude names it there (an option's value): the efforts
-    /// offered are that model's.
+    /// The models `initialize` listed, and the one in use: the one asked for (an alias such as "opus"), then the one
+    /// Claude reports running (a model id, an entry's resolvedModel). The efforts offered are that model's; nil until
+    /// one is known, since the person's own settings may pick a model other than "default".
     private var models: [[String: Any]]?
-    private var model: String
+    private var model: String?
     /// Plan B's answer: writes a decision for a spool uuid. Set by the engine.
     var hookReply: ((String, [String: Any]) -> PermissionSpool.Delivery)?
     /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
@@ -83,7 +86,7 @@ public final class ClaudeDriver: Driver {
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
-        model = launch.model ?? "default"
+        model = launch.model
     }
 
     /// `initialize` is optional, but its answer lists the models this account offers.
@@ -213,6 +216,7 @@ public final class ClaudeDriver: Driver {
         switch frame["subtype"] as? String {
         case "init":
             emit(.reported(model: frame["model"] as? String, mode: frame["permissionMode"] as? String, effort: frame["effort"] as? String))
+            if let model = frame["model"] as? String { running(model) }
             if !statesSeen { turn(open: true) }
         case "session_state_changed":
             statesSeen = true
@@ -244,7 +248,10 @@ public final class ClaudeDriver: Driver {
         }
         // A subagent's frames carry the tool call that started it; its model (often a smaller one) is not the agent's.
         let sub = !(frame["parent_tool_use_id"] is NSNull) && frame["parent_tool_use_id"] != nil
-        if !sub, let model = message["model"] as? String { emit(.reported(model: model, mode: nil, effort: nil)) }
+        if !sub, let model = message["model"] as? String {
+            emit(.reported(model: model, mode: nil, effort: nil))
+            running(model)
+        }
         // One frame per block, several frames per message: the frame's own uuid tells the items apart.
         let frameID = frame["uuid"] as? String ?? message["id"] as? String ?? "\(launch.thread)/\(UUID().uuidString.lowercased())"
         for (index, block) in blocks.enumerated() {
@@ -413,18 +420,32 @@ public final class ClaudeDriver: Driver {
         emit(.itemUpdated(item))
     }
 
+    /// Claude reports running `reported`: the efforts offered become that model's, unless the one known already is it.
+    private func running(_ reported: String) {
+        guard entry(model).map({ ClaudeDriver.names($0).contains(reported) }) != true, reported != model else { return }
+        model = reported
+        if models != nil { emit(.options(options())) }
+    }
+
+    /// The entry `initialize` listed for `name`, by its value or its resolved model.
+    private func entry(_ name: String?) -> [String: Any]? {
+        guard let name else { return nil }
+        return models?.first { ClaudeDriver.names($0).contains(name) }
+    }
+
+    private static func names(_ entry: [String: Any]) -> [String] { [entry["value"], entry["resolvedModel"]].compactMap { $0 as? String } }
+
     private func id(_ claudeID: String) -> String { "\(launch.agent):\(claudeID)" }
 
-    /// The efforts are those of the model in use, as `initialize` listed them; nil until it did, or when Claude
-    /// names none for that model (an older Claude), so a space cannot ask for one.
+    /// The efforts are those of the model in use, as `initialize` listed them; nil until it did and the model is
+    /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
     private func options() -> Options {
         var options = Options()
         options.mode = ClaudeDriver.modes
         options.model = models?.compactMap { model in
             (model["value"] as? String).map { Option(value: $0, label: model["displayName"] as? String ?? $0) }
         }
-        let current = models?.first { $0["value"] as? String == model || $0["resolvedModel"] as? String == model }
-        options.effort = (current?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: $0.capitalized) } }
+        options.effort = (entry(model)?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: ClaudeDriver.effortLabels[$0] ?? $0) } }
         return options
     }
 
@@ -439,6 +460,9 @@ public final class ClaudeDriver: Driver {
     private func send(_ object: [String: Any]) throws {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
+
+    /// Words for the levels Claude names; a level not here is shown as Claude names it.
+    static let effortLabels = ["low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high", "max": "Max"]
 
     /// The start of the sentence for a control request Claude refused.
     static let refusals = ["initialize": "Claude Code refused to start the session", "interrupt": "Claude Code refused to stop the turn",

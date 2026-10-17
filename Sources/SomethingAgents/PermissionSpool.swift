@@ -43,10 +43,30 @@ enum Spool {
     /// Whether the something that wrote `heartbeat` still runs and keeps it fresh.
     static func alive(_ heartbeat: String) -> Bool {
         guard let date = (try? FileManager.default.attributesOfItem(atPath: heartbeat))?[.modificationDate] as? Date,
-              Date().timeIntervalSince(date) < stale,
-              let data = FileManager.default.contents(atPath: heartbeat),
-              let pid = pid_t(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+              Date().timeIntervalSince(date) < stale, let pid = pid(in: heartbeat) else { return false }
         return running(pid)
+    }
+
+    /// Removes the spools in `root` that a something now gone left behind (it crashed, or was killed during a
+    /// request): nothing else cleans this folder, and their asks hold Claude's requests, which must not outlive the
+    /// session. Only the pid is asked, not the date: a something that App Nap slowed is still there. A spool without
+    /// a pid yet is kept while it is new, since another something may be making it.
+    static func sweep(_ root: String) {
+        for name in (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? [] {
+            let folder = (root as NSString).appendingPathComponent(name)
+            if let pid = pid(in: (folder as NSString).appendingPathComponent(heartbeat)) {
+                if running(pid) { continue }
+            } else {
+                let changed = (try? FileManager.default.attributesOfItem(atPath: folder))?[.modificationDate] as? Date ?? .distantPast
+                if Date().timeIntervalSince(changed) < stale { continue }
+            }
+            try? FileManager.default.removeItem(atPath: folder)
+        }
+    }
+
+    /// The pid a heartbeat file names; nil when it is missing or unreadable.
+    static func pid(in heartbeat: String) -> pid_t? {
+        FileManager.default.contents(atPath: heartbeat).flatMap { pid_t(String(decoding: $0, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
     /// Whether `pid` is a process (EPERM: one of another user, which is still there).
@@ -139,9 +159,10 @@ final class PermissionSpool {
 
     init(folder: String) { self.folder = folder }
 
-    /// Makes the folder (mode 0700, as its parent), keeps its heartbeat fresh and starts reading asks. Throws
-    /// LAUNCH_FAILED when the folder cannot be made.
+    /// Removes the spools left behind next to it, makes the folder (mode 0700, as its parent), keeps its heartbeat
+    /// fresh and starts reading asks. Throws a SpoolError when the folder cannot be made.
     func start() throws {
+        Spool.sweep((folder as NSString).deletingLastPathComponent)
         do {
             for path in [(folder as NSString).deletingLastPathComponent, folder] {
                 try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
