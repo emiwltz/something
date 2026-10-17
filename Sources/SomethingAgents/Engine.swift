@@ -1,7 +1,7 @@
 // The engine: every agent on this Mac in one contract 1 State, and the hands on the ones something launched.
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
-// agents: its public API is what the app may use. Until the drivers and readers arrive (slices 10 to 18) it knows
-// no agent: the state is empty and every write answers NOT_SUPPORTED.
+// agents: its public API is what the app may use. Until the drivers and readers arrive (slices 11 to 18) it knows
+// no agent: the state says which programs are installed, and every write answers NOT_SUPPORTED.
 import Foundation
 import SomethingCore
 
@@ -38,17 +38,31 @@ public final class Engine {
     public var changed: () -> Void = {}
 
     /// `environment` is the one agents are started in: the terminal's when something was started from one,
-    /// otherwise the login shell's, which the app reads.
-    public init(environment: [String: String]) {}
+    /// otherwise the app's own, and Programs then reads the login shell's PATH.
+    public init(environment: [String: String]) { programs = Programs(environment: environment) }
+
+    private let programs: Programs
+    /// Whether each kind's program was found; empty until `start` looked (main queue only).
+    private var installed: [String: Bool] = [:]
+    private var looked = false
 
     /// Starts watching this Mac. `often` is true while a space is open.
-    public func start(often: Bool) {}
+    public func start(often: Bool) {
+        guard !looked else { return }
+        looked = true
+        // Reading the login shell can take 3 s: never on the main queue.
+        DispatchQueue.global().async { [self] in
+            let found = Dictionary(uniqueKeysWithValues: Programs.kinds.compactMap { kind in programs.installed(kind).map { (kind, $0) } })
+            DispatchQueue.main.async { [self] in installed = found; changed() }
+        }
+    }
 
     /// The whole state, before any space's scope is applied.
     public var state: State {
-        let none = Kind(launch: false, installed: nil, tested: "none", seen: nil, reader: "none", note: nil)
-        return State(at: ISO8601DateFormatter().string(from: Date()),
-                     kinds: Dictionary(uniqueKeysWithValues: ["claude", "codex", "opencode", "pi", "omp"].map { ($0, none) }))
+        let kinds = ["claude", "codex", "opencode", "pi", "omp"].map { kind in
+            (kind, Kind(launch: false, installed: installed[kind], tested: "none", seen: nil, reader: "none", note: nil))
+        }
+        return State(at: ISO8601DateFormatter().string(from: Date()), kinds: Dictionary(uniqueKeysWithValues: kinds))
     }
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
