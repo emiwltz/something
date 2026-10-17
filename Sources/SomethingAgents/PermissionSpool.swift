@@ -9,10 +9,13 @@ import Foundation
 
 /// The names and delays both sides agree on.
 enum Spool {
+    /// The heartbeat file holds the app's pid, so a hook sees at once that something is gone. Its date, refreshed
+    /// every second, is only a backstop for an app that is there but no longer works.
     static let heartbeat = "heartbeat"
     static let ask = ".ask.json", answer = ".answer.json"
-    /// Older than this, the heartbeat means something is gone, and nobody can answer.
-    static let stale: TimeInterval = 5
+    /// Older than this, the heartbeat means nobody can answer. Wider than design 4.1's 5 s: App Nap and a Mac waking
+    /// from sleep delay a background app's timer by more than that, and the pid already tells a crash at once.
+    static let stale: TimeInterval = 30
     /// Claude's own limit for the hook (`timeout` in the launch's settings), in seconds.
     static let claudeTimeout = 3600
     /// The hook answers a minute before Claude would kill it, so a request left alone ends as a deny it says.
@@ -34,10 +37,17 @@ enum Spool {
         return true
     }
 
-    static func age(_ path: String) -> TimeInterval? {
-        guard let date = (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date else { return nil }
-        return Date().timeIntervalSince(date)
+    /// Whether the something that wrote `heartbeat` still runs and keeps it fresh.
+    static func alive(_ heartbeat: String) -> Bool {
+        guard let date = (try? FileManager.default.attributesOfItem(atPath: heartbeat))?[.modificationDate] as? Date,
+              Date().timeIntervalSince(date) < stale,
+              let data = FileManager.default.contents(atPath: heartbeat),
+              let pid = pid_t(String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+        return running(pid)
     }
+
+    /// Whether `pid` is a process (EPERM: one of another user, which is still there).
+    static func running(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 }
 
 /// `something hook permission --spool <dir> [--timeout <seconds>]`, run by Claude Code for each permission request.
@@ -71,7 +81,7 @@ enum SpoolHook {
             return deny("something could not read this permission request, so it was refused.")
         }
         let heartbeat = (folder as NSString).appendingPathComponent(Spool.heartbeat)
-        guard let age = Spool.age(heartbeat), age < Spool.stale else { return gone }
+        guard Spool.alive(heartbeat) else { return gone }
         let uuid = UUID().uuidString.lowercased()
         let ask = (folder as NSString).appendingPathComponent(uuid + Spool.ask)
         let answer = (folder as NSString).appendingPathComponent(uuid + Spool.answer)
@@ -89,7 +99,9 @@ enum SpoolHook {
                 }
                 return decided
             }
-            guard let age = Spool.age(heartbeat), age < Spool.stale else { return gone }
+            guard Spool.alive(heartbeat) else { return gone }
+            // Claude ended the shell that ran this hook without ending the hook: nobody reads what it prints.
+            if getppid() == 1 { return deny("Claude Code stopped waiting for this request.") }
             if Date() >= end { return deny("Nobody answered in something in time, so the request was refused.") }
             usleep(100_000)
         }
@@ -117,6 +129,9 @@ final class PermissionSpool {
     private var timer: DispatchSourceTimer?
     /// The open asks, by uuid, with their hook's pid (queue only).
     private var open: [String: pid_t] = [:]
+    /// The asks answered whose hook has not read the answer yet: their ask file is still there, and must not open a
+    /// second window for a request the person already answered (queue only).
+    private var answered: [String: pid_t] = [:]
     private var ticks = 0
 
     init(folder: String) { self.folder = folder }
@@ -132,7 +147,9 @@ final class PermissionSpool {
         } catch {
             throw SpoolError.folder(folder, error.localizedDescription)
         }
-        beat()
+        guard Spool.put(Data("\(getpid())\n".utf8), path(Spool.heartbeat)) else {
+            throw SpoolError.folder(folder, "its heartbeat file could not be written")
+        }
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 0.25, repeating: 0.25)
         timer.setEventHandler { [weak self] in self?.tick() }
@@ -140,41 +157,48 @@ final class PermissionSpool {
         self.timer = timer
     }
 
-    /// Writes the person's decision for `uuid` (`behavior` allow or deny, as Claude reads it). Returns false when the
-    /// hook was gone already, or the file could not be written.
-    func answer(_ uuid: String, _ decision: [String: Any]) -> Bool {
+    enum Delivery { case written, gone, unwritten }
+
+    /// Writes the person's decision for `uuid` (`behavior` allow or deny, as Claude reads it). Returns `gone` when the
+    /// hook was gone already, `unwritten` when the file could not be written (the ask then stays open).
+    func answer(_ uuid: String, _ decision: [String: Any]) -> Delivery {
         queue.sync {
-            guard open.removeValue(forKey: uuid) != nil,
-                  let data = try? JSONSerialization.data(withJSONObject: decision, options: [.sortedKeys]) else { return false }
-            return Spool.put(data, path(uuid + Spool.answer))
+            guard let pid = open[uuid] else { return .gone }
+            guard let data = try? JSONSerialization.data(withJSONObject: decision, options: [.sortedKeys]),
+                  Spool.put(data, path(uuid + Spool.answer)) else { return .unwritten }
+            open[uuid] = nil
+            answered[uuid] = pid
+            return .written
         }
     }
 
-    /// Stops the heartbeat and removes the folder: a hook still waiting then denies within 5 s.
+    /// Stops the heartbeat and removes the folder: a hook still waiting then denies within a moment.
     func stop() {
         queue.sync {
             timer?.cancel()
             timer = nil
             open = [:]
+            answered = [:]
         }
         try? FileManager.default.removeItem(atPath: folder)
     }
 
     private func path(_ name: String) -> String { (folder as NSString).appendingPathComponent(name) }
 
-    private func beat() {
-        let heartbeat = path(Spool.heartbeat)
-        if !FileManager.default.createFile(atPath: heartbeat, contents: nil, attributes: [.posixPermissions: 0o600]) {
-            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: heartbeat)
-        }
-    }
+    private func beat() { try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: path(Spool.heartbeat)) }
 
     private func tick() {
         ticks += 1
         if ticks % 4 == 0 { beat() }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []
         let present = Set(names.filter { $0.hasSuffix(Spool.ask) }.map { String($0.dropLast(Spool.ask.count)) })
-        for uuid in present where open[uuid] == nil {
+        // An answered ask is over once its hook took the answer, or died before.
+        for (uuid, pid) in answered where !present.contains(uuid) || !Spool.running(pid) {
+            answered[uuid] = nil
+            unlink(path(uuid + Spool.ask))
+            unlink(path(uuid + Spool.answer))
+        }
+        for uuid in present where open[uuid] == nil && answered[uuid] == nil {
             guard let data = FileManager.default.contents(atPath: path(uuid + Spool.ask)),
                   let ask = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                   let pid = ask["pid"] as? Int else { continue }
@@ -183,7 +207,7 @@ final class PermissionSpool {
             DispatchQueue.main.async { [weak self] in self?.asked(uuid, request) }
         }
         // A hook that ended takes its ask file with it; one killed leaves it, but its pid is gone.
-        for (uuid, pid) in open where !present.contains(uuid) || (kill(pid, 0) == -1 && errno == ESRCH) {
+        for (uuid, pid) in open where !present.contains(uuid) || !Spool.running(pid) {
             open[uuid] = nil
             unlink(path(uuid + Spool.ask))
             DispatchQueue.main.async { [weak self] in self?.withdrawn(uuid) }

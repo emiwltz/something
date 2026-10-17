@@ -69,10 +69,11 @@ public final class ClaudeDriver: Driver {
     private var outcome: Outcome?
     private var interrupting = false
     private var heard = false
-    /// Plan B's answer: writes a decision for a spool uuid, false when the hook was gone. Set by the engine.
-    var hookReply: ((String, [String: Any]) -> Bool)?
+    /// Plan B's answer: writes a decision for a spool uuid. Set by the engine.
+    var hookReply: ((String, [String: Any]) -> PermissionSpool.Delivery)?
     /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
     /// Called once at most, when Claude refused `initialize` or did not know the prompt tool, before any message.
+    /// Both triggers are guesses, not seen from a real Claude: no version without `stdio` was recorded.
     var fallback: (() -> Bool)?
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
@@ -162,9 +163,17 @@ public final class ClaudeDriver: Driver {
         let reply: [String: Any] = allowed.map { ["behavior": "allow", "updatedInput": $0] }
             ?? ["behavior": "deny", "message": question ? "The person chose not to answer." : "The person refused this in something."]
         if ask.hook {
-            asks[request] = nil
-            // A hook that ended meanwhile was withdrawn too: its window closes either way.
-            if hookReply?(ask.claudeID, reply) != true { emit(.requestClosed(id: request)); return false }
+            switch hookReply?(ask.claudeID, reply) ?? .gone {
+            case .written: asks[request] = nil
+            case .gone:
+                // The hook ended meanwhile: the request was withdrawn, and its window closes.
+                asks[request] = nil
+                emit(.requestClosed(id: request))
+                return false
+            case .unwritten:
+                emit(.error(AgentError(code: "AGENT_ERROR", message: "something could not pass your answer to Claude Code; answer again.")))
+                return false
+            }
         } else {
             try send(["type": "control_response", "response": ["subtype": "success", "request_id": ask.claudeID, "response": reply]])
             asks[request] = nil
@@ -183,7 +192,7 @@ public final class ClaudeDriver: Driver {
     public func ended(code: Int32, errors: String) {
         guard code != 0 else { return emit(.stopped(nil)) }
         let lines = errors.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        // An older Claude that does not know `stdio` as a prompt tool ends at once, naming the flag.
+        // An older Claude that does not know `stdio` as a prompt tool ends at once, naming the flag (a guess: see `fallback`).
         if !heard, errors.contains("permission-prompt-tool"), fallingBack() { return }
         // A program that ends before its first line could not start: its first error line says why.
         if !heard { return emit(.stopped(AgentError(code: "LAUNCH_FAILED", message: lines.first.map { "Claude Code could not start: \($0)" }
@@ -209,9 +218,10 @@ public final class ClaudeDriver: Driver {
         case "status":
             if let mode = frame["permissionMode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
         case "permission_denied":
-            // Denied without asking anyone: by a rule, by the mode (its classifier included) or by a hook.
+            // Denied without asking anyone: by a rule, by the mode (its classifier included) or by a hook. Plan B's
+            // hook carries the person's deny, which `answer` recorded already: it stays theirs.
             let by = ["rule": "rule", "mode": "mode", "classifier": "mode", "hook": "hook"][frame["decision_reason_type"] as? String ?? ""]
-            if let tool = frame["tool_use_id"] as? String, let by { decide(tool, Decision(by: by, outcome: "denied")) }
+            if let tool = frame["tool_use_id"] as? String, let by, decisions[tool]?.by != "person" { decide(tool, Decision(by: by, outcome: "denied")) }
         default: break
         }
     }
@@ -300,9 +310,11 @@ public final class ClaudeDriver: Driver {
         emit(.requestClosed(id: id(uuid)))
     }
 
+    /// The one running tool this ask is about; nil when none or several match, so no decision lands on a guess.
     private func hookTool(_ request: [String: Any]) -> String? {
         let name = request["tool_name"] as? String, text = ClaudeDriver.summary(request["input"])
-        return tools.first { $0.value.tool?.name == name && $0.value.text == text && $0.value.decision == nil }?.key
+        let matching = tools.filter { $0.value.tool?.name == name && $0.value.text == text && $0.value.decision == nil }
+        return matching.count == 1 ? matching.first?.key : nil
     }
 
     private func open(_ raw: String, _ request: [String: Any], hook: Bool) {

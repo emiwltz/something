@@ -128,9 +128,13 @@ public final class Engine {
         return try launch(type, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
-    /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: this program, by its absolute path, with
-    /// `hook permission`; nil when that path is unknown, and plan B is then not offered.
-    public var hookCommand: [String]? = Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] }
+    /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
+    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app, once its main routes those
+    /// words: until then its own path would start a second app), and plan B is then not offered.
+    public var hookCommand: [String]?
+
+    /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
+    public static var ownHookCommand: [String]? { Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] } }
 
     /// Where plan B's spool folders go; a test's own folder in tests.
     var spools = Spool.root
@@ -152,7 +156,7 @@ public final class Engine {
     private func start(_ type: any Driver.Type, _ launch: Launch, _ program: Program, planB: Bool,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
         let spool = planB && type is ClaudeDriver.Type ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
-        guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "something cannot find its own program to answer Claude Code's permission requests.") }
+        guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
         let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? type.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing))
@@ -204,7 +208,7 @@ public final class Engine {
         if let spool {
             do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
             let claude = agent.driver as? ClaudeDriver
-            claude?.hookReply = { [weak spool] uuid, decision in spool?.answer(uuid, decision) == true }
+            claude?.hookReply = { [weak spool] uuid, decision in spool?.answer(uuid, decision) ?? .gone }
             spool.asked = { [weak claude] uuid, request in claude?.hookAsked(uuid, request) }
             spool.withdrawn = { [weak claude] uuid in claude?.hookWithdrawn(uuid) }
         }

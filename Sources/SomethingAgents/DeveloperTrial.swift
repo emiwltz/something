@@ -21,7 +21,9 @@ enum DeveloperTrial {
         while let word = words.popFirst() {
             switch word {
             case "--record": guard let path = words.popFirst() else { return fail(usage, 2) }; file = path
-            case "--plan-b" where type is ClaudeDriver.Type: planB = true
+            case "--plan-b":
+                guard type is ClaudeDriver.Type else { return fail("something try: --plan-b is for claude only.", 2) }
+                planB = true
             default: return fail(usage, 2)
             }
         }
@@ -37,6 +39,8 @@ enum DeveloperTrial {
             output.write(data + Data("\n".utf8))
         }
         let engine = Engine(environment: ProcessInfo.processInfo.environment)
+        // The command that routes `try` here routes `hook permission` too.
+        engine.hookCommand = Engine.ownHookCommand
         let printer = Printer()
         var id = ""
         engine.changed = { if let agent = engine.state.agents.first(where: { $0.id == id }) { printer.show(agent, engine.state) } }
