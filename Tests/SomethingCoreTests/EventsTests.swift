@@ -73,6 +73,31 @@ struct EventsTests {
         #expect(fold.agent.state == "interrupted", "a process gone mid-turn did not end normally")
         #expect(fold.turns.last?.state == "interrupted" && fold.agent.alive == false && fold.agent.can == Can())
         #expect(fold.thread == nil, "a thread nobody named cannot be shown")
+        // A clean exit after a failed or an interrupted turn keeps what the last turn said.
+        for (outcome, state) in [(Outcome.failed(error), "error"), (.interrupted, "interrupted")] {
+            var ended = launched()
+            ended.apply(.started(pid: nil, thread: "th1"), at: "2026-10-17T09:00:00Z")
+            ended.apply(.turnStarted(id: nil), at: "2026-10-17T09:00:01Z")
+            ended.apply(.turnEnded(outcome), at: "2026-10-17T09:00:02Z")
+            ended.apply(.stopped(nil), at: "2026-10-17T09:00:03Z")
+            #expect(ended.agent.state == state && ended.agent.alive == false)
+        }
+    }
+
+    @Test func aReaderFoldsAnAgentStartedElsewhere() {
+        var agent = Agent(id: "e1", kind: "codex", origin: "elsewhere")
+        agent.folder = "/Users/example/code/blog"
+        var fold = Fold(agent)
+        let now = Date(timeIntervalSince1970: 1_792_227_600)
+        fold.apply(.seen(alive: nil, evidence: nil, waiting: .unknown, lastWrite: now.addingTimeInterval(-30)), at: "2026-10-17T09:00:00Z", now: now)
+        fold.apply(.turnStarted(id: nil), at: "2026-10-17T09:00:00Z", now: now)
+        #expect(fold.agent.state == "working" && fold.agent.evidence == "recent-write" && fold.agent.alive == nil && fold.agent.waiting == nil)
+        fold.apply(.turnStarted(id: nil), at: "2026-10-17T09:00:00Z", now: now.addingTimeInterval(600))
+        #expect(fold.agent.state == "unknown", "an old write proves nothing")
+        fold.apply(.seen(alive: true, evidence: "registry", waiting: .permission, lastWrite: now), at: "2026-10-17T09:10:00Z", now: now)
+        #expect(fold.agent.state == "waiting" && fold.agent.waiting == "permission" && fold.agent.evidence == "registry")
+        fold.apply(.seen(alive: false, evidence: "registry", waiting: .unknown, lastWrite: now), at: "2026-10-17T09:11:00Z", now: now)
+        #expect(fold.agent.state == "interrupted" && fold.agent.alive == false, "a holder gone with a turn open did not end normally")
     }
 
     @Test func aCleanStopIsDoneAndAFailedOneIsAnError() {

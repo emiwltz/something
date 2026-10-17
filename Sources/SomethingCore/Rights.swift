@@ -1,16 +1,17 @@
 // What a space may do (contract 5): the rights' words, the scope matched on whole path components, the `granted` a
 // space receives, the grants file the engine keeps outside the spaces folder, and what to ask again at an opening.
-// A space never inherits rights by name: grants are keyed by name here, and import, rename and delete drop the entry.
+// A space never inherits rights by name: grants are keyed by name, so whoever imports, renames or deletes a space removes its entry.
 import Foundation
 
-/// The person's answers for one space, as the grants file keeps them.
+/// The person's answers for one space, as the grants file keeps them. Every key is required when read: the engine
+/// always writes the whole file, and a file edited by hand that misses one reads as unreadable, never as half known.
 public struct Grant: Codable, Equatable, Sendable {
     /// What the declaration asked when the person last answered: what the next opening is compared with.
     public var declared: Asked
     public var granted: [String] = [], refused: [String] = []
     /// The folder in force for launches, absolute; nil when none was chosen.
     public var folder: String?
-    /// For a declared folder that is not on this Mac, the folder the person chose in its place.
+    /// For a scope folder, as declared, that is not on this Mac: the absolute folder the person chose in its place.
     public var remap: [String: String] = [:]
     public var at: String
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
@@ -98,7 +99,7 @@ public enum Rights {
             else { granted.rights += allowed.filter { covers([right], $0) && !granted.rights.contains($0) } }
             if !covers(allowed, right), covers(refused, right) { granted.refused.append(right) }
         }
-        if case .folders(let folders) = declaration.agents { granted.agents = .folders(folders.map { Declaration.expand($0, home: home) ?? $0 }) }
+        if case .folders(let folders) = declaration.agents { granted.agents = .folders(folders.map { grant?.remap[$0] ?? Declaration.expand($0, home: home) ?? $0 }) }
         else { granted.agents = .all }
         return granted
     }

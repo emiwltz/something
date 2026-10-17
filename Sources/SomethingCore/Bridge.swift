@@ -39,8 +39,12 @@ public enum Bridge {
         let method = request["method"] as? String ?? "", params = request["params"] as? [String: Any] ?? [:]
         var line = Line(agent: params["agent"] as? String, kind: params["kind"] as? String)
         var answer: [String: Any] = ["id": request["id"] ?? NSNull()]
-        do { answer["result"] = try call(method, Params(values: params), host, &line) } catch {
-            let coded = error as? CodedError ?? CodedError("AGENT_ERROR", (error as? SpaceError)?.message ?? "\(error)")
+        do {
+            if let contract = request["contract"], contract as? Int != 1 { throw CodedError("BAD_PARAMS", "This engine speaks contract 1, not contract \(contract).") }
+            answer["result"] = try call(method, Params(values: params), host, &line)
+        } catch {
+            // Any other error's words may hold a path of this Mac, which a space must not learn.
+            let coded = error as? CodedError ?? CodedError("AGENT_ERROR", "something could not do this on this Mac; try again.")
             answer["error"] = ["code": coded.code, "message": coded.message]
             line.result = coded.code
         }
@@ -65,7 +69,8 @@ public enum Bridge {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CodedError("BAD_PARAMS", "send needs a text that is not empty.") }
             guard when == "next" || when == "now" else { throw CodedError("BAD_PARAMS", "when is \"next\" or \"now\", not \"\(when)\".") }
             let agent = try writable(id, host, &line)
-            try able(agent, "send"); try able(agent, when == "now" ? "steer" : "queue")
+            // An idle agent starts a turn with either `when` (contract 4.1); steer and queue only matter during a turn.
+            try able(agent, "send"); if ["working", "waiting"].contains(agent.state) { try able(agent, when == "now" ? "steer" : "queue") }
             return ["delivery": try host.deliver(text, to: agent, when: when)]
         case "interrupt":
             let agent = try writable(try p.string("agent"), host, &line); try able(agent, "interrupt")
@@ -93,6 +98,8 @@ public enum Bridge {
             let target = folder ?? root
             guard target.hasPrefix("/") else { throw CodedError("BAD_PARAMS", "folder is an absolute path, for example something.granted.folder + \"/web\".") }
             guard Rights.inside(target, root) else { throw CodedError("FOLDER_NOT_GRANTED", "\(target) is outside the folder granted for launches, \(root).") }
+            let limits = granted.limits[kind] ?? [], given = [("model", model), ("mode", mode), ("effort", effort)]
+            if let (key, _) = given.first(where: { $1 != nil && limits.contains($0) }) { throw CodedError("NOT_SUPPORTED", "\(kind) agents take no \(key) here; launch without it.") }
             if let mode { try confirm(mode, kind, host) }
             line.agent = try host.launch(kind, folder: target, model: model, mode: mode, effort: effort)
             return line.agent!
@@ -116,9 +123,10 @@ public enum Bridge {
                 guard let value = p.values["value"] else { throw CodedError("BAD_PARAMS", "store.set needs a value; null removes the key.") }
                 try memory.set(path, value)
                 return NSNull()
-            } catch let error as SpaceError {
-                // Contract 1 has no code for a memory file the disk will not read or write; the message says what it is.
-                throw CodedError("STORE_FULL", error.message)
+            } catch is SpaceError {
+                // Contract 1 has no code for a memory file the disk will not read or write. Memory's own words name
+                // the file's path, which a space must not learn (it could keep it, and an export would carry it).
+                throw CodedError("STORE_FULL", "This space's memory cannot be read or written on this Mac.")
             }
         case "open":
             let text = try p.string("url")
@@ -163,7 +171,6 @@ public enum Bridge {
     static func confirm(_ mode: String, _ kind: String, _ host: BridgeHost) throws {
         if !host.confirms(mode: mode, kind: kind) { throw CodedError("REFUSED", "The person did not allow the mode \(mode).") }
     }
-
 }
 
 /// The params of one call, read with their types.

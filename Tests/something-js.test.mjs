@@ -138,3 +138,18 @@ test("every function of frozen-v1.json is there", () => {
     assert.notEqual(value, undefined, `${name} is missing`);
   }
 });
+
+test("a post that throws (a value WebKit cannot copy) rejects with BAD_PARAMS instead of throwing", async () => {
+  const window = { webkit: { messageHandlers: { something: { postMessage: () => { throw new Error("DataCloneError"); } } } } };
+  vm.runInNewContext(source, { window, setTimeout });
+  let promise;
+  assert.doesNotThrow(() => { promise = window.something.store.set("x", () => {}); });
+  await assert.rejects(promise, (error) => error.code === "BAD_PARAMS" && error.message.endsWith("."));
+});
+
+test("a transport rejection that carries a code keeps it", async () => {
+  const coded = Object.assign(new Error("Invented."), { code: "BUSY" });
+  const window = { webkit: { messageHandlers: { something: { postMessage: () => Promise.reject(coded) } } } };
+  vm.runInNewContext(source, { window, setTimeout });
+  await assert.rejects(window.something.open("https://example.com"), (error) => error.code === "BUSY");
+});

@@ -81,9 +81,7 @@ public struct CodedError: Error, Equatable, Sendable {
 
 /// Where a problem is, when it has a place in the space's files.
 public struct Where: Codable, Equatable, Sendable, EveryKey {
-    public var file: String
-    public var line: Int?
-    public var column: Int?
+    public var file: String, line: Int?, column: Int?
     public init(file: String, line: Int? = nil, column: Int? = nil) { (self.file, self.line, self.column) = (file, line, column) }
 }
 
@@ -123,18 +121,14 @@ public struct Report: Encodable {
         }
     }
 
-    public var space: String
-    public var path: String
+    public var space: String, path: String
     public var declaration: Declaration?
     public var rights = Rights()
     public var received: Received?
     public var problems: [Problem] = []
-    public var calls: [JSONValue] = []
-    public var console: [JSONValue] = []
+    public var calls: [JSONValue] = [], console: [JSONValue] = []
     public var size: Size?
-    public var snapshot: String?
-    public var journal: [JournalLine]?
-    public var ms: Int?
+    public var snapshot: String?, journal: [JournalLine]?, ms: Int?
 
     public init(space: String, path: String) { (self.space, self.path) = (space, path) }
 

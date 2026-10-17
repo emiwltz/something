@@ -24,10 +24,15 @@
     if (!handler) {
       return Promise.reject(failure("NO_HOST", "This page is not open in something; open the space in something to reach its agents."));
     }
-    return Promise.resolve(handler.postMessage({ contract: 1, id: next++, method: method, params: params }))
+    const request = { contract: 1, id: next++, method: method, params: params };
+    // Inside the promise, so a post that throws (WebKit cannot copy a function, for example) rejects instead.
+    return new Promise(function (resolve) { resolve(handler.postMessage(request)); })
       .then(function (answer) {
         if (answer && answer.error) throw failure(answer.error.code, answer.error.message);
         return answer && answer.result !== undefined ? answer.result : null;
+      }, function (error) {
+        if (error && error.code) throw error;
+        throw failure("BAD_PARAMS", method + " was given a value that cannot be sent to something; pass only JSON values.");
       });
   }
 

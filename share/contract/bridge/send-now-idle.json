@@ -1,0 +1,62 @@
+{
+  "about": "A message with when \"now\" to an idle launched agent that cannot steer (as OpenCode): it starts a turn.",
+  "comment": "A bridge case: one request as the page side sends it ({contract, id, method, params}), against state-example.json, with the rights in granted. A result is compared whole; an error by its code only, since its message is free (one sentence that says what to do). A case may carry patch: per agent id, keys that replace those of state-example.json for this case only.",
+  "state": "state-example.json",
+  "patch": {
+    "agents": {
+      "a1": {
+        "state": "idle",
+        "waiting": "none",
+        "can": {
+          "send": true,
+          "steer": false,
+          "queue": true,
+          "interrupt": true,
+          "model": true,
+          "mode": true,
+          "effort": false,
+          "resume": false
+        }
+      }
+    }
+  },
+  "granted": {
+    "rights": [
+      "state",
+      "send:claude"
+    ],
+    "refused": [],
+    "unavailable": [],
+    "limits": {
+      "claude": [
+        "effort"
+      ],
+      "opencode": [
+        "steer"
+      ],
+      "pi": [
+        "mode"
+      ]
+    },
+    "agents": {
+      "see": "all"
+    },
+    "folder": "/Users/example/code/shop"
+  },
+  "request": {
+    "contract": 1,
+    "id": 1,
+    "method": "send",
+    "params": {
+      "agent": "a1",
+      "text": "Add a footer.",
+      "when": "now"
+    }
+  },
+  "answer": {
+    "id": 1,
+    "result": {
+      "delivery": "started"
+    }
+  }
+}

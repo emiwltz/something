@@ -6,6 +6,9 @@ import Foundation
 public enum AgentEvent: Equatable, Sendable {
     /// The program runs. `thread` is its conversation, once the harness names it.
     case started(pid: Int?, thread: String?)
+    /// What a reader learned of an agent started elsewhere: whether a holder lives and its proof ("registry", "lock",
+    /// "cwd", ...), what it waits on, and when its conversation file was last written. nil means unknown.
+    case seen(alive: Bool?, evidence: String?, waiting: StateMap.Waiting, lastWrite: Date?)
     /// Values the agent itself reported; nil leaves a value as it was.
     case reported(model: String?, mode: String?, effort: String?)
     case options(Options)
@@ -52,6 +55,7 @@ public struct Fold: Sendable {
         case .started(let pid, let thread):
             (facts.alive, facts.evidence, facts.waiting) = (true, "child", .nothing)
             (agent.pid, agent.thread, agent.started) = (pid ?? agent.pid, thread ?? agent.thread, agent.started ?? at)
+        case .seen(let alive, let evidence, let waiting, let lastWrite): (facts.alive, facts.evidence, facts.waiting, facts.lastWrite) = (alive, evidence, waiting, lastWrite)
         case .reported(let model, let mode, let effort):
             (agent.model, agent.mode, agent.effort) = (model ?? agent.model, mode ?? agent.mode, effort ?? agent.effort)
         case .options(let options): agent.options = options
@@ -83,7 +87,9 @@ public struct Fold: Sendable {
         case .stopped(let error):
             // A process gone mid-turn did not end normally: the open turn makes StateMap say "interrupted".
             if facts.turnOpen == true { close("interrupted", at: at) }
-            (facts.alive, facts.ended, facts.failed) = (false, error == nil && facts.turnOpen != true, error != nil)
+            // The last turn's outcome stays: a failed or interrupted turn is not undone by a clean exit after it.
+            (facts.alive, facts.failed) = (false, facts.failed || error != nil)
+            facts.ended = !facts.failed && !facts.aborted && facts.turnOpen != true
             agent.error = error ?? agent.error
             // Nobody is left to answer a request or to take a held message.
             (requests, agent.queue, agent.can, agent.because) = ([], [], Can(), [:])

@@ -107,5 +107,17 @@ struct RightsTests {
         try Data("{".utf8).write(to: url)
         #expect(throws: SpaceError.self) { try AppFile.read(url) }
         #expect(try Data(contentsOf: url) == Data("{".utf8))
+        // Every key of a grant is required: a file edited by hand without remap is unreadable, not read half.
+        let withoutRemap = #"{"app":1,"spaces":{"x":{"declared":{"rights":[],"agents":{"see":"all"}},"granted":[],"refused":[],"at":"2026-10-17T09:00:00Z"}}}"#
+        try Data(withoutRemap.utf8).write(to: url)
+        #expect(throws: SpaceError.self) { try AppFile.read(url) }
+    }
+
+    @Test func aScopeFolderNotOnThisMacIsReplacedByTheOneThePersonChose() {
+        var reading = DeclarationReading()
+        reading.declaration = declaration(["state"], agents: .folders(["~/code/shop", "~/code/blog"]))
+        var grant = Grant(declared: Asked(reading.declaration!), at: "2026-10-17T09:00:00Z")
+        grant.remap = ["~/code/shop": "/Users/example/work/shop"]
+        #expect(Rights.granted(reading, grant, limits: [:], home: home).agents == .folders(["/Users/example/work/shop", "/Users/example/code/blog"]))
     }
 }

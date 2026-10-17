@@ -29,7 +29,7 @@ final class FakeHost: BridgeHost {
     func journal(_ line: JournalLine) { lines.append(line) }
     func deliver(_ text: String, to agent: Agent, when: String) throws -> String {
         calls.append("deliver \(agent.id) \(when)")
-        return when == "now" ? "steered" : ["working", "waiting"].contains(agent.state) ? "queued" : "started"
+        return !["working", "waiting"].contains(agent.state) ? "started" : when == "now" ? "steered" : "queued"
     }
     func interrupt(_ agent: Agent) throws -> Bool { calls.append("interrupt \(agent.id)"); return agent.state == "working" }
     func set(_ agent: Agent, model: String?, mode: String?, effort: String?) throws -> String {
@@ -55,6 +55,12 @@ struct BridgeTests {
         let fixture = try ContractFiles.object(name)
         let granted = try JSONDecoder().decode(Granted.self, from: JSONSerialization.data(withJSONObject: fixture["granted"]!))
         let host = try FakeHost(granted: granted)
+        // A case's patch replaces keys of some agents of state-example.json, for this case only.
+        if let patch = (fixture["patch"] as? [String: Any])?["agents"] as? [String: [String: Any]] {
+            var state = try #require(try JSONSerialization.jsonObject(with: host.state.json()) as? [String: Any])
+            state["agents"] = (state["agents"] as? [[String: Any]] ?? []).map { agent in agent.merging(patch[agent["id"] as? String ?? ""] ?? [:]) { $1 } }
+            host.state = try JSONDecoder().decode(State.self, from: JSONSerialization.data(withJSONObject: state))
+        }
         let request = try #require(fixture["request"] as? [String: Any])
         let expected = try #require(fixture["answer"] as? [String: Any])
         let answer = Bridge.answer(request, host: host)
@@ -86,6 +92,21 @@ struct BridgeTests {
         #expect(code("send", ["agent": "a1", "text": "  "], host) == "BAD_PARAMS")
         host.state.agents[0].alive = false
         #expect(code("send", hello, host) == "AGENT_STOPPED")
+        var refused = Granted()
+        (refused.rights, refused.refused, refused.agents) = (["state"], ["send"], .all)
+        #expect(code("send", hello, try FakeHost(granted: refused)) == "RIGHT_NOT_GRANTED")
+    }
+
+    @Test func anIdleAgentStartsATurnWhateverItsSteerOrQueue() throws {
+        let host = try FakeHost(["state", "send"])
+        (host.state.agents[0].state, host.state.agents[0].waiting) = ("idle", "none")
+        (host.state.agents[0].can.steer, host.state.agents[0].can.queue) = (false, false)
+        let answer = Bridge.answer(["method": "send", "params": ["agent": "a1", "text": "Add a footer.", "when": "now"]], host: host)
+        #expect(answer["result"] as? [String: String] == ["delivery": "started"])
+        #expect(code("send", ["agent": "a1", "text": "Add a footer."], host) == "ok")
+        host.state.agents[0].state = "working"
+        #expect(code("send", ["agent": "a1", "text": "Add a footer.", "when": "now"], host) == "NOT_SUPPORTED")
+        #expect(code("send", ["agent": "a1", "text": "Add a footer."], host) == "NOT_SUPPORTED")
     }
 
     @Test func withoutTheStateRightOnlyItsOwnAgentsExist() throws {
@@ -111,9 +132,14 @@ struct BridgeTests {
         #expect(code("set", ["agent": "a1", "effort": "high"], host) == "NOT_SUPPORTED")
         #expect(code("set", ["agent": "a1", "mode": "yolo"], host) == "VALUE_NOT_OFFERED")
         #expect(code("set", ["agent": "e1", "model": "gpt-example"], host) == "READ_ONLY_AGENT")
+        let blog = try FakeHost(["state", "send"], scope: .folders(["/Users/example/code/blog"]))
+        #expect(code("interrupt", ["agent": "a1"], blog) == "AGENT_NOT_FOUND")
+        #expect(code("set", ["agent": "a1", "mode": "plan"], blog) == "AGENT_NOT_FOUND")
         host.state.agents[0].can.interrupt = false
         #expect(code("interrupt", ["agent": "a1"], host) == "NOT_SUPPORTED")
-        #expect(host.calls == ["interrupt a1", "set a1 - plan"])
+        host.state.agents[0].alive = false
+        #expect(code("interrupt", ["agent": "a1"], host) == "AGENT_STOPPED")
+        #expect(host.calls == ["interrupt a1", "set a1 - plan"] && blog.calls.isEmpty)
     }
 
     @Test func aModeThatLowersAskingNeedsThePersonsYes() throws {
@@ -137,6 +163,9 @@ struct BridgeTests {
         #expect(code("launch", ["kind": "opencode"], host) == "NOT_INSTALLED")
         #expect(code("launch", ["kind": "omp"], host) == "NOT_SUPPORTED")
         #expect(code("launch", ["kind": 3], host) == "BAD_PARAMS")
+        // What a kind can never do here is refused by the bridge, before the shell is asked.
+        host.granted.limits = ["claude": ["effort"]]
+        #expect(code("launch", ["kind": "claude", "effort": "high"], host) == "NOT_SUPPORTED")
         host.granted.folder = nil
         #expect(code("launch", ["kind": "claude"], host) == "FOLDER_NOT_GRANTED")
         #expect(host.calls == ["launch claude /Users/example/code/shop", "launch claude /Users/example/code/shop/web"])
@@ -171,6 +200,8 @@ struct BridgeTests {
         #expect(code("store.get", ["path": "a//b"], host) == "BAD_PARAMS")
         try Data("not json".utf8).write(to: folder.appendingPathComponent("example.json"))
         #expect(code("store.get", ["path": ""], host) == "STORE_FULL")
+        let message = (Bridge.answer(["method": "store.get", "params": ["path": ""]], host: host)["error"] as? [String: String])?["message"] ?? "/"
+        #expect(!message.contains("/"), "the space must not learn where the memory lives: \(message)")
         #expect(code("store.get", ["path": ""], try FakeHost(["state"])) == "RIGHT_NOT_GRANTED")
         #expect(code("store.get", ["path": ""], try FakeHost(["store"])) == "RIGHT_NOT_GRANTED")
         #expect(host.lines.isEmpty, "the memory is not a write action of the journal")
@@ -207,5 +238,8 @@ struct BridgeTests {
         let error = try #require(answer["error"] as? [String: String])
         #expect(error["code"] == "UNKNOWN_METHOD" && error["message"]?.isEmpty == false)
         #expect(Bridge.answer([:], host: try FakeHost([]))["id"] is NSNull)
+        let later = Bridge.answer(["contract": 2, "id": 8, "method": "state"], host: try FakeHost(["state"]))
+        #expect((later["error"] as? [String: String])?["code"] == "BAD_PARAMS" && later["id"] as? Int == 8)
+        #expect(code("state", [:], try FakeHost(["state"])) == "ok", "contract 1 is answered")
     }
 }

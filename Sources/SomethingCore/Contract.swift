@@ -97,23 +97,18 @@ public struct Agent: Codable, Equatable, Sendable, EveryKey {
 }
 
 public struct Options: Codable, Equatable, Sendable, EveryKey {
-    public var model: [Option]?
-    public var mode: [Option]?
-    public var effort: [Option]?
+    public var model: [Option]?, mode: [Option]?, effort: [Option]?
     public init() {}
 }
 
 public struct Option: Codable, Equatable, Sendable, EveryKey {
-    public var value: String
-    public var label: String
+    public var value: String, label: String
     public init(value: String, label: String) { (self.value, self.label) = (value, label) }
 }
 
 /// A message something holds for the agent's next turn.
 public struct Queued: Codable, Equatable, Sendable, EveryKey {
-    public var id: String
-    public var text: String
-    public var at: String
+    public var id: String, text: String, at: String
     public init(id: String, text: String, at: String) { (self.id, self.text, self.at) = (id, text, at) }
 }
 
@@ -125,8 +120,7 @@ public struct Can: Codable, Equatable, Sendable, EveryKey {
 }
 
 public struct AgentError: Codable, Equatable, Sendable, EveryKey {
-    public var code: String
-    public var message: String
+    public var code: String, message: String
     public init(code: String, message: String) { (self.code, self.message) = (code, message) }
 }
 
@@ -217,9 +211,7 @@ public struct Request: Codable, Equatable, Sendable, EveryKey {
 
 /// What the person allowed this space, and what can never be done here.
 public struct Granted: Codable, Equatable, Sendable, EveryKey {
-    public var rights: [String] = []
-    public var refused: [String] = []
-    public var unavailable: [String] = []
+    public var rights: [String] = [], refused: [String] = [], unavailable: [String] = []
     /// Per kind, the `can` entries that are always false here.
     public var limits: [String: [String]] = [:]
     public var agents: Scope = .folders([])
