@@ -37,7 +37,10 @@ import SomethingCore
       id=$(printf '%s' "$line" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
       case "$line" in
         *'"method":"initialize"'*) echo "{\"id\":$id,\"result\":{\"userAgent\":\"something/0.163.0\"}}" ;;
-        *'"method":"thread/start"'*) echo "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"01a14bae-0000-7000-8000-000000000001\"},\"model\":\"fake-model\",\"approvalPolicy\":\"untrusted\",\"reasoningEffort\":null}}" ;;
+        *'"method":"thread/start"'*)
+          # Codex reports the policy it was given, or its own default.
+          policy=$(printf '%s' "$line" | sed -n 's/.*"approvalPolicy":"\([a-z-]*\)".*/\1/p')
+          echo "{\"id\":$id,\"result\":{\"thread\":{\"id\":\"01a14bae-0000-7000-8000-000000000001\"},\"model\":\"fake-model\",\"approvalPolicy\":\"${policy:-on-request}\",\"reasoningEffort\":null}}" ;;
         *'"method":"model/list"'*) echo "{\"id\":$id,\"result\":{\"data\":[{\"id\":\"fake-model\",\"model\":\"fake-model\",\"displayName\":\"Fake\",\"hidden\":false,\"supportedReasoningEfforts\":[{\"reasoningEffort\":\"low\",\"description\":\"Invented.\"}]}]}}" ;;
         *'"method":"turn/start"'*)
           echo "{\"id\":$id,\"result\":{\"turn\":{\"id\":\"t1\",\"status\":\"inProgress\",\"items\":[]}}}"

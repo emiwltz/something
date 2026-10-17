@@ -14,16 +14,20 @@ public final class CodexDriver: Driver {
     public static let limits: [String: String] = [:]
     /// Codex names the thread when it starts it.
     public static let picksThread = false
+    /// A model the catalog does not list (a custom provider's) offers no effort, and Codex would take any word.
+    public static let effortOnlyWhenOffered = true
     /// The approval policies a space may choose (0.163 accepts these three; "on-failure" is gone).
     public static let modes = [Option(value: "on-request", label: "Ask when needed"),
                                Option(value: "untrusted", label: "Ask before most commands"),
                                Option(value: "never", label: "Never ask (refuse what is not allowed)")]
-    /// The policy of a launch that names none: without it a stranger's settings pick one, possibly "never".
+    /// The policy a launch that names none puts on its first turn when the thread's own would never ask ("never",
+    /// or a granular set of rules, which asks no more than this): a stricter one is left as the person set it.
     static let defaultMode = "on-request"
     /// How long an interrupt may go unanswered: Codex never answers one sent to a thread with no active turn (V1's hang).
     static let interruptTimeout: TimeInterval = 5
 
-    /// The stdio app-server starts no background daemon (trial T-2 on 0.163.0, `daemon_auto_start` on): no flag is needed.
+    /// The stdio app-server starts no background daemon, even with the `daemon_auto_start` feature on (trial T-2 on
+    /// 0.163.0): no flag is needed.
     public static func command(_ launch: Launch) -> Command { Command(arguments: ["app-server"]) }
 
     private let launch: Launch
@@ -45,7 +49,7 @@ public final class CodexDriver: Driver {
     /// Model, effort and approval policy for the next turn/start: Codex keeps them for the turns after it.
     private var overrides: [String: String] = [:]
     /// Open requests by the id something shows: Codex's own id, the method, its params and the window's details.
-    private var asks: [String: (codexID: Any, method: String, params: [String: Any], prompt: Prompt)] = [:]
+    private var asks: [String: Ask] = [:]
     /// Tool items not finished yet, and the person's decisions on them, by Codex's item id.
     private var tools: [String: Item] = [:], decisions: [String: Decision] = [:]
     /// The items as Codex started them: a file change's request names no path, its item does.
@@ -57,7 +61,13 @@ public final class CodexDriver: Driver {
     /// Closes the program's input, after which Codex exits: set by the engine, used when the launch cannot go on.
     var quit: () -> Void = {}
 
-    private enum Call { case initialize, open, models, start(String, overrides: [String: String]), steer(String), interrupt }
+    private enum Call { case initialize, open, models, start(String, overrides: [String: String]), settings, steer(String), interrupt }
+
+    /// An open request: Codex's own id, its method and params, the window's details, and for a question the ids
+    /// Codex gave the questions shown, in their order.
+    private struct Ask {
+        var codexID: Any, method: String, params: [String: Any], prompt: Prompt, questionIDs: [String] = []
+    }
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
@@ -117,7 +127,7 @@ public final class CodexDriver: Driver {
     }
 
     /// Codex takes a model, an effort and an approval policy with the next turn it starts, so nothing applies now; the
-    /// state shows the new values once Codex took that turn.
+    /// state shows the new values once Codex, having taken that turn, reports them.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
         for (key, value) in [("model", model), ("approvalPolicy", mode), ("effort", effort)] { if let value { overrides[key] = value } }
         return "next-turn"
@@ -137,13 +147,24 @@ public final class CodexDriver: Driver {
         let reply: [String: Any], allowed: Bool
         switch (ask.method, answer) {
         case ("item/tool/requestUserInput", .choice(let chosen)):
-            let ids = (ask.params["questions"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
-            (reply, allowed) = (["answers": Dictionary(zip(ids, chosen.map { ["answers": $0] }), uniquingKeysWith: { first, _ in first })], true)
-        case ("item/tool/requestUserInput", _): (reply, allowed) = (["answers": [String: Any]()], false)
-        case ("item/permissions/requestApproval", .once): (reply, allowed) = (["permissions": ask.params["permissions"] ?? [:], "scope": "turn"], true)
-        case ("item/permissions/requestApproval", _): (reply, allowed) = (["permissions": [String: Any]()], false)
-        case (_, .once): (reply, allowed) = (["decision": "accept"], true)
-        default: (reply, allowed) = (["decision": "decline"], false)
+            let answers = Dictionary(zip(ask.questionIDs, chosen.map { ["answers": $0] }), uniquingKeysWith: { first, _ in first })
+            reply = ["answers": answers]
+            allowed = true
+        case ("item/tool/requestUserInput", _):
+            reply = ["answers": [String: Any]()]
+            allowed = false
+        case ("item/permissions/requestApproval", .once):
+            reply = ["permissions": ask.params["permissions"] ?? [:], "scope": "turn"]
+            allowed = true
+        case ("item/permissions/requestApproval", _):
+            reply = ["permissions": [String: Any]()]
+            allowed = false
+        case (_, .once):
+            reply = ["decision": "accept"]
+            allowed = true
+        default:
+            reply = ["decision": "decline"]
+            allowed = false
         }
         try send(["id": ask.codexID, "result": reply])
         asks[request] = nil
@@ -176,7 +197,9 @@ public final class CodexDriver: Driver {
         case .initialize:
             do {
                 try send(["method": "initialized"])
-                var params: [String: Any] = ["cwd": launch.folder, "approvalPolicy": launch.mode ?? CodexDriver.defaultMode]
+                // A resume's settings persist into the thread: only what the person chose is sent.
+                var params: [String: Any] = ["cwd": launch.folder]
+                if let mode = launch.mode { params["approvalPolicy"] = mode }
                 if let model = launch.model { params["model"] = model }
                 if launch.resume {
                     // Its history is left out: a long thread's answer can weigh megabytes.
@@ -191,6 +214,10 @@ public final class CodexDriver: Driver {
             thread = (result["thread"] as? [String: Any])?["id"] as? String
             emit(.started(pid: nil, thread: thread))
             reported(model: result["model"], mode: result["approvalPolicy"], effort: result["reasoningEffort"])
+            let policy = result["approvalPolicy"] as? String
+            if launch.mode == nil, overrides["approvalPolicy"] == nil, policy == nil || policy == "never" {
+                overrides["approvalPolicy"] = CodexDriver.defaultMode
+            }
             let waiting = early
             early = []
             for message in waiting { try? deliver(message.text, steer: message.steer) }
@@ -198,10 +225,12 @@ public final class CodexDriver: Driver {
             models = result["data"] as? [[String: Any]]
             emit(.options(options()))
         case .start(_, let asked):
-            // Codex names no setting when it takes a turn (0.163 sends no thread/settings/updated on this channel): a
-            // turn it took is its word that the values it carried apply, from this turn on.
-            if !asked.isEmpty { reported(model: asked["model"], mode: asked["approvalPolicy"], effort: asked["effort"]) }
             if turn == nil, let id = (result["turn"] as? [String: Any])?["id"] as? String { running(id) }
+            // Codex takes any word for a model or an effort, and says nothing of its settings when it takes a turn
+            // (0.163 sends no thread/settings/updated on this channel). Resuming the thread this server holds loads
+            // nothing and answers with the settings in force, policy included, which thread/read leaves out.
+            if !asked.isEmpty, let thread { try? invoke(.settings, "thread/resume", ["threadId": thread, "excludeTurns": true]) }
+        case .settings: reported(model: result["model"], mode: result["approvalPolicy"], effort: result["reasoningEffort"])
         case .steer, .interrupt: break   // a steer's userMessage item shows it; an interrupt's turn/completed ends the turn
         }
     }
@@ -217,9 +246,10 @@ public final class CodexDriver: Driver {
             over = true
             emit(.stopped(error))
             quit()
-        case .models, .interrupt: break   // the options stay unknown; turn/completed says how the turn ended
+        case .models, .settings, .interrupt: break   // the values stay as last known; turn/completed says how the turn ended
         case .start(let text, _):
-            // The turn this message opened never started on Codex's side.
+            // The turn this message opened never started on Codex's side: what was held for it goes with it.
+            reset()
             emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "Codex refused the message “\(Launched.short(text))”: \(words)"))))
         case .steer(let text):
             emit(.error(AgentError(code: "AGENT_ERROR", message: "Codex did not take the message “\(Launched.short(text))”: \(words)")))
@@ -253,7 +283,7 @@ public final class CodexDriver: Driver {
     private func request(_ method: String, _ codexID: Any, _ params: [String: Any]) {
         let shownID = id(codexID)
         let kind: String
-        var about: String?, input: String?, questions: [Question] = []
+        var about: String?, input: String?, questions: [Question] = [], questionIDs: [String] = []
         switch method {
         case "item/commandExecution/requestApproval":
             kind = "commandExecution"
@@ -271,11 +301,14 @@ public final class CodexDriver: Driver {
             input = CodexDriver.json(params["permissions"])
         case "item/tool/requestUserInput":
             kind = "requestUserInput"
-            questions = (params["questions"] as? [[String: Any]] ?? []).compactMap { question in
-                guard let text = question["question"] as? String else { return nil }
+            // A question without an id or a text cannot be answered: it is left out, and so is its answer.
+            let shown = (params["questions"] as? [[String: Any]] ?? []).compactMap { question -> (String, Question)? in
+                guard let id = question["id"] as? String, let text = question["question"] as? String else { return nil }
                 let options = (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
-                return Question(header: question["header"] as? String, text: text, options: options, multiple: false)
+                return (id, Question(header: question["header"] as? String, text: text, options: options, multiple: false))
             }
+            questionIDs = shown.map(\.0)
+            questions = shown.map(\.1)
             about = questions.first?.text
         default:
             // Codex waits for every request it sends: one something does not handle gets a refusal, not silence.
@@ -283,14 +316,14 @@ public final class CodexDriver: Driver {
             return
         }
         let shown = Request(id: shownID, agent: launch.agent, kind: questions.isEmpty ? "permission" : "question", tool: kind, about: about, at: now())
-        asks[shownID] = (codexID, method, params, Prompt(request: shown, input: input, questions: questions))
+        asks[shownID] = Ask(codexID: codexID, method: method, params: params, prompt: Prompt(request: shown, input: input, questions: questions),
+                            questionIDs: questionIDs)
         emit(.requestOpened(shown))
     }
 
     /// The turn ended: what it left open closes with it. An item cut by a steer or an interrupt never completes, and
     /// a request still open when the turn was interrupted is withdrawn (Codex's serverRequest/resolved comes after).
     private func completed(_ ended: [String: Any]) {
-        (turn, active, interruptAsked, interruptSent, steers) = (nil, false, false, nil, [])
         for (id, var item) in tools {
             item.tool?.status = nil
             emit(.itemUpdated(item))
@@ -300,7 +333,7 @@ public final class CodexDriver: Driver {
             asks[id] = nil
             emit(.requestClosed(id: id))
         }
-        started = [:]
+        reset()
         switch ended["status"] as? String {
         case "interrupted": emit(.turnEnded(.interrupted))
         case "failed":
@@ -337,6 +370,17 @@ public final class CodexDriver: Driver {
 
     // MARK: Helpers
 
+    /// Forgets what belonged to the turn that ended, or to the one Codex refused to start.
+    private func reset() {
+        turn = nil
+        active = false
+        interruptAsked = false
+        interruptSent = nil
+        steers = []
+        decisions = [:]
+        started = [:]
+    }
+
     /// The running turn is `id`: a steer or an interrupt asked before its id was known goes out now.
     private func running(_ id: String) {
         guard turn != id else { return }
@@ -361,9 +405,9 @@ public final class CodexDriver: Driver {
         emit(.itemUpdated(shown))
     }
 
-    /// Codex's approval policy is a word, or a set of rules something shows as "granular".
+    /// Codex's approval policy is a word, or a set of rules something shows as "granular"; anything else is unknown.
     private func reported(model: Any?, mode: Any?, effort: Any?) {
-        let mode = mode.map { $0 as? String ?? "granular" }
+        let mode = mode as? String ?? (mode is [String: Any] ? "granular" : nil)
         emit(.reported(model: model as? String, mode: mode, effort: effort as? String))
         if let model = model as? String, model != self.model {
             self.model = model

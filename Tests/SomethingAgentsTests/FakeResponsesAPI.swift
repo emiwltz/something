@@ -47,7 +47,11 @@ final class FakeResponsesAPI {
     /// The tool outputs the program sent back to the model.
     var toolOutputs: [String] { lock.withLock { outputs } }
 
-    func stop() { close(socket) }
+    /// Shut down first: on Darwin a close alone does not wake the accept() blocked in the other thread.
+    func stop() {
+        shutdown(socket, SHUT_RDWR)
+        close(socket)
+    }
 
     /// One step of the script: a message (slow: one word every quarter second), or a tool call.
     enum Step { case message(String, slow: Bool), call(name: String, arguments: [String: Any]) }
@@ -128,7 +132,7 @@ final class FakeResponsesAPI {
         return send(client, "0\r\n\r\n")
     }
 
-    /// The next request on the connection: its first header lines and its body; nil once the program closed it.
+    /// The next request on the connection: its request line and its body; nil once the program closed it.
     private static func nextRequest(_ client: Int32, _ data: inout Data) -> (String, Data)? {
         var buffer = [UInt8](repeating: 0, count: 65_536)
         while true {
@@ -140,7 +144,7 @@ final class FakeResponsesAPI {
                 if data.count - end.upperBound >= length {
                     let body = data.subdata(in: end.upperBound..<end.upperBound + length)
                     data = data.subdata(in: end.upperBound + length..<data.count)
-                    return (String(head.prefix(80)), body)
+                    return (String(head.prefix { $0 != "\r" }), body)   // the request line alone
                 }
             }
             let n = read(client, &buffer, buffer.count)

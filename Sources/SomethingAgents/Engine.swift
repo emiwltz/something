@@ -188,8 +188,6 @@ public final class Engine {
                           environment: program.environment(environment, adding: command.adding, removing: command.removing))
         let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
         agent.changed = { [weak self] in self?.changed() }
-        // A Codex that cannot open its conversation is told to end.
-        (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
             claude.fallback = { [weak self, weak spawn] in
                 guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
@@ -226,6 +224,8 @@ public final class Engine {
             try spawn.write(line)
             record?(true, line)
         }, now: Engine.now)
+        // A Codex that cannot open its conversation is told to end.
+        (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
         let goodbye = agent.driver.goodbye
         spawn.graceful = { [weak spawn] in
             guard let spawn, let goodbye, (try? spawn.write(goodbye)) != nil else { return }

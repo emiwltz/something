@@ -98,11 +98,16 @@ import SomethingCore
     static let thread = "01a14bae-0000-7000-8000-000000000001", turn = "01a14bae-0000-7000-8000-0000000000aa"
 
     /// A replay whose thread is open: initialize and thread/start answered as the recordings show.
-    static func opened(mode: String? = nil) -> Replay {
+    /// `policy` is the one Codex reports, by default the one asked for or else its own default.
+    static func opened(mode: String? = nil, policy: Any? = nil) -> Replay {
         let replay = Replay.codex(mode: mode)
         replay.feed(["id": 1, "result": ["codexHome": "/Users/example/.codex", "platformFamily": "unix", "platformOs": "macos", "userAgent": "something/0.163.0"]])
-        replay.feed(["id": 2, "result": ["thread": ["id": thread], "model": "fake-model", "approvalPolicy": mode ?? "on-request", "reasoningEffort": NSNull()]])
+        replay.feed(["id": 2, "result": ["thread": ["id": thread], "model": "fake-model", "approvalPolicy": policy ?? mode ?? "on-request", "reasoningEffort": NSNull()]])
         return replay
+    }
+
+    static func params(_ replay: Replay, _ method: String) -> [String: Any]? {
+        replay.lines().last { $0["method"] as? String == method }?["params"] as? [String: Any]
     }
 
     static func started(_ replay: Replay, call id: Int) {
@@ -117,14 +122,28 @@ import SomethingCore
         #expect(Replay.codex(resume: Self.thread).fold.agent.thread == Self.thread)
     }
 
+    /// A launch without a mode leaves the thread's policy as it is, unless that policy never asks: its first turn
+    /// then asks when needed. A mode chosen goes with the thread.
     @Test func aLaunchAsksWhenNeededUnlessToldOtherwise() throws {
         let replay = Self.opened()
-        let start = try #require(replay.lines().first { $0["method"] as? String == "thread/start" }?["params"] as? [String: Any])
-        #expect(start["approvalPolicy"] as? String == "on-request")
+        #expect(Self.params(replay, "thread/start")?["approvalPolicy"] == nil, "a resumed thread's own policy is kept")
         #expect(replay.fold.agent.thread == Self.thread)
         #expect(replay.fold.agent.mode == "on-request")
-        let never = Self.opened(mode: "never")
-        #expect((never.lines().first { $0["method"] as? String == "thread/start" }?["params"] as? [String: Any])?["approvalPolicy"] as? String == "never")
+        _ = try replay.agent.send("Hello.", when: "next")
+        #expect(Self.params(replay, "turn/start")?["approvalPolicy"] == nil)
+
+        let chosen = Self.opened(mode: "never")
+        #expect(Self.params(chosen, "thread/start")?["approvalPolicy"] as? String == "never")
+        _ = try chosen.agent.send("Hello.", when: "next")
+        #expect(Self.params(chosen, "turn/start")?["approvalPolicy"] == nil, "the person chose it")
+
+        for policy: Any in ["never", ["granular": ["rules": false]], NSNull()] {
+            let raised = Self.opened(policy: policy)
+            _ = try raised.agent.send("Hello.", when: "next")
+            #expect(Self.params(raised, "turn/start")?["approvalPolicy"] as? String == "on-request", "\(policy)")
+        }
+        #expect(Self.opened(policy: ["granular": ["rules": false]]).fold.agent.mode == "granular")
+        #expect(Self.opened(policy: NSNull()).fold.agent.mode == nil, "a null policy is unknown, not granular")
     }
 
     /// Messages sent before Codex answered: the first starts the turn once the thread exists, a steer waits for the
@@ -168,12 +187,26 @@ import SomethingCore
         #expect(replay.fold.agent.error?.message == "Codex did not confirm the interrupt within 5 seconds; it may still be working.")
         #expect(try replay.agent.interrupt())
         #expect(replay.lines().filter { $0["method"] as? String == "turn/interrupt" }.count == 2)
-        // A late answer to the first changes nothing.
+        // A late answer to the first leaves the second unanswered: its timer still says so.
         replay.feed(["id": 5, "result": [:]])
+        Self.unrelatedError(replay)
         replay.scheduled.removeFirst()()
-        #expect(replay.fold.agent.error?.message.contains("5 seconds") == true)
+        #expect(replay.fold.agent.error?.message == "Codex did not confirm the interrupt within 5 seconds; it may still be working.")
+        // An interrupt answered in time: its timer says nothing.
+        #expect(try replay.agent.interrupt())
+        replay.feed(["id": 7, "result": [:]])
+        Self.unrelatedError(replay)
+        replay.scheduled.removeFirst()()
+        #expect(replay.fold.agent.error?.message == "Invented unrelated error.")
     }
 
+    static func unrelatedError(_ replay: Replay) {
+        replay.feed(["method": "error", "params": ["threadId": thread, "error": ["message": "Invented unrelated error."], "willRetry": false]])
+        #expect(replay.fold.agent.error?.message == "Invented unrelated error.")
+    }
+
+    /// The state shows what Codex reports once it took the turn, never what was asked: here Codex took a
+    /// different effort than the one asked for.
     @Test func settingsGoWithTheNextTurn() throws {
         let replay = Self.opened()
         #expect(try replay.agent.driver.set(model: "other-model", mode: "untrusted", effort: "low") == "next-turn")
@@ -182,7 +215,12 @@ import SomethingCore
         let params = try #require(replay.lines().last?["params"] as? [String: Any])
         #expect((params["model"] as? String, params["approvalPolicy"] as? String, params["effort"] as? String) == ("other-model", "untrusted", "low"))
         Self.started(replay, call: 4)
-        #expect((replay.fold.agent.model, replay.fold.agent.mode, replay.fold.agent.effort) == ("other-model", "untrusted", "low"))
+        #expect((replay.fold.agent.model, replay.fold.agent.mode) == ("fake-model", "on-request"), "nothing is reported yet")
+        let read = try #require(replay.lines().first { $0["method"] as? String == "thread/resume" })
+        #expect(read["id"] as? Int == 5)
+        #expect(read["params"] as? [String: AnyHashable] == ["threadId": Self.thread, "excludeTurns": true], "no override: only a read")
+        replay.feed(["id": 5, "result": ["thread": ["id": Self.thread], "model": "other-model", "approvalPolicy": "untrusted", "reasoningEffort": "medium"]])
+        #expect((replay.fold.agent.model, replay.fold.agent.mode, replay.fold.agent.effort) == ("other-model", "untrusted", "medium"))
         replay.feed(["method": "turn/completed", "params": ["threadId": Self.thread, "turn": ["id": Self.turn, "status": "completed"]]])
         _ = try replay.agent.send("Again.", when: "next")
         #expect((replay.lines().last?["params"] as? [String: Any])?["model"] == nil, "Codex keeps them: they are sent once")
@@ -243,6 +281,47 @@ import SomethingCore
         let early = Replay.codex()
         early.agent.ended(code: 1, errors: "error: unexpected argument\n", asked: false)
         #expect(early.fold.agent.error == AgentError(code: "LAUNCH_FAILED", message: "Codex could not start: error: unexpected argument"))
+    }
+
+    /// An interrupt asked before Codex refused the turn belongs to that turn: the next one is not interrupted.
+    @Test func aRefusedTurnTakesItsInterruptAlong() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.send("First.", when: "next")
+        _ = try replay.agent.send("Steered.", when: "now")
+        #expect(try replay.agent.interrupt())
+        replay.feed(["id": 4, "error": ["code": -32600, "message": "Invalid request: invented refusal"]])
+        #expect(try replay.agent.send("Second.", when: "next") == "started")
+        Self.started(replay, call: 5)
+        let methods = replay.lines().compactMap { $0["method"] as? String }
+        #expect(!methods.contains("turn/interrupt") && !methods.contains("turn/steer"), "\(methods)")
+    }
+
+    /// For a model the catalog does not list, no effort is offered, so none can be set.
+    @Test func noEffortForAModelTheCatalogLacks() throws {
+        let replay = Self.opened()
+        let entry: [String: Any] = ["id": "other-model", "model": "other-model", "displayName": "Other", "hidden": false,
+                                    "supportedReasoningEfforts": [["reasoningEffort": "low", "description": "Invented."]]]
+        replay.feed(["id": 3, "result": ["data": [entry]]])
+        #expect(replay.agent.agent.can.effort == false)
+        #expect(replay.agent.agent.because["effort"] != nil)
+        let listed = Replay.codex()
+        listed.feed(["id": 1, "result": [:]])
+        listed.feed(["id": 2, "result": ["thread": ["id": Self.thread], "model": "other-model", "approvalPolicy": "on-request"]])
+        listed.feed(["id": 3, "result": ["data": [entry]]])
+        #expect(listed.agent.agent.can.effort == true)
+    }
+
+    /// A question Codex sent without its text is not shown, and the answers go to the questions shown.
+    @Test func answersGoToTheQuestionsShown() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.send("Please ask-me something.", when: "next")
+        Self.started(replay, call: 4)
+        replay.feed(["id": 0, "method": "item/tool/requestUserInput", "params": ["threadId": Self.thread, "itemId": "call_3", "questions": [
+            ["id": "blank", "header": "Blank", "options": []],
+            ["id": "colour", "header": "Colour", "question": "Which colour?", "options": [["label": "Blue", "description": "Calm"]]]]]])
+        #expect(replay.agent.prompt("codex-1:0")?.questions.map(\.text) == ["Which colour?"])
+        #expect(try replay.agent.answer("codex-1:0", .choice([["Blue"]])))
+        #expect((replay.lines().last?["result"] as? [String: Any])?["answers"] as? [String: [String: [String]]] == ["colour": ["answers": ["Blue"]]])
     }
 
     @Test func aRefusedTurnEndsItAndTheQueueGoesOn() throws {

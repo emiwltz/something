@@ -6,7 +6,8 @@
 // Each case gets a throwaway HOME and CODEX_HOME under $TMPDIR, deleted after, whatever the case's outcome. Its
 // config.toml declares a model provider that points at the fake, with a made-up key given for the trial only; no
 // login is there, so nothing reaches a real model or the person's ~/.codex. Two features under development are
-// enabled for the trial only, so the fake model can ask a question and ask for more permissions.
+// enabled for the trial only, so the fake model can ask a question and ask for more permissions; and the feature that
+// starts Codex's background daemon is on, the worst case a stranger may have, for K-X1.
 // SOMETHING_TRIAL_RECORD=<folder> also writes each case as an exchange in the format of Tests/Exchanges/codex, its
 // paths made /Users/example: the raw material of a replay.
 import Foundation
@@ -47,6 +48,8 @@ import SomethingCore
             wire_api = "responses"
             requires_openai_auth = false
             supports_websockets = false
+            [features]
+            daemon_auto_start = true
 
             """.write(to: folders[0].appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
         let program = trialCodex!
@@ -60,7 +63,6 @@ import SomethingCore
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             exchange.rows.append([written ? "something" : "codex": frame])
         })
-        (agent.driver as! CodexDriver).quit = { [weak spawn] in spawn?.closeInput() }
     }
 
     final class Exchange { var rows: [[String: Any]] = [["begin": true]] }
