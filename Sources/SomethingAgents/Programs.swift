@@ -44,8 +44,8 @@ public final class Programs {
     var systemFolders = ["/opt/homebrew/bin", "/usr/local/bin"]
     private let home: String
     private let lock = NSLock()
-    /// The login shell's folders by `interactive`, kept after the first read, a failed one included (nil).
-    private var shellFolders: [Bool: [String]?] = [:]
+    /// The login shell's folders by `interactive`, kept after the first read that worked; a failed one is tried again.
+    private var shellFolders: [Bool: [String]] = [:]
 
     /// `environment` is the person's: the Terminal's when something was started from one, else the app's own.
     public init(environment: [String: String]) {
@@ -53,44 +53,70 @@ public final class Programs {
         home = environment["HOME"] ?? NSHomeDirectory()
     }
 
-    /// Whether the program's file was found; nil for a kind something does not look for. Never runs the program.
+    /// Whether the program's file was found; nil for a kind something does not look for, and when it was not found
+    /// but the login shell's PATH, which was needed, could not be read. Never runs the program.
     public func installed(_ kind: String) -> Bool? {
         guard Programs.kinds.contains(kind) else { return nil }
-        return first(kind, in: folders(interactive: false)) != nil
+        let search = folders(interactive: false)
+        if first(kind, in: search.list) != nil { return true }
+        return search.known ? false : nil
     }
 
     /// The program to launch for `kind`. Throws NOT_INSTALLED when no file is found (or for an unknown kind), and
-    /// INTERPRETER_NOT_FOUND when what it runs on (node, for example) is missing; each says what to type.
+    /// INTERPRETER_NOT_FOUND when what it runs on (node, for example) is missing; each says what to type, or, when
+    /// the login shell's PATH could not be read, how to start something from Terminal so that it has that PATH.
     public func find(_ kind: String) throws -> Program {
         guard let (name, command) = Programs.install[kind] else {
             throw CodedError("NOT_INSTALLED", "something does not know how to launch \(kind).")
         }
-        var folders = folders(interactive: false)
-        guard let path = first(kind, in: folders) else {
+        var search = folders(interactive: false)
+        guard let path = first(kind, in: search.list) else {
+            if !search.known { throw CodedError("NOT_INSTALLED", unread(name)) }
             throw CodedError("NOT_INSTALLED", "\(name) was not found on this Mac. To install it, type in Terminal: \(command)")
         }
-        var missing = missingInterpreter(of: path, kind: kind, in: folders)
+        var missing = missingInterpreter(of: path, kind: kind, in: search.list + bundled(kind))
         if missing != nil {
             // nvm and similar tools put node on the PATH only in an interactive shell.
-            folders = self.folders(interactive: true)
-            missing = missingInterpreter(of: path, kind: kind, in: folders)
+            search = folders(interactive: true)
+            missing = missingInterpreter(of: path, kind: kind, in: search.list + bundled(kind))
         }
         if let missing {
+            if !search.known { throw CodedError("INTERPRETER_NOT_FOUND", unread("what \(name) needs (\(missing))")) }
             let how = missing == "node" ? "To install it, type in Terminal: brew install node"
                 : missing.hasPrefix("/") ? "Install \(name) again: \(command)" : "Install \(missing), then try again."
             throw CodedError("INTERPRETER_NOT_FOUND", "\(name) needs \(missing), which was not found on this Mac. \(how)")
         }
-        return Program(kind: kind, path: path, folders: Programs.unique([(path as NSString).deletingLastPathComponent] + folders))
+        let folder = (path as NSString).deletingLastPathComponent
+        return Program(kind: kind, path: path, folders: Programs.unique([folder] + search.list + bundled(kind)))
     }
 
     /// Where to look, in order: the PATH from the command line when there is one, else the login shell's; then the
-    /// folders installers use, for a shell that does not set them.
-    func folders(interactive: Bool) -> [String] {
+    /// folders installers use, for a shell that does not set them. `known` is false when the login shell's PATH was
+    /// needed and could not be read: what is not found there is then not known to be missing.
+    func folders(interactive: Bool) -> (list: [String], known: Bool) {
         let given = (environment["PATH"] ?? "").split(separator: ":").map(String.init)
         let fromTerminal = given.contains { !Programs.launchdFolders.contains($0) }
-        let path = fromTerminal && !interactive ? given : (shell(interactive: interactive) ?? given)
+        var path = given
+        var known = true
+        if interactive || !fromTerminal {
+            if let read = shell(interactive: interactive) { path = read } else { known = false }
+        }
         let fixed = systemFolders + [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"].map { "\(home)/\($0)" }
-        return Programs.unique(path + (interactive ? given : []) + fixed)
+        return (Programs.unique(path + (interactive ? given : []) + fixed), known)
+    }
+
+    /// Folders a program's installer filled for it alone: the node pi's installer brings, which pi's launcher puts on
+    /// the PATH itself. It goes last on the child's PATH too, so that a pi started by `#!/usr/bin/env node` finds it.
+    func bundled(_ kind: String) -> [String] {
+        guard kind == "pi" else { return [] }
+        let piNode = "\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/pi-node/current/bin"
+        return FileManager.default.fileExists(atPath: piNode) ? [piNode] : []
+    }
+
+    /// The sentence for something the login shell's PATH was needed to find, and could not be read.
+    private func unread(_ what: String) -> String {
+        "something could not read the PATH of your login shell (\(environment["SHELL"] ?? "/bin/zsh")), so it cannot tell "
+            + "whether \(what) is on this Mac. Quit something, then start it from Terminal by typing: something"
     }
 
     /// The first executable file named `kind` in `folders`. The Claude desktop app's own copy is never used: it is
@@ -111,12 +137,7 @@ public final class Programs {
         if let named = Programs.interpreter(of: (path as NSString).resolvingSymlinksInPath) { needs.insert(named, at: 0) }
         return needs.first { need in
             if need.hasPrefix("/") { return !FileManager.default.isExecutableFile(atPath: need) }
-            var places = folders
-            // pi's launcher puts the node its installer brought first on the PATH itself.
-            if kind == "pi" && need == "node" {
-                places.append("\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/pi-node/current/bin")
-            }
-            return !places.contains { FileManager.default.isExecutableFile(atPath: "\($0)/\(need)") }
+            return !folders.contains { FileManager.default.isExecutableFile(atPath: "\($0)/\(need)") }
         }
     }
 
@@ -133,33 +154,39 @@ public final class Programs {
         return words.dropFirst().first { !$0.hasPrefix("-") && !$0.contains("=") }
     }
 
-    /// The login shell's PATH folders (`-l`, and `-i` too when `interactive`), read once and kept; nil when the shell
-    /// is not absolute, fails, prints no markers or takes longer than 3 s. The markers set the PATH apart from what
-    /// the person's startup files print.
+    /// The login shell's PATH folders (`-l`, and `-i` too when `interactive`), kept once read; nil when the shell is
+    /// not absolute, fails, prints no marker or takes longer than 3 s.
     func shell(interactive: Bool) -> [String]? {
-        if case .some(let kept) = lock.withLock({ shellFolders[interactive] }) { return kept }
-        let folders = readShell(interactive: interactive)
-        lock.withLock { shellFolders[interactive] = .some(folders) }
+        if let kept = lock.withLock({ shellFolders[interactive] }) { return kept }
+        guard let folders = readShell(interactive: interactive) else { return nil }
+        lock.withLock { shellFolders[interactive] = folders }
         return folders
     }
 
     private func readShell(interactive: Bool) -> [String]? {
         let shell = environment["SHELL"] ?? "/bin/zsh"
         guard shell.hasPrefix("/") else { return nil }
-        let spawn = Spawn(path: shell, arguments: (interactive ? ["-l", "-i"] : ["-l"]) + ["-c", "printf '<<%s>>' \"$PATH\""],
+        // A POSIX child prints the PATH it inherits, which every shell exports joined by colons (fish's own "$PATH"
+        // is joined by spaces). The marker is new at each read, so nothing the startup files print passes for it.
+        let marker = "<<something-\(UUID().uuidString)>>"
+        let command = #"/bin/sh -c 'printf "\#(marker)%s\n" "$PATH"'"#
+        let spawn = Spawn(path: shell, arguments: (interactive ? ["-l", "-i"] : ["-l"]) + ["-c", command],
                           folder: FileManager.default.fileExists(atPath: home) ? home : "/", environment: environment, input: false)
-        let said = NSMutableData(), finished = DispatchSemaphore(value: 0)
+        let found = NSLock()
+        var path: String?
+        let answered = DispatchSemaphore(value: 0)
         do {
-            try spawn.start(lines: { line in said.append(line); said.append(Data([0x0A])) }, ended: { _ in finished.signal() })
+            try spawn.start(lines: { line in
+                let text = String(decoding: line, as: UTF8.self)
+                guard text.hasPrefix(marker) else { return }
+                found.withLock { path = String(text.dropFirst(marker.count)) }
+                answered.signal()
+            }, ended: { _ in answered.signal() })
         } catch { return nil }
-        guard finished.wait(timeout: .now() + Programs.shellTimeout) == .success else {
-            spawn.stop(cap: 0)
-            return nil
-        }
-        let text = String(decoding: said as Data, as: UTF8.self)
-        guard let end = text.range(of: ">>", options: .backwards),
-              let start = text.range(of: "<<", options: .backwards, range: text.startIndex..<end.lowerBound) else { return nil }
-        return text[start.upperBound..<end.lowerBound].split(separator: ":").map(String.init)
+        _ = answered.wait(timeout: .now() + Programs.shellTimeout)
+        // Taken as soon as it is printed: the shell, and anything its startup files left running, is not waited for.
+        spawn.stop(cap: 0)
+        return found.withLock { path }?.split(separator: ":").map(String.init)
     }
 
     static func unique(_ folders: [String]) -> [String] {

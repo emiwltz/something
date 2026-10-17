@@ -29,9 +29,10 @@ final class FakeMac {
             #!/bin/sh
             : > "\(root)/shell-ran"
             \(before)
-            echo 'Welcome back <<not the PATH>>'
+            echo '<<something-decoy>>/Users/example/decoy'
             case " $* " in *" -i "*) PATH='\(interactive.map { "\(root)/\($0)" }.joined(separator: ":"))' ;;
               *) PATH='\(login.map { "\(root)/\($0)" }.joined(separator: ":"))' ;; esac
+            export PATH   # a login shell always exports it, even when it started without one
             for last; do :; done
             eval "$last"
             echo 'rc noise after'
@@ -104,13 +105,18 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(opencode?.message.hasSuffix("Install OpenCode again: brew install opencode") == true)
     }
 
-    /// The node pi's installer brought is found where pi's launcher looks for it.
+    /// The node pi's installer brought is found where pi's launcher looks for it, and is on the child's PATH for a pi
+    /// that `env` starts.
     @Test func pisOwnNodeCounts() throws {
         let mac = try FakeMac()
         try mac.program("home/.local/bin/pi")
-        try mac.program("home/.local/share/pi-node/current/bin/node")
-        let pi = try mac.programs(["PATH": "/usr/bin:/bin", "SHELL": "/Users/example/no-shell"]).find("pi")
-        #expect(pi.path == "\(mac.home)/.local/bin/pi")
+        try mac.program("term/pi", "#!/usr/bin/env node")
+        let piNode = try (mac.program("home/.local/share/pi-node/current/bin/node") as NSString).deletingLastPathComponent
+        let fromFinder = try mac.programs(["PATH": "/usr/bin:/bin", "SHELL": "/Users/example/no-shell"]).find("pi")
+        #expect(fromFinder.path == "\(mac.home)/.local/bin/pi")
+        let fromTerminal = try mac.programs(["PATH": "\(mac.root)/term:/usr/bin:/bin"]).find("pi")
+        #expect(fromTerminal.path == "\(mac.root)/term/pi")
+        #expect(fromTerminal.folders.last == piNode)
     }
 
     @Test func aProgramNotFoundSaysWhatToType() throws {
@@ -142,18 +148,39 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(programs.installed("claude") == false)
     }
 
+    /// From the Finder, a shell that hangs is given up after 3 s and ended. What it would have found is then not
+    /// known to be missing: installed says nil, and find says how to give something the PATH.
     @Test func aShellThatHangsIsLeftAfterThreeSeconds() throws {
         let mac = try FakeMac()
-        try mac.program("term/codex")
-        let shell = try mac.shell(login: ["login"], interactive: [], before: "sleep 30")
-        let programs = mac.programs(["PATH": "/usr/bin:/bin:\(mac.root)/term", "SHELL": shell])
-        programs.systemFolders = []
-        let start = Date()
-        // From the Finder (only launchd's folders), the hanging shell is read, given up, and the given PATH used.
+        try mac.program("login/codex")
+        let shell = try mac.shell(login: ["login"], interactive: [], before: "echo $$ > '\(mac.root)/shell-pid'; sleep 30")
         let finder = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": shell])
-        #expect(finder.installed("codex") == false)
-        #expect(Date().timeIntervalSince(start) < 4.5)
-        #expect(try programs.find("codex").path == "\(mac.root)/term/codex")
+        let start = Date()
+        #expect(finder.installed("codex") == nil)
+        let took = Date().timeIntervalSince(start)
+        #expect(took > 2.9 && took < 4.5)
+        #expect(mac.shellRan)
+        let pid = try #require(pid_t((try? String(contentsOfFile: "\(mac.root)/shell-pid", encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
+        let deadline = Date().addingTimeInterval(2)
+        while processExists(pid) && Date() < deadline { usleep(20_000) }
+        #expect(!processExists(pid))
+        let error = code { _ = try finder.find("codex") }
+        #expect(error?.code == "NOT_INSTALLED")
+        #expect(error?.message.hasSuffix("start it from Terminal by typing: something") == true)
+        // From a Terminal, the shell is not needed and what is not found is not there.
+        #expect(mac.programs(["PATH": "\(mac.root)/term:/usr/bin:/bin", "SHELL": shell]).installed("codex") == false)
+    }
+
+    /// A failed read is not kept: once the shell answers, the program is found.
+    @Test func aFailedReadIsTriedAgain() throws {
+        let mac = try FakeMac()
+        try mac.program("login/codex")
+        let shell = try mac.shell(login: ["login"], interactive: [], before: "[ -f '\(mac.root)/ready' ] || exit 1")
+        let programs = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": shell])
+        #expect(programs.installed("codex") == nil)
+        try "".write(toFile: "\(mac.root)/ready", atomically: true, encoding: .utf8)
+        #expect(programs.installed("codex") == true)
     }
 
     @Test func theFirstLineNamesTheInterpreter() throws {

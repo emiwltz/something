@@ -14,15 +14,24 @@ final class Fixture: @unchecked Sendable {
     private(set) var status: Int32?
     let ended = DispatchSemaphore(value: 0)
 
+    private(set) var endedAt: Date?
+
     init(_ script: String, input: Bool = true) throws {
         spawn = Spawn(path: "/bin/sh", arguments: ["-c", script], folder: NSTemporaryDirectory(),
                       environment: ["PATH": "/usr/bin:/bin", "HOME": "/Users/example"], input: input)
         try spawn.start(lines: { [self] data in lock.withLock { said.append((String(decoding: data, as: UTF8.self), Date())) } },
-                        ended: { [self] code in lock.withLock { status = code }; ended.signal() })
+                        ended: { [self] code in
+            lock.withLock {
+                status = code
+                endedAt = Date()
+            }
+            ended.signal()
+        })
     }
 
     var lines: [String] { lock.withLock { said.map(\.line) } }
     func when(_ line: String) -> Date? { lock.withLock { said.first { $0.line == line }?.at } }
+    var lastLineAt: Date? { lock.withLock { said.last?.at } }
 
     /// Waits until `line` was written, at most `seconds`.
     func wait(for line: String, seconds: Double = 5) -> Bool {
@@ -81,8 +90,55 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         #expect(processExists(grandchild))
         let took = fixture.stop()
         #expect(fixture.status == 0)
-        #expect(took > 2.8 && took < 4.5)
+        #expect(took > 1.8 && took < 4.5)
         #expect(getpgid(grandchild) == -1)
+    }
+
+    /// With nobody stopping it, a program that ended leaves nothing behind that holds its outputs, and no line comes
+    /// after `ended`.
+    @Test func whatHoldsTheOutputsAfterTheEndIsEnded() throws {
+        let fixture = try Fixture("(sleep 1; echo late; sleep 60) & echo $!; exit 0", input: false)
+        #expect(fixture.ended.wait(timeout: .now() + 4) == .success)
+        let grandchild = try #require(pid_t(fixture.lines.first ?? ""))
+        let deadline = Date().addingTimeInterval(4)
+        while getpgid(grandchild) != -1 && Date() < deadline { usleep(20_000) }
+        #expect(getpgid(grandchild) == -1)
+        #expect(try #require(fixture.lastLineAt) <= (try #require(fixture.endedAt)))
+        #expect(fixture.lines.contains("late"))   // written within the two seconds the outputs are given
+    }
+
+    @Test func aWriteAfterTheEndIsRefused() throws {
+        let fixture = try Fixture("exit 0")
+        #expect(fixture.ended.wait(timeout: .now() + 5) == .success)
+        #expect(code { try fixture.spawn.write(Data("late".utf8)) }?.code == "AGENT_STOPPED")
+    }
+
+    /// The program closed its input but runs on: the write that fails makes the next one throw.
+    @Test func aFailedWriteIsSaid() throws {
+        let fixture = try Fixture("exec 0<&-; echo ready; sleep 60")
+        #expect(fixture.wait(for: "ready"))
+        try fixture.spawn.write(Data("lost".utf8))
+        let deadline = Date().addingTimeInterval(2)
+        var refused: CodedError?
+        while refused == nil && Date() < deadline {
+            refused = code { try fixture.spawn.write(Data("again".utf8)) }
+            usleep(20_000)
+        }
+        #expect(refused?.code == "AGENT_STOPPED")
+        _ = fixture.stop()
+    }
+
+    /// A second stop joins the ladder that runs, and its smaller cap still holds.
+    @Test func aSecondStopJoinsTheFirst() throws {
+        let fixture = try Fixture("trap '' TERM; echo ready; while :; do sleep 0.05; done")
+        #expect(fixture.wait(for: "ready"))
+        let start = Date(), first = DispatchSemaphore(value: 0), second = DispatchSemaphore(value: 0)
+        fixture.spawn.stop { first.signal() }
+        fixture.spawn.stop(cap: 1) { second.signal() }
+        #expect(first.wait(timeout: .now() + 3) == .success)
+        #expect(second.wait(timeout: .now() + 1) == .success)
+        #expect(Date().timeIntervalSince(start) < 1.5)
+        #expect(!processExists(fixture.spawn.pid))
     }
 
     /// Lines come back whole, whatever they hold: U+2028 and U+2029 are not line ends, and 1 MB is one line.
@@ -137,7 +193,7 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         Spawn.stopAll(fixtures.map(\.spawn), cap: 1.5) { done.signal() }
         done.wait()
         let took = Date().timeIntervalSince(start)
-        #expect(took > 1.4 && took < 3)
+        #expect(took > 1.2 && took < 1.7)
         for fixture in fixtures { #expect(!processExists(fixture.spawn.pid)) }
     }
 
@@ -156,10 +212,14 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 
     @Test func aMissingFileIsNotInstalled() {
         let spawn = Spawn(path: "/Users/example/no-such-agent", arguments: [], folder: "/", environment: [:])
-        #expect(throws: CodedError.self) { try spawn.start(lines: { _ in }, ended: { _ in }) }
-        do { try spawn.start(lines: { _ in }, ended: { _ in }) } catch let error as CodedError {
-            #expect(error.code == "NOT_INSTALLED")
-        } catch {}
+        #expect(code { try spawn.start(lines: { _ in }, ended: { _ in }) }?.code == "NOT_INSTALLED")
+    }
+
+    /// posix_spawn answers ENOENT for a missing folder too: the program is fine, and is not said to be missing.
+    @Test func aMissingFolderIsSaidAsSuch() {
+        let spawn = Spawn(path: "/bin/sh", arguments: [], folder: "/Users/example/missing", environment: [:])
+        #expect(code { try spawn.start(lines: { _ in }, ended: { _ in }) } ==
+                CodedError("LAUNCH_FAILED", "The folder /Users/example/missing does not exist on this Mac."))
     }
 }
 
@@ -194,6 +254,20 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         #expect(queue.fold.agent.queue.isEmpty)
         #expect(queue.record(.turnEnded(.interrupted), at: at) == nil)
         #expect(try queue.send("Fresh.", when: "next", at: at) == .started)
+    }
+
+    /// What is sent between an interrupt and the end of the turn it stops was said to be queued: it is delivered.
+    @Test func aMessageHeldAfterAnInterruptIsDelivered() throws {
+        var queue = fresh()
+        _ = try queue.send("Hello.", when: "next", at: at)
+        _ = queue.record(.turnStarted(id: nil), at: at)
+        _ = try queue.send("Dropped by the interrupt.", when: "next", at: at)
+        #expect(queue.interrupt() == true)
+        #expect(try queue.send("After the interrupt.", when: "next", at: at) == .queued)
+        #expect(try queue.send("And this one.", when: "next", at: at) == .queued)
+        #expect(queue.record(.turnEnded(.interrupted), at: at)?.text == "After the interrupt.")
+        #expect(queue.fold.agent.queue.map(\.text) == ["And this one."])
+        #expect(queue.record(.turnEnded(.done), at: at)?.text == "And this one.")
     }
 
     @Test func aFailedTurnStillHandsTheNextOneOver() throws {
