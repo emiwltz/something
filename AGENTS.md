@@ -49,6 +49,7 @@ What is committed here is public, and stays in the history even when a later com
 ```sh
 swift build
 swift test
+node --test Tests/something-js.test.mjs    # name the file: node 22 does not take a folder
 ```
 
 - **Fakes shaped exactly like real data.** Fake agents that speak each channel, fake session files with invented text. A fixture that does not match the real shape proves nothing.
