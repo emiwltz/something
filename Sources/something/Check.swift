@@ -3,6 +3,7 @@
 // rights granted except those --refuse names, and reports what the page did wrong. Its output is read by an agent's
 // model, which may run off this Mac: it never reads a real agent's state or the person's memory.
 import AppKit
+import SomethingAgents
 import SomethingCore
 import WebKit
 
@@ -101,7 +102,7 @@ final class CheckRunner {
         grant.refused = refused
         let folder = declaration.folder.flatMap { Declaration.expand($0, home: CheckRunner.invented) }
         grant.folder = folder ?? CheckRunner.invented.appendingPathComponent("code").path
-        let granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: CheckRunner.invented)
+        let granted = Rights.granted(reading, grant, limits: Engine.limits, home: CheckRunner.invented)
         report.rights.granted = granted.rights
         report.rights.refused = granted.refused
         report.rights.unavailable = reading.unavailable

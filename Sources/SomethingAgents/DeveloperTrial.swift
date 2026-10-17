@@ -12,21 +12,40 @@ enum DeveloperTrial {
         Then type a message, or: /now <message> (steer), /interrupt, /allow, /deny, /answer <label>[; <label>…], /stop.
         """
 
-    /// Returns the exit status: 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
-    static func main(_ arguments: [String]) -> Int32 {
-        var words = arguments[...]
-        if words.first == "try" { words = words.dropFirst() }
-        guard let kind = words.popFirst(), let type = Engine.drivers[kind] else { return fail(usage, 2) }
-        var file: String?, planB = false
+    /// What the words ask for.
+    struct Asked {
+        var kind: String, type: any Driver.Type, record: String?, planB = false
+    }
+
+    /// What `arguments` (every word after `something`, `try` first) ask for, or the sentence that says why they are
+    /// wrong. Launches nothing: the tests check with it that no test's words would start a real agent.
+    static func parse(_ arguments: [String]) -> Result<Asked, SpaceError> {
+        guard arguments.first == "try" else { return .failure(SpaceError(usage)) }
+        var words = arguments.dropFirst()
+        guard let kind = words.popFirst(), let type = Engine.drivers[kind] else { return .failure(SpaceError(usage)) }
+        var asked = Asked(kind: kind, type: type, record: nil)
         while let word = words.popFirst() {
             switch word {
-            case "--record": guard let path = words.popFirst() else { return fail(usage, 2) }; file = path
+            case "--record":
+                guard let path = words.popFirst() else { return .failure(SpaceError(usage)) }
+                asked.record = path
             case "--plan-b":
-                guard type is ClaudeDriver.Type else { return fail("something try: --plan-b is for claude only.", 2) }
-                planB = true
-            default: return fail(usage, 2)
+                guard type is ClaudeDriver.Type else { return .failure(SpaceError("something try: --plan-b is for claude only.")) }
+                asked.planB = true
+            default: return .failure(SpaceError(usage))
             }
         }
+        return .success(asked)
+    }
+
+    /// Returns the exit status: 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
+    static func main(_ arguments: [String]) -> Int32 {
+        let asked: Asked
+        switch parse(arguments) {
+        case .success(let words): asked = words
+        case .failure(let wrong): return fail(wrong.message, 2)
+        }
+        let (kind, type, file, planB) = (asked.kind, asked.type, asked.record, asked.planB)
         var output: FileHandle?
         if let file {
             guard FileManager.default.createFile(atPath: file, contents: nil), let handle = FileHandle(forWritingAtPath: file) else {

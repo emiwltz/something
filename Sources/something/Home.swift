@@ -1,13 +1,12 @@
 // Home (design 5): the spaces of the spaces folder in a table, the card of the selected one beside it, and below,
 // the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
-// Make default and Show in Finder act on the selected space; Import makes a new one; New is shown, disabled, until it
-// exists. A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
+// Make default and Show in Finder act on the selected space; New (as `something new`) and Import make a new one. A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
 // A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it).
 import AppKit
 import SomethingCore
 
 final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
-    let places: Places, examples: URL, ask: Asking
+    let places: Places, examples: URL, template: URL, ask: Asking
     let card: Card
     /// What Open does: the app opens the space in the space window.
     var open: (Space) -> Void = { _ in }
@@ -24,9 +23,10 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     /// failure said again at each time would bring its own window back without end.
     private var told: String?
 
-    /// `examples` is share/examples, which may not exist.
-    init(places: Places, examples: URL, ask: Asking) {
-        (self.places, self.examples, self.ask) = (places, examples, ask)
+    /// `share` holds template.html and examples/, which may not exist.
+    init(places: Places, share: URL, ask: Asking) {
+        (self.places, self.ask) = (places, ask)
+        (examples, template) = (share.appendingPathComponent("examples"), share.appendingPathComponent("template.html"))
         card = Card(places: places, ask: ask)
         super.init()
         for list in [table, sampleTable] {
@@ -137,6 +137,18 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         }
     }
 
+    /// Asks a name and makes the space as `something new <name>` does, selected; nothing when the person cancels.
+    @objc func newChosen() {
+        guard let name = ask.newName() else { return }
+        do {
+            let space = try Command.new(name, folder: false, places: places, template: template)
+            reload()
+            if let row = spaces.firstIndex(where: { $0.name == space.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
+        } catch {
+            ask.tell("The space \(name) was not made. \(Home.words(error))")
+        }
+    }
+
     @objc func importChosen() {
         if let url = ask.importFile() { importSpace(from: url) }
     }
@@ -233,7 +245,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         }
         actions = [button("Open", #selector(openSelected)), button("Export", #selector(exportSelected)),
                    button("Make default", #selector(makeDefault)), button("Show in Finder", #selector(showInFinder))]
-        let bar = NSStackView(views: [actions[0], button("New", nil), button("Import", #selector(importChosen))] + actions[1...])
+        let bar = NSStackView(views: [actions[0], button("New", #selector(newChosen)), button("Import", #selector(importChosen))] + actions[1...])
         let label = Card.header("Examples, read-only")
         let copy = button("Make a copy", #selector(makeACopy))
         exampleSection = [label, Home.scroll(sampleTable, height: 120), copy]

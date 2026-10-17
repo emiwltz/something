@@ -49,6 +49,8 @@ protocol Asking: AnyObject {
     func saveAs(_ name: String) -> URL?
     /// The .something file to import; nil when the person cancels.
     func importFile() -> URL?
+    /// The name of a new space, as typed; nil when the person cancels.
+    func newName() -> String?
     /// Says a failure that has no window of its own.
     func tell(_ message: String)
 }
@@ -151,6 +153,19 @@ final class NativeAsk: Asking {
         return panel.runModal() == .OK ? panel.url : nil
     }
 
+    func newName() -> String? {
+        let alert = NSAlert()
+        alert.messageText = "A new space"
+        alert.informativeText = "Its name, in small letters, digits and dashes, for example morning-review."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Make")
+        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
+        alert.window.initialFirstResponder = field
+        guard Ask.run(alert) == .alertFirstButtonReturn else { return nil }
+        return field.stringValue.trimmingCharacters(in: .whitespaces)
+    }
+
     func tell(_ message: String) {
         let alert = NSAlert()
         alert.messageText = message
@@ -197,7 +212,11 @@ enum Ask {
         switch parts[0] {
         case "state": return "See your agents and what they say"
         case "send": return "Write to, interrupt and change the \(kind.map { $0 + " " } ?? "")agents it launched"
-        case "launch": return "Launch or continue \(kind ?? "agents") in the folder chosen for it"
+        case "launch":
+            let launch = "Launch or continue \(kind ?? "agents") in the folder chosen for it"
+            // pi has no permission modes: a space that launches it gets an agent that never waits for a click.
+            guard parts.count == 1 || parts[1] == "pi" else { return launch }
+            return launch + (parts.count == 1 ? " (pi, one of them," : " (pi") + " runs commands and edits files without asking you first)"
         case "store": return "Keep a memory of its own on this Mac"
         default: return right
         }

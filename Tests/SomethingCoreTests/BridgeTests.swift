@@ -129,7 +129,7 @@ struct BridgeTests {
         #expect(code("interrupt", ["agent": "a1"], try FakeHost(["state"])) == "RIGHT_NOT_GRANTED")
         #expect(code("set", ["agent": "a1", "mode": "plan"], host) == "ok")
         #expect(code("set", ["agent": "a1"], host) == "BAD_PARAMS")
-        #expect(code("set", ["agent": "a1", "effort": "high"], host) == "NOT_SUPPORTED")
+        #expect(code("set", ["agent": "a1", "effort": "max"], host) == "VALUE_NOT_OFFERED")
         #expect(code("set", ["agent": "a1", "mode": "yolo"], host) == "VALUE_NOT_OFFERED")
         #expect(code("set", ["agent": "e1", "model": "gpt-example"], host) == "READ_ONLY_AGENT")
         let blog = try FakeHost(["state", "send"], scope: .folders(["/Users/example/code/blog"]))
@@ -137,6 +137,8 @@ struct BridgeTests {
         #expect(code("set", ["agent": "a1", "mode": "plan"], blog) == "AGENT_NOT_FOUND")
         host.state.agents[0].can.interrupt = false
         #expect(code("interrupt", ["agent": "a1"], host) == "NOT_SUPPORTED")
+        host.state.agents[0].can.effort = false
+        #expect(code("set", ["agent": "a1", "effort": "high"], host) == "NOT_SUPPORTED")
         host.state.agents[0].alive = false
         #expect(code("interrupt", ["agent": "a1"], host) == "AGENT_STOPPED")
         #expect(host.calls == ["interrupt a1", "set a1 - plan"] && blog.calls.isEmpty)
@@ -164,8 +166,9 @@ struct BridgeTests {
         #expect(code("launch", ["kind": "omp"], host) == "NOT_SUPPORTED")
         #expect(code("launch", ["kind": 3], host) == "BAD_PARAMS")
         // What a kind can never do here is refused by the bridge, before the shell is asked.
-        host.granted.limits = ["claude": ["effort"]]
-        #expect(code("launch", ["kind": "claude", "effort": "high"], host) == "NOT_SUPPORTED")
+        // An invented table: no kind something launches lacks a mode at launch but pi, whose right this host lacks.
+        host.granted.limits = ["claude": ["mode"]]
+        #expect(code("launch", ["kind": "claude", "mode": "plan"], host) == "NOT_SUPPORTED")
         host.granted.folder = nil
         #expect(code("launch", ["kind": "claude"], host) == "FOLDER_NOT_GRANTED")
         #expect(host.calls == ["launch claude /Users/example/code/shop", "launch claude /Users/example/code/shop/web"])

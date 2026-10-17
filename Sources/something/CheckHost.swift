@@ -2,6 +2,7 @@
 // engine would answer them, and records each call with its answer. It reaches no agent and opens no window, and the
 // person's journal and memory stay untouched: the check's memory is a throwaway file.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class CheckHost: BridgeHost {
@@ -51,7 +52,7 @@ final class CheckHost: BridgeHost {
 
     /// As if the person allowed a mode that lowers asking; a mode something never offers is refused as in the app.
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
-        _ = try SpaceWindow.lowers(mode, kind: kind)
+        _ = try Engine.lowersAsking(mode: mode, kind: kind)
         return true
     }
 

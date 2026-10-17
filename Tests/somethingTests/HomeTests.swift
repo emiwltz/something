@@ -10,9 +10,9 @@ import Testing
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct HomeTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
-    /// Home on the test's home; `examples` is a folder of the test's home, which may not exist.
+    /// Home on the test's home, whose root stands for share/: its examples folder and its template may not exist.
     func home(_ test: Home, _ ask: FakeAsk) -> something.Home {
-        let home = something.Home(places: test.places, examples: test.root.appendingPathComponent("examples"), ask: ask)
+        let home = something.Home(places: test.places, share: test.root, ask: ask)
         home.reveal = { _ in Issue.record("Show in Finder was not expected") }
         home.reload()
         return home
@@ -217,6 +217,36 @@ import Testing
         home.makeACopy()
         #expect(home.selectedSample?.name == "game")
         #expect(ask.told.count == 1 && ask.told[0].hasPrefix("A space named game already exists"), "\(ask.told)")
+    }
+
+    /// New makes the space as `something new` does: the template, and none of the answers a deleted space of the same
+    /// name left in the grants file.
+    @Test func newMakesASpaceAsTheCommandDoes() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let template = test.root.appendingPathComponent("template.html")
+        try FileManager.default.createDirectory(at: test.root, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: Home.share.appendingPathComponent("template.html"), to: template)
+        let home = home(test, ask)
+        var file = AppFile()
+        file.spaces["garden"] = answered(declared: ["state"], granted: ["state"])
+        try FileManager.default.createDirectory(at: test.places.support, withIntermediateDirectories: true)
+        try file.write(test.places.grants)
+
+        home.newChosen()
+        #expect(home.spaces.isEmpty, "a cancelled name makes nothing")
+        ask.named = "garden"
+        home.newChosen()
+        let made = try #require(home.selected)
+        #expect(made.name == "garden" && made.form == .file)
+        #expect(try Data(contentsOf: made.page) == Data(contentsOf: template))
+        #expect(try AppFile.read(test.places.grants).spaces["garden"] == nil)
+        for wrong in ["Garden", "garden"] {
+            ask.named = wrong
+            home.newChosen()
+            #expect(ask.told.last?.hasPrefix("The space \(wrong) was not made.") == true, "\(ask.told)")
+        }
+        #expect(home.spaces.map(\.name) == ["garden"])
     }
 
     @Test func exportAsksForTheDataAndImportStartsWithoutGrants() throws {

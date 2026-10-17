@@ -116,7 +116,7 @@ import SomethingCore
         let place = try Place()
         // The fake must be the program found, never the real one of this Mac.
         #expect(try Programs(environment: place.environment).find("claude").path == place.bin.appendingPathComponent("claude").path)
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         var changes = 0
         engine.changed = { changes += 1 }
         let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: "plan", effort: nil)
@@ -127,9 +127,7 @@ import SomethingCore
         #expect(engine.state.kinds["opencode"]?.launch == true)
         #expect(engine.state.kinds["pi"]?.launch == true)
         #expect(engine.state.kinds["omp"]?.launch == false)
-        #expect(engine.limits["claude"] == nil && engine.limits["codex"] == nil, "Claude and Codex have no limit left")
-        #expect(engine.limits["opencode"] == ["steer"])
-        #expect(engine.limits["pi"] == ["mode"])
+        #expect(Engine.limits == ["opencode": ["steer"], "pi": ["mode"]], "Claude and Codex have no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -160,7 +158,7 @@ import SomethingCore
     @Test func aLaunchedCodexTalksAndStops() async throws {
         let place = try Place()
         #expect(try Programs(environment: place.environment).find("codex").path == place.bin.appendingPathComponent("codex").path)
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("codex", folder: place.work.path, model: nil, mode: "untrusted", effort: nil)
         #expect(id == "codex-1")
         try await until("the thread") { engine.state.agents.first?.thread != nil && engine.state.agents.first?.options.model != nil }
@@ -184,7 +182,7 @@ import SomethingCore
     @Test func aLaunchedOpenCodeTalksAndStopsByCancelling() async throws {
         let place = try Place()
         #expect(try Programs(environment: place.environment).find("opencode").path == place.bin.appendingPathComponent("opencode").path)
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
         #expect(id == "opencode-1")
         try await until("the session") { engine.state.agents.first?.thread == "ses_invented0000000000000001" }
@@ -202,30 +200,35 @@ import SomethingCore
             try engine.deliver("Too late.", to: id, when: "next")
         }
         try await until("the stop") { stopped }
-        #expect(Date().timeIntervalSince(begun) < 2, "the cancel's answer ends the first step at once")
+        // Spawn gives the graceful step 3 s: ending under that shows the cancel's answer ended it, not the cap. The
+        // answer reaches the main queue, which the window suites keep busy while the whole suite runs (2.7 s seen).
+        #expect(Date().timeIntervalSince(begun) < 3, "the cancel's answer ends the first step before Spawn's cap")
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("cancels").path))
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("closed").path), "its input was closed: no signal")
         #expect(engine.state.agents.first?.state == "interrupted")
         #expect(engine.state.agents.first?.error == nil, "this home has no OpenCode database: no claim is said")
     }
 
-    /// The modes that make an agent ask less are confirmed by the person; an unknown mode is too.
-    @Test func whichModesLowerAsking() {
-        let engine = Engine(environment: [:])
-        for mode in ["acceptEdits", "auto", "dontAsk", "bypassPermissions"] { #expect(engine.lowersAsking(mode: mode, kind: "claude")) }
-        for mode in ["default", "manual", "plan"] { #expect(!engine.lowersAsking(mode: mode, kind: "claude")) }
-        #expect(engine.lowersAsking(mode: "never", kind: "codex") && !engine.lowersAsking(mode: "on-request", kind: "codex"))
-        #expect(!engine.lowersAsking(mode: "untrusted", kind: "codex"))
-        #expect(engine.lowersAsking(mode: "default", kind: "pi"), "pi takes no mode: one asked for is confirmed, never guessed")
-        #expect(!engine.lowersAsking(mode: "build", kind: "opencode") && !engine.lowersAsking(mode: "plan", kind: "opencode"))
-        #expect(engine.lowersAsking(mode: "invented-agent", kind: "opencode"))
-        #expect(engine.lowersAsking(mode: "anything", kind: "other"))
+    /// The modes that make an agent ask less are confirmed by the person; an unknown OpenCode agent is too. A mode
+    /// Claude or Codex is never given here is refused before any window.
+    @Test func whichModesLowerAsking() throws {
+        for mode in ["acceptEdits", "auto", "dontAsk"] { #expect(try Engine.lowersAsking(mode: mode, kind: "claude")) }
+        for mode in ["default", "plan"] { #expect(try !Engine.lowersAsking(mode: mode, kind: "claude")) }
+        #expect(try Engine.lowersAsking(mode: "never", kind: "codex") && !Engine.lowersAsking(mode: "on-request", kind: "codex"))
+        #expect(try !Engine.lowersAsking(mode: "untrusted", kind: "codex"))
+        #expect(try Engine.lowersAsking(mode: "default", kind: "pi"), "pi takes no mode: one asked for is confirmed, never guessed")
+        #expect(try !Engine.lowersAsking(mode: "build", kind: "opencode") && !Engine.lowersAsking(mode: "plan", kind: "opencode"))
+        #expect(try Engine.lowersAsking(mode: "invented-agent", kind: "opencode"))
+        #expect(try Engine.lowersAsking(mode: "anything", kind: "other"))
+        for (mode, kind) in [("bypassPermissions", "claude"), ("manual", "claude"), ("acceptedits", "claude"), ("granular", "codex")] {
+            #expect(throws: CodedError.self, "\(mode)") { try Engine.lowersAsking(mode: mode, kind: kind) }
+        }
     }
 
     /// start(often:) again changes the cadence only: the programs are looked for once.
     @Test func startIsCalledAgain() async throws {
         let place = try Place()
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         var changes = 0
         engine.changed = { changes += 1 }
         engine.start(often: false)
@@ -248,7 +251,7 @@ import SomethingCore
 
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch omp yet.")) {
             try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil)
         }

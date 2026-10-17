@@ -14,7 +14,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let ask = NativeAsk()
     /// The open space. One at a time (design 9): opening another closes it.
     var current: SpaceWindow?
-    lazy var home = Home(places: places, examples: Resources.share.appendingPathComponent("examples"), ask: ask)
+    lazy var home = Home(places: places, share: Resources.share, ask: ask)
     lazy var panels = Panels(source: engine)
     var statusItem: NSStatusItem?
     var pushing = false
@@ -41,7 +41,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         home.card.window = { [weak self] name in self?.current.flatMap { $0.kept && $0.space.name == name ? $0 : nil } }
         panels.who = { [weak self] request in self?.who(request) ?? "An agent" }
         engine.changed = { [weak self] in self?.schedulePush() }
-        engine.start(often: true)
+        // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
+        engine.hookCommand = Engine.ownHookCommand
+        engine.start(often: false)
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
             do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
@@ -49,7 +51,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             home.forgetGone()
             let early = handed ?? []
             handed = nil
-            if let opening {
+            if let opening, (opening as NSString).pathExtension == "something" {
+                receive(URL(fileURLWithPath: opening).standardizedFileURL)
+            } else if let opening {
                 guard let space = Spaces(root: places.spaces).locate(opening) else {
                     fail("There is no space \(opening): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")
                 }
@@ -102,9 +106,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 current?.close()
             }
             window.closed = { [weak self] closed in
-                if self?.current === closed { self?.current = nil }
+                guard let self, current === closed else { return }
+                current = nil
+                engine.start(often: false)
             }
             current = window
+            // The readers look often while a space is open, and rarely when nobody is looking.
+            engine.start(often: true)
             window.open()
             window.show()
             return nil

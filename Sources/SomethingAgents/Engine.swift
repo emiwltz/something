@@ -50,7 +50,8 @@ public final class Engine {
                                                         "pi": PiDriver.self]
 
     private let environment: [String: String]
-    private let programs: Programs
+    /// Where programs are found; a test empties its system folders (`Engine.throwaway`).
+    let programs: Programs
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
     private var looked = false
@@ -87,14 +88,21 @@ public final class Engine {
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without
-    /// any is left out.
-    public var limits: [String: [String]] { Engine.drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
+    /// any is left out. Static, so that `something check` gives the same without an engine.
+    public static var limits: [String: [String]] { drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first (contract 4.1). Every mode is taken as one that lowers asking, but those known to ask
-    /// as much or more: a mode something does not know (a newer program's, an OpenCode agent the person wrote) is
-    /// confirmed rather than guessed.
-    public func lowersAsking(mode: String, kind: String) -> Bool { !(Engine.asksAsMuch[kind] ?? []).contains(mode) }
+    /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)
+    /// is confirmed rather than guessed. Throws VALUE_NOT_OFFERED, before any window, for a mode the kind never
+    /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
+    /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
+    public static func lowersAsking(mode: String, kind: String) throws -> Bool {
+        if let type = drivers[kind], !(type is ACPDriver.Type), !type.modes.isEmpty, !type.modes.contains(where: { $0.value == mode }) {
+            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
+        }
+        return !(asksAsMuch[kind] ?? []).contains(mode)
+    }
 
     /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
     /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports,
@@ -160,8 +168,8 @@ public final class Engine {
     }
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
-    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app, once its main routes those
-    /// words: until then its own path would start a second app), and plan B is then not offered.
+    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app and `something try` set
+    /// `ownHookCommand`), and plan B is then not offered.
     public var hookCommand: [String]?
 
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
@@ -295,15 +303,15 @@ public final class Engine {
 }
 
 /// `something hook permission --spool <dir>`: Claude's plan B (design 4.1). Returns the exit status.
-/// `arguments` are the words after `something`, with or without `hook permission` in front. Returns 0 once a
-/// decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
+/// `arguments` are every word after `something`, `hook permission` first, as the command routes them. Returns 0 once
+/// a decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
 public enum PermissionHook {
     public static func main(_ arguments: [String]) -> Int32 { SpoolHook.main(arguments) }
 }
 
 /// `something try <kind> [--record <file>] [--plan-b]`: a developer's trial of one driver against a real agent.
 public enum Trial {
-    /// `arguments` are the words after `something`, with or without `try` in front. Returns the exit status: 0 once
-    /// the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
+    /// `arguments` are every word after `something`, `try` first, as the command routes them. Returns the exit status:
+    /// 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
     public static func main(_ arguments: [String]) -> Int32 { DeveloperTrial.main(arguments) }
 }

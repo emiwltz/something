@@ -172,6 +172,9 @@ extension Home {
         #expect((checked.json["calls"] as? [[String: Any]])?.first as NSDictionary? == ["method": "send", "params": ["agent": "a1", "text": "Hello", "when": "next"],
                                                                                          "answer": ["delivery": "queued"]])
         #expect(checked.json["console"] as? [NSDictionary] == [["level": "warn", "text": "No agent yet."]])
+        // The example's received is what the invented state gives, and its rights what this declaration gives.
+        #expect(checked.json["received"] as? NSDictionary == (example as? [String: Any])?["received"] as? NSDictionary)
+        #expect(checked.json["rights"] as? NSDictionary == (example as? [String: Any])?["rights"] as? NSDictionary)
     }
 
     /// --refuse takes a right from the declared ones; a page that reads granted and hides it is clean.

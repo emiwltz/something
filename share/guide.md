@@ -114,11 +114,11 @@ at most four times a second, only when it changed. A shortened example (the full
       "options": {
         "model": [{ "value": "claude-example-model", "label": "Example model" }],
         "mode": [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
-        "effort": null
+        "effort": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }]
       },
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
-      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": false, "resume": false },
-      "because": { "effort": "Claude Code offers no way to change effort during a session." },
+      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": true, "resume": false },
+      "because": {},
       "error": null, "started": "2026-10-17T08:55:00Z", "updated": "2026-10-17T09:00:03Z", "detail": {}
     }
   ],
@@ -204,7 +204,8 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   `outcome`: `allowed`, `denied`), else `null`. Today only Claude Code launched by something says it.
 - **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
   the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and
-  say "answer in the window of something".
+  say "answer in the window of something". OpenCode, launched by something, never asks a question: it dismisses its
+  own, and the agent's `error` asks the person to have it write the question in its reply.
 
 What is outside the scope is absent: agents, and their threads and requests. Without the `state` right, `state()`
 still answers, with only the agents this space launched. Agents seen elsewhere stay listed while alive, and for 24
@@ -214,7 +215,7 @@ hours after their last activity.
 
 | kind | send | steer | queue | interrupt | model | mode | effort |
 |---|---|---|---|---|---|---|---|
-| claude | yes | yes | yes | yes | yes | yes (permission modes) | no |
+| claude | yes | yes | yes | yes | yes (next turn) | yes (permission modes) | yes (the levels its model lists, next turn) |
 | codex | yes | yes | yes | yes | yes (next turn) | yes (approval policy) | yes (next turn) |
 | opencode | yes | no | yes | yes | yes | yes (agents such as build, plan) | yes |
 | pi | yes | yes | yes | yes | yes | no | yes (thinking level) |
@@ -280,7 +281,7 @@ if (agent) {
   "rights": ["state", "send:claude", "store"],
   "refused": ["launch:codex"],
   "unavailable": ["launch:omp"],
-  "limits": { "claude": ["effort"], "opencode": ["steer"], "pi": ["mode"] },
+  "limits": { "opencode": ["steer"], "pi": ["mode"] },
   "agents": { "see": "all" },
   "folder": "/Users/example/code/shop"
 }

@@ -85,9 +85,45 @@ final class FakeDoor: Door {
         let wrong = Ran(["open"], home)
         #expect(wrong.status == 2 && wrong.out.isEmpty && wrong.err.contains("Usage:"))
         // check runs a window of its own, through the program itself: CheckTests.swift.
-        // Routed to SomethingAgents, which has no hook and no trial yet: their own statuses come back.
+        // Routed to SomethingAgents: wrong words only, so that no agent is ever launched (NoRealAgentTests).
         #expect(Ran(["hook", "permission"], home).status == 2)
-        #expect(Ran(["try", "claude"], home).status == 2)
+        #expect(Ran(["try", "nope"], home).status == 2)
+        #expect(Ran(["try", "claude", "--bogus"], home).status == 2)
+    }
+
+    /// The program swift test built routes `hook permission`, as Claude's plan-B hook runs it (Engine.hookCommand):
+    /// wrong words are a usage error; right ones read the request and print a decision, here a deny that says why,
+    /// since no app keeps the spool alive.
+    @Test func theBuiltProgramAnswersHookPermission() throws {
+        let home = Home()
+        defer { home.remove() }
+        let spool = home.root.appendingPathComponent("spool")
+        try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
+        func hook(_ words: [String]) throws -> (status: Int32, out: String, err: String) {
+            let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
+            process.executableURL = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
+            process.arguments = words
+            process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"]
+            (process.standardInput, process.standardOutput, process.standardError) = (input, out, err)
+            try process.run()
+            input.fileHandleForWriting.write(Data(#"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#.utf8))
+            try input.fileHandleForWriting.close()
+            let deadline = DispatchWorkItem { process.terminate() }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
+            let printed = out.fileHandleForReading.readDataToEndOfFile(), errors = err.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            deadline.cancel()
+            return (process.terminationStatus, String(decoding: printed, as: UTF8.self), String(decoding: errors, as: UTF8.self))
+        }
+        for wrong in [["hook", "permission"], ["hook", "permission", "--spool"], ["hook", "permission", "--spool", spool.path, "--bogus"]] {
+            let ran = try hook(wrong)
+            #expect(ran.status == 2 && ran.out.isEmpty && ran.err.contains("usage: something hook permission"), "\(wrong): \(ran)")
+        }
+        let ran = try hook(["hook", "permission", "--spool", spool.path])
+        #expect(ran.status == 0, "\(ran)")
+        let printed = try JSONSerialization.jsonObject(with: Data(ran.out.utf8)) as? [String: Any]
+        let decision = (printed?["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any]
+        #expect(decision?["behavior"] as? String == "deny" && (decision?["message"] as? String)?.contains("something is not running") == true, "\(ran.out)")
     }
 
     /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".
@@ -144,6 +180,13 @@ final class FakeDoor: Door {
         let nowhere = Ran(["open", "/Users/example/nowhere.html"], home, door)
         #expect(nowhere.status == 1 && nowhere.err.contains("There is no space at /Users/example/nowhere.html"))
         #expect(door.delivered.count == 2)
+
+        // An export goes to the app, which imports it; a missing one is said here.
+        let export = home.root.appendingPathComponent("garden.something")
+        try Data("{}".utf8).write(to: export)
+        #expect(Ran(["open", export.path], home, door).status == 0 && door.delivered.last == export.standardizedFileURL)
+        let none = Ran(["open", home.root.appendingPathComponent("nothing.something").path], home, door)
+        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 3)
 
         door.problem = "something could not be started: invented. Try again."
         let refused = Ran([], home, door)

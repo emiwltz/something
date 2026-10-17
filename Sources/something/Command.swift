@@ -14,7 +14,8 @@ enum Command: Equatable {
     static let usage = """
         Usage:
           something                       start something, or bring it to the front
-          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
+          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder;
+                                          or import an export (a .something file) into Home
           something new <name> [--folder] make a space from the template (a folder holds more than one file)
           something guide [--print]       where the guide for the coding agent that writes your spaces is
           something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
@@ -63,6 +64,14 @@ enum Command: Equatable {
         switch self {
         case .start:
             return door.start().map { say($0, true); return 1 } ?? 0
+        case .open(let name) where (name as NSString).pathExtension == "something":
+            // An export goes to the app, which imports it as a double click in Finder does.
+            let file = URL(fileURLWithPath: name).standardizedFileURL
+            guard FileManager.default.fileExists(atPath: file.path) else {
+                say("There is no file at \(name): give the path of an export, a .something file.", true)
+                return 1
+            }
+            return door.deliver(file).map { say($0, true); return 1 } ?? 0
         case .open(let name):
             guard let space = Spaces(root: places.spaces).locate(name) else {
                 say(Spaces.isName(name)

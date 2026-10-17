@@ -6,20 +6,8 @@ import SomethingCore
 import WebKit
 
 extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
-    /// The modes of each kind whose modes are levels of asking (design 3.3): a mode that keeps asking passes, one that
-    /// lowers asking opens a confirmation, and any other is refused, so a misspelt or a new mode never passes unseen.
-    /// `bypassPermissions` is in neither list: it is never offered. OpenCode's modes are its agents (build, plan, the
-    /// person's own), not levels of asking; pi takes no mode. The Engine does not say these yet, so the app keeps them.
-    static let modes: [String: (keeps: Set<String>, lowers: Set<String>)] = [
-        "claude": (keeps: ["default", "manual", "plan"], lowers: ["acceptEdits", "auto", "dontAsk"]),
-        "codex": (keeps: ["untrusted", "on-request"], lowers: ["never"]),
-    ]
-
-    /// What the agents of each kind can never do here (contract 3.7, the false columns), for `granted.limits`. The
-    /// Engine does not say it yet, so the app keeps the table until it does.
-    static let limits: [String: [String]] = ["claude": ["effort"], "opencode": ["steer"], "pi": ["mode"]]
-
-    /// Only the page of the open space is answered (contract 4.4): never a frame inside it, never the app's page.
+    /// Only the open space's own page is answered (contract 4.4): never a frame inside it, never the engine's own page
+    /// around it.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
         guard isSpace(message.frameInfo), blocked.isEmpty,
@@ -76,17 +64,8 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
         }
     }
 
+    /// A mode that makes the agent ask less waits for the person's click (Engine.lowersAsking says which).
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
-        try SpaceWindow.lowers(mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
-    }
-
-    /// Whether `mode` makes agents of `kind` ask less, so the person must confirm it. Throws a `CodedError`
-    /// (VALUE_NOT_OFFERED) for a mode something never offers.
-    static func lowers(_ mode: String, kind: String) throws -> Bool {
-        guard let known = modes[kind], !known.keeps.contains(mode) else { return false }
-        guard known.lowers.contains(mode) else {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
-        }
-        return true
+        try Engine.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
     }
 }

@@ -120,7 +120,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         if let declaration = reading.declaration {
             title = declaration.title
-            granted = Rights.granted(reading, answer(declaration), limits: SpaceWindow.limits, home: places.home)
+            granted = Rights.granted(reading, answer(declaration), limits: Engine.limits, home: places.home)
             inject()
             web.load(URLRequest(url: Scheme.shell))
         } else {
@@ -161,7 +161,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
                 return ask.tell((error as? SpaceError)?.message ?? "\(error)")
             }
         }
-        granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: places.home)
+        granted = Rights.granted(reading, grant, limits: Engine.limits, home: places.home)
         inject()
         if let frame { web.evaluateJavaScript("window.something && something._granted(\(String(decoding: SpaceWindow.encoded(granted), as: UTF8.self)))", in: frame, in: .page) }
         push()

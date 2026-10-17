@@ -3,6 +3,7 @@
 // asked once and remembered, and the window reloads when the space changes. Serialized: each test turns the run loop.
 import AppKit
 import Foundation
+import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -175,7 +176,7 @@ import WebKit
         window.open()
         try await ready(window)
         try Offscreen(window.web).click(x: 450, y: 320)
-        await wait(1)
+        await wait(3)
         withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root") {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
@@ -316,6 +317,13 @@ import WebKit
         #expect(ask.modes.count == 2)
     }
 
+    /// The rights window says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
+    @Test func theRightsWindowSaysThatPiNeverAsks() {
+        #expect(Ask.words(for: "launch:pi").hasSuffix("(pi runs commands and edits files without asking you first)"))
+        #expect(Ask.words(for: "launch").contains("pi, one of them, runs commands and edits files without asking you first"))
+        #expect(!Ask.words(for: "launch:claude").contains("without asking"))
+    }
+
     /// granted.limits is the table of contract 3.7, as the contract's own fixtures give it.
     @Test func theLimitsAreTheContracts() throws {
         let bridge = Home.share.appendingPathComponent("contract/bridge")
@@ -324,7 +332,7 @@ import WebKit
         for file in cases {
             let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
             let limits = (fixture?["granted"] as? [String: Any])?["limits"] as? [String: [String]]
-            #expect(limits == SpaceWindow.limits, "\(file.lastPathComponent)")
+            #expect(limits == Engine.limits, "\(file.lastPathComponent)")
         }
     }
 

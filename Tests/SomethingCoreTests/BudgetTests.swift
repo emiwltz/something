@@ -5,8 +5,6 @@ import Testing
 
 enum Budget {
     static let core = 1_700, driver = 600, reader = 400, agentsShared = 400, app = 1_700
-    /// The drivers that still carry their V1 names; new ones end in Driver.swift.
-    static let v1Drivers: Set<String> = ["Claude.swift", "Codex.swift", "ACP.swift", "Pi.swift"]
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -32,7 +30,7 @@ enum Budget {
         if core > Budget.core { problems.append("SomethingCore has \(core) lines; its budget is \(Budget.core).") }
         for file in files(in: sources.appendingPathComponent("SomethingAgents")) {
             let base = (file.name as NSString).lastPathComponent
-            let (role, budget) = base.hasSuffix("Driver.swift") || v1Drivers.contains(base) ? ("driver", driver)
+            let (role, budget) = base.hasSuffix("Driver.swift") ? ("driver", driver)
                 : base.hasSuffix("Reader.swift") ? ("reader", reader) : ("shared file", agentsShared)
             if file.lines > budget { problems.append("\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
         }
@@ -82,7 +80,7 @@ enum Budget {
     @Test func eachBudgetFailsOneLineOver() throws {
         let cases: [(folder: String, name: String, lines: Int, problem: String)] = [
             ("SomethingAgents", "ClaudeDriver.swift", 601, "ClaudeDriver.swift has 601 lines; a driver has 600."),
-            ("SomethingAgents", "Codex.swift", 601, "Codex.swift has 601 lines; a driver has 600."),
+            ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "PiReader.swift", 401, "PiReader.swift has 401 lines; a reader has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_701, "SomethingCore has 1701 lines; its budget is 1700."),

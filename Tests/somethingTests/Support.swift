@@ -3,10 +3,10 @@
 import AppKit
 import Darwin
 import Foundation
-import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
+@testable import SomethingAgents
 @testable import something
 
 /// Whether the window suites run: WebKit's views and AppKit's windows need a window server. A Mac where someone is
@@ -33,8 +33,17 @@ struct Home {
 
     @MainActor
     func window(_ space: Space, _ ask: FakeAsk = FakeAsk()) async throws -> SpaceWindow {
-        try SpaceWindow(space: space, places: places, engine: Engine(environment: [:]), ask: ask, share: Home.share,
+        try SpaceWindow(space: space, places: places, engine: engine(), ask: ask, share: Home.share,
                         rules: try await Lockdown.ruleList())
+    }
+
+    /// An engine that finds no agent program: its PATH is an empty folder of this home, and the system's install
+    /// folders are not searched (NoRealAgentTests), so nothing a space asks reaches a real agent.
+    func engine() -> Engine {
+        let environment = ["HOME": root.path, "PATH": root.appendingPathComponent("bin").path + ":/usr/bin:/bin", "SHELL": "/bin/sh"]
+        let engine = Engine(environment: environment)
+        engine.programs.systemFolders = []
+        return engine
     }
 
     func remove() { try? FileManager.default.removeItem(at: root) }
@@ -60,6 +69,8 @@ final class FakeAsk: Asking {
     var shown: [[String]] = []
     /// Where the save panel saves, and the file the open panel chooses; nil cancels.
     var saveTo: URL?, chosen: URL?
+    /// The name typed for a new space; nil cancels.
+    var named: String?
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
@@ -80,6 +91,7 @@ final class FakeAsk: Asking {
     }
     func saveAs(_ name: String) -> URL? { saveTo }
     func importFile() -> URL? { chosen }
+    func newName() -> String? { named }
     func tell(_ message: String) { told.append(message) }
 }
 
