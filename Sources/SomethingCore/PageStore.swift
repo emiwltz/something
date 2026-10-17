@@ -1,5 +1,5 @@
 // A page's own memory (the mood of a Tamagotchi, a chosen tab): JSON values by key, kept in one file
-// next to the page. Agents never see it; it is not state.
+// in the person's data folder (~/something/data/<name>.json). Agents never see it; it is not state.
 import Foundation
 
 public final class PageStore {

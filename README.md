@@ -16,7 +16,7 @@ swift run something --self-test     # checks the window is on screen, ⌘V paste
 swift run something --try claude --in /Users/example/scratch   # launches Claude Code (or codex, opencode, pi) there, sends one short message, prints what came back
 # add --ask "<message>" to send your own; --answer once|deny answers its permission requests without a window,
 # --click "<button>" shows the windows and has something click that button itself; --force-ask makes Codex and OpenCode ask before acting; --model <model> picks OpenCode's or pi's model for the conversation
-swift test                          # the tests of the core (with Xcode installed; without it, see below)
+swift test                          # the tests: core, agents, budgets, publishable scan (with Xcode installed; without it, see below)
 ```
 
 Nothing is signed with a paid Apple account: what is built on the machine itself is not blocked by macOS.
@@ -31,7 +31,7 @@ swift test -Xswiftc -F -Xswiftc $T/Frameworks -Xlinker -F -Xlinker $T/Frameworks
 
 ## Pages
 
-For now the window shows one page, `share/template.html`, a plain chat; spaces of your own, written by your coding agent, come next. The guide written for that agent is [share/guide.md](share/guide.md). The page reloads each time its file is saved. It loads its files from `something://` addresses and cannot reach the Internet. It has a small memory of its own, `~/something/data/template.json`.
+For now the window shows one page, `share/template.html`, a plain chat; spaces of your own, written by your coding agent, come next. The guide written for that agent is [share/guide.md](share/guide.md). The page reloads each time its file is saved. It loads its files from `something://` addresses and cannot reach the Internet. It has a small memory of its own, `~/something/data/template.json`; `--self-test` writes a key there and removes it, so the file stays.
 
 ## The first page
 
@@ -51,7 +51,7 @@ pi is launched as `pi --mode rpc`, its official channel, with your own pi config
 
 ```text
 share/                     what the window serves: something.js (the tools a page uses), template.html (the page shown), guide.md (the guide for the agent that writes pages)
-Sources/SomethingCore/     the state, the bridge, the page memory: Foundation only, names no agent, so it can build on Linux and Windows
+Sources/SomethingCore/     the state, the bridge, the page memory: Foundation only, so it can build on Linux and Windows; meant to name no agent (the contract types to come finish it)
 Sources/SomethingAgents/   one driver per agent (AgentProcess, Claude, Codex, ACP, Pi)
 Sources/something/         the Mac app: menu bar, window, something:// pages, native windows; carries, asks, decides nothing
 Tests/                     SomethingCoreTests (with the budgets and the publishable scan) and SomethingAgentsTests

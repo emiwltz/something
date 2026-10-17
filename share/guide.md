@@ -6,18 +6,11 @@ something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode
 
 ## Where a page lives
 
-A page is a folder here, in `pages/`, with an `index.html`:
+For now the window shows one page, `share/template.html` in something's folder, a plain chat. The person may edit it, or copy their own page over it; spaces of their own, folders where each page lives, come in a later version.
 
-```text
-pages/
-  AGENTS.md          this file
-  chat/index.html    the first page, a plain chat: copy it to start
-  <your page>/index.html
-```
+The window reloads by itself each time that file is saved, so you can work and they can watch.
 
-The person opens a page from something's icon in the menu bar. The window reloads by itself each time you save a file of the page you are showing, so you can work and they can watch.
-
-Plain HTML, CSS and JavaScript, in as many files as you like inside the page's folder. No build step: what you write is what runs.
+Plain HTML, CSS and JavaScript in that one file. No build step: what you write is what runs.
 
 ## Talking to something
 
@@ -70,7 +63,7 @@ Every promise rejects with an `Error` whose message is one sentence for the pers
 
 ## Rules
 
-- **No network.** A page cannot load anything from the Internet: no CDN, no fonts, no fetch. Put every file in the page's folder. What the page shows of the agents stays on the machine.
+- **No network.** A page cannot load anything from the Internet: no CDN, no fonts, no fetch. Write everything in the page itself. What the page shows of the agents stays on the machine.
 - **Writing is the person's word.** `send` may be refused; a permission is never answered by a page. Show that an agent waits, and say where to answer.
 - **Show failures.** A rejected promise, an `error` in the state: put the sentence on screen.
-- **Do not change** `pages/chat/`, `web/` or anything outside your page's folder: they belong to something.
+- **Do not change** `share/something.js`, `share/guide.md` or anything else in something's folder: they belong to something. Only `share/template.html` is the page.

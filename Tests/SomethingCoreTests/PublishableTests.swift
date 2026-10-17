@@ -100,11 +100,17 @@ enum Publishable {
         #expect(problems.isEmpty, "\(problems)")
     }
 
-    /// share/ is what something hands to every space and to the agents that write them: it must be in the scan.
+    /// share/ is what something hands to every space and to the agents that write them: every file in it, today's
+    /// and those to come, must be in the scan.
     @Test func theScanCoversShare() throws {
         guard let listed = Publishable.git("ls-files", "-z", "--cached", "--others", "--exclude-standard") else { return }
-        let names = listed.split(separator: "\0").map(String.init)
-        for name in ["share/something.js", "share/guide.md", "share/template.html"] {
+        let names = Set(listed.split(separator: "\0").map(String.init))
+        let share = Publishable.root.appendingPathComponent("share")
+        let onDisk = (FileManager.default.enumerator(at: share, includingPropertiesForKeys: [.isRegularFileKey])?.allObjects
+            as? [URL] ?? []).filter { (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
+        #expect(!onDisk.isEmpty, "share/ holds no file")
+        for file in onDisk {
+            let name = "share/" + String(file.standardizedFileURL.path.dropFirst(share.standardizedFileURL.path.count + 1))
             #expect(names.contains(name), "\(name) is not in the scan")
         }
     }

@@ -60,7 +60,7 @@
     $("waiting").textContent = request ? "Waiting for you: may it use " + request.tool +
       (request.about ? " (" + request.about + ")" : "") + "? Answer in the window something opened." : "";
     if (!agent) {
-      $("about").textContent = "No agent yet. Launch one, or build your own page from this one.";
+      $("about").textContent = "No agent yet. Launch one.";
       $("messages").replaceChildren();
       return;
     }

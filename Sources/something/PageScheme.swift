@@ -30,13 +30,12 @@ final class PageScheme: NSObject, WKURLSchemeHandler {
     /// The file an address points to, or nil when it points outside share/.
     func file(for url: URL) -> URL? {
         guard url.host == "app" else { return nil }
-        let root = app
-        var file = root.appendingPathComponent(url.path).standardizedFileURL
+        var file = app.appendingPathComponent(url.path).standardizedFileURL
         var isFolder: ObjCBool = false
         if FileManager.default.fileExists(atPath: file.path, isDirectory: &isFolder), isFolder.boolValue {
             file.appendPathComponent("index.html")
         }
-        return file.path.hasPrefix(root.standardizedFileURL.path + "/") ? file : nil
+        return file.path.hasPrefix(app.standardizedFileURL.path + "/") ? file : nil
     }
 
     static func type(of file: URL) -> String {

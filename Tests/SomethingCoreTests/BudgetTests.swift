@@ -14,9 +14,10 @@ enum Budget {
         return newlines + (text.isEmpty || text.hasSuffix("\n") ? 0 : 1)
     }
 
-    /// The Swift files of a folder, by name, with their line counts; empty when the folder does not exist.
+    /// The Swift files under a folder, subfolders included, by path relative to it, with their line counts;
+    /// empty when the folder does not exist (`theSourcesHoldTheirBudgets` checks that each one does).
     static func files(in folder: URL) -> [(name: String, lines: Int)] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        let names = (FileManager.default.enumerator(atPath: folder.path)?.allObjects as? [String]) ?? []
         return names.filter { $0.hasSuffix(".swift") }.sorted().compactMap { name in
             guard let text = try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) else { return nil }
             return (name, lines(text))
@@ -30,8 +31,9 @@ enum Budget {
         let core = files(in: sources.appendingPathComponent("SomethingCore")).map(\.lines).reduce(0, +)
         if core > Budget.core { problems.append("SomethingCore has \(core) lines; its budget is \(Budget.core).") }
         for file in files(in: sources.appendingPathComponent("SomethingAgents")) {
-            let (role, budget) = file.name.hasSuffix("Driver.swift") || v1Drivers.contains(file.name) ? ("driver", driver)
-                : file.name.hasSuffix("Reader.swift") ? ("reader", reader) : ("shared file", agentsShared)
+            let base = (file.name as NSString).lastPathComponent
+            let (role, budget) = base.hasSuffix("Driver.swift") || v1Drivers.contains(base) ? ("driver", driver)
+                : base.hasSuffix("Reader.swift") ? ("reader", reader) : ("shared file", agentsShared)
             if file.lines > budget { problems.append("\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
         }
         let app = files(in: sources.appendingPathComponent("something")).map(\.lines).reduce(0, +)
@@ -44,7 +46,22 @@ enum Budget {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
     @Test func theSourcesHoldTheirBudgets() {
+        // A renamed or misspelled folder would hold its budget with zero lines: each one must be there.
+        for target in ["SomethingCore", "SomethingAgents", "something"] {
+            #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
+        }
         #expect(Budget.problems(under: root).isEmpty, "\(Budget.problems(under: root))")
+    }
+
+    @Test func filesInSubfoldersAreCounted() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("budget-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folder = root.appendingPathComponent("Sources/SomethingAgents/Readers")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try String(repeating: "let example = 1\n", count: 401).write(to: folder.appendingPathComponent("CodexReader.swift"),
+                                                                     atomically: true, encoding: .utf8)
+        #expect(Budget.files(in: root.appendingPathComponent("Sources/SomethingAgents")).map(\.name) == ["Readers/CodexReader.swift"])
+        #expect(Budget.problems(under: root) == ["Readers/CodexReader.swift has 401 lines; a reader has 400."])
     }
 
     @Test func linesAreCountedAsWcCountsThem() {
