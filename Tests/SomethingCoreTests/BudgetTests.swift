@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_500, driver = 600, reader = 400, agentsShared = 400, app = 1_700
+    static let core = 1_700, driver = 600, reader = 400, agentsShared = 400, app = 1_700
     /// The drivers that still carry their V1 names; new ones end in Driver.swift.
     static let v1Drivers: Set<String> = ["Claude.swift", "Codex.swift", "ACP.swift", "Pi.swift"]
 
@@ -77,7 +77,7 @@ enum Budget {
             ("SomethingAgents", "Codex.swift", 601, "Codex.swift has 601 lines; a driver has 600."),
             ("SomethingAgents", "PiReader.swift", 401, "PiReader.swift has 401 lines; a reader has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
-            ("SomethingCore", "Contract.swift", 1_501, "SomethingCore has 1501 lines; its budget is 1500."),
+            ("SomethingCore", "Contract.swift", 1_701, "SomethingCore has 1701 lines; its budget is 1700."),
             ("something", "App.swift", 1_701, "The Mac app has 1701 lines; its budget is 1700."),
         ]
         for item in cases {

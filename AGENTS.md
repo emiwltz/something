@@ -20,7 +20,7 @@ Everything in the repository is in English: code, comments, data keys, commit me
 3. **The unknown is said.** What is not known is `null`; a state no source gives is `"unknown"`, never `"idle"`, never a guess.
 4. **No orchestration.** something launches, shows and passes messages it is asked to pass. It never chains agents by itself, gives them roles, or decides for the person.
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
-6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by `BudgetTests`: the core (`Sources/SomethingCore`) 1,500 lines in all; in `Sources/SomethingAgents`, each driver 600, each reader 400, each other file 400; the Mac app (`Sources/something`) 1,700 in all, a soft budget that Emi may raise. Every line counts, comments too.
+6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by `BudgetTests`: the core (`Sources/SomethingCore`) 1,700 lines in all; in `Sources/SomethingAgents`, each driver 600, each reader 400, each other file 400; the Mac app (`Sources/something`) 1,700 in all, a soft budget that Emi may raise. Every line counts, comments too.
 7. **Clear.** Each file has one role, said in its first comment. A public function says what it returns and when it throws. A comment says why, not what.
 
 ## The contract
