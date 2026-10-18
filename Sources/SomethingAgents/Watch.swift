@@ -46,6 +46,10 @@ struct Sighting: Equatable {
     var detail: [String: JSONValue] = [:]
     /// Seen from its process only, as when its reader no longer knows the shape of its files: its state is unknown.
     var processOnly = false
+    /// Its holder is known, but not what it does (a status word the reader does not know): its state is unknown.
+    var stateKnown = true
+    /// Why an entry of `can` is false, beyond what is said of every agent seen elsewhere, by entry.
+    var because: [String: String] = [:]
 }
 
 /// What one tick saw: the sightings of every reader, and each reader's version, health and note (its sightings moved out).
@@ -76,7 +80,9 @@ final class Watch {
     }
 
     /// The readers for something's own environment: the folders its agents use are found there, never guessed.
-    static func readers(_ environment: [String: String]) -> [Reader] { [ClaudeReader(environment: environment)] }
+    static func readers(_ environment: [String: String]) -> [Reader] {
+        [ClaudeReader(environment: environment), CodexReader(environment: environment), OpenCodeReader(environment: environment)]
+    }
 
     /// Ticks every `seconds`, the first one now, and gives each tick's result to `seen` on the main queue. Called
     /// again, it only changes the cadence.
@@ -107,7 +113,9 @@ final class Watch {
         var seen = Seen()
         for reader in readers {
             var reading = reader.read(processes, discover: discover, now: now)
-            if reading.health == "changed" {
+            // A reader that knows its files changed shape and found nothing else to read (Codex has its rollouts when
+            // its index changed) shows its program's processes.
+            if reading.health == "changed", reading.sightings.isEmpty {
                 reading.sightings = processes.processes.values.filter { reader.programs.contains($0.name) }.map { process in
                     Sighting(kind: reader.kind, key: "pid-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),
                              folder: process.folder, started: process.started, processOnly: true)
@@ -139,7 +147,9 @@ final class Watch {
         for sighting in seen.sightings where !keys.contains(sighting.key) && !(sighting.group.map(groups.contains) ?? false) {
             var agent = Agent(id: "\(sighting.kind)-\(sighting.key)", kind: sighting.kind, origin: "elsewhere")
             // A process proves its holder alive, not what it does: the state words are those of an unknown holder.
-            let result = StateMap.map(sighting.processOnly ? StateMap.Facts(alive: nil, evidence: "process") : sighting.facts, now: now)
+            let facts = sighting.processOnly ? StateMap.Facts(alive: nil, evidence: "process")
+                : sighting.stateKnown ? sighting.facts : StateMap.Facts(alive: nil, evidence: sighting.facts.evidence)
+            let result = StateMap.map(facts, now: now)
             agent.alive = sighting.facts.alive
             agent.evidence = result.evidence
             agent.state = result.state
@@ -155,7 +165,7 @@ final class Watch {
             agent.started = sighting.started.map(iso)
             agent.updated = sighting.updated.map(iso)
             agent.because = ["send": "This agent was started outside something; something only reads it.",
-                             "resume": Engine.notYet.message]
+                             "resume": Engine.notYet.message].merging(sighting.because) { _, own in own }
             if sighting.processOnly { agent.thread = nil; agents.append(agent); continue }
             var thread = AgentThread(id: sighting.key, agent: agent.id, title: agent.name, started: agent.started, turns: sighting.turns)
             thread.complete = thread.complete && sighting.complete

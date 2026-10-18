@@ -5,7 +5,6 @@
 // session/request_permission is a permission. What each choice rests on (notes, channel-opencode, and trial T-3 on
 // 2.0.20) is said where it is made.
 import Foundation
-import SQLite3
 import SomethingCore
 
 public final class ACPDriver: Driver {
@@ -376,19 +375,12 @@ public final class ACPDriver: Driver {
     }
 
     /// Whether OpenCode's database marks `session` as running (`time_suspended` set: the claim a run takes and
-    /// releases at its end); nil when the database or the session cannot be read. Read only, never written.
-    /// TODO(slice 17): move onto SQLiteRO and the OpenCode reader's claim query, behind its schema guard, so that one
-    /// reader of session_v2 remains and a schema change is said rather than silently read as "unknown".
+    /// releases at its end); nil when the database, its shape or the session cannot be read. Read only, never written.
     static func claimed(_ session: String, in path: String) -> Bool? {
-        var db: OpaquePointer?
-        defer { sqlite3_close(db) }
-        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
-        var row: OpaquePointer?
-        defer { sqlite3_finalize(row) }
-        guard sqlite3_prepare_v2(db, "SELECT time_suspended IS NOT NULL FROM session_v2 WHERE id = ?", -1, &row, nil) == SQLITE_OK,
-              sqlite3_bind_text(row, 1, session, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) == SQLITE_OK,
-              sqlite3_step(row) == SQLITE_ROW else { return nil }
-        return sqlite3_column_int(row, 0) != 0
+        let whitelist: [String: Set<String>] = ["session_v2": ["id", "time_suspended"]]
+        guard let db = try? SQLiteRO(path, whitelist: whitelist), (try? db.guarded()) == true,
+              let row = (try? db.rows("SELECT time_suspended IS NOT NULL AS claimed FROM session_v2 WHERE id = ?", [session]))?.first else { return nil }
+        return row["claimed"] as? Int64 == 1
     }
 
     private func invoke(_ call: Call, _ method: String, _ params: [String: Any]) throws {

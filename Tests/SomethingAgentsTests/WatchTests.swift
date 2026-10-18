@@ -95,7 +95,7 @@ import SomethingCore
     @Test func theEngineMergesLaunchedAndSeenAgents() async throws {
         let place = try EngineTests.Place()
         let home = try ClaudeHome()
-        let engine = Engine(environment: place.environment)
+        let engine = Engine.throwaway(place.environment)
         var snapshot = ClaudeHome.snapshot()
         engine.watch = Watch(readers: [home.reader], snapshot: { snapshot })
         var changes = 0

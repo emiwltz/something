@@ -145,20 +145,26 @@ final class ClaudeReader: Reader {
         let record = session.record, lines = session.lines
         var facts = StateMap.Facts(alive: session.alive, evidence: session.alive == nil ? nil : "registry", lastWrite: session.stamp?.modified)
         var detail: [String: JSONValue] = [:]
+        var known = true
         switch record.status {
-        // "shell" is idle with a background shell still running (notes/format-claude.md 1.3), but design 3.2 maps it
-        // as "busy": kept so until Emi settles which one wins.
-        case "busy", "shell":
+        case "busy":
             facts.turnOpen = true
             facts.waiting = .nothing
-        case "idle":
+        // "shell" is a session idle while a background shell it started still runs (notes/format-claude.md 1.3).
+        case "idle", "shell":
             facts.turnOpen = false
             facts.waiting = .nothing
+            if record.status == "shell" { detail["backgroundShell"] = .bool(true) }
         case "waiting":
             facts.turnOpen = true
             facts.waiting = ["permission prompt", "sandbox request"].contains(record.waitingFor) ? .permission : .answer
             if facts.waiting == .answer, let word = record.waitingFor { detail["waitingFor"] = .string(word) }
-        default: facts.turnOpen = lines.open
+        // Older versions write no status: the transcript says whether a turn runs.
+        case nil: facts.turnOpen = lines.open
+        // A word this reader does not know says nothing it can trust: the state is unknown, never idle.
+        case let word?:
+            known = false
+            detail["status"] = .string(word)
         }
         facts.ended = session.ended
         facts.failed = lines.turns.last?.state == "error"
@@ -166,7 +172,7 @@ final class ClaudeReader: Reader {
         return Sighting(kind: kind, key: record.session, pid: record.pid, facts: facts, folder: record.cwd, title: lines.title ?? record.name,
                         model: lines.model, mode: lines.mode, effort: lines.effort, started: record.started,
                         updated: ClaudeReader.updated(session), turns: lines.turns, complete: lines.complete,
-                        error: lines.error, detail: detail)
+                        error: lines.error, detail: detail, stateKnown: known)
     }
 
     /// The last activity seen: the transcript's last write, else the record's own date.

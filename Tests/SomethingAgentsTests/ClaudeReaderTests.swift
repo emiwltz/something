@@ -204,7 +204,7 @@ final class ClaudeHome {
             (#""status":"waiting","waitingFor":"sandbox request""#, .permission, true, nil),
             (#""status":"waiting","waitingFor":"input needed""#, .answer, true, "input needed"),
             (#""status":"waiting","waitingFor":"goal proposal""#, .answer, true, "goal proposal"),
-            (#""status":"shell""#, .nothing, true, nil),
+            (#""status":"shell""#, .nothing, false, nil),
             (#""status":"idle""#, .nothing, false, nil),
         ]
         for (words, waiting, open, raw) in cases {
@@ -213,7 +213,22 @@ final class ClaudeHome {
             let shop = try #require(home.read().sightings.first { $0.key == ClaudeHome.shop })
             #expect(shop.facts.waiting == waiting && shop.facts.turnOpen == open, "\(words)")
             #expect(shop.detail["waitingFor"] == raw.map(JSONValue.string), "\(words)")
+            #expect(shop.stateKnown && (shop.detail["backgroundShell"] != nil) == words.contains("shell"), "\(words)")
         }
+
+        // A session idle while its background shell runs: a closed turn, said in the detail.
+        try original.replacingOccurrences(of: #""status":"waiting","waitingFor":"permission prompt""#, with: #""status":"shell""#)
+            .write(to: record, atomically: true, encoding: .utf8)
+        var agent = try #require(Watch.elsewhere(Seen(sightings: home.read().sightings), groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
+        #expect(agent.state == "idle" && agent.waiting == "none" && agent.detail["backgroundShell"] == .bool(true))
+
+        // A status word the reader does not know: the holder is alive, what it does is unknown, never idle.
+        try original.replacingOccurrences(of: #""status":"waiting","waitingFor":"permission prompt""#, with: #""status":"pondering""#)
+            .write(to: record, atomically: true, encoding: .utf8)
+        let shop = try #require(home.read().sightings.first { $0.key == ClaudeHome.shop })
+        #expect(!shop.stateKnown && shop.detail["status"] == .string("pondering"))
+        agent = try #require(Watch.elsewhere(Seen(sightings: [shop]), groups: [], keys: [], now: Date()).agents.first)
+        #expect(agent.alive == true && agent.evidence == "registry" && agent.state == "unknown" && agent.waiting == nil)
     }
 
     @Test func theHealthOfTheReader() throws {
