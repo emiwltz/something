@@ -1,5 +1,5 @@
 # The tests on GitHub's Macs, at each push, on macOS 15, the floor the package, the app and the formula
-# declare and the oldest runner GitHub still offers (macos-14 is removed on 2 November 2026), and on macos-latest.
+# declare, and on macos-latest.
 #
 # Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases, and
 # make-app.sh assembles a signed something.app from a release build. The runner has a logged-in window server, so the
@@ -87,10 +87,10 @@ jobs:
           # What is timed: brew install alone, without brew update (turned off above) and without the first start.
           # Both must take under five minutes, so the install alone above 300 s turns the run red.
           if [ "$seconds" -gt 300 ]; then
-            echo "::error title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start): over the 300 s it may take"
+            echo "::error title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start): over the 300 s limit"
             exit 1
           fi
-          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start); it may take 300 s"
+          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start); the limit is 300 s"
       - run: brew test local/something/something
       - name: The command, as a person types it
         run: |

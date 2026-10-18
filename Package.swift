@@ -8,7 +8,7 @@ import PackageDescription
 
 let package = Package(
     name: "something",
-    // macOS 15, the oldest macOS GitHub's runners still prove; the formula and Info.plist say the same. Tools 5.9
+    // macOS 15, the oldest macOS this repository's CI runs on; the formula and Info.plist say the same. Tools 5.9
     // have no .v15, hence the string.
     platforms: [.macOS("15.0")],
     products: [.executable(name: "something", targets: ["something"])],

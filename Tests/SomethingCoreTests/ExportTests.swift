@@ -187,7 +187,7 @@ import Testing
         #expect(throws: SpaceError.self, "a name taken in the meantime") { try Export.place(heavy, as: "notes", in: place.spaces, memory: place.data) }
     }
 
-    /// Criterion 7: a space can link to an agent's session, but nothing of the session reaches its export.
+    /// A space can link to an agent's session, but nothing of the session reaches its export.
     @Test func aStringPlantedInAnAgentSessionNeverReachesAnExport() throws {
         let place = Place()
         defer { place.remove() }

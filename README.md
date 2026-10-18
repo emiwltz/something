@@ -168,9 +168,9 @@ A space reads what holds now in each agent's `can` and `because`, not in this ta
 ## Where it has run
 
 *The suite has run on macOS 27 on Apple silicon (Swift 6.3, Xcode 26), and only there so far. something requires macOS
-15 (the package, the app and the formula say so), the oldest macOS on GitHub's runners: GitHub runs the suite at each
-push on macOS 15 and on the newest macOS its runners offer, and installs the formula there with Homebrew; this line
-names them once those runs are green.* Intel Macs are not tested.
+15 (the package, the app and the formula say so), the oldest macOS this repository's CI runs on: GitHub runs the suite
+at each push on macOS 15 and on the newest macOS its runners offer, and installs the formula there with Homebrew; this
+line names them once those runs are green.* Intel Macs are not tested.
 
 ## Uninstall
 

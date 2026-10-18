@@ -279,7 +279,7 @@ final class CodexHome {
         #expect(unreadable.health == "unreadable" && unreadable.sightings.count == 3 && unreadable.note?.contains("check its permissions") == true)
     }
 
-    /// Contract 3.5: listed while alive. A conversation idle for three days whose lock a codex process holds is read.
+    /// Listed while alive: a conversation idle for three days whose lock a codex process holds is read.
     @Test func aHeldConversationIdleForDaysIsListed() throws {
         let unheld = try CodexHome()
         defer { unheld.remove() }

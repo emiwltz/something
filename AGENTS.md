@@ -11,6 +11,8 @@ Emi maintains the project and gives the direction.
 - **Propose, do not expand.** A possible improvement is a question to him; it does not add itself to the work.
 - **Say what is true.** Keep decided, done, verified, proposed and blocked apart. Say what you did not verify and what went wrong.
 
+If you work for a contributor, the same holds with them, in their language. What enters `main` is Emi's decision.
+
 Everything in the repository is in English: code, comments, data keys, commit messages, documents.
 
 ## What must stay true
@@ -42,7 +44,7 @@ What is committed here is public, and stays in the history even when a later com
 - **Small verified slices.** One commit per slice that is tested and works.
 - **A choice nothing covers:** if it is implementation, take the smallest reversible option, note it in the commit, go on. If it changes what the product is or what the README promises, ask Emi.
 - **Keep the paperwork small.** The documents are the README, this file, and the guide for spaces. No progress logs, no plan files.
-- **Sub-agents:** at most two at a time on Emi's machine, where memory is tight. One writer per file. An independent reviewer for anything that touches the core. A sub-agent does not inherit these rules: its brief gives the goal, the files it may touch, what is forbidden, and the proof expected, and tells it to work alone.
+- **Sub-agents:** at most two at a time (the suite and the builds are memory-hungry). One writer per file. An independent reviewer for anything that touches the core. A sub-agent does not inherit these rules: its brief gives the goal, the files it may touch, what is forbidden, and the proof expected, and tells it to work alone.
 
 ## Proving
 
@@ -70,7 +72,8 @@ node --test Tests/something-js.test.mjs    # name the file: node 22 does not tak
 
 - Push, publish, install anything on his machine, or change a global configuration (an agent's settings, the shell).
 - Make a repository public, change its settings, tag or release a version, rewrite a history that was pushed.
-- Listen on a network port.
+- Listen anywhere other than 127.0.0.1. A test listener binds 127.0.0.1 on a port the system picks (port 0) and stops
+  when the test ends.
 - Send anything to a real agent, or start, stop or close a real agent, a real terminal or a virtual machine.
 - Read, show or copy a secret (`.env`, keys, tokens).
 - Write, change or delete anything outside this repository, except a temporary folder you created yourself.
