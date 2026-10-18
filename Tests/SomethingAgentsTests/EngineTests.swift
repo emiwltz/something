@@ -276,18 +276,22 @@ import SomethingCore
         try """
             #!/bin/sh
             echo "$*" >> "$FAKE_OUT/shell-runs"
+            touch "$FAKE_OUT/shell-sleeps"
             sleep 2
+            rm -f "$FAKE_OUT/shell-sleeps"
             PATH='\(place.bin.path):/usr/bin:/bin'; export PATH
             for last; do :; done
             eval "$last"
             """.write(to: shell, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
         let engine = Engine.throwaway(place.environment.merging(["PATH": "/usr/bin:/bin", "SHELL": shell.path]) { _, finder in finder })
-        final class Ticks { var count = 0, running = true }
-        let ticks = Ticks()
+        // The main queue ticks while the shell sleeps; one held by the shell could never. Counting ticks instead would
+        // fail on a busy runner, where the other suites' main-actor tests hold the main queue too.
+        final class Ticks { var duringShell = 0, running = true }
+        let ticks = Ticks(), sleeping = place.out.appendingPathComponent("shell-sleeps").path
         func tick() {
             guard ticks.running else { return }
-            ticks.count += 1
+            if FileManager.default.fileExists(atPath: sleeping) { ticks.duringShell += 1 }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: tick)
         }
         tick()
@@ -299,8 +303,7 @@ import SomethingCore
         ticks.running = false
         let waited = Date().timeIntervalSince(begun)
         #expect(waited >= 1.8, "the launch waited for the shell")
-        // A tick every 50 ms, about 40 in 2 s: a main queue held by the shell would have had one or two.
-        #expect(ticks.count >= 15)
+        #expect(ticks.duringShell >= 1, "the main queue ran while the login shell was read")
         // A second launch, as one that waited for the person's answer, uses what was found and reads no shell.
         let second = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
         #expect(second != id)
