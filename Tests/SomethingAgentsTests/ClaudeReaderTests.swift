@@ -77,7 +77,10 @@ final class ClaudeHome {
         #expect(blog.title == "Blog typo", "the person's title wins over Claude's")
         #expect(blog.facts.turnOpen == true && blog.facts.waiting == .nothing)
         #expect(blog.turns.map(\.state) == ["done", "working"])
-        #expect(blog.turns[0].items.map(\.text) == ["Fix the typo in the about page.", "/Users/example/blog_v2/about.md", "Invented: the typo is fixed."])
+        // Its last reply is two lines, a thought and a text, each saying end_turn: one turn holds both.
+        #expect(blog.turns[0].items.map(\.text) == ["Fix the typo in the about page.", "/Users/example/blog_v2/about.md",
+                                                    "Invented: one word was misspelled.", "Invented: the typo is fixed."])
+        #expect(blog.turns[0].items.map(\.kind) == ["message", "tool", "thought", "message"])
         #expect(blog.turns[0].items[1].tool == Tool(name: "Edit", status: "done"))
         #expect(blog.turns[0].ended == "2026-10-17T07:31:09.000Z")
         #expect(blog.turns[1].items.map(\.kind) == ["message", "subagent", "message"], "a helper's notice is not the person's")
@@ -128,6 +131,45 @@ final class ClaudeHome {
         #expect(FileManager.default.fileExists(atPath: home.sessions.appendingPathComponent("41300.json").path), "never deleted")
         // A day after its last write, an ended conversation is no longer listed.
         #expect(home.read(ClaudeHome.snapshot(shop: false, blog: false), now: Date().addingTimeInterval(Watch.recent + 60)).sightings.isEmpty)
+    }
+
+    /// Claude rewrites a record whole: one caught mid-write (or too big) keeps the session as it was.
+    @Test func aTornRecordEndsNothing() throws {
+        let home = try ClaudeHome()
+        _ = home.read()
+        let record = home.sessions.appendingPathComponent("41300.json")
+        try Data(#"{"pid":41300,"sessionId":"6a7b"#.utf8).write(to: record)
+        let torn = try #require(home.read().sightings.first { $0.key == ClaudeHome.blog })
+        #expect(torn.facts.alive == true && !torn.facts.ended && torn.facts.turnOpen == true)
+        // A record never read yet, torn on its first sighting, is not taken for an end either.
+        let fresh = try ClaudeHome()
+        try Data(#"{"pid":41300,"sessionId":"6a7b"#.utf8).write(to: fresh.sessions.appendingPathComponent("41300.json"))
+        #expect(Set(fresh.read().sightings.map(\.key)) == [ClaudeHome.shop])
+    }
+
+    /// A long transcript read from its end says that its first turns are missing, and so does one that grew by more
+    /// than 4 MB between two ticks, whose turns are kept.
+    @Test func turnsNotReadMakeTheThreadIncomplete() throws {
+        let home = try ClaudeHome()
+        let blog = home.transcript("-Users-example-blog-v2", ClaudeHome.blog)
+        #expect(home.read().sightings.first { $0.key == ClaudeHome.blog }?.complete == true, "read from its first byte")
+        let filler = String(repeating: #"{"type":"progress","data":"Invented filler."}"# + "\n", count: 120_000)
+        let append = { (text: String) in
+            let handle = try FileHandle(forWritingTo: blog)
+            handle.seekToEndOfFile()
+            handle.write(Data(text.utf8))
+            try handle.close()
+        }
+        let end = #"{"isSidechain":false,"type":"assistant","message":{"id":"msg_b5invented","role":"assistant","model":"claude-example-model","content":[{"type":"text","text":"Invented: the links are fine."}],"stop_reason":"end_turn"},"uuid":"b0000000-0000-4000-8000-000000000014","timestamp":"2026-10-17T07:50:00.000Z"}"#
+        try append(filler + end + "\n")
+        let gap = try #require(home.read().sightings.first { $0.key == ClaudeHome.blog })
+        #expect(!gap.complete && gap.turns.map(\.state) == ["done", "done"], "the turns before the gap are kept")
+        #expect(gap.turns[1].items.last?.text == "Invented: the links are fine.")
+
+        let long = try ClaudeHome(), longBlog = long.transcript("-Users-example-blog-v2", ClaudeHome.blog)
+        try (Data(filler.utf8) + Data(contentsOf: longBlog)).write(to: longBlog)
+        let tail = try #require(long.read().sightings.first { $0.key == ClaudeHome.blog })
+        #expect(!tail.complete && tail.turns.count == 2)
     }
 
     @Test func aTranscriptOutsideItsFolderIsFoundByTheWalk() throws {

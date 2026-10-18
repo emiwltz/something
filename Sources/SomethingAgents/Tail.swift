@@ -6,7 +6,8 @@ import Darwin
 import Foundation
 
 /// Where the reading of one file stopped. A file replaced (new inode), cut shorter, or whose first bytes changed (a
-/// harness that rewrites its file in place) is read again from its end, as a new one.
+/// harness that rewrites its file in place) is read again from its end, as a new one; a file that grew by more than
+/// 4 MB is read from its end too, as the same one.
 public struct Cursor: Equatable, Sendable {
     var inode: UInt64
     /// Just after the last whole line handed over.
@@ -25,10 +26,13 @@ public enum Tail {
         /// The whole lines that hold one of the substrings asked for, oldest first, without their newline.
         public var lines: [Data]
         public var cursor: Cursor
-        /// true when `lines` come from the end of the file rather than right after the cursor given: the caller
-        /// starts over from them. That is the case for a first read, a file replaced, cut or rewritten, and when more
-        /// than 4 MB were written since the last read.
+        /// true when the caller must start over from `lines`: a first read, or a file replaced, cut or rewritten.
         public var fresh: Bool
+        /// true when more than 4 MB were written since the cursor: `lines` come from the file's end, and what was
+        /// written before them is skipped. The file is the same one, so what the caller kept still holds.
+        public var gap: Bool
+        /// true when the lines read begin at the file's first byte: nothing before them was left out.
+        public var fromStart: Bool
         /// How many bytes were read from the file, for the budget of a tick.
         public var bytes: Int
     }
@@ -54,13 +58,13 @@ public enum Tail {
         let headBytes = chunk(0, UInt64(headLength))
         let head = hash(headBytes)
 
-        if let cursor, cursor.inode == inode, cursor.offset <= size, size - cursor.offset <= UInt64(widest),
-           hash(headBytes.prefix(cursor.headLength)) == cursor.head {
+        let same = cursor.map { $0.inode == inode && $0.offset <= size && hash(headBytes.prefix($0.headLength)) == $0.head } ?? false
+        if let cursor, same, size - cursor.offset <= UInt64(widest) {
             let (lines, consumed, skipping) = split(chunk(cursor.offset, size), startsMidLine: cursor.skipping, containing: containing)
             let next = Cursor(inode: inode, offset: cursor.offset + consumed, head: head, headLength: headLength, skipping: skipping)
-            return Read(lines: lines, cursor: next, fresh: false, bytes: bytes)
+            return Read(lines: lines, cursor: next, fresh: false, gap: false, fromStart: cursor.offset == 0 && !cursor.skipping, bytes: bytes)
         }
-        // A fresh read: the last 512 KB, then the 4 MB before the end when the caller needs more.
+        // A fresh read, or one past a gap: the last 512 KB, then the 4 MB before the end when the caller needs more.
         var start = size > UInt64(window) ? size - UInt64(window) : 0
         var data = chunk(start, size)
         var (lines, consumed, skipping) = split(data, startsMidLine: start > 0, containing: containing)
@@ -71,7 +75,7 @@ public enum Tail {
             (lines, consumed, skipping) = split(data, startsMidLine: start > 0, containing: containing)
         }
         let next = Cursor(inode: inode, offset: start + consumed, head: head, headLength: headLength, skipping: skipping)
-        return Read(lines: lines, cursor: next, fresh: true, bytes: bytes)
+        return Read(lines: lines, cursor: next, fresh: !same, gap: same, fromStart: start == 0, bytes: bytes)
     }
 
     /// The whole lines of `data` that hold one of `containing`, and how many bytes were used up. The bytes before the

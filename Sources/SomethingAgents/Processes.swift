@@ -28,11 +28,14 @@ public struct Running: Equatable, Sendable {
 /// The processes of one tick. Tests build one by hand, with invented processes.
 public struct Snapshot {
     public let processes: [Int32: Running]
+    /// false when the system did not give the whole list: a process missing from it is then not proven gone.
+    public let whole: Bool
     private let files: (Int32) -> [String]?
 
     /// `files` gives the paths a process holds open, or nil when they cannot be read.
-    public init(_ processes: [Running], files: @escaping (Int32) -> [String]? = { _ in nil }) {
+    public init(_ processes: [Running], whole: Bool = true, files: @escaping (Int32) -> [String]? = { _ in nil }) {
         self.processes = Dictionary(processes.map { ($0.pid, $0) }) { first, _ in first }
+        self.whole = whole
         self.files = files
     }
 
@@ -52,11 +55,12 @@ public final class Processes {
 
     public init(known: Set<String>) { self.known = known }
 
-    /// The processes running now. A process that ends during the read is left out; the list is empty only when the
-    /// system refuses to give it.
+    /// The processes running now. A process that ends during the read is left out. The snapshot is `whole` only
+    /// when the system gave the list in full and something's own process is in it.
     public func snapshot() -> Snapshot {
         var processes: [Running] = []
-        for pid in Processes.pids() {
+        let pids = Processes.pids()
+        for pid in pids ?? [] {
             guard var process = Processes.info(pid) else { continue }
             if known.contains(process.name) {
                 if let entry = kept[pid], entry.started == process.started {
@@ -71,17 +75,22 @@ public final class Processes {
         }
         let alive = Set(processes.map(\.pid))
         kept = kept.filter { alive.contains($0.key) }
-        return Snapshot(processes, files: Processes.openFiles)
+        let whole = pids != nil && processes.contains { $0.pid == getpid() }
+        return Snapshot(processes, whole: whole, files: Processes.openFiles)
     }
 
-    /// Every pid on this Mac, or none when the system refuses.
-    static func pids() -> [Int32] {
-        // The list can grow between the two calls: room is left for more.
+    /// Every pid on this Mac, or nil when the system refuses or the list kept outgrowing the room made for it.
+    static func pids() -> [Int32]? {
         let count = proc_listallpids(nil, 0)
-        guard count > 0 else { return [] }
-        var pids = [Int32](repeating: 0, count: Int(count) + 64)
-        let found = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
-        return found > 0 ? Array(pids.prefix(Int(found))).filter { $0 > 0 } : []
+        guard count > 0 else { return nil }
+        // The list can grow between the two calls: room is left for more, and a full buffer is tried once bigger.
+        for room in [Int(count) + 64, Int(count) * 2 + 256] {
+            var pids = [Int32](repeating: 0, count: room)
+            let found = pids.withUnsafeMutableBytes { proc_listallpids($0.baseAddress, Int32($0.count)) }
+            guard found > 0 else { return nil }
+            if Int(found) < room { return Array(pids.prefix(Int(found))).filter { $0 > 0 } }
+        }
+        return nil
     }
 
     /// The process `pid` without its arguments and folder, or nil when it is gone or hidden from this user.

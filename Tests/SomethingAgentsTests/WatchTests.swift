@@ -53,6 +53,33 @@ import SomethingCore
         #expect(threads.isEmpty)
     }
 
+    /// A snapshot the system did not give in full proves nobody gone: the last tick stands.
+    @Test func aSnapshotNotWholeEndsNothing() throws {
+        let home = try ClaudeHome()
+        var snapshot = ClaudeHome.snapshot()
+        let watch = Watch(readers: [home.reader], snapshot: { snapshot })
+        let good = watch.tick(now: Date())
+        snapshot = Snapshot([], whole: false)
+        #expect(watch.tick(now: Date()) == good)
+        #expect(Watch.elsewhere(watch.tick(now: Date()), groups: [], keys: [], now: Date()).agents.allSatisfy { $0.alive == true })
+        // This Mac's own snapshot holds this process, and is whole.
+        let own = Processes(known: []).snapshot()
+        #expect(own.whole && own[getpid()] != nil)
+    }
+
+    /// An agent seen elsewhere that ended has no pid: the number may already be another program's.
+    @Test func anEndedAgentHasNoPid() throws {
+        let home = try ClaudeHome()
+        var snapshot = ClaudeHome.snapshot()
+        let watch = Watch(readers: [home.reader], snapshot: { snapshot })
+        _ = watch.tick(now: Date())
+        try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
+        snapshot = ClaudeHome.snapshot(shop: false)
+        let seen = watch.tick(now: Date())
+        let shop = try #require(Watch.elsewhere(seen, groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
+        #expect(shop.alive == false && shop.pid == nil)
+    }
+
     @Test func theTimerTicksAndChangesItsCadence() async throws {
         let home = try ClaudeHome()
         let watch = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() })
@@ -98,5 +125,15 @@ import SomethingCore
         engine.stopAll(within: 3) { done.done = true }
         let end = Date().addingTimeInterval(5)
         while !done.done, Date() < end { try await Task.sleep(nanoseconds: 20_000_000) }
+        #expect(done.done)
+
+        // Once that child ended, a Claude started by hand whose group has the child's old pid is listed.
+        snapshot = Snapshot(ClaudeHome.snapshot().processes.values.map { process in
+            var process = process
+            if process.pid == 41300 { process.group = pid }
+            return process
+        })
+        engine.saw(engine.watch.tick(now: Date()))
+        #expect(engine.state.agents.contains { $0.thread == ClaudeHome.blog && $0.origin == "elsewhere" })
     }
 }

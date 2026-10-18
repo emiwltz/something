@@ -92,10 +92,12 @@ public final class Engine {
                      threads: folds.compactMap(\.thread) + elsewhere.threads, requests: folds.flatMap(\.requests))
     }
 
-    /// The agents the watch saw, but those something launched: the groups of its children and the conversations
-    /// its drivers reported are left out (design 4.3).
+    /// The agents the watch saw, but those something launched: the groups of its running children and the
+    /// conversations its drivers reported are left out (design 4.3). An ended child's group is not: its pid may be
+    /// reused by a program started by hand, and its conversation is still left out by its key.
     private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
-        Watch.elsewhere(seen, groups: Set(launched.map(\.spawn.pid).filter { $0 > 0 }), keys: Set(launched.compactMap(\.agent.agent.thread)), now: Date())
+        let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
+        return Watch.elsewhere(seen, groups: groups, keys: Set(launched.compactMap(\.agent.agent.thread)), now: Date())
     }
 
     /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.

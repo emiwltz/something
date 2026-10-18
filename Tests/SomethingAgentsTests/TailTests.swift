@@ -29,7 +29,7 @@ import Testing
         let path = file()
         try (line(1) + line(2, type: "noise") + line(3)).write(toFile: path, atomically: false, encoding: .utf8)
         let first = try #require(Tail.read(path, after: nil, containing: TailTests.wanted))
-        #expect(first.fresh && texts(first) == [line(1), line(3)].map { String($0.dropLast()) })
+        #expect(first.fresh && first.fromStart && !first.gap && texts(first) == [line(1), line(3)].map { String($0.dropLast()) })
         // A line still being written is left for the next read.
         try append(line(4) + #"{"type":"message","text":"Invented, unfin"#, to: path)
         let second = try #require(Tail.read(path, after: first.cursor, containing: TailTests.wanted))
@@ -92,6 +92,7 @@ import Testing
         let first = try #require(Tail.read(path, after: nil, containing: TailTests.wanted, enough: { _ in false }))
         #expect(first.bytes <= Tail.widest + Tail.headSize, "\(first.bytes) bytes read")
         #expect(texts(first) == [String(line(1).dropLast())], "the end of the long line is dropped")
+        #expect(!first.fromStart)
         // Then 12 MB more in one line, and a short one: the long line is skipped, the short one read.
         let appending = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
         appending.seekToEndOfFile()
@@ -99,6 +100,7 @@ import Testing
         appending.write(Data(line(2).utf8))
         try appending.close()
         let next = try #require(Tail.read(path, after: first.cursor, containing: TailTests.wanted))
+        #expect(!next.fresh && next.gap, "more than 4 MB since the cursor: a gap in the same file, not a new one")
         #expect(next.bytes <= Tail.widest + Tail.headSize)
         #expect(texts(next) == [String(line(2).dropLast())])
         #expect(next.lines.allSatisfy { $0.count <= Tail.widest })

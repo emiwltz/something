@@ -58,19 +58,27 @@ final class ClaudeReader: Reader {
             names = listed.filter { $0.range(of: #"^\d+\.json$"#, options: .regularExpression) != nil }
         }
         records = records.filter { names.contains($0.key) }
-        var current: [String: (record: Record, alive: Bool?)] = [:], stale: Set<Int32> = []
+        var current: [String: (record: Record, alive: Bool?)] = [:], stale: Set<Int32> = [], unread: Set<String> = []
         for name in names {
             let path = (registry as NSString).appendingPathComponent(name)
             guard let stamp = Stamp(path) else { continue }
             if records[name]?.stamp != stamp {
-                guard stamp.size <= UInt64(ClaudeReader.largestRecord), let data = contents(path),
-                      let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { continue }   // torn: tried again next tick
-                guard ["interactive", "bg", nil].contains(object["kind"] as? String) else { records[name] = (stamp, nil); continue }
-                guard let record = ClaudeReader.record(object) else {
-                    return Reading(health: "changed", note: "Claude Code's session files changed shape; its agents are shown as processes only.")
+                // Claude rewrites a record whole at each change: one caught mid-write keeps its last reading (its old
+                // stamp makes the next tick try again), and a session never read yet is left as it was, not ended.
+                if stamp.size <= UInt64(ClaudeReader.largestRecord), let data = contents(path),
+                   let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+                    if ["interactive", "bg", nil].contains(object["kind"] as? String) {
+                        guard let record = ClaudeReader.record(object) else {
+                            return Reading(health: "changed", note: "Claude Code's session files changed shape; its agents are shown as processes only.")
+                        }
+                        // Claude names each record after its pid: another name is no record of Claude's.
+                        records[name] = (stamp, "\(record.pid).json" == name ? record : nil)
+                    } else {
+                        records[name] = (stamp, nil)
+                    }
+                } else if records[name] == nil {
+                    unread.insert(name)
                 }
-                // Claude names each record after its pid: another name is no record of Claude's.
-                records[name] = (stamp, "\(record.pid).json" == name ? record : nil)
             }
             guard let record = records[name]?.record else { continue }
             let alive = ClaudeReader.alive(record, snapshot)
@@ -82,14 +90,19 @@ final class ClaudeReader: Reader {
         for (id, (record, alive)) in current {
             // A conversation continued by a new process (a resume) is held again.
             var session = sessions[id] ?? Session(record: record, lines: ClaudeTranscript(session: id))
-            (session.record, session.alive, session.ended) = (record, alive, false)
+            session.record = record
+            session.alive = alive
+            session.ended = false
             sessions[id] = session
         }
-        for (id, session) in sessions where current[id] == nil && session.alive != false {
+        for (id, session) in sessions where current[id] == nil && session.alive != false && !unread.contains("\(session.record.pid).json") {
             // A record left behind by a process that is gone is a crash; one removed or moved on is a normal end.
-            (sessions[id]!.alive, sessions[id]!.ended) = (false, !stale.contains(session.record.pid))
+            sessions[id]!.alive = false
+            sessions[id]!.ended = !stale.contains(session.record.pid)
         }
-        sessions = sessions.filter { $0.value.alive != false || ($0.value.stamp?.modified ?? $0.value.record.updated).map { now.timeIntervalSince($0) < Watch.recent } == true }
+        // A session whose record is there is kept, so that its transcript is not read again from its end; one that
+        // ended is forgotten when Watch stops listing it.
+        sessions = sessions.filter { current[$0.key] != nil || Watch.isRecent(alive: $0.value.alive, updated: ClaudeReader.updated($0.value), now: now) }
         for id in sessions.keys {
             follow(id, discover: discover)
             reading.sightings.append(sighting(sessions[id]!))
@@ -116,9 +129,13 @@ final class ClaudeReader: Reader {
             opened(path)
             if let read = Tail.read(path, after: session.cursor, containing: ClaudeReader.wanted,
                                     enough: { $0.contains { $0.range(of: ClaudeReader.wanted[1]) != nil } }) {
+                // A read from the file's end starts the turns over; one past a gap keeps them. Either way, turns
+                // before what was read may be missing.
                 if read.fresh { session.lines = ClaudeTranscript(session: id) }
+                if read.gap || (read.fresh && !read.fromStart) { session.lines.complete = false }
                 read.lines.forEach { session.lines.add($0) }
-                (session.cursor, session.stamp) = (read.cursor, stamp)
+                session.cursor = read.cursor
+                session.stamp = stamp
             }
         }
         sessions[id] = session
@@ -129,20 +146,31 @@ final class ClaudeReader: Reader {
         var facts = StateMap.Facts(alive: session.alive, evidence: session.alive == nil ? nil : "registry", lastWrite: session.stamp?.modified)
         var detail: [String: JSONValue] = [:]
         switch record.status {
-        case "busy", "shell": (facts.turnOpen, facts.waiting) = (true, .nothing)
-        case "idle": (facts.turnOpen, facts.waiting) = (false, .nothing)
+        // "shell" is idle with a background shell still running (notes/format-claude.md 1.3), but design 3.2 maps it
+        // as "busy": kept so until Emi settles which one wins.
+        case "busy", "shell":
+            facts.turnOpen = true
+            facts.waiting = .nothing
+        case "idle":
+            facts.turnOpen = false
+            facts.waiting = .nothing
         case "waiting":
             facts.turnOpen = true
             facts.waiting = ["permission prompt", "sandbox request"].contains(record.waitingFor) ? .permission : .answer
             if facts.waiting == .answer, let word = record.waitingFor { detail["waitingFor"] = .string(word) }
         default: facts.turnOpen = lines.open
         }
-        (facts.ended, facts.failed, facts.aborted) = (session.ended, lines.turns.last?.state == "error", lines.turns.last?.state == "interrupted")
+        facts.ended = session.ended
+        facts.failed = lines.turns.last?.state == "error"
+        facts.aborted = lines.turns.last?.state == "interrupted"
         return Sighting(kind: kind, key: record.session, pid: record.pid, facts: facts, folder: record.cwd, title: lines.title ?? record.name,
                         model: lines.model, mode: lines.mode, effort: lines.effort, started: record.started,
-                        updated: session.stamp?.modified ?? record.updated, turns: lines.turns, complete: lines.complete,
+                        updated: ClaudeReader.updated(session), turns: lines.turns, complete: lines.complete,
                         error: lines.error, detail: detail)
     }
+
+    /// The last activity seen: the transcript's last write, else the record's own date.
+    private static func updated(_ session: Session) -> Date? { session.stamp?.modified ?? session.record.updated }
 
     private func contents(_ path: String) -> Data? {
         opened(path)
@@ -200,7 +228,8 @@ struct Stamp: Equatable {
         var status = stat()
         guard stat(path, &status) == 0 else { return nil }
         modified = Date(timeIntervalSince1970: TimeInterval(status.st_mtimespec.tv_sec) + TimeInterval(status.st_mtimespec.tv_nsec) / 1e9)
-        (size, inode) = (UInt64(max(status.st_size, 0)), UInt64(status.st_ino))
+        size = UInt64(max(status.st_size, 0))
+        inode = UInt64(status.st_ino)
     }
 }
 
@@ -209,9 +238,13 @@ struct Stamp: Equatable {
 struct ClaudeTranscript {
     let session: String
     private(set) var turns: [Turn] = []
-    private(set) var complete = true
+    /// false once turns before those read are missing: dropped past the limit, or never read.
+    var complete = true
     private(set) var model: String?, effort: String?, mode: String?, error: AgentError?
     private var customTitle: String?, aiTitle: String?
+    /// The message.id of the reply that closed the last turn: Claude writes one reply as one line per block, each
+    /// with the reply's final stop_reason, so the blocks after the first that says end_turn still belong to that turn.
+    private var closedBy: String?
 
     init(session: String) { self.session = session }
 
@@ -268,22 +301,29 @@ struct ClaudeTranscript {
             error = AgentError(code: "AGENT_ERROR", message: text.isEmpty ? "Claude Code could not answer." : text)
             return close("error", at: at)
         }
-        (model, effort) = (message["model"] as? String ?? model, object["effort"] as? String ?? effort)
+        model = message["model"] as? String ?? model
+        effort = object["effort"] as? String ?? effort
+        let reply = message["id"] as? String
+        let continuing = reply != nil && reply == closedBy && turns.last?.state == "done"
         for (index, block) in blocks.enumerated() {
             switch block["type"] as? String {
-            case "text": append(Item(id: "\(id)/\(index)", kind: "message", author: "agent", text: block["text"] as? String ?? "", at: at), at: at)
+            case "text": append(Item(id: "\(id)/\(index)", kind: "message", author: "agent", text: block["text"] as? String ?? "", at: at), at: at, continuing: continuing)
             case "thinking":
                 guard let text = block["thinking"] as? String, !text.isEmpty else { continue }
-                append(Item(id: "\(id)/\(index)", kind: "thought", author: "agent", text: text, at: at), at: at)
+                append(Item(id: "\(id)/\(index)", kind: "thought", author: "agent", text: text, at: at), at: at, continuing: continuing)
             case "tool_use":
                 let name = block["name"] as? String ?? "a tool", input = block["input"] as? [String: Any] ?? [:]
                 let target = ClaudeTranscript.targets.lazy.compactMap { input[$0] as? String }.first { !$0.isEmpty } ?? name
                 append(Item(id: block["id"] as? String ?? "\(id)/\(index)", kind: ["Agent", "Task"].contains(name) ? "subagent" : "tool",
-                            author: "agent", text: target, at: at, tool: Tool(name: name, status: "running")), at: at)
+                            author: "agent", text: target, at: at, tool: Tool(name: name, status: "running")), at: at, continuing: continuing)
             default: break
             }
         }
-        if message["stop_reason"] as? String == "end_turn" { close("done", at: at) }
+        if continuing, !at.isEmpty { turns[turns.count - 1].ended = at }
+        if message["stop_reason"] as? String == "end_turn", !continuing {
+            close("done", at: at)
+            closedBy = reply
+        }
     }
 
     /// A message with no origin is the person's (older versions write none); a peer's or a task's is not.
@@ -293,8 +333,9 @@ struct ClaudeTranscript {
     }
 
     /// Adds `item` to the running turn, or to a new one: a reply nobody was seen asking for still opens a turn.
-    private mutating func append(_ item: Item, at: String) {
-        if turns.last?.state != "working" {
+    /// `continuing` adds it to the last turn, closed by the reply the item belongs to.
+    private mutating func append(_ item: Item, at: String, continuing: Bool = false) {
+        if turns.last?.state != "working" && !continuing {
             turns.append(Turn(id: item.id, state: "working", started: at.isEmpty ? nil : at, ended: nil, items: []))
             if turns.count > Limits.turns { turns.removeFirst(); complete = false }
         }
@@ -309,6 +350,7 @@ struct ClaudeTranscript {
 
     private mutating func close(_ state: String, at: String?) {
         guard let last = turns.indices.last, turns[last].state == "working" else { return }
-        (turns[last].state, turns[last].ended) = (state, at.flatMap { $0.isEmpty ? nil : $0 })
+        turns[last].state = state
+        turns[last].ended = at.flatMap { $0.isEmpty ? nil : $0 }
     }
 }

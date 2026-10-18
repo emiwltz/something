@@ -65,6 +65,8 @@ final class Watch {
     private var timer: DispatchSourceTimer?
     private var interval: TimeInterval = 0
     private var ticks = 0
+    /// The last tick's result, kept for a tick whose snapshot is not whole.
+    private var last = Seen()
 
     /// `snapshot` takes the processes of a tick; by default, this Mac's.
     init(readers: [Reader], snapshot: (() -> Snapshot)? = nil) {
@@ -95,9 +97,11 @@ final class Watch {
 
     deinit { timer?.cancel() }
 
-    /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings.
+    /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings. A snapshot that is
+    /// not whole proves no process gone: the readers are not run, and the last result stands.
     func tick(now: Date) -> Seen {
         let processes = snapshot()
+        guard processes.whole else { return last }
         let discover = ticks % Watch.discoveryEvery == 0
         ticks += 1
         var seen = Seen()
@@ -109,7 +113,7 @@ final class Watch {
                              folder: process.folder, started: process.started, processOnly: true)
                 }
             }
-            reading.sightings = reading.sightings.filter { $0.facts.alive == true || ($0.updated.map { now.timeIntervalSince($0) < Watch.recent } ?? false) }
+            reading.sightings = reading.sightings.filter { Watch.isRecent(alive: $0.facts.alive, updated: $0.updated, now: now) }
             // Oldest first, in one order from tick to tick: the same agents in another order would be a change.
             reading.sightings.sort { ($0.started ?? .distantPast, $0.key) < ($1.started ?? .distantPast, $1.key) }
             for index in reading.sightings.indices { reading.sightings[index].group = reading.sightings[index].pid.flatMap { processes[$0]?.group } }
@@ -118,7 +122,13 @@ final class Watch {
             // A kind with nothing on this Mac is left out: the state says "none" for it, as for a kind without a reader.
             if reading != Reading() { seen.kinds[reader.kind] = reading }
         }
+        last = seen
         return seen
+    }
+
+    /// Whether a conversation is listed (contract 3.5): alive, or active within `recent`.
+    static func isRecent(alive: Bool?, updated: Date?, now: Date) -> Bool {
+        alive == true || (updated.map { now.timeIntervalSince($0) < recent } ?? false)
     }
 
     /// The agents and threads of `seen` that something did not launch: a sighting is dropped when its process is in
@@ -130,11 +140,20 @@ final class Watch {
             var agent = Agent(id: "\(sighting.kind)-\(sighting.key)", kind: sighting.kind, origin: "elsewhere")
             // A process proves its holder alive, not what it does: the state words are those of an unknown holder.
             let result = StateMap.map(sighting.processOnly ? StateMap.Facts(alive: nil, evidence: "process") : sighting.facts, now: now)
-            (agent.alive, agent.evidence, agent.state, agent.waiting) = (sighting.facts.alive, result.evidence, result.state, result.waiting)
+            agent.alive = sighting.facts.alive
+            agent.evidence = result.evidence
+            agent.state = result.state
+            agent.waiting = result.waiting
             agent.name = sighting.title ?? sighting.folder.map { ($0 as NSString).lastPathComponent } ?? sighting.kind
-            (agent.folder, agent.pid, agent.thread) = (sighting.folder, sighting.pid.map(Int.init), sighting.key)
-            (agent.model, agent.mode, agent.effort, agent.error, agent.detail) = (sighting.model, sighting.mode, sighting.effort, sighting.error, sighting.detail)
-            (agent.started, agent.updated) = (sighting.started.map(iso), sighting.updated.map(iso))
+            agent.folder = sighting.folder
+            // An ended process's pid may already be another program's.
+            agent.pid = sighting.facts.alive == false ? nil : sighting.pid.map(Int.init)
+            agent.thread = sighting.key
+            (agent.model, agent.mode, agent.effort) = (sighting.model, sighting.mode, sighting.effort)
+            agent.error = sighting.error
+            agent.detail = sighting.detail
+            agent.started = sighting.started.map(iso)
+            agent.updated = sighting.updated.map(iso)
             agent.because = ["send": "This agent was started outside something; something only reads it.",
                              "resume": Engine.notYet.message]
             if sighting.processOnly { agent.thread = nil; agents.append(agent); continue }
