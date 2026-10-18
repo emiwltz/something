@@ -182,21 +182,33 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         #expect(second.stop() < 2)
     }
 
+    /// At quit's own cap (6 s), three programs whose first step never ends and that ignore SIGTERM: every ladder
+    /// begins before any program ends, each is killed near the cap, and the whole stop ends well before three
+    /// ladders one after another would. These are relations, not times: on a busy 3-core Mac a thread can wait its
+    /// turn for seconds, and a short cap could not tell that wait from a ladder run late.
     @Test func atQuitEveryLadderRunsAtOnceWithinItsCap() throws {
         let stubborn = "trap '' TERM; echo ready; while :; do sleep 0.05; done"
         let fixtures = try [Fixture(stubborn), Fixture(stubborn), Fixture(stubborn)]
+        let steps = NSLock()
+        var stepsBegun: [Date] = []
         for fixture in fixtures {
             #expect(fixture.wait(for: "ready"))
-            fixture.spawn.graceful = { sleep(10) }   // a driver's step that never ends is cut by the cap
+            fixture.spawn.graceful = {   // a driver's step that never ends is cut by the cap
+                steps.withLock { stepsBegun.append(Date()) }
+                sleep(10)
+            }
         }
         let start = Date(), done = DispatchSemaphore(value: 0)
-        Spawn.stopAll(fixtures.map(\.spawn), cap: 1.5) { done.signal() }
+        Spawn.stopAll(fixtures.map(\.spawn)) { done.signal() }
         done.wait()
-        let took = Date().timeIntervalSince(start)
-        // Each ladder alone lasts until its SIGKILL, 1.25 s at a 1.5 s cap: the three together end after that, and
-        // well before three ladders one after another. An absolute bound near the cap fails on a busy 3-core Mac,
-        // where a thread that polls every 20 ms can wait its turn for half a second.
-        #expect(took > 1.2 && took < 3 * 1.2, "took \(took) s")
+        let took = Date().timeIntervalSince(start), cap = 6.0
+        let begun = steps.withLock { stepsBegun }, ended = fixtures.compactMap(\.endedAt)
+        let timeline = "steps began at \(begun.map { $0.timeIntervalSince(start) }), programs ended at \(ended.map { $0.timeIntervalSince(start) }), done at \(took) s"
+        #expect(begun.count == 3 && ended.count == 3, "\(timeline)")
+        #expect(begun.max().map { last in ended.allSatisfy { last < $0 } } == true, "every ladder begins before any program ends: \(timeline)")
+        // SIGKILL comes 0.25 s before the cap: no program ended before it, since none gave way earlier.
+        #expect(ended.allSatisfy { $0.timeIntervalSince(start) > cap - 0.3 }, "\(timeline)")
+        #expect(took < 3 * (cap - 0.25), "within the cap, far from three ladders one after another: \(timeline)")
         for fixture in fixtures { #expect(!processExists(fixture.spawn.pid)) }
     }
 

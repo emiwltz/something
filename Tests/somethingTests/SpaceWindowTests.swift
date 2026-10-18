@@ -197,31 +197,50 @@ import WebKit
         try await ready(a)
         try await ready(b)
         #expect(ask.questions.isEmpty, "a space that declares no right is asked nothing")
-        let written = try await run(a, """
+        // The database is read back by its key, and looked for in b by opening it: on macOS 15, indexedDB.databases()
+        // gave an empty list right after a database was written (seen on CI; most likely it lists only what a store
+        // keeps on disk, and these stores keep nothing), so a count of it would prove nothing there.
+        #expect(try await run(a, """
             localStorage.setItem("kept", "from a");
             document.cookie = "kept=from-a";
-            await new Promise((done, failed) => {
+            const database = await new Promise((done, failed) => {
               const opening = indexedDB.open("kept");
               opening.onupgradeneeded = () => opening.result.createObjectStore("store");
-              opening.onsuccess = () => {
-                const writing = opening.result.transaction("store", "readwrite");
-                writing.objectStore("store").put("from a", "key");
-                writing.oncomplete = done;
-                writing.onerror = failed;
-              };
+              opening.onsuccess = () => done(opening.result);
               opening.onerror = failed;
+            });
+            await new Promise((done, failed) => {
+              const writing = database.transaction("store", "readwrite");
+              writing.objectStore("store").put("from a", "key");
+              writing.oncomplete = done;
+              writing.onerror = failed;
+            });
+            const kept = await new Promise((done, failed) => {
+              const reading = database.transaction("store").objectStore("store").get("key");
+              reading.onsuccess = () => done(reading.result);
+              reading.onerror = failed;
             });
             if (self.caches) await (await caches.open("kept")).put("https://example.com/kept", new Response("from a"));
             new BroadcastChannel("kept").postMessage("from a");
-            return [localStorage.getItem("kept"), (await indexedDB.databases()).map((d) => d.name).join()]
-            """)
-        #expect(written as? [String] == ["from a", "kept"], "\(String(describing: written))")
+            return [localStorage.getItem("kept"), kept]
+            """) as? [String] == ["from a", "from a"])
         await wait(0.5)
         #expect(try await run(a, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
         #expect(try await run(b, """
-            return [localStorage.getItem("kept"), document.cookie.includes("kept"), (await indexedDB.databases()).length,
+            const found = await new Promise((done, failed) => {
+              const opening = indexedDB.open("kept");
+              let made = false;
+              opening.onupgradeneeded = (event) => made = event.oldVersion === 0;
+              opening.onsuccess = () => {
+                const stores = opening.result.objectStoreNames.length;
+                opening.result.close();
+                done(!made || stores > 0);
+              };
+              opening.onerror = failed;
+            });
+            return [localStorage.getItem("kept"), document.cookie.includes("kept"), found,
                     self.caches ? await caches.has("kept") : false, heard.length]
-            """) as? [AnyHashable] == [NSNull(), false, 0, false, 0])
+            """) as? [AnyHashable] == [NSNull(), false, false, false, 0])
 
         // Storage ends with the window: the same space, opened again, starts empty.
         a.close()
