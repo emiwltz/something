@@ -25,7 +25,7 @@ final class Stopped: @unchecked Sendable { var done = false }
     var asked = false
 
     /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool.
-    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false) throws {
+    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false) async throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
@@ -39,7 +39,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         if planB {
             let tools = root.appendingPathComponent("tools"), hook = tools.appendingPathComponent("something").path
             try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
-            try PlanBTests.buildHook(hook, in: tools)
+            try await PlanBTests.buildHook(hook, in: tools)
             // The product's own path shape, space included, so the hook command's quoting meets the real shell.
             spool = PermissionSpool(folder: root.appendingPathComponent("Application Support/spool/claude-trial-\(launch.thread)").path)
             command = ClaudeDriver.command(launch, hook: [hook, "hook", "permission", "--spool", spool!.folder])
@@ -124,7 +124,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
 @MainActor struct ClaudeTrial {
 
     @Test func aTurnStartsAndEnds() async throws {
-        let run = try ClaudeRun("turn")
+        let run = try await ClaudeRun("turn")
         defer { run.cleanup() }
         #expect(try run.agent.send("Hello there.", when: "next") == "started")
         try await run.until("a reply") { run.items.contains { $0.author == "agent" && $0.kind == "message" } && run.state.state == "idle" }
@@ -137,7 +137,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func aPermissionIsAllowedOnce() async throws {
-        let run = try ClaudeRun("permission-once")
+        let run = try await ClaudeRun("permission-once")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -152,7 +152,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func aPermissionIsDenied() async throws {
-        let run = try ClaudeRun("deny")
+        let run = try await ClaudeRun("deny")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -165,7 +165,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
 
     /// The answer goes back as `updatedInput.answers`, and the model reads it in the tool's result.
     @Test func aQuestionIsAnswered() async throws {
-        let run = try ClaudeRun("question")
+        let run = try await ClaudeRun("question")
         defer { run.cleanup() }
         _ = try run.agent.send("Please ask-me something.", when: "next")
         try await run.until("a question") { run.request != nil }
@@ -183,7 +183,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func aSteerJoinsTheTurnAndAQueuedMessageWaits() async throws {
-        let run = try ClaudeRun("steer-queue")
+        let run = try await ClaudeRun("steer-queue")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-sleep for me.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -203,7 +203,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func anInterruptStopsATool() async throws {
-        let run = try ClaudeRun("interrupt")
+        let run = try await ClaudeRun("interrupt")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-sleep for me.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -220,7 +220,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
 
     /// A steer Claude still holds is dropped by the interrupt (`cancel_queued`): never read, never shown.
     @Test func anInterruptDropsASteer() async throws {
-        let run = try ClaudeRun("steer-interrupt")
+        let run = try await ClaudeRun("steer-interrupt")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-sleep for me.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -240,7 +240,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func anInterruptWithdrawsARequest() async throws {
-        let run = try ClaudeRun("withdrawn")
+        let run = try await ClaudeRun("withdrawn")
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -253,7 +253,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func modeAndModelAreSet() async throws {
-        let run = try ClaudeRun("set")
+        let run = try await ClaudeRun("set")
         defer { run.cleanup() }
         try await run.until("the models") { run.state.options.model != nil }
         #expect(try run.agent.driver.set(model: nil, mode: "plan", effort: nil) == "now")
@@ -270,7 +270,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
 
     /// The effort given at launch reaches the model; one set during the session does from the next request.
     @Test func anEffortIsGivenAndSet() async throws {
-        let run = try ClaudeRun("effort", effort: "high")
+        let run = try await ClaudeRun("effort", effort: "high")
         defer { run.cleanup() }
         _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && !run.api.received.isEmpty }
@@ -290,7 +290,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     /// Plan B against the real Claude: its PermissionRequest hook, given in --settings, runs the real hook command,
     /// which asks through the spool.
     @Test func planBAllowsOnce() async throws {
-        let run = try ClaudeRun("plan-b-once", planB: true)
+        let run = try await ClaudeRun("plan-b-once", planB: true)
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -302,7 +302,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func planBDenies() async throws {
-        let run = try ClaudeRun("plan-b-deny", planB: true)
+        let run = try await ClaudeRun("plan-b-deny", planB: true)
         defer { run.cleanup() }
         _ = try run.agent.send("Please run-echo now.", when: "next")
         try await run.until("a permission") { run.request != nil }
@@ -313,7 +313,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     }
 
     @Test func endSessionStopsCleanly() async throws {
-        let run = try ClaudeRun("stop")
+        let run = try await ClaudeRun("stop")
         defer { run.cleanup() }
         _ = try run.agent.send("Hello there.", when: "next")
         try await run.until("a reply") { run.state.state == "idle" && run.items.contains { $0.author == "agent" } }

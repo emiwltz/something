@@ -193,7 +193,10 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         Spawn.stopAll(fixtures.map(\.spawn), cap: 1.5) { done.signal() }
         done.wait()
         let took = Date().timeIntervalSince(start)
-        #expect(took > 1.2 && took < 1.7)
+        // Each ladder alone lasts until its SIGKILL, 1.25 s at a 1.5 s cap: the three together end after that, and
+        // well before three ladders one after another. An absolute bound near the cap fails on a busy 3-core Mac,
+        // where a thread that polls every 20 ms can wait its turn for half a second.
+        #expect(took > 1.2 && took < 3 * 1.2, "took \(took) s")
         for fixture in fixtures { #expect(!processExists(fixture.spawn.pid)) }
     }
 

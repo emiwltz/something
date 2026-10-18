@@ -176,10 +176,20 @@ struct Offscreen {
     }
 }
 
+/// Runs `work`, which waits for a child process, on a thread of its own, and returns what it returns or throws. The
+/// main actor is never held: every main-actor suite shares it with WebKit and the engine's main queue, and a child
+/// that takes seconds on a slow Mac (a 3-core runner) would make their deadlines pass while nothing could run.
+func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        Thread.detachNewThread { continuation.resume(with: Result { try work() }) }
+    }
+}
+
 /// Waits, without blocking the main actor, until `condition` holds or `seconds` pass; whether it holds. The tests
-/// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on.
+/// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on. The default is
+/// only a guard against a hang: WebKit's first processes start slowly on a busy Mac.
 @MainActor @discardableResult
-func wait(_ seconds: Double = 10, until condition: () -> Bool = { false }) async -> Bool {
+func wait(_ seconds: Double = 30, until condition: () -> Bool = { false }) async -> Bool {
     let end = Date().addingTimeInterval(seconds)
     while !condition(), Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
     return condition()
@@ -208,7 +218,11 @@ let inventedRequest = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash
 /// Runs a built `program` with `words` (as Claude's plan-B hook runs it, for `hook permission`), in `home` with the
 /// system's PATH only, `input` on its input; its status and outputs. Stopped after 30 s, so that a program that never
 /// answers fails the test.
-func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest) throws -> (status: Int32, out: String, err: String) {
+func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest) async throws -> (status: Int32, out: String, err: String) {
+    try await offMain { try runBuiltWaiting(program, words, home: home, input: text) }
+}
+
+private func runBuiltWaiting(_ program: URL, _ words: [String], home: Home, input text: String) throws -> (status: Int32, out: String, err: String) {
     let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
     process.executableURL = program
     process.arguments = words

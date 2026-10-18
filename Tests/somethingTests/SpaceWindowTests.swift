@@ -197,7 +197,7 @@ import WebKit
         try await ready(a)
         try await ready(b)
         #expect(ask.questions.isEmpty, "a space that declares no right is asked nothing")
-        #expect(try await run(a, """
+        let written = try await run(a, """
             localStorage.setItem("kept", "from a");
             document.cookie = "kept=from-a";
             await new Promise((done, failed) => {
@@ -214,7 +214,8 @@ import WebKit
             if (self.caches) await (await caches.open("kept")).put("https://example.com/kept", new Response("from a"));
             new BroadcastChannel("kept").postMessage("from a");
             return [localStorage.getItem("kept"), (await indexedDB.databases()).map((d) => d.name).join()]
-            """) as? [String] == ["from a", "kept"])
+            """)
+        #expect(written as? [String] == ["from a", "kept"], "\(String(describing: written))")
         await wait(0.5)
         #expect(try await run(a, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
         #expect(try await run(b, """

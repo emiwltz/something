@@ -17,7 +17,13 @@ struct Checked {
     var json: [String: Any] { (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? [String: Any] ?? [:] }
     var codes: [String] { (json["problems"] as? [[String: Any]] ?? []).compactMap { $0["code"] as? String } }
 
-    init(_ words: [String], _ home: Home) throws {
+    init(_ words: [String], _ home: Home) async throws {
+        let ran = try await offMain { try Checked.run(words, home) }
+        (status, out, err) = (ran.status, ran.out, ran.err)
+        #expect(ran.exited, "something check \(words.joined(separator: " ")) ran over 30 seconds and was ended.")
+    }
+
+    private static func run(_ words: [String], _ home: Home) throws -> (status: Int32, out: String, err: String, exited: Bool) {
         let process = Process()
         process.executableURL = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
         process.arguments = ["check"] + words
@@ -35,10 +41,8 @@ struct Checked {
         let errors = err.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         deadline.cancel()
-        status = process.terminationStatus
-        self.out = String(decoding: data, as: UTF8.self)
-        self.err = String(decoding: errors, as: UTF8.self)
-        #expect(process.terminationReason == .exit, "something check \(words.joined(separator: " ")) ran over 30 seconds and was ended.")
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self), String(decoding: errors, as: UTF8.self),
+                process.terminationReason == .exit)
     }
 }
 
@@ -112,12 +116,12 @@ extension Home {
     ]
 
     @Test(arguments: fixtures.indices)
-    func eachSpaceGivesExactlyItsCode(_ index: Int) throws {
+    func eachSpaceGivesExactlyItsCode(_ index: Int) async throws {
         let fixture = CheckTests.fixtures[index], home = Home(prefix: "something-check-")
         defer { home.remove() }
         try fixture.make(home)
         let words = fixture.words.map { $0 == "STATE" ? home.root.appendingPathComponent("state.json").path : $0 }
-        let checked = try Checked(["x", "--json"] + words, home)
+        let checked = try await Checked(["x", "--json"] + words, home)
         #expect(checked.codes == [fixture.code], "\(fixture.code): \(checked.out)")
         let level = try #require(Codes.all[fixture.code]).level
         #expect(checked.status == (level == .fatal ? 2 : level == .error ? 1 : 0), "\(fixture.code) exits with \(checked.status)")
@@ -130,11 +134,11 @@ extension Home {
     }
 
     /// The template the command starts a space from is a clean space: no problem, a snapshot, every call answered.
-    @Test func aCleanSpaceGivesNone() throws {
+    @Test func aCleanSpaceGivesNone() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("board", try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8))
-        let checked = try Checked(["board", "--json"], home)
+        let checked = try await Checked(["board", "--json"], home)
         #expect(checked.status == 0 && checked.codes.isEmpty, "\(checked.out)")
         let snapshot = try #require(checked.json["snapshot"] as? String)
         #expect(snapshot == home.root.appendingPathComponent("tmp/something-check/board.png").path)
@@ -143,20 +147,20 @@ extension Home {
         #expect(calls.contains { $0["method"] as? String == "state" && ($0["answer"] as? [String: Any])?["agents"] as? [String] == ["a1", "e1", "p1"] })
         #expect(checked.json["received"] as? NSDictionary == ["source": "invented", "agents": 3, "states": ["waiting": 1, "done": 1, "unknown": 1],
                                                                "requests": 1, "nullKeys": ["effort", "error", "mode", "model", "pid", "thread", "updated", "waiting"]])
-        let human = try Checked(["board"], home)
+        let human = try await Checked(["board"], home)
         #expect(human.status == 0 && human.out.hasPrefix("something check board\n  space     "), "\(human.out)")
         #expect(human.out.contains("\n  received  3 agents (1 waiting, 1 done, 1 unknown), 1 request · invented state\n"))
         #expect(human.out.hasSuffix("\n  0 errors, 0 warnings.\n"))
     }
 
     /// --json has the keys of share/contract/check-example.json, at every level the example shows.
-    @Test func theJsonMatchesTheContractKeyForKey() throws {
+    @Test func theJsonMatchesTheContractKeyForKey() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send:claude\", \"sendd\"]", """
             <script>agnets;</script><script>console.warn("No agent yet."); something.send("a1", "Hello", { when: "next" });</script>
             """))
-        let checked = try Checked(["x", "--json"], home)
+        let checked = try await Checked(["x", "--json"], home)
         let example = try JSONSerialization.jsonObject(with: Data(contentsOf: Home.share.appendingPathComponent("contract/check-example.json")))
         func keys(_ a: Any?, _ b: Any?, _ at: String) {
             if let a = a as? [String: Any], let b = b as? [String: Any] {
@@ -178,11 +182,11 @@ extension Home {
     }
 
     /// --refuse takes a right from the declared ones; a page that reads granted and hides it is clean.
-    @Test func refuseTakesARight() throws {
+    @Test func refuseTakesARight() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("board", try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8))
-        let checked = try Checked(["board", "--json", "--refuse", "send"], home)
+        let checked = try await Checked(["board", "--json", "--refuse", "send"], home)
         #expect(checked.status == 0 && checked.codes.isEmpty, "\(checked.out)")
         #expect((checked.json["rights"] as? [String: Any])?["granted"] as? [String] == ["state", "launch"])
         #expect((checked.json["rights"] as? [String: Any])?["refused"] as? [String] == ["send"])
@@ -190,19 +194,19 @@ extension Home {
 
     /// RIGHT_REFUSED is only for the rejection of a refused call: a caught refused call and an uncaught undeclared
     /// one give the undeclared one's codes, and the check fails.
-    @Test func onlyARefusedCallIsRightRefused() throws {
+    @Test func onlyARefusedCallIsRightRefused() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
                                      "<script>something.send(\"a1\", \"Hello.\").catch(() => {}); something.launch(\"pi\");</script>"))
-        let checked = try Checked(["x", "--json", "--refuse", "send"], home)
+        let checked = try await Checked(["x", "--json", "--refuse", "send"], home)
         #expect(checked.codes == ["PROMISE_REJECTED", "RIGHT_NOT_DECLARED"] && checked.status == 1, "\(checked.out)")
     }
 
     /// A launch the app refuses is refused by the check too: a mode something does not offer for Codex, and a model
     /// that reads as a flag, which only Engine.checkLaunch refuses (the BridgeHost default both hosts share). Codex,
     /// not OpenCode: the invented state has no OpenCode installed, which is refused first.
-    @Test func aLaunchTheAppRefusesIsABridgeError() throws {
+    @Test func aLaunchTheAppRefusesIsABridgeError() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"rights\": [\"launch:codex\"]", """
@@ -211,7 +215,7 @@ extension Home {
             something.launch("codex", {model: "--yolo"}).catch(() => {});
             </script>
             """))
-        let checked = try Checked(["x", "--json"], home)
+        let checked = try await Checked(["x", "--json"], home)
         let messages = (checked.json["problems"] as? [[String: Any]] ?? []).compactMap { $0["message"] as? String }
         #expect(checked.codes == ["BRIDGE_ERROR", "BRIDGE_ERROR"], "\(checked.out)")
         #expect(messages.contains { $0.contains("VALUE_NOT_OFFERED") } && messages.contains { $0.contains("BAD_PARAMS") }, "\(checked.out)")
@@ -221,31 +225,31 @@ extension Home {
     }
 
     /// A --refuse word must name a declared right as it is declared, or nothing would be refused.
-    @Test func refuseNamesADeclaredRight() throws {
+    @Test func refuseNamesADeclaredRight() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]", "<p>Invented.</p>"))
         for word in ["sned", "send:claude"] {
-            let checked = try Checked(["x", "--refuse", word], home)
+            let checked = try await Checked(["x", "--refuse", word], home)
             #expect(checked.status == 2 && checked.out.isEmpty, "\(checked.out)")
             #expect(checked.err == "--refuse \(word) names no right the space declares (it declares: state, send); refuse a right as it is declared.\n")
         }
     }
 
     /// An error thrown in a listener of something.on keeps its file and line.
-    @Test func aListenerErrorSaysWhere() throws {
+    @Test func aListenerErrorSaysWhere() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\"]",
                                      "<script>\nsomething.on(\"change\", (state) => { state.agnets.length; });\n</script>"))
-        let checked = try Checked(["x", "--json"], home)
+        let checked = try await Checked(["x", "--json"], home)
         let problem = (checked.json["problems"] as? [[String: Any]])?.first
         #expect(checked.codes == ["SCRIPT_ERROR"] && (problem?["where"] as? [String: Any])?["file"] as? String == "x.html", "\(checked.out)")
         #expect((problem?["where"] as? [String: Any])?["line"] as? Int == 2, "\(checked.out)")
     }
 
     /// --state gives the page another state, named as the source; a broken one stops the check (status 2).
-    @Test func stateGivesAnotherState() throws {
+    @Test func stateGivesAnotherState() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\"]", "<script>something.state();</script>"))
@@ -253,35 +257,35 @@ extension Home {
         state["agents"] = Array((state["agents"] as? [Any] ?? []).prefix(1))
         let file = home.root.appendingPathComponent("one.json")
         try JSONSerialization.data(withJSONObject: state).write(to: file)
-        let checked = try Checked(["x", "--json", "--state", file.path], home)
+        let checked = try await Checked(["x", "--json", "--state", file.path], home)
         #expect(checked.status == 0 && checked.codes.isEmpty, "\(checked.out)")
         #expect((checked.json["received"] as? [String: Any])?["source"] as? String == file.path)
         #expect((checked.json["received"] as? [String: Any])?["agents"] as? Int == 1)
 
         try "{\"contract\": 1, \"at\": \"x\", \"kinds\": {}, \"agents\": [{\"id\": \"a1\"}], \"threads\": [], \"requests\": []}".write(to: file, atomically: true, encoding: .utf8)
-        let broken = try Checked(["x", "--state", file.path], home)
+        let broken = try await Checked(["x", "--state", file.path], home)
         #expect(broken.status == 2 && broken.out.contains("fatal     STATE_FILE_UNREADABLE \(file.path) is not a state of contract 1: the key agents[0].kind is missing."), "\(broken.out)")
         #expect(broken.out.hasSuffix("The check could not run to its end: fix the fatal problem first.\n"))
     }
 
     /// --journal adds the space's journal, and never the check's own calls.
-    @Test func journalPrintsTheSpacesJournal() throws {
+    @Test func journalPrintsTheSpacesJournal() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]", "<script>something.send(\"a1\", \"Hello.\");</script>"))
         let line = JournalLine(at: "2026-10-17T09:00:02Z", action: "send", agent: "a1", kind: "claude", when: "next", text: "Then run the tests.", result: "ok")
         try Journal(folder: home.places.journals).append(line, space: "x")
-        let checked = try Checked(["x", "--json", "--journal"], home)
+        let checked = try await Checked(["x", "--json", "--journal"], home)
         #expect(checked.json["journal"] as? [NSDictionary] == [["at": "2026-10-17T09:00:02Z", "action": "send", "agent": "a1", "kind": "claude",
                                                                  "when": "next", "text": "Then run the tests.", "result": "ok"]], "\(checked.out)")
         #expect(try Journal(folder: home.places.journals).last(10, space: "x") == [line])
-        let human = try Checked(["x", "--journal"], home)
+        let human = try await Checked(["x", "--journal"], home)
         #expect(human.out.contains("\n  journal   2026-10-17T09:00:02Z send a1 claude next \"Then run the tests.\": ok\n"), "\(human.out)")
-        #expect(try Checked(["x", "--json"], home).json["journal"] is NSNull)
+        #expect(try await Checked(["x", "--json"], home).json["journal"] is NSNull)
 
         // Over 100 lines, the human output says the older ones are left out.
         for _ in 0..<100 { try Journal(folder: home.places.journals).append(line, space: "x") }
-        let long = try Checked(["x", "--journal"], home)
+        let long = try await Checked(["x", "--journal"], home)
         #expect(long.out.components(separatedBy: "\n  journal   2026").count == 101, "\(long.out)")
         #expect(long.out.contains("\n  journal   the last 100 lines; older ones are left out\n"))
 
@@ -289,19 +293,19 @@ extension Home {
         let file = Journal(folder: home.places.journals).file("x")
         try FileManager.default.removeItem(at: file)
         try FileManager.default.createDirectory(at: file, withIntermediateDirectories: true)
-        #expect(try Checked(["x", "--json", "--journal"], home).json["journal"] is NSNull)
-        #expect(try Checked(["x", "--journal"], home).out.contains("\n  journal   not read: The journal in \(file.path) cannot be read.\n"))
+        #expect(try await Checked(["x", "--json", "--journal"], home).json["journal"] is NSNull)
+        #expect(try await Checked(["x", "--journal"], home).out.contains("\n  journal   not read: The journal in \(file.path) cannot be read.\n"))
     }
 
     /// 0 with warnings only, 1 with an error, 2 when the check could not run.
-    @Test func theThreeExitStatuses() throws {
+    @Test func theThreeExitStatuses() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("warned", declared("<script>console.error(\"Invented problem.\");</script>"))
         try home.space("broken", declared("<script>agnets.length;</script>"))
-        #expect(try Checked(["warned"], home).status == 0)
-        #expect(try Checked(["broken"], home).status == 1)
-        let missing = try Checked(["nowhere"], home)
+        #expect(try await Checked(["warned"], home).status == 0)
+        #expect(try await Checked(["broken"], home).status == 1)
+        let missing = try await Checked(["nowhere"], home)
         #expect(missing.status == 2 && missing.out.contains("fatal     SPACE_NOT_FOUND There is no space nowhere in "), "\(missing.out)")
     }
 

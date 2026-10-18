@@ -109,7 +109,7 @@ import SomethingCore
         func remove() { try? FileManager.default.removeItem(at: root) }
     }
 
-    func until(_ what: String, seconds: Double = 10, _ condition: () -> Bool) async throws {
+    func until(_ what: String, seconds: Double = 30, _ condition: () -> Bool) async throws {
         let end = Date().addingTimeInterval(seconds)
         while !condition() {
             guard Date() < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }

@@ -64,12 +64,12 @@ import SomethingCore
         var hook: String { tools.appendingPathComponent("something").path }
         var environment: [String: String] { ["HOME": root.path, "PATH": "\(bin.path):/usr/bin:/bin", "FAKE_OUT": out.path, "SHELL": "/bin/sh"] }
 
-        init() throws {
+        init() async throws {
             for folder in [bin, work, out, tools] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
             let program = bin.appendingPathComponent("claude")
             try PlanBTests.fake.write(to: program, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
-            try PlanBTests.buildHook(hook, in: tools)
+            try await PlanBTests.buildHook(hook, in: tools)
         }
 
         /// Called with defer in each test: a deinit does not always run before the test process ends.
@@ -92,8 +92,9 @@ import SomethingCore
     }
 
     /// Builds the hook command from PermissionSpool.swift alone, at `path`, with what `something hook permission`
-    /// runs; `folder` holds its scraps.
-    nonisolated static func buildHook(_ path: String, in folder: URL) throws {
+    /// runs; `folder` holds its scraps. swiftc takes seconds on a slow Mac (5 s on a 3-core runner): it is waited for
+    /// on a thread of its own, never on the main actor, which the engine's tests and WebKit's share.
+    nonisolated static func buildHook(_ path: String, in folder: URL) async throws {
         let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources/SomethingAgents/PermissionSpool.swift")
         let main = folder.appendingPathComponent("main.swift")
@@ -101,12 +102,22 @@ import SomethingCore
         let swiftc = Process()
         swiftc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         swiftc.arguments = ["swiftc", "-module-cache-path", folder.appendingPathComponent("cache").path, "-o", path, source.path, main.path]
-        try swiftc.run()
-        swiftc.waitUntilExit()
+        try await PlanBTests.offMain {
+            try swiftc.run()
+            swiftc.waitUntilExit()
+        }
         #expect(swiftc.terminationStatus == 0, "the hook command did not build")
     }
 
-    func until(_ what: String, seconds: Double = 10, _ condition: () -> Bool) async throws {
+    /// Runs `work`, which waits for a child process, on a thread of its own, and returns what it returns or throws:
+    /// the main actor is never held (Support.swift says why, for the app's tests).
+    nonisolated static func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            Thread.detachNewThread { continuation.resume(with: Result { try work() }) }
+        }
+    }
+
+    func until(_ what: String, seconds: Double = 30, _ condition: () -> Bool) async throws {
         let end = Date().addingTimeInterval(seconds)
         while !condition() {
             guard Date() < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }
@@ -159,7 +170,7 @@ import SomethingCore
     }
 
     @Test func allowOnce() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let engine = place.engine(), openings = Openings()
         let (_, request) = try await ask(place, engine, openings)
@@ -185,7 +196,7 @@ import SomethingCore
 
     /// Claude says a hook denied the tool: the deny is still the person's, who chose it.
     @Test func deny() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_DENIED_FRAME": "1"])
         let (_, request) = try await ask(place, engine)
@@ -200,7 +211,7 @@ import SomethingCore
 
     /// Nobody answers: the hook denies before Claude's own limit, and the window closes by itself.
     @Test func timeout() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let engine = place.engine(["hook", "permission", "--timeout", "1"])
         let (_, request) = try await ask(place, engine)
@@ -214,7 +225,7 @@ import SomethingCore
 
     /// Claude kills the hook while it waits (an interrupt): the window closes, and nobody decided.
     @Test func aKilledHookIsWithdrawn() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_KILL_HOOK": "1"]), openings = Openings()
         _ = try await ask(place, engine, openings)
@@ -229,7 +240,7 @@ import SomethingCore
     /// An answer stays answered while the hook has not read it yet, and one that could not be written leaves the
     /// request open, to be answered again.
     @Test func anAnswerIsGivenOnce() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let spool = PermissionSpool(folder: place.spools.appendingPathComponent("claude-1-x").path)
         try spool.start()
@@ -251,8 +262,8 @@ import SomethingCore
     }
 
     /// The heartbeat is too old, though its pid runs (something hangs): the hook denies at once.
-    @Test func anOldHeartbeatIsGone() throws {
-        let place = try Place()
+    @Test func anOldHeartbeatIsGone() async throws {
+        let place = try await Place()
         defer { place.remove() }
         let folder = place.spools.appendingPathComponent("claude-1-old")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -266,7 +277,7 @@ import SomethingCore
 
     /// something is gone (it crashed and left its spool, whose heartbeat names a pid that ended): the hook denies at once.
     @Test func staleHeartbeat() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let folder = place.spools.appendingPathComponent("claude-1-gone")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -291,8 +302,8 @@ import SomethingCore
 
     /// A spool left by a something that ended (its heartbeat names a pid gone) is removed at the next start, with the
     /// request it held; a live one and one still being made are kept.
-    @Test func aLeftoverSpoolIsRemovedAtTheNextStart() throws {
-        let place = try Place()
+    @Test func aLeftoverSpoolIsRemovedAtTheNextStart() async throws {
+        let place = try await Place()
         defer { place.remove() }
         let ended = Process()
         ended.executableURL = URL(fileURLWithPath: "/usr/bin/true")
@@ -318,7 +329,7 @@ import SomethingCore
 
     /// The heartbeat stops while the hook waits: it denies within a moment, not at its timeout.
     @Test func heartbeatStopsWhileWaiting() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let spool = PermissionSpool(folder: place.spools.appendingPathComponent("claude-1-x").path)
         try spool.start()
@@ -335,7 +346,7 @@ import SomethingCore
         try await until("the ask") { asked != nil }
         spool.stop()
         let begun = Date()
-        hook.waitUntilExit()
+        try await PlanBTests.offMain { hook.waitUntilExit() }
         #expect(Date().timeIntervalSince(begun) < 2)
         let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         #expect(printed.contains(#""behavior":"deny""#) && printed.contains("something is not running"))
@@ -343,7 +354,7 @@ import SomethingCore
 
     /// A Claude that does not know the prompt tool is launched again with plan B, under the same agent id.
     @Test func aRefusedPromptToolFallsBackToPlanB() async throws {
-        let place = try Place()
+        let place = try await Place()
         defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_NO_PROMPT_TOOL": "1"])
         let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)

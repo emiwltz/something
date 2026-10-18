@@ -16,7 +16,7 @@ import Testing
     }
 
     @Test(arguments: ["template"] + examples)
-    func passesTheCheck(_ name: String) throws {
+    func passesTheCheck(_ name: String) async throws {
         let home = Home(prefix: "something-examples-")
         defer { home.remove() }
         let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
@@ -24,13 +24,13 @@ import Testing
         let lines = html.filter { $0 == "\n" }.count
         #expect(lines <= 300, "\(name) has \(lines) lines; an example stays under about 300")
         try home.space(name, html)
-        let checked = try Checked([name, "--json"], home)
+        let checked = try await Checked([name, "--json"], home)
         #expect(checked.status == 0 && checked.codes.isEmpty, "\(checked.out)")
         #expect((checked.json["console"] as? [Any])?.isEmpty == true, "\(checked.out)")
         let declared = (checked.json["declaration"] as? [String: Any])?["rights"] as? [String] ?? []
         #expect(!declared.isEmpty)
         for right in declared {
-            let refused = try Checked([name, "--json", "--refuse", right], home)
+            let refused = try await Checked([name, "--json", "--refuse", right], home)
             #expect(refused.status == 0 && refused.codes.isEmpty, "with \(right) refused: \(refused.out)")
         }
     }

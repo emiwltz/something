@@ -23,7 +23,7 @@ import Testing
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
     }
 
-    @Test func theAppRunsThroughHomebrewsWrapper() throws {
+    @Test func theAppRunsThroughHomebrewsWrapper() async throws {
         // The something program swift test built, next to this suite's bundle.
         let program = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
         try #require(FileManager.default.isExecutableFile(atPath: program.path), "swift test built no something program at \(program.path)")
@@ -59,9 +59,9 @@ import Testing
         let spool = home.root.appendingPathComponent("spool")
         try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
         let inside = app.appendingPathComponent("Contents/MacOS/something")
-        let wrong = try runBuilt(inside, ["hook", "permission", "--bogus"], home: home)
+        let wrong = try await runBuilt(inside, ["hook", "permission", "--bogus"], home: home)
         #expect(wrong.status == 2 && wrong.out.isEmpty && wrong.err.contains("usage: something hook permission"), "\(wrong)")
-        let ran = try runBuilt(inside, ["hook", "permission", "--spool", spool.path], home: home)
+        let ran = try await runBuilt(inside, ["hook", "permission", "--spool", spool.path], home: home)
         let decision = hookDecision(ran.out)
         #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
     }

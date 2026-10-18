@@ -94,21 +94,21 @@ final class FakeDoor: Door {
     /// The program swift test built routes `hook permission`, as Claude's plan-B hook runs it (Engine.hookCommand):
     /// wrong words are a usage error; right ones read the request and print a decision, here a deny that says why,
     /// since no app keeps the spool alive. It also refuses a missing export without starting the app.
-    @Test func theBuiltProgramAnswersHookPermission() throws {
+    @Test func theBuiltProgramAnswersHookPermission() async throws {
         let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let spool = home.root.appendingPathComponent("spool")
         try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
         let program = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
         for wrong in [["hook", "permission"], ["hook", "permission", "--spool"], ["hook", "permission", "--spool", spool.path, "--bogus"]] {
-            let ran = try runBuilt(program, wrong, home: home)
+            let ran = try await runBuilt(program, wrong, home: home)
             #expect(ran.status == 2 && ran.out.isEmpty && ran.err.contains("usage: something hook permission"), "\(wrong): \(ran)")
         }
-        let ran = try runBuilt(program, ["hook", "permission", "--spool", spool.path], home: home)
+        let ran = try await runBuilt(program, ["hook", "permission", "--spool", spool.path], home: home)
         let decision = hookDecision(ran.out)
         #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
         // Under swift run, an export that is not there is said in the terminal, before any app starts.
-        let gone = try runBuilt(program, ["open", "/Users/example/nothing.something"], home: home, input: "")
+        let gone = try await runBuilt(program, ["open", "/Users/example/nothing.something"], home: home, input: "")
         #expect(gone.status == 1 && gone.err.contains("There is no file at /Users/example/nothing.something"), "\(gone)")
     }
 

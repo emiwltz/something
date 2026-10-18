@@ -95,7 +95,7 @@ import SomethingCore
         var ticks = 0
         watch.start(every: 0.05) { _ in ticks += 1 }
         watch.start(every: 0.05) { _ in Issue.record("the same cadence keeps the first timer") }
-        let end = Date().addingTimeInterval(5)
+        let end = Date().addingTimeInterval(30)
         while ticks < 3, Date() < end { try await Task.sleep(nanoseconds: 20_000_000) }
         #expect(ticks >= 3)
         watch.start(every: 3600) { _ in }
@@ -134,7 +134,7 @@ import SomethingCore
         try FileManager.default.removeItem(at: record)
         let done = Stopped()
         engine.stopAll(within: 3) { done.done = true }
-        let end = Date().addingTimeInterval(5)
+        let end = Date().addingTimeInterval(30)
         while !done.done, Date() < end { try await Task.sleep(nanoseconds: 20_000_000) }
         #expect(done.done)
 
