@@ -102,16 +102,16 @@ final class PromptPanel: NSPanel {
         let buttons: [NSButton]
         if prompt.request.kind == "question" {
             title = "A question from an agent"
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "\(who) asks you:"))
+            lines.addArrangedSubview(PromptPanel.line("\(who) asks you:"))
             for question in prompt.questions { add(question, to: lines) }
             buttons = [NSButton(title: "Don't answer", target: self, action: #selector(deny)),
                        NSButton(title: "Answer", target: self, action: #selector(reply))]
         } else {
             title = "Permission"
             let tool = prompt.request.tool.map { "to use \($0)" } ?? "for permission"
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "\(who) asks \(tool)."))
+            lines.addArrangedSubview(PromptPanel.line("\(who) asks \(tool)."))
             if let what = prompt.input ?? prompt.request.about {
-                let text = NSTextField(wrappingLabelWithString: what)
+                let text = PromptPanel.line(what)
                 text.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
                 text.isSelectable = true
                 lines.addArrangedSubview(text)
@@ -129,7 +129,7 @@ final class PromptPanel: NSPanel {
 
     private func add(_ question: Question, to lines: NSStackView) {
         if let header = question.header { lines.addArrangedSubview(NSTextField(labelWithString: header)) }
-        lines.addArrangedSubview(NSTextField(wrappingLabelWithString: question.text))
+        lines.addArrangedSubview(PromptPanel.line(question.text))
         // Radio buttons with the same action in the same stack form one group: one choice.
         let group = NSStackView()
         group.orientation = .vertical
@@ -145,6 +145,13 @@ final class PromptPanel: NSPanel {
         lines.addArrangedSubview(field)
         boxes.append(options)
         typed.append(field)
+    }
+
+    /// A label that wraps at the panel's width: who asks, with its folder, would otherwise widen the panel past the screen.
+    static func line(_ text: String) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.preferredMaxLayoutWidth = 448
+        return label
     }
 
     /// Each question's chosen labels, with the typed text when there is one.

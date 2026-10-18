@@ -57,54 +57,16 @@ protocol Asking: AnyObject {
 
 final class NativeAsk: Asking {
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
-        let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow what is ticked", "Not now"])
-        let lines = NSStackView()
-        lines.orientation = .vertical
-        lines.alignment = .leading
-        let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.words(for: $0), target: nil, action: nil) }
-        boxes.forEach(lines.addArrangedSubview)
-        if let scope = question.scope {
-            let seen: String
-            switch scope {
-            case .all: seen = "all your agents"
-            case .folders(let folders):
-                seen = folders.isEmpty ? "only the agents it launches" : "the agents working in " + folders.joined(separator: ", ")
-            }
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "With the right to see your agents, it sees \(seen)."))
-        }
-        var remap: [String: String] = [:], folder = question.folder?.found
-        var choosers: [Chooser] = []
-        for missing in question.missing {
-            choosers.append(Chooser(lines, "Agents in \(missing): not on this Mac.", button: "Choose a folder in its place…") { remap[missing] = $0 })
-        }
-        if let asked = question.folder {
-            let now = asked.found.map { "Agents it launches work in \($0)." }
-                ?? asked.declared.map { "Agents it launches work in \($0): not on this Mac." } ?? "Agents it launches need a folder."
-            choosers.append(Chooser(lines, now, button: asked.found == nil ? "Choose a folder…" : "Choose another folder…") { folder = $0 })
-        }
-        lines.frame.size = lines.fittingSize
-        alert.accessoryView = lines
-        // Return keeps nothing: a refusal is remembered, so it takes a click on the button that says what it does.
-        alert.buttons[0].keyEquivalent = ""
-        alert.buttons[1].keyEquivalent = "\r"
-        let response = Ask.run(alert)
-        withExtendedLifetime(choosers) {}
-        guard response == .alertFirstButtonReturn else { return nil }
-        let ticked = zip(question.rights, boxes).filter { $0.1.state == .on }.map(\.0)
-        return RightsAnswer(allowed: ticked, refused: question.rights.filter { !ticked.contains($0) }, folder: folder, remap: remap)
+        let window = Ask.rights(question)
+        return Ask.run(window.alert) == .alertFirstButtonReturn ? window.answer() : nil
     }
 
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
-        let alert = Ask.alert("Let “\(space)” put \(Ask.name(of: kind)) in a mode where it \(Ask.words(forMode: mode)) (\(mode))?",
-                              "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts.",
-                              buttons: ["Allow", "Don't allow"], escape: 1)
-        return Ask.run(alert) == .alertFirstButtonReturn
+        Ask.run(Ask.lowers(mode, kind: kind, folder: folder, space: space)) == .alertFirstButtonReturn
     }
 
     func link(_ url: URL, space: String) -> LinkChoice {
-        let alert = Ask.alert("“\(space)” wants to open a link.", url.absoluteString,
-                              buttons: ["Open", "Cancel", "Block links until reload"], escape: 1)
-        switch Ask.run(alert) {
+        switch Ask.run(Ask.link(url, space: space)) {
         case .alertFirstButtonReturn:
             NSWorkspace.shared.open(url)
             return .open
@@ -114,13 +76,7 @@ final class NativeAsk: Asking {
     }
 
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
-        // Ten keys at most: a memory of hundreds would make the window taller than the screen.
-        let shown = keys.prefix(10).joined(separator: ", ") + (keys.count > 10 ? " and \(keys.count - 10) more" : "")
-        let alert = Ask.alert("Export “\(space)” with its data?", "Its memory holds \(shown) (\(Size.words(bytes))). "
-                              + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac.",
-                              buttons: ["Without data", "With its data", "Cancel"], escape: 2)
-        alert.buttons[1].keyEquivalent = ""
-        switch Ask.run(alert) {
+        switch Ask.run(Ask.withData(space, keys: keys, bytes: bytes)) {
         case .alertFirstButtonReturn: return false
         case .alertSecondButtonReturn: return true
         default: return nil
@@ -190,6 +146,69 @@ enum Ask {
         return alert
     }
 
+    /// The rights window, not yet run, and the answers its boxes and choosers hold once it closed with its first
+    /// button. The window is built apart from running it so that a test can draw it without showing it.
+    static func rights(_ question: RightsQuestion) -> (alert: NSAlert, answer: () -> RightsAnswer) {
+        let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow what is ticked", "Not now"])
+        let lines = NSStackView()
+        lines.orientation = .vertical
+        lines.alignment = .leading
+        let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.words(for: $0), target: nil, action: nil) }
+        boxes.forEach(lines.addArrangedSubview)
+        if let scope = question.scope {
+            let seen: String
+            switch scope {
+            case .all: seen = "all your agents"
+            case .folders(let folders):
+                seen = folders.isEmpty ? "only the agents it launches" : "the agents working in " + folders.joined(separator: ", ")
+            }
+            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "With the right to see your agents, it sees \(seen)."))
+        }
+        var remap: [String: String] = [:], folder = question.folder?.found
+        var choosers: [Chooser] = []
+        for missing in question.missing {
+            choosers.append(Chooser(lines, "Agents in \(missing): not on this Mac.", button: "Choose a folder in its place…") { remap[missing] = $0 })
+        }
+        if let asked = question.folder {
+            let now = asked.found.map { "Agents it launches work in \($0)." }
+                ?? asked.declared.map { "Agents it launches work in \($0): not on this Mac." } ?? "Agents it launches need a folder."
+            choosers.append(Chooser(lines, now, button: asked.found == nil ? "Choose a folder…" : "Choose another folder…") { folder = $0 })
+        }
+        lines.frame.size = lines.fittingSize
+        alert.accessoryView = lines
+        // Return keeps nothing: a refusal is remembered, so it takes a click on the button that says what it does.
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        return (alert, {
+            withExtendedLifetime(choosers) {}
+            let ticked = zip(question.rights, boxes).filter { $0.1.state == .on }.map(\.0)
+            return RightsAnswer(allowed: ticked, refused: question.rights.filter { !ticked.contains($0) }, folder: folder, remap: remap)
+        })
+    }
+
+    /// The window that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button.
+    static func lowers(_ mode: String, kind: String, folder: String?, space: String) -> NSAlert {
+        alert("Let “\(space)” put \(name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
+              "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts.",
+              buttons: ["Allow", "Don't allow"], escape: 1)
+    }
+
+    /// The link window: Open, Cancel, or Block links until reload, in that order.
+    static func link(_ url: URL, space: String) -> NSAlert {
+        alert("“\(space)” wants to open a link.", url.absoluteString, buttons: ["Open", "Cancel", "Block links until reload"], escape: 1)
+    }
+
+    /// The export window: Without data, With its data, or Cancel, in that order.
+    static func withData(_ space: String, keys: [String], bytes: Int) -> NSAlert {
+        // Ten keys at most: a memory of hundreds would make the window taller than the screen.
+        let shown = keys.prefix(10).joined(separator: ", ") + (keys.count > 10 ? " and \(keys.count - 10) more" : "")
+        let alert = alert("Export “\(space)” with its data?", "Its memory holds \(shown) (\(Size.words(bytes))). "
+                          + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac.",
+                          buttons: ["Without data", "With its data", "Cancel"], escape: 2)
+        alert.buttons[1].keyEquivalent = ""
+        return alert
+    }
+
     static func run(_ alert: NSAlert) -> NSApplication.ModalResponse {
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal()
@@ -224,7 +243,11 @@ enum Ask {
          "never": "never asks you before it runs a command"][mode] ?? "asks you less"
     }
 
-    static func quit(stopping count: Int) -> Bool {
-        run(alert("Quit something?", "\(count) agent(s) will stop.", buttons: ["Quit", "Cancel"])) == .alertFirstButtonReturn
+    static func quit(stopping count: Int) -> Bool { run(quit(count)) == .alertFirstButtonReturn }
+
+    /// The window that asks before quitting while `count` agents something launched run: Quit, then Cancel.
+    static func quit(_ count: Int) -> NSAlert {
+        let stop = count == 1 ? "The agent something launched stops." : "The \(count) agents something launched stop."
+        return alert("Quit something?", stop + " Agents you started yourself keep running.", buttons: ["Quit", "Cancel"])
     }
 }

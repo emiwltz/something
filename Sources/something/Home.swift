@@ -228,8 +228,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         actions.forEach { $0.isEnabled = selected != nil }
     }
 
-    private func makeWindow() -> NSWindow {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
+    func makeWindow() -> NSWindow {
+        // As wide as the list's buttons and the card side by side: narrower, the card is cut on the right.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "something"
         window.isReleasedWhenClosed = false
