@@ -11,6 +11,12 @@
 // timings only, never a name, a path, a title or a text:
 //
 //   SOMETHING_TRIAL_REAL_CODEX=1 SOMETHING_TRIAL_REAL_OPENCODE=1 swift test --filter ReadersTrial
+//   SOMETHING_TRIAL_REAL_PI=1 SOMETHING_TRIAL_REAL_OMP=1 swift test --filter ReadersTrial
+//
+// The cost of the watch loop with every reader on this Mac's own homes, read-only: CPU time per tick and resident
+// memory, a minute at each cadence (2 s and 10 s). Numbers only:
+//
+//   SOMETHING_TRIAL_COST=1 swift test --filter ReadersTrial
 import Darwin
 import Foundation
 import Testing
@@ -106,6 +112,93 @@ import SomethingCore
         var opened = 0
         reader.opened = { _ in opened += 1 }
         ReadersTrial.report(reader.kind, reader) { opened }
+    }
+
+    /// T-10 for pi and OMP: each reader once on this Mac's own ~/.pi or ~/.omp, read-only, then the fold of the five
+    /// logs written last, however old, since a log idle for a day is not listed. Counts only.
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_PI"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_PI=1."))
+    func thePiReaderOnThisMacsOwnSessions() throws {
+        let reader = PiReader(environment: ReadersTrial.environment)
+        var opened: [String] = []
+        reader.opened = { opened.append($0) }
+        ReadersTrial.report("pi", reader) { opened.count }
+        let root = try #require(reader.folder)
+        let roots = ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).map { "\(root)/\($0)/sessions" }.filter(ClaudeReader.isFolder)
+        ReadersTrial.fold("pi", PiLog.logs(in: roots), line: 0, skip: 0)
+        #expect(opened.allSatisfy { $0.hasSuffix(".jsonl") })
+    }
+
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_OMP"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_OMP=1."))
+    func theOMPReaderOnThisMacsOwnSessions() throws {
+        let reader = OMPReader(environment: ReadersTrial.environment)
+        var opened: [String] = []
+        reader.opened = { opened.append($0) }
+        ReadersTrial.report("omp", reader) { opened.count }
+        let root = try #require(reader.folder)
+        let logs = PiLog.logs(in: ["\(root)/agent/sessions"].filter(ClaudeReader.isFolder)).filter { ($0 as NSString).lastPathComponent.contains("_") }
+        ReadersTrial.fold("omp", logs, line: 1, skip: OMPReader.titleSlot)
+        #expect(opened.allSatisfy { $0.hasSuffix(".jsonl") })
+    }
+
+    /// Folds the five logs of `paths` written last and prints what they give, in counts.
+    static func fold(_ kind: String, _ paths: [String], line: Int, skip: Int) {
+        let headers = paths.map { PiLog.header($0, line: line, opened: { _ in }) }
+        let newest = zip(paths, headers).compactMap { path, header in header.flatMap { h in Stamp(path).map { (path, h, $0) } } }
+            .sorted { $0.2.modified > $1.2.modified }.prefix(5)
+        var turns = 0, items = 0, incomplete = 0, titled = 0, models = 0, efforts = 0, states: [String: Int] = [:], ms: [Double] = []
+        for (path, header, stamp) in newest {
+            let begin = Date()
+            var file = PiFile(path: path, header: header, log: PiLog(name: kind))
+            if skip > 0 { file.title = OMPReader.title(path, opened: { _ in }) }
+            file.follow(stamp, skip: skip, opened: { _ in })
+            ms.append(Date().timeIntervalSince(begin) * 1000)
+            turns += file.log.turns.count
+            items += file.log.turns.reduce(0) { $0 + $1.items.count }
+            incomplete += file.log.complete ? 0 : 1
+            titled += (file.title ?? file.log.title) == nil ? 0 : 1
+            models += file.log.model == nil ? 0 : 1
+            efforts += file.log.effort == nil ? 0 : 1
+            for turn in file.log.turns { states[turn.state, default: 0] += 1 }
+        }
+        print("""
+        T-10 \(kind) files: \(paths.count) logs found, \(headers.compactMap { $0 }.count) with a readable header; the \(newest.count) newest: \(turns) turns, \(items) items, \
+        \(incomplete) incomplete, title \(titled), model \(models), effort \(efforts); turn states \(states.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")); \
+        ms per first read: \(ms.map { String(format: "%.1f", $0) }.joined(separator: ", "))
+        """)
+    }
+
+    /// The watch loop with every reader, on this Mac's own homes: a minute at each cadence, a new watch for each.
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_COST"] == "1", "The cost trial reads this Mac's own sessions: set SOMETHING_TRIAL_COST=1."))
+    func theCostOfTheWatchLoop() async throws {
+        for cadence in [2.0, 10.0] {
+            let watch = Watch(readers: Watch.readers(ReadersTrial.environment))
+            var cpu: [Double] = [], wall: [Double] = [], resident: [Double] = [ReadersTrial.resident()]
+            let start = Date()
+            var seen = Seen()
+            while Date().timeIntervalSince(start) < 60 {
+                let (cpu0, wall0) = (clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID), Date())
+                seen = watch.tick(now: Date())
+                cpu.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu0) / 1e6)
+                wall.append(Date().timeIntervalSince(wall0) * 1000)
+                resident.append(ReadersTrial.resident())
+                try await Task.sleep(nanoseconds: UInt64(cadence * 1e9))
+            }
+            let rest = cpu.dropFirst(), sorted = rest.sorted()
+            func f(_ value: Double) -> String { String(format: "%.1f", value) }
+            print("""
+            Cost at \(Int(cadence)) s: \(cpu.count) ticks, \(seen.sightings.count) sightings; CPU ms first tick \(f(cpu[0])) (wall \(f(wall[0]))); \
+            then mean \(f(rest.reduce(0, +) / Double(max(rest.count, 1)))), median \(f(sorted.isEmpty ? 0 : sorted[sorted.count / 2])), max \(f(sorted.last ?? 0)); \
+            CPU ms in the minute \(f(cpu.reduce(0, +))); resident MB before \(f(resident[0])), after the first tick \(f(resident[1])), at the end \(f(resident.last!)), max \(f(resident.max()!))
+            """)
+        }
+    }
+
+    /// This process's resident memory, in MB.
+    static func resident() -> Double {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count) } }
+        return result == KERN_SUCCESS ? Double(info.resident_size) / 1_048_576 : -1
     }
 
     /// Three ticks of a watch with `reader` alone, then counts of what the state would say.

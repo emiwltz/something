@@ -23,7 +23,8 @@ import SomethingCore
         #expect(shop.id == "claude-\(ClaudeHome.shop)" && shop.kind == "claude" && shop.origin == "elsewhere")
         #expect(shop.name == "Dark mode for the cart" && shop.folder == "/Users/example/shop" && shop.pid == 41234)
         #expect(shop.alive == true && shop.evidence == "registry" && shop.state == "waiting" && shop.waiting == "permission")
-        #expect(shop.can == Can() && shop.because["send"] != nil && shop.because["resume"] == Engine.notYet.message)
+        #expect(shop.can == Can() && shop.because["send"] != nil)
+        #expect(shop.because["resume"] == "Claude Code still runs this conversation (pid 41234). Quit it there first.")
         #expect(shop.queue.isEmpty && shop.options == Options() && shop.model == "claude-example-model")
         #expect(shop.started == "2026-10-17T08:55:00Z")
         let blog = try #require(agents.first { $0.thread == ClaudeHome.blog })
@@ -136,4 +137,13 @@ import SomethingCore
         engine.saw(engine.watch.tick(now: Date()))
         #expect(engine.state.agents.contains { $0.thread == ClaudeHome.blog && $0.origin == "elsewhere" })
     }
+}
+
+/// Continue here (design 4.4): a conversation no process holds, for the kinds whose drivers resume one.
+@Test func continueHereFollowsTheHolder() {
+    #expect(Watch.continuable("claude", alive: true, pid: 41234) == (false, "Claude Code still runs this conversation (pid 41234). Quit it there first."))
+    #expect(Watch.continuable("claude", alive: false, pid: nil) == (true, nil))
+    #expect(Watch.continuable("codex", alive: nil, pid: nil) == (true, nil), "Codex refuses a second writer by itself")
+    #expect(Watch.continuable("claude", alive: nil, pid: nil).0 == false)
+    #expect(Watch.continuable("pi", alive: false, pid: nil) == (false, "something cannot continue pi conversations started elsewhere yet."))
 }

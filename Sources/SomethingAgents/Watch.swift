@@ -12,8 +12,14 @@ protocol Reader: AnyObject {
     var kind: String { get }
     /// The process names of its program, whose arguments and folder the snapshot reads.
     var programs: Set<String> { get }
+    /// Whether `process` runs its program; by default, when its name is one of `programs`.
+    func owns(_ process: Running) -> Bool
     /// What its files say now. `discover` asks for the walk of every 15th tick.
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading
+}
+
+extension Reader {
+    func owns(_ process: Running) -> Bool { programs.contains(process.name) }
 }
 
 struct Reading: Equatable {
@@ -85,7 +91,8 @@ final class Watch {
 
     /// The readers for something's own environment: the folders its agents use are found there, never guessed.
     static func readers(_ environment: [String: String]) -> [Reader] {
-        [ClaudeReader(environment: environment), CodexReader(environment: environment), OpenCodeReader(environment: environment)]
+        [ClaudeReader(environment: environment), CodexReader(environment: environment), OpenCodeReader(environment: environment),
+         PiReader(environment: environment), OMPReader(environment: environment), OtherReader()]
     }
 
     /// Ticks every `seconds`, the first one now, and gives each tick's result to `seen` on the main queue. Called
@@ -121,7 +128,7 @@ final class Watch {
             // A reader that knows its files changed shape and found nothing else to read (Codex has its rollouts when
             // its index changed) shows its program's processes.
             if reading.health == "changed", reading.sightings.isEmpty {
-                reading.sightings = processes.processes.values.filter { reader.programs.contains($0.name) }.map { process in
+                reading.sightings = processes.processes.values.filter(reader.owns).map { process in
                     Sighting(kind: reader.kind, key: "pid-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),
                              folder: process.folder, started: process.started, processOnly: true)
                 }
@@ -173,8 +180,11 @@ final class Watch {
             agent.detail = sighting.detail
             agent.started = sighting.started.map(iso)
             agent.updated = sighting.updated.map(iso)
-            agent.because = ["send": "This agent was started outside something; something only reads it.",
-                             "resume": Engine.notYet.message].merging(sighting.because) { _, own in own }
+            agent.because = ["send": "This agent was started outside something; something only reads it."]
+            if !sighting.processOnly {
+                (agent.can.resume, agent.because["resume"]) = Watch.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
+            }
+            agent.because.merge(sighting.because) { _, own in own }
             if sighting.processOnly { agent.thread = nil; agents.append(agent); continue }
             var thread = AgentThread(id: sighting.key, agent: agent.id, title: agent.name, started: agent.started, turns: sighting.turns)
             thread.complete = thread.complete && sighting.complete
@@ -182,6 +192,20 @@ final class Watch {
             threads.append(thread)
         }
         return (agents, threads)
+    }
+
+    /// Whether a conversation seen elsewhere can be continued here (design 4.4), and why not. Only one no process
+    /// holds: one still held would get a second writer. Codex refuses a second writer by itself, so a Codex
+    /// conversation whose holder is unknown is offered; Codex says so if its background service holds it.
+    static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
+        let name = Programs.name(of: kind)
+        guard Engine.continuable.contains(kind) else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
+        switch alive {
+        case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
+        case false?: return (true, nil)
+        case nil:
+            return kind == "codex" ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
+        }
     }
 
     static func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }

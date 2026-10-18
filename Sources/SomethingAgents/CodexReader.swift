@@ -57,7 +57,7 @@ final class CodexReader: Reader {
     private var indexed: Result<[Thread]?, Failure> = .success(nil)
     private var walked: [String: Thread?]?
     private var followed: [String: Followed] = [:]
-    private var held: (pids: Set<Int32>, at: Date, files: [String: Int32], others: Bool)?
+    private let held = HeldFiles(every: CodexReader.filesEvery)
 
     init(environment: [String: String]) {
         folder = environment["CODEX_HOME"] ?? environment["HOME"].map { ($0 as NSString).appendingPathComponent(".codex") }
@@ -214,13 +214,8 @@ final class CodexReader: Reader {
     /// they hold.
     private func holders(_ snapshot: Snapshot, now: Date) -> Holders {
         let pids = Set(snapshot.processes.values.filter { programs.contains($0.name) }.map(\.pid))
-        if let held, held.pids == pids, now.timeIntervalSince(held.at) < CodexReader.filesEvery { return (held.files, held.others) }
-        var files: [String: Int32] = [:]
         // A process whose open files the system does not give holds nothing that can be seen.
-        for pid in pids.sorted() { for path in snapshot.openFiles(pid) ?? [] { files[path] = pid } }
-        let others = pids.contains { !snapshot.descends($0, from: own) }
-        held = (pids, now, files, others)
-        return (files, others)
+        return (held.read(snapshot, pids, now: now).files, pids.contains { !snapshot.descends($0, from: own) })
     }
 
     private func sighting(_ session: Followed, _ holders: Holders) -> Sighting {

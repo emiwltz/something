@@ -172,3 +172,31 @@ public final class Processes {
         String(decoding: bytes.prefix { $0 != 0 }, as: UTF8.self)
     }
 }
+
+/// The files some processes hold open, by path, read again only when those processes change or every `every`
+/// seconds: a conversation opened in a process that runs on is seen within that time.
+final class HeldFiles {
+    struct Held: Equatable {
+        /// Each path, and the process that holds it (the lowest pid, when several do).
+        var files: [String: Int32] = [:]
+        /// false when a process did not give its open files: what it holds is unknown.
+        var whole = true
+    }
+
+    let every: TimeInterval
+    private var last: (pids: Set<Int32>, at: Date, held: Held)?
+
+    init(every: TimeInterval) { self.every = every }
+
+    /// What `pids` hold open, as last read when they are the same processes and that read is recent enough.
+    func read(_ snapshot: Snapshot, _ pids: Set<Int32>, now: Date) -> Held {
+        if let last, last.pids == pids, now.timeIntervalSince(last.at) < every { return last.held }
+        var held = Held()
+        for pid in pids.sorted(by: >) {
+            guard let files = snapshot.openFiles(pid) else { held.whole = false; continue }
+            for path in files { held.files[path] = pid }
+        }
+        last = (pids, now, held)
+        return held
+    }
+}

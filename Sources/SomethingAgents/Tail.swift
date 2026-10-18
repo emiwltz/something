@@ -12,7 +12,7 @@ public struct Cursor: Equatable, Sendable {
     var inode: UInt64
     /// Just after the last whole line handed over.
     var offset: UInt64
-    /// A hash of the file's first `headLength` bytes, at most 256.
+    /// A hash of the file's first `headLength` bytes after those skipped, at most 256.
     var head: Int
     var headLength: Int
     /// The bytes at `offset` belong to a line given up on (over 4 MB): they are skipped up to its end.
@@ -39,8 +39,10 @@ public enum Tail {
 
     /// Returns the lines of `path` written after `cursor` (nil for a first read) that hold one of `containing`; nil
     /// when the file cannot be opened. On a fresh read, `enough` tells whether the lines of the last 512 KB are enough
-    /// for the caller; if not, the last 4 MB are read. It never reads more than 4 MB plus 256 bytes.
-    public static func read(_ path: String, after cursor: Cursor?, containing: [Data],
+    /// for the caller; if not, the last 4 MB are read. It never reads more than 4 MB plus 256 bytes. The first
+    /// `skippingHead` bytes are left out of what says the file was rewritten: a slot the harness rewrites in place
+    /// (OMP's title) changes nothing after it.
+    public static func read(_ path: String, after cursor: Cursor?, containing: [Data], skippingHead: Int = 0,
                             enough: ([Data]) -> Bool = { !$0.isEmpty }) -> Read? {
         let file = open(path, O_RDONLY | O_CLOEXEC)
         guard file >= 0 else { return nil }
@@ -54,8 +56,9 @@ public enum Tail {
             bytes += data.count
             return data
         }
-        let headLength = Int(min(size, UInt64(headSize)))
-        let headBytes = chunk(0, UInt64(headLength))
+        let headStart = min(size, UInt64(max(skippingHead, 0)))
+        let headLength = Int(min(size - headStart, UInt64(headSize)))
+        let headBytes = chunk(headStart, headStart + UInt64(headLength))
         let head = hash(headBytes)
 
         let same = cursor.map { $0.inode == inode && $0.offset <= size && hash(headBytes.prefix($0.headLength)) == $0.head } ?? false
