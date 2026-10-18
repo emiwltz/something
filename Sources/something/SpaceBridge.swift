@@ -7,15 +7,26 @@ import SomethingCore
 import WebKit
 
 extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
-    /// Only the open space's own page is answered, while it is displayed. A launch or a resume is answered once its
-    /// program was looked for off the main queue (Engine.lookFor), so that the app never freezes on the login shell.
+    /// Only the open space's own page is answered, while it is displayed. A launch or a resume waits for its program,
+    /// looked for off the main queue (Engine.lookFor), and is refused if the page reloaded or closed in the meantime.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        let answer = { SpaceWindow.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler) }
-        let request = message.body as? [String: Any]
-        guard ["launch", "resume"].contains(request?["method"] as? String),
-              let kind = (request?["params"] as? [String: Any])?["kind"] as? String else { return answer() }
+        let loaded = loads
+        let answer = { [weak self] in
+            guard let self, self.loads == loaded else { return SpaceWindow.reply(message, open: false, { $0 }, replyHandler) }
+            SpaceWindow.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
+        }
+        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let kind = SpaceWindow.lookup(message.body, host: self) else { return answer() }
         engine.lookFor(kind, then: answer)
+    }
+
+    /// The kind whose program must be found before the call `body` is answered: a launch or a resume the space may
+    /// make, of a kind something launches. nil for any other call, which is answered at once.
+    static func lookup(_ body: Any, host: BridgeHost) -> String? {
+        guard let request = body as? [String: Any], ["launch", "resume"].contains(request["method"] as? String),
+              let kind = (request["params"] as? [String: Any])?["kind"] as? String,
+              (try? Bridge.launchable(kind, host)) != nil else { return nil }
+        return kind
     }
 
     var state: State { engine.state }

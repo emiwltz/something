@@ -36,6 +36,8 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// bridge and the link window answer the frame `isSpace` recognizes, which the navigation policy makes this same
     /// frame. nil before, while the space is blocked, and from each new load of the app's page until its frame asks.
     private(set) var frame: WKFrameInfo?
+    /// One more at each load and at the close: a call answered late is refused when the page it came from is gone.
+    private(set) var loads = 0
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
@@ -141,6 +143,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// Reads the declaration, asks the rights that changed, then loads or reloads the page with the new `granted`;
     /// or, when the declaration keeps the space from being displayed, says why in the window.
     func load() {
+        loads += 1
         stamp = space.stamp()
         pushed = nil
         frame = nil
@@ -340,6 +343,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// Stops watching and lets the window go; its data store goes with it.
     func close() {
+        loads += 1
         timer?.invalidate()
         SpaceWindow.release(web)
         closed(self)

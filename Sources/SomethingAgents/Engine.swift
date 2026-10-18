@@ -57,7 +57,8 @@ public final class Engine {
     private let lookups = DispatchQueue(label: "something.programs")
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
-    /// The latest `lookFor` of each kind, taken by its next launch or resume.
+    /// The latest `lookFor` of each kind, which every launch or resume of that kind uses. Each bridge call looks
+    /// again first, so it is never older than the call, and a launch that waited for the person still finds it.
     private var found: [String: Result<Program, any Error>] = [:]
     private var looked = false
     /// Whether a space is open, which sets the readers' cadence: every 2 s, else 10 s.
@@ -196,9 +197,9 @@ public final class Engine {
         return applied
     }
 
-    /// Looks for the program of `kind` off the main queue, then calls `then` on the main queue. The next launch or
-    /// resume of `kind` takes what was found, so that it never reads the login shell's PATH on the main queue, where
-    /// the whole app would freeze for seconds. Without it, that launch looks for the program itself.
+    /// Looks for the program of `kind` off the main queue, then calls `then` on the main queue. The launches and
+    /// resumes of `kind` that follow use what was found, so that they never read the login shell's PATH on the main
+    /// queue, where the whole app would freeze for seconds. A kind never looked for is looked for by its launch.
     public func lookFor(_ kind: String, then: @escaping () -> Void) {
         lookups.async { [self] in
             let result = Result { try programs.find(kind) }
@@ -235,7 +236,7 @@ public final class Engine {
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
         let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
-        let program = try found.removeValue(forKey: type.kind)?.get() ?? programs.find(type.kind)
+        let program = try found[type.kind]?.get() ?? programs.find(type.kind)
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }

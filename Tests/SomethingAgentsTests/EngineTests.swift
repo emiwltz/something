@@ -268,7 +268,7 @@ import SomethingCore
     }
 
     /// Opened from the Finder, the app reads the login shell's PATH: a shell that takes 2 s never holds the main queue,
-    /// a first launch waits for the first look off it, and the login shell is not read twice.
+    /// a first launch waits for the first look off it, and the login shell is not read again by later launches.
     @Test func theFirstLaunchLeavesTheMainQueueFree() async throws {
         let place = try Place()
         defer { place.remove() }
@@ -301,6 +301,9 @@ import SomethingCore
         #expect(waited >= 1.8, "the launch waited for the shell")
         // A tick every 50 ms, about 40 in 2 s: a main queue held by the shell would have had one or two.
         #expect(ticks.count >= 15)
+        // A second launch, as one that waited for the person's answer, uses what was found and reads no shell.
+        let second = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(second != id)
         let runs = try String(contentsOf: place.out.appendingPathComponent("shell-runs"), encoding: .utf8)
         // The first look reads the login shell once (and the interactive one once, for pi and omp, missing here).
         #expect(runs.components(separatedBy: "\n").filter { $0.hasPrefix("-l -c ") }.count == 1)

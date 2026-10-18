@@ -166,7 +166,8 @@ public enum Bridge {
         guard all[key] == true else { throw CodedError("NOT_SUPPORTED", agent.because[key] ?? "This agent cannot do this: its can.\(key) is false.") }
     }
 
-    static func launchable(_ kind: String, _ host: BridgeHost) throws {
+    /// Returns when the space may launch `kind` and something can; throws RIGHT_NOT_GRANTED, BAD_PARAMS, NOT_SUPPORTED, NOT_INSTALLED.
+    public static func launchable(_ kind: String, _ host: BridgeHost) throws {
         guard Rights.covers(host.granted.rights, "launch:\(kind)") else { throw CodedError("RIGHT_NOT_GRANTED", "The right launch:\(kind) was not granted.") }
         guard let known = host.state.kinds[kind] else { throw CodedError("BAD_PARAMS", "\(kind) is not a kind; the state's kinds lists them.") }
         guard known.launch else { throw CodedError("NOT_SUPPORTED", known.note ?? "something cannot launch \(kind).") }
