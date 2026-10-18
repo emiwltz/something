@@ -44,6 +44,8 @@ struct Sighting: Equatable {
     var facts: StateMap.Facts
     var folder: String?
     var title: String?
+    /// The program's name, the agent's name when neither a title nor a folder gives one (contract 3.2).
+    var program: String?
     var model: String?, mode: String?, effort: String?
     var started: Date?
     /// The last activity seen.
@@ -170,7 +172,7 @@ final class Watch {
             agent.evidence = result.evidence
             agent.state = result.state
             agent.waiting = result.waiting
-            agent.name = sighting.title ?? sighting.folder.map { ($0 as NSString).lastPathComponent } ?? sighting.kind
+            agent.name = sighting.title ?? sighting.folder.map { ($0 as NSString).lastPathComponent } ?? sighting.program ?? sighting.kind
             agent.folder = sighting.folder
             // An ended process's pid may already be another program's.
             agent.pid = sighting.facts.alive == false ? nil : sighting.pid.map(Int.init)

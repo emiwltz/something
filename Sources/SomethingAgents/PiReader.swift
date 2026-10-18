@@ -22,11 +22,13 @@ final class PiReader: Reader {
     let named: [String]
     /// Sees every path the reader opens.
     var opened: (String) -> Void = { _ in }
-    /// something's own pid: the pi it launched are not the person's. A test names another.
-    var own = getpid()
 
-    private var found: [String: (inode: UInt64, header: PiLog.Header?)] = [:]
-    private var walked = false, pids: Set<Int32> = []
+    /// The logs the last walk listed.
+    private var logs: [String] = []
+    /// The headers read, by path, with the inode they were read from: a log replaced since is read again.
+    private var headers: [String: (inode: UInt64, header: PiLog.Header?)] = [:]
+    private var walked = false
+    private var pids: Set<Int32> = []
     private var files: [String: PiFile] = [:]
 
     init(environment: [String: String]) {
@@ -35,63 +37,84 @@ final class PiReader: Reader {
                  environment["PI_CODING_AGENT_SESSION_DIR"]].compactMap { $0 }
     }
 
-    func owns(_ process: Running) -> Bool {
-        PiReader.names.contains(process.name) || process.arguments?.first.map { PiReader.names.contains(($0 as NSString).lastPathComponent) } == true
-    }
+    func owns(_ process: Running) -> Bool { process.runs(PiReader.names) != nil }
 
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
         guard folder.map(ClaudeReader.isFolder) == true || !named.isEmpty else { return Reading() }
-        let processes = snapshot.processes.values.filter { owns($0) && !snapshot.descends($0.pid, from: own) }
+        // The pi something launched count when the pi of a folder are counted: a log of that folder may be theirs.
+        let every = snapshot.processes.values.filter(owns)
+        let running = Set(every.map(\.pid))
         // A pi started since the last walk may have begun a log in a folder the walk has not listed.
-        let running = Set(processes.map(\.pid))
         if discover || !walked || running != pids {
-            (walked, pids) = (true, running)
-            let roots = (folder.map { root in
-                ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).map { "\(root)/\($0)/sessions" }
-            } ?? []) + named
-            let paths = PiLog.logs(in: roots.filter(ClaudeReader.isFolder))
-            found = Dictionary(uniqueKeysWithValues: paths.compactMap { path in
-                Stamp(path).map { stamp in
-                    (path, found[path].flatMap { $0.inode == stamp.inode ? $0 : nil } ?? (stamp.inode, PiLog.header(path, line: 0, opened: opened)))
-                }
-            })
+            walked = true
+            pids = running
+            walk()
         }
         var stamps: [String: Stamp] = [:], byFolder: [String: [String]] = [:]
-        for (path, entry) in found {
-            guard let header = entry.header, let stamp = Stamp(path), stamp.inode == entry.inode else { continue }
+        for path in logs {
+            guard let stamp = Stamp(path) else { continue }
+            if headers[path]?.inode != stamp.inode { headers[path] = (stamp.inode, PiLog.header(path, line: 0, opened: opened)) }
+            guard let header = headers[path]?.header else { continue }
             stamps[path] = stamp
-            byFolder[CodexReader.real(header.folder), default: []].append(path)
+            byFolder[HeldFiles.real(header.folder), default: []].append(path)
         }
-        let here = Dictionary(grouping: processes) { $0.folder.map(CodexReader.real) ?? "" }
-        var reading = Reading(health: "ok"), holders: [String: (alive: Bool?, pid: Int32?)] = [:]
+        let here = Dictionary(grouping: every) { $0.folder.map(HeldFiles.real) ?? "" }
+        var reading = Reading(health: "ok"), followed: [String: PiFile] = [:], shown: Set<String> = []
         for (place, paths) in byFolder {
-            let pi = here[place] ?? [], newest = paths.max { stamps[$0]!.modified < stamps[$1]!.modified }!
-            let since = pi.map(\.started).min().map { $0.addingTimeInterval(-1) } ?? .distantFuture
-            for path in paths {
-                let written = stamps[path]!.modified >= since
-                holders[path] = pi.count == 1 && written && path == newest ? (true, pi[0].pid) : pi.count > 1 && written ? (nil, nil) : (false, nil)
+            for (path, holder) in PiReader.holders(paths, stamps, pi: here[place] ?? [])
+            where holder.alive == true || Watch.isRecent(alive: nil, updated: stamps[path]?.modified, now: now) {
+                let header = headers[path]!.header!
+                var file = files[path] ?? PiFile(path: path, header: header, log: PiLog(name: "pi"))
+                file.header = header
+                file.follow(stamps[path]!, skip: 0, opened: opened)
+                followed[path] = file
+                if holder.alive != false { shown.insert(place) }
+                var facts = StateMap.Facts(alive: holder.alive, evidence: holder.alive == true ? "cwd" : holder.alive == false ? "process" : nil,
+                                           turnOpen: file.log.open, waiting: .nothing, lastWrite: file.stamp?.modified)
+                facts.failed = file.log.turns.last?.state == "error"
+                facts.aborted = file.log.turns.last?.state == "interrupted"
+                reading.sightings.append(file.sighting(kind, key: path, pid: holder.pid, facts: facts))
             }
         }
-        var followed: [String: PiFile] = [:]
-        for (path, holder) in holders where holder.alive == true || Watch.isRecent(alive: nil, updated: stamps[path]?.modified, now: now) {
-            var file = files[path] ?? PiFile(path: path, header: found[path]!.header!, log: PiLog(name: "pi"))
-            file.follow(stamps[path]!, skip: 0, opened: opened)
-            followed[path] = file
-            var facts = StateMap.Facts(alive: holder.alive, evidence: holder.alive == true ? "cwd" : holder.alive == false ? "process" : nil,
-                                       turnOpen: file.log.open, waiting: .nothing, lastWrite: file.stamp?.modified)
-            facts.failed = file.log.turns.last?.state == "error"
-            facts.aborted = file.log.turns.last?.state == "interrupted"
-            reading.sightings.append(file.sighting(kind, key: path, pid: holder.pid, facts: facts))
-        }
         files = followed
-        // A pi in a folder that holds no log written since it started has not written its log yet.
-        for (place, pi) in here where !(byFolder[place] ?? []).contains(where: { holders[$0]?.alive != false }) {
+        // A pi whose folder shows no log it may hold has not written its log yet, or wrote it too long ago to be
+        // listed: it is seen from its process. The pi something launched are its own, and the watch drops them.
+        for (place, pi) in here where !shown.contains(place) {
             reading.sightings += pi.map { process in
                 Sighting(kind: kind, key: "pid-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),
                          folder: process.folder, started: process.started, processOnly: true)
             }
         }
         return reading
+    }
+
+    /// Lists the logs of every sessions folder.
+    private func walk() {
+        let agentFolders = folder.map { root in ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).map { "\(root)/\($0)/sessions" } } ?? []
+        logs = PiLog.logs(in: (agentFolders + named).filter(ClaudeReader.isFolder))
+        let listed = Set(logs)
+        headers = headers.filter { listed.contains($0.key) }
+    }
+
+    /// Who holds each of one folder's logs, from the pi running in that folder. One pi holds the log written last,
+    /// if written since it started. Several cannot be told apart: a log written since the first started may be any
+    /// one's. Any other log is held by none.
+    static func holders(_ paths: [String], _ stamps: [String: Stamp], pi: [Running]) -> [String: (alive: Bool?, pid: Int32?)] {
+        // A second of slack: a time on disk and a process's start are not taken by the same clock read.
+        let since = pi.map(\.started).min().map { $0.addingTimeInterval(-1) } ?? .distantFuture
+        let newest = paths.max { stamps[$0]!.modified < stamps[$1]!.modified }
+        var holders: [String: (alive: Bool?, pid: Int32?)] = [:]
+        for path in paths {
+            let written = stamps[path]!.modified >= since
+            if pi.count == 1, written, path == newest {
+                holders[path] = (true, pi[0].pid)
+            } else if pi.count > 1, written {
+                holders[path] = (nil, nil)
+            } else {
+                holders[path] = (false, nil)
+            }
+        }
+        return holders
     }
 }
 
@@ -117,7 +140,8 @@ struct PiFile {
         if read.fresh { log = PiLog(name: log.name) }
         if read.gap || (read.fresh && !read.fromStart) { log.readFromStart = false }
         log.add(read.lines)
-        (cursor, stamp) = (read.cursor, now)
+        cursor = read.cursor
+        stamp = now
     }
 
     func sighting(_ kind: String, key: String, pid: Int32?, facts: StateMap.Facts) -> Sighting {
@@ -275,7 +299,8 @@ struct PiLog {
             }
         }
         if turns.count > Limits.turns { turns.removeFirst(turns.count - Limits.turns); whole = false }
-        (self.turns, self.error) = (turns, error)
+        self.turns = turns
+        self.error = error
     }
 
     /// The header of a pi or OMP log, its line `line` (pi writes it first, OMP after its title slot); nil when

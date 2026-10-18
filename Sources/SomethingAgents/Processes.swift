@@ -25,6 +25,23 @@ public struct Running: Equatable, Sendable {
     }
 }
 
+extension Running {
+    /// The interpreters a coding agent may run under: the system names its process after them.
+    static let interpreters: Set<String> = ["node", "bun"]
+
+    /// Which of `names` this process runs, or nil: its own name, its first argument's file name, or, under an
+    /// interpreter, the file name of its first argument that is no option. A Node program that renames itself (pi sets
+    /// its title) shows its interpreter's arguments until it does, and the arguments are read once per process.
+    func runs(_ names: Set<String>) -> String? {
+        let words = (arguments ?? []).map { ($0 as NSString).lastPathComponent }
+        if names.contains(name) { return name }
+        if let first = words.first, names.contains(first) { return first }
+        guard Running.interpreters.contains(name) || words.first.map(Running.interpreters.contains) == true,
+              let script = words.dropFirst().first(where: { !$0.hasPrefix("-") }) else { return nil }
+        return names.contains(script) ? script : nil
+    }
+}
+
 /// The processes of one tick. Tests build one by hand, with invented processes.
 public struct Snapshot {
     public let processes: [Int32: Running]
@@ -186,7 +203,14 @@ final class HeldFiles {
     let every: TimeInterval
     private var last: (pids: Set<Int32>, at: Date, held: Held)?
 
-    init(every: TimeInterval) { self.every = every }
+    init(every: TimeInterval = 10) { self.every = every }
+
+    /// `path` with its links resolved, as the system names the files a process holds ("/private/var", not "/var").
+    static func real(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
 
     /// What `pids` hold open, as last read when they are the same processes and that read is recent enough.
     func read(_ snapshot: Snapshot, _ pids: Set<Int32>, now: Date) -> Held {

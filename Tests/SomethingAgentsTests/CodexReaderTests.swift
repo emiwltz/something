@@ -143,7 +143,7 @@ final class CodexHome {
     func snapshot(holding: [String]? = nil, codex: Bool = true) -> Snapshot {
         var processes = [Running(pid: 40001, parent: 1, group: 40001, started: Date(timeIntervalSince1970: 1_792_220_000), name: "zsh")]
         if codex { processes.append(Running(pid: 51000, parent: 1, group: 51000, started: Date(timeIntervalSince1970: 1_792_220_100), name: "codex")) }
-        let files = holding ?? [CodexReader.real(lock(CodexHome.shop)), "/dev/null"]
+        let files = holding ?? [HeldFiles.real(lock(CodexHome.shop)), "/dev/null"]
         return Snapshot(processes, files: { $0 == 51000 ? files : nil })
     }
 
@@ -198,7 +198,7 @@ final class CodexHome {
 
         // The rollout held open, not the lock, holds it too.
         let reader = try CodexHome()
-        let open = reader.read(reader.snapshot(holding: [CodexReader.real(reader.rollout("2026/10/16", CodexHome.blog).path)]))
+        let open = reader.read(reader.snapshot(holding: [HeldFiles.real(reader.rollout("2026/10/16", CodexHome.blog).path)]))
         #expect(open.sightings.first { $0.key == CodexHome.blog }?.facts.alive == true)
         #expect(open.sightings.first { $0.key == CodexHome.shop }?.facts.alive == nil)
 
@@ -272,10 +272,10 @@ final class CodexHome {
         #expect(try !CodexHome().read().sightings.contains { $0.key == CodexHome.stale })
         let home = try CodexHome()
         try Data().write(to: URL(fileURLWithPath: home.lock(CodexHome.stale)))
-        let held = home.read(home.snapshot(holding: [CodexReader.real(home.lock(CodexHome.stale))]), discover: false)
+        let held = home.read(home.snapshot(holding: [HeldFiles.real(home.lock(CodexHome.stale))]), discover: false)
         let stale = try #require(held.sightings.first { $0.key == CodexHome.stale }, "the held lock asks the index again")
         #expect(stale.facts.alive == true && stale.facts.evidence == "lock" && stale.pid == 51000)
-        #expect(Watch(readers: [home.reader], snapshot: { home.snapshot(holding: [CodexReader.real(home.lock(CodexHome.stale))]) })
+        #expect(Watch(readers: [home.reader], snapshot: { home.snapshot(holding: [HeldFiles.real(home.lock(CodexHome.stale))]) })
             .tick(now: home.now).sightings.contains { $0.key == CodexHome.stale }, "the watch keeps what is alive")
     }
 

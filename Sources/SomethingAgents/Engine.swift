@@ -88,9 +88,9 @@ public final class Engine {
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
-        let folds = launched.map(\.agent.queue.fold), elsewhere = elsewhere
+        let elsewhere = elsewhere
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + elsewhere.agents,
-                     threads: folds.compactMap(\.thread) + elsewhere.threads, requests: folds.flatMap(\.requests))
+                     threads: launched.compactMap(\.agent.thread) + elsewhere.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
     }
 
     /// The agents the watch saw, but those something launched: the groups of its running children and the
@@ -98,13 +98,10 @@ public final class Engine {
     /// reused by a program started by hand, and its conversation is still left out by its key.
     private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
         let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
-        // A resume the agent refused never held the conversation: it is still the one seen elsewhere.
-        let keys = launched.map(\.agent.agent).filter { !Engine.refusedResume.contains($0.error?.code ?? "") }.compactMap(\.thread)
+        // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
+        let keys = launched.compactMap(\.agent.agent.thread)
         return Watch.elsewhere(seen, groups: groups, keys: Set(keys), now: Date())
     }
-
-    /// The errors of a resume whose agent never took the conversation.
-    static let refusedResume: Set = ["HELD_ELSEWHERE", "THREAD_NOT_FOUND"]
 
     /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.
     func saw(_ seen: Seen) {

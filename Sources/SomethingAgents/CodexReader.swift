@@ -33,8 +33,6 @@ final class CodexReader: Reader {
                          #""type":"item_completed""#].map { Data($0.utf8) }
     /// The thread sources of conversations nobody typed into: sub-agents and the reviews Codex runs by itself.
     static let unattended: Set<String> = ["subagent", "guardian_review"]
-    /// The open files of codex processes are read again at most this often, unless the processes change.
-    static let filesEvery: TimeInterval = 10
 
     struct Thread: Equatable {
         var id: String, rollout: String
@@ -57,7 +55,7 @@ final class CodexReader: Reader {
     private var indexed: Result<[Thread]?, Failure> = .success(nil)
     private var walked: [String: Thread?]?
     private var followed: [String: Followed] = [:]
-    private let held = HeldFiles(every: CodexReader.filesEvery)
+    private let held = HeldFiles()
 
     init(environment: [String: String]) {
         folder = environment["CODEX_HOME"] ?? environment["HOME"].map { ($0 as NSString).appendingPathComponent(".codex") }
@@ -109,7 +107,7 @@ final class CodexReader: Reader {
 
     /// The thread ids whose writer lock (`thread-writer-locks/<id>.lock`) one of `files` is, sorted.
     static func locked(_ files: [String: Int32], in folder: String) -> [String] {
-        let locks = real((folder as NSString).appendingPathComponent("thread-writer-locks")) + "/"
+        let locks = HeldFiles.real((folder as NSString).appendingPathComponent("thread-writer-locks")) + "/"
         return files.keys.filter { $0.hasPrefix(locks) && $0.hasSuffix(".lock") }
             .map { String($0.dropFirst(locks.count).dropLast(5)) }.filter { !$0.hasPrefix(".") }.sorted()
     }
@@ -206,22 +204,23 @@ final class CodexReader: Reader {
         followed[thread.id] = session
     }
 
-    typealias Holders = (files: [String: Int32], others: Bool)
+    typealias Holders = (files: [String: Int32], others: Bool, services: Set<Int32>)
 
-    /// Which codex process holds which file open, by path, and whether a codex process that does not descend from
-    /// something runs. Read again when the codex processes change, or every 10 s: a conversation started in a
+    /// Which codex process holds which file open, by path, whether a codex process that does not descend from
+    /// something runs, and which ones are Codex's background service (`codex app-server`). Read again when the codex processes change, or every 10 s: a conversation started in a
     /// running process takes its lock then. something's own processes stay among the holders: the dedupe drops what
     /// they hold.
     private func holders(_ snapshot: Snapshot, now: Date) -> Holders {
-        let pids = Set(snapshot.processes.values.filter { programs.contains($0.name) }.map(\.pid))
+        let codex = snapshot.processes.values.filter { programs.contains($0.name) }
+        let pids = Set(codex.map(\.pid)), services = Set(codex.filter { $0.arguments?.contains("app-server") == true }.map(\.pid))
         // A process whose open files the system does not give holds nothing that can be seen.
-        return (held.read(snapshot, pids, now: now).files, pids.contains { !snapshot.descends($0, from: own) })
+        return (held.read(snapshot, pids, now: now).files, pids.contains { !snapshot.descends($0, from: own) }, services)
     }
 
     private func sighting(_ session: Followed, _ holders: Holders) -> Sighting {
         let thread = session.thread, lines = session.lines
         let lock = ((folder ?? "") as NSString).appendingPathComponent("thread-writer-locks/\(thread.id).lock")
-        let holder = [lock, thread.rollout].flatMap { [$0, CodexReader.real($0)] }.lazy.compactMap { holders.files[$0] }.first
+        let holder = [lock, thread.rollout].flatMap { [$0, HeldFiles.real($0)] }.lazy.compactMap { holders.files[$0] }.first
         var facts = StateMap.Facts(alive: nil, turnOpen: lines.open, lastWrite: session.stamp?.modified)
         if holder != nil {
             facts.alive = true
@@ -234,16 +233,12 @@ final class CodexReader: Reader {
         facts.aborted = lines.turns.last?.state == "interrupted"
         var detail: [String: JSONValue] = [:]
         if let originator = thread.originator { detail["originator"] = .string(originator) }
-        return Sighting(kind: kind, key: thread.id, pid: holder, facts: facts, folder: thread.folder, title: thread.title,
-                        model: lines.model ?? thread.model, mode: lines.mode ?? thread.mode, effort: lines.effort ?? thread.effort, started: thread.started,
-                        updated: session.stamp?.modified, turns: lines.turns, complete: lines.complete, error: lines.error, detail: detail)
-    }
-
-    /// `path` with its links resolved, as the system names the files a process holds ("/private/var", not "/var").
-    static func real(_ path: String) -> String {
-        guard let resolved = realpath(path, nil) else { return path }
-        defer { free(resolved) }
-        return String(cString: resolved)
+        var sighting = Sighting(kind: kind, key: thread.id, pid: holder, facts: facts, folder: thread.folder, title: thread.title,
+                                model: lines.model ?? thread.model, mode: lines.mode ?? thread.mode, effort: lines.effort ?? thread.effort, started: thread.started,
+                                updated: session.stamp?.modified, turns: lines.turns, complete: lines.complete, error: lines.error, detail: detail)
+        // A background service has no window to quit it from: the gesture that frees the conversation is said instead.
+        if let holder, holders.services.contains(holder) { sighting.because["resume"] = CodexDriver.heldByService }
+        return sighting
     }
 
     /// A Codex time: ISO 8601 in UTC, with milliseconds.

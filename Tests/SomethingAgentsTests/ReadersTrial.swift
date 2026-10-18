@@ -47,7 +47,7 @@ import SomethingCore
         try await Task.sleep(nanoseconds: 500_000_000)
         let idle = try #require(seen())
         #expect(idle.facts.alive == true && idle.facts.turnOpen == false && idle.turns.last?.state == "done")
-        #expect(idle.turns.last?.items.first?.author == "person" && idle.model == "fake-model" && idle.folder.map(CodexReader.real) == CodexReader.real(run.work.path), "Codex names the folder by its real path")
+        #expect(idle.turns.last?.items.first?.author == "person" && idle.model == "fake-model" && idle.folder.map(HeldFiles.real) == HeldFiles.real(run.work.path), "Codex names the folder by its real path")
         try await run.finish()
         let ended = try #require(seen())
         // The run's codex descends from this test, as something's own would: only another codex (the person's) leaves

@@ -27,7 +27,6 @@ final class PiHome {
         try Data("invented".utf8).write(to: root.appendingPathComponent(".omp/agent/agent.db"))
         pi = PiReader(environment: ["HOME": root.path])
         omp = OMPReader(environment: ["HOME": root.path])
-        pi.own = 999_999
         pi.opened = { [unowned self] in opened.append($0) }
         omp.opened = { [unowned self] in opened.append($0) }
         // The shop's second log was written last; every log within the hour.
@@ -52,12 +51,19 @@ final class PiHome {
         Running(pid: pid, parent: parent, group: pid, started: started, name: "node", arguments: ["pi"], folder: folder)
     }
 
-    func read(_ processes: [Running]) -> [String: Sighting] {
-        Dictionary(uniqueKeysWithValues: pi.read(Snapshot(processes), discover: true, now: now).sightings.map { ($0.key, $0) })
+    func read(_ processes: [Running], discover: Bool = true) -> [String: Sighting] {
+        Dictionary(uniqueKeysWithValues: pi.read(Snapshot(processes), discover: discover, now: now).sightings.map { ($0.key, $0) })
     }
 
-    func readOMP(_ processes: [Running] = [], files: @escaping (Int32) -> [String]? = { _ in [] }) -> [String: Sighting] {
-        Dictionary(uniqueKeysWithValues: omp.read(Snapshot(processes, files: files), discover: true, now: now).sightings.map { ($0.key, $0) })
+    func readOMP(_ processes: [Running] = [], discover: Bool = true, files: @escaping (Int32) -> [String]? = { _ in [] }) -> [String: Sighting] {
+        Dictionary(uniqueKeysWithValues: omp.read(Snapshot(processes, files: files), discover: discover, now: now).sightings.map { ($0.key, $0) })
+    }
+
+    /// Replaces `path` by a new file with `text`, through a rename, as OMP and a rewrite of pi do: a new inode.
+    static func replace(_ path: String, with text: String) throws {
+        let next = path + ".tmp"
+        try Data(text.utf8).write(to: URL(fileURLWithPath: next))
+        #expect(rename(next, path) == 0)
     }
 
     /// The state, waiting and evidence words of `facts`, in one string.
@@ -108,9 +114,7 @@ final class PiHome {
 
     @Test func onePiHoldsTheNewestLogOfItsFolderWrittenSinceItStarted() throws {
         let home = try PiHome()
-        var seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600)),
-                              // something's own pi, which is not the person's.
-                              PiHome.pi(52003, in: "/Users/example/shop", started: home.now, parent: 999_999)])
+        var seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600))])
         let b = try #require(seen[home.log(PiHome.shopB)])
         #expect(b.facts.alive == true && b.facts.evidence == "cwd" && b.pid == 52001)
         #expect(PiHome.words(b.facts, home.now) == "working none cwd")
@@ -122,6 +126,70 @@ final class PiHome {
         #expect(fresh.processOnly && fresh.facts.alive == true && fresh.folder == "/Users/example/shop")
         let agent = try #require(Watch.elsewhere(Seen(sightings: [fresh]), groups: [], keys: [], now: home.now).agents.first)
         #expect(agent.kind == "pi" && agent.state == "unknown" && agent.evidence == "process" && agent.thread == nil && !agent.can.resume)
+    }
+
+    @Test func aPiSomethingLaunchedStillCountsInItsFolder() throws {
+        let home = try PiHome()
+        // something's own pi (pid 52003, under something's pid 999999) and the person's, in one folder: the newest
+        // log may be either one's, so neither log is claimed, and the own pi is not shown.
+        let watch = Watch(readers: [home.pi], snapshot: {
+            Snapshot([Running(pid: 999_999, parent: 1, group: 999_999, started: home.now.addingTimeInterval(-7200), name: "something"),
+                      PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600)),
+                      PiHome.pi(52003, in: "/Users/example/shop", started: home.now.addingTimeInterval(-900), parent: 999_999)])
+        })
+        watch.own = 999_999
+        let seen = Dictionary(uniqueKeysWithValues: watch.tick(now: home.now).sightings.map { ($0.key, $0) })
+        #expect(seen[home.log(PiHome.shopB)]?.facts.alive == nil && seen[home.log(PiHome.shopB)]?.pid == nil)
+        #expect(seen[home.log(PiHome.shopA)]?.facts.alive == nil && !seen.keys.contains { $0.hasPrefix("pid-") })
+    }
+
+    @Test func piThatRunForDaysAreSeenFromTheirProcess() throws {
+        let home = try PiHome()
+        for (id, days) in [(PiHome.shopA, 2.5), (PiHome.shopB, 2)] {
+            try FileManager.default.setAttributes([.modificationDate: home.now.addingTimeInterval(-days * 86_400)], ofItemAtPath: home.log(id))
+        }
+        let started = home.now.addingTimeInterval(-3 * 86_400)
+        // Two pi in the shop since three days, their logs written two days ago and more: neither log is listed, both pi are.
+        var seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: started), PiHome.pi(52002, in: "/Users/example/shop", started: started)])
+        #expect(seen[home.log(PiHome.shopA)] == nil && seen[home.log(PiHome.shopB)] == nil)
+        #expect(seen["pid-52001"]?.processOnly == true && seen["pid-52002"]?.processOnly == true)
+        // One of them alone holds its log, however old.
+        seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: started)])
+        #expect(seen[home.log(PiHome.shopB)]?.facts.alive == true && seen["pid-52001"] == nil)
+    }
+
+    @Test func aPiIsKnownBeforeItRenamesItself() throws {
+        let home = try PiHome()
+        // Its first milliseconds: node runs pi's script, and the snapshot keeps those arguments for the process's life.
+        let early = Running(pid: 52005, parent: 1, group: 52005, started: home.now.addingTimeInterval(-3600), name: "node",
+                            arguments: ["node", "/opt/example/lib/node_modules/.bin/pi"], folder: "/Users/example/shop")
+        #expect(home.pi.owns(early) && !home.pi.owns(Running(pid: 1, parent: 0, group: 1, started: home.now, name: "node", arguments: ["node", "server.js"])))
+        #expect(home.read([early])[home.log(PiHome.shopB)]?.pid == 52005)
+    }
+
+    @Test func logsReplacedBetweenWalksAreReadAgain() throws {
+        let home = try PiHome()
+        let pi = PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600))
+        let omp = Running(pid: 53000, parent: 1, group: 53000, started: home.now.addingTimeInterval(-7200), name: "omp")
+        _ = home.read([pi])
+        _ = home.readOMP([omp])
+        // The same processes, no walk: each reader keeps the files it listed and finds the new inode by its stat.
+        try PiHome.replace(home.log(PiHome.shopB), with: """
+            {"type":"session","version":3,"id":"\(PiHome.shopB)","timestamp":"2026-10-17T08:30:00.000Z","cwd":"/Users/example/shop","parentSession":null}
+            {"type":"message","id":"b2000001","parentId":null,"timestamp":"2026-10-17T08:30:05.000Z","message":{"role":"user","content":"Make the checkout blue.","timestamp":1792225800000}}
+
+            """)
+        let ompPath = home.ompLog(PiHome.ompShop)
+        let slot = try String(contentsOfFile: ompPath, encoding: .utf8).prefix(OMPReader.titleSlot)
+        try PiHome.replace(ompPath, with: slot + """
+            {"type":"session","version":3,"id":"\(PiHome.ompShop)","timestamp":"2026-10-17T09:00:00.000Z","cwd":"/Users/example/shop"}
+            {"type":"message","id":"f0000001","parentId":null,"timestamp":"2026-10-17T09:10:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Start over with a red total."}],"attribution":"user","timestamp":1792226400000}}
+
+            """)
+        let b = try #require(home.read([pi], discover: false)[home.log(PiHome.shopB)])
+        #expect(b.facts.alive == true && b.turns.map { $0.items.map(\.text) } == [["Make the checkout blue."]])
+        let shop = try #require(home.readOMP([omp], discover: false)[PiHome.ompShop])
+        #expect(shop.turns.map { $0.items.map(\.text) } == [["Start over with a red total."]] && shop.title == "Fix the cart total")
     }
 
     @Test func aRewrittenPiLogIsReadAgain() throws {
@@ -164,7 +232,7 @@ final class PiHome {
         let omp = Running(pid: 53000, parent: 1, group: 53000, started: home.now.addingTimeInterval(-7200), name: "omp")
         let leases = home.root.appendingPathComponent(".omp/run/session-owners").path
         // The shop's log held open, the blog's lease held: both say a living holder.
-        var seen = home.readOMP([omp]) { _ in [CodexReader.real(home.ompLog(PiHome.ompShop)), CodexReader.real(leases) + "/\(PiHome.ompBlog).lock"] }
+        var seen = home.readOMP([omp]) { _ in [HeldFiles.real(home.ompLog(PiHome.ompShop)), HeldFiles.real(leases) + "/\(PiHome.ompBlog).lock"] }
         #expect(seen[PiHome.ompShop]?.facts.alive == true && seen[PiHome.ompShop]?.facts.evidence == "open-file" && seen[PiHome.ompShop]?.pid == 53000)
         #expect(seen[PiHome.ompBlog]?.facts.alive == true)
         #expect(PiHome.words(seen[PiHome.ompShop]!.facts, home.now) == "idle nil open-file")
@@ -206,11 +274,13 @@ final class PiHome {
             Running(pid: 54001, parent: 54000, group: 54000, started: started, name: "node", arguments: ["node", "--max-old-space-size=8192", "/opt/example/bin/gemini"]),
             Running(pid: 54100, parent: 1, group: 54100, started: started, name: "amp", arguments: ["amp"], folder: "/Users/example/blog"),
             Running(pid: 54200, parent: 1, group: 54200, started: started, name: "node", arguments: ["node", "server.js"], folder: "/Users/example/shop"),
+            Running(pid: 54300, parent: 1, group: 54300, started: started, name: "qwen", arguments: ["qwen"]),
         ])
         let watch = Watch(readers: [OtherReader()], snapshot: { snapshot })
         let (agents, threads) = Watch.elsewhere(watch.tick(now: started), groups: [], keys: [], now: started)
-        #expect(agents.map(\.name) == ["amp", "gemini"] && threads.isEmpty, "oldest first, then by key")
-        let gemini = try #require(agents.first { $0.name == "gemini" })
+        // Named by their folder, else by their program (contract 3.2).
+        #expect(agents.map(\.name) == ["blog", "notes", "qwen"] && threads.isEmpty, "oldest first, then by key")
+        let gemini = try #require(agents.first { $0.id == "other-gemini-54000" })
         #expect(gemini.kind == "other" && gemini.alive == true && gemini.evidence == "process" && gemini.state == "unknown" && gemini.waiting == nil)
         #expect(gemini.folder == "/Users/example/notes" && gemini.pid == 54000 && gemini.thread == nil && gemini.can == Can())
         #expect(gemini.because == ["send": "something has no reader for this agent; it only sees its process."])
