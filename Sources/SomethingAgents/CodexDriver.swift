@@ -56,6 +56,9 @@ public final class CodexDriver: Driver {
     private var started: [String: [String: Any]] = [:]
     private var models: [[String: Any]]?, model: String?
     private var heard = false, over = false
+    /// Codex refused to read the settings back (a new thread's rollout is empty until its first turn ends): they are
+    /// read again when that turn completes.
+    private var rereadSettings = false
     /// Runs `work` on the driver's queue after a delay; tests run it by hand.
     var schedule: (TimeInterval, @escaping () -> Void) -> Void = { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) }
     /// Closes the program's input, after which Codex exits: set by the engine, used when the launch cannot go on.
@@ -249,11 +252,14 @@ public final class CodexDriver: Driver {
             over = true
             emit(.stopped(error))
             quit()
-        case .models, .settings, .interrupt: break   // the values stay as last known; turn/completed says how the turn ended
+        case .settings: rereadSettings = true
+        case .models, .interrupt: break   // the values stay as last known; turn/completed says how the turn ended
         case .start(let text, _):
-            // The turn this message opened never started on Codex's side: what was held for it goes with it.
+            // The turn this message opened never started on Codex's side: what was held for it goes with it, and
+            // the steers answered "steered" while they waited for its id are said lost, never silently dropped.
+            let lost = steers.isEmpty ? "" : "; the \(steers.count == 1 ? "message" : "\(steers.count) messages") steered into it went nowhere either"
             reset()
-            emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "Codex refused the message “\(Launched.short(text))”: \(words)"))))
+            emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "Codex refused the message “\(Launched.short(text))”: \(words)" + lost))))
         case .steer(let text):
             emit(.error(AgentError(code: "AGENT_ERROR", message: "Codex did not take the message “\(Launched.short(text))”: \(words)")))
         }
@@ -337,6 +343,10 @@ public final class CodexDriver: Driver {
             emit(.requestClosed(id: id))
         }
         reset()
+        if rereadSettings, let thread {
+            rereadSettings = false
+            try? invoke(.settings, "thread/resume", ["threadId": thread, "excludeTurns": true])
+        }
         switch ended["status"] as? String {
         case "interrupted": emit(.turnEnded(.interrupted))
         case "failed":

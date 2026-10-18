@@ -141,8 +141,31 @@ struct GalleryTests {
         let invented = try JSONDecoder().decode(State.self, from: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json")))
         for name in ["template"] + ExamplesTests.examples {
             let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
-            try await drawSpace(name, try String(contentsOf: source, encoding: .utf8), invented, "space-\(name)" + suffix, fixture)
+            let state = name == "agents" ? elsewhere(invented) : invented
+            try await drawSpace(name, try String(contentsOf: source, encoding: .utf8), state, "space-\(name)" + suffix, fixture)
         }
+    }
+
+    /// The invented state, with agents started in a terminal as the readers show them: a Claude Code waiting for the
+    /// person there, an OpenCode at work (so OpenCode is installed here), a pi that ended.
+    func elsewhere(_ state: State) -> State {
+        var state = state
+        if var opencode = state.kinds["opencode"] {
+            (opencode.installed, opencode.seen, opencode.reader) = (true, "2.0.20", "ok")
+            state.kinds["opencode"] = opencode
+        }
+        let more = [("claude", "Rename the invoice fields", "/Users/example/code/billing", "waiting", "registry", true as Bool?),
+                    ("opencode", "Draft the release notes", "/Users/example/code/site", "working", "claim", true),
+                    ("pi", "scripts", "/Users/example/code/scripts", "done", "process", false)]
+        for (index, agent) in more.enumerated() {
+            var made = Agent(id: "e\(index + 2)", kind: agent.0, origin: "elsewhere")
+            (made.name, made.folder, made.state, made.evidence, made.alive) = (agent.1, agent.2, agent.3, agent.4, agent.5)
+            made.waiting = agent.3 == "waiting" ? "permission" : "none"
+            made.updated = state.at
+            made.because = ["send": "This agent was started outside something; something only reads it."]
+            state.agents.append(made)
+        }
+        return state
     }
 
     /// Opens `html` as the space `name` in an offscreen space window, pushes it `state` as the Engine would (the

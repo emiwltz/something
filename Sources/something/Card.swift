@@ -174,8 +174,13 @@ final class Card: NSObject {
             text.textStorage?.setAttributedString(NSAttributedString(string: journal.joined(separator: "\n"), attributes: [
                 .font: font, .foregroundColor: NSColor.textColor, .paragraphStyle: entry]))
             text.autoresizingMask = [.width]
-            view.addArrangedSubview(Card.scroll(text, height: 150))
-            // The newest action is the one a person looks for.
+            let scroll = Card.scroll(text, height: 150)
+            // The newest action is the one a person looks for. It is measured at the journal's own size first: on an
+            // empty frame, the end was found too early, and the newest line and the oldest shown were cut.
+            scroll.frame.size = NSSize(width: Card.width, height: 150)
+            text.frame.size.width = scroll.contentSize.width
+            text.sizeToFit()
+            view.addArrangedSubview(scroll)
             text.scrollToEndOfDocument(nil)
         }
         guard !notes.isEmpty else { return }

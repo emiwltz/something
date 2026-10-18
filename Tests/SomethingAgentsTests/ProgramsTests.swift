@@ -13,7 +13,8 @@ final class FakeMac {
     var shellRuns: [String] { ((try? String(contentsOfFile: "\(root)/shell-runs", encoding: .utf8)) ?? "").split(separator: "\n").map(String.init) }
 
     init() throws { try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true) }
-    deinit { try? FileManager.default.removeItem(atPath: root) }
+    /// Called with defer in each test: a deinit does not always run before the test process ends.
+    func remove() { try? FileManager.default.removeItem(atPath: root) }
 
     /// An executable file at `path` (under the root) whose first line is `head`.
     @discardableResult func program(_ path: String, _ head: String = "#!/bin/sh") throws -> String {
@@ -58,9 +59,10 @@ func code(_ body: () throws -> Void) -> CodedError? {
     return nil
 }
 
-@Suite struct ProgramsTests {
+@Suite(.leavesNothing("programs-")) struct ProgramsTests {
     @Test func theTerminalsPathIsUsedAndTheShellIsNotRun() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("term/claude")
         let shell = try mac.shell(login: [], interactive: [])
         let programs = mac.programs(["PATH": "\(mac.root)/term:/usr/bin:/bin", "SHELL": shell])
@@ -73,6 +75,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func afterAFinderLaunchTheLoginShellsPathIsRead() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("login/codex")
         let shell = try mac.shell(login: ["login", "other"], interactive: [])
         let programs = mac.programs(["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "SHELL": shell])
@@ -85,6 +88,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// With nvm, node is only on an interactive shell's PATH: the second read finds it and gives its folder to pi.
     @Test func aMissingInterpreterIsLookedForInAnInteractiveShell() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("login/pi", "#!/usr/bin/env node")
         try mac.program("nvm/node")
         let shell = try mac.shell(login: ["login"], interactive: ["login", "nvm"])
@@ -96,6 +100,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func aMissingInterpreterSaysWhatToType() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("login/pi")   // pi's own launcher: a shell script that needs node all the same
         try mac.program("login/opencode", "#!/Users/example/gone/bun")
         let shell = try mac.shell(login: ["login"], interactive: ["login"])
@@ -112,6 +117,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// that `env` starts.
     @Test func pisOwnNodeCounts() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("home/.local/bin/pi")
         try mac.program("term/pi", "#!/usr/bin/env node")
         let piNode = try (mac.program("home/.local/share/pi-node/current/bin/node") as NSString).deletingLastPathComponent
@@ -124,6 +130,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func aProgramNotFoundSaysWhatToType() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         let programs = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": try mac.shell(login: [], interactive: [])])
         #expect(code { _ = try programs.find("opencode") } ==
                 CodedError("NOT_INSTALLED", "OpenCode was not found on this Mac. To install it, type in Terminal: brew install opencode"))
@@ -135,6 +142,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func theInstallersFoldersAreSearchedWhenTheShellFails() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("home/.opencode/bin/opencode")
         try mac.program("home/.bun/bin/codex")
         let programs = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": "relative-shell"])
@@ -144,6 +152,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func theDesktopAppsClaudeIsNeverUsed() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         let bundled = try mac.program("home/Library/Application Support/Claude/claude-code/2.1.0/claude")
         try FileManager.default.createDirectory(atPath: "\(mac.root)/term", withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(atPath: "\(mac.root)/term/claude", withDestinationPath: bundled)
@@ -156,6 +165,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// known to be missing: installed says nil, and find says how to give something the PATH.
     @Test func aShellThatHangsIsLeftAfterThreeSeconds() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("login/codex")
         let shell = try mac.shell(login: ["login"], interactive: [], before: "echo $$ > '\(mac.root)/shell-pid'; sleep 30")
         let finder = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": shell])
@@ -179,6 +189,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// A failed read is not kept: once the shell answers, the program is found.
     @Test func aFailedReadIsTriedAgain() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("login/codex")
         let shell = try mac.shell(login: ["login"], interactive: [], before: "[ -f '\(mac.root)/ready' ] || exit 1")
         let programs = mac.programs(["PATH": "/usr/bin:/bin", "SHELL": shell])
@@ -191,6 +202,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// that read is kept.
     @Test func aProgramOnlyAnInteractiveShellFindsIsFound() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("nvm/pi", "#!/usr/bin/env node")
         try mac.program("nvm/node")
         let programs = mac.programs(["SHELL": try mac.shell(login: ["login"], interactive: ["login", "nvm"])])
@@ -205,6 +217,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// not known to be missing.
     @Test func aFailedInteractiveReadIsKept() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         let shell = try mac.shell(login: ["login"], interactive: ["login"], before: #"case " $* " in *" -i "*) exit 1 ;; esac"#)
         let programs = mac.programs(["SHELL": shell])
         #expect(programs.installed("codex") == nil)
@@ -217,6 +230,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
     /// person's startup files are not run to look again.
     @Test func fromATerminalAMissingProgramRunsNoShell() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         try mac.program("nvm/pi")
         let shell = try mac.shell(login: ["login"], interactive: ["nvm"])
         let programs = mac.programs(["PATH": "\(mac.root)/term:/usr/bin:/bin", "SHELL": shell])
@@ -227,6 +241,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
 
     @Test func theFirstLineNamesTheInterpreter() throws {
         let mac = try FakeMac()
+        defer { mac.remove() }
         #expect(Programs.interpreter(of: try mac.program("a", "#!/usr/bin/env -S node --no-warnings")) == "node")
         #expect(Programs.interpreter(of: try mac.program("b", "#!/usr/bin/env NODE_OPTIONS=x bun")) == "bun")
         #expect(Programs.interpreter(of: try mac.program("c", "#!/bin/sh -e")) == "/bin/sh")

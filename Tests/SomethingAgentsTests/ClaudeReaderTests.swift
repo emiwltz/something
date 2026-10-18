@@ -29,7 +29,8 @@ final class ClaudeHome {
         reader.opened = { [unowned self] in opened.append($0) }
     }
 
-    deinit {
+    /// Called with defer where the home is made: a deinit does not always run before the test process ends.
+    func remove() {
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sessions.path)
         try? FileManager.default.removeItem(at: root)
     }
@@ -53,6 +54,7 @@ final class ClaudeHome {
 @Suite struct ClaudeReaderTests {
     @Test func twoLiveSessionsAreReadAndTheStaleOnesIgnored() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let reading = home.read()
         #expect(reading.health == "ok" && reading.note == nil)
         #expect(reading.version == "2.1.299", "the newest version of a live record")
@@ -96,6 +98,7 @@ final class ClaudeHome {
 
     @Test func aSecondTickReadsOnlyWhatChanged() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         _ = home.read()
         let before = home.opened.count
         #expect(home.read().sightings.count == 2)
@@ -119,6 +122,7 @@ final class ClaudeHome {
 
     @Test func anEndIsShownAndAnOldOneLeavesTheList() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         _ = home.read()
         // The shop's Claude exits normally (its record goes); the blog's dies (its record stays behind).
         try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
@@ -136,6 +140,7 @@ final class ClaudeHome {
     /// Claude rewrites a record whole: one caught mid-write (or too big) keeps the session as it was.
     @Test func aTornRecordEndsNothing() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         _ = home.read()
         let record = home.sessions.appendingPathComponent("41300.json")
         try Data(#"{"pid":41300,"sessionId":"6a7b"#.utf8).write(to: record)
@@ -143,6 +148,7 @@ final class ClaudeHome {
         #expect(torn.facts.alive == true && !torn.facts.ended && torn.facts.turnOpen == true)
         // A record never read yet, torn on its first sighting, is not taken for an end either.
         let fresh = try ClaudeHome()
+        defer { fresh.remove() }
         try Data(#"{"pid":41300,"sessionId":"6a7b"#.utf8).write(to: fresh.sessions.appendingPathComponent("41300.json"))
         #expect(Set(fresh.read().sightings.map(\.key)) == [ClaudeHome.shop])
     }
@@ -151,6 +157,7 @@ final class ClaudeHome {
     /// than 4 MB between two ticks, whose turns are kept.
     @Test func turnsNotReadMakeTheThreadIncomplete() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let blog = home.transcript("-Users-example-blog-v2", ClaudeHome.blog)
         #expect(home.read().sightings.first { $0.key == ClaudeHome.blog }?.complete == true, "read from its first byte")
         let filler = String(repeating: #"{"type":"progress","data":"Invented filler."}"# + "\n", count: 120_000)
@@ -167,6 +174,7 @@ final class ClaudeHome {
         #expect(gap.turns[1].items.last?.text == "Invented: the links are fine.")
 
         let long = try ClaudeHome(), longBlog = long.transcript("-Users-example-blog-v2", ClaudeHome.blog)
+        defer { long.remove() }
         try (Data(filler.utf8) + Data(contentsOf: longBlog)).write(to: longBlog)
         let tail = try #require(long.read().sightings.first { $0.key == ClaudeHome.blog })
         #expect(!tail.complete && tail.turns.count == 2)
@@ -174,6 +182,7 @@ final class ClaudeHome {
 
     @Test func aTranscriptOutsideItsFolderIsFoundByTheWalk() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         // A start folder Claude named another way (a long path, a worktree): the file is elsewhere under projects/.
         let moved = home.claude.appendingPathComponent("projects/-Users-example-shop-long")
         try FileManager.default.createDirectory(at: moved, withIntermediateDirectories: true)
@@ -184,6 +193,7 @@ final class ClaudeHome {
 
     @Test func aNewTranscriptWaitsForTheWalk() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let original = home.transcript("-Users-example-shop", ClaudeHome.shop)
         let kept = home.root.appendingPathComponent("kept.jsonl")
         try FileManager.default.moveItem(at: original, to: kept)
@@ -197,6 +207,7 @@ final class ClaudeHome {
 
     @Test func theRegistryWordsMapAsTheDesignSays() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let record = home.sessions.appendingPathComponent("41234.json")
         let original = String(decoding: try Data(contentsOf: record), as: UTF8.self)
         let cases: [(String, StateMap.Waiting, Bool?, String?)] = [
@@ -235,6 +246,7 @@ final class ClaudeHome {
         #expect(ClaudeReader(environment: [:]).read(ClaudeHome.snapshot(), discover: true, now: Date()) == Reading(), "no home: none")
         #expect(ClaudeReader(environment: ["HOME": "/Users/example/nowhere"]).read(ClaudeHome.snapshot(), discover: true, now: Date()).health == "none")
         let home = try ClaudeHome()
+        defer { home.remove() }
         #expect(ClaudeReader(environment: ["HOME": "/Users/example/nowhere", "CLAUDE_CONFIG_DIR": home.claude.path])
             .read(ClaudeHome.snapshot(), discover: true, now: Date()).sightings.count == 2, "CLAUDE_CONFIG_DIR moves everything")
 
@@ -251,6 +263,7 @@ final class ClaudeHome {
 
     @Test func aRecordOfAnotherSystemCannotBeChecked() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let record = home.sessions.appendingPathComponent("41234.json")
         try String(decoding: try Data(contentsOf: record), as: UTF8.self).replacingOccurrences(of: #""pidDomain":"darwin""#, with: #""pidDomain":"linux:invented""#)
             .write(to: record, atomically: true, encoding: .utf8)

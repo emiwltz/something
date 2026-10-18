@@ -36,6 +36,7 @@ the person's and yours; the contract is in the guide.
 - A `change` may arrive while the person types: keep the input outside what you redraw.
 - Catch every rejected call and show its `message`; an uncaught one is an error of `check`.
 - Show the harness names (Claude Code, Codex, OpenCode, pi), never the program names.
-- One space is open at a time. OpenCode cannot steer; pi has no modes; agents started elsewhere are read-only.
+- One space is open at a time. OpenCode cannot steer; pi has no modes; agents started elsewhere are read-only, and a
+  Claude Code or Codex one can be continued here with `resume` when its `can.resume` says so.
 - In a sandbox without a window server, `check` reports `NO_WINDOW_SERVER`: ask the person to run it, or run it
   outside the sandbox.

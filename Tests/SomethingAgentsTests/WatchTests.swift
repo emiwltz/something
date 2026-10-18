@@ -8,6 +8,7 @@ import SomethingCore
 @MainActor @Suite struct WatchTests {
     @Test func aTickGivesRecentSightingsWithTheirGroups() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let watch = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() })
         let seen = watch.tick(now: Date())
         #expect(Set(seen.sightings.map(\.key)) == [ClaudeHome.shop, ClaudeHome.blog])
@@ -17,13 +18,14 @@ import SomethingCore
 
     @Test func elsewhereAgentsAreShapedAsTheContractSays() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
         let shop = try #require(agents.first { $0.thread == ClaudeHome.shop })
         #expect(shop.id == "claude-\(ClaudeHome.shop)" && shop.kind == "claude" && shop.origin == "elsewhere")
         #expect(shop.name == "Dark mode for the cart" && shop.folder == "/Users/example/shop" && shop.pid == 41234)
         #expect(shop.alive == true && shop.evidence == "registry" && shop.state == "waiting" && shop.waiting == "permission")
-        #expect(shop.can == Can() && shop.because["send"] != nil)
+        #expect(shop.can == Can() && shop.because["send"] == "This agent was started outside something; something only reads it.")
         #expect(shop.because["resume"] == "Claude Code still runs this conversation (pid 41234). Quit it there first.")
         #expect(shop.queue.isEmpty && shop.options == Options() && shop.model == "claude-example-model")
         #expect(shop.started == "2026-10-17T08:55:00Z")
@@ -36,6 +38,7 @@ import SomethingCore
 
     @Test func whatSomethingLaunchedIsDropped() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         // The blog's Claude runs in the group of one of something's children; the shop's conversation is one a driver reported.
         #expect(Watch.elsewhere(seen, groups: [41290], keys: [], now: Date()).agents.map(\.thread) == [ClaudeHome.shop])
@@ -45,6 +48,7 @@ import SomethingCore
 
     @Test func aChangedShapeShowsTheProcessesOnly() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         try Data(#"{"pid":41500,"session":"renamed","kind":"interactive"}"#.utf8).write(to: home.sessions.appendingPathComponent("41500.json"))
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         #expect(seen.kinds["claude"]?.health == "changed")
@@ -57,6 +61,7 @@ import SomethingCore
     /// A snapshot the system did not give in full proves nobody gone: the last tick stands.
     @Test func aSnapshotNotWholeEndsNothing() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         var snapshot = ClaudeHome.snapshot()
         let watch = Watch(readers: [home.reader], snapshot: { snapshot })
         let good = watch.tick(now: Date())
@@ -71,6 +76,7 @@ import SomethingCore
     /// An agent seen elsewhere that ended has no pid: the number may already be another program's.
     @Test func anEndedAgentHasNoPid() throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         var snapshot = ClaudeHome.snapshot()
         let watch = Watch(readers: [home.reader], snapshot: { snapshot })
         _ = watch.tick(now: Date())
@@ -79,10 +85,12 @@ import SomethingCore
         let seen = watch.tick(now: Date())
         let shop = try #require(Watch.elsewhere(seen, groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
         #expect(shop.alive == false && shop.pid == nil)
+        #expect(shop.can.resume && shop.because["send"] == "This agent was started outside something; something only reads it. Continue it here to write to it.")
     }
 
     @Test func theTimerTicksAndChangesItsCadence() async throws {
         let home = try ClaudeHome()
+        defer { home.remove() }
         let watch = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() })
         var ticks = 0
         watch.start(every: 0.05) { _ in ticks += 1 }
@@ -95,7 +103,9 @@ import SomethingCore
 
     @Test func theEngineMergesLaunchedAndSeenAgents() async throws {
         let place = try EngineTests.Place()
+        defer { place.remove() }
         let home = try ClaudeHome()
+        defer { home.remove() }
         let engine = Engine.throwaway(place.environment)
         var snapshot = ClaudeHome.snapshot()
         engine.watch = Watch(readers: [home.reader], snapshot: { snapshot })

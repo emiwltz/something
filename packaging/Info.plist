@@ -20,7 +20,7 @@
 	<key>CFBundleVersion</key>
 	<string>written by make-app.sh</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>

@@ -71,4 +71,13 @@ import Testing
         // An unset variable in a formula or a CI job must not become /something.app.
         #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["", "1.0.0"], quiet: true).status == 2)
     }
+
+    /// The floor is macOS 15 everywhere a person or a tool reads it (decision E-6).
+    @Test func everyPlaceSaysMacOS15() throws {
+        func text(_ path: String) throws -> String { try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8) }
+        #expect(try text("Package.swift").contains(#"platforms: [.macOS("15.0")]"#))
+        #expect(try text("packaging/Info.plist").contains("<key>LSMinimumSystemVersion</key>\n\t<string>15.0</string>"))
+        #expect(try text("packaging/homebrew/something.rb").contains("depends_on macos: :sequoia"))
+        #expect(try text("README.md").contains("macOS 15 or later") && text("share/guide.md").contains("macOS 15 or later"))
+    }
 }

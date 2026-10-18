@@ -8,9 +8,10 @@ for you, a bridge to those agents: a board of who is waiting, a chat, a summary 
 
 ## The first five minutes
 
-You need a Mac with macOS 15 or later (the formula requires it; see [Where it has run](#where-it-has-run)), [Homebrew](https://brew.sh), and Apple's Command Line Tools, which Homebrew
-installs with itself (otherwise: `xcode-select --install`, free). Xcode is not needed. No version is tagged yet, so
-Homebrew builds the latest code of `main` on your Mac, which takes a few minutes:
+You need a Mac with macOS 15 or later (see [Where it has run](#where-it-has-run)), [Homebrew](https://brew.sh), and
+Apple's Command Line Tools, which Homebrew installs with itself (otherwise: `xcode-select --install`, free). Xcode is
+not needed. No version is tagged yet, so Homebrew builds the latest code of `main` on your Mac, which takes a few
+minutes:
 
 ```sh
 brew install --HEAD emiwltz/tap/something
@@ -158,17 +159,18 @@ changes.
 - **pi has no mode, and never asks permission**, by design: it runs commands and edits files without asking you
   first. The rights window says so when a space asks to launch pi.
 - **OMP is only read**: launching it is left for after 1.0.
-- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. Claude Code
-  and Codex conversations can be continued in something ("continue here") once no other process holds them.
+- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 1.0, a
+  Claude Code or Codex conversation can be continued in something ("continue here") once no other process holds it;
+  OpenCode, pi and OMP conversations cannot.
 
 A space reads what holds now in each agent's `can` and `because`, not in this table.
 
 ## Where it has run
 
-*The suite has run on macOS 27 on Apple silicon (Swift 6.3, Xcode 26), and only there so far. The formula requires
-macOS 15, the oldest macOS on GitHub's runners: GitHub runs the suite at each push on macOS 15 and on the newest
-macOS its runners offer, and installs the formula there with Homebrew; this line names them once those runs are
-green.* Intel Macs are not tested.
+*The suite has run on macOS 27 on Apple silicon (Swift 6.3, Xcode 26), and only there so far. something requires macOS
+15 (the package, the app and the formula say so), the oldest macOS on GitHub's runners: GitHub runs the suite at each
+push on macOS 15 and on the newest macOS its runners offer, and installs the formula there with Homebrew; this line
+names them once those runs are green.* Intel Macs are not tested.
 
 ## Uninstall
 
@@ -192,8 +194,6 @@ swift test                                  # the Swift suite
 node --test Tests/something-js.test.mjs     # something.js against the contract's cases
 tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app and signs it ad hoc, as the formula does
 ```
-
-The package itself declares macOS 13, but nothing has run below macOS 15: on 13 or 14 it is untested.
 
 With the Command Line Tools alone (no Xcode), `swift test` does not find Swift Testing by itself; give it the way:
 

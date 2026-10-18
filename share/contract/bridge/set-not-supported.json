@@ -55,8 +55,7 @@
           "resume": false
         },
         "because": {
-          "effort": "This model offers no effort level.",
-          "resume": "This conversation is already open here."
+          "effort": "This model offers no effort level."
         }
       }
     }

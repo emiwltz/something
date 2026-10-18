@@ -23,7 +23,7 @@ final class OpenCodeReader: Reader {
     /// The columns the reader may use, and the guard asks for; `data` is read only through json_extract.
     static let whitelist: [String: Set<String>] = [
         "session_v2": ["id", "parent_id", "directory", "title", "agent", "model", "time_created", "time_updated", "time_archived",
-                       "time_suspended", "time_idle", "idle_outcome"],
+                       "time_suspended", "time_idle", "idle_outcome", "version"],
         "session_message": ["id", "session_id", "type", "seq", "time_created", "time_updated"],
         "migration": ["id"],
     ]
@@ -69,8 +69,10 @@ final class OpenCodeReader: Reader {
         opened(path)
         let unreadable = Reading(health: "unreadable", note: "something cannot read OpenCode's database; check its permissions.")
         guard let db = try? SQLiteRO(path, whitelist: OpenCodeReader.whitelist), let tables = try? db.tables() else { return (unreadable, []) }
-        let versions = tables["migration"] == nil ? [] : (try? db.rows("SELECT max(id) AS version FROM migration")) ?? []
-        let version = versions.first?["version"] as? String
+        // The schema's last migration says which format the file has, not which OpenCode wrote it: it is the version
+        // only when no session names its program's.
+        let migrations = tables["migration"] == nil ? [] : (try? db.rows("SELECT max(id) AS version FROM migration")) ?? []
+        var version = migrations.first?["version"] as? String
         guard tables["session_v2"] != nil || tables["session"] == nil else {
             return (Reading(version: version, health: "changed", note: "This OpenCode database is in the 1.x format, which OpenCode desktop 1.x "
                             + "still writes; something reads OpenCode 2 only, so its agents are shown as processes only."), [])
@@ -78,6 +80,8 @@ final class OpenCodeReader: Reader {
         guard (try? db.guarded()) == true else {
             return (Reading(version: version, health: "changed", note: "OpenCode's database changed shape; its agents are shown as processes only."), [])
         }
+        let newest = try? db.rows("SELECT version FROM session_v2 WHERE version != '' ORDER BY time_updated DESC LIMIT 1")
+        version = newest?.first?["version"] as? String ?? version
         let since = (now.timeIntervalSince1970 - Watch.recent) * 1000
         // An aggregate returns no stored column: the 1.x table needs no place on the whitelist.
         let legacy = tables["session"]?.contains("time_updated") == true ? (try? db.rows("SELECT max(time_updated) AS last FROM session")) : nil

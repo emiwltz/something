@@ -11,8 +11,8 @@ class Something < Formula
   license "MIT"
   head "https://github.com/emiwltz/something.git", branch: "main"
 
-  # The package builds for macOS 13, but GitHub's oldest runner left is macOS 15 (macos-14 is removed on
-  # 2 November 2026): the floor is the oldest macOS on which CI installs this formula.
+  # macOS 15, as the package and the app's Info.plist say: the oldest macOS on which CI installs this formula
+  # (macos-14 runners are removed on 2 November 2026).
   depends_on macos: :sequoia
   # Apple's Command Line Tools are enough; Xcode is not needed. Homebrew itself needs them.
   uses_from_macos "swift" => :build

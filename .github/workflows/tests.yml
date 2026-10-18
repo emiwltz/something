@@ -1,5 +1,5 @@
-# The tests on Macs that are not the author's, at each push, on the oldest macOS runner GitHub still offers that the
-# package supports (macos-15: macos-14 is in brownouts and is removed on 2 November 2026) and on macos-latest.
+# The tests on Macs that are not the author's, at each push, on macOS 15, the floor the package, the app and the formula
+# declare and the oldest runner GitHub still offers (macos-14 is removed on 2 November 2026), and on macos-latest.
 #
 # Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases, and
 # make-app.sh assembles a signed something.app from a release build. The runner has a logged-in window server, so the

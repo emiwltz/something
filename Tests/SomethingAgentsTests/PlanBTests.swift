@@ -9,7 +9,7 @@ import Testing
 @testable import SomethingAgents
 import SomethingCore
 
-@MainActor @Suite(.serialized) struct PlanBTests {
+@MainActor @Suite(.serialized, .leavesNothing("plan-b-")) struct PlanBTests {
     nonisolated static let fake = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
@@ -72,7 +72,8 @@ import SomethingCore
             try PlanBTests.buildHook(hook, in: tools)
         }
 
-        deinit { try? FileManager.default.removeItem(at: root) }
+        /// Called with defer in each test: a deinit does not always run before the test process ends.
+        func remove() { try? FileManager.default.removeItem(at: root) }
 
         func engine(_ hook: [String] = ["hook", "permission"], extra: [String: String] = [:]) -> Engine {
             let engine = Engine.throwaway(environment.merging(extra) { _, new in new })
@@ -159,6 +160,7 @@ import SomethingCore
 
     @Test func allowOnce() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = place.engine(), openings = Openings()
         let (_, request) = try await ask(place, engine, openings)
         #expect(place.arguments.contains("--settings") && !place.arguments.contains("--permission-prompt-tool"))
@@ -184,6 +186,7 @@ import SomethingCore
     /// Claude says a hook denied the tool: the deny is still the person's, who chose it.
     @Test func deny() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_DENIED_FRAME": "1"])
         let (_, request) = try await ask(place, engine)
         engine.answer(request.id, .deny)
@@ -198,6 +201,7 @@ import SomethingCore
     /// Nobody answers: the hook denies before Claude's own limit, and the window closes by itself.
     @Test func timeout() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = place.engine(["hook", "permission", "--timeout", "1"])
         let (_, request) = try await ask(place, engine)
         try await until("the request to close") { engine.state.requests.isEmpty && tool(engine)?.tool?.status == "failed" }
@@ -211,6 +215,7 @@ import SomethingCore
     /// Claude kills the hook while it waits (an interrupt): the window closes, and nobody decided.
     @Test func aKilledHookIsWithdrawn() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_KILL_HOOK": "1"]), openings = Openings()
         _ = try await ask(place, engine, openings)
         try await until("the window to close") { engine.state.requests.isEmpty && tool(engine)?.tool?.status == "failed" }
@@ -225,6 +230,7 @@ import SomethingCore
     /// request open, to be answered again.
     @Test func anAnswerIsGivenOnce() async throws {
         let place = try Place()
+        defer { place.remove() }
         let spool = PermissionSpool(folder: place.spools.appendingPathComponent("claude-1-x").path)
         try spool.start()
         defer { spool.stop() }
@@ -247,6 +253,7 @@ import SomethingCore
     /// The heartbeat is too old, though its pid runs (something hangs): the hook denies at once.
     @Test func anOldHeartbeatIsGone() throws {
         let place = try Place()
+        defer { place.remove() }
         let folder = place.spools.appendingPathComponent("claude-1-old")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let heartbeat = folder.appendingPathComponent("heartbeat").path
@@ -260,6 +267,7 @@ import SomethingCore
     /// something is gone (it crashed and left its spool, whose heartbeat names a pid that ended): the hook denies at once.
     @Test func staleHeartbeat() async throws {
         let place = try Place()
+        defer { place.remove() }
         let folder = place.spools.appendingPathComponent("claude-1-gone")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let ended = Process()
@@ -285,6 +293,7 @@ import SomethingCore
     /// request it held; a live one and one still being made are kept.
     @Test func aLeftoverSpoolIsRemovedAtTheNextStart() throws {
         let place = try Place()
+        defer { place.remove() }
         let ended = Process()
         ended.executableURL = URL(fileURLWithPath: "/usr/bin/true")
         try ended.run()
@@ -310,6 +319,7 @@ import SomethingCore
     /// The heartbeat stops while the hook waits: it denies within a moment, not at its timeout.
     @Test func heartbeatStopsWhileWaiting() async throws {
         let place = try Place()
+        defer { place.remove() }
         let spool = PermissionSpool(folder: place.spools.appendingPathComponent("claude-1-x").path)
         try spool.start()
         let hook = Process()
@@ -334,6 +344,7 @@ import SomethingCore
     /// A Claude that does not know the prompt tool is launched again with plan B, under the same agent id.
     @Test func aRefusedPromptToolFallsBackToPlanB() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_NO_PROMPT_TOOL": "1"])
         let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
         try await until("plan B") { place.arguments.contains("--settings") && engine.state.agents.first?.options.model != nil }

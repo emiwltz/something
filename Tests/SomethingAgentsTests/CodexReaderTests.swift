@@ -106,7 +106,8 @@ final class CodexHome {
         try makeDatabase(codex.appendingPathComponent("state_4.sqlite").path, "CREATE TABLE threads (id TEXT PRIMARY KEY);")
     }
 
-    deinit {
+    /// Called with defer where the home is made: a deinit does not always run before the test process ends.
+    func remove() {
         try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: codex.appendingPathComponent("state_5.sqlite").path)
         try? FileManager.default.removeItem(at: root)
     }
@@ -152,9 +153,10 @@ final class CodexHome {
     }
 }
 
-@Suite struct CodexReaderTests {
+@Suite(.leavesNothing("codex-home-")) struct CodexReaderTests {
     @Test func theIndexGivesTheRecentConversationsOfPeople() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         let reading = home.read()
         #expect(reading.health == "ok" && reading.version == "0.163.0" && reading.note == nil)
         // Not the compressed one, the sub-agent, the review, the archived one or the one idle for three days.
@@ -177,6 +179,7 @@ final class CodexHome {
     /// A long turn whose turn_context lies before the last 4 MB: the index gives the settings.
     @Test func theIndexGivesTheSettingsTheRolloutDoesNot() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         let marks = [#"{"timestamp":"2026-10-17T09:00:00.000Z","ordinal":900,"type":"event_msg","payload":{"type":"item_completed","turn_id":"t","item":{"type":"AgentMessage","id":"r","content":[{"type":"Text","text":"Invented."}]}}}"#,
                      #"{"timestamp":"2026-10-17T09:01:00.000Z","ordinal":901,"type":"event_msg","payload":{"type":"task_complete","turn_id":"t"}}"#]
         try Data((marks.joined(separator: "\n") + "\n").utf8).write(to: home.rollout("2026/10/16", CodexHome.blog))
@@ -186,6 +189,7 @@ final class CodexHome {
 
     @Test func theLockHolderSaysWhoIsAlive() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         let held = home.read()
         let shop = try #require(held.sightings.first { $0.key == CodexHome.shop })
         #expect(shop.facts.alive == true && shop.facts.evidence == "lock" && shop.pid == 51000 && shop.facts.turnOpen == true)
@@ -198,24 +202,29 @@ final class CodexHome {
 
         // The rollout held open, not the lock, holds it too.
         let reader = try CodexHome()
+        defer { reader.remove() }
         let open = reader.read(reader.snapshot(holding: [HeldFiles.real(reader.rollout("2026/10/16", CodexHome.blog).path)]))
         #expect(open.sightings.first { $0.key == CodexHome.blog }?.facts.alive == true)
         #expect(open.sightings.first { $0.key == CodexHome.shop }?.facts.alive == nil)
 
         // No codex process at all: every conversation has ended; one left mid-turn was interrupted.
-        let gone = try CodexHome().read(home.snapshot(codex: false))
+        let fresh = try CodexHome()
+        defer { fresh.remove() }
+        let gone = fresh.read(home.snapshot(codex: false))
         #expect(gone.sightings.allSatisfy { $0.facts.alive == false && $0.facts.evidence == "process" && $0.pid == nil })
         let ended = gone.sightings.map { ($0.key, StateMap.map($0.facts, now: Date()).state) }
         #expect(Dictionary(uniqueKeysWithValues: ended) == [CodexHome.shop: "interrupted", CodexHome.blog: "done", CodexHome.ours: "done"])
 
         // A codex process whose open files the system does not give proves nothing.
         let hidden = try CodexHome()
+        defer { hidden.remove() }
         let unknown = hidden.reader.read(Snapshot(hidden.snapshot().processes.values.map { $0 }, files: { _ in nil }), discover: false, now: hidden.now)
         #expect(unknown.sightings.allSatisfy { $0.facts.alive == nil })
     }
 
     @Test func theIndexIsQueriedOnlyWhenItMoves() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         _ = home.read()
         let index = home.codex.appendingPathComponent("state_5.sqlite").path
         let rollout = home.rollout("2026/10/17", CodexHome.shop).path
@@ -238,6 +247,7 @@ final class CodexHome {
     @Test func aChangedIndexFallsBackToTheLastThreeDays() throws {
         let home = try CodexHome(shape: CodexHome.threads.replacingOccurrences(of: "rollout_path TEXT NOT NULL", with: "path TEXT NOT NULL")
             .replacingOccurrences(of: "rollout_path", with: "path"))
+        defer { home.remove() }
         let reading = home.read()
         #expect(reading.health == "changed" && reading.note == "Codex changed the format of its conversation list; something shows only the conversations of its last three days.")
         // The newest three day folders, without the sub-agent's rollout or the compressed one; the 14th is not read.
@@ -256,12 +266,14 @@ final class CodexHome {
         #expect(CodexReader(environment: [:]).read(Snapshot([]), discover: true, now: Date()) == Reading())
         #expect(CodexReader(environment: ["HOME": "/Users/example/nowhere"]).read(Snapshot([]), discover: true, now: Date()) == Reading())
         let home = try CodexHome(index: false)
+        defer { home.remove() }
         let reading = home.read()
         #expect(reading.health == "ok" && Set(reading.sightings.map(\.key)) == [CodexHome.shop, CodexHome.blog, CodexHome.ours])
         #expect(CodexReader(environment: ["HOME": "/Users/example/nowhere", "CODEX_HOME": home.codex.path]).read(home.snapshot(), discover: true, now: Date())
             .sightings.count == 3, "CODEX_HOME moves everything")
 
         let locked = try CodexHome()
+        defer { locked.remove() }
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.codex.appendingPathComponent("state_5.sqlite").path)
         let unreadable = locked.read()
         #expect(unreadable.health == "unreadable" && unreadable.sightings.count == 3 && unreadable.note?.contains("check its permissions") == true)
@@ -269,8 +281,11 @@ final class CodexHome {
 
     /// Contract 3.5: listed while alive. A conversation idle for three days whose lock a codex process holds is read.
     @Test func aHeldConversationIdleForDaysIsListed() throws {
-        #expect(try !CodexHome().read().sightings.contains { $0.key == CodexHome.stale })
+        let unheld = try CodexHome()
+        defer { unheld.remove() }
+        #expect(!unheld.read().sightings.contains { $0.key == CodexHome.stale })
         let home = try CodexHome()
+        defer { home.remove() }
         try Data().write(to: URL(fileURLWithPath: home.lock(CodexHome.stale)))
         let held = home.read(home.snapshot(holding: [HeldFiles.real(home.lock(CodexHome.stale))]), discover: false)
         let stale = try #require(held.sightings.first { $0.key == CodexHome.stale }, "the held lock asks the index again")
@@ -282,6 +297,7 @@ final class CodexHome {
     /// notes/format-codex 1.1 and 1.4: a day folder may hold an "A_B" segment headed by A, and a second copy of A.
     @Test func theWalkKeepsOneFilePerConversation() throws {
         let home = try CodexHome(index: false)
+        defer { home.remove() }
         let day = home.day("2026/10/17"), other = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a99"
         let segment = day.appendingPathComponent("rollout-2026-10-17T11-00-00-\(CodexHome.shop)_\(other).jsonl")
         let copy = day.appendingPathComponent("rollout-2026-10-17T09-00-00-\(CodexHome.shop).jsonl")
@@ -297,6 +313,7 @@ final class CodexHome {
     /// something's own codex holds only what it launched: with no other codex, what nobody holds has ended.
     @Test func ourOwnCodexProvesNothingOfTheOthers() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         home.reader.own = 1
         let reading = home.read()
         let blog = try #require(reading.sightings.first { $0.key == CodexHome.blog })
@@ -308,6 +325,7 @@ final class CodexHome {
     /// person's now, seen elsewhere.
     @Test func dedupeByThreadAndOurOwnEarlierRuns() throws {
         let home = try CodexHome()
+        defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { home.snapshot() }).tick(now: home.now)
         let (agents, _) = Watch.elsewhere(seen, groups: [], keys: [CodexHome.shop], now: home.now)
         #expect(Set(agents.compactMap(\.thread)) == [CodexHome.blog, CodexHome.ours])

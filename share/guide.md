@@ -2,13 +2,13 @@
 
 *For the coding agent a person asks to build them a space. Read this file whole before writing.*
 
-something is a Mac app that sees the coding agents on this Mac (Claude Code, Codex, OpenCode, pi), launches them, and
-shows **spaces**: HTML pages that you write for the person. A board of who is waiting, a chat, a summary of the day, a
-small game: what they ask for. something gives you an empty page and this contract, version 1. The look and the
-content are yours and theirs; the contract only says what a space can rely on.
+something is a Mac app (macOS 15 or later) that sees the coding agents on this Mac (Claude Code, Codex, OpenCode, pi),
+launches them, and shows **spaces**: HTML pages that you write for the person. A board of who is waiting, a chat, a
+summary of the day, a small game: what they ask for. something gives you an empty page and this contract, version 1. The
+look and the content are yours and theirs; the contract only says what a space can rely on.
 
-*Status: something 1.0 is being built. Today the state lists only the agents something launched, not yet those started
-elsewhere, and `resume` answers `NOT_SUPPORTED`.*
+*Status: something 1.0 is being built; no version is tagged yet. The state lists the agents something launched and
+those started elsewhere, and `resume` continues here a Claude Code or Codex conversation started elsewhere.*
 
 ## The five steps
 
@@ -123,8 +123,8 @@ returns a promise. A rejected promise carries an `Error` with `.code` (see "Ever
 | `something.granted` | Granted (below), a property set before your scripts run | none |
 | `something.state()` | The state | `state` (without it: only the agents this space launched) |
 | `something.on(event, fn)` | `"change"`: `fn(state)`; `"granted"`: `fn(granted)`. Returns a function that unsubscribes. | none |
-| `something.send(agent, text, {when})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` | `send` |
-| `something.interrupt(agent)` | `{interrupted}`: true, or false if no turn was running. The agent's `queue` is emptied either way. | `send` |
+| `something.send(agent, text, {when})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` (below) | `send` |
+| `something.interrupt(agent)` | `{interrupted}`: true, or false if no turn was running. The agent's `queue` is emptied either way, and a steer the agent has not taken in yet is dropped. | `send` |
 | `something.set(agent, {model, mode, effort})` | `{applied}`: `now` or `next-turn`. At least one key, values from `options`. | `send` |
 | `something.launch(kind, {folder, model, mode, effort})` | The new agent's `id`. All optional; `folder` is the granted one or inside it. | `launch` |
 | `something.resume(kind, threadId)` | The agent's `id`; it runs in the thread's own folder. | `launch` |
@@ -142,11 +142,22 @@ Call `something.open` for a link your code opens, not from the click handler of 
 - `"next"` (the default): after the current turn ends. something holds the message itself (it shows in `queue`) and
   hands it over when the agent finishes its turn.
 - `"now"`: into the running turn, at the agent's earliest safe point, without stopping it (steer). Check `can.steer`.
-- On an idle agent, both start a turn: `delivery` is `"started"`.
-- `"unconfirmed"`: the agent took the message but did not confirm within 10 seconds; the state will show what happened.
+- On an idle agent, both start a turn.
 - On a waiting agent (a `permission` or a `question` in `requests`), a turn is still running: `"next"` is held in
   `queue` and handed over when that turn ends, after the person has answered in something's window; `"now"` steers.
   Neither answers the request. So a reply box on a waiting agent can stay, if it says the message comes after the answer.
+
+What each `delivery` means today:
+
+- `"started"`: the agent had no turn running; the message was written to it and opens a new turn.
+- `"steered"`: a turn was running and `when` was `"now"`; the message was written to the agent for that turn (to Codex,
+  once the turn's id is known, a moment later). It is not yet proof that the agent took it in: it shows in the thread once
+  the agent does. If the agent then refuses it, or the turn fails before it, the agent's `error` says so; an
+  interrupt drops it. An agent that cannot steer, or has ended, makes the call fail with its code (`NOT_SUPPORTED`,
+  `AGENT_STOPPED`): such a call never answers `"steered"`.
+- `"queued"`: a turn was running and `when` was `"next"`; the message is in the agent's `queue`.
+- `"unconfirmed"`: kept in contract 1 for a message the agent took without confirming it within 10 seconds.
+  something 1.0 never gives it, since it answers as soon as the message is written; treat it as `"steered"`.
 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
@@ -242,7 +253,9 @@ at most four times a second, only when it changed. A shortened example (the full
 ### `kinds`: one entry per harness
 
 `claude`, `codex`, `opencode`, `pi`, `omp`. `launch`: something can launch it. `installed`: its program was found
-(or `null`). `tested`: the newest version something was proven on; `seen`: the newest found on this Mac, or `null`.
+(or `null`). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac
+name, or `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its
+database's last migration).
 `reader`: `ok`, `changed` (its files changed shape: its agents show as processes only), `unreadable`, or `none`
 (nothing of this kind here). `note`: one sentence for the person when something is off, or `null`.
 
@@ -296,7 +309,8 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   emoji is one, though `text.length` may say two); `truncated` says it was cut.
   `tool` is `{name, status}` (`running`, `done`, `failed` or `null`) for a tool item, else `null`. `decision` is
   `{by, outcome}` when the agent's own stream says who decided a permission (`by`: `person`, `hook`, `rule`, `mode`;
-  `outcome`: `allowed`, `denied`), else `null`. Today only Claude Code launched by something says it.
+  `outcome`: `allowed`, `denied`), else `null`. An agent something launched says `person` when the person answered
+  something's window; only Claude Code also says when a hook, a rule or its mode decided.
 - **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
   the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and
   say "answer in something's window".
@@ -321,9 +335,11 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   write the question in its reply.
 - **pi has no mode**: pi never asks permission, by design; it runs commands and edits files without asking.
 - **OMP is not launched**: something only reads it (`launch:omp` and `send:omp` are unavailable).
-- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. It can only
-  be resumed ("continue here"), for `claude` and `codex`, once no other process holds its conversation; the new agent
-  is a launch of this space.
+- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 1.0 only a
+  `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
+  is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,
+  with the `launch` right for that kind. For `opencode`, `pi` and `omp`, `can.resume` is false and `because.resume`
+  says why. A permission or a question of an agent started elsewhere is answered where it runs: it is no `request`.
 - **`other` agents are seen by their process only**: no conversation, no state beyond `unknown`.
 
 ## Memory

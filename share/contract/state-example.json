@@ -31,7 +31,7 @@
       },
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
       "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": true, "resume": false },
-      "because": { "resume": "This conversation is already open here." },
+      "because": {},
       "error": null,
       "started": "2026-10-17T08:55:00Z",
       "updated": "2026-10-17T09:00:03Z",

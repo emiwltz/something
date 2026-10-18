@@ -185,6 +185,7 @@ final class Watch {
             agent.because = ["send": "This agent was started outside something; something only reads it."]
             if !sighting.processOnly {
                 (agent.can.resume, agent.because["resume"]) = Watch.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
+                if agent.can.resume { agent.because["send"]! += " Continue it here to write to it." }
             }
             agent.because.merge(sighting.because) { _, own in own }
             if sighting.processOnly { agent.thread = nil; agents.append(agent); continue }

@@ -64,12 +64,12 @@ final class OpenCodeHome {
             return
         }
         func session(_ id: String, title: String = "NULL", parent: String = "NULL", suspended: Int64? = nil, idle: Int64? = nil,
-                     outcome: String? = nil, updated: Int64, archived: Int64? = nil) -> String {
+                     outcome: String? = nil, updated: Int64, archived: Int64? = nil, version: String = "2.0.20") -> String {
             func value(_ number: Int64?) -> String { number.map(String.init) ?? "NULL" }
             return """
                 INSERT INTO session_v2 (id, project_id, parent_id, slug, directory, title, version, agent, model, time_created, time_updated,
                   time_archived, time_suspended, time_idle, idle_outcome)
-                VALUES ('\(id)', 'global', \(parent), 'invented-slug', '/Users/example/shop', \(title), '2.0.20', 'build',
+                VALUES ('\(id)', 'global', \(parent), 'invented-slug', '/Users/example/shop', \(title), '\(version)', 'build',
                   '{"providerID":"fake","id":"fake-model","variant":"high"}', \(updated - 60_000), \(updated), \(value(archived)),
                   \(value(suspended)), \(value(idle)), \(outcome.map { "'\($0)'" } ?? "NULL"));
                 """
@@ -103,13 +103,14 @@ final class OpenCodeHome {
             message(OpenCodeHome.done, "user", #"{"text":"Say hello.","time":{"created":1}}"#, at: ago(200)),
             message(OpenCodeHome.done, "assistant", #"{"agent":"build","content":[{"type":"text","text":"Hello."}],"finish":"stop","time":{"created":1,"completed":2}}"#, at: ago(150)),
             message(OpenCodeHome.done, "idle", #"{"outcome":"succeeded","time":{"created":1}}"#, at: ago(100)),
-            session(OpenCodeHome.child, parent: "'\(OpenCodeHome.shop)'", suspended: ago(20), updated: ago(20)),
-            session(OpenCodeHome.old, idle: ago(3 * 86_400), outcome: "succeeded", updated: ago(3 * 86_400)),
+            session(OpenCodeHome.child, parent: "'\(OpenCodeHome.shop)'", suspended: ago(20), updated: ago(20), version: "2.0.21"),
+            session(OpenCodeHome.old, idle: ago(3 * 86_400), outcome: "succeeded", updated: ago(3 * 86_400), version: "2.0.19"),
             session(OpenCodeHome.archived, updated: ago(60), archived: ago(50)),
         ].joined(separator: "\n"))
     }
 
-    deinit { try? FileManager.default.removeItem(at: root) }
+    /// Called with defer where the home is made: a deinit does not always run before the test process ends.
+    func remove() { try? FileManager.default.removeItem(at: root) }
 
     /// `person`: the person's OpenCode (its background service), started 15 minutes ago, outside something's groups.
     /// `ours`: something's own `opencode acp` and the server it starts, in the group of something's child.
@@ -128,11 +129,12 @@ final class OpenCodeHome {
     func read(_ snapshot: Snapshot? = nil) -> Reading { reader.read(snapshot ?? self.snapshot(), discover: false, now: now) }
 }
 
-@Suite struct OpenCodeReaderTests {
+@Suite(.leavesNothing("opencode-home-")) struct OpenCodeReaderTests {
     @Test func theRecentRootSessionsWithTheirTurns() throws {
         let home = try OpenCodeHome()
+        defer { home.remove() }
         let reading = home.read()
-        #expect(reading.health == "ok" && reading.version == OpenCodeHome.migration && reading.note == nil)
+        #expect(reading.health == "ok" && reading.version == "2.0.21" && reading.note == nil, "the newest session's program")
         // Not the sub-agent, the archived one or the one idle for three days.
         #expect(Set(reading.sightings.map(\.key)) == [OpenCodeHome.shop, OpenCodeHome.blog, OpenCodeHome.late, OpenCodeHome.done])
         let shop = try #require(reading.sightings.first { $0.key == OpenCodeHome.shop })
@@ -153,6 +155,7 @@ final class OpenCodeHome {
     /// C10: a claim is held only by a live OpenCode process started at or before it, outside something's groups.
     @Test func theClaimAndHolderRule() throws {
         let home = try OpenCodeHome()
+        defer { home.remove() }
         func words(_ reading: Reading) -> [String: (alive: Bool?, evidence: String?, state: String, pid: Int32?)] {
             Dictionary(uniqueKeysWithValues: reading.sightings.map { sighting in
                 (sighting.key, (sighting.facts.alive, sighting.facts.evidence, StateMap.map(sighting.facts, now: home.now).state, sighting.pid))
@@ -186,6 +189,7 @@ final class OpenCodeHome {
 
     @Test func theDatabaseIsQueriedOnlyWhenItMoves() throws {
         let home = try OpenCodeHome()
+        defer { home.remove() }
         let before = home.read()
         #expect(home.opened == [home.database])
         // The person's OpenCode ends: the facts follow the processes without a query.
@@ -202,8 +206,17 @@ final class OpenCodeHome {
         #expect(home.opened.count == 2 && ended.turns.map(\.state) == ["done", "error"] && ended.facts.failed && ended.facts.turnOpen == false)
     }
 
+    /// No session names its program: the schema's last migration is all that is known.
+    @Test func withoutASessionVersionTheMigrationIsSeen() throws {
+        let home = try OpenCodeHome()
+        defer { home.remove() }
+        try makeDatabase(home.database, "UPDATE session_v2 SET version = '';")
+        #expect(home.read().version == OpenCodeHome.migration)
+    }
+
     @Test func aLegacyOnlyDatabaseIsChanged() throws {
         let home = try OpenCodeHome(legacyOnly: true)
+        defer { home.remove() }
         let reading = home.read()
         #expect(reading.health == "changed" && reading.sightings.isEmpty)
         #expect(reading.note?.contains("OpenCode desktop 1.x") == true)
@@ -219,6 +232,7 @@ final class OpenCodeHome {
     /// OpenCode desktop 1.x keeps writing the 1.x tables of a database OpenCode 2 has moved on from.
     @Test func aDesktopStillWritingThe1xTablesIsSaid() throws {
         let home = try OpenCodeHome()
+        defer { home.remove() }
         try makeDatabase(home.database, """
             INSERT INTO session VALUES ('ses_legacy', 'global', NULL, 'invented', '/Users/example/shop', 'Invented title', '1.18.30',
               NULL, NULL, NULL, NULL, NULL, NULL, NULL, \(home.ago(600)), \(home.ago(60)), NULL, NULL);
@@ -230,6 +244,7 @@ final class OpenCodeHome {
     /// A refusal may pass: the next tick asks again, though the database did not move.
     @Test func anUnreadableDatabaseIsAskedAgain() throws {
         let home = try OpenCodeHome()
+        defer { home.remove() }
         let before = try FileManager.default.attributesOfItem(atPath: home.database)[.modificationDate] as? Date
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: home.database)
         let refused = home.read()
@@ -254,6 +269,7 @@ final class OpenCodeHome {
         #expect(OpenCodeReader(environment: [:]).read(Snapshot([]), discover: true, now: Date()) == Reading())
         #expect(OpenCodeReader(environment: ["HOME": "/Users/example/nowhere"]).read(Snapshot([]), discover: true, now: Date()) == Reading())
         let home = try OpenCodeHome(legacyOnly: true)
+        defer { home.remove() }
         for suffix in ["", "-wal", "-shm"] { try FileManager.default.removeItem(atPath: home.database + suffix) }
         try makeDatabase(home.database, OpenCodeHome.tables.replacingOccurrences(of: "`time_suspended` integer, ", with: ""))
         let reading = home.read()

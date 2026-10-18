@@ -226,6 +226,27 @@ import SomethingCore
         #expect((replay.lines().last?["params"] as? [String: Any])?["model"] == nil, "Codex keeps them: they are sent once")
     }
 
+    /// On a new thread's first turn Codex refuses the read-back (its rollout is still empty): the settings are read
+    /// again once that turn completes, so the new model is still reported.
+    @Test func aRefusedReadBackIsTriedAgainAtTheTurnEnd() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.driver.set(model: "other-model", mode: nil, effort: nil)
+        _ = try replay.agent.send("Hello.", when: "next")
+        Self.started(replay, call: 4)
+        replay.feed(["id": 5, "error": ["code": -32600, "message": "Invented: no rollout found for thread"]])
+        #expect(replay.fold.agent.model == "fake-model")
+        #expect(replay.fold.agent.error == nil, "a refused read-back is no error of the agent")
+        replay.feed(["method": "turn/completed", "params": ["threadId": Self.thread, "turn": ["id": Self.turn, "status": "completed"]]])
+        let reads = replay.lines().filter { $0["method"] as? String == "thread/resume" }
+        #expect(reads.map { $0["id"] as? Int } == [5, 6])
+        replay.feed(["id": 6, "result": ["thread": ["id": Self.thread], "model": "other-model", "approvalPolicy": "on-request"]])
+        #expect(replay.fold.agent.model == "other-model")
+        _ = try replay.agent.send("Again.", when: "next")
+        Self.started(replay, call: 7)
+        replay.feed(["method": "turn/completed", "params": ["threadId": Self.thread, "turn": ["id": Self.turn, "status": "completed"]]])
+        #expect(replay.lines().filter { $0["method"] as? String == "thread/resume" }.count == 2, "read again once only")
+    }
+
     @Test func anEffortGivenAtLaunchGoesWithTheFirstTurn() throws {
         let replay = Replay.codex(effort: "high")
         replay.feed(["id": 1, "result": [:]])
@@ -330,5 +351,15 @@ import SomethingCore
         replay.feed(["id": 4, "error": ["code": -32600, "message": "Invalid request: invented refusal"]])
         #expect(replay.fold.agent.error?.message == "Codex refused the message “First.”: Invalid request: invented refusal")
         #expect(try replay.agent.send("Second.", when: "next") == "started")
+    }
+
+    /// A steer that waited for the turn's id, when Codex refuses that turn: it is said lost, never dropped unsaid.
+    @Test func aSteerWaitingForARefusedTurnIsSaidLost() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.send("First.", when: "next")
+        #expect(try replay.agent.send("Steered.", when: "now") == "steered")
+        replay.feed(["id": 4, "error": ["code": -32600, "message": "Invalid request: invented refusal"]])
+        #expect(replay.fold.agent.error?.message == "Codex refused the message “First.”: Invalid request: invented refusal; the message steered into it went nowhere either")
+        #expect(!replay.lines().contains { $0["method"] as? String == "turn/steer" })
     }
 }

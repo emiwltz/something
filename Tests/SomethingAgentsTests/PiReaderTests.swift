@@ -36,7 +36,8 @@ final class PiHome {
         }
     }
 
-    deinit { try? FileManager.default.removeItem(at: root) }
+    /// Called with defer where the home is made: a deinit does not always run before the test process ends.
+    func remove() { try? FileManager.default.removeItem(at: root) }
 
     func find(_ folder: String, _ id: String) -> String {
         let paths = (FileManager.default.enumerator(atPath: root.appendingPathComponent(folder).path)?.allObjects as? [String]) ?? []
@@ -82,9 +83,10 @@ final class PiHome {
     }
 }
 
-@Suite struct PiReaderTests {
+@Suite(.leavesNothing("pi-home-")) struct PiReaderTests {
     @Test func twoPiInOneFolderAreNotToldApart() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let started = home.now.addingTimeInterval(-3600)
         let seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: started), PiHome.pi(52002, in: "/Users/example/shop", started: started)])
         #expect(Set(seen.keys) == Set([PiHome.shopA, PiHome.shopB, PiHome.blog, PiHome.notes].map(home.log)), "no process is shown without its log")
@@ -114,6 +116,7 @@ final class PiHome {
 
     @Test func onePiHoldsTheNewestLogOfItsFolderWrittenSinceItStarted() throws {
         let home = try PiHome()
+        defer { home.remove() }
         var seen = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600))])
         let b = try #require(seen[home.log(PiHome.shopB)])
         #expect(b.facts.alive == true && b.facts.evidence == "cwd" && b.pid == 52001)
@@ -130,6 +133,7 @@ final class PiHome {
 
     @Test func aPiSomethingLaunchedStillCountsInItsFolder() throws {
         let home = try PiHome()
+        defer { home.remove() }
         // something's own pi (pid 52003, under something's pid 999999) and the person's, in one folder: the newest
         // log may be either one's, so neither log is claimed, and the own pi is not shown.
         let watch = Watch(readers: [home.pi], snapshot: {
@@ -145,6 +149,7 @@ final class PiHome {
 
     @Test func piThatRunForDaysAreSeenFromTheirProcess() throws {
         let home = try PiHome()
+        defer { home.remove() }
         for (id, days) in [(PiHome.shopA, 2.5), (PiHome.shopB, 2)] {
             try FileManager.default.setAttributes([.modificationDate: home.now.addingTimeInterval(-days * 86_400)], ofItemAtPath: home.log(id))
         }
@@ -160,6 +165,7 @@ final class PiHome {
 
     @Test func aPiIsKnownBeforeItRenamesItself() throws {
         let home = try PiHome()
+        defer { home.remove() }
         // Its first milliseconds: node runs pi's script, and the snapshot keeps those arguments for the process's life.
         let early = Running(pid: 52005, parent: 1, group: 52005, started: home.now.addingTimeInterval(-3600), name: "node",
                             arguments: ["node", "/opt/example/lib/node_modules/.bin/pi"], folder: "/Users/example/shop")
@@ -169,6 +175,7 @@ final class PiHome {
 
     @Test func logsReplacedBetweenWalksAreReadAgain() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let pi = PiHome.pi(52001, in: "/Users/example/shop", started: home.now.addingTimeInterval(-3600))
         let omp = Running(pid: 53000, parent: 1, group: 53000, started: home.now.addingTimeInterval(-7200), name: "omp")
         _ = home.read([pi])
@@ -194,6 +201,7 @@ final class PiHome {
 
     @Test func aRewrittenPiLogIsReadAgain() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let path = home.log(PiHome.shopA)
         _ = home.read([])
         let inode = Stamp(path)?.inode
@@ -213,6 +221,7 @@ final class PiHome {
 
     @Test func anOMPLogShowsItsCurrentBranch() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let seen = home.readOMP()
         #expect(Set(seen.keys) == [PiHome.ompShop, PiHome.ompBlog], "a sub-agent's log, the lock leftovers and the leases are no conversations")
         let shop = try #require(seen[PiHome.ompShop])
@@ -229,6 +238,7 @@ final class PiHome {
 
     @Test func anOMPHolderMakesItAlive() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let omp = Running(pid: 53000, parent: 1, group: 53000, started: home.now.addingTimeInterval(-7200), name: "omp")
         let leases = home.root.appendingPathComponent(".omp/run/session-owners").path
         // The shop's log held open, the blog's lease held: both say a living holder.
@@ -249,6 +259,7 @@ final class PiHome {
 
     @Test func anOMPTitleRewriteKeepsTheCursor() throws {
         let home = try PiHome()
+        defer { home.remove() }
         let path = home.ompLog(PiHome.ompShop)
         let first = try #require(Tail.read(path, after: nil, containing: [PiLog.typed], skippingHead: OMPReader.titleSlot))
         let plain = try #require(Tail.read(path, after: nil, containing: [PiLog.typed]))
@@ -290,6 +301,7 @@ final class PiHome {
         let place = try EngineTests.Place()
         defer { place.remove() }
         let home = try PiHome()
+        defer { home.remove() }
         let engine = Engine.throwaway(place.environment)
         engine.watch = Watch(readers: [home.pi, home.omp], snapshot: { Snapshot([]) })
         engine.saw(engine.watch.tick(now: home.now))
