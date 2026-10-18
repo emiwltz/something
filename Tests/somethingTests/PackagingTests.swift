@@ -9,8 +9,15 @@ import Testing
 @Suite(.leavesNothing("something-packaging-"), .leavesNothing("something-prefix-")) struct PackagingTests {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    /// Runs `program` with `arguments`; its status and standard output.
-    func run(_ program: String, _ arguments: [String], quiet: Bool = false) throws -> (status: Int32, out: String) {
+    /// Runs `program` with `arguments` on a thread of its own; its status and standard output. Throws when it cannot
+    /// start. make-app.sh and codesign take seconds: waiting for them on one of the few threads of Swift's shared pool
+    /// would delay every other test that needs one.
+    func run(_ program: String, _ arguments: [String], quiet: Bool = false) async throws -> (status: Int32, out: String) {
+        try await offMain { try Self.runBlocking(program, arguments, quiet: quiet) }
+    }
+
+    /// The same, waited for on the calling thread: for a `defer`, which cannot await.
+    static func runBlocking(_ program: String, _ arguments: [String], quiet: Bool = false) throws -> (status: Int32, out: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: program)
         process.arguments = arguments
@@ -31,10 +38,10 @@ import Testing
         let app = prefix.appendingPathComponent("something.app")
         defer {
             // Running a program inside a bundle may register the bundle with LaunchServices: forget it before deleting it.
-            _ = try? run("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-u", app.path], quiet: true)
+            _ = try? Self.runBlocking("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-u", app.path], quiet: true)
             try? FileManager.default.removeItem(at: prefix)
         }
-        #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, [prefix.path, "9.8.7", program.path]).status == 0)
+        #expect(try await run(root.appendingPathComponent("tools/make-app.sh").path, [prefix.path, "9.8.7", program.path]).status == 0)
 
         let info = try #require(try PropertyListSerialization.propertyList(
             from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any])
@@ -46,12 +53,12 @@ import Testing
         try FileManager.default.createDirectory(at: wrapper.deletingLastPathComponent(), withIntermediateDirectories: true)
         try "#!/bin/bash\nexec \"\(app.path)/Contents/MacOS/something\" \"$@\"\n".write(to: wrapper, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
-        let version = try run(wrapper.path, ["--version"])
+        let version = try await run(wrapper.path, ["--version"])
         #expect(version.status == 0 && version.out == "something 9.8.7\n")
-        let guide = try run(wrapper.path, ["guide"])
+        let guide = try await run(wrapper.path, ["guide"])
         #expect(guide.out.contains(app.appendingPathComponent("Contents/Resources/share/guide.md").path))
 
-        #expect(try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]).status == 0)
+        #expect(try await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]).status == 0)
 
         // Plan B's hook, as Engine.ownHookCommand gives it inside the app: the bundle's own program, not the wrapper.
         let home = Home(prefix: "something-packaging-")
@@ -66,10 +73,10 @@ import Testing
         #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
     }
 
-    @Test func makeAppRefusesWrongUse() throws {
-        #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["/Users/example/prefix"]).status == 2)
+    @Test func makeAppRefusesWrongUse() async throws {
+        #expect(try await run(root.appendingPathComponent("tools/make-app.sh").path, ["/Users/example/prefix"]).status == 2)
         // An unset variable in a formula or a CI job must not become /something.app.
-        #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["", "1.0.0"], quiet: true).status == 2)
+        #expect(try await run(root.appendingPathComponent("tools/make-app.sh").path, ["", "1.0.0"], quiet: true).status == 2)
     }
 
     /// The floor is macOS 15 everywhere a person or a tool reads it.

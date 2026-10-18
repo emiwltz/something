@@ -200,7 +200,7 @@ import WebKit
         // The database is read back by its key, and looked for in b by opening it: on macOS 15, indexedDB.databases()
         // gave an empty list right after a database was written (seen on CI; most likely it lists only what a store
         // keeps on disk, and these stores keep nothing), so a count of it would prove nothing there.
-        #expect(try await run(a, """
+        let stored = try await run(a, """
             localStorage.setItem("kept", "from a");
             document.cookie = "kept=from-a";
             const database = await new Promise((done, failed) => {
@@ -222,10 +222,20 @@ import WebKit
             });
             if (self.caches) await (await caches.open("kept")).put("https://example.com/kept", new Response("from a"));
             new BroadcastChannel("kept").postMessage("from a");
-            return [localStorage.getItem("kept"), kept]
-            """) as? [String] == ["from a", "from a"])
-        await wait(0.5)
-        #expect(try await run(a, "return heard") as? [String] == ["from a"], "a message reaches the space's own listener")
+            return [localStorage.getItem("kept"), kept, document.cookie.includes("kept"), self.caches ? await caches.has("kept") : null]
+            """)
+        // a keeps what it stored, so b's empty stores mean something. The cookie is the exception: WebKit keeps none
+        // for the something scheme (seen on macOS 26), so no space has one to share. Should WebKit start keeping
+        // them, this fails, and b's cookie check below starts to prove isolation.
+        #expect(stored as? [AnyHashable] == ["from a", "from a", false, true], "\(String(describing: stored))")
+        // The message is waited for: on a slow Mac its delivery may take longer than any fixed pause.
+        var heard: [String]?
+        let end = Date().addingTimeInterval(30)
+        while heard?.isEmpty != false, Date() < end {
+            heard = try await run(a, "return heard") as? [String]
+            await wait(0.05)
+        }
+        #expect(heard == ["from a"], "a message reaches the space's own listener")
         #expect(try await run(b, """
             const found = await new Promise((done, failed) => {
               const opening = indexedDB.open("kept");
