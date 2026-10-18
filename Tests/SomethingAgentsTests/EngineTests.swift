@@ -267,6 +267,48 @@ import SomethingCore
         #expect(engine.state.kinds["omp"]?.installed != nil, "omp's file is looked for")
     }
 
+    /// Opened from the Finder, the app reads the login shell's PATH: a shell that takes 2 s never holds the main queue,
+    /// a first launch waits for the first look off it, and the login shell is not read twice.
+    @Test func theFirstLaunchLeavesTheMainQueueFree() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let shell = place.root.appendingPathComponent("slow-shell")
+        try """
+            #!/bin/sh
+            echo "$*" >> "$FAKE_OUT/shell-runs"
+            sleep 2
+            PATH='\(place.bin.path):/usr/bin:/bin'; export PATH
+            for last; do :; done
+            eval "$last"
+            """.write(to: shell, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
+        let engine = Engine.throwaway(place.environment.merging(["PATH": "/usr/bin:/bin", "SHELL": shell.path]) { _, finder in finder })
+        final class Ticks { var count = 0, running = true }
+        let ticks = Ticks()
+        func tick() {
+            guard ticks.running else { return }
+            ticks.count += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: tick)
+        }
+        tick()
+        let begun = Date()
+        engine.start(often: false)
+        var id: String?
+        engine.lookFor("claude") { id = try? engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil) }
+        try await until("the launch") { id != nil }
+        ticks.running = false
+        let waited = Date().timeIntervalSince(begun)
+        #expect(waited >= 1.8, "the launch waited for the shell")
+        // A tick every 50 ms, about 40 in 2 s: a main queue held by the shell would have had one or two.
+        #expect(ticks.count >= 15)
+        let runs = try String(contentsOf: place.out.appendingPathComponent("shell-runs"), encoding: .utf8)
+        // The first look reads the login shell once (and the interactive one once, for pi and omp, missing here).
+        #expect(runs.components(separatedBy: "\n").filter { $0.hasPrefix("-l -c ") }.count == 1)
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+    }
+
     /// Plan B's spools are in the person's Application Support, never in $TMPDIR, which a sandboxed agent may write.
     @Test func theSpoolsAreNotInTheTemporaryFolder() {
         #expect(Spool.root.hasSuffix("/Library/Application Support/something/spool"))

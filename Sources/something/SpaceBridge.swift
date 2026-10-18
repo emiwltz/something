@@ -7,10 +7,15 @@ import SomethingCore
 import WebKit
 
 extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
-    /// Only the open space's own page is answered, while it is displayed.
+    /// Only the open space's own page is answered, while it is displayed. A launch or a resume is answered once its
+    /// program was looked for off the main queue (Engine.lookFor), so that the app never freezes on the login shell.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        SpaceWindow.reply(message, open: blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
+        let answer = { SpaceWindow.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler) }
+        let request = message.body as? [String: Any]
+        guard ["launch", "resume"].contains(request?["method"] as? String),
+              let kind = (request?["params"] as? [String: Any])?["kind"] as? String else { return answer() }
+        engine.lookFor(kind, then: answer)
     }
 
     var state: State { engine.state }

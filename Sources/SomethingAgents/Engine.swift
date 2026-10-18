@@ -52,8 +52,13 @@ public final class Engine {
     private let environment: [String: String]
     /// Where programs are found; a test empties its system folders (`Engine.throwaway`).
     let programs: Programs
+    /// Program lookups, one at a time off the main queue: reading the login shell's PATH can take seconds, and a
+    /// launch's lookup waits behind the first look, whose shell read it then reuses.
+    private let lookups = DispatchQueue(label: "something.programs")
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
+    /// The latest `lookFor` of each kind, taken by its next launch or resume.
+    private var found: [String: Result<Program, any Error>] = [:]
     private var looked = false
     /// Whether a space is open, which sets the readers' cadence: every 2 s, else 10 s.
     private(set) var often = false
@@ -76,7 +81,7 @@ public final class Engine {
         guard !looked else { return }
         looked = true
         // Reading the login shell can take 3 s: never on the main queue.
-        DispatchQueue.global().async { [self] in
+        lookups.async { [self] in
             let found = Dictionary(uniqueKeysWithValues: Programs.kinds.compactMap { kind in programs.installed(kind).map { (kind, $0) } })
             DispatchQueue.main.async { [self] in installed = found; changed() }
         }
@@ -191,8 +196,21 @@ public final class Engine {
         return applied
     }
 
+    /// Looks for the program of `kind` off the main queue, then calls `then` on the main queue. The next launch or
+    /// resume of `kind` takes what was found, so that it never reads the login shell's PATH on the main queue, where
+    /// the whole app would freeze for seconds. Without it, that launch looks for the program itself.
+    public func lookFor(_ kind: String, then: @escaping () -> Void) {
+        lookups.async { [self] in
+            let result = Result { try programs.find(kind) }
+            DispatchQueue.main.async { [self] in
+                found[kind] = result
+                then()
+            }
+        }
+    }
+
     /// Starts an agent of `kind` in `folder` and returns its id. Throws as `checkLaunch` does, then NOT_INSTALLED,
-    /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED.
+    /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED. Called after `lookFor(kind)`, it does not wait for the login shell.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
         try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
         let type = Engine.drivers[kind]!
@@ -217,7 +235,7 @@ public final class Engine {
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
         let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
-        let program = try programs.find(type.kind)
+        let program = try found.removeValue(forKey: type.kind)?.get() ?? programs.find(type.kind)
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
