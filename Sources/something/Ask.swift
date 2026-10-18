@@ -118,10 +118,12 @@ final class Chooser: NSObject {
     let label: NSTextField, chosen: (String) -> Void
 
     init(_ lines: NSStackView, _ text: String, button title: String, chosen: @escaping (String) -> Void) {
-        label = NSTextField(wrappingLabelWithString: text)
+        let button = NSButton(title: title, target: nil, action: #selector(choose))
+        label = Card.line(text, width: Ask.rightsWidth - button.fittingSize.width - 8)
         self.chosen = chosen
         super.init()
-        lines.addArrangedSubview(NSStackView(views: [label, NSButton(title: title, target: self, action: #selector(choose))]))
+        button.target = self
+        lines.addArrangedSubview(NSStackView(views: [label, button]))
     }
 
     @objc func choose() {
@@ -146,6 +148,9 @@ enum Ask {
         return alert
     }
 
+    /// How wide the rights window's lines wrap: a long folder or many of them would otherwise widen it past the screen.
+    static let rightsWidth: CGFloat = 400
+
     /// The rights window, not yet run, and the answers its boxes and choosers hold once it closed with its first
     /// button. The window is built apart from running it so that a test can draw it without showing it.
     static func rights(_ question: RightsQuestion) -> (alert: NSAlert, answer: () -> RightsAnswer) {
@@ -153,8 +158,15 @@ enum Ask {
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
-        let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.words(for: $0), target: nil, action: nil) }
-        boxes.forEach(lines.addArrangedSubview)
+        // A box's title does not wrap: the warning a right may carry goes in a label under its box.
+        let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.title(for: $0), target: nil, action: nil) }
+        for (right, box) in zip(question.rights, boxes) {
+            lines.addArrangedSubview(box)
+            guard let warning = Ask.warning(for: right) else { continue }
+            let under = NSStackView(views: [Card.line(warning + ".", width: Ask.rightsWidth - 20)])
+            under.edgeInsets.left = 20
+            lines.addArrangedSubview(under)
+        }
         if let scope = question.scope {
             let seen: String
             switch scope {
@@ -162,7 +174,7 @@ enum Ask {
             case .folders(let folders):
                 seen = folders.isEmpty ? "only the agents it launches" : "the agents working in " + folders.joined(separator: ", ")
             }
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "With the right to see your agents, it sees \(seen)."))
+            lines.addArrangedSubview(Card.line("With the right to see your agents, it sees \(seen).", width: Ask.rightsWidth))
         }
         var remap: [String: String] = [:], folder = question.folder?.found
         var choosers: [Chooser] = []
@@ -219,20 +231,31 @@ enum Ask {
         ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"][kind] ?? kind
     }
 
-    /// A right in plain words, for the rights window.
+    /// A right in plain words, with its warning when it has one: what the card says.
     static func words(for right: String) -> String {
+        [title(for: right), warning(for: right)].compactMap { $0 }.joined(separator: ". ")
+    }
+
+    /// What a right lets the space do, in plain words: the title of its box in the rights window.
+    static func title(for right: String) -> String {
         let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
         let kind = parts.count == 2 ? name(of: parts[1]) : nil
         switch parts[0] {
         case "state": return "See your agents and what they say"
         case "send": return "Write to, interrupt and change the \(kind.map { $0 + " " } ?? "")agents it launched"
-        case "launch":
-            let launch = "Launch or continue \(kind ?? "agents") in the folder chosen for it"
-            // pi has no permission modes: a space that launches it gets an agent that never waits for a click.
-            guard parts.count == 1 || parts[1] == "pi" else { return launch }
-            return launch + (parts.count == 1 ? ". One of them, pi," : ". pi") + " runs commands and edits files without asking you first"
+        case "launch": return "Launch or continue \(kind ?? "agents") in the folder chosen for it"
         case "store": return "Keep a memory of its own on this Mac"
         default: return right
+        }
+    }
+
+    /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach pi.
+    static func warning(for right: String) -> String? {
+        // pi has no permission modes: a space that launches it gets an agent that never waits for a click.
+        switch right {
+        case "launch": return "One of them, pi, runs commands and edits files without asking you first"
+        case "launch:pi": return "pi runs commands and edits files without asking you first"
+        default: return nil
         }
     }
 
@@ -242,8 +265,6 @@ enum Ask {
          "dontAsk": "never asks you, and does only what your settings already allow",
          "never": "never asks you before it runs a command"][mode] ?? "asks you less"
     }
-
-    static func quit(stopping count: Int) -> Bool { run(quit(count)) == .alertFirstButtonReturn }
 
     /// The window that asks before quitting while `count` agents something launched run: Quit, then Cancel.
     static func quit(_ count: Int) -> NSAlert {

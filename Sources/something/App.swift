@@ -129,11 +129,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Who asks, for a panel ("Claude Code “shop”, working in /Users/example/code/shop, asks…"): the agent's name and
     /// folder, and the open space when it launched the agent.
     func who(_ request: Request) -> String {
-        guard let agent = engine.state.agents.first(where: { $0.id == request.agent }) else { return "An agent" }
+        let launcher = current.flatMap { $0.launched.contains(request.agent) ? $0.title : nil }
+        return App.who(engine.state.agents.first { $0.id == request.agent }, launchedBy: launcher)
+    }
+
+    /// Who `agent` is, in words, with the title of the space that launched it when one did; "An agent" when the
+    /// state no longer holds it.
+    static func who(_ agent: Agent?, launchedBy space: String?) -> String {
+        guard let agent else { return "An agent" }
         var words = Ask.name(of: agent.kind)
         if let name = agent.name { words += " “\(name)”" }
         if let folder = agent.folder { words += ", working in \(folder)," }
-        if let current, current.launched.contains(request.agent) { words += " launched by “\(current.title)”," }
+        if let space { words += " launched by “\(space)”," }
         return words
     }
 
@@ -193,7 +200,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Asks first when agents something launched still run, then stops them all before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let running = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }.count
-        if running > 0, !Ask.quit(stopping: running) { return .terminateCancel }
+        if running > 0, Ask.run(Ask.quit(running)) != .alertFirstButtonReturn { return .terminateCancel }
         engine.stopAll(within: 5) { NSApp.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
     }

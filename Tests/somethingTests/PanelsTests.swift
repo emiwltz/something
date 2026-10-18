@@ -94,4 +94,20 @@ final class FakePrompts: PromptSource {
         try #require(panels.panel).cancelOperation(nil)
         #expect(source.answers.last?.0 == "q2" && source.answers.last?.1 == .deny, "Escape leaves a question unanswered")
     }
+
+    /// A long sentence of who asks and a long command wrap: the panel keeps its width instead of growing past the screen.
+    @Test func aLongRequestKeepsThePanelsWidth() throws {
+        let who = "Claude Code “an-invented-agent-name-that-goes-on”, working in /Users/example/code/clients/example-agency/"
+            + String(repeating: "a-very-deep-folder/", count: 10) + "website, launched by “Morning review”,"
+        let input = "npm test -- " + String(repeating: "--an-invented-flag ", count: 20)
+        let panel = PromptPanel(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil,
+                                                        at: "2026-10-17T09:00:01Z"), input: input), who: who) { _ in }
+        #expect(panel.frame.width <= PromptPanel.width)
+    }
+
+    /// The quit window says how many agents stop, in the singular and the plural, and that the others keep running.
+    @Test func theQuitWindowSaysWhoStops() {
+        #expect(Ask.quit(1).informativeText == "The agent something launched stops. Agents you started yourself keep running.")
+        #expect(Ask.quit(2).informativeText == "The 2 agents something launched stop. Agents you started yourself keep running.")
+    }
 }

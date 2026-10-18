@@ -181,6 +181,17 @@ import Testing
         #expect(home.card.notes == ["OMP: OMP's files changed shape."])
     }
 
+    /// Home cannot be made narrower than its list and its card side by side, and it opens at least that large.
+    @Test func homeCannotCutItsCard() throws {
+        let test = Home()
+        defer { test.remove() }
+        let window = home(test, FakeAsk()).makeWindow()
+        let card = try #require(window.contentView?.subviews.last)
+        #expect(window.contentMinSize.width >= card.fittingSize.width + 400)
+        let size = try #require(window.contentView).frame.size
+        #expect(size.width >= window.contentMinSize.width && size.height >= window.contentMinSize.height)
+    }
+
     @Test func makeDefaultShowInFinderAndCopies() throws {
         let test = Home(), ask = FakeAsk()
         defer { test.remove() }

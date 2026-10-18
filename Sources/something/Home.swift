@@ -229,9 +229,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     }
 
     func makeWindow() -> NSWindow {
-        // As wide as the list's buttons and the card side by side: narrower, the card is cut on the right.
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 600),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                              backing: .buffered, defer: false)
         window.title = "something"
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -249,6 +248,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         let content = NSStackView(views: [left, card.view])
         content.alignment = .top
         window.contentView = content
+        // Smaller than the list and the card side by side, the card is cut: Home opens at that size, its smallest.
+        window.contentMinSize = content.fittingSize
+        window.setContentSize(content.fittingSize)
         window.center()
         return window
     }

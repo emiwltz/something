@@ -87,10 +87,13 @@ final class PromptPanel: NSPanel {
     /// For a question: the boxes of each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
 
+    /// The panel's width: who asks, with its folder, would otherwise widen it past the screen.
+    static let width: CGFloat = 480
+
     init(_ prompt: Prompt, who: String, decide: @escaping (Answer) -> Void) {
         request = prompt.request
         self.decide = decide
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 480, height: 200), styleMask: [.titled, .utilityWindow],
+        super.init(contentRect: NSRect(x: 0, y: 0, width: PromptPanel.width, height: 200), styleMask: [.titled, .utilityWindow],
                    backing: .buffered, defer: true)
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
@@ -99,6 +102,7 @@ final class PromptPanel: NSPanel {
         lines.orientation = .vertical
         lines.alignment = .leading
         lines.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        lines.widthAnchor.constraint(equalToConstant: PromptPanel.width).isActive = true
         let buttons: [NSButton]
         if prompt.request.kind == "question" {
             title = "A question from an agent"
@@ -147,12 +151,8 @@ final class PromptPanel: NSPanel {
         typed.append(field)
     }
 
-    /// A label that wraps at the panel's width: who asks, with its folder, would otherwise widen the panel past the screen.
-    static func line(_ text: String) -> NSTextField {
-        let label = NSTextField(wrappingLabelWithString: text)
-        label.preferredMaxLayoutWidth = 448
-        return label
-    }
+    /// A label that wraps inside the panel's insets.
+    static func line(_ text: String) -> NSTextField { Card.line(text, width: width - 32) }
 
     /// Each question's chosen labels, with the typed text when there is one.
     var choice: [[String]] {

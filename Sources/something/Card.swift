@@ -34,6 +34,8 @@ final class Card: NSObject {
         view.orientation = .vertical
         view.alignment = .leading
         view.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
+        // As wide as its journal and insets even before a space is selected, so that Home's smallest size fits it.
+        view.widthAnchor.constraint(greaterThanOrEqualToConstant: 444).isActive = true
     }
 
     /// Shows `space`, or nothing when no space is selected.
@@ -163,10 +165,11 @@ final class Card: NSObject {
         view.addArrangedSubview(NSTextField(wrappingLabelWithString: notes.isEmpty ? "No note from the readers." : notes.joined(separator: "\n")))
     }
 
-    /// A label that wraps at the column's width: a long path must not widen the window.
-    static func line(_ text: String) -> NSTextField {
+    /// A label that wraps at `width` points, the column's by default: a long path must not widen its window. The
+    /// rights window and the panels use it too.
+    static func line(_ text: String, width: CGFloat = 380) -> NSTextField {
         let label = NSTextField(wrappingLabelWithString: text)
-        label.preferredMaxLayoutWidth = 380
+        label.preferredMaxLayoutWidth = width
         return label
     }
 
