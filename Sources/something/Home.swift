@@ -60,13 +60,15 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     /// Reads the spaces, the examples and the default space again, then selects the space `name`, or keeps the
     /// selection by name, or selects the default space, or the first: the card always shows a space when there is one.
     func reload(selecting name: String? = nil) {
-        let kept = (name ?? selected?.name, selectedSample?.name)
+        let wanted = [name, selected?.name], keptSample = selectedSample?.name
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
         preferred = forgetGone()
-        Home.reselect(table, spaces, kept.0 ?? preferred ?? spaces.first?.name)
-        if selected == nil, !spaces.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
-        Home.reselect(sampleTable, samples, kept.1)
+        // A name whose space is gone (deleted or renamed in Finder) gives way to the next one, not to whatever space
+        // now sits at its row.
+        let present = (wanted + [preferred, spaces.first?.name]).compactMap { $0 }.first { name in spaces.contains { $0.name == name } }
+        Home.reselect(table, spaces, present)
+        Home.reselect(sampleTable, samples, keptSample)
         exampleSection.forEach { $0.isHidden = samples.isEmpty }
         // As tall as its examples, four at most; the list of spaces above takes the rest of the column.
         sampleHeight?.constant = CGFloat(min(max(samples.count, 1), 4)) * (Home.rowHeight + 2) + 4
@@ -254,12 +256,15 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         actions = [button("Open", #selector(openSelected)), button("Export", #selector(exportSelected)),
                    button("Make default", #selector(makeDefault)), button("Show in Finder", #selector(showInFinder))]
         let bar = NSStackView(views: [actions[0], button("New", #selector(newChosen)), button("Import", #selector(importChosen))] + actions[1...])
-        let samplesList = Card.scroll(sampleTable, height: 0)
-        sampleHeight = samplesList.constraints.first { $0.firstAttribute == .height }
+        let samplesList = Card.scroll(sampleTable)
+        sampleHeight = samplesList.heightAnchor.constraint(equalToConstant: 0)
+        sampleHeight?.isActive = true
         exampleSection = [Card.header("Examples, read-only"), samplesList, button("Make a copy", #selector(makeACopy))]
-        list = Card.scroll(table, height: 0)
+        list = Card.scroll(table)
         // The list takes the height the column has left: it grows with the window, never shorter than five rows.
-        list.constraints.first { $0.firstAttribute == .height }?.priority = .defaultLow
+        let fill = list.heightAnchor.constraint(equalToConstant: 0)
+        fill.priority = .defaultLow
+        fill.isActive = true
         list.heightAnchor.constraint(greaterThanOrEqualToConstant: 5 * (Home.rowHeight + 2)).isActive = true
         empty = Card.line("No space yet. Click New to make your first one, or type something new <name> in Terminal.")
         // Of the column's lines, the list, or this sentence in its place, takes the height left: the others keep theirs.

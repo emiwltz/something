@@ -158,7 +158,7 @@ final class Card: NSObject {
         view.addArrangedSubview(NSButton(title: "Ask again", target: self, action: #selector(askAgain)))
         view.addArrangedSubview(Card.header("Journal"))
         if journal.isEmpty {
-            view.addArrangedSubview(Card.line("Nothing yet: each time the space writes to an agent, it is written here."))
+            view.addArrangedSubview(Card.line("Nothing yet: each time the space acts for you (writes to, launches or changes an agent, or opens a link), it is written here."))
         } else {
             let text = NSTextView()
             text.isEditable = false
@@ -194,13 +194,14 @@ final class Card: NSObject {
         return label
     }
 
-    /// `content` in a column-wide scroll view `height` points tall: Home's lists and the card's journal.
-    static func scroll(_ content: NSView, height: CGFloat) -> NSScrollView {
+    /// `content` in a column-wide scroll view, `height` points tall when given, else as tall as its owner makes it:
+    /// Home's lists and the card's journal.
+    static func scroll(_ content: NSView, height: CGFloat? = nil) -> NSScrollView {
         let scroll = NSScrollView()
         scroll.documentView = content
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        scroll.heightAnchor.constraint(equalToConstant: height).isActive = true
+        if let height { scroll.heightAnchor.constraint(equalToConstant: height).isActive = true }
         scroll.widthAnchor.constraint(equalToConstant: width).isActive = true
         return scroll
     }

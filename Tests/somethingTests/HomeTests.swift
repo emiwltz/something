@@ -218,6 +218,14 @@ import Testing
         try file.write(test.places.grants)
         let again = self.home(test, FakeAsk())
         #expect(again.selected?.name == "shop" && again.card.space?.name == "shop", "the default space is selected first")
+        // The selected space is deleted in Finder: the default is selected, not the space that took its row.
+        try test.space("zoo", page(nil, ""))
+        file.default = "garden"
+        try file.write(test.places.grants)
+        again.reload(selecting: "shop")
+        try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("shop.html"))
+        again.reload()
+        #expect(again.selected?.name == "garden" && again.card.space?.name == "garden", "\(again.selected?.name ?? "none")")
     }
 
     @Test func makeDefaultShowInFinderAndCopies() throws {

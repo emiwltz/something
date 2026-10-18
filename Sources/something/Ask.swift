@@ -115,13 +115,17 @@ final class NativeAsk: Asking {
 }
 
 /// One line of the rights window with a folder chooser: a sentence, the folder on a line of its own below it, so that
-/// a path is never broken, and the button beside them. Once a folder is chosen, the lines say it.
+/// a path is never broken, and the button beside them. Once a folder is chosen, the sentence becomes `then`, which
+/// still says what the folder is for, and the chosen folder is shown below it.
 final class Chooser: NSObject {
-    let row = NSStackView(), home: String, width: CGFloat, chosen: (String) -> Void
+    let row = NSStackView(), home: String, width: CGFloat, then: String, chosen: (String) -> Void
 
-    init(_ lines: NSStackView, _ text: String, folder: String?, button title: String, home: String, chosen: @escaping (String) -> Void) {
+    init(_ lines: NSStackView, _ text: String, folder: String?, then: String, button title: String, home: String,
+         chosen: @escaping (String) -> Void) {
         let button = NSButton(title: title, target: nil, action: #selector(choose))
-        (self.home, self.chosen) = (home, chosen)
+        self.home = home
+        self.then = then
+        self.chosen = chosen
         width = Ask.rightsWidth - button.fittingSize.width - 8
         super.init()
         button.target = self
@@ -143,8 +147,13 @@ final class Chooser: NSObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        say("Chosen:", url.path)
-        chosen(url.path)
+        picked(url.path)
+    }
+
+    /// Says and keeps `folder`, as chosen in the panel.
+    func picked(_ folder: String) {
+        say(then, folder)
+        chosen(folder)
     }
 }
 
@@ -164,10 +173,14 @@ enum Ask {
     static let rightsWidth: CGFloat = 400
 
     /// The rights window, not yet run, and the answers its boxes and choosers hold once it closed with its first
-    /// button, "Allow". Every right is ticked: the person unticks what they refuse. Paths are shown from `home`.
+    /// button, "Allow". Every right is ticked: the person unticks what they refuse, and clicks Allow, which Return does
+    /// not press. Paths are shown from `home`.
     /// The window is built apart from running it so that a test can draw it without showing it.
     static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (alert: NSAlert, answer: () -> RightsAnswer) {
         let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow", "Not now"], escape: 1)
+        // Every box is ticked, and this window opens by itself at a first opening: Return must not allow it all
+        // unread. Allow is clicked; Escape is Not now.
+        alert.buttons[0].keyEquivalent = ""
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
@@ -189,8 +202,15 @@ enum Ask {
                 lines.addArrangedSubview(Card.line(sentence + "only the agents it launches.", width: Ask.rightsWidth))
             case .folders(let folders):
                 lines.addArrangedSubview(Card.line(sentence + "the agents working in:", width: Ask.rightsWidth))
-                for folder in folders {
-                    let line = NSStackView(views: [Words.pathLabel("", folder, home: home, width: Ask.rightsWidth - 20)])
+                // Six at most: an alert does not scroll, and twenty folders would push its buttons off the screen.
+                var shown: [NSView] = folders.prefix(6).map { Words.pathLabel("", $0, home: home, width: Ask.rightsWidth - 20) }
+                if folders.count > 6 {
+                    let more = Card.line("and \(folders.count - 6) more", width: Ask.rightsWidth - 20)
+                    more.toolTip = folders.dropFirst(6).joined(separator: "\n")
+                    shown.append(more)
+                }
+                for view in shown {
+                    let line = NSStackView(views: [view])
                     line.edgeInsets.left = 20
                     lines.addArrangedSubview(line)
                 }
@@ -199,13 +219,14 @@ enum Ask {
         var remap: [String: String] = [:], folder = question.folder?.found
         var choosers: [Chooser] = []
         for missing in question.missing {
-            choosers.append(Chooser(lines, "This folder is not on this Mac:", folder: missing, button: "Choose a folder in its place…",
+            choosers.append(Chooser(lines, "This folder is not on this Mac:", folder: missing,
+                                    then: "In place of \(Words.path(missing, home: home)):", button: "Choose a folder in its place…",
                                     home: home) { remap[missing] = $0 })
         }
         if let asked = question.folder {
             let now = asked.found != nil ? "Agents it launches work in:"
                 : asked.declared != nil ? "Agents it launches work in this folder, not on this Mac:" : "Agents it launches need a folder."
-            choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared,
+            choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared, then: "Agents it launches will work in:",
                                     button: asked.found == nil ? "Choose a folder…" : "Choose another folder…", home: home) { folder = $0 })
         }
         lines.frame.size = lines.fittingSize
