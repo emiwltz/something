@@ -1,8 +1,17 @@
-# The tests on a Mac that is not the author's, at each push: something builds, the whole Swift suite passes, and
-# something.js answers the contract's cases. The runner has a logged-in window server, so the window tests run there
-# too: the lockdown test (nothing reaches a listener on 127.0.0.1), isolation, the bridge, links, rights and reload,
-# in a real WKWebView that is never shown. On a Mac with no window server those suites say so and are skipped; on CI
-# (CI is set) they always run, so a runner without one turns the run red instead of skipping the lockdown test.
+# The tests on Macs that are not the author's, at each push, on the oldest macOS runner GitHub still offers that the
+# package supports (macos-15: macos-14 is in brownouts and is removed on 2 November 2026) and on macos-latest.
+#
+# Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases, and
+# make-app.sh assembles a signed something.app from a release build. The runner has a logged-in window server, so the
+# window tests run too (the lockdown test, isolation, the bridge, links, rights, reload) in a real WKWebView that is
+# never shown. On a Mac with no window server those suites say so and are skipped; on CI (CI is set) they always run,
+# so a runner without one turns the run red instead of skipping the lockdown test.
+#
+# Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
+# at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
+# how long the install took: criterion 1 asks for brew install and the first start in under five minutes.
+#
+# No secret is used; the token can only read the repository.
 name: tests
 
 on:
@@ -14,9 +23,75 @@ permissions:
 
 jobs:
   tests:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Versions
+        run: sw_vers && swift --version && node --version
       - run: swift build
-      - run: swift test
+      - name: swift test
+        # A hung test must not hold the runner: perl's alarm stops the suite after 20 minutes, the step's cap too.
+        timeout-minutes: 25
+        run: perl -e 'alarm 1200; exec @ARGV' swift test
       - run: node --test Tests/something-js.test.mjs
+      - name: make-app.sh into a temporary prefix
+        run: |
+          prefix="$RUNNER_TEMP/prefix"
+          tools/make-app.sh "$prefix" 0.0.0-ci
+          codesign --verify --deep --strict "$prefix/something.app"
+          # The wrapper Homebrew's write_exec_script writes: a symlink would break Bundle.main.
+          mkdir -p "$prefix/bin"
+          printf '#!/bin/bash\nexec "%s" "$@"\n' "$prefix/something.app/Contents/MacOS/something" > "$prefix/bin/something"
+          chmod +x "$prefix/bin/something"
+          test "$("$prefix/bin/something" --version)" = "something 0.0.0-ci"
+
+  brew:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      # brew update would time Homebrew's own download, not something's install.
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so that it can be pushed into the local repository the formula builds from.
+          fetch-depth: 0
+      - name: A local tap whose formula builds this commit
+        run: |
+          git init -q --bare "$RUNNER_TEMP/something.git"
+          git push -q "$RUNNER_TEMP/something.git" HEAD:refs/heads/main
+          brew tap-new --no-git local/something
+          tap="$(brew --repository)/Library/Taps/local/homebrew-something"
+          echo "TAP=$tap" >> "$GITHUB_ENV"
+          # Only the head line changes: GitHub's address becomes this commit, in a repository on this runner.
+          sed "s|^  head .*|  head \"file://$RUNNER_TEMP/something.git\", branch: \"main\", using: :git|" \
+            packaging/homebrew/something.rb > "$tap/Formula/something.rb"
+          grep -q "file://$RUNNER_TEMP/something.git" "$tap/Formula/something.rb"
+      - name: brew install, timed
+        run: |
+          start=$(date +%s)
+          brew install --HEAD local/something/something
+          seconds=$(( $(date +%s) - start ))
+          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s (criterion 1: under 300 s, with the first start)"
+      - run: brew test local/something/something
+      - name: The command, as a person types it
+        run: |
+          something --version
+          something guide
+          something check "$(brew --prefix)/opt/something/something.app/Contents/Resources/share/template.html"
+      - name: brew style and brew audit, on the formula as it goes into the tap
+        run: |
+          cp packaging/homebrew/something.rb "$TAP/Formula/something.rb"
+          brew style local/something/something
+          brew audit --formula local/something/something
