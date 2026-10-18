@@ -132,19 +132,48 @@
 
   function said(error) { $("memory").textContent = error.message; }
 
-  function start() {
+  function explain() {
     $("memory").textContent = remembers() ? "Your level and best scores are kept in this space's memory."
       : "This space may not keep a memory, so it forgets your level when the window closes. Allow it in its card, in Home.";
-    const read = remembers() ? something.store.get("") : Promise.resolve(null);
+  }
+
+  // The memory kept by an earlier opening, or null when there is none or it is not the shape this page writes.
+  function recall() {
+    return something.store.get("").then((kept) =>
+      kept && typeof kept.level === "number" && kept.best && typeof kept.best === "object" ? kept : null);
+  }
+
+  function start() {
+    explain();
+    const read = remembers() ? recall() : Promise.resolve(null);
     read.then(function (kept) {
-      if (kept && typeof kept.level === "number" && kept.best && typeof kept.best === "object") memory = kept;
+      if (kept) memory = kept;
       play(memory.level);
     }).catch(function (error) { said(error); play(memory.level); });
   }
 
+  // A right switched in the card never wipes the board in play. When "store" arrives, the best scores kept earlier
+  // join this game's, and the memory is written; when it goes, the sentence says the game now forgets.
+  let remembered = remembers();
+  function regranted() {
+    explain();
+    const arrived = remembers() && !remembered;
+    remembered = remembers();
+    if (!arrived) return;
+    recall().then(function (kept) {
+      if (kept) {
+        for (const [level, best] of Object.entries(kept.best)) {
+          if (!(memory.best[level] <= best)) memory.best[level] = best;
+        }
+      }
+      draw();
+      keep();
+    }).catch(said);
+  }
+
   $("again").onclick = () => play(memory.level);
   $("next").onclick = () => play(memory.level + 1);
-  something.on("granted", start);
+  something.on("granted", regranted);
   start();
 </script>
 </body>

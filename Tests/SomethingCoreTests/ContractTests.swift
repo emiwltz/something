@@ -247,7 +247,8 @@ enum Frozen {
         let codes = try #require(try ContractFiles.object("codes.json")["codes"] as? [String: [String: Any]])
         let rows = ContractFiles.guide.split(separator: "\n").map { $0.replacingOccurrences(of: "`", with: "") }
         for (code, about) in codes where about["from"] as? String != "import" {
-            let fix = about["fix"] as? String ?? ""
+            let fix = try #require(about["fix"] as? String, "\(code) has no fix in codes.json")
+            #expect(!fix.isEmpty, "\(code) has an empty fix in codes.json")
             #expect(rows.contains { $0.hasPrefix("| \(code) |") && $0.contains(fix) }, "\(code): \(fix)")
         }
     }

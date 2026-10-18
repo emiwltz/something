@@ -27,6 +27,8 @@ public struct Asked: Codable, Equatable, Sendable {
 public struct AppFile: Codable, Equatable, Sendable {
     public var app = 1
     public var `default`: String?
+    /// Whether the app has made its first-start copy of the agents example: only the app writes it (P15).
+    public var welcomed: Bool?
     public var spaces: [String: Grant] = [:]
     public init() {}
     /// The file at `url`, or an empty one when it does not exist yet. Throws a `SpaceError` when it is there but does

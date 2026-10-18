@@ -113,12 +113,19 @@
   }
 
   function render(state) {
+    // Without the "state" right the page receives no agent: an empty list then says nothing about this Mac.
+    const sees = something.granted.rights.includes("state");
     const waiting = state.agents.filter((a) => a.state === "waiting").length;
-    $("summary").textContent = state.agents.length === 0 ? "No agent on this Mac right now."
+    $("summary").textContent = !sees ? "Not allowed to see your agents."
+      : state.agents.length === 0 ? "something sees no agent yet."
       : `${state.agents.length} agent${state.agents.length === 1 ? "" : "s"}` + (waiting ? ` · ${waiting} waiting for you` : " · nobody waiting for you");
     const agents = state.agents.slice().sort((a, b) => rank(a.state) - rank(b.state));
     $("groups").replaceChildren(...agents.map((a) => card(a, state)));
-    if (!state.agents.length) $("groups").append(element("p", "empty", "Start Claude Code, Codex, OpenCode or pi in a terminal, and it shows here."));
+    // TODO(slices 16-18): once the readers list the agents started elsewhere, say instead
+    // "Start Claude Code, Codex, OpenCode or pi in a terminal, and it shows here."
+    if (sees && !state.agents.length) {
+      $("groups").append(element("p", "empty", "For now something sees only the agents it launched; agents started in a terminal will show here in a later version."));
+    }
     $("programs").replaceChildren(...Object.keys(state.kinds).map(function (kind) {
       const info = state.kinds[kind];
       const line = element("span");

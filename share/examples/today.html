@@ -98,15 +98,17 @@
     const today = new Date().toDateString();
     // The day to show: today, or the last day with a turn, said plainly so it is never taken for today.
     const latest = all.map((e) => e.turn.started).sort().pop();
-    const shown = all.some((e) => dayOf(e.turn.started) === today) || !latest ? today : dayOf(latest);
+    const hasToday = all.some((e) => dayOf(e.turn.started) === today);
+    const shown = (hasToday || !latest) ? today : dayOf(latest);
     const date = new Date(shown === today ? Date.now() : latest);
     $("day").textContent = date.toLocaleDateString(document.documentElement.lang, { weekday: "long", day: "numeric", month: "long" });
     $("eyebrow").textContent = shown === today ? "Today" : "Nothing yet today · the last day with activity";
     const day = all.filter((e) => dayOf(e.turn.started) === shown).sort((a, b) => a.turn.started.localeCompare(b.turn.started));
     const agents = [...new Set(day.map((e) => e.agent))];
     const calls = day.reduce((sum, e) => sum + e.turn.items.filter((i) => i.kind === "tool").length, 0);
-    $("summary").textContent = day.length
-      ? `${plural(agents.length, "agent")}, ${plural(day.length, "turn")}, ${plural(calls, "tool call")}.`
+    // Without the "state" right the page receives no agent: no turn then says nothing about the day.
+    $("summary").textContent = !something.granted.rights.includes("state") ? "Not allowed to read your agents."
+      : day.length ? `${plural(agents.length, "agent")}, ${plural(day.length, "turn")}, ${plural(calls, "tool call")}.`
       : "No agent has worked yet, as far as something can see.";
     $("agents").replaceChildren(...agents.map(function (agent) {
       const section = element("section");

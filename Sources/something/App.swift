@@ -48,7 +48,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
             do {
-                if try FirstRun.prepare(places), let problem = FirstRun.welcome(places, examples: home.examples) { ask.tell(problem) }
+                try FirstRun.prepare(places)
+                if let problem = FirstRun.welcome(places, examples: home.examples) { ask.tell(problem) }
             } catch { fail(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             home.forgetGone()
