@@ -102,7 +102,9 @@
 
   $("write").onsubmit = function (event) {
     event.preventDefault();
-    // "next" (the default) waits for the running turn to end; "now" steers into it, where can.steer is true.
+    // "next" (the default) waits for the running turn to end (on a waiting agent: until the person answered in
+    // something's window); "now" steers into it, where can.steer is true. The form is outside what render redraws,
+    // so a change that arrives while the person types keeps their text.
     something.send(chosen, $("text").value, { when: "next" })
       .then(({ delivery }) => { $("text").value = ""; problem(null); $("note").textContent = "Message " + delivery + "."; })
       .catch(problem);

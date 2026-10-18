@@ -144,6 +144,9 @@ Call `something.open` for a link your code opens, not from the click handler of 
 - `"now"`: into the running turn, at the agent's earliest safe point, without stopping it (steer). Check `can.steer`.
 - On an idle agent, both start a turn: `delivery` is `"started"`.
 - `"unconfirmed"`: the agent took the message but did not confirm within 10 seconds; the state will show what happened.
+- On a waiting agent (a `permission` or a `question` in `requests`), a turn is still running: `"next"` is held in
+  `queue` and handed over when that turn ends, after the person has answered in something's window; `"now"` steers.
+  Neither answers the request. So a reply box on a waiting agent can stay, if it says the message comes after the answer.
 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
@@ -355,12 +358,18 @@ Run it after each change. It loads your space as the app does (same `something:/
 `something.js`) in a window nobody sees, and reports what went wrong, each problem with its code, its place and what
 to do. Exit status: `0` no error (warnings allowed), `1` errors, `2` the check could not run.
 
-- **An invented state**, `share/contract/state-example.json`, or the file given with `--state` (it must keep every
-  key). Never the person's agents: what the check prints may leave the Mac with your context. In your declaration, `~`
+- **An invented state**, `share/contract/state-example.json`: a Claude Code launched by something and waiting on a
+  permission, a Codex started elsewhere and done, an `other` agent in `unknown`. To see another case (an idle launched
+  agent, no agent at all), copy that file, change values but keep every key, and pass it with `--state`. Never the
+  person's agents: what the check prints may leave the Mac with your context. In your declaration, `~`
   stands here for `/Users/example`, the invented state's home, so a scope written with `~` meets its agents.
 - **Every right you declare is granted**, except those named with `--refuse`: run once with `--refuse send` (or another
-  right) to see that your page reads `something.granted` and hides what was refused instead of throwing. Name a right
+  right) to see that your page reads `something.granted` and hides what was refused instead of throwing. The check
+  cannot judge what the page shows: look at the snapshot of that run (each run replaces the last one). Name a right
   as you declared it: a word that names none of them stops the check (status `2`), since nothing would be refused.
+- **Nothing is clicked or typed.** Only the calls your page makes by itself are run, while it loads and in the
+  half second after the snapshot. A path behind a button (a `send`, its errors) is not run: read it again
+  against this guide, and ask the person to try it once in the app.
 - **Calls are answered** as the engine would answer them, and reach no agent: a launch returns an id such as
   `check-1` that no state lists, `open` answers `false` (as if the person cancelled), and the memory is a throwaway
   one, empty at the start. Each call is listed with its answer (for `state`, the ids of the agents your page saw).
@@ -453,5 +462,6 @@ The same list as data: `share/contract/codes.json`.
 - A permission or a question is answered in something's window, never in your page.
 - A rejected promise left uncaught is an error of `check`: catch each call and show its `message`.
 - An `id` from an old state may be gone: take ids from the latest state.
+- A `change` may arrive while the person types: keep the input outside what you redraw, or its text and focus are lost.
 - Calling `something.open` from the click handler of an `<a href>` asks the person twice.
 - The memory is one JSON document: keep it small, and write whole values.
