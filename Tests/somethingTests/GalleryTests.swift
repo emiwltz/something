@@ -1,6 +1,7 @@
 // A gallery of every native window, drawn offscreen with invented data, one PNG at 2x each, for a person to look at
 // what nobody can see in a test: no window is shown, none takes the focus, and drawing a view into a bitmap needs no
-// permission of macOS (a screenshot would need Screen Recording). It runs only when SOMETHING_GALLERY names a folder:
+// permission of macOS (a screenshot would need Screen Recording). Each window is drawn in the light appearance, then
+// in the dark one (its file ends in -dark.png). It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
 import SomethingAgents
@@ -14,13 +15,10 @@ let gallery = ProcessInfo.processInfo.environment["SOMETHING_GALLERY"].map { URL
 @MainActor @Suite(.serialized, .enabled(if: gallery != nil, "SOMETHING_GALLERY does not name a folder, so the gallery of windows is not drawn."),
                   .enabled(if: windowServer, windowServerMissing))
 struct GalleryTests {
-    init() {
-        NSApplication.shared.setActivationPolicy(.prohibited)
-        NSApp.appearance = NSAppearance(named: .aqua)
-    }
+    init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
-    /// A home with the space morning-review and a second one, a grant, ten journal lines, and a share folder with an
-    /// example; its temporary path is shown as /Users/example in the pictures.
+    /// A home with the space morning-review and a second one, a grant, ten journal lines of yesterday and today, and a
+    /// share folder with an example; its temporary path is shown as /Users/example in the pictures.
     func invented() throws -> (fixture: Home, share: URL) {
         let fixture = Home()
         let declaration = #"{"contract": 1, "title": "Morning review", "description": "Reads what the agents said overnight and asks each one for a summary.", "agents": {"folders": ["~/code/shop"]}, "folder": "~/code/shop", "rights": ["state", "send:claude", "launch:claude", "store"]}"#
@@ -34,11 +32,23 @@ struct GalleryTests {
         file.spaces["morning-review"] = grant
         try file.write(fixture.places.grants)
         let journal = Journal(folder: fixture.places.journals)
-        let texts = ["What changed in the cart overnight?", "Summarize the failing tests.", nil, "Stop after this file.", nil]
-        for minute in 0..<10 {
-            let line = JournalLine(at: "2026-10-17T08:0\(minute):00Z", action: minute % 5 == 2 ? "interrupt" : "send", agent: "a\(minute % 3 + 1)",
-                                   kind: "claude", when: minute % 5 == 2 ? nil : "now", text: texts[minute % 5], result: minute == 7 ? "busy" : "ok")
-            try journal.append(line, space: "morning-review")
+        let morning = Calendar.current.startOfDay(for: Date()).addingTimeInterval(8 * 3600)
+        let lines: [(TimeInterval, String, String?, String?, String?, String)] = [
+            (-86_400 - 600, "launch", "a1", "claude", fixture.root.appendingPathComponent("code/shop").path, "ok"),
+            (-86_400, "send", "a1", "claude", "What changed in the cart overnight? List the files and the tests that broke.", "ok"),
+            (0, "send", "a1", "claude", "Summarize the failing tests.", "ok"),
+            (60, "set", "a1", "claude", "mode=plan", "ok"),
+            (120, "send", "a2", "codex", "Stop after this file.", "READ_ONLY_AGENT"),
+            (180, "interrupt", "a1", "claude", nil, "ok"),
+            (240, "open", nil, nil, "https://example.com/notes/overnight", "REFUSED"),
+            (300, "send", "a1", "claude", "Then run the tests\nand say which ones still fail.", "ok"),
+            (420, "interrupt", "a1", "claude", nil, "NOT_SUPPORTED"),
+            (480, "resume", "a9", "claude", "thread-invented", "STILL_RUNNING"),
+        ]
+        for (offset, action, agent, kind, text, result) in lines {
+            let at = ISO8601DateFormatter().string(from: morning.addingTimeInterval(offset))
+            try journal.append(JournalLine(at: at, action: action, agent: agent, kind: kind, when: action == "send" ? "next" : nil,
+                                           text: text, result: result), space: "morning-review")
         }
         let share = fixture.root.appendingPathComponent("share")
         try FileManager.default.createDirectory(at: share.appendingPathComponent("examples"), withIntermediateDirectories: true)
@@ -63,6 +73,15 @@ struct GalleryTests {
     }
 
     @Test func drawsEveryWindow() async throws {
+        defer { NSApp.appearance = nil }
+        // One after the other: the appearance is the app's, so two drawings at once would mix them.
+        for dark in [false, true] {
+            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            try await drawEveryWindow(suffix: dark ? "-dark" : "")
+        }
+    }
+
+    func drawEveryWindow(suffix: String) async throws {
         let folder = try #require(gallery)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let (fixture, share) = try invented()
@@ -72,41 +91,51 @@ struct GalleryTests {
 
         let home = something.Home(places: fixture.places, share: share, ask: FakeAsk())
         home.card.kinds = { kinds }
+        home.card.agents = { self.agents() }
         let window = home.makeWindow()
         home.reload(selecting: "morning-review")
-        try draw(try #require(window.contentView), "home", fixture)
+        try draw(try #require(window.contentView), "home" + suffix, fixture)
 
         let card = Card(places: fixture.places, ask: FakeAsk())
         card.kinds = { kinds }
+        card.agents = { self.agents() }
         card.show(Spaces(root: fixture.places.spaces).named("morning-review"))
-        try draw(card.view, "card", fixture)
+        try draw(card.view, "card" + suffix, fixture)
+
+        // A first opening, with no space yet and no example: the sentence that says how to make one.
+        let bare = Home()
+        defer { bare.remove() }
+        let first = something.Home(places: bare.places, share: bare.root, ask: FakeAsk())
+        let firstWindow = first.makeWindow()
+        first.reload()
+        try draw(try #require(firstWindow.contentView), "home-empty" + suffix, bare)
 
         // Five folders, two of them long and one not on this Mac: the window must still fit a small screen.
         let folders = ["~/code/shop", "~/code/garden", "~/code/clients/example-agency/website-redesign-2026",
                        "~/code/tools/a-rather-long-folder-name-for-the-build-scripts", "~/Documents/notes"]
-        let first = RightsQuestion(space: "Morning review", description: "Reads what the agents said overnight and asks each one for a summary.",
+        let opening = RightsQuestion(space: "Morning review", description: "Reads what the agents said overnight and asks each one for a summary.",
                                    rights: ["state", "send:claude", "launch:claude", "store"], scope: .folders(folders),
                                    missing: [folders[2]], folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
-        try draw(Ask.rights(first).alert, "rights-first-opening", fixture)
+        try draw(Ask.rights(opening, home: "/Users/example").alert, "rights-first-opening" + suffix, fixture)
         let pi = RightsQuestion(space: "Morning review", description: nil, rights: ["launch:pi"], scope: nil, missing: [],
                                 folder: FolderQuestion(declared: "~/code/garden", found: nil))
-        try draw(Ask.rights(pi).alert, "rights-launch-pi", fixture)
-        try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review"), "lowering-mode", fixture)
-        try draw(Ask.link(try #require(URL(string: "https://example.com/notes/overnight")), space: "Morning review"), "link", fixture)
-        try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export", fixture)
-        try draw(Ask.quit(2), "quit-while-agents-run", fixture)
+        try draw(Ask.rights(pi, home: "/Users/example").alert, "rights-launch-pi" + suffix, fixture)
+        try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review"), "lowering-mode" + suffix, fixture)
+        try draw(Ask.link(try #require(URL(string: "https://example.com/notes/overnight")), space: "Morning review"), "link" + suffix, fixture)
+        try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)
+        try draw(Ask.quit(2), "quit-while-agents-run" + suffix, fixture)
 
         let who = App.who(agents()[0], launchedBy: "Morning review")
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
                                                  at: "2026-10-17T09:00:01Z"), input: "npm test -- --runInBand src/cart")
-        try draw(try #require(PromptPanel(permission, who: who) { _ in }.contentView), "permission-panel", fixture)
+        try draw(try #require(PromptPanel(permission, who: who) { _ in }.contentView), "permission-panel" + suffix, fixture)
         let question = Prompt(request: Request(id: "r2", agent: "a1", kind: "question", tool: nil, about: "Which test runner?",
                                                at: "2026-10-17T09:00:02Z"),
                               questions: [Question(header: "Runner", text: "Which test runner should the cart use?",
                                                    options: ["Jest", "Vitest", "Node's own"], multiple: false),
                                           Question(header: "Scope", text: "Which folders should it cover?",
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
-        try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel", fixture)
+        try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
 
         let html = try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8)
         let space = try fixture.space("morning-review", html)
@@ -122,7 +151,7 @@ struct GalleryTests {
         SpaceWindow.push(try state.json(), in: open.web, frame: try #require(open.frame))
         await wait(0.5)
         let snapshot = try await open.web.takeSnapshot(configuration: nil)
-        try png(of: open.web.bounds.size, "space-window") { snapshot.draw(in: NSRect(origin: .zero, size: open.web.bounds.size)) }
+        try png(of: open.web.bounds.size, "space-window" + suffix) { snapshot.draw(in: NSRect(origin: .zero, size: open.web.bounds.size)) }
         withExtendedLifetime(offscreen) {}
     }
 
@@ -140,7 +169,10 @@ struct GalleryTests {
         view.layoutSubtreeIfNeeded()
         let rep = try bitmap(view.bounds.size)
         view.cacheDisplay(in: view.bounds, to: rep)
-        try png(of: view.bounds.size, name) { rep.draw(in: NSRect(origin: .zero, size: view.bounds.size)) }
+        // Over the background: a bitmap's plain draw copies its transparent pixels over it.
+        try png(of: view.bounds.size, name) {
+            rep.draw(in: NSRect(origin: .zero, size: view.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
     }
 
     func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {
@@ -156,7 +188,8 @@ struct GalleryTests {
         let rep = try bitmap(size)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+        // NSApp.effectiveAppearance follows a change of NSApp.appearance only later, on the run loop.
+        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance {
             NSColor.windowBackgroundColor.setFill()
             NSRect(origin: .zero, size: size).fill()
             content()

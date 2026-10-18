@@ -3,6 +3,7 @@
 // quitting while agents run. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. Space windows ask through `Asking`, so their tests answer without a window.
 import AppKit
+import SomethingAgents
 import SomethingCore
 import UniformTypeIdentifiers
 
@@ -113,17 +114,28 @@ final class NativeAsk: Asking {
     }
 }
 
-/// One line of the rights window with a folder chooser; the line then says the folder chosen.
+/// One line of the rights window with a folder chooser: a sentence, the folder on a line of its own below it, so that
+/// a path is never broken, and the button beside them. Once a folder is chosen, the lines say it.
 final class Chooser: NSObject {
-    let label: NSTextField, chosen: (String) -> Void
+    let row = NSStackView(), home: String, width: CGFloat, chosen: (String) -> Void
 
-    init(_ lines: NSStackView, _ text: String, button title: String, chosen: @escaping (String) -> Void) {
+    init(_ lines: NSStackView, _ text: String, folder: String?, button title: String, home: String, chosen: @escaping (String) -> Void) {
         let button = NSButton(title: title, target: nil, action: #selector(choose))
-        label = Card.line(text, width: Ask.rightsWidth - button.fittingSize.width - 8)
-        self.chosen = chosen
+        (self.home, self.chosen) = (home, chosen)
+        width = Ask.rightsWidth - button.fittingSize.width - 8
         super.init()
         button.target = self
-        lines.addArrangedSubview(NSStackView(views: [label, button]))
+        row.orientation = .vertical
+        row.alignment = .leading
+        row.spacing = 2
+        say(text, folder)
+        lines.addArrangedSubview(NSStackView(views: [row, button]))
+    }
+
+    private func say(_ text: String, _ folder: String?) {
+        row.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        row.addArrangedSubview(Card.line(text, width: width))
+        if let folder { row.addArrangedSubview(Words.pathLabel("", folder, home: home, width: width)) }
     }
 
     @objc func choose() {
@@ -131,7 +143,7 @@ final class Chooser: NSObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        label.stringValue = "Chosen: \(url.path)"
+        say("Chosen:", url.path)
         chosen(url.path)
     }
 }
@@ -152,15 +164,17 @@ enum Ask {
     static let rightsWidth: CGFloat = 400
 
     /// The rights window, not yet run, and the answers its boxes and choosers hold once it closed with its first
-    /// button. The window is built apart from running it so that a test can draw it without showing it.
-    static func rights(_ question: RightsQuestion) -> (alert: NSAlert, answer: () -> RightsAnswer) {
-        let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow what is ticked", "Not now"])
+    /// button, "Allow". Every right is ticked: the person unticks what they refuse. Paths are shown from `home`.
+    /// The window is built apart from running it so that a test can draw it without showing it.
+    static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (alert: NSAlert, answer: () -> RightsAnswer) {
+        let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow", "Not now"], escape: 1)
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
         // A box's title does not wrap: the warning a right may carry goes in a label under its box.
         let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.title(for: $0), target: nil, action: nil) }
         for (right, box) in zip(question.rights, boxes) {
+            box.state = .on
             lines.addArrangedSubview(box)
             guard let warning = Ask.warning(for: right) else { continue }
             let under = NSStackView(views: [Card.line(warning + ".", width: Ask.rightsWidth - 20)])
@@ -168,29 +182,34 @@ enum Ask {
             lines.addArrangedSubview(under)
         }
         if let scope = question.scope {
-            let seen: String
+            let sentence = "With the right to see your agents, it sees "
             switch scope {
-            case .all: seen = "all your agents"
+            case .all: lines.addArrangedSubview(Card.line(sentence + "all your agents.", width: Ask.rightsWidth))
+            case .folders(let folders) where folders.isEmpty:
+                lines.addArrangedSubview(Card.line(sentence + "only the agents it launches.", width: Ask.rightsWidth))
             case .folders(let folders):
-                seen = folders.isEmpty ? "only the agents it launches" : "the agents working in " + folders.joined(separator: ", ")
+                lines.addArrangedSubview(Card.line(sentence + "the agents working in:", width: Ask.rightsWidth))
+                for folder in folders {
+                    let line = NSStackView(views: [Words.pathLabel("", folder, home: home, width: Ask.rightsWidth - 20)])
+                    line.edgeInsets.left = 20
+                    lines.addArrangedSubview(line)
+                }
             }
-            lines.addArrangedSubview(Card.line("With the right to see your agents, it sees \(seen).", width: Ask.rightsWidth))
         }
         var remap: [String: String] = [:], folder = question.folder?.found
         var choosers: [Chooser] = []
         for missing in question.missing {
-            choosers.append(Chooser(lines, "Agents in \(missing): not on this Mac.", button: "Choose a folder in its place…") { remap[missing] = $0 })
+            choosers.append(Chooser(lines, "This folder is not on this Mac:", folder: missing, button: "Choose a folder in its place…",
+                                    home: home) { remap[missing] = $0 })
         }
         if let asked = question.folder {
-            let now = asked.found.map { "Agents it launches work in \($0)." }
-                ?? asked.declared.map { "Agents it launches work in \($0): not on this Mac." } ?? "Agents it launches need a folder."
-            choosers.append(Chooser(lines, now, button: asked.found == nil ? "Choose a folder…" : "Choose another folder…") { folder = $0 })
+            let now = asked.found != nil ? "Agents it launches work in:"
+                : asked.declared != nil ? "Agents it launches work in this folder, not on this Mac:" : "Agents it launches need a folder."
+            choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared,
+                                    button: asked.found == nil ? "Choose a folder…" : "Choose another folder…", home: home) { folder = $0 })
         }
         lines.frame.size = lines.fittingSize
         alert.accessoryView = lines
-        // Return keeps nothing: a refusal is remembered, so it takes a click on the button that says what it does.
-        alert.buttons[0].keyEquivalent = ""
-        alert.buttons[1].keyEquivalent = "\r"
         return (alert, {
             withExtendedLifetime(choosers) {}
             let ticked = zip(question.rights, boxes).filter { $0.1.state == .on }.map(\.0)
@@ -200,7 +219,7 @@ enum Ask {
 
     /// The window that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button.
     static func lowers(_ mode: String, kind: String, folder: String?, space: String) -> NSAlert {
-        alert("Let “\(space)” put \(name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
+        alert("Let “\(space)” put \(Programs.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
               "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts.",
               buttons: ["Allow", "Don't allow"], escape: 1)
     }
@@ -226,11 +245,6 @@ enum Ask {
         return alert.runModal()
     }
 
-    /// The name a person knows an agent by.
-    static func name(of kind: String) -> String {
-        ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"][kind] ?? kind
-    }
-
     /// A right in plain words, with its warning when it has one: what the card says.
     static func words(for right: String) -> String {
         [title(for: right), warning(for: right)].compactMap { $0 }.joined(separator: ". ")
@@ -239,7 +253,7 @@ enum Ask {
     /// What a right lets the space do, in plain words: the title of its box in the rights window.
     static func title(for right: String) -> String {
         let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        let kind = parts.count == 2 ? name(of: parts[1]) : nil
+        let kind = parts.count == 2 ? Programs.name(of: parts[1]) : nil
         switch parts[0] {
         case "state": return "See your agents and what they say"
         case "send": return "Write to, interrupt and change the \(kind.map { $0 + " " } ?? "")agents it launched"

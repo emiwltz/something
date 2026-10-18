@@ -1,6 +1,7 @@
-// Home (design 5): the spaces of the spaces folder in a table, the card of the selected one beside it, and below,
-// the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
-// Make default and Show in Finder act on the selected space; New (as `something new`) and Import make a new one.
+// Home (design 5): the spaces of the spaces folder in a table, one of them always selected while there is one, the
+// card of the selected one beside it, and below, the examples, read-only, each with "Make a copy" (the section shows
+// nothing while there is none). An empty list says how to make a first space. Open, Export, Make default and Show in
+// Finder act on the selected space; New (as `something new`) and Import make a new one.
 // A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
 // A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it), and
 // a space made, imported or copied under a name forgets what the grants file kept for it first.
@@ -19,6 +20,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     private(set) var preferred: String?
     let table = NSTableView(), sampleTable = NSTableView()
     private var exampleSection: [NSView] = []
+    /// The list of spaces, and the sentence shown in its place while there is none.
+    private(set) var list = NSScrollView(), empty = NSTextField()
+    private var sampleHeight: NSLayoutConstraint?
     private var actions: [NSButton] = []
     private var window: NSWindow?
     /// The last failure to read the grants file that was said: reload runs each time the window becomes key, and a
@@ -34,11 +38,16 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         card = Card(places: places, ask: ask)
         super.init()
         for list in [table, sampleTable] {
-            list.addTableColumn(NSTableColumn(identifier: NSUserInterfaceItemIdentifier("space")))
+            let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("space"))
+            column.width = Card.width - 40
+            list.addTableColumn(column)
             list.headerView = nil
+            list.rowHeight = Home.rowHeight
             list.dataSource = self
             list.delegate = self
         }
+        // A click below the rows keeps the selection: the card beside the list always says which space it shows.
+        table.allowsEmptySelection = false
         table.target = self
         table.doubleAction = #selector(openSelected)
     }
@@ -46,16 +55,23 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     var selected: Space? { spaces.indices.contains(table.selectedRow) ? spaces[table.selectedRow] : nil }
     var selectedSample: Space? { samples.indices.contains(sampleTable.selectedRow) ? samples[sampleTable.selectedRow] : nil }
 
+    static let rowHeight: CGFloat = 24
+
     /// Reads the spaces, the examples and the default space again, then selects the space `name`, or keeps the
-    /// selection by name.
+    /// selection by name, or selects the default space, or the first: the card always shows a space when there is one.
     func reload(selecting name: String? = nil) {
         let kept = (name ?? selected?.name, selectedSample?.name)
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
         preferred = forgetGone()
-        Home.reselect(table, spaces, kept.0)
+        Home.reselect(table, spaces, kept.0 ?? preferred ?? spaces.first?.name)
+        if selected == nil, !spaces.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
         Home.reselect(sampleTable, samples, kept.1)
         exampleSection.forEach { $0.isHidden = samples.isEmpty }
+        // As tall as its examples, four at most; the list of spaces above takes the rest of the column.
+        sampleHeight?.constant = CGFloat(min(max(samples.count, 1), 4)) * (Home.rowHeight + 2) + 4
+        list.isHidden = spaces.isEmpty
+        empty.isHidden = !spaces.isEmpty
         update()
     }
 
@@ -238,19 +254,36 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         actions = [button("Open", #selector(openSelected)), button("Export", #selector(exportSelected)),
                    button("Make default", #selector(makeDefault)), button("Show in Finder", #selector(showInFinder))]
         let bar = NSStackView(views: [actions[0], button("New", #selector(newChosen)), button("Import", #selector(importChosen))] + actions[1...])
-        let label = Card.header("Examples, read-only")
-        let copy = button("Make a copy", #selector(makeACopy))
-        exampleSection = [label, Card.scroll(sampleTable, height: 120), copy]
-        let left = NSStackView(views: [bar, Card.line("Your spaces, in \(places.spaces.path)"), Card.scroll(table, height: 300)] + exampleSection)
+        let samplesList = Card.scroll(sampleTable, height: 0)
+        sampleHeight = samplesList.constraints.first { $0.firstAttribute == .height }
+        exampleSection = [Card.header("Examples, read-only"), samplesList, button("Make a copy", #selector(makeACopy))]
+        list = Card.scroll(table, height: 0)
+        // The list takes the height the column has left: it grows with the window, never shorter than five rows.
+        list.constraints.first { $0.firstAttribute == .height }?.priority = .defaultLow
+        list.heightAnchor.constraint(greaterThanOrEqualToConstant: 5 * (Home.rowHeight + 2)).isActive = true
+        empty = Card.line("No space yet. Click New to make your first one, or type something new <name> in Terminal.")
+        // Of the column's lines, the list, or this sentence in its place, takes the height left: the others keep theirs.
+        empty.setContentHuggingPriority(.defaultLow - 1, for: .vertical)
+        let place = Words.pathLabel("Your spaces, in ", places.spaces.path, home: places.home.path, width: Card.width)
+        let left = NSStackView(views: [bar, place, list, empty] + exampleSection)
         left.orientation = .vertical
         left.alignment = .leading
+        left.distribution = .fill
+        for line in left.arrangedSubviews where line !== list && line !== empty {
+            line.setContentHuggingPriority(.required, for: .vertical)
+            (line as? NSStackView)?.setHuggingPriority(.required, for: .vertical)
+        }
+        left.setCustomSpacing(16, after: list)
+        left.setCustomSpacing(16, after: empty)
         left.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         let content = NSStackView(views: [left, card.view])
         content.alignment = .top
+        content.spacing = 8
+        left.heightAnchor.constraint(equalTo: content.heightAnchor).isActive = true
         window.contentView = content
         // Smaller than the list and the card side by side, the card is cut: Home opens at that size, its smallest.
-        window.contentMinSize = content.fittingSize
-        window.setContentSize(content.fittingSize)
+        window.contentMinSize = NSSize(width: content.fittingSize.width, height: max(content.fittingSize.height, 280))
+        window.setContentSize(window.contentMinSize)
         window.center()
         return window
     }

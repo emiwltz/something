@@ -38,6 +38,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let problem = self?.open(space) { self?.ask.tell(problem) }
         }
         home.card.kinds = { [weak self] in self?.engine.state.kinds ?? [:] }
+        home.card.agents = { [weak self] in self?.engine.state.agents ?? [] }
         home.card.window = { [weak self] name in self?.current.flatMap { $0.kept && $0.space.name == name ? $0 : nil } }
         panels.who = { [weak self] request in self?.who(request) ?? "An agent" }
         engine.changed = { [weak self] in self?.schedulePush() }
@@ -137,7 +138,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// state no longer holds it.
     static func who(_ agent: Agent?, launchedBy space: String?) -> String {
         guard let agent else { return "An agent" }
-        var words = Ask.name(of: agent.kind)
+        var words = Programs.name(of: agent.kind)
         if let name = agent.name { words += " “\(name)”" }
         if let folder = agent.folder { words += ", working in \(folder)," }
         if let space { words += " launched by “\(space)”," }

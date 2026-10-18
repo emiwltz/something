@@ -102,7 +102,8 @@ import SomethingCore
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: opencode.path)
         }
 
-        deinit { try? FileManager.default.removeItem(at: root) }
+        // Called with defer in each test: a deinit does not always run before the test process ends.
+        func remove() { try? FileManager.default.removeItem(at: root) }
     }
 
     func until(_ what: String, seconds: Double = 10, _ condition: () -> Bool) async throws {
@@ -115,6 +116,7 @@ import SomethingCore
 
     @Test func aLaunchedClaudeTalksStopsAndIsShown() async throws {
         let place = try Place()
+        defer { place.remove() }
         // The fake must be the program found, never the real one of this Mac.
         #expect(try Programs(environment: place.environment).find("claude").path == place.bin.appendingPathComponent("claude").path)
         let engine = Engine.throwaway(place.environment)
@@ -158,6 +160,7 @@ import SomethingCore
     /// Codex through the engine: launched with its mode, a turn, its input closed at the stop, which ends it cleanly.
     @Test func aLaunchedCodexTalksAndStops() async throws {
         let place = try Place()
+        defer { place.remove() }
         #expect(try Programs(environment: place.environment).find("codex").path == place.bin.appendingPathComponent("codex").path)
         let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("codex", folder: place.work.path, model: nil, mode: "untrusted", effort: nil)
@@ -182,6 +185,7 @@ import SomethingCore
     /// and OpenCode ends without a signal.
     @Test func aLaunchedOpenCodeTalksAndStopsByCancelling() async throws {
         let place = try Place()
+        defer { place.remove() }
         #expect(try Programs(environment: place.environment).find("opencode").path == place.bin.appendingPathComponent("opencode").path)
         let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
@@ -244,6 +248,7 @@ import SomethingCore
     /// start(often:) again changes the cadence only: the programs are looked for once.
     @Test func startIsCalledAgain() async throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = Engine.throwaway(place.environment)
         var changes = 0
         engine.changed = { changes += 1 }
@@ -267,6 +272,7 @@ import SomethingCore
 
     @Test func whatALaunchRefuses() throws {
         let place = try Place()
+        defer { place.remove() }
         let engine = Engine.throwaway(place.environment)
         #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch omp yet.")) {
             try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil)
