@@ -3,6 +3,7 @@
 // 15th tick, readers also walk their folders for what a stat cannot find. The work runs on the watch's own queue and
 // its result is handed to the main queue, where the engine drops what it launched itself (dedupe) and folds the rest
 // into agents through StateMap.
+import Darwin
 import Foundation
 import SomethingCore
 
@@ -21,7 +22,8 @@ struct Reading: Equatable {
     var version: String?
     /// `kinds.<kind>.reader`: "ok", "changed", "unreadable" or "none".
     var health = "none"
-    /// One sentence for the person when the health is not "ok" or "none".
+    /// One sentence for the person when the health is not "ok" or "none", or when a source beside the files read
+    /// cannot be read (OpenCode desktop 1.x's tables).
     var note: String?
 }
 
@@ -71,6 +73,8 @@ final class Watch {
     private var ticks = 0
     /// The last tick's result, kept for a tick whose snapshot is not whole.
     private var last = Seen()
+    /// something's own pid: what descends from it is an agent it launched, or a helper of one. A test names another.
+    var own = getpid()
 
     /// `snapshot` takes the processes of a tick; by default, this Mac's.
     init(readers: [Reader], snapshot: (() -> Snapshot)? = nil) {
@@ -103,8 +107,9 @@ final class Watch {
 
     deinit { timer?.cancel() }
 
-    /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings. A snapshot that is
-    /// not whole proves no process gone: the readers are not run, and the last result stands.
+    /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings, and none whose
+    /// process descends from something (design 4.3: its children, their descendants and reparented helpers). A
+    /// snapshot that is not whole proves no process gone: the readers are not run, and the last result stands.
     func tick(now: Date) -> Seen {
         let processes = snapshot()
         guard processes.whole else { return last }
@@ -121,7 +126,10 @@ final class Watch {
                              folder: process.folder, started: process.started, processOnly: true)
                 }
             }
-            reading.sightings = reading.sightings.filter { Watch.isRecent(alive: $0.facts.alive, updated: $0.updated, now: now) }
+            reading.sightings = reading.sightings.filter { sighting in
+                Watch.isRecent(alive: sighting.facts.alive, updated: sighting.updated, now: now)
+                    && !(sighting.pid.map { processes.descends($0, from: own) } ?? false)
+            }
             // Oldest first, in one order from tick to tick: the same agents in another order would be a change.
             reading.sightings.sort { ($0.started ?? .distantPast, $0.key) < ($1.started ?? .distantPast, $1.key) }
             for index in reading.sightings.indices { reading.sightings[index].group = reading.sightings[index].pid.flatMap { processes[$0]?.group } }
@@ -140,8 +148,9 @@ final class Watch {
     }
 
     /// The agents and threads of `seen` that something did not launch: a sighting is dropped when its process is in
-    /// the group of one of something's children (`groups`), or when its conversation is one a driver reported
-    /// (`keys`). Ids are stable while the conversation is listed.
+    /// the group of one of something's children (`groups`: a helper whose leader ended no longer descends from
+    /// something), or when its conversation is one a driver reported (`keys`). Ids are stable while the conversation
+    /// is listed.
     static func elsewhere(_ seen: Seen, groups: Set<Int32>, keys: Set<String>, now: Date) -> (agents: [Agent], threads: [AgentThread]) {
         var agents: [Agent] = [], threads: [AgentThread] = []
         for sighting in seen.sightings where !keys.contains(sighting.key) && !(sighting.group.map(groups.contains) ?? false) {

@@ -239,7 +239,7 @@ final class CodexHome {
         let home = try CodexHome(shape: CodexHome.threads.replacingOccurrences(of: "rollout_path TEXT NOT NULL", with: "path TEXT NOT NULL")
             .replacingOccurrences(of: "rollout_path", with: "path"))
         let reading = home.read()
-        #expect(reading.health == "changed" && reading.note == "Codex's thread index changed shape; something reads only the conversations of its last three days.")
+        #expect(reading.health == "changed" && reading.note == "Codex changed the format of its conversation list; something shows only the conversations of its last three days.")
         // The newest three day folders, without the sub-agent's rollout or the compressed one; the 14th is not read.
         #expect(Set(reading.sightings.map(\.key)) == [CodexHome.shop, CodexHome.blog, CodexHome.ours])
         let shop = try #require(reading.sightings.first { $0.key == CodexHome.shop })
@@ -264,7 +264,44 @@ final class CodexHome {
         let locked = try CodexHome()
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked.codex.appendingPathComponent("state_5.sqlite").path)
         let unreadable = locked.read()
-        #expect(unreadable.health == "unreadable" && unreadable.sightings.count == 3)
+        #expect(unreadable.health == "unreadable" && unreadable.sightings.count == 3 && unreadable.note?.contains("check its permissions") == true)
+    }
+
+    /// Contract 3.5: listed while alive. A conversation idle for three days whose lock a codex process holds is read.
+    @Test func aHeldConversationIdleForDaysIsListed() throws {
+        #expect(try !CodexHome().read().sightings.contains { $0.key == CodexHome.stale })
+        let home = try CodexHome()
+        try Data().write(to: URL(fileURLWithPath: home.lock(CodexHome.stale)))
+        let held = home.read(home.snapshot(holding: [CodexReader.real(home.lock(CodexHome.stale))]), discover: false)
+        let stale = try #require(held.sightings.first { $0.key == CodexHome.stale }, "the held lock asks the index again")
+        #expect(stale.facts.alive == true && stale.facts.evidence == "lock" && stale.pid == 51000)
+        #expect(Watch(readers: [home.reader], snapshot: { home.snapshot(holding: [CodexReader.real(home.lock(CodexHome.stale))]) })
+            .tick(now: home.now).sightings.contains { $0.key == CodexHome.stale }, "the watch keeps what is alive")
+    }
+
+    /// notes/format-codex 1.1 and 1.4: a day folder may hold an "A_B" segment headed by A, and a second copy of A.
+    @Test func theWalkKeepsOneFilePerConversation() throws {
+        let home = try CodexHome(index: false)
+        let day = home.day("2026/10/17"), other = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f6a99"
+        let segment = day.appendingPathComponent("rollout-2026-10-17T11-00-00-\(CodexHome.shop)_\(other).jsonl")
+        let copy = day.appendingPathComponent("rollout-2026-10-17T09-00-00-\(CodexHome.shop).jsonl")
+        try CodexHome.lines(CodexHome.shop, open: false).write(to: segment)
+        try CodexHome.lines(CodexHome.shop, open: false).write(to: copy)
+        try FileManager.default.setAttributes([.modificationDate: home.now.addingTimeInterval(-7200)], ofItemAtPath: copy.path)
+        for _ in 0..<2 {
+            let shops = home.read(discover: true).sightings.filter { $0.key == CodexHome.shop }
+            #expect(shops.count == 1 && shops.first?.turns.map(\.state) == ["done", "working"], "the file named by its id, the newest of them")
+        }
+    }
+
+    /// something's own codex holds only what it launched: with no other codex, what nobody holds has ended.
+    @Test func ourOwnCodexProvesNothingOfTheOthers() throws {
+        let home = try CodexHome()
+        home.reader.own = 1
+        let reading = home.read()
+        let blog = try #require(reading.sightings.first { $0.key == CodexHome.blog })
+        #expect(blog.facts.alive == false && blog.facts.evidence == "process")
+        #expect(reading.sightings.first { $0.key == CodexHome.shop }?.facts.alive == true, "it still holds what it launched, for the dedupe")
     }
 
     /// What something launched is dropped by its thread id; a thread something started in an earlier run is the
@@ -295,6 +332,8 @@ final class CodexHome {
         #expect(failed.turns.map(\.state) == ["error"] && failed.error == AgentError(code: "AGENT_ERROR", message: "Invented failure."))
         #expect(fold([started, started]).turns.map(\.state) == ["unknown", "working"], "a turn never closed is not called done")
         #expect(fold([]).open == nil)
+        let recovered = fold([started, #"{"type":"task_complete","turn_id":"a","error":{"message":"Invented failure."}}"#, started, #"{"type":"task_complete","turn_id":"b"}"#])
+        #expect(recovered.turns.map(\.state) == ["error", "done"] && recovered.error == nil, "a past failure is not the agent's last error")
         #expect(fold(Array(repeating: started, count: 12)).turns.count == Limits.turns && !fold(Array(repeating: started, count: 12)).complete)
     }
 }

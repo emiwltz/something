@@ -1,7 +1,8 @@
 // CodexReader: the Codex conversations started elsewhere (a terminal, Codex's background service, the desktop app),
 // read from Codex's own files, never through its program (design 4.2). The thread index, the highest
 // `state_N.sqlite`, says which conversations moved in the last 24 hours and where each one's rollout is; the rollout,
-// a JSONL file Codex appends to, gives the turns, from whitelisted fields only. When the index changed shape, the
+// a JSONL file Codex appends to, gives the turns, from whitelisted fields only. A conversation whose writer lock a
+// codex process holds is read however long it has been idle: it is listed while alive. When the index changed shape, the
 // rollouts of the last three day folders are read instead. Codex compresses a rollout idle for some days (`.zst`):
 // such a conversation is old, and it is skipped. A conversation is held by the codex process that holds its writer
 // lock or its rollout open; the files Codex writes say nothing of what it waits on, so `waiting` is null.
@@ -19,6 +20,9 @@ final class CodexReader: Reader {
     let databases: String?
     /// Sees every path the reader opens.
     var opened: (String) -> Void = { _ in }
+    /// something's own pid: its own codex processes hold only what it launched, so they prove no conversation seen
+    /// elsewhere alive or ended. A test names another.
+    var own = getpid()
 
     /// The index columns the reader may use; the guard asks for all of them.
     static let whitelist: [String: Set<String>] = ["threads": ["id", "rollout_path", "created_at", "updated_at", "archived", "source",
@@ -47,12 +51,13 @@ final class CodexReader: Reader {
         var lines: CodexRollout
     }
 
-    /// The index's file and log as last read, and what they gave.
+    /// The index's file and log, and the held locks, as last read, and what they gave.
     private var indexStamps: [Stamp?] = []
+    private var indexHeld: [String] = []
     private var indexed: Result<[Thread]?, Failure> = .success(nil)
     private var walked: [String: Thread?]?
     private var followed: [String: Followed] = [:]
-    private var held: (pids: Set<Int32>, at: Date, files: [String: Int32], whole: Bool)?
+    private var held: (pids: Set<Int32>, at: Date, files: [String: Int32], others: Bool)?
 
     init(environment: [String: String]) {
         folder = environment["CODEX_HOME"] ?? environment["HOME"].map { ($0 as NSString).appendingPathComponent(".codex") }
@@ -62,21 +67,22 @@ final class CodexReader: Reader {
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
         guard let folder, ClaudeReader.isFolder(folder) else { return Reading() }
         var reading = Reading(health: "ok")
+        let holders = holders(snapshot, now: now)
         var threads: [Thread]
-        switch index(discover: discover, now: now) {
+        switch index(discover: discover, held: CodexReader.locked(holders.files, in: folder), now: now) {
         case .success(let found?): threads = found
         case .success(nil): threads = walk(discover: discover)
         case .failure(let failure):
             threads = walk(discover: discover)
             reading.health = failure == .changed ? "changed" : "unreadable"
             reading.note = failure == .changed
-                ? "Codex's thread index changed shape; something reads only the conversations of its last three days."
-                : "something cannot read Codex's thread index; it reads only the conversations of its last three days."
+                ? "Codex changed the format of its conversation list; something shows only the conversations of its last three days."
+                : "something cannot read Codex's conversation list (state_N.sqlite in ~/.codex); check its permissions. "
+                    + "Only the conversations of the last three days are shown."
         }
         threads = threads.filter { FileManager.default.fileExists(atPath: $0.rollout) }
         let ids = Set(threads.map(\.id))
         followed = followed.filter { ids.contains($0.key) }
-        let holders = holders(snapshot, now: now)
         for thread in threads {
             follow(thread)
             guard let session = followed[thread.id] else { continue }
@@ -88,26 +94,36 @@ final class CodexReader: Reader {
 
     enum Failure: Error { case changed, unreadable }
 
-    /// The conversations of the index updated in the last 24 hours, read again only when its file or its log moved,
-    /// or for the walk of every 15th tick, as the 24 hours move on; nil when there is no index.
-    private func index(discover: Bool, now: Date) -> Result<[Thread]?, Failure> {
+    /// The conversations of the index updated in the last 24 hours, and those whose lock is `held`, read again only
+    /// when its file, its log or the held locks moved, or for the walk of every 15th tick, as the 24 hours move on;
+    /// nil when there is no index.
+    private func index(discover: Bool, held: [String], now: Date) -> Result<[Thread]?, Failure> {
         guard let databases, let path = CodexReader.newestIndex(in: databases) else { return .success(nil) }
         let stamps = [Stamp(path), Stamp(path + "-wal")]
-        if stamps == indexStamps, !discover { return indexed }
+        if stamps == indexStamps, held == indexHeld, !discover { return indexed }
         indexStamps = stamps
-        indexed = query(path, now: now)
+        indexHeld = held
+        indexed = query(path, held: held, now: now)
         return indexed
     }
 
-    private func query(_ path: String, now: Date) -> Result<[Thread]?, Failure> {
+    /// The thread ids whose writer lock (`thread-writer-locks/<id>.lock`) one of `files` is, sorted.
+    static func locked(_ files: [String: Int32], in folder: String) -> [String] {
+        let locks = real((folder as NSString).appendingPathComponent("thread-writer-locks")) + "/"
+        return files.keys.filter { $0.hasPrefix(locks) && $0.hasSuffix(".lock") }
+            .map { String($0.dropFirst(locks.count).dropLast(5)) }.filter { !$0.hasPrefix(".") }.sorted()
+    }
+
+    private func query(_ path: String, held: [String], now: Date) -> Result<[Thread]?, Failure> {
         opened(path)
         guard let db = try? SQLiteRO(path, whitelist: CodexReader.whitelist) else { return .failure(.unreadable) }
         guard (try? db.guarded()) == true else { return .failure(.changed) }
         let since = Int64(now.timeIntervalSince1970 - Watch.recent)
         guard let rows = try? db.rows("""
             SELECT id, rollout_path, created_at, source, thread_source, cwd, title, name, cli_version, originator, model, reasoning_effort, approval_mode
-            FROM threads WHERE archived = 0 AND updated_at >= ? ORDER BY updated_at DESC LIMIT 200
-            """, [since]) else { return .failure(.unreadable) }
+            FROM threads WHERE archived = 0 AND (updated_at >= ? OR id IN (\(held.map { _ in "?" }.joined(separator: ", "))))
+            ORDER BY updated_at DESC LIMIT 200
+            """, [since] + held) else { return .failure(.unreadable) }
         return .success(rows.compactMap { row in
             guard let id = row["id"] as? String, let rollout = row["rollout_path"] as? String, rollout.hasPrefix("/"),
                   !CodexReader.unattended.contains(row["thread_source"] as? String ?? ""),
@@ -147,7 +163,13 @@ final class CodexReader: Reader {
             let known = walked ?? [:]
             walked = Dictionary(uniqueKeysWithValues: files.map { ($0, known[$0] ?? CodexReader.identity($0, opened: opened)) })
         }
-        return (walked ?? [:]).values.compactMap { $0 }.sorted { $0.rollout < $1.rollout }
+        // One id can head several files of a day (an "A_B" segment whose first line is A's, a second copy): one file
+        // per conversation, the one named by its id first, then the newest.
+        func rank(_ thread: Thread) -> (Int, Date) {
+            ((thread.rollout as NSString).lastPathComponent.hasSuffix("-\(thread.id).jsonl") ? 1 : 0, Stamp(thread.rollout)?.modified ?? .distantPast)
+        }
+        let copies = Dictionary(grouping: (walked ?? [:]).values.compactMap { $0 }, by: \.id)
+        return copies.values.compactMap { $0.max { rank($0) < rank($1) } }.sorted { $0.rollout < $1.rollout }
     }
 
     /// Whose rollout `path` is, from its first line (a `session_meta` of 20 KB or so, read up to 1 MB); nil for a
@@ -184,29 +206,34 @@ final class CodexReader: Reader {
         followed[thread.id] = session
     }
 
-    /// Which codex process holds which file open, by path; `whole` is false when one of them did not say. Read again
-    /// when the codex processes change, or every 10 s: a conversation started in a running process takes its lock then.
-    private func holders(_ snapshot: Snapshot, now: Date) -> (pids: Set<Int32>, files: [String: Int32], whole: Bool) {
+    typealias Holders = (files: [String: Int32], others: Bool)
+
+    /// Which codex process holds which file open, by path, and whether a codex process that does not descend from
+    /// something runs. Read again when the codex processes change, or every 10 s: a conversation started in a
+    /// running process takes its lock then. something's own processes stay among the holders: the dedupe drops what
+    /// they hold.
+    private func holders(_ snapshot: Snapshot, now: Date) -> Holders {
         let pids = Set(snapshot.processes.values.filter { programs.contains($0.name) }.map(\.pid))
-        if let held, held.pids == pids, now.timeIntervalSince(held.at) < CodexReader.filesEvery { return (pids, held.files, held.whole) }
-        var files: [String: Int32] = [:], whole = true
-        for pid in pids.sorted() {
-            guard let paths = snapshot.openFiles(pid) else { whole = false; continue }
-            for path in paths { files[path] = pid }
-        }
-        held = (pids, now, files, whole)
-        return (pids, files, whole)
+        if let held, held.pids == pids, now.timeIntervalSince(held.at) < CodexReader.filesEvery { return (held.files, held.others) }
+        var files: [String: Int32] = [:]
+        // A process whose open files the system does not give holds nothing that can be seen.
+        for pid in pids.sorted() { for path in snapshot.openFiles(pid) ?? [] { files[path] = pid } }
+        let others = pids.contains { !snapshot.descends($0, from: own) }
+        held = (pids, now, files, others)
+        return (files, others)
     }
 
-    private func sighting(_ session: Followed, _ holders: (pids: Set<Int32>, files: [String: Int32], whole: Bool)) -> Sighting {
+    private func sighting(_ session: Followed, _ holders: Holders) -> Sighting {
         let thread = session.thread, lines = session.lines
         let lock = ((folder ?? "") as NSString).appendingPathComponent("thread-writer-locks/\(thread.id).lock")
         let holder = [lock, thread.rollout].flatMap { [$0, CodexReader.real($0)] }.lazy.compactMap { holders.files[$0] }.first
         var facts = StateMap.Facts(alive: nil, turnOpen: lines.open, lastWrite: session.stamp?.modified)
         if holder != nil {
-            (facts.alive, facts.evidence) = (true, "lock")
-        } else if holders.pids.isEmpty {
-            (facts.alive, facts.evidence) = (false, "process")
+            facts.alive = true
+            facts.evidence = "lock"
+        } else if !holders.others {
+            facts.alive = false
+            facts.evidence = "process"
         }
         facts.failed = lines.turns.last?.state == "error"
         facts.aborted = lines.turns.last?.state == "interrupted"
@@ -258,6 +285,8 @@ struct CodexRollout {
             mode = payload["approval_policy"] as? String ?? mode
         case ("event_msg", "task_started"):
             close("unknown", at: nil)
+            // A new turn: an error of an earlier one is past.
+            error = nil
             open(payload["turn_id"] as? String ?? "\(thread)/\(turns.count)", at: at)
         case ("event_msg", "task_complete"):
             if let failure = payload["error"] as? [String: Any] {

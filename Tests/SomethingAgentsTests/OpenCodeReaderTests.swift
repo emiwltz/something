@@ -207,9 +207,47 @@ final class OpenCodeHome {
         let reading = home.read()
         #expect(reading.health == "changed" && reading.sightings.isEmpty)
         #expect(reading.note?.contains("OpenCode desktop 1.x") == true)
-        let seen = Watch(readers: [home.reader], snapshot: { home.snapshot() }).tick(now: home.now)
+        let watch = Watch(readers: [home.reader], snapshot: { home.snapshot() })
+        watch.own = OpenCodeHome.own
+        let seen = watch.tick(now: home.now)
         #expect(seen.kinds["opencode"]?.health == "changed")
-        #expect(Set(seen.sightings.compactMap(\.pid)) == [52000, 52100, 52101, 52102] && seen.sightings.allSatisfy(\.processOnly))
+        // something's own `opencode acp`, and the server it starts in a group of its own, are not agents seen elsewhere.
+        #expect(seen.sightings.compactMap(\.pid) == [52000] && seen.sightings.allSatisfy(\.processOnly))
+        #expect(Watch.elsewhere(seen, groups: [52100], keys: [], now: home.now).agents.map(\.pid) == [52000])
+    }
+
+    /// OpenCode desktop 1.x keeps writing the 1.x tables of a database OpenCode 2 has moved on from.
+    @Test func aDesktopStillWritingThe1xTablesIsSaid() throws {
+        let home = try OpenCodeHome()
+        try makeDatabase(home.database, """
+            INSERT INTO session VALUES ('ses_legacy', 'global', NULL, 'invented', '/Users/example/shop', 'Invented title', '1.18.30',
+              NULL, NULL, NULL, NULL, NULL, NULL, NULL, \(home.ago(600)), \(home.ago(60)), NULL, NULL);
+            """)
+        let reading = home.read()
+        #expect(reading.health == "ok" && reading.note == OpenCodeReader.desktop && reading.sightings.count == 4)
+    }
+
+    /// A refusal may pass: the next tick asks again, though the database did not move.
+    @Test func anUnreadableDatabaseIsAskedAgain() throws {
+        let home = try OpenCodeHome()
+        let before = try FileManager.default.attributesOfItem(atPath: home.database)[.modificationDate] as? Date
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: home.database)
+        let refused = home.read()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: home.database)
+        #expect(refused.health == "unreadable" && refused.sightings.isEmpty)
+        let again = home.read()
+        #expect(again.health == "ok" && again.sightings.count == 4 && home.opened.count == 2)
+        #expect(try FileManager.default.attributesOfItem(atPath: home.database)[.modificationDate] as? Date == before)
+    }
+
+    @Test func aNewTurnClearsAnEarlierError() {
+        var fold = OpenCodeTurns(session: "s")
+        fold.add(["id": "m1", "type": "user", "text": "Invented."], blocks: [])
+        fold.add(["id": "m2", "type": "assistant", "finish": "error", "failure": "Invented failure."], blocks: [])
+        #expect(fold.error?.message == "Invented failure.")
+        fold.add(["id": "m3", "type": "user", "text": "Invented again."], blocks: [])
+        fold.add(["id": "m4", "type": "idle", "outcome": "succeeded"], blocks: [])
+        #expect(fold.error == nil && fold.turns.map(\.state) == ["unknown", "done"])
     }
 
     @Test func aChangedShapeAMissingDatabaseAndNoHome() throws {

@@ -44,6 +44,18 @@ public struct Snapshot {
     /// The paths `pid` holds open now, or nil when they cannot be read. Each call reads them again: ask for a
     /// candidate only.
     public func openFiles(_ pid: Int32) -> [String]? { files(pid) }
+
+    /// Whether `pid` descends from `ancestor`, through its parents or the leader of its group: a helper whose parent
+    /// ended is reparented, but still runs in its group, and a server that starts a group of its own still has a parent.
+    public func descends(_ pid: Int32, from ancestor: Int32) -> Bool {
+        var seen: Set<Int32> = [], next = [pid]
+        while let current = next.popLast() {
+            guard seen.insert(current).inserted, let process = self[current] else { continue }
+            if process.parent == ancestor || process.group == ancestor { return true }
+            next += [process.parent, process.group]
+        }
+        return false
+    }
 }
 
 /// Takes snapshots. Arguments are kept per pid and start time, since a process does not change them once started

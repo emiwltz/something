@@ -44,9 +44,16 @@ import SomethingCore
         #expect(idle.turns.last?.items.first?.author == "person" && idle.model == "fake-model" && idle.folder.map(CodexReader.real) == CodexReader.real(run.work.path), "Codex names the folder by its real path")
         try await run.finish()
         let ended = try #require(seen())
-        // Another codex on this Mac (the person's own) leaves the end unproven, never alive.
-        print("T-2 reader: ended: alive \(String(describing: ended.facts.alive)), evidence \(ended.facts.evidence ?? "null")")
+        // The run's codex descends from this test, as something's own would: only another codex (the person's) leaves
+        // the end unproven.
+        let others = processes.snapshot().processes.values.filter { $0.name == "codex" && !processes.snapshot().descends($0.pid, from: getpid()) }
+        print("T-2 reader: ended: alive \(String(describing: ended.facts.alive)), evidence \(ended.facts.evidence ?? "null"), other codex processes on this Mac \(others.count)")
         #expect(ended.facts.alive != true && ended.pid == nil)
+        if others.isEmpty {
+            #expect(ended.facts.alive == false && ended.facts.evidence == "process")
+        } else {
+            print("T-2 reader: the check of \"no codex process, so ended\" is skipped: another codex runs on this Mac.")
+        }
     }
 
     @Test(.enabled(if: trialOpenCode != nil, "T-3 needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))

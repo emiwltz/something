@@ -30,6 +30,7 @@ final class OpenCodeReader: Reader {
     /// The messages a session's turns are folded from: at most this many of its last.
     static let messages = 300
     static let mayResume = "OpenCode's background service may continue this conversation by itself the next time it starts."
+    static let desktop = "OpenCode desktop 1.x still writes conversations in the 1.x format, which something does not read: they are not shown."
 
     struct Session: Equatable {
         var id: String, folder: String?, title: String?, model: String?, effort: String?, mode: String?
@@ -37,9 +38,8 @@ final class OpenCodeReader: Reader {
         /// When a run claimed the session (`time_suspended`); nil when no run holds it.
         var claimed: Date?
         var outcome: String?
-        /// The last step ended with "stop": a turn OpenCode 1.x left without an idle mark ended there.
-        var stopped = false
-        var turns: [Turn] = [], complete = true, error: AgentError?
+        /// Its turns, folded from its last messages.
+        var fold: OpenCodeTurns
     }
 
     private var stamps: [Stamp?] = []
@@ -53,15 +53,18 @@ final class OpenCodeReader: Reader {
         let current = [Stamp(database), Stamp(database + "-wal")]
         guard current[0] != nil else { return Reading() }
         if current != stamps {
-            stamps = current
             (last, sessions) = query(database, now: now)
+            // A refusal may pass (a checkpoint holding the file past the busy timeout): the next tick asks again.
+            if last.health != "unreadable" { stamps = current }
         }
         var reading = last
         reading.sightings = sessions.map { sighting($0, snapshot) }
         return reading
     }
 
-    /// What the database says now: its version, its health and its recent sessions with their turns.
+    /// What the database says now: its version, its health and its recent sessions with their turns. OpenCode desktop
+    /// 1.x still writes the 1.x tables, which OpenCode 2 left frozen when it moved its sessions: a write there in the
+    /// last 24 hours is a source something does not read, and the person is told.
     private func query(_ path: String, now: Date) -> (Reading, [Session]) {
         opened(path)
         let unreadable = Reading(health: "unreadable", note: "something cannot read OpenCode's database; check its permissions.")
@@ -76,6 +79,9 @@ final class OpenCodeReader: Reader {
             return (Reading(version: version, health: "changed", note: "OpenCode's database changed shape; its agents are shown as processes only."), [])
         }
         let since = (now.timeIntervalSince1970 - Watch.recent) * 1000
+        // An aggregate returns no stored column: the 1.x table needs no place on the whitelist.
+        let legacy = tables["session"]?.contains("time_updated") == true ? (try? db.rows("SELECT max(time_updated) AS last FROM session")) : nil
+        let note = (SQLiteRO.number(legacy?.first?["last"]) ?? 0) >= since ? OpenCodeReader.desktop : nil
         guard let rows = try? db.rows("""
             SELECT s.id, s.directory, s.title, s.agent, json_extract(s.model, '$.id') AS model, json_extract(s.model, '$.variant') AS variant,
                    s.time_created, s.time_suspended, s.idle_outcome,
@@ -90,25 +96,29 @@ final class OpenCodeReader: Reader {
             func text(_ key: String) -> String? { (row[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
             var session = Session(id: id, folder: text("directory"), title: text("title"), model: text("model"), effort: text("variant"),
                                   mode: text("agent"), started: OpenCodeReader.date(row["time_created"]), updated: OpenCodeReader.date(row["last_write"]),
-                                  claimed: OpenCodeReader.date(row["time_suspended"]), outcome: text("idle_outcome"))
+                                  claimed: OpenCodeReader.date(row["time_suspended"]), outcome: text("idle_outcome"), fold: OpenCodeTurns(session: id))
             // A session whose last write did not move keeps the turns read before.
             if let known = sessions.first(where: { $0.id == id }), known.updated == session.updated, known.claimed == session.claimed {
-                (session.turns, session.complete, session.error, session.stopped) = (known.turns, known.complete, known.error, known.stopped)
-            } else if !turns(of: &session, db) {
+                session.fold = known.fold
+            } else if let fold = turns(of: id, db) {
+                session.fold = fold
+            } else {
                 return (unreadable, [])
             }
             found.append(session)
         }
-        return (Reading(version: version, health: "ok"), found)
+        return (Reading(version: version, health: "ok", note: note), found)
     }
 
-    /// Folds the session's last messages into its turns; false when the database refused the query.
-    private func turns(of session: inout Session, _ db: SQLiteRO) -> Bool {
-        guard let messages = try? db.rows("""
+    /// The turns of `session`, folded from its last messages; nil when the database refused the query.
+    private func turns(of session: String, _ db: SQLiteRO) -> OpenCodeTurns? {
+        // One message more than kept says whether older ones were left out.
+        guard let fetched = try? db.rows("""
             SELECT id, seq, type, time_created, json_extract(data, '$.text') AS text, json_extract(data, '$.outcome') AS outcome,
                    json_extract(data, '$.finish') AS finish, json_extract(data, '$.error.message') AS failure
             FROM session_message WHERE session_id = ? AND type IN ('user', 'assistant', 'idle') ORDER BY seq DESC LIMIT ?
-            """, [session.id, OpenCodeReader.messages]) else { return false }
+            """, [session, OpenCodeReader.messages + 1]) else { return nil }
+        let messages = fetched.prefix(OpenCodeReader.messages)
         let first: Any = messages.last?["seq"] ?? Int64(0)
         // json_each walks an assistant message's blocks; only the paths named here leave the database.
         guard let blocks = try? db.rows("""
@@ -119,53 +129,46 @@ final class OpenCodeReader: Reader {
                             json_extract(c.value, '$.state.input.description'), json_extract(c.value, '$.state.input.prompt')) AS target
             FROM session_message m, json_each(m.data, '$.content') c
             WHERE m.session_id = ? AND m.type = 'assistant' AND m.seq >= ? ORDER BY m.seq, c.key
-            """, [session.id, first]) else { return false }
-        var fold = OpenCodeTurns(session: session.id)
-        fold.complete = messages.count < OpenCodeReader.messages
+            """, [session, first]) else { return nil }
+        var fold = OpenCodeTurns(session: session)
+        fold.complete = fetched.count <= OpenCodeReader.messages
         let byMessage = Dictionary(grouping: blocks) { $0["message"] as? String ?? "" }
         for message in messages.reversed() { fold.add(message, blocks: byMessage[message["id"] as? String ?? ""] ?? []) }
-        (session.turns, session.complete, session.error, session.stopped) = (fold.turns, fold.complete, fold.error, fold.finish == "stop")
-        return true
+        return fold
     }
 
     /// The claim-and-holder rule (C10): a claim taken at t is held only by a live OpenCode process started at or
-    /// before t, outside something's own groups. Without a claim, no OpenCode process outside them proves the
-    /// session idle in no process; one of them leaves it unknown.
+    /// before t, that does not descend from something. Without a claim, no such OpenCode process proves the session
+    /// idle in no process; one of them leaves it unknown.
     private func sighting(_ session: Session, _ snapshot: Snapshot) -> Sighting {
-        let others = snapshot.processes.values.filter { programs.contains($0.name) && !ours($0, snapshot) }.sorted { $0.pid < $1.pid }
+        let others = snapshot.processes.values.filter { programs.contains($0.name) && !snapshot.descends($0.pid, from: own) }.sorted { $0.pid < $1.pid }
         var facts = StateMap.Facts(alive: nil, lastWrite: session.updated)
-        var turns = session.turns, holder: Int32?, because: [String: String] = [:]
+        var turns = session.fold.turns, holder: Int32?, because: [String: String] = [:]
         if let claimed = session.claimed {
             holder = others.first { $0.started <= claimed }?.pid
-            (facts.alive, facts.evidence, facts.turnOpen) = (holder != nil, "claim", true)
+            facts.alive = holder != nil
+            facts.evidence = "claim"
+            facts.turnOpen = true
             if holder == nil {
                 because["resume"] = OpenCodeReader.mayResume
                 OpenCodeReader.close(&turns, "interrupted")
             }
         } else {
             let ended = ["succeeded": "done", "failed": "error", "interrupted": "interrupted"][session.outcome ?? ""]
-            OpenCodeReader.close(&turns, ended ?? (session.stopped ? "done" : "unknown"))
+            OpenCodeReader.close(&turns, ended ?? (session.fold.finish == "stop" ? "done" : "unknown"))
             facts.turnOpen = turns.isEmpty ? nil : false
             facts.failed = session.outcome == "failed"
             facts.aborted = session.outcome == "interrupted"
-            if others.isEmpty { (facts.alive, facts.evidence) = (false, "process") }
+            if others.isEmpty {
+                facts.alive = false
+                facts.evidence = "process"
+            }
         }
         var sighting = Sighting(kind: kind, key: session.id, pid: holder, facts: facts, folder: session.folder, title: session.title,
                                 model: session.model, mode: session.mode, effort: session.effort, started: session.started,
-                                updated: session.updated, turns: turns, complete: session.complete, error: session.error)
+                                updated: session.updated, turns: turns, complete: session.fold.complete, error: session.fold.error)
         sighting.because = because
         return sighting
-    }
-
-    /// Whether `process` is one of something's children, descends from one, or runs in the group of one (a helper
-    /// reparented when its parent ended). `opencode acp` starts its server in a group of its own: descent finds it.
-    private func ours(_ process: Running, _ snapshot: Snapshot) -> Bool {
-        var seen: Set<Int32> = [], current: Running? = process
-        while let next = current, seen.insert(next.pid).inserted {
-            if next.parent == own || snapshot[next.group]?.parent == own { return true }
-            current = snapshot[next.parent]
-        }
-        return false
     }
 
     /// Ends the last turn as `state`, if it still runs.
@@ -181,7 +184,7 @@ final class OpenCodeReader: Reader {
 /// The turns of one OpenCode session, folded message by message: a person's message opens a turn, an `idle` mark
 /// closes it with its outcome, and an assistant message adds its texts, its reasoning and its tool calls (their name
 /// and what they act on, never their output).
-struct OpenCodeTurns {
+struct OpenCodeTurns: Equatable {
     let session: String
     private(set) var turns: [Turn] = []
     var complete = true
@@ -198,6 +201,8 @@ struct OpenCodeTurns {
         case "user":
             guard let text = message["text"] as? String, !text.isEmpty else { return }
             close(finish == "stop" ? "done" : "unknown", at: nil)
+            // A new turn: an error of an earlier one is past.
+            error = nil
             open(id, at: at)
             append(Item(id: id, kind: "message", author: "person", text: text, at: at))
         case "assistant":
