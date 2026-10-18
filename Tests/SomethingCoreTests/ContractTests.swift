@@ -241,6 +241,17 @@ enum Frozen {
         #expect(missing.isEmpty, "\(missing)")
     }
 
+    /// An agent reads each code an engine or the check can give with its fix: every bridge and check code of
+    /// codes.json has a row in the guide that holds its fix sentence (backticks aside).
+    @Test func theGuideGivesEveryCodeWithItsFix() throws {
+        let codes = try #require(try ContractFiles.object("codes.json")["codes"] as? [String: [String: Any]])
+        let rows = ContractFiles.guide.split(separator: "\n").map { $0.replacingOccurrences(of: "`", with: "") }
+        for (code, about) in codes where about["from"] as? String != "import" {
+            let fix = about["fix"] as? String ?? ""
+            #expect(rows.contains { $0.hasPrefix("| \(code) |") && $0.contains(fix) }, "\(code): \(fix)")
+        }
+    }
+
     /// A removal anywhere fails: a key from shape.json, a word, a code from codes.json, and from the guide a function,
     /// an event, a right, a right's kind or a bridge code.
     @Test func aRemovalFails() throws {

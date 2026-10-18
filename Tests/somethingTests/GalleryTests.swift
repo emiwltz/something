@@ -18,7 +18,7 @@ struct GalleryTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// A home with the space morning-review and a second one, a grant, ten journal lines of yesterday and today, and a
-    /// share folder with an example; its temporary path is shown as /Users/example in the pictures.
+    /// share folder with the template and the examples; its temporary path is shown as /Users/example in the pictures.
     func invented() throws -> (fixture: Home, share: URL) {
         let fixture = Home()
         let declaration = #"{"contract": 1, "title": "Morning review", "description": "Reads what the agents said overnight and asks each one for a summary.", "agents": {"folders": ["~/code/shop"]}, "folder": "~/code/shop", "rights": ["state", "send:claude", "launch:claude", "store"]}"#
@@ -51,10 +51,10 @@ struct GalleryTests {
                                            text: text, result: result), space: "morning-review")
         }
         let share = fixture.root.appendingPathComponent("share")
-        try FileManager.default.createDirectory(at: share.appendingPathComponent("examples"), withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: Home.share.appendingPathComponent("template.html"), to: share.appendingPathComponent("template.html"))
-        try page(#"{"contract": 1, "title": "Who is waiting", "rights": ["state"]}"#, "<p>Waiting</p>")
-            .write(to: share.appendingPathComponent("examples/who-is-waiting.html"), atomically: true, encoding: .utf8)
+        try FileManager.default.createDirectory(at: share, withIntermediateDirectories: true)
+        for name in ["template.html", "examples"] {
+            try FileManager.default.copyItem(at: Home.share.appendingPathComponent(name), to: share.appendingPathComponent(name))
+        }
         return (fixture, share)
     }
 
@@ -137,21 +137,31 @@ struct GalleryTests {
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
         try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
 
-        let html = try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8)
-        let space = try fixture.space("morning-review", html)
+        // The template and each example in the space window, against the invented state `something check` gives.
+        let invented = try JSONDecoder().decode(State.self, from: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json")))
+        for name in ["template"] + ExamplesTests.examples {
+            let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
+            try await drawSpace(name, try String(contentsOf: source, encoding: .utf8), invented, "space-\(name)" + suffix, fixture)
+        }
+    }
+
+    /// Opens `html` as the space `name` in an offscreen space window, pushes it `state` as the Engine would (the
+    /// agent a1 counted as launched by it), and draws what it painted into `picture`.png.
+    func drawSpace(_ name: String, _ html: String, _ state: State, _ picture: String, _ fixture: Home) async throws {
+        let space = try fixture.space(name, html)
         let open = try await fixture.window(space)
         defer { open.close() }
         let offscreen = Offscreen(open.web)
         open.open()
-        #expect(await wait(until: { !open.web.isLoading && open.frame != nil }), "the space window did not load template.html")
+        #expect(await wait(until: { !open.web.isLoading && open.frame != nil }), "the space window did not load \(name)")
         await wait(1)
         // The page then sees the invented agents, through the same filter of rights as the state of the Engine.
         open.launched = ["a1"]
-        let state = Rights.visible(State(at: "2026-10-17T09:00:03Z", kinds: kinds, agents: agents()), open.granted, launched: open.launched)
-        SpaceWindow.push(try state.json(), in: open.web, frame: try #require(open.frame))
+        let visible = Rights.visible(state, open.granted, launched: open.launched)
+        SpaceWindow.push(try visible.json(), in: open.web, frame: try #require(open.frame))
         await wait(0.5)
         let snapshot = try await open.web.takeSnapshot(configuration: nil)
-        try png(of: open.web.bounds.size, "space-window" + suffix) { snapshot.draw(in: NSRect(origin: .zero, size: open.web.bounds.size)) }
+        try png(of: open.web.bounds.size, picture) { snapshot.draw(in: NSRect(origin: .zero, size: open.web.bounds.size)) }
         withExtendedLifetime(offscreen) {}
     }
 

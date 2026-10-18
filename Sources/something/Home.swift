@@ -204,25 +204,31 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         if let space = selected { reveal(space.location) }
     }
 
-    /// Copies the selected example into the spaces folder, under its own name, and selects the copy. A copy has no
-    /// grant: answers left in the grants file by a space of the same name, deleted in Finder, are forgotten first, as
-    /// a received space never inherits rights by name (contract 5). It asks its rights at its first opening.
+    /// Copies the selected example into the spaces folder, under its own name, and selects the copy.
     @objc func makeACopy() {
         guard let sample = selectedSample else { return }
+        do { try Home.copy(sample, into: places) } catch { return ask.tell(error.sentence) }
+        reload(selecting: sample.name)
+    }
+
+    /// Copies the example `sample` into the spaces folder under its own name. A copy has no grant: answers left in
+    /// the grants file by a space of the same name, deleted in Finder, are forgotten first, as a received space never
+    /// inherits rights by name (contract 5); it asks its rights at its first opening. Throws a `SpaceError` that says
+    /// why when that name is taken, the grants file cannot be changed, or the copy cannot be written.
+    static func copy(_ sample: Space, into places: Places) throws {
         let target = places.spaces.appendingPathComponent(sample.location.lastPathComponent)
         guard Spaces(root: places.spaces).named(sample.name) == nil, !FileManager.default.fileExists(atPath: target.path) else {
-            return ask.tell("A space named \(sample.name) already exists in \(places.spaces.path); rename it to make a new copy.")
+            throw SpaceError("A space named \(sample.name) already exists in \(places.spaces.path); rename it to make a new copy.")
         }
         do { try Home.forget(sample.name, in: places) } catch {
-            return ask.tell("The example \(sample.name) was not copied. \(error.sentence)")
+            throw SpaceError("The example \(sample.name) was not copied. \(error.sentence)")
         }
         do {
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: sample.location, to: target)
         } catch {
-            return ask.tell("The example \(sample.name) could not be copied to \(target.path): \(error.localizedDescription)")
+            throw SpaceError("The example \(sample.name) could not be copied to \(target.path): \(error.localizedDescription)")
         }
-        reload(selecting: sample.name)
     }
 
     // MARK: The table

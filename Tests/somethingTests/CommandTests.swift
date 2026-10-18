@@ -218,6 +218,8 @@ final class FakeDoor: Door {
         defer { home.remove() }
         let path = Ran(["guide"], home)
         #expect(path.status == 0 && path.out.contains(Home.share.appendingPathComponent("guide.md").path))
+        let skill = Home.share.appendingPathComponent("skill/SKILL.md")
+        #expect(path.out.contains(skill.path) && FileManager.default.fileExists(atPath: skill.path), "\(path.out)")
         let printed = Ran(["guide", "--print"], home)
         #expect(printed.out == (try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)) + "\n")
     }

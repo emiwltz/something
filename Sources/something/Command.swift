@@ -104,7 +104,9 @@ enum Command: Equatable {
                     The guide for the coding agent that writes your spaces:
                       \(Command.stable(guide).path)
                     Give your agent this path. It says how a space is written (an HTML page in \(places.spaces.path)), \
-                    and what it may ask for.
+                    and what it may ask for. Next to it are the template, the examples in examples/, and a skill to add \
+                    to your agent yourself, so that it knows how to build a space anywhere:
+                      \(Command.stable(guide).deletingLastPathComponent().appendingPathComponent("skill/SKILL.md").path)
                     """, false)
                 return 0
             }

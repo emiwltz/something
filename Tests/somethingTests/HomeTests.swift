@@ -402,12 +402,12 @@ import Testing
     @Test func theStartMakesItsFoldersAndChoosesWhatToShow() throws {
         let test = Home()
         defer { test.remove() }
-        try FirstRun.prepare(test.places)
+        #expect(try FirstRun.prepare(test.places), "the spaces folder was made: a first start")
         for folder in [test.places.spaces, test.places.data] {
             #expect(FileManager.default.fileExists(atPath: folder.path), "\(folder.path)")
             #expect(folder.path.hasPrefix(test.root.path))
         }
-        try FirstRun.prepare(test.places)
+        #expect(try !FirstRun.prepare(test.places), "the spaces folder was there")
         #expect(FirstRun.first(test.places) == nil, "no space: Home")
         try test.space("agents", page(nil, ""))
         #expect(FirstRun.first(test.places)?.name == "agents", "agents while it is the only space")
@@ -420,5 +420,23 @@ import Testing
         file.default = "gone"
         try file.write(test.places.grants)
         #expect(FirstRun.first(test.places) == nil, "a default that names no space is passed over")
+    }
+
+    /// A first start puts the agents example in the spaces folder, without the answers a former space of that name
+    /// left, and opens it while it is the only space (P15); a missing example is said, and the start goes on to Home.
+    @Test func aFirstStartOpensOnTheAgentsExample() throws {
+        let test = Home()
+        defer { test.remove() }
+        var file = AppFile()
+        file.spaces["agents"] = answered(declared: ["state"], granted: ["state"])
+        try file.write(test.places.grants)
+        #expect(try FirstRun.prepare(test.places))
+        #expect(FirstRun.welcome(test.places, examples: Home.share.appendingPathComponent("examples")) == nil)
+        let copy = test.places.spaces.appendingPathComponent("agents.html")
+        #expect(try Data(contentsOf: copy) == Data(contentsOf: Home.share.appendingPathComponent("examples/agents.html")))
+        #expect(try AppFile.read(test.places.grants).spaces["agents"] == nil, "the copy has no grant")
+        #expect(FirstRun.first(test.places)?.name == "agents")
+        let problem = FirstRun.welcome(test.places, examples: test.root.appendingPathComponent("nowhere"))
+        #expect(problem?.hasPrefix("The example agents is missing from ") == true, "\(problem ?? "nil")")
     }
 }

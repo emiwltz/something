@@ -1,111 +1,110 @@
 <!doctype html>
-<!-- The first page: nearly blank on purpose. Choose an agent, read what was said, write to it. -->
+<!-- A space for something, contract 1: the page `something new` starts from. Read the guide first
+     (`something guide --print`), then make this page the one the person asked for: keep what it needs, drop the rest. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>something</title>
-<style>
-  :root { color-scheme: light dark; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
-  body { margin: 0; padding: 24px; display: flex; flex-direction: column; gap: 12px; height: 100vh; box-sizing: border-box; }
-  header { display: flex; gap: 8px; align-items: center; }
-  #about { opacity: .65; font-size: 13px; }
-  #messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-  .from { font-weight: 600; }
-  form { display: flex; gap: 8px; }
-  textarea { flex: 1; font: inherit; padding: 6px 8px; resize: vertical; }
-  form { align-items: flex-end; }
-  #status { opacity: .65; font-size: 13px; min-height: 1.5em; }
-  #problem { border-left: 3px solid #c0392b; padding: 6px 10px; background: rgba(192, 57, 43, .1); }
-  #waiting { border-left: 3px solid #d68910; padding: 6px 10px; background: rgba(214, 137, 16, .12); }
-</style>
+<title>My space</title>
+<!-- The declaration. Ask only for the rights the page uses: the person allows or refuses each one in a window of the
+     Mac. Here: see every agent ("state" with "see": "all"), write to them ("send"), start one ("launch"; the person
+     picks the folder it works in, unless you add "folder": "~/code/example"). -->
 <script type="application/json" id="something">
-{ "contract": 1, "title": "something", "agents": { "see": "all" }, "rights": ["state", "send", "launch"] }
+{
+  "contract": 1,
+  "title": "My space",
+  "description": "The agents on this Mac, and a line to write to one.",
+  "agents": { "see": "all" },
+  "rights": ["state", "send", "launch"]
+}
 </script>
+<style>
+  [hidden] { display: none !important; }
+  :root { color-scheme: light dark; font: 15px/1.5 -apple-system, system-ui, sans-serif; }
+  body { margin: 0 auto; padding: 24px; max-width: 720px; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  ul { list-style: none; padding: 0; margin: 0 0 12px; }
+  li { padding: 6px 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+  label { display: flex; gap: 8px; align-items: baseline; cursor: pointer; }
+  .quiet { opacity: .65; font-size: 13px; }
+  .alert { border-left: 3px solid #c0392b; padding: 6px 10px; background: rgba(192, 57, 43, .1); }
+  form { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+  textarea { flex: 1; font: inherit; padding: 6px 8px; }
+  #launch button { margin: 0 6px 6px 0; }
+</style>
 </head>
 <body>
-<header>
-  <select id="agents" aria-label="Agent"></select>
-  <span id="launches"></span>
-</header>
-<div id="about"></div>
-<div id="problem" role="alert" hidden></div>
-<div id="waiting" role="status" hidden></div>
-<div id="messages"></div>
-<form id="write">
-  <textarea id="text" rows="3" placeholder="Write to the agent (Enter sends, Shift+Enter for a new line)"></textarea>
+<h1>My space</h1>
+<p id="problem" class="alert" role="alert" hidden></p>
+<ul id="agents"></ul>
+<div id="launch"></div>
+<form id="write" hidden>
+  <textarea id="text" rows="2" placeholder="Write to the agent you chose"></textarea>
   <button type="submit">Send</button>
 </form>
-<div id="status"></div>
+<p id="note" class="quiet"></p>
 <script>
-  // Contract 1 (share/guide.md): something.js is already there, injected by something before this script.
+  // something.js is already there: something injects it before this script. Each call returns a promise; a
+  // rejection carries .code and .message, one sentence for the person. Show it, never swallow it.
   const $ = (id) => document.getElementById(id);
-  const unknown = (value) => value === null ? "unknown" : value;
-  let current = null;
+  // Show the harness's name, never the program's. A kind this page does not know is "other agent".
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "other agent";
+  // What is not known is null: say "unknown", never guess.
+  const known = (value) => value === null ? "unknown" : value;
+  // A right counts when it was granted plainly ("send") or for this kind ("send:claude"). The person can refuse or
+  // revoke one at any time: read something.granted, never the declaration.
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const element = (tag, properties) => Object.assign(document.createElement(tag), properties);
+  let chosen = null;
 
-  function show(state) {
-    const kinds = Object.keys(state.kinds).filter((kind) => state.kinds[kind].launch);
-    $("launches").replaceChildren(...kinds.map(function (kind) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = "Launch " + kind + "…";
-      button.onclick = function () {
-        something.launch(kind).then(function (id) { current = id; said(); return something.state(); }).then(show).catch(said);
-      };
-      return button;
-    }));
-    if (!state.agents.some((a) => a.id === current)) current = state.agents.length ? state.agents[0].id : null;
-    const select = $("agents");
-    select.replaceChildren(...state.agents.map(function (agent) {
-      const option = new Option(unknown(agent.name) + " (" + agent.kind + ")", agent.id);
-      option.selected = agent.id === current;
-      return option;
-    }));
-    select.hidden = !state.agents.length;
-    const agent = state.agents.find((a) => a.id === current);
-    $("write").hidden = !(agent && agent.can.send);
-    $("problem").hidden = !(agent && agent.error);
-    $("problem").textContent = agent && agent.error ? agent.kind + " says: " + agent.error.message : "";
-    const request = agent && state.requests.find((r) => r.agent === agent.id);
-    $("waiting").hidden = !request;
-    $("waiting").textContent = request ? "Waiting for you" + (request.tool ? ": may it use " + request.tool +
-      (request.about ? " (" + request.about + ")" : "") + "?" : ".") + " Answer in the window something opened." : "";
-    if (!agent) {
-      const notes = Object.keys(state.kinds).map((k) => state.kinds[k].note).filter(Boolean);
-      $("about").textContent = kinds.length ? "No agent yet. Launch one." : "No agent yet. " + (notes[0] || "something cannot launch agents yet.");
-      $("messages").replaceChildren();
-      return;
-    }
-    $("about").textContent = [unknown(agent.folder), "model " + unknown(agent.model), "mode " + unknown(agent.mode),
-      agent.state].join(" · ");
-    const thread = state.threads.find((t) => t.id === agent.thread);
-    const items = thread ? thread.turns.flatMap((turn) => turn.items).filter((item) => item.kind === "message") : [];
-    $("messages").replaceChildren(...items.map(function (item) {
-      const line = document.createElement("div");
-      const from = document.createElement("span");
-      from.className = "from";
-      from.textContent = (item.author === "person" ? "you" : unknown(agent.name)) + ": ";
-      line.append(from, item.text);
-      return line;
-    }));
-    $("messages").scrollTop = $("messages").scrollHeight;
+  function problem(error) {
+    $("problem").hidden = !error;
+    $("problem").textContent = error ? error.message : "";
   }
 
-  function said(error) { $("status").textContent = error ? error.message : ""; }
+  function render(state) {
+    if (!state.agents.some((a) => a.id === chosen)) chosen = null;
+    $("agents").replaceChildren(...state.agents.map(function (agent) {
+      const item = element("li");
+      const pick = element("input", { type: "radio", name: "agent", checked: agent.id === chosen });
+      pick.onchange = () => { chosen = agent.id; render(state); };
+      // A request waits in a window of the Mac: a page sees it and never answers it. Say where to answer.
+      const waits = state.requests.some((r) => r.agent === agent.id) ? " · waiting for you: answer in something's window" : "";
+      const line = element("label");
+      line.append(pick, `${known(agent.name)} — ${label(agent.kind)}, ${agent.state}${waits}`);
+      item.append(line);
+      if (agent.error) item.append(element("div", { className: "alert", textContent: agent.error.message }));
+      return item;
+    }));
+    if (!state.agents.length) $("agents").append(element("li", { className: "quiet", textContent: "No agent yet." }));
 
-  something.on("change", show);
-  something.state().then(show).catch(said);
-  $("agents").onchange = function () { current = this.value; something.state().then(show); };
-  // Enter sends, Shift+Enter starts a new line: a long prompt can be pasted with its lines.
-  $("text").onkeydown = function (event) {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-      event.preventDefault();
-      $("write").requestSubmit();
-    }
-  };
+    // Offer a launch only for a kind something can launch, found on this Mac, and granted to this page.
+    const kinds = Object.keys(state.kinds).filter((k) => state.kinds[k].launch && state.kinds[k].installed !== false && has("launch", k));
+    $("launch").replaceChildren(...kinds.map(function (kind) {
+      const button = element("button", { type: "button", textContent: "Launch " + label(kind) });
+      button.onclick = () => something.launch(kind).then((id) => { chosen = id; problem(null); }).catch(problem);
+      return button;
+    }));
+
+    // `can` says what a call would do now and `because` why not: hide what cannot be done, and say why.
+    const agent = state.agents.find((a) => a.id === chosen);
+    $("write").hidden = !(agent && agent.can.send && has("send", agent.kind));
+    const notes = Object.keys(state.kinds).map((k) => state.kinds[k].note).filter(Boolean);
+    $("note").textContent = !agent ? notes.join(" ")
+      : !agent.can.send ? agent.because.send || "This agent cannot take a message now." : "";
+  }
+
+  something.on("change", render);
+  something.on("granted", () => something.state().then(render, problem));
+  something.state().then(render, problem);
+
   $("write").onsubmit = function (event) {
     event.preventDefault();
-    something.send(current, $("text").value).then(function () { $("text").value = ""; said(); }).catch(said);
+    // "next" (the default) waits for the running turn to end; "now" steers into it, where can.steer is true.
+    something.send(chosen, $("text").value, { when: "next" })
+      .then(({ delivery }) => { $("text").value = ""; problem(null); $("note").textContent = "Message " + delivery + "."; })
+      .catch(problem);
   };
 </script>
 </body>

@@ -1,0 +1,189 @@
+<!doctype html>
+<!-- Example space: a conversation with an agent this space launched. Send, queue for the next turn, steer the
+     running one, interrupt. It sees only the agents it launched (no "agents" scope, no "state" right), and it never
+     answers a permission or a question: those wait in something's own windows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Chat",
+  "description": "Talk with an agent you start here: send, steer, queue, interrupt.",
+  "rights": ["launch", "send"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    color-scheme: light dark;
+    --page: #eef0f6; --panel: #ffffff; --ink: #1c2033; --soft: #6b7089; --line: #dde0ea;
+    --mine: #3b4cca; --mine-ink: #ffffff; --theirs: #ffffff; --warn: #b7791f; --error: #c53030;
+    font: 15px/1.45 ui-rounded, -apple-system, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #14161f; --panel: #1d2030; --ink: #e6e8f2; --soft: #8e93ad; --line: #2c3045;
+            --mine: #5b6cf0; --theirs: #262a3d; --warn: #e0a84a; --error: #f07272; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--page); color: var(--ink); }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0 10px 0 0; }
+  button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  button.on { background: var(--mine); border-color: var(--mine); color: var(--mine-ink); }
+  button.primary { background: var(--mine); border-color: var(--mine); color: var(--mine-ink); }
+  #tabs, #new { display: flex; gap: 6px; align-items: center; }
+  #new { margin-left: 8px; color: var(--soft); font-size: 12px; }
+  button.quiet { font-size: 12px; padding: 3px 10px; color: var(--soft); }
+  #about { color: var(--soft); font-size: 12px; margin-left: auto; }
+  #talk { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .bubble { max-width: 72%; padding: 8px 12px; border-radius: 16px; background: var(--theirs); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble.person { align-self: flex-end; background: var(--mine); color: var(--mine-ink); border-color: var(--mine); border-bottom-right-radius: 4px; }
+  .bubble.agent { align-self: flex-start; border-bottom-left-radius: 4px; }
+  .tool, .thought { align-self: flex-start; color: var(--soft); font-size: 12px; }
+  .tool { font-family: ui-monospace, Menlo, monospace; }
+  .thought { font-style: italic; }
+  .turn { align-self: center; color: var(--soft); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+  .banner { margin: 0 18px 8px; padding: 8px 12px; border-radius: 10px; font-size: 13px; background: color-mix(in srgb, var(--warn) 16%, transparent); }
+  .banner.error { background: color-mix(in srgb, var(--error) 14%, transparent); }
+  #queue { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 18px 8px; }
+  #queue span { font-size: 12px; color: var(--soft); border: 1px dashed var(--line); border-radius: 999px; padding: 3px 10px; }
+  form { display: flex; gap: 8px; padding: 12px 18px 16px; background: var(--panel); border-top: 1px solid var(--line); align-items: flex-end; }
+  textarea { flex: 1; font: inherit; padding: 8px 12px; border-radius: 14px; border: 1px solid var(--line); background: var(--page); color: var(--ink); resize: none; }
+  .start { margin: auto; text-align: center; color: var(--soft); }
+  .start p { margin: 0 0 12px; }
+  .start button { margin: 4px; font-size: 15px; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chat</h1>
+  <span id="tabs"></span>
+  <span id="new"></span>
+  <span id="about"></span>
+</header>
+<div id="talk"></div>
+<div id="waiting" class="banner" role="status" hidden></div>
+<div id="error" class="banner error" role="alert" hidden></div>
+<div id="problem" class="banner error" role="alert" hidden></div>
+<div id="queue"></div>
+<form id="write" hidden>
+  <textarea id="text" rows="2" placeholder="Write a message (Enter sends, Shift+Enter for a new line)"></textarea>
+  <button type="button" id="stop" hidden>Interrupt</button>
+  <button type="button" id="steer" hidden>Steer now</button>
+  <button type="submit" id="send" class="primary">Send</button>
+</form>
+<script>
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "Other agent";
+  const $ = (id) => document.getElementById(id);
+  const element = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text || "" });
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const known = (value) => value === null ? "unknown" : value;
+  let state = null, current = null;
+
+  function problem(error) {
+    $("problem").hidden = !error;
+    $("problem").textContent = error ? error.message : "";
+  }
+
+  // The kinds this space may start: something can launch them, they were found, and the person granted it.
+  function launchable() {
+    return Object.keys(state.kinds).filter((k) => state.kinds[k].launch && state.kinds[k].installed !== false && has("launch", k));
+  }
+
+  function launch(kind) {
+    problem(null);
+    something.launch(kind).then((id) => { current = id; return something.state(); }).then(render).catch(problem);
+  }
+
+  function talk(agent) {
+    const thread = state.threads.find((t) => t.id === agent.thread);
+    if (!thread) return [element("div", "start", "No message yet. Say hello.")];
+    const lines = thread.complete ? [] : [element("div", "turn", "Older turns are not shown")];
+    thread.turns.forEach(function (turn) {
+      const at = turn.started === null ? "time unknown" : new Date(turn.started).toLocaleTimeString(document.documentElement.lang, { hour: "2-digit", minute: "2-digit" });
+      lines.push(element("div", "turn", turn.state === "working" ? at + " · working" : at));
+      turn.items.forEach(function (item) {
+        if (item.kind === "message") lines.push(element("div", "bubble " + item.author, item.text + (item.truncated ? " …" : "")));
+        else if (item.kind === "tool") lines.push(element("div", "tool", `${item.tool ? item.tool.name : "tool"} · ${item.text} · ${item.tool && item.tool.status ? item.tool.status : "status unknown"}`));
+        else lines.push(element("div", "thought", item.kind === "thought" ? "Thinking…" : "A sub-agent is at work."));
+      });
+    });
+    return lines;
+  }
+
+  function render(next) {
+    state = next;
+    const agents = state.agents.filter((a) => a.origin === "launched");
+    if (!agents.some((a) => a.id === current)) current = agents.length ? agents[agents.length - 1].id : null;
+    const agent = agents.find((a) => a.id === current);
+    $("tabs").replaceChildren(...agents.map(function (a) {
+      const tab = element("button", a.id === current ? "on" : "", `${label(a.kind)} · ${known(a.name)}`);
+      tab.onclick = () => { current = a.id; render(state); };
+      return tab;
+    }));
+    // Once a conversation is open, a new one starts from the quieter buttons beside the tabs.
+    $("new").replaceChildren(...(agent && launchable().length ? [element("span", "new", "New:"), ...launchable().map(function (kind) {
+      const button = element("button", "quiet", label(kind));
+      button.onclick = () => launch(kind);
+      return button;
+    })] : []));
+    if (!agent) {
+      const start = element("div", "start");
+      const kinds = launchable();
+      start.append(element("p", "", kinds.length ? "Start a conversation with" : "No agent this space may start was found on this Mac."));
+      start.append(...kinds.map(function (kind) {
+        const button = element("button", "primary", label(kind));
+        button.onclick = () => launch(kind);
+        return button;
+      }));
+      $("talk").replaceChildren(start);
+      $("about").textContent = "";
+    } else {
+      $("talk").replaceChildren(...talk(agent));
+      $("talk").scrollTop = $("talk").scrollHeight;
+      const folder = agent.folder === null ? "folder unknown" : agent.folder.replace(/^\/Users\/[^/]+(?=\/|$)/, "~");
+      $("about").textContent = [folder, known(agent.model), agent.state].join(" · ");
+    }
+    // The person answers a permission or a question in something's window, never here.
+    const request = agent && state.requests.find((r) => r.agent === agent.id);
+    $("waiting").hidden = !request;
+    $("waiting").textContent = !request ? "" : request.kind === "permission"
+      ? `${label(agent.kind)} asks to use ${known(request.tool)}${request.about ? ": " + request.about : ""}. Answer in something's window.`
+      : `${label(agent.kind)} has a question for you. Answer in something's window.`;
+    // The agent's own last error, in its words; a failed call of this page shows in #problem.
+    $("error").hidden = !(agent && agent.error);
+    $("error").textContent = agent && agent.error ? `${label(agent.kind)}: ${agent.error.message}` : "";
+    $("queue").replaceChildren(...(agent ? agent.queue.map((q) => element("span", "", "Next turn: " + q.text)) : []));
+    const writable = agent && agent.can.send && has("send", agent.kind);
+    $("write").hidden = !writable;
+    if (!writable) return;
+    const busy = agent.state === "working" || agent.state === "waiting";
+    // While a turn runs, Send holds the message for the next one; Steer puts it into this one, where the agent can.
+    $("send").textContent = busy ? "Queue" : "Send";
+    $("steer").hidden = !(busy && agent.can.steer);
+    $("stop").hidden = !(busy && agent.can.interrupt);
+  }
+
+  function send(when) {
+    const text = $("text").value.trim();
+    if (!text) return;
+    problem(null);
+    something.send(current, text, { when }).then(() => { $("text").value = ""; }).catch(problem);
+  }
+
+  $("write").onsubmit = (event) => { event.preventDefault(); send("next"); };
+  $("steer").onclick = () => send("now");
+  $("stop").onclick = () => something.interrupt(current).catch(problem);
+  $("text").onkeydown = function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); send("next"); }
+  };
+  something.on("change", render);
+  something.on("granted", () => something.state().then(render, problem));
+  something.state().then(render, problem);
+</script>
+</body>
+</html>

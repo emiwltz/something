@@ -1,0 +1,149 @@
+<!doctype html>
+<!-- Example space: every agent on this Mac and its state, who waits for the person first. It only reads: one right,
+     "state", over every agent. something opens it at the first start, while it is the person's only space. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your agents</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Your agents",
+  "description": "Every coding agent on this Mac, what it is doing, and who is waiting for you.",
+  "agents": { "see": "all" },
+  "rights": ["state"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  :root {
+    color-scheme: light dark;
+    --page: #f4f3ef; --card: #fffefb; --ink: #1f1d1a; --soft: #6f6a62; --line: #e3dfd6;
+    --waiting: #c27c0e; --working: #2f6fd6; --idle: #2e8b57; --ended: #8a857c; --error: #c0392b; --unknown: #9a948a;
+    font: 14px/1.45 -apple-system, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #191816; --card: #23211e; --ink: #ece8e1; --soft: #a19b91; --line: #34312c;
+            --waiting: #e6a23c; --working: #6aa0ff; --idle: #4fbf7f; --ended: #8f897f; --error: #ef6b5b; --unknown: #8f897f; }
+  }
+  body { margin: 0; background: var(--page); color: var(--ink); }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 28px 40px; }
+  h1 { font-size: 26px; font-weight: 650; letter-spacing: -.01em; margin: 0; }
+  #summary { color: var(--soft); margin: 4px 0 24px; }
+  h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--soft); margin: 28px 0 10px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; border-top: 3px solid var(--tone); }
+  .card.unknown { border-style: dashed; border-top-style: solid; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .state { color: var(--tone); font-weight: 600; font-size: 12px; }
+  .state::before { content: "●"; margin-right: 5px; }
+  .kind { color: var(--soft); font-size: 12px; }
+  .name { font-size: 16px; font-weight: 600; margin: 6px 0 2px; overflow-wrap: anywhere; }
+  .folder { font: 12px ui-monospace, Menlo, monospace; color: var(--soft); overflow-wrap: anywhere; }
+  .facts { color: var(--soft); font-size: 12px; margin-top: 8px; }
+  .say { margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; background: color-mix(in srgb, var(--tone) 12%, transparent); }
+  .programs { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--soft); font-size: 12px; }
+  .programs b { color: var(--ink); font-weight: 600; }
+  #problem { border-left: 3px solid var(--error); padding: 8px 12px; background: color-mix(in srgb, var(--error) 10%, transparent); }
+  .empty { color: var(--soft); padding: 18px 0; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Your agents</h1>
+  <p id="summary">Looking for agents…</p>
+  <p id="problem" role="alert" hidden></p>
+  <div id="groups" class="grid"></div>
+  <h2>Programs</h2>
+  <div id="programs" class="programs"></div>
+</main>
+<script>
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "Other agent";
+  // The order the person reads: what needs them, then what moves, then the rest. A state word this page does not
+  // know yet comes last, with the unknown ones, rather than vanishing.
+  const ORDER = ["waiting", "working", "idle", "error", "interrupted", "done", "unknown"];
+  const rank = (state) => ORDER.includes(state) ? ORDER.indexOf(state) : ORDER.length;
+  const TONES = { waiting: "waiting", working: "working", idle: "idle", done: "ended", interrupted: "ended", error: "error" };
+  const $ = (id) => document.getElementById(id);
+  const element = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text || "" });
+  // A home folder reads better as ~; the rest of the path is kept whole.
+  const short = (folder) => folder === null ? "folder unknown" : folder.replace(/^\/Users\/[^/]+(?=\/|$)/, "~");
+
+  // How long ago, against the state's own time, so the words do not drift while nothing changes.
+  function ago(time, now) {
+    if (time === null) return null;
+    const minutes = Math.round((Date.parse(now) - Date.parse(time)) / 60000);
+    if (minutes < 1) return "just now";
+    if (minutes < 60) return minutes + " min ago";
+    if (minutes < 24 * 60) return Math.round(minutes / 60) + " h ago";
+    return new Date(time).toLocaleDateString(document.documentElement.lang, { day: "numeric", month: "short" });
+  }
+
+  // One sentence for the person when the card has something to say: a wait, an error, or why the state is unknown.
+  function sentence(agent, request) {
+    if (agent.state === "waiting" && agent.waiting === "permission") {
+      const what = request && request.tool ? `to use ${request.tool}${request.about ? ": " + request.about : ""}` : "for a permission";
+      return `Asks ${what}. Answer in something's window.`;
+    }
+    if (agent.state === "waiting") return "Has a question for you. Answer in something's window.";
+    if (agent.error) return agent.error.message;
+    if (agent.kind === "other" || !NAMES[agent.kind]) return "something sees only its process, not what it does.";
+    if (agent.state === "unknown") return "Nothing shows whether it is still running.";
+    return null;
+  }
+
+  function card(agent, state) {
+    const tone = TONES[agent.state] || "unknown";
+    const box = element("article", "card" + (tone === "unknown" ? " unknown" : ""));
+    box.style.setProperty("--tone", `var(--${tone})`);
+    const top = element("div", "top");
+    top.append(element("span", "state", agent.state), element("span", "kind", label(agent.kind)));
+    box.append(top, element("div", "name", agent.name === null ? "Unnamed" : agent.name), element("div", "folder", short(agent.folder)));
+    const facts = [agent.origin === "launched" ? "launched by something" : "started elsewhere"];
+    if (agent.model !== null) facts.push(agent.model);
+    const updated = ago(agent.updated, state.at);
+    facts.push(updated === null ? "last activity unknown" : "active " + updated);
+    if (agent.queue.length) facts.push(agent.queue.length + " queued");
+    box.append(element("div", "facts", facts.join(" · ")));
+    const said = sentence(agent, state.requests.find((r) => r.agent === agent.id));
+    if (said) box.append(element("div", "say", said));
+    return box;
+  }
+
+  function render(state) {
+    const waiting = state.agents.filter((a) => a.state === "waiting").length;
+    $("summary").textContent = state.agents.length === 0 ? "No agent on this Mac right now."
+      : `${state.agents.length} agent${state.agents.length === 1 ? "" : "s"}` + (waiting ? ` · ${waiting} waiting for you` : " · nobody waiting for you");
+    const agents = state.agents.slice().sort((a, b) => rank(a.state) - rank(b.state));
+    $("groups").replaceChildren(...agents.map((a) => card(a, state)));
+    if (!state.agents.length) $("groups").append(element("p", "empty", "Start Claude Code, Codex, OpenCode or pi in a terminal, and it shows here."));
+    $("programs").replaceChildren(...Object.keys(state.kinds).map(function (kind) {
+      const info = state.kinds[kind];
+      const line = element("span");
+      const found = info.installed === null ? "unknown" : info.installed ? (info.seen === null ? "installed" : "version " + info.seen) : "not installed";
+      line.append(element("b", "", label(kind)), " " + found + (info.note ? " — " + info.note : ""));
+      return line;
+    }));
+  }
+
+  function problem(error) {
+    $("problem").hidden = false;
+    $("problem").textContent = error.message;
+  }
+
+  something.on("change", render);
+  // Without the "state" right the page still answers, with no agent: say why instead of showing an empty Mac.
+  function start() {
+    $("problem").hidden = true;
+    if (!something.granted.rights.includes("state")) {
+      problem({ message: "This space may not see your agents. Allow it in its card, in Home." });
+    }
+    something.state().then(render, problem);
+  }
+  something.on("granted", start);
+  start();
+</script>
+</body>
+</html>
