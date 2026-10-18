@@ -9,7 +9,8 @@
 #
 # Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
 # at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
-# how long the install took: criterion 1 asks for brew install and the first start in under five minutes.
+# how long brew install alone took, and fails above five minutes: criterion 1 asks for brew install and the first
+# start in under five minutes, and the first start cannot be timed on a runner.
 #
 # No secret is used; the token can only read the repository.
 name: tests
@@ -35,9 +36,9 @@ jobs:
         run: sw_vers && swift --version && node --version
       - run: swift build
       - name: swift test
-        # A hung test must not hold the runner: perl's alarm stops the suite after 20 minutes, the step's cap too.
-        timeout-minutes: 25
-        run: perl -e 'alarm 1200; exec @ARGV' swift test
+        # A hung test must not hold the runner: GitHub stops the whole process tree after 20 minutes and says so.
+        timeout-minutes: 20
+        run: swift test
       - run: node --test Tests/something-js.test.mjs
       - name: make-app.sh into a temporary prefix
         run: |
@@ -83,7 +84,13 @@ jobs:
           start=$(date +%s)
           brew install --HEAD local/something/something
           seconds=$(( $(date +%s) - start ))
-          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s (criterion 1: under 300 s, with the first start)"
+          # What is timed: brew install alone, without brew update (turned off above) and without the first start.
+          # Criterion 1 asks for both under five minutes, so the install alone above 300 s turns the run red.
+          if [ "$seconds" -gt 300 ]; then
+            echo "::error title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start): over criterion 1's 300 s"
+            exit 1
+          fi
+          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start); criterion 1: under 300 s"
       - run: brew test local/something/something
       - name: The command, as a person types it
         run: |

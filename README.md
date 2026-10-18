@@ -4,14 +4,13 @@ something is a Mac app that sees the coding agents on your Mac (Claude Code, Cod
 what they write, and drives the ones it launches itself. It gives **spaces**, free HTML pages your own agent writes
 for you, a bridge to those agents: a board of who is waiting, a chat, a summary of your day, whatever you ask for.
 
-*Status: 1.0 is being built. Today something sees only the agents it launched; the agents you started in a terminal
-or a desktop app, and "continue here", are not there yet (see [Not done yet](#not-done-yet)).*
+*Status: 1.0 is being built; no version is tagged yet (see [Not done yet](#not-done-yet)).*
 
 ## The first five minutes
 
-You need a Mac with macOS 15 or later, [Homebrew](https://brew.sh), and Apple's Command Line Tools, which Homebrew
+You need a Mac with macOS 15 or later (the formula requires it; see [Where it has run](#where-it-has-run)), [Homebrew](https://brew.sh), and Apple's Command Line Tools, which Homebrew
 installs with itself (otherwise: `xcode-select --install`, free). Xcode is not needed. No version is tagged yet, so
-Homebrew builds the latest code of `main` on your Mac, which takes a minute or so:
+Homebrew builds the latest code of `main` on your Mac, which takes a few minutes:
 
 ```sh
 brew install --HEAD emiwltz/tap/something
@@ -36,10 +35,10 @@ Each agent you want something to launch must be installed and signed in as you u
 
 ## What it reads, and never writes
 
-*Not in this build yet: the readers below arrive with 1.0. Until then something reads none of these folders.*
-
-something reads, and never writes, each agent's own files: `~/.claude` (Claude Code), `~/.codex` (Codex), OpenCode's
-database (in `~/.local/share/opencode`, or `$OPENCODE_DB`), `~/.pi` (pi) and `~/.omp` (OMP). It opens them read-only
+something reads, and never writes, each agent's own files: `~/.claude` or `$CLAUDE_CONFIG_DIR` (Claude Code), `~/.codex`
+or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), OpenCode's database (in
+`~/.local/share/opencode`, or `$OPENCODE_DB`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
+`$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). It opens them read-only
 and takes only what a space is shown: the folder, the state, the last messages, what the agent waits for. Nothing it
 reads from an agent goes into an export. It also looks at the list of running processes, to tell an agent that runs
 from one that ended.
@@ -160,16 +159,16 @@ changes.
   first. The rights window says so when a space asks to launch pi.
 - **OMP is only read**: launching it is left for after 1.0.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. Claude Code
-  and Codex conversations can be continued in something ("continue here") once no other process holds them. *Not in
-  this build yet.*
+  and Codex conversations can be continued in something ("continue here") once no other process holds them.
 
 A space reads what holds now in each agent's `can` and `because`, not in this table.
 
 ## Where it has run
 
-*The suite has run on macOS 27 on Apple silicon (Swift 6.3, Xcode 26). GitHub runs it at each push on macOS 15 and on
-the newest macOS its runners offer, and installs the formula there with Homebrew; this line names them once those
-runs are green.* Intel Macs are not tested.
+*The suite has run on macOS 27 on Apple silicon (Swift 6.3, Xcode 26), and only there so far. The formula requires
+macOS 15, the oldest macOS on GitHub's runners: GitHub runs the suite at each push on macOS 15 and on the newest
+macOS its runners offer, and installs the formula there with Homebrew; this line names them once those runs are
+green.* Intel Macs are not tested.
 
 ## Uninstall
 
@@ -194,6 +193,8 @@ node --test Tests/something-js.test.mjs     # something.js against the contract'
 tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app and signs it ad hoc, as the formula does
 ```
 
+The package itself declares macOS 13, but nothing has run below macOS 15: on 13 or 14 it is untested.
+
 With the Command Line Tools alone (no Xcode), `swift test` does not find Swift Testing by itself; give it the way:
 
 ```sh
@@ -216,9 +217,6 @@ Tests/                     the Swift suites, recorded exchanges with invented te
 
 ## Not done yet
 
-- **Agents started elsewhere.** something does not read the agents you started in a terminal or a desktop app yet:
-  the `agents` space and every state list only the agents something launched.
-- **Continue here.** `resume` answers `NOT_SUPPORTED`.
 - **A tagged version.** Until the first tag, `brew install` needs `--HEAD`.
 
 ## Security
