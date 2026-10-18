@@ -58,6 +58,7 @@ import SomethingCore
     /// A message holding "wait" is answered only when something cancels it.
     static let fakeOpenCode = #"""
     #!/bin/sh
+    trap 'echo TERM > "$FAKE_OUT/signalled"; exit 143' TERM
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     session='"sessionId":"ses_invented0000000000000001"'
     options='"configOptions":[{"id":"model","category":"model","currentValue":"fake/fake-model","options":[{"value":"fake/fake-model","name":"fake/Fake Model"}]}]'
@@ -202,9 +203,13 @@ import SomethingCore
             try engine.deliver("Too late.", to: id, when: "next")
         }
         try await until("the stop") { stopped }
-        #expect(Date().timeIntervalSince(begun) < 2, "the cancel's answer ends the first step at once")
+        // Only a guard against a hang: the cancel's answer reaches the main queue, which the window suites keep busy
+        // while the whole suite runs (2.7 s seen), so a time near Spawn's 3 s cap cannot tell the answer from the cap.
+        // What shows the ladder is the fake's own record: it got the cancel, then its input closed, and no signal.
+        #expect(Date().timeIntervalSince(begun) < 6, "the stop ends within its cap")
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("cancels").path))
-        #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("closed").path), "its input was closed: no signal")
+        #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("closed").path), "its input was closed")
+        #expect(!FileManager.default.fileExists(atPath: place.out.appendingPathComponent("signalled").path), "no signal was needed")
         #expect(engine.state.agents.first?.state == "interrupted")
         #expect(engine.state.agents.first?.error == nil, "this home has no OpenCode database: no claim is said")
     }
