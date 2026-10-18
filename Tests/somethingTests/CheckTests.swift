@@ -63,7 +63,7 @@ extension Home {
     }
 }
 
-@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct CheckTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-check-")) struct CheckTests {
     init() {
         NSApplication.shared.setActivationPolicy(.prohibited)
     }
@@ -113,7 +113,7 @@ extension Home {
 
     @Test(arguments: fixtures.indices)
     func eachSpaceGivesExactlyItsCode(_ index: Int) throws {
-        let fixture = CheckTests.fixtures[index], home = Home()
+        let fixture = CheckTests.fixtures[index], home = Home(prefix: "something-check-")
         defer { home.remove() }
         try fixture.make(home)
         let words = fixture.words.map { $0 == "STATE" ? home.root.appendingPathComponent("state.json").path : $0 }
@@ -131,7 +131,7 @@ extension Home {
 
     /// The template the command starts a space from is a clean space: no problem, a snapshot, every call answered.
     @Test func aCleanSpaceGivesNone() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("board", try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8))
         let checked = try Checked(["board", "--json"], home)
@@ -151,7 +151,7 @@ extension Home {
 
     /// --json has the keys of contract 9.3, at every level the example shows.
     @Test func theJsonMatchesTheContractKeyForKey() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send:claude\", \"sendd\"]", """
             <script>agnets;</script><script>console.warn("No agent yet."); something.send("a1", "Hello", { when: "next" });</script>
@@ -179,7 +179,7 @@ extension Home {
 
     /// --refuse takes a right from the declared ones; a page that reads granted and hides it is clean.
     @Test func refuseTakesARight() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("board", try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8))
         let checked = try Checked(["board", "--json", "--refuse", "send"], home)
@@ -191,7 +191,7 @@ extension Home {
     /// RIGHT_REFUSED is only for the rejection of a refused call: a caught refused call and an uncaught undeclared
     /// one give the undeclared one's codes, and the check fails.
     @Test func onlyARefusedCallIsRightRefused() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
                                      "<script>something.send(\"a1\", \"Hello.\").catch(() => {}); something.launch(\"pi\");</script>"))
@@ -203,7 +203,7 @@ extension Home {
     /// that reads as a flag, which only Engine.checkLaunch refuses (the BridgeHost default both hosts share). Codex,
     /// not OpenCode: the invented state has no OpenCode installed, which is refused first.
     @Test func aLaunchTheAppRefusesIsABridgeError() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"rights\": [\"launch:codex\"]", """
             <script>
@@ -222,7 +222,7 @@ extension Home {
 
     /// A --refuse word must name a declared right as it is declared, or nothing would be refused.
     @Test func refuseNamesADeclaredRight() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]", "<p>Invented.</p>"))
         for word in ["sned", "send:claude"] {
@@ -234,7 +234,7 @@ extension Home {
 
     /// An error thrown in a listener of something.on keeps its file and line.
     @Test func aListenerErrorSaysWhere() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\"]",
                                      "<script>\nsomething.on(\"change\", (state) => { state.agnets.length; });\n</script>"))
@@ -246,7 +246,7 @@ extension Home {
 
     /// --state gives the page another state, named as the source; a broken one stops the check (status 2).
     @Test func stateGivesAnotherState() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\"]", "<script>something.state();</script>"))
         var state = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json"))) as? [String: Any])
@@ -266,7 +266,7 @@ extension Home {
 
     /// --journal adds the space's journal, and never the check's own calls.
     @Test func journalPrintsTheSpacesJournal() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]", "<script>something.send(\"a1\", \"Hello.\");</script>"))
         let line = JournalLine(at: "2026-10-17T09:00:02Z", action: "send", agent: "a1", kind: "claude", when: "next", text: "Then run the tests.", result: "ok")
@@ -295,7 +295,7 @@ extension Home {
 
     /// 0 with warnings only, 1 with an error, 2 when the check could not run.
     @Test func theThreeExitStatuses() throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("warned", declared("<script>console.error(\"Invented problem.\");</script>"))
         try home.space("broken", declared("<script>agnets.length;</script>"))
@@ -315,7 +315,7 @@ extension Home {
 
     /// In an agent's sandbox there is no window server: the static checks run, the page does not, and the check says so.
     @Test func withoutAWindowServerOnlyTheStaticChecksRun() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"colour\": \"blue\"", "<script>agnets.length;</script>"))
         let runner = runner(home)
@@ -337,7 +337,7 @@ extension Home {
     }
 
     @Test func aPageThatNeverLoadsTimesOut() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<script>for (;;) {}</script>"))
         let runner = runner(home)
@@ -352,7 +352,7 @@ extension Home {
     }
 
     @Test func aPageWhoseProcessEndsCrashed() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<p>Invented.</p>"))
         let runner = runner(home)

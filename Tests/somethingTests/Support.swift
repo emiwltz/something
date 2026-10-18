@@ -16,9 +16,11 @@ import WebKit
 let windowServer = CGSessionCopyCurrentDictionary() != nil || ProcessInfo.processInfo.environment["CI"] != nil
 let windowServerMissing: Comment = "This session has no window server, and WebKit and AppKit windows cannot run without one."
 
-/// A home in the temporary folder, removed by `remove()`; the person's own folders are never touched.
+/// A home in the temporary folder, removed by `remove()`; the person's own folders are never touched. `prefix` names
+/// it in $TMPDIR, one per suite, so that each suite's `.leavesNothing` counts only the folders it made.
 struct Home {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("something-app-\(UUID().uuidString)")
+    let root: URL
+    init(prefix: String) { root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)") }
     var places: Places { Places(home: root) }
     static let share = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent("share")

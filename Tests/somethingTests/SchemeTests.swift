@@ -5,11 +5,11 @@ import SomethingCore
 import Testing
 @testable import something
 
-@Suite struct SchemeTests {
+@Suite(.leavesNothing("something-scheme-")) struct SchemeTests {
     func url(_ text: String) -> URL { URL(string: text)! }
 
     @Test func aFolderSpaceServesItsFilesOnly() throws {
-        let home = Home()
+        let home = Home(prefix: "something-scheme-")
         defer { home.remove() }
         let folder = home.places.spaces.appendingPathComponent("board")
         try FileManager.default.createDirectory(at: folder.appendingPathComponent("lib"), withIntermediateDirectories: true)
@@ -37,7 +37,7 @@ import Testing
     }
 
     @Test func aSingleFileSpaceServesOnlyItself() throws {
-        let home = Home()
+        let home = Home(prefix: "something-scheme-")
         defer { home.remove() }
         let space = try home.space("today", "<p>invented</p>")
         try "invented".write(to: home.places.spaces.appendingPathComponent("other.html"), atomically: true, encoding: .utf8)
@@ -52,7 +52,7 @@ import Testing
     /// The app's page holds the space in a frame that may neither replace the page nor open a window, and is not a
     /// file of the space.
     @Test func theAppsPageHoldsTheSpaceInASandbox() throws {
-        let home = Home()
+        let home = Home(prefix: "something-scheme-")
         defer { home.remove() }
         let scheme = Scheme(space: try home.space("today", "<p>invented</p>"))
         let shell = String(decoding: scheme.shellPage, as: UTF8.self)

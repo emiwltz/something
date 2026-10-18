@@ -6,7 +6,7 @@ import Foundation
 import Testing
 @testable import something
 
-@Suite struct PackagingTests {
+@Suite(.leavesNothing("something-packaging-"), .leavesNothing("something-prefix-")) struct PackagingTests {
     let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
     /// Runs `program` with `arguments`; its status and standard output.
@@ -54,7 +54,7 @@ import Testing
         #expect(try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]).status == 0)
 
         // Plan B's hook, as Engine.ownHookCommand gives it inside the app: the bundle's own program, not the wrapper.
-        let home = Home()
+        let home = Home(prefix: "something-packaging-")
         defer { home.remove() }
         let spool = home.root.appendingPathComponent("spool")
         try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)

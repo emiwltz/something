@@ -7,7 +7,7 @@ import SomethingCore
 import Testing
 @testable import something
 
-@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct HomeTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-home-")) struct HomeTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// Home on the test's home, whose root stands for share/: its examples folder and its template may not exist.
@@ -28,7 +28,7 @@ import Testing
     }
 
     @Test func aRevokedRightReachesTheOpenSpace() async throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"]}"#, """
             <script>window.heard = []; something.on("granted", (g) => heard.push(g.rights.join(","))); window.done = true</script>
@@ -62,7 +62,7 @@ import Testing
     }
 
     @Test func askAgainClearsTheRefusalsOnlyAndAsksThemNow() async throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let space = try test.space("board", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
@@ -91,7 +91,7 @@ import Testing
     }
 
     @Test func aSwitchChangesOnlyItsOwnRight() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         // "send" was allowed; the space now declares one right per kind, and a launch it was never asked about.
         try test.space("shop", page(#"{"contract": 1, "rights": ["send:claude", "send:codex", "launch:claude"]}"#, ""))
@@ -110,7 +110,7 @@ import Testing
     }
 
     @Test func aWiderRightDeclaredLaterShowsWhatIsInForce() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         try test.space("shop", page(#"{"contract": 1, "rights": ["send"]}"#, ""))
         var file = AppFile()
@@ -123,7 +123,7 @@ import Testing
     }
 
     @Test func aGrantsFileThatDoesNotReadIsSaid() async throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let space = try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
@@ -145,7 +145,7 @@ import Testing
     }
 
     @Test func aSwitchAppliesOnlyTheDeclarationThePersonWasAsked() async throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"], "agents": {"folders": []}}"#,
                                                  "<script>window.done = true</script>"))
@@ -162,7 +162,7 @@ import Testing
     }
 
     @Test func theCardShowsTheJournalAndTheReadersNotes() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         try test.space("board", page(nil, ""))
         let journal = Journal(folder: test.places.journals)
@@ -187,7 +187,7 @@ import Testing
 
     /// Home cannot be made narrower than its list and its card side by side, and it opens at least that large.
     @Test func homeCannotCutItsCard() throws {
-        let test = Home()
+        let test = Home(prefix: "something-home-")
         defer { test.remove() }
         let window = home(test, FakeAsk()).makeWindow()
         let card = try #require(window.contentView?.subviews.last)
@@ -199,7 +199,7 @@ import Testing
     /// A space is always selected while there is one, the default first, and the card follows the selection; an empty
     /// list says how to make a first space.
     @Test func homeAlwaysShowsASpaceOrHowToMakeOne() throws {
-        let test = Home()
+        let test = Home(prefix: "something-home-")
         defer { test.remove() }
         let home = home(test, FakeAsk())
         _ = home.makeWindow()
@@ -229,7 +229,7 @@ import Testing
     }
 
     @Test func makeDefaultShowInFinderAndCopies() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         try test.space("agents", page(nil, ""))
         try test.space("today", page(#"{"contract": 1, "title": "Today"}"#, ""))
@@ -269,7 +269,7 @@ import Testing
     /// New makes the space as `something new` does: the template, and none of the answers a deleted space of the same
     /// name left in the grants file.
     @Test func newMakesASpaceAsTheCommandDoes() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let template = test.root.appendingPathComponent("template.html")
         try FileManager.default.createDirectory(at: test.root, withIntermediateDirectories: true)
@@ -297,7 +297,7 @@ import Testing
     }
 
     @Test func exportAsksForTheDataAndImportStartsWithoutGrants() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -341,7 +341,7 @@ import Testing
     }
 
     @Test func anExportNamesTheLinksItLeftOutAndRefusesALinkedMemory() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -366,7 +366,7 @@ import Testing
     }
 
     @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {
-        let test = Home(), ask = FakeAsk()
+        let test = Home(prefix: "something-home-"), ask = FakeAsk()
         defer { test.remove() }
         try test.space("notes", page(nil, ""))
         let home = home(test, ask)
@@ -400,7 +400,7 @@ import Testing
     }
 
     @Test func theStartMakesItsFoldersAndChoosesWhatToShow() throws {
-        let test = Home()
+        let test = Home(prefix: "something-home-")
         defer { test.remove() }
         try FirstRun.prepare(test.places)
         for folder in [test.places.spaces, test.places.data] {
@@ -425,7 +425,7 @@ import Testing
     /// A first start puts the agents example in the spaces folder, without the answers a former space of that name
     /// left, and opens it while it is the only space (P15); a missing example is said, and the start goes on to Home.
     @Test func aFirstStartOpensOnTheAgentsExample() throws {
-        let test = Home()
+        let test = Home(prefix: "something-home-")
         defer { test.remove() }
         var file = AppFile()
         file.spaces["agents"] = answered(declared: ["state"], granted: ["state"])
@@ -448,7 +448,7 @@ import Testing
     /// `something new`, run from a terminal before the app ever opened, makes the spaces folder: the app's own first
     /// start still copies the agents example beside the new space.
     @Test func aSpaceMadeBeforeTheFirstStartKeepsTheWelcome() throws {
-        let test = Home()
+        let test = Home(prefix: "something-home-")
         defer { test.remove() }
         _ = try Command.new("shop", folder: false, places: test.places, template: Home.share.appendingPathComponent("template.html"))
         try FirstRun.prepare(test.places)

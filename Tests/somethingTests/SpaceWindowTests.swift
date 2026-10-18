@@ -9,7 +9,7 @@ import Testing
 import WebKit
 @testable import something
 
-@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct SpaceWindowTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-window-")) struct SpaceWindowTests {
     init() {
         // WebKit's processes talk to an application; this one never shows in the Dock and never takes the focus.
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -17,7 +17,7 @@ import WebKit
 
     /// Every way a page could reach a server, aimed at a listener on 127.0.0.1. The listener must see nothing.
     @Test func nothingReachesTheNetwork() async throws {
-        let home = Home(), listener = try Listener()
+        let home = Home(prefix: "something-window-"), listener = try Listener()
         defer { home.remove(); listener.stop() }
         let base = "http://127.0.0.1:\(listener.port)"
 
@@ -162,7 +162,7 @@ import WebKit
     /// before the sandbox refuses the window. Marked as known: when WebKit stops doing it, Swift Testing reports that
     /// the known issue was not recorded, and this test and the README's paragraph are updated.
     @Test func theKnownGap() async throws {
-        let home = Home(), listener = try Listener()
+        let home = Home(prefix: "something-window-"), listener = try Listener()
         defer { home.remove(); listener.stop() }
         let window = try await home.window(try home.space("gap", page(nil, """
             <div id="host" style="position: fixed; inset: 0"></div>
@@ -185,7 +185,7 @@ import WebKit
     /// Every space has the same origin, something://space, so each window has its own data store. Two spaces open at
     /// the same time share nothing: no storage, no cookie, no database, no cache, no message between windows.
     @Test func noSpaceReadsAnothersStorage() async throws {
-        let home = Home(), ask = FakeAsk()
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
         defer { home.remove() }
         let listening = "<script>window.heard = []; new BroadcastChannel('kept').onmessage = (e) => heard.push(e.data); window.done = true</script>"
         let a = try await home.window(try home.space("space-a", page(nil, listening)), ask)
@@ -232,7 +232,7 @@ import WebKit
     }
 
     @Test func theBridgeAnswersThePageAndOnlyThePage() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let ask = FakeAsk()
         let window = try await home.window(try home.space("bridge", page(#"{"contract": 1, "rights": ["state", "store"]}"#, """
@@ -296,7 +296,7 @@ import WebKit
     }
 
     @Test func aModeThatLowersAskingIsConfirmed() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let ask = FakeAsk()
         let window = try await home.window(try home.space("modes", page(nil, "")), ask)
@@ -319,7 +319,7 @@ import WebKit
 
     /// OpenCode launches with build or plan: an agent the person wrote is refused before the person is asked.
     @Test func aLaunchThatCannotHappenAsksNothing() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let shop = home.root.appendingPathComponent("code/shop")
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
@@ -356,7 +356,7 @@ import WebKit
     }
 
     @Test func rightsAreAskedOnceAndRemembered() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let shop = home.root.appendingPathComponent("code/shop")
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
@@ -396,7 +396,7 @@ import WebKit
 
     /// The scope is shown whenever `state` is asked, even when it was answered earlier with another right.
     @Test func stateAddedLaterShowsItsScope() async throws {
-        let home = Home(), ask = FakeAsk()
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
         defer { home.remove() }
         let space = try home.space("later", page(#"{"contract": 1, "rights": ["store"], "agents": {"see": "all"}}"#, ""))
         let first = try await home.window(space, ask)
@@ -413,7 +413,7 @@ import WebKit
     /// A space opened by path keeps its answers while its window is open, and nowhere else: a file that lands at the
     /// same path later is asked again.
     @Test func aSpaceOpenedByPathIsNotRemembered() async throws {
-        let home = Home(), ask = FakeAsk()
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
         defer { home.remove() }
         let file = home.root.appendingPathComponent("Downloads/board.html")
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -433,7 +433,7 @@ import WebKit
     }
 
     @Test func aGrantsFileThatDoesNotReadIsLeftAndSaid() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         try FileManager.default.createDirectory(at: home.places.support, withIntermediateDirectories: true)
         try "{ not json".write(to: home.places.grants, atomically: true, encoding: .utf8)
@@ -449,7 +449,7 @@ import WebKit
     /// A reload that something did not start (WebKit's Reload, a restart after the web content process ended) gives
     /// the app's page a new frame: it is taken for the space, and pushes reach it.
     @Test func aReloadByWebKitFindsTheSpaceAgain() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let window = try await home.window(try home.space("again", page(nil, """
             <script>window.changes = 0; something.on("change", () => window.changes += 1); window.done = true</script>
@@ -468,7 +468,7 @@ import WebKit
     }
 
     @Test func theWindowReloadsWhenTheSpaceChanges() async throws {
-        let home = Home()
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let space = try home.space("live", page(#"{"contract": 2}"#, "<p id='word'>one</p>"))
         let window = try await home.window(space)

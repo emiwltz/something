@@ -187,7 +187,13 @@ final class Watch {
                 (agent.can.resume, agent.because["resume"]) = Watch.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
                 if agent.can.resume { agent.because["send"]! += " Continue it here to write to it." }
             }
-            agent.because.merge(sighting.because) { _, own in own }
+            // A reader names the holder better (Codex's background service), so its reason wins; but for a kind
+            // something cannot continue, that comes first and the reader's note follows, so it never hides why.
+            var notes = sighting.because
+            if !Engine.continuable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {
+                agent.because["resume"] = "\(reason) \(note)"
+            }
+            agent.because.merge(notes) { _, reader in reader }
             if sighting.processOnly { agent.thread = nil; agents.append(agent); continue }
             var thread = AgentThread(id: sighting.key, agent: agent.id, title: agent.name, started: agent.started, turns: sighting.turns)
             thread.complete = thread.complete && sighting.complete

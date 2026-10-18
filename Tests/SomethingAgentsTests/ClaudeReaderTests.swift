@@ -13,13 +13,16 @@ final class ClaudeHome {
     static let shop = "0f1e2d3c-4b5a-4678-8901-234567890abc", blog = "6a7b8c9d-0e1f-4a2b-8c3d-4e5f6a7b8c9d"
     static let notes = "11111111-2222-4333-8444-555555555555"
 
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-home-\(UUID().uuidString)")
+    let root: URL
     var claude: URL { root.appendingPathComponent(".claude") }
     var sessions: URL { claude.appendingPathComponent("sessions") }
     let reader: ClaudeReader
     private(set) var opened: [String] = []
 
-    init() throws {
+    /// `prefix` names the folder in $TMPDIR: the default is ClaudeReaderTests' own, and another suite passes its own,
+    /// so that each suite's `.leavesNothing` counts only the folders it made.
+    init(prefix: String = "claude-home-") throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
         reader = ClaudeReader(environment: ["HOME": root.path])
         try FileManager.default.copyItem(at: ClaudeHome.fixture, to: root)
         // The secrets Claude keeps beside its records. Never in the repository: a file named *.key would be one there.
@@ -51,7 +54,7 @@ final class ClaudeHome {
     func transcript(_ folder: String, _ id: String) -> URL { claude.appendingPathComponent("projects/\(folder)/\(id).jsonl") }
 }
 
-@Suite struct ClaudeReaderTests {
+@Suite(.leavesNothing("claude-home-")) struct ClaudeReaderTests {
     @Test func twoLiveSessionsAreReadAndTheStaleOnesIgnored() throws {
         let home = try ClaudeHome()
         defer { home.remove() }

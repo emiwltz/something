@@ -155,7 +155,7 @@ public enum Bridge {
         line.kind = agent.kind
         guard Rights.covers(rights, "send:\(agent.kind)") else { throw CodedError("RIGHT_NOT_GRANTED", "The right send:\(agent.kind) was not granted.") }
         guard agent.origin == "launched" else {
-            throw CodedError("READ_ONLY_AGENT", agent.because["send"] ?? "This agent was started outside something; something only reads it. Continue it here to write to it.")
+            throw CodedError("READ_ONLY_AGENT", agent.because["send"] ?? "This agent was started outside something; something only reads it.")
         }
         guard agent.alive != false else { throw CodedError("AGENT_STOPPED", "This agent has ended; launch or resume one to go on.") }
         return agent

@@ -4,7 +4,7 @@
 // in the dark one (its file ends in -dark.png). It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
-import SomethingAgents
+@testable import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -13,14 +13,14 @@ import WebKit
 let gallery = ProcessInfo.processInfo.environment["SOMETHING_GALLERY"].map { URL(fileURLWithPath: $0) }
 
 @MainActor @Suite(.serialized, .enabled(if: gallery != nil, "SOMETHING_GALLERY does not name a folder, so the gallery of windows is not drawn."),
-                  .enabled(if: windowServer, windowServerMissing))
+                  .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-gallery-"))
 struct GalleryTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// A home with the space morning-review and a second one, a grant, ten journal lines of yesterday and today, and a
     /// share folder with the template and the examples; its temporary path is shown as /Users/example in the pictures.
     func invented() throws -> (fixture: Home, share: URL) {
-        let fixture = Home()
+        let fixture = Home(prefix: "something-gallery-")
         let declaration = #"{"contract": 1, "title": "Morning review", "description": "Reads what the agents said overnight and asks each one for a summary.", "agents": {"folders": ["~/code/shop"]}, "folder": "~/code/shop", "rights": ["state", "send:claude", "launch:claude", "store"]}"#
         let space = try fixture.space("morning-review", page(declaration, "<p>Morning review</p>"))
         try fixture.space("garden-notes", page(#"{"contract": 1, "title": "Garden notes", "rights": ["store"]}"#, "<p>Garden</p>"))
@@ -103,7 +103,7 @@ struct GalleryTests {
         try draw(card.view, "card" + suffix, fixture)
 
         // A first opening, with no space yet and no example: the sentence that says how to make one.
-        let bare = Home()
+        let bare = Home(prefix: "something-gallery-")
         defer { bare.remove() }
         let first = something.Home(places: bare.places, share: bare.root, ask: FakeAsk())
         let firstWindow = first.makeWindow()
@@ -147,24 +147,27 @@ struct GalleryTests {
     }
 
     /// The invented state, with agents started in a terminal as the readers show them: a Claude Code waiting for the
-    /// person there, an OpenCode at work (so OpenCode is installed here), a pi that ended.
+    /// person there, an OpenCode at work (so OpenCode is installed here), a pi that ended. Watch makes them from
+    /// sightings, as it does from a reader's, so they carry what the product gives: ids, `can` and `because`.
     func elsewhere(_ state: State) -> State {
         var state = state
         if var opencode = state.kinds["opencode"] {
-            (opencode.installed, opencode.seen, opencode.reader) = (true, "2.0.20", "ok")
+            opencode.installed = true
+            opencode.seen = "2.0.20"
+            opencode.reader = "ok"
             state.kinds["opencode"] = opencode
         }
-        let more = [("claude", "Rename the invoice fields", "/Users/example/code/billing", "waiting", "registry", true as Bool?),
-                    ("opencode", "Draft the release notes", "/Users/example/code/site", "working", "claim", true),
-                    ("pi", "scripts", "/Users/example/code/scripts", "done", "process", false)]
-        for (index, agent) in more.enumerated() {
-            var made = Agent(id: "e\(index + 2)", kind: agent.0, origin: "elsewhere")
-            (made.name, made.folder, made.state, made.evidence, made.alive) = (agent.1, agent.2, agent.3, agent.4, agent.5)
-            made.waiting = agent.3 == "waiting" ? "permission" : "none"
-            made.updated = state.at
-            made.because = ["send": "This agent was started outside something; something only reads it."]
-            state.agents.append(made)
-        }
+        let now = Date(), minuteAgo = now.addingTimeInterval(-60)
+        let claude = Sighting(kind: "claude", key: "c1a0de00-0000-4000-8000-0000000000e2", pid: 47100,
+                              facts: StateMap.Facts(alive: true, evidence: "registry", turnOpen: true, waiting: .permission),
+                              folder: "/Users/example/code/billing", title: "Rename the invoice fields", updated: minuteAgo)
+        let opencode = Sighting(kind: "opencode", key: "ses_0000000000000000000000e3", pid: 47200,
+                                facts: StateMap.Facts(alive: true, evidence: "claim", turnOpen: true, waiting: .nothing),
+                                folder: "/Users/example/code/site", title: "Draft the release notes", updated: minuteAgo)
+        let pi = Sighting(kind: "pi", key: "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f00e4",
+                          facts: StateMap.Facts(alive: false, evidence: "process", turnOpen: false, waiting: .nothing),
+                          folder: "/Users/example/code/scripts", updated: minuteAgo)
+        state.agents += Watch.elsewhere(Seen(sightings: [claude, opencode, pi]), groups: [], keys: [], now: now).agents
         return state
     }
 

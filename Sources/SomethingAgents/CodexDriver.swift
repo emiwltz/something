@@ -246,9 +246,11 @@ public final class CodexDriver: Driver {
         switch call {
         case .initialize, .open:
             let held = words.contains("active writer"), missing = words.contains("no rollout found") || words.contains("invalid session id")
-            let error = held ? AgentError(code: "HELD_ELSEWHERE", message: CodexDriver.heldByService)
-                : missing ? AgentError(code: "THREAD_NOT_FOUND", message: "Codex has no conversation \(launch.thread) on this Mac.")
-                : AgentError(code: "AGENT_ERROR", message: "Codex refused to start the conversation: \(words)")
+            // The messages held for the thread, steers answered "steered" among them, are said lost, never dropped unsaid.
+            let lost = early.isEmpty ? "" : "; the \(early.count == 1 ? "message" : "\(early.count) messages") sent to it went nowhere"
+            let error = held ? AgentError(code: "HELD_ELSEWHERE", message: CodexDriver.heldByService + lost)
+                : missing ? AgentError(code: "THREAD_NOT_FOUND", message: "Codex has no conversation \(launch.thread) on this Mac" + lost + ".")
+                : AgentError(code: "AGENT_ERROR", message: "Codex refused to start the conversation: \(words)" + lost)
             over = true
             emit(.stopped(error))
             quit()

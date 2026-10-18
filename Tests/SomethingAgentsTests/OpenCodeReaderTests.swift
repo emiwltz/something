@@ -182,7 +182,7 @@ final class OpenCodeHome {
         let (agents, threads) = Watch.elsewhere(seen, groups: [52100], keys: [OpenCodeHome.done], now: home.now)
         #expect(Set(agents.compactMap(\.thread)) == [OpenCodeHome.shop, OpenCodeHome.blog, OpenCodeHome.late], "a session something launched is left out by its id")
         let agent = try #require(agents.first { $0.thread == OpenCodeHome.blog })
-        #expect(agent.because["resume"] == OpenCodeReader.mayResume && agent.because["send"] != nil && agent.pid == nil && agent.waiting == "none")
+        #expect(agent.because["resume"] == "something cannot continue OpenCode conversations started elsewhere yet. \(OpenCodeReader.mayResume)" && agent.because["send"] != nil && agent.pid == nil && agent.waiting == "none")
         #expect(agents.first { $0.thread == OpenCodeHome.shop }?.waiting == nil, "nobody can say what a running OpenCode waits on")
         #expect(threads.first { $0.id == OpenCodeHome.shop }?.turns.last?.state == "working")
     }

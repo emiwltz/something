@@ -353,6 +353,17 @@ import SomethingCore
         #expect(try replay.agent.send("Second.", when: "next") == "started")
     }
 
+    /// Messages sent before Codex opened the thread, when it refuses to: they are said lost with the stop.
+    @Test func messagesWaitingForARefusedThreadAreSaidLost() throws {
+        let replay = Replay.codex()
+        _ = try replay.agent.send("First.", when: "next")
+        _ = try replay.agent.send("Steered.", when: "now")
+        replay.feed(["id": 1, "result": [:]])
+        replay.feed(["id": 2, "error": ["code": -32600, "message": "Invalid request: invented refusal"]])
+        #expect(replay.fold.agent.error?.message == "Codex refused to start the conversation: Invalid request: invented refusal; the 2 messages sent to it went nowhere")
+        #expect(!replay.lines().contains { ["turn/start", "turn/steer"].contains($0["method"] as? String) })
+    }
+
     /// A steer that waited for the turn's id, when Codex refuses that turn: it is said lost, never dropped unsaid.
     @Test func aSteerWaitingForARefusedTurnIsSaidLost() throws {
         let replay = Self.opened()

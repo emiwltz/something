@@ -8,7 +8,7 @@ import Testing
 @testable import SomethingAgents
 import SomethingCore
 
-@MainActor struct ResumeTests {
+@MainActor @Suite(.leavesNothing("resume-")) struct ResumeTests {
     static let fakeCodex = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
@@ -38,7 +38,7 @@ import SomethingCore
         var claudeRunning: Running { Running(pid: 47000, parent: 1, group: 47000, started: Date(timeIntervalSince1970: 1_792_227_300), name: "claude") }
 
         init() throws {
-            place = try EngineTests.Place()
+            place = try EngineTests.Place(prefix: "resume-")
             let codex = place.bin.appendingPathComponent("codex")
             try ResumeTests.fakeCodex.write(to: codex, atomically: true, encoding: .utf8)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: codex.path)

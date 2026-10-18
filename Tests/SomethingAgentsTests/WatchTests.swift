@@ -5,9 +5,9 @@ import Testing
 @testable import SomethingAgents
 import SomethingCore
 
-@MainActor @Suite struct WatchTests {
+@MainActor @Suite(.leavesNothing("watch-")) struct WatchTests {
     @Test func aTickGivesRecentSightingsWithTheirGroups() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let watch = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() })
         let seen = watch.tick(now: Date())
@@ -17,7 +17,7 @@ import SomethingCore
     }
 
     @Test func elsewhereAgentsAreShapedAsTheContractSays() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
@@ -37,7 +37,7 @@ import SomethingCore
     }
 
     @Test func whatSomethingLaunchedIsDropped() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         // The blog's Claude runs in the group of one of something's children; the shop's conversation is one a driver reported.
@@ -47,7 +47,7 @@ import SomethingCore
     }
 
     @Test func aChangedShapeShowsTheProcessesOnly() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         try Data(#"{"pid":41500,"session":"renamed","kind":"interactive"}"#.utf8).write(to: home.sessions.appendingPathComponent("41500.json"))
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
@@ -60,7 +60,7 @@ import SomethingCore
 
     /// A snapshot the system did not give in full proves nobody gone: the last tick stands.
     @Test func aSnapshotNotWholeEndsNothing() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         var snapshot = ClaudeHome.snapshot()
         let watch = Watch(readers: [home.reader], snapshot: { snapshot })
@@ -75,7 +75,7 @@ import SomethingCore
 
     /// An agent seen elsewhere that ended has no pid: the number may already be another program's.
     @Test func anEndedAgentHasNoPid() throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         var snapshot = ClaudeHome.snapshot()
         let watch = Watch(readers: [home.reader], snapshot: { snapshot })
@@ -89,7 +89,7 @@ import SomethingCore
     }
 
     @Test func theTimerTicksAndChangesItsCadence() async throws {
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let watch = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() })
         var ticks = 0
@@ -102,9 +102,9 @@ import SomethingCore
     }
 
     @Test func theEngineMergesLaunchedAndSeenAgents() async throws {
-        let place = try EngineTests.Place()
+        let place = try EngineTests.Place(prefix: "watch-engine-")
         defer { place.remove() }
-        let home = try ClaudeHome()
+        let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let engine = Engine.throwaway(place.environment)
         var snapshot = ClaudeHome.snapshot()

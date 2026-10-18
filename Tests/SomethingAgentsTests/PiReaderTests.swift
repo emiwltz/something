@@ -298,7 +298,7 @@ final class PiHome {
     }
 
     @Test func ompIsSeenAndNeverLaunched() throws {
-        let place = try EngineTests.Place()
+        let place = try EngineTests.Place(prefix: "pi-home-engine-")
         defer { place.remove() }
         let home = try PiHome()
         defer { home.remove() }

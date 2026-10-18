@@ -6,7 +6,7 @@ import Testing
 @testable import SomethingAgents
 import SomethingCore
 
-@MainActor struct EngineTests {
+@MainActor @Suite(.leavesNothing("engine-")) struct EngineTests {
     static let fake = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
@@ -79,8 +79,10 @@ import SomethingCore
     echo closed > "$FAKE_OUT/closed"
     """#
 
+    /// A throwaway home with fake programs. `prefix` names its folder in $TMPDIR; the default is EngineTests' own, and
+    /// another suite passes its own, so that each suite's `.leavesNothing` counts only the folders it made.
     final class Place {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("engine-\(UUID().uuidString)")
+        let root: URL
         var bin: URL { root.appendingPathComponent("bin") }
         var work: URL { root.appendingPathComponent("work/shop") }
         var out: URL { root.appendingPathComponent("out") }
@@ -89,7 +91,8 @@ import SomethingCore
              "ANTHROPIC_API_KEY": "test-key", "ANTHROPIC_AUTH_TOKEN": "test-token"]
         }
 
-        init() throws {
+        init(prefix: String = "engine-") throws {
+            root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
             for folder in [bin, work, out] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
             let program = bin.appendingPathComponent("claude")
             try EngineTests.fake.write(to: program, atomically: true, encoding: .utf8)

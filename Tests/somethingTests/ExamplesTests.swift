@@ -7,7 +7,7 @@ import SomethingCore
 import Testing
 @testable import something
 
-@Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct ExamplesTests {
+@Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-examples-")) struct ExamplesTests {
     static let examples = ["agents", "chat", "today", "game"]
 
     @Test func theExamplesAreTheFourOfTheSpecification() {
@@ -17,7 +17,7 @@ import Testing
 
     @Test(arguments: ["template"] + examples)
     func passesTheCheck(_ name: String) throws {
-        let home = Home()
+        let home = Home(prefix: "something-examples-")
         defer { home.remove() }
         let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
         let html = try String(contentsOf: source, encoding: .utf8)

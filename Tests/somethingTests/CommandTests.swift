@@ -24,7 +24,7 @@ final class FakeDoor: Door {
     }
 }
 
-@MainActor @Suite struct CommandTests {
+@MainActor @Suite(.leavesNothing("something-command-")) struct CommandTests {
     @Test func theWordsAreRead() {
         let cases: [([String], Command)] = [
             ([], .start),
@@ -76,7 +76,7 @@ final class FakeDoor: Door {
     }
 
     @Test func eachCommandExitsWithItsStatus() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         try home.space("board", page(nil, "<p>Invented.</p>"))
         let version = Ran(["--version"], home)
@@ -95,7 +95,7 @@ final class FakeDoor: Door {
     /// wrong words are a usage error; right ones read the request and print a decision, here a deny that says why,
     /// since no app keeps the spool alive. It also refuses a missing export without starting the app.
     @Test func theBuiltProgramAnswersHookPermission() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let spool = home.root.appendingPathComponent("spool")
         try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
@@ -114,7 +114,7 @@ final class FakeDoor: Door {
 
     /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".
     @Test func theVersionIsTheBundles() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let bare = home.root.appendingPathComponent("bare.app")
         try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
@@ -136,7 +136,7 @@ final class FakeDoor: Door {
 
     /// A space handed by its path is the one already open by its name: the window is fronted, not reopened.
     @Test func aSpaceIsTheSameHoweverItsPathIsWritten() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         try FileManager.default.createDirectory(at: home.places.spaces, withIntermediateDirectories: true)
         let spaces = Spaces(root: home.places.spaces)
@@ -152,7 +152,7 @@ final class FakeDoor: Door {
     }
 
     @Test func startAndOpenGoThroughTheDoor() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let board = try home.space("board", page(nil, "<p>Invented.</p>"))
         let door = FakeDoor()
@@ -180,7 +180,7 @@ final class FakeDoor: Door {
     }
 
     @Test func newMakesASpaceThatInheritsNoAnswers() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         // Answers left by a deleted space of the same name.
         var file = AppFile()
@@ -204,7 +204,7 @@ final class FakeDoor: Door {
     }
 
     @Test func aNewSpaceIsUndoneWhenTheGrantsCannotBeRead() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         try FileManager.default.createDirectory(at: home.places.support, withIntermediateDirectories: true)
         try "not json".write(to: home.places.grants, atomically: true, encoding: .utf8)
@@ -214,7 +214,7 @@ final class FakeDoor: Door {
     }
 
     @Test func theGuideIsGivenByItsPathOrPrinted() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let path = Ran(["guide"], home)
         #expect(path.status == 0 && path.out.contains(Home.share.appendingPathComponent("guide.md").path))
@@ -226,7 +226,7 @@ final class FakeDoor: Door {
 
     /// An invented Homebrew prefix: the guide's path goes through opt/, which survives upgrades, when it is there.
     @Test func theGuidesPathSurvivesUpgrades() throws {
-        let home = Home()
+        let home = Home(prefix: "something-command-")
         defer { home.remove() }
         let guide = home.root.appendingPathComponent("Cellar/something/1.2.3/something.app/Contents/Resources/share/guide.md")
         #expect(Command.stable(guide) == guide)
