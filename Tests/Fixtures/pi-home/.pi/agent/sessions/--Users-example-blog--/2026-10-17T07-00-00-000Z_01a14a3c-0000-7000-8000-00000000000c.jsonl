@@ -1,0 +1,6 @@
+{"type":"session","version":3,"id":"01a14a3c-0000-7000-8000-00000000000c","timestamp":"2026-10-17T07:00:00.000Z","cwd":"/Users/example/blog"}
+{"type":"model_change","id":"c0000001","parentId":null,"timestamp":"2026-10-17T07:00:00.010Z","provider":"example-provider","modelId":"example-model"}
+{"type":"message","id":"c0000002","parentId":"c0000001","timestamp":"2026-10-17T07:00:05.000Z","message":{"role":"user","content":[{"type":"text","text":"Fix the typo in the blog title."}],"timestamp":1792224000000}}
+{"type":"custom","customType":"web-search-results","data":{"results":[{"id":"r1","title":"Invented result"}]},"id":"c0000003","parentId":"c0000002","timestamp":"2026-10-17T07:00:08.000Z"}
+{"type":"message","id":"c0000004","parentId":"c0000003","timestamp":"2026-10-17T07:00:12.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Fixed the typo."}],"api":"example","provider":"example-provider","model":"example-model","usage":{"input":10,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":15,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0.0}},"stopReason":"stop","timestamp":1792224000000}}
+{"type":"session_info","id":"c0000005","parentId":"c0000004","timestamp":"2026-10-17T07:00:13.000Z","name":"Blog typo"}

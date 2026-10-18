@@ -2,7 +2,7 @@
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
 // agents: its public API is what the app may use. It drives the agents something launched (Claude Code, Codex,
 // OpenCode and pi), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
-// Agents started elsewhere come with the readers (slices 16 to 18); until then resume answers NOT_SUPPORTED.
+// Agents started elsewhere come from the readers, through the watch; a conversation of one can be continued here.
 import Foundation
 import SomethingCore
 
@@ -63,10 +63,16 @@ public final class Engine {
     private var stopping: Set<String> = []
     private var count = 0
 
+    /// The agents started elsewhere: the readers, on their timer once `start` was called.
+    lazy var watch = Watch(readers: Watch.readers(environment))
+    /// What the watch saw last, before the dedupe.
+    private var seen = Seen()
+
     /// Starts watching this Mac. `often` is true while a space is open. Called again, it only changes the cadence:
     /// the programs are looked for once.
     public func start(often: Bool) {
         self.often = often
+        watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) }
         guard !looked else { return }
         looked = true
         // Reading the login shell can take 3 s: never on the main queue.
@@ -80,11 +86,29 @@ public final class Engine {
     public var state: State {
         let kinds = Programs.kinds.map { kind in
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
-                        seen: nil, reader: "none", note: nil))
+                        seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
-        let folds = launched.map(\.agent.queue.fold)
-        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent),
-                     threads: folds.compactMap(\.thread), requests: folds.flatMap(\.requests))
+        let elsewhere = elsewhere
+        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + elsewhere.agents,
+                     threads: launched.compactMap(\.agent.thread) + elsewhere.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
+    }
+
+    /// The agents the watch saw, but those something launched: the groups of its running children and the
+    /// conversations its drivers reported are left out (design 4.3). An ended child's group is not: its pid may be
+    /// reused by a program started by hand, and its conversation is still left out by its key.
+    private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
+        let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
+        // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
+        let keys = launched.compactMap(\.agent.agent.thread)
+        return Watch.elsewhere(seen, groups: groups, keys: Set(keys), now: Date())
+    }
+
+    /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.
+    func saw(_ seen: Seen) {
+        let before = elsewhere, kinds = self.seen.kinds
+        self.seen = seen
+        let after = elsewhere
+        if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { changed() }
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without
@@ -187,7 +211,7 @@ public final class Engine {
     var spools = Spool.root
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
-    /// With `resume`, the program continues that conversation in `folder` (Codex, OpenCode and pi so far); a pi
+    /// With `resume`, the program continues that conversation in `folder`; a pi
     /// conversation is its file, which must exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
@@ -204,7 +228,8 @@ public final class Engine {
     }
 
     /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude
-    /// that refuses plan A is launched again with plan B, under the same agent id and a new conversation id.
+    /// that refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same
+    /// one for a resume).
     private func start(_ type: any Driver.Type, _ launch: Launch, _ program: Program, planB: Bool,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
         let spool = planB && type is ClaudeDriver.Type ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
@@ -218,7 +243,8 @@ public final class Engine {
             claude.fallback = { [weak self, weak spawn] in
                 guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
                 var again = launch
-                again.thread = UUID().uuidString.lowercased()
+                // A resume continues the same conversation with plan B.
+                if !launch.resume { again.thread = UUID().uuidString.lowercased() }
                 guard let started = try? start(type, again, program, planB: true, record: record) else { return false }
                 // The first program's end now reaches a Launched no longer listed: it changes nothing.
                 spawn.stop()
@@ -230,7 +256,23 @@ public final class Engine {
         return (agent, spawn)
     }
 
-    public func resume(_ kind: String, thread: String, of agent: String) throws -> String { throw Engine.notYet }
+    /// The kinds whose conversations seen elsewhere can be continued here (contract 3.7).
+    static let continuable: Set = ["claude", "codex"]
+
+    /// Continues here the conversation `thread` of `agent`, an agent seen elsewhere, in the conversation's own folder,
+    /// and returns the id of the agent launched for it, which lists it from then on (design 4.4). Throws
+    /// THREAD_NOT_FOUND when no agent seen now holds that conversation, STILL_RUNNING while its process runs,
+    /// NOT_SUPPORTED when it cannot be continued here, then as `launch` does. Codex's background service holding the
+    /// conversation comes after the launch, as the agent's HELD_ELSEWHERE error.
+    public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
+        guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
+            throw CodedError("THREAD_NOT_FOUND", "No \(Programs.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
+        }
+        guard seen.can.resume, let type = Engine.drivers[kind] else {
+            throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", seen.because["resume"] ?? "This conversation cannot be continued here.")
+        }
+        return try launch(type, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
+    }
 
     /// Stops every agent something launched, all at once, within `seconds`, then calls `done` on the main queue.
     public func stopAll(within seconds: TimeInterval, done: @escaping () -> Void) {
@@ -306,8 +348,6 @@ public final class Engine {
     }
 
     static func now() -> String { ISO8601DateFormatter().string(from: Date()) }
-
-    static let notYet = CodedError("NOT_SUPPORTED", "something cannot continue a conversation here yet.")
 }
 
 /// `something hook permission --spool <dir>`: Claude's plan B (design 4.1). Returns the exit status.

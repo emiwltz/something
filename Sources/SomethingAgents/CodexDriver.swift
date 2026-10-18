@@ -235,12 +235,15 @@ public final class CodexDriver: Driver {
         }
     }
 
+    /// What frees a conversation Codex's background service holds (design 4.4).
+    static let heldByService = "Codex's background service holds this conversation; run `codex app-server daemon stop` in a terminal, then try again."
+
     /// Codex refused a call; each says what became of what was asked.
     private func refused(_ call: Call, _ words: String) {
         switch call {
         case .initialize, .open:
             let held = words.contains("active writer"), missing = words.contains("no rollout found") || words.contains("invalid session id")
-            let error = held ? AgentError(code: "HELD_ELSEWHERE", message: "Codex's background service holds this conversation; run `codex app-server daemon stop` in a terminal, then try again.")
+            let error = held ? AgentError(code: "HELD_ELSEWHERE", message: CodexDriver.heldByService)
                 : missing ? AgentError(code: "THREAD_NOT_FOUND", message: "Codex has no conversation \(launch.thread) on this Mac.")
                 : AgentError(code: "AGENT_ERROR", message: "Codex refused to start the conversation: \(words)")
             over = true

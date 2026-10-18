@@ -42,7 +42,8 @@ public final class ClaudeDriver: Driver {
         } else {
             arguments += ["--permission-prompt-tool", "stdio"]
         }
-        arguments += ["--include-hook-events", "--permission-mode", launch.mode ?? "default", "--session-id", launch.thread]
+        // A resume keeps the conversation's id: Claude forks a new one only when asked (--fork-session).
+        arguments += ["--include-hook-events", "--permission-mode", launch.mode ?? "default", launch.resume ? "--resume" : "--session-id", launch.thread]
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
         if let effort = launch.effort { arguments.append("--effort=\(effort)") }

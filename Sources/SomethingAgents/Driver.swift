@@ -110,19 +110,32 @@ final class Launched {
     /// Called after each event, so the engine can push the state.
     var changed: () -> Void = {}
     private let now: () -> String
+    private let resumes: Bool
+
+    /// The errors of a resume whose program never took the conversation.
+    static let refusals: Set = ["HELD_ELSEWHERE", "THREAD_NOT_FOUND"]
 
     init<D: Driver>(_ type: D.Type, _ launch: Launch, write: @escaping (Data) throws -> Void, now: @escaping () -> String) {
         self.now = now
+        resumes = launch.resume
         queue = HeldQueue(Fold(D.fresh(launch)))
         var emit: (AgentEvent) -> Void = { _ in }
         driver = D(launch, write: write, emit: { emit($0) }, now: now)
         emit = { [weak self] event in self?.record(event) }
     }
 
+    /// Whether its program refused to continue the conversation it was launched for: it never held it, so it does
+    /// not list it, and the conversation stays the one seen elsewhere, which a new resume can try again.
+    var refused: Bool { resumes && Launched.refusals.contains(queue.fold.agent.error?.code ?? "") }
+
+    /// Its conversation as the state lists it; nil until the harness names it, or when the resume was refused.
+    var thread: AgentThread? { refused ? nil : queue.fold.thread }
+
     /// The agent as the state shows it: the fold's, with `can.effort` false while no effort is offered to a kind
-    /// that takes only those (contract: `can` says what a call would do now).
+    /// that takes only those (contract: `can` says what a call would do now), and no thread when it was refused.
     var agent: Agent {
         var agent = queue.fold.agent
+        if refused { agent.thread = nil }
         if type(of: driver).effortOnlyWhenOffered, agent.can.effort, agent.options.effort == nil {
             agent.can.effort = false
             agent.because["effort"] = "This model offers no effort level."
