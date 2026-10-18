@@ -45,9 +45,8 @@ enum DeveloperTrial {
         case .success(let words): asked = words
         case .failure(let wrong): return fail(wrong.message, 2)
         }
-        let (kind, type, file, planB) = (asked.kind, asked.type, asked.record, asked.planB)
         var output: FileHandle?
-        if let file {
+        if let file = asked.record {
             guard FileManager.default.createFile(atPath: file, contents: nil), let handle = FileHandle(forWritingAtPath: file) else {
                 return fail("something try: cannot write \(file).", 1)
             }
@@ -65,13 +64,14 @@ enum DeveloperTrial {
         engine.changed = { if let agent = engine.state.agents.first(where: { $0.id == id }) { printer.show(agent, engine.state) } }
         row(["begin": true])
         do {
-            id = try engine.launch(type, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil, planB: planB) { written, line in
-                row([written ? "something" : kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
+            id = try engine.launch(asked.type, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
+                                   planB: asked.planB) { written, line in
+                row([written ? "something" : asked.kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
             }
         } catch {
             return fail("something try: \(error)", 1)
         }
-        print("\(id) started\(planB ? " with plan B" : ""). \(usage.split(separator: "\n").last!)")
+        print("\(id) started\(asked.planB ? " with plan B" : ""). \(usage.split(separator: "\n").last!)")
         var stopAsked = false
         Thread.detachNewThread {
             while let line = readLine() {

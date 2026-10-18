@@ -56,6 +56,11 @@ final class CheckHost: BridgeHost {
         return true
     }
 
+    /// The engine's own check of a launch's values, so that a launch the app refuses is refused here too.
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+    }
+
     /// An id for an agent the space launched or resumed. It is in no state: the check has no real agent to show.
     private func newAgent() -> String {
         started += 1

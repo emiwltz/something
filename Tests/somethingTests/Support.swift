@@ -199,3 +199,33 @@ func ready(_ window: SpaceWindow) async throws {
     }
     for _ in 0..<100 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
 }
+
+/// An invented permission request of Claude's, as its plan-B hook reads it on its input.
+let inventedRequest = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#
+
+/// Runs a built `program` with `words` (as Claude's plan-B hook runs it, for `hook permission`), in `home` with the
+/// system's PATH only, `input` on its input; its status and outputs. Stopped after 30 s, so that a program that never
+/// answers fails the test.
+func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest) throws -> (status: Int32, out: String, err: String) {
+    let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
+    process.executableURL = program
+    process.arguments = words
+    process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"]
+    (process.standardInput, process.standardOutput, process.standardError) = (input, out, err)
+    try process.run()
+    input.fileHandleForWriting.write(Data(text.utf8))
+    try input.fileHandleForWriting.close()
+    let deadline = DispatchWorkItem { process.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
+    let printed = out.fileHandleForReading.readDataToEndOfFile(), errors = err.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    deadline.cancel()
+    return (process.terminationStatus, String(decoding: printed, as: UTF8.self), String(decoding: errors, as: UTF8.self))
+}
+
+/// The decision a hook printed for Claude: its behavior and its message.
+func hookDecision(_ out: String) -> (behavior: String?, message: String?) {
+    let printed = try? JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String: Any]
+    let decision = (printed?["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any]
+    return (decision?["behavior"] as? String, decision?["message"] as? String)
+}

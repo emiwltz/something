@@ -317,10 +317,29 @@ import WebKit
         #expect(ask.modes.count == 2)
     }
 
+    /// OpenCode launches with build or plan: an agent the person wrote is refused before the person is asked.
+    @Test func aLaunchThatCannotHappenAsksNothing() async throws {
+        let home = Home()
+        defer { home.remove() }
+        let shop = home.root.appendingPathComponent("code/shop")
+        try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
+        let ask = FakeAsk()
+        ask.lowers = true
+        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: shop.path, remap: [:]) }
+        let declared = #"{"contract": 1, "title": "Launcher", "rights": ["launch:opencode"], "folder": "~/code/shop"}"#
+        let window = try await home.window(try home.space("launcher", page(declared, "<script>window.done = true</script>")), ask)
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        let code = try await run(window, "try { await something.launch('opencode', {mode: 'my-agent'}); return 'ok' } catch (e) { return e.code }")
+        #expect(code as? String == "VALUE_NOT_OFFERED")
+        #expect(ask.modes.isEmpty)
+    }
+
     /// The rights window says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
     @Test func theRightsWindowSaysThatPiNeverAsks() {
-        #expect(Ask.words(for: "launch:pi").hasSuffix("(pi runs commands and edits files without asking you first)"))
-        #expect(Ask.words(for: "launch").contains("pi, one of them, runs commands and edits files without asking you first"))
+        #expect(Ask.words(for: "launch:pi") == "Launch or continue pi in the folder chosen for it. pi runs commands and edits files without asking you first")
+        #expect(Ask.words(for: "launch") == "Launch or continue agents in the folder chosen for it. One of them, pi, runs commands and edits files without asking you first")
         #expect(!Ask.words(for: "launch:claude").contains("without asking"))
     }
 

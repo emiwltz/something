@@ -5,6 +5,7 @@
 //   system's install folders (a test puts its fake programs on that PATH);
 // - `something try` (Trial.main, DeveloperTrial.main, the command's "try") is run only with words it refuses.
 // A live trial is a file whose suite is `.enabled(if: trial…)`; it starts the program its variable names.
+// Behind the scan, Spawn itself refuses under the tests any program that is not a fake (TestRunGuard).
 import Foundation
 import SomethingCore
 import Testing
@@ -90,6 +91,24 @@ struct NoRealAgentTests {
             return
         }
         #expect(asked.kind == "claude" && asked.record == "out.jsonl" && asked.planB)
+    }
+
+    /// Whatever a test does, Spawn starts no program outside the temporary folder and the system's tools, but the one
+    /// a SOMETHING_TRIAL_* variable names. sysctl stands in for an agent installed on this Mac: it is never started.
+    @Test func spawnRefusesARealProgramUnderTheTests() throws {
+        #expect(TestRunGuard.underTests)
+        let spawn = Spawn(path: "/usr/sbin/sysctl", arguments: ["-n", "hw.ncpu"], folder: "/", environment: [:], input: false)
+        do {
+            try spawn.start(lines: { _ in }, ended: { _ in })
+            spawn.stop()
+            Issue.record("a program outside the temporary folder was started")
+        } catch { #expect((error as? CodedError)?.code == "LAUNCH_FAILED") }
+        #expect(spawn.pid == 0)
+        #expect(TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/sysctl"]))
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/other"]))
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_RECORD": "/usr/sbin/sysctl"]), "only a kind's variable names a program")
+        #expect(TestRunGuard.allowed(NSTemporaryDirectory() + "fake/claude", environment: [:]))
+        #expect(TestRunGuard.allowed("/bin/sh", environment: [:]) && !TestRunGuard.allowed("/opt/homebrew/bin/claude", environment: [:]))
     }
 
     /// The throwaway engine finds no program its PATH lacks, even one installed on this Mac.

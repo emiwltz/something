@@ -58,6 +58,14 @@ enum Command: Equatable {
         }
     }
 
+    /// What to say when `name` is the path of an export (a .something file) that is not there; nil otherwise. Checked
+    /// before any app starts, inside the .app (here) and under `swift run` (main.swift) alike.
+    static func missingExport(_ name: String) -> String? {
+        guard (name as NSString).pathExtension == "something",
+              !FileManager.default.fileExists(atPath: URL(fileURLWithPath: name).standardizedFileURL.path) else { return nil }
+        return "There is no file at \(name): give the path of an export, a .something file."
+    }
+
     /// Does what was asked and returns the exit status. `door` reaches the app; `say` prints to the terminal, on
     /// standard error when its second argument is true.
     @MainActor func run(places: Places, share: URL, door: Door, say: (String, Bool) -> Void) -> Int32 {
@@ -66,12 +74,11 @@ enum Command: Equatable {
             return door.start().map { say($0, true); return 1 } ?? 0
         case .open(let name) where (name as NSString).pathExtension == "something":
             // An export goes to the app, which imports it as a double click in Finder does.
-            let file = URL(fileURLWithPath: name).standardizedFileURL
-            guard FileManager.default.fileExists(atPath: file.path) else {
-                say("There is no file at \(name): give the path of an export, a .something file.", true)
+            if let missing = Command.missingExport(name) {
+                say(missing, true)
                 return 1
             }
-            return door.deliver(file).map { say($0, true); return 1 } ?? 0
+            return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
         case .open(let name):
             guard let space = Spaces(root: places.spaces).locate(name) else {
                 say(Spaces.isName(name)

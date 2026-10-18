@@ -68,4 +68,8 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
         try Engine.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
     }
+
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+    }
 }

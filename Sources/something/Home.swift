@@ -1,6 +1,7 @@
 // Home (design 5): the spaces of the spaces folder in a table, the card of the selected one beside it, and below,
 // the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
-// Make default and Show in Finder act on the selected space; New (as `something new`) and Import make a new one. A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
+// Make default and Show in Finder act on the selected space; New (as `something new`) and Import make a new one.
+// A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
 // A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it).
 import AppKit
 import SomethingCore
@@ -26,7 +27,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     /// `share` holds template.html and examples/, which may not exist.
     init(places: Places, share: URL, ask: Asking) {
         (self.places, self.ask) = (places, ask)
-        (examples, template) = (share.appendingPathComponent("examples"), share.appendingPathComponent("template.html"))
+        examples = share.appendingPathComponent("examples")
+        template = share.appendingPathComponent("template.html")
         card = Card(places: places, ask: ask)
         super.init()
         for list in [table, sampleTable] {

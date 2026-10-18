@@ -216,7 +216,7 @@ enum Ask {
             let launch = "Launch or continue \(kind ?? "agents") in the folder chosen for it"
             // pi has no permission modes: a space that launches it gets an agent that never waits for a click.
             guard parts.count == 1 || parts[1] == "pi" else { return launch }
-            return launch + (parts.count == 1 ? " (pi, one of them," : " (pi") + " runs commands and edits files without asking you first)"
+            return launch + (parts.count == 1 ? ". One of them, pi," : ". pi") + " runs commands and edits files without asking you first"
         case "store": return "Keep a memory of its own on this Mac"
         default: return right
         }

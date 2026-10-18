@@ -93,37 +93,23 @@ final class FakeDoor: Door {
 
     /// The program swift test built routes `hook permission`, as Claude's plan-B hook runs it (Engine.hookCommand):
     /// wrong words are a usage error; right ones read the request and print a decision, here a deny that says why,
-    /// since no app keeps the spool alive.
+    /// since no app keeps the spool alive. It also refuses a missing export without starting the app.
     @Test func theBuiltProgramAnswersHookPermission() throws {
         let home = Home()
         defer { home.remove() }
         let spool = home.root.appendingPathComponent("spool")
         try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
-        func hook(_ words: [String]) throws -> (status: Int32, out: String, err: String) {
-            let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
-            process.executableURL = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
-            process.arguments = words
-            process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"]
-            (process.standardInput, process.standardOutput, process.standardError) = (input, out, err)
-            try process.run()
-            input.fileHandleForWriting.write(Data(#"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#.utf8))
-            try input.fileHandleForWriting.close()
-            let deadline = DispatchWorkItem { process.terminate() }
-            DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
-            let printed = out.fileHandleForReading.readDataToEndOfFile(), errors = err.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            deadline.cancel()
-            return (process.terminationStatus, String(decoding: printed, as: UTF8.self), String(decoding: errors, as: UTF8.self))
-        }
+        let program = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
         for wrong in [["hook", "permission"], ["hook", "permission", "--spool"], ["hook", "permission", "--spool", spool.path, "--bogus"]] {
-            let ran = try hook(wrong)
+            let ran = try runBuilt(program, wrong, home: home)
             #expect(ran.status == 2 && ran.out.isEmpty && ran.err.contains("usage: something hook permission"), "\(wrong): \(ran)")
         }
-        let ran = try hook(["hook", "permission", "--spool", spool.path])
-        #expect(ran.status == 0, "\(ran)")
-        let printed = try JSONSerialization.jsonObject(with: Data(ran.out.utf8)) as? [String: Any]
-        let decision = (printed?["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any]
-        #expect(decision?["behavior"] as? String == "deny" && (decision?["message"] as? String)?.contains("something is not running") == true, "\(ran.out)")
+        let ran = try runBuilt(program, ["hook", "permission", "--spool", spool.path], home: home)
+        let decision = hookDecision(ran.out)
+        #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
+        // Under swift run, an export that is not there is said in the terminal, before any app starts.
+        let gone = try runBuilt(program, ["open", "/Users/example/nothing.something"], home: home, input: "")
+        #expect(gone.status == 1 && gone.err.contains("There is no file at /Users/example/nothing.something"), "\(gone)")
     }
 
     /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".

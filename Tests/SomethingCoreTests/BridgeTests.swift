@@ -13,6 +13,8 @@ final class FakeHost: BridgeHost {
     var lines: [JournalLine] = []
     var calls: [String] = []
     var confirmsModes = true
+    /// The modes the person was asked about, in order.
+    var confirmed: [String] = []
 
     init(granted: Granted, memory: Memory? = nil) throws {
         state = try JSONDecoder().decode(State.self, from: ContractFiles.data("state-example.json"))
@@ -40,7 +42,13 @@ final class FakeHost: BridgeHost {
     }
     func resume(_ kind: String, thread: String, of agent: Agent) throws -> String { calls.append("resume \(thread)"); return "n2" }
     func open(_ url: URL) throws -> Bool { calls.append("open \(url.absoluteString)"); return true }
-    func confirms(mode: String, kind: String, folder: String?) -> Bool { mode != "acceptEdits" || confirmsModes }
+    func confirms(mode: String, kind: String, folder: String?) -> Bool {
+        confirmed.append(mode)
+        return mode != "acceptEdits" || confirmsModes
+    }
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        if mode == "never-offered" { throw CodedError("VALUE_NOT_OFFERED", "never-offered is not a mode something offers.") }
+    }
 }
 
 /// The code of the answer, or "ok" for a result.
@@ -151,7 +159,10 @@ struct BridgeTests {
         host.confirmsModes = false
         #expect(code("set", ["agent": "a1", "mode": "acceptEdits"], host) == "REFUSED")
         #expect(code("launch", ["kind": "claude", "mode": "acceptEdits"], host) == "REFUSED")
+        // A launch the engine would refuse is refused before the person is asked anything.
+        #expect(code("launch", ["kind": "claude", "mode": "never-offered"], host) == "VALUE_NOT_OFFERED")
         #expect(host.calls == ["set a1 - acceptEdits"])
+        #expect(host.confirmed == ["acceptEdits", "acceptEdits", "acceptEdits"])
     }
 
     @Test func launchStaysInTheGrantedFolder() throws {

@@ -104,14 +104,35 @@ public final class Engine {
         return !(asksAsMuch[kind] ?? []).contains(mode)
     }
 
+    /// Returns when a launch of `kind` with these values can be tried; throws the error `launch` would give for them,
+    /// before any program is looked for and before any window: NOT_SUPPORTED for a kind without a driver or a value
+    /// its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED
+    /// for a mode it does not offer (never one that skips every permission; OpenCode launches with build or plan).
+    /// Static, so that `something check` answers as the app does.
+    public static func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        guard let type = drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
+            if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
+        }
+        if let model, model.isEmpty || model.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
+        }
+        if let effort, effort.isEmpty || effort.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
+        }
+        if let mode, !type.modes.contains(where: { $0.value == mode }) {
+            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
+        }
+    }
+
     /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
-    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports,
-    /// "manual" the one its help gives now. Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
+    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports
+    /// (its help's "manual" is never offered: ClaudeDriver.modes leaves it out). Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
     /// which older versions offered, asks more. OpenCode 2.0.20: a mode is an agent; build and plan ask as the
     /// person's settings say, and only `--auto`, which something never passes, asks less. pi 1.0.0 takes no mode and
     /// never asks: it is not listed, so any mode for pi (as for a kind not known here) counts as lowering asking, which
     /// is safe, since the bridge refuses a mode pi does not take before any confirmation.
-    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "manual", "plan"], "codex": ["on-request", "untrusted"],
+    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"],
                                                     "opencode": ["build", "plan"]]
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
@@ -146,24 +167,11 @@ public final class Engine {
         return applied
     }
 
-    /// Starts an agent of `kind` in `folder` and returns its id. Throws NOT_SUPPORTED for a kind without a driver or
-    /// a value its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED for a
-    /// mode it does not offer (never one that skips every permission), NOT_INSTALLED, INTERPRETER_NOT_FOUND,
-    /// LAUNCH_FAILED.
+    /// Starts an agent of `kind` in `folder` and returns its id. Throws as `checkLaunch` does, then NOT_INSTALLED,
+    /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
-        guard let type = Engine.drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
-        for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
-            if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
-        }
-        if let model, model.isEmpty || model.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
-        }
-        if let effort, effort.isEmpty || effort.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
-        }
-        if let mode, !type.modes.contains(where: { $0.value == mode }) {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
-        }
+        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+        let type = Engine.drivers[kind]!
         return try launch(type, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 

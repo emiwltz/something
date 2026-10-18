@@ -2,13 +2,14 @@
 
 *For the coding agent a person asks to build them a space. Read this file whole before writing.*
 
-something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), reads the ones started
+something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), will read the ones started
 elsewhere, and shows **spaces**: HTML pages the person asked you to write. A dashboard, a chat, a board of who is
 waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Its last section says
 how to check a space; later chapters add examples.
 
-*Status: something 1.0 is being built. The app opens a space and serves this contract, but it knows no agent yet:
-the state lists none and a launch answers `NOT_SUPPORTED` until the drivers arrive in the next versions.*
+*Status: something 1.0 is being built. The app opens a space, serves this contract and launches Claude Code, Codex,
+OpenCode and pi. It does not read the agents started elsewhere yet: the state lists only the agents it launched, and
+`resume` answers `NOT_SUPPORTED`.*
 
 Rules that hold everywhere:
 
@@ -260,6 +261,8 @@ Call `something.open` for a link your code opens, not from the click handler of 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
 `bypassPermissions`), or one something does not know, is never offered: `VALUE_NOT_OFFERED`, from `set` and `launch`.
+OpenCode is launched with `build` or `plan`; another of its agents is chosen with `set`, once `options.mode` lists it.
+A launch something would refuse is refused before any window opens.
 
 ```js
 const off = something.on("change", (state) => render(state));

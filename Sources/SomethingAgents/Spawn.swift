@@ -59,6 +59,7 @@ public final class Spawn {
         guard FileManager.default.fileExists(atPath: folder, isDirectory: &isFolder), isFolder.boolValue else {
             throw CodedError("LAUNCH_FAILED", "The folder \(folder) does not exist on this Mac.")
         }
+        try TestRunGuard.check(path)
         var inPipe: [Int32] = [-1, -1]
         var outPipe: [Int32] = [-1, -1]
         var errPipe: [Int32] = [-1, -1]

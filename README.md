@@ -2,7 +2,7 @@
 
 A Mac app you start with one command in the terminal. It opens a real window, launches your coding agents through their official channels, always shows you their permission requests, and lets your own agent draw the interface you want in that window.
 
-It is young. Today it opens a space (an HTML page) in a window locked off the network, asks you which rights the space may have, and answers it through `something.js`. Its engine is being rewritten: until the drivers arrive, it knows no agent, and a launch answers `NOT_SUPPORTED`. The design file (in French, private) is the reference: https://claude.ai/artifact/GwPKPZoVZRASAzkF4ELbeR
+It is young. Today it opens a space (an HTML page) in a window locked off the network, asks you which rights the space may have, and answers it through `something.js`. It launches Claude Code, Codex, OpenCode and pi for a space that has the right (see [Agents](#agents)); it does not show the agents you started elsewhere yet. The design file (in French, private) is the reference: https://claude.ai/artifact/GwPKPZoVZRASAzkF4ELbeR
 
 It follows [something](https://github.com/emiwltz/something), which stays frozen as it is.
 
