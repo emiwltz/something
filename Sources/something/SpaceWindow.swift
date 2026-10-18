@@ -68,7 +68,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// Whether `space` is the one of that name in the spaces folder, the only kind that has a memory and a journal.
     static func isKept(_ space: Space, _ places: Places) -> Bool {
-        Spaces(root: places.spaces).named(space.name)?.location.resolvingSymlinksInPath().path == space.location.resolvingSymlinksInPath().path
+        Spaces(root: places.spaces).named(space.name).map { App.same($0, space) } ?? false
     }
 
     /// What every web view that holds a space starts from, the app's window and the check's alike: `scheme` as its
@@ -143,7 +143,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// The guards, then something.js holding `granted`, for every page that holds a space (the check's too).
     static func scripts(_ bridge: String, _ granted: Granted) -> [WKUserScript] {
-        let start = "if (window !== top && parent === top) {\n\(bridge)\nsomething._granted(\(String(decoding: encoded(granted), as: UTF8.self)));\n}\n"
+        let start = "if (window !== top && parent === top) {\n\(bridge)\nsomething._granted(\(json(granted)));\n}\n"
         return [WKUserScript(source: Lockdown.activationScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page),
                 WKUserScript(source: Lockdown.guardScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world),
                 WKUserScript(source: start, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page)]
@@ -158,12 +158,12 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         var grant = held
         if kept {
             do { grant = try AppFile.read(places.grants).spaces[space.name] } catch {
-                return ask.tell((error as? SpaceError)?.message ?? "\(error)")
+                return ask.tell(error.sentence)
             }
         }
         granted = Rights.granted(reading, grant, limits: Engine.limits, home: places.home)
         inject()
-        if let frame { web.evaluateJavaScript("window.something && something._granted(\(String(decoding: SpaceWindow.encoded(granted), as: UTF8.self)))", in: frame, in: .page) }
+        if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceWindow.json(granted)))", in: frame, in: .page) }
         push()
     }
 
@@ -174,7 +174,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         var file = AppFile()
         if kept {
             do { file = try AppFile.read(places.grants) } catch {
-                ask.tell((error as? SpaceError)?.message ?? "\(error)")
+                ask.tell(error.sentence)
                 return nil
             }
         }
@@ -189,7 +189,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             return grant
         }
         file.spaces[space.name] = grant
-        do { try file.write(places.grants) } catch { ask.tell((error as? SpaceError)?.message ?? "\(error)") }
+        do { try file.write(places.grants) } catch { ask.tell(error.sentence) }
         return grant
     }
 
@@ -238,19 +238,18 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
     }
 
-    static func encoded(_ granted: Granted) -> Data {
+    /// `granted` as the JSON the page receives.
+    static func json(_ granted: Granted) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         // Granted holds only strings, lists and maps of them: encoding it cannot fail.
-        return try! encoder.encode(granted)
+        return String(decoding: try! encoder.encode(granted), as: UTF8.self)
     }
 
     // MARK: Navigation: something:// only
 
     /// Whether `frame` is the space's: a frame of the app's page that holds a file of the space. A frame inside the
     /// space never holds one (the navigation policy), so this is the space's frame and no other.
-    func isSpace(_ frame: WKFrameInfo?) -> Bool { SpaceWindow.isSpace(frame) }
-
     static func isSpace(_ frame: WKFrameInfo?) -> Bool {
         guard let frame, !frame.isMainFrame, let url = frame.request.url else { return false }
         return url.scheme == Scheme.name && url.host == Scheme.host
@@ -288,7 +287,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             // A frame inside the space may not hold a file of the space, so the bridge can tell the space's frame
             // from the frames it holds.
             if frame == nil, action.sourceFrame.isMainFrame { return .space(target) }
-            return isSpace(target) ? .allow : .cancel
+            return SpaceWindow.isSpace(target) ? .allow : .cancel
         }
         // about:blank and about:srcdoc frames are the space's own and inherit its policy. A clicked link was handed
         // over by Lockdown's guard before WebKit followed it; the app's page lets the space's frame go nowhere else
@@ -299,7 +298,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// A link the person clicked, from Lockdown's guard: it goes to the link window, unless one is open or links are
     /// blocked until the next reload. A link of a frame inside the space goes nowhere.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
+        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
     }
 

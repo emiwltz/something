@@ -49,12 +49,12 @@ final class Card: NSObject {
                 if let grant { rights = Card.standings(Declaration.read(space, home: places.home), grant, home: places.home) }
                 folder = grant?.folder
             } catch {
-                problem = (error as? SpaceError)?.message ?? "\(error)"
+                problem = error.sentence
             }
             do {
                 journal = try Journal(folder: places.journals).last(100, space: space.name).map(Card.words)
             } catch {
-                journal = [(error as? SpaceError)?.message ?? "\(error)"]
+                journal = [error.sentence]
             }
         }
         draw()
@@ -97,7 +97,7 @@ final class Card: NSObject {
 
     /// Clears the space's refusals (design 3.4): what it was allowed, its folder and its remap stay. The refused
     /// rights are asked again now if it is open, otherwise at its next opening.
-    func askAgain() {
+    @objc func askAgain() {
         change { $0?.refused = [] }
         guard let space, let open = window(space.name) else { return }
         open.load()
@@ -112,7 +112,7 @@ final class Card: NSObject {
             edit(&file.spaces[space.name])
             try file.write(places.grants)
         } catch {
-            ask.tell((error as? SpaceError)?.message ?? "\(error)")
+            ask.tell(error.sentence)
         }
         show(space)
     }
@@ -149,19 +149,14 @@ final class Card: NSObject {
             let now = inForce.isEmpty ? "" : " Allowed until then: " + inForce.map(Ask.words(for:)).joined(separator: "; ") + "."
             view.addArrangedSubview(Card.line("\(Ask.words(for: line.right)): asked at its next opening.\(now)"))
         }
-        view.addArrangedSubview(NSButton(title: "Ask again", target: self, action: #selector(askAgainClicked)))
+        view.addArrangedSubview(NSButton(title: "Ask again", target: self, action: #selector(askAgain)))
         view.addArrangedSubview(Card.header("Journal"))
         let text = NSTextView()
         text.isEditable = false
         text.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         text.string = journal.isEmpty ? "Nothing yet: each write of the space is written here." : journal.joined(separator: "\n")
-        let scroll = NSScrollView()
-        scroll.documentView = text
-        scroll.hasVerticalScroller = true
         text.autoresizingMask = [.width]
-        scroll.heightAnchor.constraint(equalToConstant: 160).isActive = true
-        scroll.widthAnchor.constraint(equalToConstant: 420).isActive = true
-        view.addArrangedSubview(scroll)
+        view.addArrangedSubview(Card.scroll(text, height: 160))
         view.addArrangedSubview(Card.header("Readers"))
         view.addArrangedSubview(NSTextField(wrappingLabelWithString: notes.isEmpty ? "No note from the readers." : notes.joined(separator: "\n")))
     }
@@ -171,6 +166,16 @@ final class Card: NSObject {
         let label = NSTextField(wrappingLabelWithString: text)
         label.preferredMaxLayoutWidth = 380
         return label
+    }
+
+    /// `content` in a column-wide scroll view `height` points tall: Home's lists and the card's journal.
+    static func scroll(_ content: NSView, height: CGFloat) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.documentView = content
+        scroll.hasVerticalScroller = true
+        scroll.heightAnchor.constraint(equalToConstant: height).isActive = true
+        scroll.widthAnchor.constraint(equalToConstant: 420).isActive = true
+        return scroll
     }
 
     static func header(_ title: String) -> NSTextField {
@@ -183,6 +188,4 @@ final class Card: NSObject {
         guard rights.indices.contains(toggle.tag) else { return }
         set(rights[toggle.tag].right, allowed: toggle.state == .on)
     }
-
-    @objc private func askAgainClicked() { askAgain() }
 }

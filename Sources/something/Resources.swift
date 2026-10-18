@@ -48,6 +48,13 @@ struct Places {
     var grants: URL { support.appendingPathComponent("app.json") }
     var journals: URL { support.appendingPathComponent("journal") }
 
+    /// Drops what the grants file kept for `name`: a new space of that name never inherits the answers a deleted
+    /// one left (contract 5). Throws a `SpaceError` when the grants file does not read or cannot be written.
+    func forgetGrants(of name: String) throws {
+        var file = try AppFile.read(grants)
+        if file.spaces.removeValue(forKey: name) != nil { try file.write(grants) }
+    }
+
     /// The person's places. $HOME first, so that `HOME=<folder> swift run something` never reaches their own folders.
     static var person: Places {
         Places(home: ProcessInfo.processInfo.environment["HOME"].map { URL(fileURLWithPath: $0) }

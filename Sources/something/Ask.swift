@@ -1,7 +1,7 @@
 // The native windows that ask the person: the rights a space declares, a mode that makes an agent ask less, a link a
 // space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// quitting while agents run. A space cannot draw them, so a space cannot answer them. Each one
-// names the space it is about. Space windows ask through `Asking`, so their tests answer without a window.
+// quitting while agents run; and the sentence of a failure. A space cannot draw them, so a space cannot answer them.
+// Each one names the space it is about. Space windows ask through `Asking`, so their tests answer without a window.
 import AppKit
 import SomethingCore
 import UniformTypeIdentifiers
@@ -57,9 +57,7 @@ protocol Asking: AnyObject {
 
 final class NativeAsk: Asking {
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
-        let alert = NSAlert()
-        alert.messageText = "“\(question.space)” asks for:"
-        alert.informativeText = question.description ?? ""
+        let alert = Ask.alert("“\(question.space)” asks for:", question.description ?? "", buttons: ["Allow what is ticked", "Not now"])
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
@@ -87,8 +85,8 @@ final class NativeAsk: Asking {
         lines.frame.size = lines.fittingSize
         alert.accessoryView = lines
         // Return keeps nothing: a refusal is remembered, so it takes a click on the button that says what it does.
-        alert.addButton(withTitle: "Allow what is ticked").keyEquivalent = ""
-        alert.addButton(withTitle: "Not now").keyEquivalent = "\r"
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
         let response = Ask.run(alert)
         withExtendedLifetime(choosers) {}
         guard response == .alertFirstButtonReturn else { return nil }
@@ -97,21 +95,15 @@ final class NativeAsk: Asking {
     }
 
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Let “\(space)” put \(Ask.name(of: kind)) in a mode where it \(Ask.words(forMode: mode)) (\(mode))?"
-        alert.informativeText = "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts."
-        alert.addButton(withTitle: "Allow")
-        alert.addButton(withTitle: "Don't allow").keyEquivalent = "\u{1b}"
+        let alert = Ask.alert("Let “\(space)” put \(Ask.name(of: kind)) in a mode where it \(Ask.words(forMode: mode)) (\(mode))?",
+                              "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts.",
+                              buttons: ["Allow", "Don't allow"], escape: 1)
         return Ask.run(alert) == .alertFirstButtonReturn
     }
 
     func link(_ url: URL, space: String) -> LinkChoice {
-        let alert = NSAlert()
-        alert.messageText = "“\(space)” wants to open a link."
-        alert.informativeText = url.absoluteString
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
-        alert.addButton(withTitle: "Block links until reload")
+        let alert = Ask.alert("“\(space)” wants to open a link.", url.absoluteString,
+                              buttons: ["Open", "Cancel", "Block links until reload"], escape: 1)
         switch Ask.run(alert) {
         case .alertFirstButtonReturn:
             NSWorkspace.shared.open(url)
@@ -122,15 +114,12 @@ final class NativeAsk: Asking {
     }
 
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
-        let alert = NSAlert()
-        alert.messageText = "Export “\(space)” with its data?"
         // Ten keys at most: a memory of hundreds would make the window taller than the screen.
         let shown = keys.prefix(10).joined(separator: ", ") + (keys.count > 10 ? " and \(keys.count - 10) more" : "")
-        alert.informativeText = "Its memory holds \(shown) (\(Size.words(bytes))). "
-            + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac."
-        alert.addButton(withTitle: "Without data")
-        alert.addButton(withTitle: "With its data").keyEquivalent = ""
-        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
+        let alert = Ask.alert("Export “\(space)” with its data?", "Its memory holds \(shown) (\(Size.words(bytes))). "
+                              + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac.",
+                              buttons: ["Without data", "With its data", "Cancel"], escape: 2)
+        alert.buttons[1].keyEquivalent = ""
         switch Ask.run(alert) {
         case .alertFirstButtonReturn: return false
         case .alertSecondButtonReturn: return true
@@ -154,22 +143,17 @@ final class NativeAsk: Asking {
     }
 
     func newName() -> String? {
-        let alert = NSAlert()
-        alert.messageText = "A new space"
-        alert.informativeText = "Its name, in small letters, digits and dashes, for example morning-review."
+        let alert = Ask.alert("A new space", "Its name, in small letters, digits and dashes, for example morning-review.",
+                              buttons: ["Make", "Cancel"], escape: 1)
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
         alert.accessoryView = field
-        alert.addButton(withTitle: "Make")
-        alert.addButton(withTitle: "Cancel").keyEquivalent = "\u{1b}"
         alert.window.initialFirstResponder = field
         guard Ask.run(alert) == .alertFirstButtonReturn else { return nil }
         return field.stringValue.trimmingCharacters(in: .whitespaces)
     }
 
     func tell(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = message
-        _ = Ask.run(alert)
+        _ = Ask.run(Ask.alert(message))
     }
 }
 
@@ -195,6 +179,17 @@ final class Chooser: NSObject {
 }
 
 enum Ask {
+    /// An alert that says `message`, with `details` below it and `buttons` (none: OK), the first one the default.
+    /// The button at `escape`, if any, is the one Escape presses.
+    static func alert(_ message: String, _ details: String = "", buttons: [String] = [], escape: Int? = nil) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = details
+        buttons.forEach { alert.addButton(withTitle: $0) }
+        if let escape { alert.buttons[escape].keyEquivalent = "\u{1b}" }
+        return alert
+    }
+
     static func run(_ alert: NSAlert) -> NSApplication.ModalResponse {
         NSApp.activate(ignoringOtherApps: true)
         return alert.runModal()
@@ -230,11 +225,15 @@ enum Ask {
     }
 
     static func quit(stopping count: Int) -> Bool {
-        let alert = NSAlert()
-        alert.messageText = "Quit something?"
-        alert.informativeText = "\(count) agent(s) will stop."
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-        return run(alert) == .alertFirstButtonReturn
+        run(alert("Quit something?", "\(count) agent(s) will stop.", buttons: ["Quit", "Cancel"])) == .alertFirstButtonReturn
+    }
+}
+
+extension Error {
+    /// What went wrong, in the sentence the person reads: a coded error's message with its code and its fix, a
+    /// `SpaceError`'s message, or the system's words.
+    var sentence: String {
+        if let coded = self as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
+        return (self as? SpaceError)?.message ?? localizedDescription
     }
 }

@@ -44,9 +44,10 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     var selected: Space? { spaces.indices.contains(table.selectedRow) ? spaces[table.selectedRow] : nil }
     var selectedSample: Space? { samples.indices.contains(sampleTable.selectedRow) ? samples[sampleTable.selectedRow] : nil }
 
-    /// Reads the spaces, the examples and the default space again, keeping the selection by name.
-    func reload() {
-        let kept = (selected?.name, selectedSample?.name)
+    /// Reads the spaces, the examples and the default space again, then selects the space `name`, or keeps the
+    /// selection by name.
+    func reload(selecting name: String? = nil) {
+        let kept = (name ?? selected?.name, selectedSample?.name)
         spaces = Spaces(root: places.spaces).list()
         samples = Spaces(root: examples).list()
         preferred = forgetGone()
@@ -65,9 +66,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             told = nil
             return file.default
         } catch {
-            let message = (error as? SpaceError)?.message ?? "\(error)"
-            if message != told { ask.tell(message) }
-            told = message
+            if error.sentence != told { ask.tell(error.sentence) }
+            told = error.sentence
             return nil
         }
     }
@@ -109,7 +109,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             file.default = space.name
             try file.write(places.grants)
         } catch {
-            ask.tell((error as? SpaceError)?.message ?? "\(error)")
+            ask.tell(error.sentence)
         }
         reload()
     }
@@ -135,7 +135,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
                 ask.tell("\(space.name) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
             }
         } catch {
-            ask.tell("\(space.name) was not exported. \(Home.words(error))")
+            ask.tell("\(space.name) was not exported. \(error.sentence)")
         }
     }
 
@@ -144,10 +144,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         guard let name = ask.newName() else { return }
         do {
             let space = try Command.new(name, folder: false, places: places, template: template)
-            reload()
-            if let row = spaces.firstIndex(where: { $0.name == space.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
+            reload(selecting: space.name)
         } catch {
-            ask.tell("The space \(name) was not made. \(Home.words(error))")
+            ask.tell("The space \(name) was not made. \(error.sentence)")
         }
     }
 
@@ -164,21 +163,13 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))
             let folder = Spaces(root: places.spaces)
             let name = try Export.freeName(received, in: folder, memory: places.data)
-            var file = try AppFile.read(places.grants)
-            if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
+            try places.forgetGrants(of: name)
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
             let space = try Export.place(received, as: name, in: folder, memory: places.data)
-            reload()
-            if let row = spaces.firstIndex(where: { $0.name == space.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
+            reload(selecting: space.name)
         } catch {
-            ask.tell("\(url.lastPathComponent) was not imported. \(Home.words(error))")
+            ask.tell("\(url.lastPathComponent) was not imported. \(error.sentence)")
         }
-    }
-
-    /// The sentence of a failure, with its code when it has one.
-    static func words(_ error: Error) -> String {
-        if let coded = error as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
-        return (error as? SpaceError)?.message ?? error.localizedDescription
     }
 
     @objc func showInFinder() {
@@ -194,11 +185,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         guard Spaces(root: places.spaces).named(sample.name) == nil, !FileManager.default.fileExists(atPath: target.path) else {
             return ask.tell("A space named \(sample.name) already exists in \(places.spaces.path); rename it to make a new copy.")
         }
-        do {
-            var file = try AppFile.read(places.grants)
-            if file.spaces.removeValue(forKey: sample.name) != nil { try file.write(places.grants) }
-        } catch {
-            return ask.tell("The example \(sample.name) was not copied. \((error as? SpaceError)?.message ?? "\(error)")")
+        do { try places.forgetGrants(of: sample.name) } catch {
+            return ask.tell("The example \(sample.name) was not copied. \(error.sentence)")
         }
         do {
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
@@ -206,8 +194,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         } catch {
             return ask.tell("The example \(sample.name) could not be copied to \(target.path): \(error.localizedDescription)")
         }
-        reload()
-        if let row = spaces.firstIndex(where: { $0.name == sample.name }) { table.selectRowIndexes([row], byExtendingSelection: false) }
+        reload(selecting: sample.name)
     }
 
     // MARK: The table
@@ -237,21 +224,14 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         window.title = "something"
         window.isReleasedWhenClosed = false
         window.delegate = self
-        func button(_ title: String, _ action: Selector?) -> NSButton {
-            let button = NSButton(title: title, target: self, action: action)
-            if action == nil {
-                button.isEnabled = false
-                button.toolTip = "Not in this version yet."
-            }
-            return button
-        }
+        func button(_ title: String, _ action: Selector) -> NSButton { NSButton(title: title, target: self, action: action) }
         actions = [button("Open", #selector(openSelected)), button("Export", #selector(exportSelected)),
                    button("Make default", #selector(makeDefault)), button("Show in Finder", #selector(showInFinder))]
         let bar = NSStackView(views: [actions[0], button("New", #selector(newChosen)), button("Import", #selector(importChosen))] + actions[1...])
         let label = Card.header("Examples, read-only")
         let copy = button("Make a copy", #selector(makeACopy))
-        exampleSection = [label, Home.scroll(sampleTable, height: 120), copy]
-        let left = NSStackView(views: [bar, Card.line("Your spaces, in \(places.spaces.path)"), Home.scroll(table, height: 300)] + exampleSection)
+        exampleSection = [label, Card.scroll(sampleTable, height: 120), copy]
+        let left = NSStackView(views: [bar, Card.line("Your spaces, in \(places.spaces.path)"), Card.scroll(table, height: 300)] + exampleSection)
         left.orientation = .vertical
         left.alignment = .leading
         left.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
@@ -260,14 +240,5 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         window.contentView = content
         window.center()
         return window
-    }
-
-    static func scroll(_ list: NSTableView, height: CGFloat) -> NSScrollView {
-        let scroll = NSScrollView()
-        scroll.documentView = list
-        scroll.hasVerticalScroller = true
-        scroll.heightAnchor.constraint(equalToConstant: height).isActive = true
-        scroll.widthAnchor.constraint(equalToConstant: 420).isActive = true
-        return scroll
     }
 }

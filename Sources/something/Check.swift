@@ -109,7 +109,7 @@ final class CheckRunner {
         report.rights.unknown = reading.unknown
         let state: State
         do { state = try read(check.state) } catch {
-            report.problems.append(Problem("STATE_FILE_UNREADABLE", (error as? SpaceError)?.message ?? "\(error)"))
+            report.problems.append(Problem("STATE_FILE_UNREADABLE", error.sentence))
             return report
         }
         guard windowServer else {
@@ -135,7 +135,7 @@ final class CheckRunner {
             report.calls = host.recorded
         } catch {
             // Without its bridge or its network lock, a space is not opened, in the app as here.
-            report.problems.append(Problem("LOAD_FAILED", (error as? SpaceError)?.message ?? "\(error)"))
+            report.problems.append(Problem("LOAD_FAILED", error.sentence))
         }
         return report
     }
@@ -148,7 +148,7 @@ final class CheckRunner {
             report.journal = Array(lines.suffix(Self.journalLines))
             if lines.count > Self.journalLines { report.journalNote = "the last \(Self.journalLines) lines; older ones are left out" }
         } catch {
-            report.journalNote = "not read: \((error as? SpaceError)?.message ?? "\(error)")"
+            report.journalNote = "not read: \(error.sentence)"
         }
     }
 

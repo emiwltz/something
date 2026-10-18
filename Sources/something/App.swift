@@ -1,6 +1,6 @@
 // The Mac app: the menu bar icon (Home, the open space, Quit), the Edit menu, one Engine, Home, one space window at a
-// time, the spaces and exports LaunchServices hands it, the permission and question panels, the state pushed at most four times a second, and quitting, which asks
-// first while agents something launched run, then stops them.
+// time, the spaces and exports LaunchServices hands it, the permission and question panels, the state pushed at most
+// four times a second, and quitting, which asks first while agents something launched run, then stops them.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -45,8 +45,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.hookCommand = Engine.ownHookCommand
         engine.start(often: false)
         Task { @MainActor in
-            do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
-            do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
+            do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
+            do { try FirstRun.prepare(places) } catch { fail(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             home.forgetGone()
             let early = handed ?? []
@@ -117,11 +117,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.show()
             return nil
         } catch {
-            return (error as? SpaceError)?.message ?? "\(error)"
+            return error.sentence
         }
     }
 
-    /// Whether two spaces are one, however their paths are written: SpaceWindow's `kept` compares them the same way.
+    /// Whether two spaces are one, however their paths are written.
     static func same(_ one: Space, _ other: Space) -> Bool {
         one.location.resolvingSymlinksInPath().path == other.location.resolvingSymlinksInPath().path
     }

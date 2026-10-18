@@ -10,8 +10,7 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     /// around it.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        guard isSpace(message.frameInfo), blocked.isEmpty,
-              let request = message.body as? [String: Any] else {
+        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let request = message.body as? [String: Any] else {
             return replyHandler(nil, "something answers only the page of the open space.")
         }
         replyHandler(Bridge.answer(request, host: self), nil)
@@ -24,7 +23,7 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     func journal(_ line: JournalLine) {
         guard kept else { return }
         do { try Journal(folder: places.journals).append(line, space: space.name) } catch {
-            FileHandle.standardError.write(Data("\((error as? SpaceError)?.message ?? "\(error)")\n".utf8))
+            FileHandle.standardError.write(Data("\(error.sentence)\n".utf8))
         }
     }
 
@@ -68,7 +67,11 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
         try Engine.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
     }
+}
 
+extension BridgeHost {
+    /// The engine's own check of a launch's values, for the app's window and the check alike: a launch the app
+    /// refuses is refused by `something check` too.
     func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
         try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
     }

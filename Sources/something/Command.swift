@@ -93,7 +93,7 @@ enum Command: Equatable {
                 say("Made \(space.page.path). Open it with: something open \(name)", false)
                 return 0
             } catch {
-                say(Home.words(error), true)
+                say(error.sentence, true)
                 return 1
             }
         case .guide(let print):
@@ -136,10 +136,7 @@ enum Command: Equatable {
     /// or a file cannot be written; then no space is left.
     static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
-        do {
-            var file = try AppFile.read(places.grants)
-            if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
-        } catch {
+        do { try places.forgetGrants(of: name) } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error
         }
