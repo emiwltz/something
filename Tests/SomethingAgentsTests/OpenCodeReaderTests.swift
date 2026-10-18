@@ -1,5 +1,5 @@
 // OpenCodeReader over an invented OpenCode data folder built here: an opencode.db whose tables are those OpenCode
-// 2.0.20 creates (column for column), messages in the shape notes/format-opencode.md describes (texts invented), and
+// 2.0.20 creates (column for column), messages in the shape real ones have (texts invented), and
 // fake snapshots for the claim-and-holder rule: a live claim, a stale claim with only something's own server alive,
 // a claim older than every process. A legacy-only database, as OpenCode desktop 1.x leaves, is read as changed.
 import Darwin
@@ -152,7 +152,7 @@ final class OpenCodeHome {
         #expect(done.turns.map(\.state) == ["done"] && done.turns[0].items.map(\.text) == ["Say hello.", "Hello."])
     }
 
-    /// C10: a claim is held only by a live OpenCode process started at or before it, outside something's groups.
+    /// A claim is held only by a live OpenCode process started at or before it, outside something's groups.
     @Test func theClaimAndHolderRule() throws {
         let home = try OpenCodeHome()
         defer { home.remove() }

@@ -1,4 +1,4 @@
-// Spawn: one program something launches, and the held queue of its agent (design 4.1).
+// Spawn: one program something launches, and the held queue of its agent.
 // The program runs in its own process group, so a stop reaches the children it started, even reparented ones. It is
 // spoken to in whole lines on one serial queue: a line written in two pieces kills Claude. Only something holds the
 // write end of its input, so if something crashes the program reads end of file and stops.
@@ -312,7 +312,7 @@ public final class Spawn {
     }
 }
 
-/// The queue something holds for a launched agent (contract 4.2, `send` with `when`), kept in the agent's fold so the
+/// The queue something holds for a launched agent (`send` with `when`), kept in the agent's fold so the
 /// state shows it: "next" waits while a turn is open, the end of a turn hands the first message over, an interrupt
 /// empties it. The driver delivers what this decides.
 public struct HeldQueue: Sendable {

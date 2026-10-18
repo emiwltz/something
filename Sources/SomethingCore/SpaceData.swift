@@ -90,7 +90,7 @@ public struct Memory: Sendable {
     }
 }
 
-/// One line of a space's journal (contract 7). Keys without a value are left out, as shape.json's JournalLine allows:
+/// One line of a space's journal. Keys without a value are left out, as shape.json's JournalLine allows:
 /// an `open` has no agent.
 public struct JournalLine: Codable, Equatable, Sendable {
     public var at: String

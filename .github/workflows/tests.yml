@@ -1,4 +1,4 @@
-# The tests on Macs that are not the author's, at each push, on macOS 15, the floor the package, the app and the formula
+# The tests on GitHub's Macs, at each push, on macOS 15, the floor the package, the app and the formula
 # declare and the oldest runner GitHub still offers (macos-14 is removed on 2 November 2026), and on macos-latest.
 #
 # Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases, and
@@ -9,8 +9,8 @@
 #
 # Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
 # at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
-# how long brew install alone took, and fails above five minutes: criterion 1 asks for brew install and the first
-# start in under five minutes, and the first start cannot be timed on a runner.
+# how long brew install alone took, and fails above five minutes: a newcomer's brew install and first start must take
+# less than that together, and the first start cannot be timed on a runner.
 #
 # No secret is used; the token can only read the repository.
 name: tests
@@ -85,12 +85,12 @@ jobs:
           brew install --HEAD local/something/something
           seconds=$(( $(date +%s) - start ))
           # What is timed: brew install alone, without brew update (turned off above) and without the first start.
-          # Criterion 1 asks for both under five minutes, so the install alone above 300 s turns the run red.
+          # Both must take under five minutes, so the install alone above 300 s turns the run red.
           if [ "$seconds" -gt 300 ]; then
-            echo "::error title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start): over criterion 1's 300 s"
+            echo "::error title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start): over the 300 s it may take"
             exit 1
           fi
-          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start); criterion 1: under 300 s"
+          echo "::notice title=brew install on ${{ matrix.os }}::${seconds} s for brew install alone (no update, no first start); it may take 300 s"
       - run: brew test local/something/something
       - name: The command, as a person types it
         run: |

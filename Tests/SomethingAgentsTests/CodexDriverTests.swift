@@ -26,7 +26,7 @@ import SomethingCore
         #expect(replay.fold.turns.map(\.state) == ["done"], "a declined command lets the turn go on")
     }
 
-    /// The fix of V1: the permissions asked for are sent back, and Codex grants them.
+    /// The permissions asked for are sent back, and Codex grants them.
     @Test func morePermissions() throws {
         let replay = try Replay.play("permissions", kind: "codex")
         let reply = try #require(replay.lines().first { $0["result"] != nil }?["result"] as? [String: Any])
@@ -61,7 +61,7 @@ import SomethingCore
         let replay = try Replay.play("interrupt", kind: "codex")
         #expect(replay.fold.turns.map(\.state) == ["interrupted", "done"])
         let methods = replay.lines().compactMap { $0["method"] as? String }
-        #expect(methods.filter { $0 == "turn/interrupt" }.count == 1, "no interrupt goes to a thread whose turn ended (V1's hang)")
+        #expect(methods.filter { $0 == "turn/interrupt" }.count == 1, "no interrupt goes to a thread whose turn ended")
         #expect(!replay.items.contains { $0.text == "Queued: dropped." })
         #expect(replay.fold.agent.error == nil)
     }

@@ -1,5 +1,5 @@
-// Processes: one snapshot of this Mac's processes per tick, read with libproc and sysctl, never by starting a program
-// (design 4.2, step 1). Every process gives its parent, its group and its start time. Only those whose name a reader
+// Processes: one snapshot of this Mac's processes per tick, read with libproc and sysctl, never by starting a program.
+// Every process gives its parent, its group and its start time. Only those whose name a reader
 // knows give their arguments and folder, and only the candidates a reader asks for give their open files: reading
 // those of every process would cost far more than a tick may.
 import Darwin

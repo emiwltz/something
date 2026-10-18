@@ -1,4 +1,4 @@
-// Tail: follows a JSONL file a harness appends to, and hands over its new whole lines (design 4.2, step 3). Session
+// Tail: follows a JSONL file a harness appends to, and hands over its new whole lines. Session
 // files reach tens of megabytes and single lines of several (tool outputs, images), so nothing is ever read whole:
 // a file seen for the first time gives its last 512 KB, widened to 4 MB when that is not enough, and a line longer
 // than 4 MB is skipped without being decoded. Lines are filtered by a substring before anyone decodes them.

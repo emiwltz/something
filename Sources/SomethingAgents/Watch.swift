@@ -1,4 +1,4 @@
-// Watch: the loop that sees the agents started elsewhere (design 4.2 and 4.3). One timer, every 2 s while a space is
+// Watch: the loop that sees the agents started elsewhere. One timer, every 2 s while a space is
 // open and 10 s otherwise: one process snapshot, then each reader stats its files and reads only what changed; every
 // 15th tick, readers also walk their folders for what a stat cannot find. The work runs on the watch's own queue and
 // its result is handed to the main queue, where the engine drops what it launched itself (dedupe) and folds the rest
@@ -44,7 +44,7 @@ struct Sighting: Equatable {
     var facts: StateMap.Facts
     var folder: String?
     var title: String?
-    /// The program's name, the agent's name when neither a title nor a folder gives one (contract 3.2).
+    /// The program's name, the agent's name when neither a title nor a folder gives one.
     var program: String?
     var model: String?, mode: String?, effort: String?
     var started: Date?
@@ -69,7 +69,7 @@ struct Seen: Equatable {
 }
 
 final class Watch {
-    /// Seen elsewhere, an agent is listed while alive and for this long after its last activity (contract 3.5).
+    /// Seen elsewhere, an agent is listed while alive and for this long after its last activity.
     static let recent: TimeInterval = 24 * 3600
     static let discoveryEvery = 15
 
@@ -117,7 +117,7 @@ final class Watch {
     deinit { timer?.cancel() }
 
     /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings, and none whose
-    /// process descends from something (design 4.3: its children, their descendants and reparented helpers). A
+    /// process descends from something (its children, their descendants and reparented helpers). A
     /// snapshot that is not whole proves no process gone: the readers are not run, and the last result stands.
     func tick(now: Date) -> Seen {
         let processes = snapshot()
@@ -151,7 +151,7 @@ final class Watch {
         return seen
     }
 
-    /// Whether a conversation is listed (contract 3.5): alive, or active within `recent`.
+    /// Whether a conversation is listed: alive, or active within `recent`.
     static func isRecent(alive: Bool?, updated: Date?, now: Date) -> Bool {
         alive == true || (updated.map { now.timeIntervalSince($0) < recent } ?? false)
     }
@@ -203,7 +203,7 @@ final class Watch {
         return (agents, threads)
     }
 
-    /// Whether a conversation seen elsewhere can be continued here (design 4.4), and why not. Only one no process
+    /// Whether a conversation seen elsewhere can be continued here, and why not. Only one no process
     /// holds: one still held would get a second writer. Codex refuses a second writer by itself, so a Codex
     /// conversation whose holder is unknown is offered; Codex says so if its background service holds it.
     static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {

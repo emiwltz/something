@@ -64,8 +64,8 @@ public struct Spaces: Sendable {
     public let root: URL
     public init(root: URL) { self.root = root }
 
-    /// The folders under the home that hold the spaces and their memory, the one place their names are written
-    /// (E-1: English names in place of the specification's `espaces` and `donnees`, pending Emi's word).
+    /// The folders under the home that hold the spaces and their memory: the one place the code
+    /// writes their names.
     public static let folders = (spaces: "something/spaces", data: "something/data")
 
     /// ~/something/spaces under `home`.

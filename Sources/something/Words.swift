@@ -97,7 +97,7 @@ enum Words {
     }
 
     /// What a journal result that is not ok means, in plain words: a refusal, said as the person's or the app's
-    /// reason, or a failure; a code of contract 4.3 this table does not know is named as it is.
+    /// reason, or a failure; a bridge code of contract 1 this table does not know is named as it is.
     static func result(_ code: String) -> String {
         [
             "REFUSED": "you said no",

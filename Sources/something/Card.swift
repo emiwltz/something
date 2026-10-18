@@ -1,4 +1,4 @@
-// The space card (design 5), shown in Home beside the list: the rights of the selected space with a switch each,
+// The space card, shown in Home beside the list: the rights of the selected space with a switch each,
 // "Ask again", where the space lives and where its agents work, the last 100 lines of its journal, one sentence each,
 // and the readers' notes when there are some. A switched right is kept in the grants file and reaches the open space
 // at once as a `granted` event.
@@ -105,7 +105,7 @@ final class Card: NSObject {
         if let space { window(space.name)?.regrant() }
     }
 
-    /// Clears the space's refusals (design 3.4): what it was allowed, its folder and its remap stay. The refused
+    /// Clears the space's refusals: what it was allowed, its folder and its remap stay. The refused
     /// rights are asked again now if it is open, otherwise at its next opening.
     @objc func askAgain() {
         change { $0?.refused = [] }

@@ -209,9 +209,10 @@ the code are in [AGENTS.md](AGENTS.md).
 ```text
 share/                     something.js, the template, the four examples, the skill, the guide, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
-Sources/SomethingAgents/   the engine, and one driver per agent it launches
+Sources/SomethingAgents/   the engine, a driver per agent it launches, a reader per agent it reads
 Sources/something/         the command and the Mac app: menu bar, Home, the space window, the windows that ask you
 packaging/, tools/         the app's Info.plist, the Homebrew formula, make-app.sh
+.github/workflows/         the suite and a Homebrew install, run by GitHub at each push
 Tests/                     the Swift suites, recorded exchanges with invented text, and the node tests of something.js
 ```
 

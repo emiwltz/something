@@ -1,4 +1,4 @@
-// Driver: what every launched agent's driver is (design 4.1), and Launched, one agent something launched: its driver
+// Driver: what every launched agent's driver is, and Launched, one agent something launched: its driver
 // and its held queue, joined. A driver is a pure function over lines: it reads the program's lines, writes lines
 // through the closure it is given, and emits events; it never touches an Agent, and no process is needed to replay it.
 // Launched is where the engine and the replays of Tests/Exchanges meet, so both run the same code.
@@ -176,7 +176,7 @@ final class Launched {
     /// The start of a message, to name it in a sentence.
     static func short(_ text: String) -> String { text.count > 40 ? String(text.prefix(40)) + "…" : text }
 
-    /// `send` of contract 4.1. Returns the delivery. Throws AGENT_STOPPED, BAD_PARAMS for an unknown `when`.
+    /// `send` of something.js. Returns the delivery. Throws AGENT_STOPPED, BAD_PARAMS for an unknown `when`.
     func send(_ text: String, when: String) throws -> String {
         let delivery = try queue.send(text, when: when, at: now())
         switch delivery {

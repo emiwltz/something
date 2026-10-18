@@ -215,7 +215,7 @@ enum Frozen {
         #expect(AgentThread(id: "th", agent: "a1", title: nil, started: nil, turns: Array(turns.prefix(10))).complete)
     }
 
-    /// The journal line of contract 7, as written there, fits JournalLine.
+    /// A journal line as the engine writes it fits shape.json's JournalLine.
     @Test func theJournalLineHasItsShape() throws {
         let line = #"{"at":"2026-10-17T09:00:02Z","action":"send","agent":"a1","kind":"claude","when":"next","text":"Then run the tests.","result":"ok"}"#
         let object = try JSONSerialization.jsonObject(with: Data(line.utf8))
@@ -304,7 +304,7 @@ enum Frozen {
         #expect(codes.values.filter { $0["from"] as? String == "check" }.count == 26)
     }
 
-    /// The fixtures for later slices are well formed now, so a typo is not found only when their engine arrives.
+    /// The contract's fixtures are well formed: each says what it is about, and names only codes codes.json knows.
     @Test func theFixturesAreWellFormed() throws {
         let codes = try #require(try ContractFiles.object("codes.json")["codes"] as? [String: Any])
         let declarations = ContractFiles.fixtures("declarations"), bridge = ContractFiles.fixtures("bridge"),

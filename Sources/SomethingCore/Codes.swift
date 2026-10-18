@@ -107,7 +107,7 @@ public struct Problem: Encodable, Equatable, Sendable {
     }
 }
 
-/// The report of one check (contract 9.2 and 9.3). What the check could not learn stays nil and is written null.
+/// The report of one check. What the check could not learn stays nil and is written null.
 public struct Report: Encodable {
     public struct Rights: Codable, Equatable, EveryKey {
         public var granted: [String] = [], refused: [String] = [], unavailable: [String] = [], unknown: [String] = []

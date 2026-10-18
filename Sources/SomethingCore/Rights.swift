@@ -1,4 +1,4 @@
-// What a space may do (contract 5): the rights' words, the scope matched on whole path components, the `granted` a
+// What a space may do: the rights' words, the scope matched on whole path components, the `granted` a
 // space receives, the grants file the engine keeps outside the spaces folder, and what to ask again at an opening.
 // A space never inherits rights by name: grants are keyed by name, so whoever imports, renames or deletes a space removes its entry.
 import Foundation
@@ -27,7 +27,7 @@ public struct Asked: Codable, Equatable, Sendable {
 public struct AppFile: Codable, Equatable, Sendable {
     public var app = 1
     public var `default`: String?
-    /// Whether the app has made its first-start copy of the agents example: only the app writes it (P15).
+    /// Whether the app has made its first-start copy of the agents example: only the app writes it.
     public var welcomed: Bool?
     public var spaces: [String: Grant] = [:]
     public init() {}
@@ -78,7 +78,7 @@ public enum Rights {
         return folder.map { path in folders.contains { inside(path, $0) } } ?? false
     }
 
-    /// The state limited to what a space sees (contract 3.4): the agents it launched, and those in its scope when it
+    /// The state limited to what a space sees: the agents it launched, and those in its scope when it
     /// holds `state`; the threads and requests of those agents only.
     public static func visible(_ state: State, _ granted: Granted, launched: Set<String>) -> State {
         var state = state, sees = covers(granted.rights, "state")

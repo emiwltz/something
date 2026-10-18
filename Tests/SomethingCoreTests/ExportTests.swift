@@ -1,6 +1,6 @@
-// The .something export (contract 8): each fixture of share/contract/exports read as it says, a file space and a
+// The .something export: each fixture of share/contract/exports read as it says, a file space and a
 // folder space through a round trip, every hostile document refused with its code before anything is written, a
-// taken name, and criterion 7: a string planted in an invented agent session never reaches an export.
+// taken name, and a string planted in an invented agent session never reaches an export.
 import Foundation
 import Testing
 @testable import SomethingCore

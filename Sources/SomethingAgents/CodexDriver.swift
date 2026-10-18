@@ -1,8 +1,8 @@
 // CodexDriver: Codex launched by something, through `codex app-server`, its official channel: JSON-RPC, one object
 // per line on its input and output, with no "jsonrpc" key. Each launch is its own private server, which holds one
 // conversation (a "thread"); something never joins the background server a terminal Codex shares. It turns Codex's
-// raw words into neutral events (design 3.2): turn/started and turn/completed into turns, its approval requests into
-// permissions, requestUserInput into a question. What each choice rests on (notes, channel-codex) is said where it is
+// raw words into neutral events: turn/started and turn/completed into turns, its approval requests into
+// permissions, requestUserInput into a question. What each choice rests on is said where it is
 // made.
 import Foundation
 import SomethingCore
@@ -23,10 +23,10 @@ public final class CodexDriver: Driver {
     /// The policy a launch that names none puts on its first turn when the thread's own would never ask ("never",
     /// or a granular set of rules, which asks no more than this): a stricter one is left as the person set it.
     static let defaultMode = "on-request"
-    /// How long an interrupt may go unanswered: Codex never answers one sent to a thread with no active turn (V1's hang).
+    /// How long an interrupt may go unanswered: Codex never answers one sent to a thread with no active turn.
     static let interruptTimeout: TimeInterval = 5
 
-    /// The stdio app-server starts no background daemon, even with the `daemon_auto_start` feature on (trial T-2 on
+    /// The stdio app-server starts no background daemon, even with the `daemon_auto_start` feature on (seen on
     /// 0.163.0): no flag is needed.
     public static func command(_ launch: Launch) -> Command { Command(arguments: ["app-server"]) }
 
@@ -238,7 +238,7 @@ public final class CodexDriver: Driver {
         }
     }
 
-    /// What frees a conversation Codex's background service holds (design 4.4).
+    /// What frees a conversation Codex's background service holds.
     static let heldByService = "Codex's background service holds this conversation; run `codex app-server daemon stop` in a terminal, then try again."
 
     /// Codex refused a call; each says what became of what was asked.
@@ -366,7 +366,7 @@ public final class CodexDriver: Driver {
             let text = (item["content"] as? [[String: Any]] ?? []).compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }.joined(separator: "\n")
             if done { emit(.itemAppended(Item(id: id, kind: "message", author: "person", text: text, at: now()))) }
         case "agentMessage":
-            // Every message is shown, "commentary" ones too: about half of a real turn's messages (notes 4.1).
+            // Every message is shown, "commentary" ones too: about half of a real turn's messages.
             if done, let text = item["text"] as? String, !text.isEmpty { emit(.itemAppended(Item(id: id, kind: "message", author: "agent", text: text, at: now()))) }
         case "reasoning":
             let summary = (item["summary"] as? [String] ?? []).joined(separator: "\n")

@@ -423,7 +423,7 @@ import Testing
     }
 
     /// A first start puts the agents example in the spaces folder, without the answers a former space of that name
-    /// left, and opens it while it is the only space (P15); a missing example is said, and the start goes on to Home.
+    /// left, and opens it while it is the only space; a missing example is said, and the start goes on to Home.
     @Test func aFirstStartOpensOnTheAgentsExample() throws {
         let test = Home(prefix: "something-home-")
         defer { test.remove() }

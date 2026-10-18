@@ -1,4 +1,4 @@
-// The window of one open space (design 5): one WKWebView with a new non-persistent data store at each opening, the
+// The window of one open space: one WKWebView with a new non-persistent data store at each opening, the
 // app's page (something://app/) holding the space in a sandboxed frame, something.js and the space's `granted`
 // injected in that frame before its scripts, the something:// scheme as its only source, every navigation away from
 // it cancelled (a clicked http, https or mailto link goes to the link window), no new window, and a reload when a file
@@ -27,7 +27,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private var timer: Timer?
     private var pushed: State?
     /// The answers for a space opened by path, kept for the life of the window only: kept in app.json under its path,
-    /// they would pass to whatever file lands at that path later, and a space never inherits rights (contract 5).
+    /// they would pass to whatever file lands at that path later, and a space never inherits rights.
     private var held: Grant?
     /// The declaration as the last load read it: the one the person was asked about. A switch in the card applies
     /// new answers to it, never to a newer file that no rights window has shown yet.
@@ -101,7 +101,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     /// Answers one call of a page: `answer` gives the answer when the call comes from the space's own frame and the
-    /// space is `open`; any other call is refused (contract 4.4: never a frame inside the space, never the app's page).
+    /// space is `open`; any other call is refused (never a frame inside the space, never the app's page).
     static func reply(_ message: WKScriptMessage, open: Bool, _ answer: ([String: Any]) -> [String: Any],
                       _ replyHandler: @escaping (Any?, String?) -> Void) {
         guard isSpace(message.frameInfo), open, let request = message.body as? [String: Any] else {
@@ -181,7 +181,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// Applies the person's answers as the grants file now keeps them, without asking and without a reload: the page
     /// hears a `granted` event, and the bridge answers by the new rights from its next call. The space's card calls it
-    /// when a right is switched (contract 5: a revocation reaches an open space as a `granted` event).
+    /// when a right is switched: a revocation reaches an open space as a `granted` event.
     /// When the grants file does not read, the rights in force stay as they are and the failure is said.
     func regrant() {
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }

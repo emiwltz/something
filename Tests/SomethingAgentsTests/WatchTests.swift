@@ -149,7 +149,7 @@ import SomethingCore
     }
 }
 
-/// Continue here (design 4.4): a conversation no process holds, for the kinds whose drivers resume one.
+/// Continue here: a conversation no process holds, for the kinds whose drivers resume one.
 @Test func continueHereFollowsTheHolder() {
     #expect(Watch.continuable("claude", alive: true, pid: 41234) == (false, "Claude Code still runs this conversation (pid 41234). Quit it there first."))
     #expect(Watch.continuable("claude", alive: false, pid: nil) == (true, nil))

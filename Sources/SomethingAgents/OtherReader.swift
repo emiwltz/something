@@ -1,5 +1,5 @@
 // OtherReader: the coding agents something knows by name but has no reader for (Gemini CLI, Amp and the like), seen
-// from their process only (design 4.2, kind "other"): alive while the process runs, in its folder, and nothing more.
+// from their process only: alive while the process runs, in its folder, and nothing more.
 // Many are Node programs: the system names their process node (Running.runs).
 import Foundation
 import SomethingCore

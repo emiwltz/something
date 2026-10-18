@@ -1,7 +1,7 @@
 {
   "comment": [
     "What contract 1 promises never to remove or rename. The tests fail when one of these disappears from shape.json,",
-    "codes.json or the guide (rightKinds: the guide's line \"Kinds for a right\"). Adding is free; removing or renaming is a new contract number, and Emi's decision."
+    "codes.json or the guide (rightKinds: the guide's line \"Kinds for a right\"). Adding is free; removing or renaming is a new contract number."
   ],
   "contract": 1,
   "keys": {

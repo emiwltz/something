@@ -1,4 +1,4 @@
-// The bridge host of `something check` (contract 9): it answers a space's calls from an invented state, as a real
+// The bridge host of `something check`: it answers a space's calls from an invented state, as a real
 // engine would answer them, and records each call with its answer. It reaches no agent and opens no window, and the
 // person's journal and memory stay untouched: the check's memory is a throwaway file. A launch's values are checked
 // by the BridgeHost default in SpaceBridge.swift, Engine.checkLaunch, as in the app.

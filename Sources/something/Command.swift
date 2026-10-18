@@ -1,8 +1,7 @@
-// The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
+// The command: what `something <words>` does in a terminal. It starts or fronts the app,
 // hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
 // sentence that says what to type next (`Error.sentence`, which the app's windows say too). The status is 0 when it
-// worked, 1 when it was refused or failed, 2 when the words were wrong or nothing could run; check has its own
-// (contract 9).
+// worked, 1 when it was refused or failed, 2 when the words were wrong or nothing could run; check has its own.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -135,7 +134,7 @@ enum Command: Equatable {
     }
 
     /// Makes the space `name` from the template and returns it. A new space never inherits the answers a deleted
-    /// space of the same name left in the grants file (contract 5). Throws a `SpaceError` when the name is not free
+    /// space of the same name left in the grants file. Throws a `SpaceError` when the name is not free
     /// or a file cannot be written; then no space is left.
     static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
@@ -156,7 +155,7 @@ enum Command: Equatable {
     }
 }
 
-/// `something check`'s words (contract 9). The check itself is in Check.swift.
+/// `something check`'s words. The check itself is in Check.swift.
 struct Check: Equatable {
     var space: String
     var json = false, journal = false

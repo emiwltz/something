@@ -72,7 +72,7 @@ import Testing
         #expect(try run(root.appendingPathComponent("tools/make-app.sh").path, ["", "1.0.0"], quiet: true).status == 2)
     }
 
-    /// The floor is macOS 15 everywhere a person or a tool reads it (decision E-6).
+    /// The floor is macOS 15 everywhere a person or a tool reads it.
     @Test func everyPlaceSaysMacOS15() throws {
         func text(_ path: String) throws -> String { try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8) }
         #expect(try text("Package.swift").contains(#"platforms: [.macOS("15.0")]"#))

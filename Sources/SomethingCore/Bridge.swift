@@ -1,10 +1,10 @@
-// The bridge a space talks through (contract 4): one call in, one answer out. It checks the params, the right, the
+// The bridge a space talks through: one call in, one answer out. It checks the params, the right, the
 // scope and what the agent can do, then asks the shell (BridgeHost) to act, and writes a journal line for every write
 // action, failed or not. The transport is the shell's (WebKit's message handler on the Mac); the answers are decided here.
 import Foundation
 
 /// What the shell around the core provides. Each method acts once the bridge has checked the call, and throws a
-/// `CodedError` with a code of contract 4.3 when it cannot (any other error is answered as AGENT_ERROR).
+/// `CodedError` with a bridge code of contract 1 when it cannot (any other error is answered as AGENT_ERROR).
 public protocol BridgeHost: AnyObject {
     /// The whole state, before the space's scope is applied.
     var state: State { get }
@@ -73,7 +73,7 @@ public enum Bridge {
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CodedError("BAD_PARAMS", "send needs a text that is not empty.") }
             guard when == "next" || when == "now" else { throw CodedError("BAD_PARAMS", "when is \"next\" or \"now\", not \"\(when)\".") }
             let agent = try writable(id, host, &line)
-            // An idle agent starts a turn with either `when` (contract 4.1); steer and queue only matter during a turn.
+            // An idle agent starts a turn with either `when`; steer and queue only matter during a turn.
             try able(agent, "send"); if ["working", "waiting"].contains(agent.state) { try able(agent, when == "now" ? "steer" : "queue") }
             return ["delivery": try host.deliver(text, to: agent, when: when)]
         case "interrupt":

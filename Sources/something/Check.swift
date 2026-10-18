@@ -1,4 +1,4 @@
-// `something check` (contract 9; design 3.6 and 5, "The check runner"): it loads a space as the app would (same
+// `something check`: it loads a space as the app would (same
 // scheme, policy, app's page and injection) in a window nobody sees, against an invented state, with the declared
 // rights granted except those --refuse names, and reports what the page did wrong. Its output is read by an agent's
 // model, which may run off this Mac: it never reads a real agent's state or the person's memory.

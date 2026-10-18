@@ -1,5 +1,5 @@
 // ClaudeDriver: Claude Code launched by something, through `claude -p` with JSON lines in and out (stream-json), the
-// channel Anthropic's SDKs use. It turns Claude's raw words into neutral events (design 3.2): its session state into
+// channel Anthropic's SDKs use. It turns Claude's raw words into neutral events: its session state into
 // turns, `can_use_tool` into a permission or, for AskUserQuestion, a question, `aborted_*` into an interruption. The
 // channel is undocumented in places; what each choice rests on is said where it is made.
 import Foundation
@@ -8,7 +8,7 @@ import SomethingCore
 public final class ClaudeDriver: Driver {
     public static let kind = "claude"
     public static let tested = "2.1.296"
-    /// None: trial T-1 showed that Claude takes an effort at launch (`--effort`) and during a session
+    /// None: ClaudeTrial.swift showed that Claude takes an effort at launch (`--effort`) and during a session
     /// (`apply_flag_settings` with `effortLevel`, from its next request to the model).
     public static let limits: [String: String] = [:]
     /// Claude refuses an effort its model does not list: `can.effort` follows `options.effort`.

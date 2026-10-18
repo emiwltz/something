@@ -1,9 +1,9 @@
 // OpenCodeReader: the OpenCode conversations started elsewhere (a terminal, OpenCode's background service), read from
-// OpenCode's own database, never through its program (design 4.2). OpenCode 2 keeps every session in one SQLite file:
+// OpenCode's own database, never through its program. OpenCode 2 keeps every session in one SQLite file:
 // `session_v2` for the sessions, `session_message` for their messages, whose `data` is read only through the JSON
 // paths named here. The database is queried again only when its file or its log moved. A run takes a claim on its
 // session (`time_suspended`) and releases it at its end; a run cut by a crash or a shutdown leaves it set, so a claim
-// counts only when a live OpenCode process could hold it (C10). The database says nothing of what a session waits on,
+// counts only when a live OpenCode process could hold it. The database says nothing of what a session waits on,
 // so `waiting` is null.
 import Darwin
 import Foundation
@@ -141,7 +141,7 @@ final class OpenCodeReader: Reader {
         return fold
     }
 
-    /// The claim-and-holder rule (C10): a claim taken at t is held only by a live OpenCode process started at or
+    /// The claim-and-holder rule: a claim taken at t is held only by a live OpenCode process started at or
     /// before t, that does not descend from something. Without a claim, no such OpenCode process proves the session
     /// idle in no process; one of them leaves it unknown.
     private func sighting(_ session: Session, _ snapshot: Snapshot) -> Sighting {

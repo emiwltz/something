@@ -1,4 +1,4 @@
-// PermissionSpool: the folder between Claude Code's plan B and something (design 4.1, "Claude plan B"). When Claude
+// PermissionSpool: the folder between Claude Code's plan B and something. When Claude
 // cannot ask something over its own channel, a PermissionRequest hook given at launch runs `something hook permission
 // --spool <dir>` for each request. That command (SpoolHook) writes the request to <uuid>.ask.json, waits for
 // <uuid>.answer.json, and prints the decision for Claude. The app's side (PermissionSpool) keeps a heartbeat file fresh,
@@ -13,7 +13,7 @@ enum Spool {
     /// every second, is only a backstop for an app that is there but no longer works.
     static let heartbeat = "heartbeat"
     static let ask = ".ask.json", answer = ".answer.json"
-    /// Older than this, the heartbeat means nobody can answer. Wider than design 4.1's 5 s: App Nap and a Mac waking
+    /// Older than this, the heartbeat means nobody can answer. Wider than 5 s: App Nap and a Mac waking
     /// from sleep delay a background app's timer by more than that, and the pid already tells a crash at once.
     static let stale: TimeInterval = 30
     /// Claude's own limit for the hook (`timeout` in the launch's settings), in seconds.

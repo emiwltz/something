@@ -1,5 +1,5 @@
 // ClaudeReader: the Claude Code sessions started elsewhere (a terminal, the desktop app, an editor), read from Claude's
-// own files, never through its program (design 4.2). The registry, `sessions/<pid>.json`, one small file per running
+// own files, never through its program. The registry, `sessions/<pid>.json`, one small file per running
 // session, says which process holds which conversation and what it waits on; the transcript,
 // `projects/<folder>/<id>.jsonl`, gives its turns, from whitelisted fields only. The `.key` files beside the registry
 // hold secrets: only names matching `^\d+\.json$` are ever opened. `claude agents --json` is never run, since it can
@@ -150,7 +150,7 @@ final class ClaudeReader: Reader {
         case "busy":
             facts.turnOpen = true
             facts.waiting = .nothing
-        // "shell" is a session idle while a background shell it started still runs (notes/format-claude.md 1.3).
+        // "shell" is a session idle while a background shell it started still runs.
         case "idle", "shell":
             facts.turnOpen = false
             facts.waiting = .nothing

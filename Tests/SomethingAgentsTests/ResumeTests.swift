@@ -1,4 +1,4 @@
-// Continue here (design 4.4), through the Engine: a Claude Code conversation and Codex ones started elsewhere, seen by
+// Continue here, through the Engine: a Claude Code conversation and Codex ones started elsewhere, seen by
 // their readers in a throwaway home (a registry record, rollouts in a day folder), then continued by fake programs
 // (EngineTests' fake claude, and a fake codex app-server that answers thread/resume, or refuses it as 0.163.0 does
 // when another writer holds the thread, Tests/Exchanges/codex/held.jsonl, until the test frees it). A retry goes

@@ -1,13 +1,13 @@
-// The bridge a space talks to something through: contract 1, section 4. Plain JavaScript, no dependency.
-// The engine injects it before the page's scripts, then calls _granted and _push. Any engine that answers the
-// transport of contract 4.4 can host it; on the Mac the transport is WebKit's "something" message handler.
+// The bridge a space talks to something through: contract 1, as the guide describes it under "The bridge". Plain
+// JavaScript, no dependency. The engine injects it before the page's scripts, then calls _granted and _push. Each call
+// posts {contract, id, method, params} to WebKit's "something" message handler, which answers {result} or {error}.
 (function () {
   "use strict";
   const listeners = { change: [], granted: [] };
   let granted = { rights: [], refused: [], unavailable: [], limits: {}, agents: { folders: [] }, folder: null };
   let next = 1;
 
-  // An Error with a code of contract 4.3, so a page can branch on .code and show .message.
+  // An Error with a bridge code of contract 1, so a page can branch on .code and show .message.
   function failure(code, message) {
     const error = new Error(message);
     error.code = code;

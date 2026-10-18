@@ -55,7 +55,7 @@ public final class Engine {
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
     private var looked = false
-    /// Whether a space is open, which the readers' cadence will follow (slices 16 to 18).
+    /// Whether a space is open, which sets the readers' cadence: every 2 s, else 10 s.
     private(set) var often = false
     /// The agents something launched, in launch order, with their program.
     private var launched: [(agent: Launched, spawn: Spawn)] = []
@@ -94,7 +94,7 @@ public final class Engine {
     }
 
     /// The agents the watch saw, but those something launched: the groups of its running children and the
-    /// conversations its drivers reported are left out (design 4.3). An ended child's group is not: its pid may be
+    /// conversations its drivers reported are left out. An ended child's group is not: its pid may be
     /// reused by a program started by hand, and its conversation is still left out by its key.
     private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
         let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
@@ -111,12 +111,12 @@ public final class Engine {
         if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { changed() }
     }
 
-    /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without
+    /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without
     /// any is left out. Static, so that `something check` gives the same without an engine.
     public static var limits: [String: [String]] { drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
-    /// asks the person first (contract 4.1). Every mode is taken as one that lowers asking, but those known to ask
+    /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
     /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)
     /// is confirmed rather than guessed. Throws VALUE_NOT_OFFERED, before any window, for a mode the kind never
     /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
@@ -170,7 +170,7 @@ public final class Engine {
     }
 
     // What a space asks through the bridge (SomethingCore/Bridge.swift checked the call first). Each throws a
-    // `CodedError` with a code of contract 4.3.
+    // `CodedError` with a bridge code of contract 1.
 
     /// Returns the delivery: "started", "steered" or "queued". Throws AGENT_NOT_FOUND, AGENT_STOPPED (also once its
     /// stop was asked), BAD_PARAMS.
@@ -256,11 +256,11 @@ public final class Engine {
         return (agent, spawn)
     }
 
-    /// The kinds whose conversations seen elsewhere can be continued here (contract 3.7).
+    /// The kinds whose conversations seen elsewhere can be continued here.
     static let continuable: Set = ["claude", "codex"]
 
     /// Continues here the conversation `thread` of `agent`, an agent seen elsewhere, in the conversation's own folder,
-    /// and returns the id of the agent launched for it, which lists it from then on (design 4.4). Throws
+    /// and returns the id of the agent launched for it, which lists it from then on. Throws
     /// THREAD_NOT_FOUND when no agent seen now holds that conversation, STILL_RUNNING while its process runs,
     /// NOT_SUPPORTED when it cannot be continued here, then as `launch` does. Codex's background service holding the
     /// conversation comes after the launch, as the agent's HELD_ELSEWHERE error.
@@ -350,7 +350,7 @@ public final class Engine {
     static func now() -> String { ISO8601DateFormatter().string(from: Date()) }
 }
 
-/// `something hook permission --spool <dir>`: Claude's plan B (design 4.1). Returns the exit status.
+/// `something hook permission --spool <dir>`: Claude's plan B. Returns the exit status.
 /// `arguments` are every word after `something`, `hook permission` first, as the command routes them. Returns 0 once
 /// a decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
 public enum PermissionHook {

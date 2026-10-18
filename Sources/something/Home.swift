@@ -1,4 +1,4 @@
-// Home (design 5): the spaces of the spaces folder in a table, one of them always selected while there is one, the
+// Home: the spaces of the spaces folder in a table, one of them always selected while there is one, the
 // card of the selected one beside it, and below, the examples, read-only, each with "Make a copy" (the section shows
 // nothing while there is none). An empty list says how to make a first space. Open, Export, Make default and Show in
 // Finder act on the selected space; New (as `something new`) and Import make a new one.
@@ -107,7 +107,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     }
 
     /// Drops what the grants file kept for `name`: a new space of that name never inherits the answers a deleted
-    /// one left (contract 5). Throws a `SpaceError` when the grants file does not read or cannot be written.
+    /// one left. Throws a `SpaceError` when the grants file does not read or cannot be written.
     static func forget(_ name: String, in places: Places) throws {
         var file = try AppFile.read(places.grants)
         if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
@@ -143,7 +143,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     }
 
     /// Saves the selected space as a .something file. Its memory goes with it only when the person says so, after
-    /// seeing its keys and size; grants and journal never do (contract 8).
+    /// seeing its keys and size; grants and journal never do.
     @objc func exportSelected() {
         guard let space = selected else { return }
         do {
@@ -184,7 +184,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
 
     /// Reads the .something file at `url` and makes it a new space, selected. It has no grant: what the grants file
     /// kept for the name it gets is dropped before anything is written, so a grants file that cannot be changed
-    /// leaves no space, and the space asks for its rights at its first opening (contract 5).
+    /// leaves no space, and the space asks for its rights at its first opening.
     func importSpace(from url: URL) {
         do {
             // Mapped, not loaded: a huge file is refused by Export.read for its size without being read.
@@ -213,7 +213,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
 
     /// Copies the example `sample` into the spaces folder under its own name. A copy has no grant: answers left in
     /// the grants file by a space of the same name, deleted in Finder, are forgotten first, as a received space never
-    /// inherits rights by name (contract 5); it asks its rights at its first opening. Throws a `SpaceError` that says
+    /// inherits rights by name; it asks its rights at its first opening. Throws a `SpaceError` that says
     /// why when that name is taken, the grants file cannot be changed, or the copy cannot be written.
     static func copy(_ sample: Space, into places: Places) throws {
         let target = places.spaces.appendingPathComponent(sample.location.lastPathComponent)

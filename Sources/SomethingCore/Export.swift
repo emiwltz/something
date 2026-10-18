@@ -1,8 +1,8 @@
-// A space as one `.something` file (contract 8): one JSON document with its files in base64 and its memory or null,
+// A space as one `.something` file: one JSON document with its files in base64 and its memory or null,
 // written from the space's own files only, never through a link; and the reading and placing of one, which refuses a
 // path that is not a plain path inside the space, a newer contract, and a file too big, before anything is written.
 // Grants and journals are never read here, so they cannot travel; whoever imports drops the grants of the name the
-// space receives before placing it (contract 5).
+// space receives before placing it.
 import Foundation
 
 /// A `.something` document once read and checked: what an import writes.

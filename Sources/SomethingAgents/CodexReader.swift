@@ -1,5 +1,5 @@
 // CodexReader: the Codex conversations started elsewhere (a terminal, Codex's background service, the desktop app),
-// read from Codex's own files, never through its program (design 4.2). The thread index, the highest
+// read from Codex's own files, never through its program. The thread index, the highest
 // `state_N.sqlite`, says which conversations moved in the last 24 hours and where each one's rollout is; the rollout,
 // a JSONL file Codex appends to, gives the turns, from whitelisted fields only. A conversation whose writer lock a
 // codex process holds is read however long it has been idle: it is listed while alive. When the index changed shape, the

@@ -1,5 +1,5 @@
-// PiReader: the pi conversations started elsewhere (a terminal), read from pi's own files, never through its program
-// (design 4.2). pi writes one JSONL log per conversation, under ~/.pi/agent/sessions/<folder>/, or flat in the
+// PiReader: the pi conversations started elsewhere (a terminal), read from pi's own files, never through its program.
+// pi writes one JSONL log per conversation, under ~/.pi/agent/sessions/<folder>/, or flat in the
 // sessions folder of another agent folder (~/.pi/<name>/sessions, which a shell alias can choose); its first line is
 // a `session` header that names the conversation's folder. pi holds no file open and takes no lock, so a process is
 // tied to a log by its working folder only (evidence "cwd", the weakest): one pi in a folder holds the log of that

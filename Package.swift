@@ -1,7 +1,7 @@
 // swift-tools-version:5.9
 // The recipe to build something. No package dependency.
-// SomethingCore uses Foundation only, so it can build on Linux and Windows later. It names no agent beyond the kinds
-// a right of contract 1 may name.
+// SomethingCore holds contract 1 and uses Foundation only. It names no agent beyond the kinds a right of contract 1
+// may name.
 // SomethingAgents holds the engine and what is specific to each agent (Foundation and Darwin).
 // The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time.
 import PackageDescription

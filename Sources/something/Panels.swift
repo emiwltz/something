@@ -1,4 +1,4 @@
-// The permission and question panels (design 4.1 and 5, E-9): a native panel for each request of an agent something
+// The permission and question panels: a native panel for each request of an agent something
 // launched, one at a time, in the order they came. A permission is allowed once or denied, and Escape denies; a
 // question is answered or left unanswered. The panels are not modal, so a request the agent withdraws closes its
 // panel while the person still looks at it. A space sees the request in its state and can never answer it.

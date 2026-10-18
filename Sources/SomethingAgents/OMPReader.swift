@@ -1,5 +1,5 @@
-// OMPReader: the OMP (oh-my-pi) conversations on this Mac, read from OMP's own files, never through its program
-// (design 4.2). something does not launch OMP in 1.0 (D2): every OMP agent is one seen elsewhere. OMP writes one
+// OMPReader: the OMP (oh-my-pi) conversations on this Mac, read from OMP's own files, never through its program.
+// something does not launch OMP in 1.0: every OMP agent is one seen elsewhere. OMP writes one
 // JSONL log per conversation under ~/.omp/agent/sessions/<folder>/<time>_<id>.jsonl (a profile's under
 // ~/.omp/profiles/<name>/agent/sessions); the first 256 bytes are a title slot OMP rewrites in place, then comes the
 // `session` header. Its format is pi's (PiLog). While a conversation is open, its omp process holds the log open, and

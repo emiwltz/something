@@ -1,4 +1,4 @@
-// A space's declaration (contract 2): finds the <script type="application/json" id="something"> block or a folder's
+// A space's declaration: finds the <script type="application/json" id="something"> block or a folder's
 // something.json, applies the defaults, and says every problem with its code. Only JSON that does not parse and a
 // contract higher than 1 keep a space from displaying; everything else is a warning and the space opens.
 import Foundation
@@ -215,7 +215,7 @@ extension Declaration {
 }
 
 extension Scope {
-    /// A folder the contract does not allow: neither absolute nor starting with ~ (contract 2).
+    /// A folder the contract does not allow: neither absolute nor starting with ~.
     var hasRelativeFolder: Bool {
         guard case .folders(let folders) = self else { return false }
         return folders.contains { Declaration.expand($0, home: URL(fileURLWithPath: "/")) == nil }

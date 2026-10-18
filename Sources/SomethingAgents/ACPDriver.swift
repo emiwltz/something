@@ -1,9 +1,9 @@
 // ACPDriver: OpenCode launched by something, through `opencode acp`: the Agent Client Protocol (ACP), JSON-RPC 2.0,
 // one object per line on its input and output. Each launch is its own `opencode acp`, with its own private server,
 // holding one conversation (a "session") in OpenCode's shared database. It turns OpenCode's raw words into neutral
-// events (design 3.2): a session/prompt waiting for its answer is an open turn, the answer's stopReason ends it, and
-// session/request_permission is a permission. What each choice rests on (notes, channel-opencode, and trial T-3 on
-// 2.0.20) is said where it is made.
+// events: a session/prompt waiting for its answer is an open turn, the answer's stopReason ends it, and
+// session/request_permission is a permission. What each choice rests on (OpenCodeTrial.swift, against
+// OpenCode 2.0.20) is said where it is made.
 import Foundation
 import SomethingCore
 
@@ -11,7 +11,7 @@ public final class ACPDriver: Driver {
     public static let kind = "opencode"
     public static let tested = "2.0.20"
     /// Over ACP a second session/prompt during a turn is refused ("Session already has an active ACP prompt"), and
-    /// OpenCode has no steer there (D3): a message for later waits in something's own queue.
+    /// OpenCode has no steer there: a message for later waits in something's own queue.
     public static let limits = ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."]
     /// OpenCode names the session when it starts it.
     public static let picksThread = false
@@ -24,7 +24,7 @@ public final class ACPDriver: Driver {
     /// Nothing else on the line: model, mode and effort go through the channel, where OpenCode says what it took.
     public static func command(_ launch: Launch) -> Command { Command(arguments: ["acp"]) }
 
-    /// The sentence for a conversation OpenCode left marked as running (design 4.1, OPENCODE_CLAIM_LEFT).
+    /// The sentence for a conversation OpenCode left marked as running.
     static func claimLeft(_ session: String) -> String {
         "OpenCode ended during a turn and left its conversation \(session) marked as running: the next time OpenCode's background service starts, it may continue that turn by itself. Open the conversation in OpenCode to finish or stop it."
     }
@@ -130,7 +130,7 @@ public final class ACPDriver: Driver {
     }
 
     /// Each value goes out with session/set_config_option, one at a time; OpenCode answers with all its options, and
-    /// the state shows what it took (it may keep another model when its catalog was not ready, notes 5.1). A turn
+    /// the state shows what it took (it may keep another model when its catalog was not ready). A turn
     /// that runs keeps the values it started with.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
         settings += [("mode", mode), ("model", model), ("effort", effort)].compactMap { key, value in value.map { (key, $0) } }
@@ -182,7 +182,7 @@ public final class ACPDriver: Driver {
 
     /// The claim sentence, when one of something's own turns was still open at the end and OpenCode's database still
     /// marks the conversation as running; nil otherwise, and when the database cannot be read. A turn OpenCode
-    /// answered, done or cancelled, released its claim (T-3); a claim no open turn of something's took (an earlier
+    /// answered, done or cancelled, released its claim; a claim no open turn of something's took (an earlier
     /// crash, the person's own OpenCode on the same conversation) is not something's to report.
     private func leftClaim() -> String? {
         guard prompting, let session, let database, ACPDriver.claimed(session, in: database) == true else { return nil }
@@ -232,7 +232,7 @@ public final class ACPDriver: Driver {
             }
             switch result["stopReason"] as? String {
             // OpenCode also ends a turn "cancelled" by itself after a refused permission or a dismissed question
-            // (T-3): only something's own cancel makes it an interrupt.
+            // (OpenCodeTrial.swift): only something's own cancel makes it an interrupt.
             case "cancelled" where cancelled: emit(.turnEnded(.interrupted))
             case "max_tokens": emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "OpenCode's model reached its output limit before the end of its answer."))))
             case "refusal": emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "OpenCode's model refused to answer."))))
@@ -265,7 +265,7 @@ public final class ACPDriver: Driver {
     }
 
     private func update(_ update: [String: Any]) {
-        // A sub-agent's updates come into its parent's stream, marked only by this key (notes 6.3).
+        // A sub-agent's updates come into its parent's stream, marked only by this key.
         let child = (update["_meta"] as? [String: Any])?["opencode/child-session"] != nil
         switch update["sessionUpdate"] as? String {
         case let kind? where kind == "agent_message_chunk" || kind == "agent_thought_chunk":

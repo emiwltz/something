@@ -1,4 +1,4 @@
-// Codes.swift equals share/contract/codes.json, code for code, and the report reads as contract 9.2 and 9.3 show it.
+// Codes.swift equals share/contract/codes.json, code for code, and the report reads as the guide and check-example.json show it.
 import Foundation
 import Testing
 @testable import SomethingCore

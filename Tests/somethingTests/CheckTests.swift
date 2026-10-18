@@ -1,4 +1,4 @@
-// `something check` (contract 9): one invented space per check code gives exactly that code, and a clean space none;
+// `something check`: one invented space per check code gives exactly that code, and a clean space none;
 // --json has every key of share/contract/check-example.json; --refuse, --state, --journal and the three exit statuses.
 // The page paints only while AppKit runs the app, which a test cannot do in its own process: these checks run the
 // something program swift test built, in a throwaway home. The three codes a page cannot be made to give on demand
@@ -149,7 +149,7 @@ extension Home {
         #expect(human.out.hasSuffix("\n  0 errors, 0 warnings.\n"))
     }
 
-    /// --json has the keys of contract 9.3, at every level the example shows.
+    /// --json has the keys of share/contract/check-example.json, at every level the example shows.
     @Test func theJsonMatchesTheContractKeyForKey() throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }

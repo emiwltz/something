@@ -206,7 +206,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         try await run.finish()
     }
 
-    /// V1 answered this request with a decision, which Codex takes and grants nothing by: the permissions go back.
+    /// Answered with a decision, this request is taken and grants nothing: the permissions asked for go back.
     @Test func morePermissionsAreGranted() async throws {
         let run = try CodexRun("permissions")
         defer { run.cleanup() }
@@ -261,7 +261,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         try await run.finish()
     }
 
-    /// The hang V1 had: an interrupt sent to a thread whose turn was interrupted is never answered. None is sent.
+    /// An interrupt sent to a thread whose turn was interrupted is never answered. None is sent.
     @Test func anInterruptStopsTheTurnOnce() async throws {
         let run = try CodexRun("interrupt")
         defer { run.cleanup() }

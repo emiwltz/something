@@ -1,8 +1,8 @@
 // PiDriver: pi launched by something, through `pi --mode rpc`, its official channel: one JSON object per line on its
 // input and output. A command carries an id and gets one `response` line that repeats it; events carry none. pi
 // never asks the person anything: it runs commands and edits files without asking first, and has no modes. It turns
-// pi's raw words into neutral events (design 3.2): agent_start and agent_settled into turns, the last assistant
-// message's stopReason into the outcome. What each choice rests on (notes, channel-pi) is said where it is made.
+// pi's raw words into neutral events: agent_start and agent_settled into turns, the last assistant
+// message's stopReason into the outcome. What each choice rests on is said where it is made.
 import Foundation
 import SomethingCore
 
@@ -49,7 +49,7 @@ public final class PiDriver: Driver {
     private var callsWritten = 0
     private var thread: String?
     /// True from agent_start until agent_settled: retries, compaction and queued messages come between agent_end and
-    /// agent_settled, and only agent_settled means nothing more happens on its own (notes 4).
+    /// agent_settled, and only agent_settled means nothing more happens on its own.
     private var running = false
     /// An interrupt asked before the run started.
     private var abortAsked = false

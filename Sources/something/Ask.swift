@@ -7,7 +7,7 @@ import SomethingAgents
 import SomethingCore
 import UniformTypeIdentifiers
 
-/// What the rights window asks about one space: only what changed since the person last answered (contract 5).
+/// What the rights window asks about one space: only what changed since the person last answered.
 struct RightsQuestion: Equatable {
     var space: String
     var description: String?

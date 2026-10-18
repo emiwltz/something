@@ -1,5 +1,5 @@
 // PiReader and OMPReader against an invented home (Tests/Fixtures/pi-home) of the exact shapes pi 1.0.0 and OMP 18.8.6
-// write (notes/format-pi-omp.md, texts invented): pi logs in two shop conversations, a blog one with a custom entry
+// write (texts invented): pi logs in two shop conversations, a blog one with a custom entry
 // whose data comes before its id, and a flat one in a second agent folder; OMP logs with their 256-byte title slot, a
 // branch left behind, a sub-agent's log, a session that exited and the leases left on disk. Fake snapshots give the
 // processes; each case copies the home into a throwaway folder and dates its files.
@@ -289,7 +289,7 @@ final class PiHome {
         ])
         let watch = Watch(readers: [OtherReader()], snapshot: { snapshot })
         let (agents, threads) = Watch.elsewhere(watch.tick(now: started), groups: [], keys: [], now: started)
-        // Named by their folder, else by their program (contract 3.2).
+        // Named by their folder, else by their program.
         #expect(agents.map(\.name) == ["blog", "notes", "qwen"] && threads.isEmpty, "oldest first, then by key")
         let gemini = try #require(agents.first { $0.id == "other-gemini-54000" })
         #expect(gemini.kind == "other" && gemini.alive == true && gemini.evidence == "process" && gemini.state == "unknown" && gemini.waiting == nil)

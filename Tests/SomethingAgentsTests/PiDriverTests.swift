@@ -1,6 +1,6 @@
 // PiDriver, replayed over Tests/Exchanges/pi (Replay.swift): each file was recorded in trial T-4 against the real
 // pi --mode rpc 1.0.0 and FakeResponsesAPI's Chat Completions, with invented text. Then the cases no recording holds,
-// built from the shapes of channel-pi's notes: the command line, a refused prompt, a failed retry, an extension's
+// built from the shapes pi writes: the command line, a refused prompt, a failed retry, an extension's
 // dialog, an interrupt before the run starts, a launch that fails, and the placeholder model of a pi with no login.
 import Foundation
 import Testing

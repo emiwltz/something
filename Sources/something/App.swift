@@ -12,7 +12,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let places = Places.person
     let engine = Engine(environment: ProcessInfo.processInfo.environment)
     let ask = NativeAsk()
-    /// The open space. One at a time (design 9): opening another closes it.
+    /// The open space. One at a time: opening another closes it.
     var current: SpaceWindow?
     lazy var home = Home(places: places, share: Resources.share, ask: ask)
     lazy var panels = Panels(source: engine)

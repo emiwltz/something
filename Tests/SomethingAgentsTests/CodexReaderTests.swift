@@ -1,5 +1,5 @@
 // CodexReader over an invented ~/.codex built here: a state_5.sqlite whose threads table is the one Codex 0.162 and
-// 0.163 create (column for column), rollouts in the shape notes/format-codex.md describes (texts invented), writer
+// 0.163 create (column for column), rollouts in the shape real ones have (texts invented), writer
 // locks, and fake snapshots whose codex processes hold some of them. SQLiteRO is proven here too.
 import Darwin
 import Foundation
@@ -294,7 +294,7 @@ final class CodexHome {
             .tick(now: home.now).sightings.contains { $0.key == CodexHome.stale }, "the watch keeps what is alive")
     }
 
-    /// notes/format-codex 1.1 and 1.4: a day folder may hold an "A_B" segment headed by A, and a second copy of A.
+    /// A day folder may hold an "A_B" segment headed by A, and a second copy of A.
     @Test func theWalkKeepsOneFilePerConversation() throws {
         let home = try CodexHome(index: false)
         defer { home.remove() }

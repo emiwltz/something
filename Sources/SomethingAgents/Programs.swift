@@ -1,5 +1,5 @@
 // Programs: finds the agent programs something can launch, and what they need to run, whether something was started
-// from a Terminal or from the Finder (design 5, "Agent programs"). It only looks for files and never runs an agent's
+// from a Terminal or from the Finder. It only looks for files and never runs an agent's
 // program: codex and opencode write into their homes when they start, so `installed` must not depend on running them.
 // The one thing it runs is the person's login shell, to learn the PATH their Terminal has, which a Finder launch lacks.
 import Foundation

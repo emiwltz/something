@@ -1,4 +1,4 @@
-// The space window in a real WKWebView, never shown: nothing reaches the network (criterion 9), no space reads
+// The space window in a real WKWebView, never shown: nothing reaches the network, no space reads
 // another's storage, the bridge answers the page and only the page, links go to the link window, the rights are
 // asked once and remembered, and the window reloads when the space changes. Serialized: each test turns the run loop.
 import AppKit
@@ -343,7 +343,7 @@ import WebKit
         #expect(!Ask.words(for: "launch:claude").contains("without asking"))
     }
 
-    /// granted.limits is the table of contract 3.7, as the contract's own fixtures give it.
+    /// granted.limits is the guide's table "What each kind can do", as the contract's own fixtures give it.
     @Test func theLimitsAreTheContracts() throws {
         let bridge = Home.share.appendingPathComponent("contract/bridge")
         let cases = try FileManager.default.contentsOfDirectory(at: bridge, includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }
