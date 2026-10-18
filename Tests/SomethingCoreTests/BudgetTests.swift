@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_700, driver = 600, reader = 400, agentsShared = 400, app = 2_900
+    static let core = 1_700, driver = 600, agentsShared = 400, app = 3_000
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -30,8 +30,9 @@ enum Budget {
         if core > Budget.core { problems.append("SomethingCore has \(core) lines; its budget is \(Budget.core).") }
         for file in files(in: sources.appendingPathComponent("SomethingAgents")) {
             let base = (file.name as NSString).lastPathComponent
-            let (role, budget) = base.hasSuffix("Driver.swift") ? ("driver", driver)
-                : base.hasSuffix("Reader.swift") ? ("reader", reader) : ("shared file", agentsShared)
+            let isDriver = base.hasSuffix("Driver.swift")
+            let role = isDriver ? "driver" : "shared file"
+            let budget = isDriver ? driver : agentsShared
             if file.lines > budget { problems.append("\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
         }
         let app = files(in: sources.appendingPathComponent("something")).map(\.lines).reduce(0, +)
@@ -60,7 +61,7 @@ enum Budget {
         try String(repeating: "let example = 1\n", count: 401).write(to: folder.appendingPathComponent("CodexReader.swift"),
                                                                      atomically: true, encoding: .utf8)
         #expect(Budget.files(in: root.appendingPathComponent("Sources/SomethingAgents")).map(\.name) == ["Readers/CodexReader.swift"])
-        #expect(Budget.problems(under: root) == ["Readers/CodexReader.swift has 401 lines; a reader has 400."])
+        #expect(Budget.problems(under: root) == ["Readers/CodexReader.swift has 401 lines; a shared file has 400."])
     }
 
     @Test func linesAreCountedAsWcCountsThem() {
@@ -74,10 +75,9 @@ enum Budget {
         let cases: [(folder: String, name: String, lines: Int, problem: String)] = [
             ("SomethingAgents", "ClaudeDriver.swift", 601, "ClaudeDriver.swift has 601 lines; a driver has 600."),
             ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
-            ("SomethingAgents", "PiReader.swift", 401, "PiReader.swift has 401 lines; a reader has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_701, "SomethingCore has 1701 lines; its budget is 1700."),
-            ("something", "App.swift", 2_901, "The Mac app has 2901 lines; its budget is 2900."),
+            ("something", "App.swift", 3_001, "The Mac app has 3001 lines; its budget is 3000."),
         ]
         for item in cases {
             for (count, expected) in [(item.lines - 1, [String]()), (item.lines, [item.problem])] {

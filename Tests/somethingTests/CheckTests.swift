@@ -199,6 +199,27 @@ extension Home {
         #expect(checked.codes == ["PROMISE_REJECTED", "RIGHT_NOT_DECLARED"] && checked.status == 1, "\(checked.out)")
     }
 
+    /// A launch the app refuses is refused by the check too: a mode something does not offer for Codex, and a model
+    /// that reads as a flag, which only Engine.checkLaunch refuses (the BridgeHost default both hosts share). Codex,
+    /// not OpenCode: the invented state has no OpenCode installed, which is refused first.
+    @Test func aLaunchTheAppRefusesIsABridgeError() throws {
+        let home = Home()
+        defer { home.remove() }
+        try home.space("x", declared("\"rights\": [\"launch:codex\"]", """
+            <script>
+            something.launch("codex", {mode: "granular"}).catch(() => {});
+            something.launch("codex", {model: "--yolo"}).catch(() => {});
+            </script>
+            """))
+        let checked = try Checked(["x", "--json"], home)
+        let messages = (checked.json["problems"] as? [[String: Any]] ?? []).compactMap { $0["message"] as? String }
+        #expect(checked.codes == ["BRIDGE_ERROR", "BRIDGE_ERROR"], "\(checked.out)")
+        #expect(messages.contains { $0.contains("VALUE_NOT_OFFERED") } && messages.contains { $0.contains("BAD_PARAMS") }, "\(checked.out)")
+        let calls = checked.json["calls"] as? [[String: Any]] ?? []
+        let codes = calls.map { (($0["answer"] as? [String: Any])?["error"] as? [String: Any])?["code"] as? String }
+        #expect(calls.map { $0["method"] as? String } == ["launch", "launch"] && codes == ["VALUE_NOT_OFFERED", "BAD_PARAMS"], "\(checked.out)")
+    }
+
     /// A --refuse word must name a declared right as it is declared, or nothing would be refused.
     @Test func refuseNamesADeclaredRight() throws {
         let home = Home()

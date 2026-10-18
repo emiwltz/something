@@ -2,7 +2,8 @@
 // the examples, read-only, each with "Make a copy" (the section shows nothing while there is none). Open, Export,
 // Make default and Show in Finder act on the selected space; New (as `something new`) and Import make a new one.
 // A space deleted or renamed in Finder loses its grants here, at the next look: a name never inherits rights.
-// A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it).
+// A name whose file or folder is still there keeps them, even while it is not a space (a checkout rewriting it), and
+// a space made, imported or copied under a name forgets what the grants file kept for it first.
 import AppKit
 import SomethingCore
 
@@ -26,7 +27,8 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
 
     /// `share` holds template.html and examples/, which may not exist.
     init(places: Places, share: URL, ask: Asking) {
-        (self.places, self.ask) = (places, ask)
+        self.places = places
+        self.ask = ask
         examples = share.appendingPathComponent("examples")
         template = share.appendingPathComponent("template.html")
         card = Card(places: places, ask: ask)
@@ -66,8 +68,9 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             told = nil
             return file.default
         } catch {
-            if error.sentence != told { ask.tell(error.sentence) }
-            told = error.sentence
+            let message = error.sentence
+            if message != told { ask.tell(message) }
+            told = message
             return nil
         }
     }
@@ -83,6 +86,13 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         gone.forEach { file.spaces[$0] = nil }
         try file.write(places.grants)
         return file
+    }
+
+    /// Drops what the grants file kept for `name`: a new space of that name never inherits the answers a deleted
+    /// one left (contract 5). Throws a `SpaceError` when the grants file does not read or cannot be written.
+    static func forget(_ name: String, in places: Places) throws {
+        var file = try AppFile.read(places.grants)
+        if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
     }
 
     private static func reselect(_ list: NSTableView, _ spaces: [Space], _ name: String?) {
@@ -163,7 +173,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
             let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))
             let folder = Spaces(root: places.spaces)
             let name = try Export.freeName(received, in: folder, memory: places.data)
-            try places.forgetGrants(of: name)
+            try Home.forget(name, in: places)
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
             let space = try Export.place(received, as: name, in: folder, memory: places.data)
             reload(selecting: space.name)
@@ -185,7 +195,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
         guard Spaces(root: places.spaces).named(sample.name) == nil, !FileManager.default.fileExists(atPath: target.path) else {
             return ask.tell("A space named \(sample.name) already exists in \(places.spaces.path); rename it to make a new copy.")
         }
-        do { try places.forgetGrants(of: sample.name) } catch {
+        do { try Home.forget(sample.name, in: places) } catch {
             return ask.tell("The example \(sample.name) was not copied. \(error.sentence)")
         }
         do {

@@ -1,6 +1,6 @@
 // The native windows that ask the person: the rights a space declares, a mode that makes an agent ask less, a link a
 // space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// quitting while agents run; and the sentence of a failure. A space cannot draw them, so a space cannot answer them.
+// quitting while agents run. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. Space windows ask through `Asking`, so their tests answer without a window.
 import AppKit
 import SomethingCore
@@ -226,14 +226,5 @@ enum Ask {
 
     static func quit(stopping count: Int) -> Bool {
         run(alert("Quit something?", "\(count) agent(s) will stop.", buttons: ["Quit", "Cancel"])) == .alertFirstButtonReturn
-    }
-}
-
-extension Error {
-    /// What went wrong, in the sentence the person reads: a coded error's message with its code and its fix, a
-    /// `SpaceError`'s message, or the system's words.
-    var sentence: String {
-        if let coded = self as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
-        return (self as? SpaceError)?.message ?? localizedDescription
     }
 }

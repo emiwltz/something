@@ -1,19 +1,16 @@
 // What a space's calls do on this Mac. SomethingCore/Bridge.swift checks each call and decides its answer; this
 // BridgeHost acts through the Engine, keeps the space's memory and journal, and asks the person in native windows.
+// It also holds the check of a launch's values that both hosts share, so `something check` refuses what the app does.
 import Foundation
 import SomethingAgents
 import SomethingCore
 import WebKit
 
 extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
-    /// Only the open space's own page is answered (contract 4.4): never a frame inside it, never the engine's own page
-    /// around it.
+    /// Only the open space's own page is answered, while it is displayed.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let request = message.body as? [String: Any] else {
-            return replyHandler(nil, "something answers only the page of the open space.")
-        }
-        replyHandler(Bridge.answer(request, host: self), nil)
+        SpaceWindow.reply(message, open: blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
     }
 
     var state: State { engine.state }

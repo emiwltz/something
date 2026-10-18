@@ -1,7 +1,8 @@
 // The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
 // hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
-// sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the
-// words were wrong or nothing could run; check has its own (contract 9).
+// sentence that says what to type next (`Error.sentence`, which the app's windows say too). The status is 0 when it
+// worked, 1 when it was refused or failed, 2 when the words were wrong or nothing could run; check has its own
+// (contract 9).
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -136,7 +137,7 @@ enum Command: Equatable {
     /// or a file cannot be written; then no space is left.
     static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
-        do { try places.forgetGrants(of: name) } catch {
+        do { try Home.forget(name, in: places) } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error
         }
@@ -240,5 +241,14 @@ struct LaunchServices: Door {
             return "\(failure): macOS did not answer within 30 seconds. Try again, or open \(app.path) in Finder."
         }
         return problem.map { "\(failure): \($0.localizedDescription) Try again, or open \(app.path) in Finder." }
+    }
+}
+
+extension Error {
+    /// What went wrong, in the sentence the person reads: a coded error's message with its code and its fix, a
+    /// `SpaceError`'s message, or the system's words.
+    var sentence: String {
+        if let coded = self as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
+        return (self as? SpaceError)?.message ?? localizedDescription
     }
 }

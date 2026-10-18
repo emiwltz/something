@@ -28,7 +28,8 @@ final class Card: NSObject {
     }
 
     init(places: Places, ask: Asking) {
-        (self.places, self.ask) = (places, ask)
+        self.places = places
+        self.ask = ask
         super.init()
         view.orientation = .vertical
         view.alignment = .leading
@@ -83,7 +84,8 @@ final class Card: NSObject {
                 words.filter { $0 != right && Rights.covers([$0], right) }
                     .flatMap { wider in declared.filter { $0 != right && !related($0) && Rights.covers([wider], $0) } }
             }
-            let (keptAllowed, keptRefused) = (kept(next.granted), kept(next.refused))
+            let keptAllowed = kept(next.granted)
+            let keptRefused = kept(next.refused)
             next.granted.removeAll(where: related)
             next.refused.removeAll(where: related)
             next.granted += keptAllowed.filter { !next.granted.contains($0) }

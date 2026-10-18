@@ -48,12 +48,9 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         title = space.name
         kept = SpaceWindow.isKept(space, places)
         scheme = Scheme(space: space)
-        web = WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 640), configuration: SpaceWindow.configuration(scheme, rules: rules))
+        web = SpaceWindow.webView(scheme, rules: rules)
         super.init()
-        web.configuration.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "something")
-        web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "link")
-        web.navigationDelegate = self
-        web.uiDelegate = self
+        SpaceWindow.hold(web, by: self)
     }
 
     /// The text of something.js in `share`. Throws a `SpaceError` when it cannot be read: without it the space could
@@ -71,9 +68,12 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         Spaces(root: places.spaces).named(space.name).map { App.same($0, space) } ?? false
     }
 
-    /// What every web view that holds a space starts from, the app's window and the check's alike: `scheme` as its
-    /// source and Lockdown's `rules`. The message handlers are the holder's own.
-    static func configuration(_ scheme: Scheme, rules: WKContentRuleList) -> WKWebViewConfiguration {
+    /// What answers a web view that holds a space: its calls, its clicked links and its navigations.
+    typealias Holder = NSObject & WKNavigationDelegate & WKUIDelegate & WKScriptMessageHandler & WKScriptMessageHandlerWithReply
+
+    /// A web view for a space, the app's window's and the check's alike: `scheme` as its only source and Lockdown's
+    /// `rules`. Nothing answers it until `hold` gives it its holder.
+    static func webView(_ scheme: Scheme, rules: WKContentRuleList) -> WKWebView {
         let config = WKWebViewConfiguration()
         // A new store at each opening: localStorage and cookies end with the window, and no space reads another's.
         config.websiteDataStore = .nonPersistent()
@@ -82,7 +82,37 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         // Safe Browsing looks addresses up on the Internet.
         config.preferences.isFraudulentWebsiteWarningEnabled = false
         config.userContentController.add(rules)
-        return config
+        return WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 640), configuration: config)
+    }
+
+    /// Makes `holder` answer `web`: the space's calls (something), the links Lockdown's guard hands over (link), and
+    /// every navigation and new window.
+    static func hold(_ web: WKWebView, by holder: Holder) {
+        web.configuration.userContentController.addScriptMessageHandler(holder, contentWorld: .page, name: "something")
+        web.configuration.userContentController.add(holder, contentWorld: Lockdown.world, name: "link")
+        web.navigationDelegate = holder
+        web.uiDelegate = holder
+    }
+
+    /// Stops `web` and lets its holder go: the message handlers keep their holder alive until they are removed.
+    static func release(_ web: WKWebView) {
+        web.stopLoading()
+        web.configuration.userContentController.removeAllScriptMessageHandlers()
+    }
+
+    /// Answers one call of a page: `answer` gives the answer when the call comes from the space's own frame and the
+    /// space is `open`; any other call is refused (contract 4.4: never a frame inside the space, never the app's page).
+    static func reply(_ message: WKScriptMessage, open: Bool, _ answer: ([String: Any]) -> [String: Any],
+                      _ replyHandler: @escaping (Any?, String?) -> Void) {
+        guard isSpace(message.frameInfo), open, let request = message.body as? [String: Any] else {
+            return replyHandler(nil, "something answers only the page of the open space.")
+        }
+        replyHandler(answer(request), nil)
+    }
+
+    /// Hands the page in `frame` the state it sees, as JSON `data`.
+    static func push(_ data: Data, in web: WKWebView, frame: WKFrameInfo) {
+        web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
     }
 
     /// Loads the space and watches its files: when one changes (checked each second), the space reloads.
@@ -235,7 +265,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         bare.at = ""
         guard bare != pushed, let data = try? state.json() else { return }
         pushed = bare
-        web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
+        SpaceWindow.push(data, in: web, frame: frame)
     }
 
     /// `granted` as the JSON the page receives.
@@ -311,8 +341,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// Stops watching and lets the window go; its data store goes with it.
     func close() {
         timer?.invalidate()
-        web.stopLoading()
-        web.configuration.userContentController.removeAllScriptMessageHandlers()
+        SpaceWindow.release(web)
         closed(self)
     }
 }

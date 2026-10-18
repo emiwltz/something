@@ -32,7 +32,8 @@ final class Panels {
     private var answered: Set<String> = []
 
     init(source: PromptSource, shows: Bool = true) {
-        (self.source, self.shows) = (source, shows)
+        self.source = source
+        self.shows = shows
     }
 
     /// Follows the source: a new request joins the queue, a request that left it is dropped, and its panel closes.
@@ -87,7 +88,8 @@ final class PromptPanel: NSPanel {
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
 
     init(_ prompt: Prompt, who: String, decide: @escaping (Answer) -> Void) {
-        (request, self.decide) = (prompt.request, decide)
+        request = prompt.request
+        self.decide = decide
         super.init(contentRect: NSRect(x: 0, y: 0, width: 480, height: 200), styleMask: [.titled, .utilityWindow],
                    backing: .buffered, defer: true)
         isReleasedWhenClosed = false
