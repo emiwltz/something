@@ -28,9 +28,6 @@
     "refused": [],
     "unavailable": [],
     "limits": {
-      "claude": [
-        "effort"
-      ],
       "opencode": [
         "steer"
       ],

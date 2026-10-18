@@ -75,13 +75,12 @@ enum Spool {
 
 /// `something hook permission --spool <dir> [--timeout <seconds>]`, run by Claude Code for each permission request.
 enum SpoolHook {
-    /// `arguments` are the words after `something`, with or without `hook permission` in front. Reads Claude's
-    /// request on standard input and prints its decision. Returns 0 when a decision was printed (a deny included,
-    /// which is what an unanswerable request gets), 2 when the words are wrong.
+    /// `arguments` are every word after `something`, `hook permission` first. Reads Claude's request on standard
+    /// input and prints its decision. Returns 0 when a decision was printed (a deny included, which is what an
+    /// unanswerable request gets), 2 when the words are wrong.
     static func main(_ arguments: [String], input: FileHandle = .standardInput, output: FileHandle = .standardOutput) -> Int32 {
-        var words = arguments[...]
-        if words.first == "hook" { words = words.dropFirst() }
-        if words.first == "permission" { words = words.dropFirst() }
+        guard arguments.starts(with: ["hook", "permission"]) else { return usage() }
+        var words = arguments.dropFirst(2)
         var folder: String?, timeout = Spool.hookTimeout
         while let word = words.popFirst() {
             switch (word, words.popFirst()) {

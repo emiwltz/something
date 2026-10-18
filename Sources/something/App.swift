@@ -1,6 +1,6 @@
 // The Mac app: the menu bar icon (Home, the open space, Quit), the Edit menu, one Engine, Home, one space window at a
-// time, the spaces and exports LaunchServices hands it, the permission and question panels, the state pushed at most four times a second, and quitting, which asks
-// first while agents something launched run, then stops them.
+// time, the spaces and exports LaunchServices hands it, the permission and question panels, the state pushed at most
+// four times a second, and quitting, which asks first while agents something launched run, then stops them.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -14,7 +14,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let ask = NativeAsk()
     /// The open space. One at a time (design 9): opening another closes it.
     var current: SpaceWindow?
-    lazy var home = Home(places: places, examples: Resources.share.appendingPathComponent("examples"), ask: ask)
+    lazy var home = Home(places: places, share: Resources.share, ask: ask)
     lazy var panels = Panels(source: engine)
     var statusItem: NSStatusItem?
     var pushing = false
@@ -38,18 +38,23 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let problem = self?.open(space) { self?.ask.tell(problem) }
         }
         home.card.kinds = { [weak self] in self?.engine.state.kinds ?? [:] }
+        home.card.agents = { [weak self] in self?.engine.state.agents ?? [] }
         home.card.window = { [weak self] name in self?.current.flatMap { $0.kept && $0.space.name == name ? $0 : nil } }
         panels.who = { [weak self] request in self?.who(request) ?? "An agent" }
         engine.changed = { [weak self] in self?.schedulePush() }
-        engine.start(often: true)
+        // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
+        engine.hookCommand = Engine.ownHookCommand
+        engine.start(often: false)
         Task { @MainActor in
-            do { rules = try await Lockdown.ruleList() } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
-            do { try FirstRun.prepare(places) } catch { fail((error as? SpaceError)?.message ?? "\(error)") }
+            do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
+            do { try FirstRun.prepare(places) } catch { fail(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             home.forgetGone()
             let early = handed ?? []
             handed = nil
-            if let opening {
+            if let opening, (opening as NSString).pathExtension == "something" {
+                receive(URL(fileURLWithPath: opening).standardizedFileURL)
+            } else if let opening {
                 guard let space = Spaces(root: places.spaces).locate(opening) else {
                     fail("There is no space \(opening): give the name of a space in \(places.spaces.path), or the path of its .html file or folder.")
                 }
@@ -102,18 +107,22 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 current?.close()
             }
             window.closed = { [weak self] closed in
-                if self?.current === closed { self?.current = nil }
+                guard let self, current === closed else { return }
+                current = nil
+                engine.start(often: false)
             }
             current = window
+            // The readers look often while a space is open, and rarely when nobody is looking.
+            engine.start(often: true)
             window.open()
             window.show()
             return nil
         } catch {
-            return (error as? SpaceError)?.message ?? "\(error)"
+            return error.sentence
         }
     }
 
-    /// Whether two spaces are one, however their paths are written: SpaceWindow's `kept` compares them the same way.
+    /// Whether two spaces are one, however their paths are written.
     static func same(_ one: Space, _ other: Space) -> Bool {
         one.location.resolvingSymlinksInPath().path == other.location.resolvingSymlinksInPath().path
     }
@@ -121,11 +130,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Who asks, for a panel ("Claude Code “shop”, working in /Users/example/code/shop, asks…"): the agent's name and
     /// folder, and the open space when it launched the agent.
     func who(_ request: Request) -> String {
-        guard let agent = engine.state.agents.first(where: { $0.id == request.agent }) else { return "An agent" }
-        var words = Ask.name(of: agent.kind)
+        let launcher = current.flatMap { $0.launched.contains(request.agent) ? $0.title : nil }
+        return App.who(engine.state.agents.first { $0.id == request.agent }, launchedBy: launcher)
+    }
+
+    /// Who `agent` is, in words, with the title of the space that launched it when one did; "An agent" when the
+    /// state no longer holds it.
+    static func who(_ agent: Agent?, launchedBy space: String?) -> String {
+        guard let agent else { return "An agent" }
+        var words = Programs.name(of: agent.kind)
         if let name = agent.name { words += " “\(name)”" }
         if let folder = agent.folder { words += ", working in \(folder)," }
-        if let current, current.launched.contains(request.agent) { words += " launched by “\(current.title)”," }
+        if let space { words += " launched by “\(space)”," }
         return words
     }
 
@@ -185,7 +201,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Asks first when agents something launched still run, then stops them all before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let running = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }.count
-        if running > 0, !Ask.quit(stopping: running) { return .terminateCancel }
+        if running > 0, Ask.run(Ask.quit(running)) != .alertFirstButtonReturn { return .terminateCancel }
         engine.stopAll(within: 5) { NSApp.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
     }

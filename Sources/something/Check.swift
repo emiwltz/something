@@ -3,6 +3,7 @@
 // rights granted except those --refuse names, and reports what the page did wrong. Its output is read by an agent's
 // model, which may run off this Mac: it never reads a real agent's state or the person's memory.
 import AppKit
+import SomethingAgents
 import SomethingCore
 import WebKit
 
@@ -15,7 +16,7 @@ extension Check {
         var outcome: Result<Report, SpaceError>?
         if runner.windowServer { NSApplication.shared.setActivationPolicy(.prohibited) }
         Task { @MainActor in
-            do { outcome = .success(try await runner.run(self)) } catch { outcome = .failure(error as? SpaceError ?? SpaceError("\(error)")) }
+            do { outcome = .success(try await runner.run(self)) } catch { outcome = .failure(error as? SpaceError ?? SpaceError(error.sentence)) }
             guard runner.windowServer else { return }
             NSApp.stop(nil)
             // run() returns once it has handled an event after stop().
@@ -58,7 +59,10 @@ final class CheckRunner {
     /// folder written with `~` meets the invented agents.
     static let invented = URL(fileURLWithPath: "/Users/example")
 
-    init(places: Places, share: URL) { (self.places, self.share) = (places, share) }
+    init(places: Places, share: URL) {
+        self.places = places
+        self.share = share
+    }
 
     /// The report of one check: what went wrong with the space is a problem of the report. Throws a `SpaceError`
     /// when a --refuse word names no right the space declares, as wrong words of the command.
@@ -101,14 +105,14 @@ final class CheckRunner {
         grant.refused = refused
         let folder = declaration.folder.flatMap { Declaration.expand($0, home: CheckRunner.invented) }
         grant.folder = folder ?? CheckRunner.invented.appendingPathComponent("code").path
-        let granted = Rights.granted(reading, grant, limits: SpaceWindow.limits, home: CheckRunner.invented)
+        let granted = Rights.granted(reading, grant, limits: Engine.limits, home: CheckRunner.invented)
         report.rights.granted = granted.rights
         report.rights.refused = granted.refused
         report.rights.unavailable = reading.unavailable
         report.rights.unknown = reading.unknown
         let state: State
         do { state = try read(check.state) } catch {
-            report.problems.append(Problem("STATE_FILE_UNREADABLE", (error as? SpaceError)?.message ?? "\(error)"))
+            report.problems.append(Problem("STATE_FILE_UNREADABLE", error.sentence))
             return report
         }
         guard windowServer else {
@@ -134,7 +138,7 @@ final class CheckRunner {
             report.calls = host.recorded
         } catch {
             // Without its bridge or its network lock, a space is not opened, in the app as here.
-            report.problems.append(Problem("LOAD_FAILED", (error as? SpaceError)?.message ?? "\(error)"))
+            report.problems.append(Problem("LOAD_FAILED", error.sentence))
         }
         return report
     }
@@ -147,7 +151,7 @@ final class CheckRunner {
             report.journal = Array(lines.suffix(Self.journalLines))
             if lines.count > Self.journalLines { report.journalNote = "the last \(Self.journalLines) lines; older ones are left out" }
         } catch {
-            report.journalNote = "not read: \((error as? SpaceError)?.message ?? "\(error)")"
+            report.journalNote = "not read: \(error.sentence)"
         }
     }
 
@@ -213,19 +217,18 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// Throws a `SpaceError` when something.js cannot be read.
     init(space: Space, host: CheckHost, share: URL, rules: WKContentRuleList) throws {
-        (self.space, self.host, scheme) = (space, host, Scheme(space: space))
+        self.space = space
+        self.host = host
+        scheme = Scheme(space: space)
         let bridge = try SpaceWindow.bridge(share)
-        web = WKWebView(frame: NSRect(x: 0, y: 0, width: 900, height: 640), configuration: SpaceWindow.configuration(scheme, rules: rules))
+        web = SpaceWindow.webView(scheme, rules: rules)
         super.init()
         let controller = web.configuration.userContentController
         controller.addUserScript(WKUserScript(source: CheckPage.probe, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
         SpaceWindow.scripts(bridge, host.granted).forEach(controller.addUserScript)
-        controller.addScriptMessageHandler(self, contentWorld: .page, name: "something")
-        controller.add(self, contentWorld: .page, name: "check")
         // Lockdown's guard hands clicked links over; nothing clicks during a check.
-        controller.add(self, contentWorld: Lockdown.world, name: "link")
-        web.navigationDelegate = self
-        web.uiDelegate = self
+        SpaceWindow.hold(web, by: self)
+        controller.add(self, contentWorld: .page, name: "check")
         scheme.missed = { [weak self] url in self?.missed(url) }
     }
 
@@ -250,8 +253,7 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         }
         defer {
             timer.invalidate()
-            web.stopLoading()
-            web.configuration.userContentController.removeAllScriptMessageHandlers()
+            SpaceWindow.release(web)
             window.orderOut(nil)
             window.contentView = nil
         }
@@ -264,7 +266,7 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
                 return rendered
             }
             if let frame, let data = try? Rights.visible(host.state, host.granted, launched: host.launched).json() {
-                web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
+                SpaceWindow.push(data, in: web, frame: frame)
                 rendered.pushed = true
             }
             step = await next { web.callAsyncJavaScript("await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))",
@@ -417,10 +419,7 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        guard SpaceWindow.isSpace(message.frameInfo), let request = message.body as? [String: Any] else {
-            return replyHandler(nil, "something answers only the page of the open space.")
-        }
-        replyHandler(host.answer(request), nil)
+        SpaceWindow.reply(message, open: true, host.answer, replyHandler)
     }
 
     // MARK: Navigation, as in the app's window

@@ -133,6 +133,14 @@ enum Frozen {
         shape = Shape(try ContractFiles.object("shape.json"))
     }
 
+    /// The engine has drivers: a space writer who reads the guide or the README must not code for launches that fail.
+    @Test func theDocsSayTheEngineLaunchesAgents() throws {
+        let readme = try String(contentsOf: ContractFiles.root.appendingPathComponent("README.md"), encoding: .utf8)
+        for (name, text) in [("guide", ContractFiles.guide), ("README", readme)] {
+            #expect(!text.contains("until the drivers arrive") && !text.contains("knows no agent"), "\(name)")
+        }
+    }
+
     @Test func theStateExampleRoundTripsByteForByte() throws {
         let example = try ContractFiles.data("state-example.json")
         let state = try JSONDecoder().decode(State.self, from: example)

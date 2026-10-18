@@ -1,7 +1,8 @@
 // The command: what `something <words>` does in a terminal (design 5, "CLI or app"). It starts or fronts the app,
 // hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
-// sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or failed, 2 when the
-// words were wrong or nothing could run; check has its own (contract 9).
+// sentence that says what to type next (`Error.sentence`, which the app's windows say too). The status is 0 when it
+// worked, 1 when it was refused or failed, 2 when the words were wrong or nothing could run; check has its own
+// (contract 9).
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -14,7 +15,8 @@ enum Command: Equatable {
     static let usage = """
         Usage:
           something                       start something, or bring it to the front
-          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder
+          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder;
+                                          or import an export (a .something file) into Home
           something new <name> [--folder] make a space from the template (a folder holds more than one file)
           something guide [--print]       where the guide for the coding agent that writes your spaces is
           something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
@@ -57,12 +59,27 @@ enum Command: Equatable {
         }
     }
 
+    /// What to say when `name` is the path of an export (a .something file) that is not there; nil otherwise. Checked
+    /// before any app starts, inside the .app (here) and under `swift run` (main.swift) alike.
+    static func missingExport(_ name: String) -> String? {
+        guard (name as NSString).pathExtension == "something",
+              !FileManager.default.fileExists(atPath: URL(fileURLWithPath: name).standardizedFileURL.path) else { return nil }
+        return "There is no file at \(name): give the path of an export, a .something file."
+    }
+
     /// Does what was asked and returns the exit status. `door` reaches the app; `say` prints to the terminal, on
     /// standard error when its second argument is true.
     @MainActor func run(places: Places, share: URL, door: Door, say: (String, Bool) -> Void) -> Int32 {
         switch self {
         case .start:
             return door.start().map { say($0, true); return 1 } ?? 0
+        case .open(let name) where (name as NSString).pathExtension == "something":
+            // An export goes to the app, which imports it as a double click in Finder does.
+            if let missing = Command.missingExport(name) {
+                say(missing, true)
+                return 1
+            }
+            return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
         case .open(let name):
             guard let space = Spaces(root: places.spaces).locate(name) else {
                 say(Spaces.isName(name)
@@ -77,7 +94,7 @@ enum Command: Equatable {
                 say("Made \(space.page.path). Open it with: something open \(name)", false)
                 return 0
             } catch {
-                say(Home.words(error), true)
+                say(error.sentence, true)
                 return 1
             }
         case .guide(let print):
@@ -120,10 +137,7 @@ enum Command: Equatable {
     /// or a file cannot be written; then no space is left.
     static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
-        do {
-            var file = try AppFile.read(places.grants)
-            if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
-        } catch {
+        do { try Home.forget(name, in: places) } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error
         }
@@ -227,5 +241,14 @@ struct LaunchServices: Door {
             return "\(failure): macOS did not answer within 30 seconds. Try again, or open \(app.path) in Finder."
         }
         return problem.map { "\(failure): \($0.localizedDescription) Try again, or open \(app.path) in Finder." }
+    }
+}
+
+extension Error {
+    /// What went wrong, in the sentence the person reads: a coded error's message with its code and its fix, a
+    /// `SpaceError`'s message, or the system's words.
+    var sentence: String {
+        if let coded = self as? CodedError { return "\(coded.message) (\(coded.code)) \(Codes.all[coded.code]?.fix ?? "")" }
+        return (self as? SpaceError)?.message ?? localizedDescription
     }
 }

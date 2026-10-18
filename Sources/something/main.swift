@@ -23,7 +23,7 @@ if Command.isApp(words, parent: getppid()) || inProcess && command == .start {
         exit(0)
     }
     runApp(opening: nil)
-} else if inProcess, case .open(let name) = command {
+} else if inProcess, case .open(let name) = command, Command.missingExport(name) == nil {
     runApp(opening: name)
 }
 // This is the main thread; check runs a window, which AppKit allows there only.

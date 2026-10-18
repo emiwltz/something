@@ -1,6 +1,7 @@
 // Packaging: tools/make-app.sh assembles something.app in a temporary prefix, from the program this suite built, and
 // the app is then run as Homebrew runs it, through the wrapper its write_exec_script writes: a symlink would break
-// Bundle.main. The bundle's version is read inside it, and its ad-hoc signature verifies.
+// Bundle.main. The bundle's version is read inside it, its ad-hoc signature verifies, and its program answers plan B's
+// hook.
 import Foundation
 import Testing
 @testable import something
@@ -51,6 +52,18 @@ import Testing
         #expect(guide.out.contains(app.appendingPathComponent("Contents/Resources/share/guide.md").path))
 
         #expect(try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path]).status == 0)
+
+        // Plan B's hook, as Engine.ownHookCommand gives it inside the app: the bundle's own program, not the wrapper.
+        let home = Home()
+        defer { home.remove() }
+        let spool = home.root.appendingPathComponent("spool")
+        try FileManager.default.createDirectory(at: spool, withIntermediateDirectories: true)
+        let inside = app.appendingPathComponent("Contents/MacOS/something")
+        let wrong = try runBuilt(inside, ["hook", "permission", "--bogus"], home: home)
+        #expect(wrong.status == 2 && wrong.out.isEmpty && wrong.err.contains("usage: something hook permission"), "\(wrong)")
+        let ran = try runBuilt(inside, ["hook", "permission", "--spool", spool.path], home: home)
+        let decision = hookDecision(ran.out)
+        #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
     }
 
     @Test func makeAppRefusesWrongUse() throws {

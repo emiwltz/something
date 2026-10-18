@@ -10,9 +10,9 @@ import Testing
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct HomeTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
-    /// Home on the test's home; `examples` is a folder of the test's home, which may not exist.
+    /// Home on the test's home, whose root stands for share/: its examples folder and its template may not exist.
     func home(_ test: Home, _ ask: FakeAsk) -> something.Home {
-        let home = something.Home(places: test.places, examples: test.root.appendingPathComponent("examples"), ask: ask)
+        let home = something.Home(places: test.places, share: test.root, ask: ask)
         home.reveal = { _ in Issue.record("Show in Finder was not expected") }
         home.reload()
         return home
@@ -171,14 +171,61 @@ import Testing
                                            text: "Invented message \(index).", result: "ok"), space: "board")
         }
         let home = home(test, ask)
+        let titles = { home.card.view.arrangedSubviews.compactMap { ($0 as? NSTextField)?.stringValue } }
+        #expect(!titles().contains("Readers"), "no reader has a note: the section is not shown")
         home.card.kinds = {
             ["omp": Kind(launch: false, installed: true, tested: "18.8.6", seen: "18.9.0", reader: "changed", note: "OMP's files changed shape."),
              "claude": Kind(launch: true, installed: true, tested: "2.1.299", seen: nil, reader: "ok", note: nil)]
         }
-        home.table.selectRowIndexes([0], byExtendingSelection: false)
+        home.reload()
         #expect(home.card.journal.count == 100)
-        #expect(home.card.journal.last == "2026-10-17T09:00:00Z  send claude a1 next  ok  “Invented message 119.”")
+        // The state no longer has a1: the line names its kind alone (WordsTests check the words).
+        #expect(home.card.journal.last?.hasSuffix("\twrote to Claude Code: “Invented message 119.”") == true, "\(home.card.journal.last ?? "")")
         #expect(home.card.notes == ["OMP: OMP's files changed shape."])
+        #expect(titles().contains("Readers"))
+    }
+
+    /// Home cannot be made narrower than its list and its card side by side, and it opens at least that large.
+    @Test func homeCannotCutItsCard() throws {
+        let test = Home()
+        defer { test.remove() }
+        let window = home(test, FakeAsk()).makeWindow()
+        let card = try #require(window.contentView?.subviews.last)
+        #expect(window.contentMinSize.width >= card.fittingSize.width + 400)
+        let size = try #require(window.contentView).frame.size
+        #expect(size.width >= window.contentMinSize.width && size.height >= window.contentMinSize.height)
+    }
+
+    /// A space is always selected while there is one, the default first, and the card follows the selection; an empty
+    /// list says how to make a first space.
+    @Test func homeAlwaysShowsASpaceOrHowToMakeOne() throws {
+        let test = Home()
+        defer { test.remove() }
+        let home = home(test, FakeAsk())
+        _ = home.makeWindow()
+        home.reload()
+        #expect(home.selected == nil && home.list.isHidden && !home.empty.isHidden)
+        #expect(home.empty.stringValue.contains("New") && home.empty.stringValue.contains("something new <name>"))
+        try test.space("garden", page(nil, ""))
+        try test.space("shop", page(nil, ""))
+        home.reload()
+        #expect(home.selected?.name == "garden" && home.card.space?.name == "garden")
+        #expect(!home.list.isHidden && home.empty.isHidden)
+        home.table.selectRowIndexes([1], byExtendingSelection: false)
+        #expect(home.card.space?.name == "shop")
+        var file = try AppFile.read(test.places.grants)
+        file.default = "shop"
+        try file.write(test.places.grants)
+        let again = self.home(test, FakeAsk())
+        #expect(again.selected?.name == "shop" && again.card.space?.name == "shop", "the default space is selected first")
+        // The selected space is deleted in Finder: the default is selected, not the space that took its row.
+        try test.space("zoo", page(nil, ""))
+        file.default = "garden"
+        try file.write(test.places.grants)
+        again.reload(selecting: "shop")
+        try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("shop.html"))
+        again.reload()
+        #expect(again.selected?.name == "garden" && again.card.space?.name == "garden", "\(again.selected?.name ?? "none")")
     }
 
     @Test func makeDefaultShowInFinderAndCopies() throws {
@@ -217,6 +264,36 @@ import Testing
         home.makeACopy()
         #expect(home.selectedSample?.name == "game")
         #expect(ask.told.count == 1 && ask.told[0].hasPrefix("A space named game already exists"), "\(ask.told)")
+    }
+
+    /// New makes the space as `something new` does: the template, and none of the answers a deleted space of the same
+    /// name left in the grants file.
+    @Test func newMakesASpaceAsTheCommandDoes() throws {
+        let test = Home(), ask = FakeAsk()
+        defer { test.remove() }
+        let template = test.root.appendingPathComponent("template.html")
+        try FileManager.default.createDirectory(at: test.root, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: Home.share.appendingPathComponent("template.html"), to: template)
+        let home = home(test, ask)
+        var file = AppFile()
+        file.spaces["garden"] = answered(declared: ["state"], granted: ["state"])
+        try FileManager.default.createDirectory(at: test.places.support, withIntermediateDirectories: true)
+        try file.write(test.places.grants)
+
+        home.newChosen()
+        #expect(home.spaces.isEmpty, "a cancelled name makes nothing")
+        ask.named = "garden"
+        home.newChosen()
+        let made = try #require(home.selected)
+        #expect(made.name == "garden" && made.form == .file)
+        #expect(try Data(contentsOf: made.page) == Data(contentsOf: template))
+        #expect(try AppFile.read(test.places.grants).spaces["garden"] == nil)
+        for wrong in ["Garden", "garden"] {
+            ask.named = wrong
+            home.newChosen()
+            #expect(ask.told.last?.hasPrefix("The space \(wrong) was not made.") == true, "\(ask.told)")
+        }
+        #expect(home.spaces.map(\.name) == ["garden"])
     }
 
     @Test func exportAsksForTheDataAndImportStartsWithoutGrants() throws {

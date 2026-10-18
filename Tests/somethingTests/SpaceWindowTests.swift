@@ -3,6 +3,7 @@
 // asked once and remembered, and the window reloads when the space changes. Serialized: each test turns the run loop.
 import AppKit
 import Foundation
+import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -175,7 +176,7 @@ import WebKit
         window.open()
         try await ready(window)
         try Offscreen(window.web).click(x: 450, y: 320)
-        await wait(1)
+        await wait(3)
         withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root") {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
@@ -316,6 +317,32 @@ import WebKit
         #expect(ask.modes.count == 2)
     }
 
+    /// OpenCode launches with build or plan: an agent the person wrote is refused before the person is asked.
+    @Test func aLaunchThatCannotHappenAsksNothing() async throws {
+        let home = Home()
+        defer { home.remove() }
+        let shop = home.root.appendingPathComponent("code/shop")
+        try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
+        let ask = FakeAsk()
+        ask.lowers = true
+        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: shop.path, remap: [:]) }
+        let declared = #"{"contract": 1, "title": "Launcher", "rights": ["launch:opencode"], "folder": "~/code/shop"}"#
+        let window = try await home.window(try home.space("launcher", page(declared, "<script>window.done = true</script>")), ask)
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        let code = try await run(window, "try { await something.launch('opencode', {mode: 'my-agent'}); return 'ok' } catch (e) { return e.code }")
+        #expect(code as? String == "VALUE_NOT_OFFERED")
+        #expect(ask.modes.isEmpty)
+    }
+
+    /// The rights window says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
+    @Test func theRightsWindowSaysThatPiNeverAsks() {
+        #expect(Ask.words(for: "launch:pi") == "Launch or continue pi in the folder chosen for it. pi runs commands and edits files without asking you first")
+        #expect(Ask.words(for: "launch") == "Launch or continue agents in the folder chosen for it. One of them, pi, runs commands and edits files without asking you first")
+        #expect(!Ask.words(for: "launch:claude").contains("without asking"))
+    }
+
     /// granted.limits is the table of contract 3.7, as the contract's own fixtures give it.
     @Test func theLimitsAreTheContracts() throws {
         let bridge = Home.share.appendingPathComponent("contract/bridge")
@@ -324,7 +351,7 @@ import WebKit
         for file in cases {
             let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
             let limits = (fixture?["granted"] as? [String: Any])?["limits"] as? [String: [String]]
-            #expect(limits == SpaceWindow.limits, "\(file.lastPathComponent)")
+            #expect(limits == Engine.limits, "\(file.lastPathComponent)")
         }
     }
 

@@ -28,12 +28,16 @@ public final class Programs {
 
     /// What to type to install each kind something launches, in Terminal. pi's is its README's (1.0.0), and
     /// `npm view` gives that package name.
-    static let install: [String: (name: String, command: String)] = [
-        "claude": ("Claude Code", "brew install --cask claude-code"),
-        "codex": ("Codex", "brew install --cask codex"),
-        "opencode": ("OpenCode", "brew install opencode"),
-        "pi": ("pi", "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"),
+    static let install = [
+        "claude": "brew install --cask claude-code",
+        "codex": "brew install --cask codex",
+        "opencode": "brew install opencode",
+        "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
     ]
+    static let names = ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"]
+
+    /// The name a person knows the agent `kind` by, in every window and sentence; the kind itself when unknown.
+    public static func name(of kind: String) -> String { names[kind] ?? kind }
     /// Interpreters a program needs that its first line does not name: pi's own launcher is a shell script that
     /// starts a node script.
     static let runsOn = ["pi": "node"]
@@ -81,9 +85,10 @@ public final class Programs {
     /// INTERPRETER_NOT_FOUND when what it runs on (node, for example) is missing; each says what to type, or, when
     /// the login shell's PATH could not be read, how to start something from Terminal so that it has that PATH.
     public func find(_ kind: String) throws -> Program {
-        guard let (name, command) = Programs.install[kind] else {
+        guard let command = Programs.install[kind] else {
             throw CodedError("NOT_INSTALLED", "something does not know how to launch \(kind).")
         }
+        let name = Programs.name(of: kind)
         var search = folders(interactive: false)
         var found = first(kind, in: search.list)
         if found == nil, search.known, let interactive = interactiveRetry() {

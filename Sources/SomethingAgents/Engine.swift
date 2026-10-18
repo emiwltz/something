@@ -50,7 +50,8 @@ public final class Engine {
                                                         "pi": PiDriver.self]
 
     private let environment: [String: String]
-    private let programs: Programs
+    /// Where programs are found; a test empties its system folders (`Engine.throwaway`).
+    let programs: Programs
     /// Whether each kind's program was found; empty until `start` looked (main queue only, as all that follows).
     private var installed: [String: Bool] = [:]
     private var looked = false
@@ -109,23 +110,51 @@ public final class Engine {
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits` of contract 4.2. A kind without
-    /// any is left out.
-    public var limits: [String: [String]] { Engine.drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
+    /// any is left out. Static, so that `something check` gives the same without an engine.
+    public static var limits: [String: [String]] { drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first (contract 4.1). Every mode is taken as one that lowers asking, but those known to ask
-    /// as much or more: a mode something does not know (a newer program's, an OpenCode agent the person wrote) is
-    /// confirmed rather than guessed.
-    public func lowersAsking(mode: String, kind: String) -> Bool { !(Engine.asksAsMuch[kind] ?? []).contains(mode) }
+    /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)
+    /// is confirmed rather than guessed. Throws VALUE_NOT_OFFERED, before any window, for a mode the kind never
+    /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
+    /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
+    public static func lowersAsking(mode: String, kind: String) throws -> Bool {
+        if let type = drivers[kind], !(type is ACPDriver.Type), !type.modes.isEmpty, !type.modes.contains(where: { $0.value == mode }) {
+            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
+        }
+        return !(asksAsMuch[kind] ?? []).contains(mode)
+    }
+
+    /// Returns when a launch of `kind` with these values can be tried; throws the error `launch` would give for them,
+    /// before any program is looked for and before any window: NOT_SUPPORTED for a kind without a driver or a value
+    /// its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED
+    /// for a mode it does not offer (never one that skips every permission; OpenCode launches with build or plan).
+    /// Static, so that `something check` answers as the app does.
+    public static func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        guard let type = drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
+            if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
+        }
+        if let model, model.isEmpty || model.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
+        }
+        if let effort, effort.isEmpty || effort.hasPrefix("-") {
+            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
+        }
+        if let mode, !type.modes.contains(where: { $0.value == mode }) {
+            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
+        }
+    }
 
     /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
-    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports,
-    /// "manual" the one its help gives now. Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
+    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports
+    /// (its help's "manual" is never offered: ClaudeDriver.modes leaves it out). Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
     /// which older versions offered, asks more. OpenCode 2.0.20: a mode is an agent; build and plan ask as the
     /// person's settings say, and only `--auto`, which something never passes, asks less. pi 1.0.0 takes no mode and
     /// never asks: it is not listed, so any mode for pi (as for a kind not known here) counts as lowering asking, which
     /// is safe, since the bridge refuses a mode pi does not take before any confirmation.
-    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "manual", "plan"], "codex": ["on-request", "untrusted"],
+    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"],
                                                     "opencode": ["build", "plan"]]
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
@@ -160,30 +189,17 @@ public final class Engine {
         return applied
     }
 
-    /// Starts an agent of `kind` in `folder` and returns its id. Throws NOT_SUPPORTED for a kind without a driver or
-    /// a value its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED for a
-    /// mode it does not offer (never one that skips every permission), NOT_INSTALLED, INTERPRETER_NOT_FOUND,
-    /// LAUNCH_FAILED.
+    /// Starts an agent of `kind` in `folder` and returns its id. Throws as `checkLaunch` does, then NOT_INSTALLED,
+    /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
-        guard let type = Engine.drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
-        for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
-            if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
-        }
-        if let model, model.isEmpty || model.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
-        }
-        if let effort, effort.isEmpty || effort.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
-        }
-        if let mode, !type.modes.contains(where: { $0.value == mode }) {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
-        }
+        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+        let type = Engine.drivers[kind]!
         return try launch(type, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
-    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app, once its main routes those
-    /// words: until then its own path would start a second app), and plan B is then not offered.
+    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app and `something try` set
+    /// `ownHookCommand`), and plan B is then not offered.
     public var hookCommand: [String]?
 
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
@@ -317,15 +333,15 @@ public final class Engine {
 }
 
 /// `something hook permission --spool <dir>`: Claude's plan B (design 4.1). Returns the exit status.
-/// `arguments` are the words after `something`, with or without `hook permission` in front. Returns 0 once a
-/// decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
+/// `arguments` are every word after `something`, `hook permission` first, as the command routes them. Returns 0 once
+/// a decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
 public enum PermissionHook {
     public static func main(_ arguments: [String]) -> Int32 { SpoolHook.main(arguments) }
 }
 
 /// `something try <kind> [--record <file>] [--plan-b]`: a developer's trial of one driver against a real agent.
 public enum Trial {
-    /// `arguments` are the words after `something`, with or without `try` in front. Returns the exit status: 0 once
-    /// the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
+    /// `arguments` are every word after `something`, `try` first, as the command routes them. Returns the exit status:
+    /// 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
     public static func main(_ arguments: [String]) -> Int32 { DeveloperTrial.main(arguments) }
 }

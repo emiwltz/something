@@ -13,6 +13,8 @@ final class FakeHost: BridgeHost {
     var lines: [JournalLine] = []
     var calls: [String] = []
     var confirmsModes = true
+    /// The modes the person was asked about, in order.
+    var confirmed: [String] = []
 
     init(granted: Granted, memory: Memory? = nil) throws {
         state = try JSONDecoder().decode(State.self, from: ContractFiles.data("state-example.json"))
@@ -40,7 +42,13 @@ final class FakeHost: BridgeHost {
     }
     func resume(_ kind: String, thread: String, of agent: Agent) throws -> String { calls.append("resume \(thread)"); return "n2" }
     func open(_ url: URL) throws -> Bool { calls.append("open \(url.absoluteString)"); return true }
-    func confirms(mode: String, kind: String, folder: String?) -> Bool { mode != "acceptEdits" || confirmsModes }
+    func confirms(mode: String, kind: String, folder: String?) -> Bool {
+        confirmed.append(mode)
+        return mode != "acceptEdits" || confirmsModes
+    }
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        if mode == "never-offered" { throw CodedError("VALUE_NOT_OFFERED", "never-offered is not a mode something offers.") }
+    }
 }
 
 /// The code of the answer, or "ok" for a result.
@@ -129,7 +137,7 @@ struct BridgeTests {
         #expect(code("interrupt", ["agent": "a1"], try FakeHost(["state"])) == "RIGHT_NOT_GRANTED")
         #expect(code("set", ["agent": "a1", "mode": "plan"], host) == "ok")
         #expect(code("set", ["agent": "a1"], host) == "BAD_PARAMS")
-        #expect(code("set", ["agent": "a1", "effort": "high"], host) == "NOT_SUPPORTED")
+        #expect(code("set", ["agent": "a1", "effort": "max"], host) == "VALUE_NOT_OFFERED")
         #expect(code("set", ["agent": "a1", "mode": "yolo"], host) == "VALUE_NOT_OFFERED")
         #expect(code("set", ["agent": "e1", "model": "gpt-example"], host) == "READ_ONLY_AGENT")
         let blog = try FakeHost(["state", "send"], scope: .folders(["/Users/example/code/blog"]))
@@ -137,6 +145,8 @@ struct BridgeTests {
         #expect(code("set", ["agent": "a1", "mode": "plan"], blog) == "AGENT_NOT_FOUND")
         host.state.agents[0].can.interrupt = false
         #expect(code("interrupt", ["agent": "a1"], host) == "NOT_SUPPORTED")
+        host.state.agents[0].can.effort = false
+        #expect(code("set", ["agent": "a1", "effort": "high"], host) == "NOT_SUPPORTED")
         host.state.agents[0].alive = false
         #expect(code("interrupt", ["agent": "a1"], host) == "AGENT_STOPPED")
         #expect(host.calls == ["interrupt a1", "set a1 - plan"] && blog.calls.isEmpty)
@@ -149,7 +159,10 @@ struct BridgeTests {
         host.confirmsModes = false
         #expect(code("set", ["agent": "a1", "mode": "acceptEdits"], host) == "REFUSED")
         #expect(code("launch", ["kind": "claude", "mode": "acceptEdits"], host) == "REFUSED")
+        // A launch the engine would refuse is refused before the person is asked anything.
+        #expect(code("launch", ["kind": "claude", "mode": "never-offered"], host) == "VALUE_NOT_OFFERED")
         #expect(host.calls == ["set a1 - acceptEdits"])
+        #expect(host.confirmed == ["acceptEdits", "acceptEdits", "acceptEdits"])
     }
 
     @Test func launchStaysInTheGrantedFolder() throws {
@@ -164,8 +177,9 @@ struct BridgeTests {
         #expect(code("launch", ["kind": "omp"], host) == "NOT_SUPPORTED")
         #expect(code("launch", ["kind": 3], host) == "BAD_PARAMS")
         // What a kind can never do here is refused by the bridge, before the shell is asked.
-        host.granted.limits = ["claude": ["effort"]]
-        #expect(code("launch", ["kind": "claude", "effort": "high"], host) == "NOT_SUPPORTED")
+        // An invented table: no kind something launches lacks a mode at launch but pi, whose right this host lacks.
+        host.granted.limits = ["claude": ["mode"]]
+        #expect(code("launch", ["kind": "claude", "mode": "plan"], host) == "NOT_SUPPORTED")
         host.granted.folder = nil
         #expect(code("launch", ["kind": "claude"], host) == "FOLDER_NOT_GRANTED")
         #expect(host.calls == ["launch claude /Users/example/code/shop", "launch claude /Users/example/code/shop/web"])

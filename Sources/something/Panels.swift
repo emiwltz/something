@@ -32,7 +32,8 @@ final class Panels {
     private var answered: Set<String> = []
 
     init(source: PromptSource, shows: Bool = true) {
-        (self.source, self.shows) = (source, shows)
+        self.source = source
+        self.shows = shows
     }
 
     /// Follows the source: a new request joins the queue, a request that left it is dropped, and its panel closes.
@@ -86,9 +87,13 @@ final class PromptPanel: NSPanel {
     /// For a question: the boxes of each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
 
+    /// The panel's width: who asks, with its folder, would otherwise widen it past the screen.
+    static let width: CGFloat = 480
+
     init(_ prompt: Prompt, who: String, decide: @escaping (Answer) -> Void) {
-        (request, self.decide) = (prompt.request, decide)
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 480, height: 200), styleMask: [.titled, .utilityWindow],
+        request = prompt.request
+        self.decide = decide
+        super.init(contentRect: NSRect(x: 0, y: 0, width: PromptPanel.width, height: 200), styleMask: [.titled, .utilityWindow],
                    backing: .buffered, defer: true)
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
@@ -97,19 +102,20 @@ final class PromptPanel: NSPanel {
         lines.orientation = .vertical
         lines.alignment = .leading
         lines.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        lines.widthAnchor.constraint(equalToConstant: PromptPanel.width).isActive = true
         let buttons: [NSButton]
         if prompt.request.kind == "question" {
             title = "A question from an agent"
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "\(who) asks you:"))
+            lines.addArrangedSubview(PromptPanel.line("\(who) asks you:"))
             for question in prompt.questions { add(question, to: lines) }
             buttons = [NSButton(title: "Don't answer", target: self, action: #selector(deny)),
                        NSButton(title: "Answer", target: self, action: #selector(reply))]
         } else {
             title = "Permission"
             let tool = prompt.request.tool.map { "to use \($0)" } ?? "for permission"
-            lines.addArrangedSubview(NSTextField(wrappingLabelWithString: "\(who) asks \(tool)."))
+            lines.addArrangedSubview(PromptPanel.line("\(who) asks \(tool)."))
             if let what = prompt.input ?? prompt.request.about {
-                let text = NSTextField(wrappingLabelWithString: what)
+                let text = PromptPanel.line(what)
                 text.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
                 text.isSelectable = true
                 lines.addArrangedSubview(text)
@@ -127,7 +133,7 @@ final class PromptPanel: NSPanel {
 
     private func add(_ question: Question, to lines: NSStackView) {
         if let header = question.header { lines.addArrangedSubview(NSTextField(labelWithString: header)) }
-        lines.addArrangedSubview(NSTextField(wrappingLabelWithString: question.text))
+        lines.addArrangedSubview(PromptPanel.line(question.text))
         // Radio buttons with the same action in the same stack form one group: one choice.
         let group = NSStackView()
         group.orientation = .vertical
@@ -144,6 +150,9 @@ final class PromptPanel: NSPanel {
         boxes.append(options)
         typed.append(field)
     }
+
+    /// A label that wraps inside the panel's insets.
+    static func line(_ text: String) -> NSTextField { Card.line(text, width: width - 32) }
 
     /// Each question's chosen labels, with the typed text when there is one.
     var choice: [[String]] {

@@ -1,32 +1,16 @@
 // What a space's calls do on this Mac. SomethingCore/Bridge.swift checks each call and decides its answer; this
 // BridgeHost acts through the Engine, keeps the space's memory and journal, and asks the person in native windows.
+// It also holds the check of a launch's values that both hosts share, so `something check` refuses what the app does.
 import Foundation
 import SomethingAgents
 import SomethingCore
 import WebKit
 
 extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
-    /// The modes of each kind whose modes are levels of asking (design 3.3): a mode that keeps asking passes, one that
-    /// lowers asking opens a confirmation, and any other is refused, so a misspelt or a new mode never passes unseen.
-    /// `bypassPermissions` is in neither list: it is never offered. OpenCode's modes are its agents (build, plan, the
-    /// person's own), not levels of asking; pi takes no mode. The Engine does not say these yet, so the app keeps them.
-    static let modes: [String: (keeps: Set<String>, lowers: Set<String>)] = [
-        "claude": (keeps: ["default", "manual", "plan"], lowers: ["acceptEdits", "auto", "dontAsk"]),
-        "codex": (keeps: ["untrusted", "on-request"], lowers: ["never"]),
-    ]
-
-    /// What the agents of each kind can never do here (contract 3.7, the false columns), for `granted.limits`. The
-    /// Engine does not say it yet, so the app keeps the table until it does.
-    static let limits: [String: [String]] = ["claude": ["effort"], "opencode": ["steer"], "pi": ["mode"]]
-
-    /// Only the page of the open space is answered (contract 4.4): never a frame inside it, never the app's page.
+    /// Only the open space's own page is answered, while it is displayed.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        guard isSpace(message.frameInfo), blocked.isEmpty,
-              let request = message.body as? [String: Any] else {
-            return replyHandler(nil, "something answers only the page of the open space.")
-        }
-        replyHandler(Bridge.answer(request, host: self), nil)
+        SpaceWindow.reply(message, open: blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
     }
 
     var state: State { engine.state }
@@ -36,7 +20,7 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
     func journal(_ line: JournalLine) {
         guard kept else { return }
         do { try Journal(folder: places.journals).append(line, space: space.name) } catch {
-            FileHandle.standardError.write(Data("\((error as? SpaceError)?.message ?? "\(error)")\n".utf8))
+            FileHandle.standardError.write(Data("\(error.sentence)\n".utf8))
         }
     }
 
@@ -76,17 +60,16 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
         }
     }
 
+    /// A mode that makes the agent ask less waits for the person's click (Engine.lowersAsking says which).
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
-        try SpaceWindow.lowers(mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
+        try Engine.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
     }
+}
 
-    /// Whether `mode` makes agents of `kind` ask less, so the person must confirm it. Throws a `CodedError`
-    /// (VALUE_NOT_OFFERED) for a mode something never offers.
-    static func lowers(_ mode: String, kind: String) throws -> Bool {
-        guard let known = modes[kind], !known.keeps.contains(mode) else { return false }
-        guard known.lowers.contains(mode) else {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
-        }
-        return true
+extension BridgeHost {
+    /// The engine's own check of a launch's values, for the app's window and the check alike: a launch the app
+    /// refuses is refused by `something check` too.
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
+        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
     }
 }

@@ -3,10 +3,10 @@
 import AppKit
 import Darwin
 import Foundation
-import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
+@testable import SomethingAgents
 @testable import something
 
 /// Whether the window suites run: WebKit's views and AppKit's windows need a window server. A Mac where someone is
@@ -33,8 +33,17 @@ struct Home {
 
     @MainActor
     func window(_ space: Space, _ ask: FakeAsk = FakeAsk()) async throws -> SpaceWindow {
-        try SpaceWindow(space: space, places: places, engine: Engine(environment: [:]), ask: ask, share: Home.share,
+        try SpaceWindow(space: space, places: places, engine: engine(), ask: ask, share: Home.share,
                         rules: try await Lockdown.ruleList())
+    }
+
+    /// An engine that finds no agent program: its PATH is an empty folder of this home, and the system's install
+    /// folders are not searched (NoRealAgentTests), so nothing a space asks reaches a real agent.
+    func engine() -> Engine {
+        let environment = ["HOME": root.path, "PATH": root.appendingPathComponent("bin").path + ":/usr/bin:/bin", "SHELL": "/bin/sh"]
+        let engine = Engine(environment: environment)
+        engine.programs.systemFolders = []
+        return engine
     }
 
     func remove() { try? FileManager.default.removeItem(at: root) }
@@ -60,6 +69,8 @@ final class FakeAsk: Asking {
     var shown: [[String]] = []
     /// Where the save panel saves, and the file the open panel chooses; nil cancels.
     var saveTo: URL?, chosen: URL?
+    /// The name typed for a new space; nil cancels.
+    var named: String?
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
@@ -80,6 +91,7 @@ final class FakeAsk: Asking {
     }
     func saveAs(_ name: String) -> URL? { saveTo }
     func importFile() -> URL? { chosen }
+    func newName() -> String? { named }
     func tell(_ message: String) { told.append(message) }
 }
 
@@ -186,4 +198,34 @@ func ready(_ window: SpaceWindow) async throws {
         throw SpaceError("The space did not load: \(window.web.isLoading) \(String(describing: window.web.url)).")
     }
     for _ in 0..<100 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
+}
+
+/// An invented permission request of Claude's, as its plan-B hook reads it on its input.
+let inventedRequest = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#
+
+/// Runs a built `program` with `words` (as Claude's plan-B hook runs it, for `hook permission`), in `home` with the
+/// system's PATH only, `input` on its input; its status and outputs. Stopped after 30 s, so that a program that never
+/// answers fails the test.
+func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest) throws -> (status: Int32, out: String, err: String) {
+    let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
+    process.executableURL = program
+    process.arguments = words
+    process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"]
+    (process.standardInput, process.standardOutput, process.standardError) = (input, out, err)
+    try process.run()
+    input.fileHandleForWriting.write(Data(text.utf8))
+    try input.fileHandleForWriting.close()
+    let deadline = DispatchWorkItem { process.terminate() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
+    let printed = out.fileHandleForReading.readDataToEndOfFile(), errors = err.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    deadline.cancel()
+    return (process.terminationStatus, String(decoding: printed, as: UTF8.self), String(decoding: errors, as: UTF8.self))
+}
+
+/// The decision a hook printed for Claude: its behavior and its message.
+func hookDecision(_ out: String) -> (behavior: String?, message: String?) {
+    let printed = try? JSONSerialization.jsonObject(with: Data(out.utf8)) as? [String: Any]
+    let decision = (printed?["hookSpecificOutput"] as? [String: Any])?["decision"] as? [String: Any]
+    return (decision?["behavior"] as? String, decision?["message"] as? String)
 }

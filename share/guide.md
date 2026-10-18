@@ -2,13 +2,14 @@
 
 *For the coding agent a person asks to build them a space. Read this file whole before writing.*
 
-something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), reads the ones started
+something is a Mac app that launches coding agents (Claude Code, Codex, OpenCode, pi), will read the ones started
 elsewhere, and shows **spaces**: HTML pages the person asked you to write. A dashboard, a chat, a board of who is
 waiting, a small game. This chapter is the **contract**, version 1: what a space can rely on. Its last section says
 how to check a space; later chapters add examples.
 
-*Status: something 1.0 is being built. The app opens a space and serves this contract, but it knows no agent yet:
-the state lists none and a launch answers `NOT_SUPPORTED` until the drivers arrive in the next versions.*
+*Status: something 1.0 is being built. The app opens a space, serves this contract and launches Claude Code, Codex,
+OpenCode and pi. It does not read the agents started elsewhere yet: the state lists only the agents it launched, and
+`resume` answers `NOT_SUPPORTED`.*
 
 Rules that hold everywhere:
 
@@ -114,11 +115,11 @@ at most four times a second, only when it changed. A shortened example (the full
       "options": {
         "model": [{ "value": "claude-example-model", "label": "Example model" }],
         "mode": [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
-        "effort": null
+        "effort": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }]
       },
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
-      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": false, "resume": false },
-      "because": { "effort": "Claude Code offers no way to change effort during a session." },
+      "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": true, "resume": false },
+      "because": {},
       "error": null, "started": "2026-10-17T08:55:00Z", "updated": "2026-10-17T09:00:03Z", "detail": {}
     }
   ],
@@ -204,7 +205,8 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   `outcome`: `allowed`, `denied`), else `null`. Today only Claude Code launched by something says it.
 - **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
   the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and
-  say "answer in the window of something".
+  say "answer in the window of something". OpenCode, launched by something, never asks a question: it dismisses its
+  own, and the agent's `error` asks the person to have it write the question in its reply.
 
 What is outside the scope is absent: agents, and their threads and requests. Without the `state` right, `state()`
 still answers, with only the agents this space launched. Agents seen elsewhere stay listed while alive, and for 24
@@ -214,7 +216,7 @@ hours after their last activity.
 
 | kind | send | steer | queue | interrupt | model | mode | effort |
 |---|---|---|---|---|---|---|---|
-| claude | yes | yes | yes | yes | yes | yes (permission modes) | no |
+| claude | yes | yes | yes | yes | yes (next turn) | yes (permission modes) | yes (the levels its model lists, next turn) |
 | codex | yes | yes | yes | yes | yes (next turn) | yes (approval policy) | yes (next turn) |
 | opencode | yes | no | yes | yes | yes | yes (agents such as build, plan) | yes |
 | pi | yes | yes | yes | yes | yes | no | yes (thinking level) |
@@ -259,6 +261,8 @@ Call `something.open` for a link your code opens, not from the click handler of 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
 `bypassPermissions`), or one something does not know, is never offered: `VALUE_NOT_OFFERED`, from `set` and `launch`.
+OpenCode is launched with `build` or `plan`; another of its agents is chosen with `set`, once `options.mode` lists it.
+A launch something would refuse is refused before any window opens.
 
 ```js
 const off = something.on("change", (state) => render(state));
@@ -280,7 +284,7 @@ if (agent) {
   "rights": ["state", "send:claude", "store"],
   "refused": ["launch:codex"],
   "unavailable": ["launch:omp"],
-  "limits": { "claude": ["effort"], "opencode": ["steer"], "pi": ["mode"] },
+  "limits": { "opencode": ["steer"], "pi": ["mode"] },
   "agents": { "see": "all" },
   "folder": "/Users/example/code/shop"
 }

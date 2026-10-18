@@ -1,5 +1,5 @@
 {
-  "about": "set an effort on a Claude Code agent, whose can.effort is false.",
+  "about": "set an effort on a Claude Code agent whose model offers no effort level (can.effort false).",
   "comment": "A bridge case: one request as the page side sends it ({contract, id, method, params}), against state-example.json, with the rights in granted. A result is compared whole; an error by its code only, since its message is free (one sentence that says what to do).",
   "state": "state-example.json",
   "granted": {
@@ -10,9 +10,6 @@
     "refused": [],
     "unavailable": [],
     "limits": {
-      "claude": [
-        "effort"
-      ],
       "opencode": [
         "steer"
       ],
@@ -24,6 +21,45 @@
       "see": "all"
     },
     "folder": "/Users/example/code/shop"
+  },
+  "patch": {
+    "agents": {
+      "a1": {
+        "options": {
+          "model": [
+            {
+              "value": "claude-example-model",
+              "label": "Example model"
+            }
+          ],
+          "mode": [
+            {
+              "value": "default",
+              "label": "Ask before acting"
+            },
+            {
+              "value": "plan",
+              "label": "Plan only"
+            }
+          ],
+          "effort": null
+        },
+        "can": {
+          "send": true,
+          "steer": true,
+          "queue": true,
+          "interrupt": true,
+          "model": true,
+          "mode": true,
+          "effort": false,
+          "resume": false
+        },
+        "because": {
+          "effort": "This model offers no effort level.",
+          "resume": "This conversation is already open here."
+        }
+      }
+    }
   },
   "request": {
     "contract": 1,

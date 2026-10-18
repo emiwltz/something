@@ -2,7 +2,7 @@
 // The recipe to build something. No package dependency.
 // SomethingCore uses Foundation only, so it can build on Linux and Windows later. It names no agent beyond the kinds
 // a right of contract 1 may name.
-// SomethingAgents holds what is specific to each agent (Foundation and Darwin), and V1's state until the drivers emit events.
+// SomethingAgents holds the engine and what is specific to each agent (Foundation and Darwin).
 // The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time.
 import PackageDescription
 

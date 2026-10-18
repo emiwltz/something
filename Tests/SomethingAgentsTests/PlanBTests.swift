@@ -75,7 +75,7 @@ import SomethingCore
         deinit { try? FileManager.default.removeItem(at: root) }
 
         func engine(_ hook: [String] = ["hook", "permission"], extra: [String: String] = [:]) -> Engine {
-            let engine = Engine(environment: environment.merging(extra) { _, new in new })
+            let engine = Engine.throwaway(environment.merging(extra) { _, new in new })
             engine.hookCommand = [self.hook] + hook
             engine.spools = spools.path
             return engine
@@ -351,7 +351,8 @@ import SomethingCore
         #expect(PermissionHook.main(["hook", "permission", "--spool"]) == 2)
         #expect(Trial.main(["try", "nope"]) == 2)
         #expect(Trial.main(["try", "claude", "--bogus"]) == 2)
-        #expect(Trial.main(["claude", "--record"]) == 2)
+        #expect(Trial.main(["claude", "--record"]) == 2, "the words begin with try")
+        #expect(PermissionHook.main(["permission", "--spool", "/Users/example/spool"]) == 2, "the words begin with hook permission")
     }
 
     @Test func aRefusedInitializeFallsBackOnlyBeforeAnyMessage() throws {

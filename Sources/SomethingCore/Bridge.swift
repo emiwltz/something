@@ -30,6 +30,9 @@ public protocol BridgeHost: AnyObject {
     /// true when `mode` does not make agents of `kind` ask less, or the person confirmed it in a native window that
     /// names the agent's `folder`. Throws a `CodedError` (VALUE_NOT_OFFERED) for a mode something never offers.
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool
+    /// Returns when the engine would try this launch; throws the `CodedError` its launch would give for these values,
+    /// so that no window asks the person about a launch that cannot happen.
+    func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws
 }
 
 public enum Bridge {
@@ -101,6 +104,7 @@ public enum Bridge {
             guard Rights.inside(target, root) else { throw CodedError("FOLDER_NOT_GRANTED", "\(target) is outside the folder granted for launches, \(root).") }
             let limits = granted.limits[kind] ?? [], given = [("model", model), ("mode", mode), ("effort", effort)]
             if let (key, _) = given.first(where: { $1 != nil && limits.contains($0) }) { throw CodedError("NOT_SUPPORTED", "\(kind) agents take no \(key) here; launch without it.") }
+            try host.checkLaunch(kind, model: model, mode: mode, effort: effort)
             if let mode { try confirm(mode, kind, target, host) }
             line.agent = try host.launch(kind, folder: target, model: model, mode: mode, effort: effort)
             return line.agent!
