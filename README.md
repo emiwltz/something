@@ -21,14 +21,14 @@ something
 The full name `emiwltz/tap/something` tells Homebrew that you trust this one formula of this tap. Later,
 `brew upgrade --fetch-HEAD something` builds the latest code again.
 
-`something` opens the app, with an icon in the menu bar. At its first start it makes `~/something/spaces` (your
-spaces) and `~/something/data` (their memory), copies the `agents` space there, and opens it: the list of your agents,
-their state, and who is waiting. A window of the Mac first asks you which rights that space may have.
+`something` opens the app's window: your spaces in the sidebar, the open one in the middle, and Info (⌥⌘I) beside it.
+At its first start it makes `~/something/spaces` (your spaces) and `~/something/data` (their memory); the sidebar
+stays empty until a space is there. At its first opening, a sheet asks you which rights that space may have.
 
 For a space of your own, ask your coding agent. `something guide` prints where the guide for that agent is, and the
 skill next to it. Tell your agent, for example: "Read the guide at that path, then make me a space that shows which
-of my agents are waiting." It writes the page with `something new`, tests it with `something check`, and you open it
-with `something open <name>`. For your agent to know how to build a space anywhere, add the skill (`skill/SKILL.md`,
+of my agents are waiting." It writes the page with `something new`, tests it with `something check`, and it appears
+in the sidebar: one click opens it (or `something open <name>`). For your agent to know how to build a space anywhere, add the skill (`skill/SKILL.md`,
 next to the guide) to it yourself: something never adds anything to your agents.
 
 Each agent you want something to launch must be installed and signed in as you use it in a terminal: `claude`,
@@ -46,7 +46,7 @@ from one that ended.
 
 something writes no hook, no MCP server, no skill and no setting into any agent's configuration. What it writes is its
 own: `~/something/` (your spaces and their memory) and `~/Library/Application Support/something/` (your answers to the
-rights windows, the journals of what spaces asked agents to do, and plan B's spool, below).
+rights sheets, the window's memory, the journals of what spaces asked agents to do, and plan B's spool, below).
 
 ## What it launches, and how
 
@@ -66,17 +66,17 @@ chose, with your own configuration:
 
 Started from a terminal, something gives the agents that terminal's environment, so they find the programs your
 terminal finds (less the variables that only say where the terminal runs, such as `TMUX`); started from Finder, it
-asks your login shell for its `PATH`. Closing the window keeps something in the menu bar; quitting it stops the agents
-it launched, after asking you.
+asks your login shell for its `PATH`. Closing the window keeps something running, with its agents: its Dock icon or
+`something` shows the window again. Quitting stops the agents it launched, after asking you.
 
 ## Permissions and the windows of the Mac
 
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
-- **Rights.** At the first opening of a space, a window lists what it declares (see your agents, write to them, launch
-  them, keep a memory), each to allow or not, and the folder its agents will work in. Your answers are kept, and
-  something asks again only for what the space adds; a space opened by its path, outside `~/something/spaces`, keeps
-  them only while its window is open. Home shows each space's rights, each with a switch to revoke it.
+- **Rights.** At the first opening of a space, a sheet on the window lists what it declares (see your agents, write to
+  them, start them, remember things), each to allow or not, and the folder its agents will work in. Your answers are
+  kept, and something asks again only for what the space adds. Info (⌥⌘I) shows each right of the open space, with a
+  switch to revoke it, and what the space did.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow once" or "Deny"
   (Escape denies). There is no "always". A question from an agent opens a panel with its choices. A space sees that the
   agent waits, and can never answer for you.
@@ -128,8 +128,8 @@ rights, words and codes are only added, never renamed or removed.
 
 ```text
 something                       start something, or bring it to the front
-something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder;
-                                or import an export (a .something file) into Home, as a double click does
+something open <name>           open a space of ~/something/spaces; or import an export (a .something file), as a
+                                double click does
 something new <name> [--folder] make a space from the template (with --folder, <name>/index.html, which can hold more files)
 something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
 something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
@@ -142,10 +142,12 @@ failed, 2 when the words were wrong; `check` has its own: 0 no error, 1 errors, 
 space with the app's own lock and bridge, in a window nobody sees, against the invented state of
 `share/contract/state-example.json`, never your agents, and writes a snapshot to `$TMPDIR/something-check/`.
 
-Home (in the menu bar) lists your spaces: Open, New, Export, Import, Make default, Show in Finder, and each space's
-card with its rights, its folder and its journal. The four examples (your agents, a chat, today, a small game) are
-there read-only, with "Make a copy". One space is open at a time, and its window reloads when one of its files
-changes.
+The window's sidebar lists your spaces by title; one click opens one, and the window opens on the last one open. A
+page of the folder without a declaration is listed as "not a space yet". A space's context menu has Show in Finder,
+Export… and Move to Trash… (its memory goes with it); File › Import Space… takes an export. A page elsewhere is not
+opened: copy it into `~/something/spaces` first. One space is open at a time, and it reloads when one of its files
+changes. The four examples (your agents, a chat, today, a small game) are in `examples/`, next to the guide: copy one
+into `~/something/spaces` to use it.
 
 ## What each agent allows, and why
 
@@ -159,7 +161,7 @@ changes.
 - **OpenCode cannot steer** (take a message during a turn): its channel has no way to. A message waits for the next
   turn. OpenCode launched by something cannot ask a question either.
 - **pi has no mode, and never asks permission**, by design: it runs commands and edits files without asking you
-  first. The rights window says so when a space asks to launch pi.
+  first. The rights sheet says so when a space asks to launch pi.
 - **OMP is only read**: launching it is left for after 1.0.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 1.0, a
   Claude Code or Codex conversation can be continued in something ("continue here") once no other process holds it;
@@ -180,7 +182,7 @@ green.* Intel Macs are not tested.
 ```sh
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
-rm -rf ~/Library/Application\ Support/something      # your answers to the rights windows, the journals
+rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 ```
 
@@ -208,7 +210,7 @@ the code are in [AGENTS.md](AGENTS.md).
 share/                     something.js, the template, the four examples, the skill, the guide, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
 Sources/SomethingAgents/   the engine, a driver per agent it launches, a reader per agent it reads
-Sources/something/         the command and the Mac app: menu bar, Home, the space window, the windows that ask you
+Sources/something/         the command and the Mac app: the window, its sidebar and Info, the open space, the sheets and panels that ask you
 packaging/, tools/         the app's Info.plist, the Homebrew formula, make-app.sh
 .github/workflows/         the suite and a Homebrew install, run by GitHub at each push
 Tests/                     the Swift suites, recorded exchanges with invented text, and the node tests of something.js

@@ -110,7 +110,6 @@ struct RightsTests {
         let url = folder.appendingPathComponent("something/app.json")
         #expect(try AppFile.read(url) == AppFile())
         var file = AppFile()
-        file.default = "agents"
         file.spaces["morning-review"] = Rights.answered(declaration(["state"]), allowed: ["state"], refused: [], folder: nil,
                                                         at: "2026-10-17T09:00:00Z", after: nil)
         try file.write(url)
@@ -149,7 +148,7 @@ struct RightsTests {
         #expect(try FileManager.default.attributesOfItem(atPath: grants.url.path)[.modificationDate] as? Date == written)
         // A file that does not read is never replaced by an update.
         try Data("{".utf8).write(to: grants.url)
-        #expect(throws: SpaceError.self) { try grants.update { $0.default = "agents" } }
+        #expect(throws: SpaceError.self) { try grants.update { $0.spaces = [:] } }
         #expect(try Data(contentsOf: grants.url) == Data("{".utf8))
     }
 

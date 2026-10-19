@@ -1,4 +1,4 @@
-// Spaces: both forms are listed and located, names follow the rule, the stamp follows every visible file, the weight
+// Spaces: both forms are listed and located, names follow the rule, hidden files are left out, the weight
 // is counted, and `new` copies the template. Everything happens in a temporary folder.
 import Foundation
 import Testing
@@ -61,7 +61,7 @@ func write(_ text: String, _ path: String, under root: URL) throws {
         #expect(spaces.locate(root.appendingPathComponent("missing.html").path) == nil)
     }
 
-    @Test func theStampFollowsEveryVisibleFileAndTheSizeCountsThem() throws {
+    @Test func theFilesAreTheVisibleOnesAndTheSizeCountsThem() throws {
         let root = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: root) }
         try write("<p>Invented.</p>", "board/index.html", under: root)
@@ -72,16 +72,6 @@ func write(_ text: String, _ path: String, under root: URL) throws {
         #expect(space.files().map(\.path) == ["img/logo.svg", "index.html"])
         #expect(space.size() == Size(bytes: 22, files: 2))
 
-        let set = { (path: String, seconds: TimeInterval) in
-            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: seconds)],
-                                                  ofItemAtPath: root.appendingPathComponent(path).path)
-        }
-        try set("board/index.html", 1_800_000_000)
-        try set("board/img/logo.svg", 1_800_000_100)
-        try set("board/.notes", 1_900_000_000)
-        #expect(space.stamp() == Date(timeIntervalSince1970: 1_800_000_100))
-        try set("board/img/logo.svg", 1_800_000_200)
-        #expect(space.stamp() == Date(timeIntervalSince1970: 1_800_000_200))
     }
 
     @Test func newCopiesTheTemplateAndRefusesBadOrTakenNames() throws {

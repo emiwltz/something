@@ -2,6 +2,7 @@
 // Inside the .app the command reaches the app through LaunchServices. Run from a clone (`swift run`) there is no
 // .app for LaunchServices to start, so `something` and `something open <space>` run the app in this process.
 import AppKit
+import SomethingCore
 
 /// Runs the app until it quits. `opening` is a space named on the command line, nil for what the start chooses.
 func runApp(opening: String?) -> Never {
@@ -23,7 +24,8 @@ if Command.isApp(words, parent: getppid()) || inProcess && command == .start {
         exit(0)
     }
     runApp(opening: nil)
-} else if inProcess, case .open(let name) = command, Command.missingExport(name) == nil {
+} else if inProcess, case .open(let name) = command, Command.missingExport(name) == nil,
+          Spaces.isName(name) || (name as NSString).pathExtension == "something" {
     runApp(opening: name)
 }
 // This is the main thread; check runs a window, which AppKit allows there only.

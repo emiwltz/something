@@ -1,6 +1,6 @@
 // What the app's windows say about a path and a journal line, as a newcomer reads them: a path with ~ for the home
 // folder, cut between two names when it is too long, never inside one; a journal line as one short sentence in local
-// time. The words are made apart from the views, so that tests read exactly what Home and the rights window show.
+// time. The words are made apart from the views, so that tests read exactly what Info and the rights sheet show.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -21,19 +21,6 @@ enum Words {
             if fits(cut) || kept == 2 { return cut }
         }
         return short
-    }
-
-    /// A one-line label, `prefix` then `path` cut to fit `width` points; the whole path shows when the pointer
-    /// rests on it.
-    static func pathLabel(_ prefix: String, _ path: String, home: String, width: CGFloat) -> NSTextField {
-        let label = NSTextField(labelWithString: "")
-        let font = label.font ?? .systemFont(ofSize: NSFont.systemFontSize)
-        label.stringValue = prefix + Words.path(path, home: home) { (prefix + $0 as NSString).size(withAttributes: [.font: font]).width <= width }
-        label.toolTip = path
-        // Even its first and last names may not fit: AppKit then cuts what is left, rather than widen the window.
-        label.lineBreakMode = .byTruncatingMiddle
-        label.widthAnchor.constraint(lessThanOrEqualToConstant: width).isActive = true
-        return label
     }
 
     /// English, as every word of the app, with the order of the day and the month of the person's region.
@@ -81,7 +68,7 @@ enum Words {
         return Words.formatter(sameYear ? "MMMd" : "yMMMd", locale, calendar.timeZone).string(from: date) + " " + hour
     }
 
-    /// Made once each: the card draws up to 100 lines at each look at Home.
+    /// Made once each: Info draws up to 100 lines at each change.
     private static var formatters: [String: DateFormatter] = [:]
 
     private static func formatter(_ template: String, _ locale: Locale, _ zone: TimeZone) -> DateFormatter {

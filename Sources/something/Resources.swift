@@ -43,10 +43,12 @@ struct Places {
     let home: URL
     var spaces: URL { Spaces.root(home: home) }
     var data: URL { Memory.folder(home: home) }
-    /// The engine's own folder, outside the folders agents edit: the grants and the journals.
+    /// The engine's own folder, outside the folders agents edit: the grants, the journals and the window's memory.
     var support: URL { home.appendingPathComponent("Library/Application Support/something") }
     var grants: URL { support.appendingPathComponent("app.json") }
     var journals: URL { support.appendingPathComponent("journal") }
+    /// The window's own memory: the last space open.
+    var window: URL { support.appendingPathComponent("window.json") }
 
     /// The person's places. $HOME first, so that `HOME=<folder> swift run something` never reaches their own folders.
     static var person: Places {

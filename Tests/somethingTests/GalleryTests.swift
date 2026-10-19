@@ -4,6 +4,7 @@
 // in the dark one (its file ends in -dark.png). It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
+import SwiftUI
 @testable import SomethingAgents
 import SomethingCore
 import Testing
@@ -84,33 +85,53 @@ struct GalleryTests {
     func drawEveryWindow(suffix: String) async throws {
         let folder = try #require(gallery)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let (fixture, share) = try invented()
+        let (fixture, _) = try invented()
         defer { fixture.remove() }
-        // The kinds the Engine really reports, so that the readers' section shows what the product shows.
-        let kinds = fixture.engine().state.kinds
+        let invented = try JSONDecoder().decode(SomethingCore.State.self, from: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json")))
 
-        let home = something.Home(places: fixture.places, share: share, ask: FakeAsk())
-        home.card.kinds = { kinds }
-        home.card.agents = { self.agents() }
-        let window = home.makeWindow()
-        home.reload(selecting: "morning-review")
-        try draw(try #require(window.contentView), "home" + suffix, fixture)
+        // The window with a space and Info: the agents example against the invented agents, then a space whose
+        // rights were answered, one refused, with its activity.
+        try fixture.space("agents", try String(contentsOf: Home.share.appendingPathComponent("examples/agents.html"), encoding: .utf8))
+        try fixture.space("draft", page(nil, "<p>Scratch.</p>"))
+        let (shell, library, info) = window(fixture)
+        let board = try await fixture.window(try #require(library.entry("agents")?.space))
+        defer { board.close() }
+        board.open()
+        #expect(await wait(until: { !board.web.isLoading && board.frame != nil }), "the agents example did not load")
+        board.launched = ["a1"]
+        SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"]).json(), in: board.web, frame: try #require(board.frame))
+        library.select("agents")
+        shell.show(board)
+        info.show(board.space)
+        shell.inspector.isCollapsed = false
+        try await draw(shell, library: library, web: board.web, "window-space-info" + suffix, fixture)
+        let review = try await fixture.window(try #require(library.entry("morning-review")?.space))
+        defer { review.close() }
+        review.open()
+        library.select("morning-review")
+        shell.show(review)
+        info.show(review.space)
+        try await draw(shell, library: library, web: review.web, "window-info-rights" + suffix, fixture)
 
-        let card = Card(places: fixture.places, ask: FakeAsk())
-        card.kinds = { kinds }
-        card.agents = { self.agents() }
-        card.show(Spaces(root: fixture.places.spaces).named("morning-review"))
-        try draw(card.view, "card" + suffix, fixture)
+        // A space that cannot be shown, Info hidden.
+        let newer = try fixture.space("newer", page(#"{"contract": 2, "title": "Garden plan"}"#, ""))
+        let unshown = try await fixture.window(newer)
+        defer { unshown.close() }
+        unshown.open()
+        library.relist()
+        library.select("newer")
+        shell.inspector.isCollapsed = true
+        shell.show(unshown)
+        try await draw(shell, library: library, web: nil, "window-cannot-be-shown" + suffix, fixture)
 
-        // A first opening, with no space yet and no example: the sentence that says how to make one.
+        // A first start: no space yet, none open.
         let bare = Home(prefix: "something-gallery-")
         defer { bare.remove() }
-        let first = something.Home(places: bare.places, share: bare.root, ask: FakeAsk())
-        let firstWindow = first.makeWindow()
-        first.reload()
-        try draw(try #require(firstWindow.contentView), "home-empty" + suffix, bare)
+        try Library.prepare(bare.places)
+        let empty = window(bare)
+        try await draw(empty.shell, library: empty.library, web: nil, "window-empty" + suffix, bare)
 
-        // Five folders, two of them long and one not on this Mac: the window must still fit a small screen.
+        // Five folders, two of them long and one not on this Mac: the sheet must still fit a small screen.
         let folders = ["~/code/shop", "~/code/garden", "~/code/clients/example-agency/website-redesign-2026",
                        "~/code/tools/a-rather-long-folder-name-for-the-build-scripts", "~/Documents/notes"]
         let opening = RightsQuestion(space: "Morning review", description: "Reads what the agents said overnight and asks each one for a summary.",
@@ -123,9 +144,10 @@ struct GalleryTests {
         try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review"), "lowering-mode" + suffix, fixture)
         try draw(Ask.link(try #require(URL(string: "https://example.com/notes/overnight")), space: "Morning review"), "link" + suffix, fixture)
         try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)
+        try draw(Ask.trash("Morning review"), "trash" + suffix, fixture)
         try draw(Ask.quit(2), "quit-while-agents-run" + suffix, fixture)
 
-        let who = App.who(agents()[0], launchedBy: "Morning review")
+        let who = App.who(agents()[0], startedBy: "Morning review", home: "/Users/example")
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
                                                  at: "2026-10-17T09:00:01Z"), input: "npm test -- --runInBand src/cart")
         try draw(try #require(PromptPanel(permission, who: who) { _ in }.contentView), "permission-panel" + suffix, fixture)
@@ -140,19 +162,58 @@ struct GalleryTests {
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
         try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
 
-        // The template and each example in the space window, against the invented state `something check` gives.
-        let invented = try JSONDecoder().decode(State.self, from: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json")))
+        // The template and each example in a space's view, against the invented state `something check` gives.
         for name in ["template"] + ExamplesTests.examples {
             let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
             let state = name == "agents" ? elsewhere(invented) : invented
-            try await drawSpace(name, try String(contentsOf: source, encoding: .utf8), state, "space-\(name)" + suffix, fixture)
+            try await drawSpace("example-\(name)", try String(contentsOf: source, encoding: .utf8), state, "space-\(name)" + suffix, fixture)
         }
+    }
+
+    /// The window of `fixture`'s home, never shown, with its spaces listed; the agents of `agents()` named in Info.
+    func window(_ fixture: Home) -> (shell: Shell, library: Library, info: Info) {
+        let ask = FakeAsk()
+        let library = Library(places: fixture.places, ask: ask), info = Info(places: fixture.places, ask: ask)
+        info.agents = { self.agents() }
+        library.relist()
+        let shell = Shell(library: library, info: info, autosave: false)
+        return (shell, library, info)
+    }
+
+    /// Draws the whole window, title bar and toolbar included, into `name`.png at 2x, with the page of `web` composed
+    /// in its place: WebKit draws in another process, which a view's own drawing does not reach. The sidebar's rows
+    /// are vibrant, blended by the window server, which a view's drawing does not reach either: the same sidebar is
+    /// drawn apart, on a plain background, and composed in its column.
+    func draw(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, _ fixture: Home) async throws {
+        let column = shell.split.splitViewItems[0].viewController.view
+        let sidebar = NSHostingView(rootView: SidebarView(library: library))
+        let offscreen = Offscreen(sidebar)
+        // Below the title bar, as the sidebar's own list starts.
+        let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
+        offscreen.window.setContentSize(NSSize(width: column.bounds.width, height: column.bounds.height - top))
+        // SwiftUI and WebKit draw on the run loop.
+        await wait(1.5)
+        let frame = try #require(shell.window.contentView?.superview)
+        disguise(frame, fixture.root.path)
+        frame.layoutSubtreeIfNeeded()
+        let rep = try bitmap(frame.bounds.size), side = try bitmap(sidebar.bounds.size)
+        frame.cacheDisplay(in: frame.bounds, to: rep)
+        sidebar.cacheDisplay(in: sidebar.bounds, to: side)
+        let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
+        try png(of: frame.bounds.size, name) {
+            rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            var place = column.convert(column.bounds, to: frame)
+            place.size.height -= top
+            side.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
+        }
+        withExtendedLifetime(offscreen) {}
     }
 
     /// The invented state, with agents started in a terminal as the readers show them: a Claude Code waiting for the
     /// person there, an OpenCode at work (so OpenCode is installed here), a pi that ended. Watch makes them from
     /// sightings, as it does from a reader's, so they carry what the product gives: ids, `can` and `because`.
-    func elsewhere(_ state: State) -> State {
+    func elsewhere(_ state: SomethingCore.State) -> SomethingCore.State {
         var state = state
         if var opencode = state.kinds["opencode"] {
             opencode.installed = true
@@ -174,9 +235,9 @@ struct GalleryTests {
         return state
     }
 
-    /// Opens `html` as the space `name` in an offscreen space window, pushes it `state` as the Engine would (the
+    /// Opens `html` as the space `name` in an offscreen space's view, pushes it `state` as the Engine would (the
     /// agent a1 counted as launched by it), and draws what it painted into `picture`.png.
-    func drawSpace(_ name: String, _ html: String, _ state: State, _ picture: String, _ fixture: Home) async throws {
+    func drawSpace(_ name: String, _ html: String, _ state: SomethingCore.State, _ picture: String, _ fixture: Home) async throws {
         let space = try fixture.space(name, html)
         let open = try await fixture.window(space)
         defer { open.close() }
@@ -187,7 +248,7 @@ struct GalleryTests {
         // The page then sees the invented agents, through the same filter of rights as the state of the Engine.
         open.launched = ["a1"]
         let visible = Rights.visible(state, open.granted, launched: open.launched)
-        SpaceWindow.push(try visible.json(), in: open.web, frame: try #require(open.frame))
+        SpaceView.push(try visible.json(), in: open.web, frame: try #require(open.frame))
         await wait(0.5)
         let snapshot = try await open.web.takeSnapshot(configuration: nil)
         try png(of: open.web.bounds.size, picture) { snapshot.draw(in: NSRect(origin: .zero, size: open.web.bounds.size)) }

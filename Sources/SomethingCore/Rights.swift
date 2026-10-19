@@ -23,10 +23,9 @@ public struct Asked: Codable, Equatable, Sendable {
     public init(_ declaration: Declaration) { (rights, agents, folder) = (declaration.rights, declaration.agents, declaration.folder) }
 }
 
-/// The engine's own file (~/Library/Application Support/something/app.json in the app): the default space and the grants.
+/// The engine's own file (~/Library/Application Support/something/app.json in the app): the grants.
 public struct AppFile: Codable, Equatable, Sendable {
     public var app = 1
-    public var `default`: String?
     public var spaces: [String: Grant] = [:]
     public init() {}
     /// The file at `url`, or an empty one when it does not exist yet. Throws a `SpaceError` when it is there but does

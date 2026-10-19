@@ -33,9 +33,10 @@ struct Home {
         return try #require(Spaces(root: places.spaces).named(name))
     }
 
+    /// The view of `space`, not loaded yet.
     @MainActor
-    func window(_ space: Space, _ ask: FakeAsk = FakeAsk()) async throws -> SpaceWindow {
-        try SpaceWindow(space: space, places: places, engine: engine(), ask: ask, share: Home.share,
+    func window(_ space: Space, _ ask: FakeAsk = FakeAsk()) async throws -> SpaceView {
+        try SpaceView(space: space, places: places, engine: engine(), ask: ask, share: Home.share,
                         rules: try await Lockdown.ruleList(), launches: Launches())
     }
 
@@ -71,8 +72,6 @@ final class FakeAsk: Asking {
     var shown: [[String]] = []
     /// Where the save panel saves, and the file the open panel chooses; nil cancels.
     var saveTo: URL?, chosen: URL?
-    /// The name typed for a new space; nil cancels.
-    var named: String?
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
@@ -93,7 +92,6 @@ final class FakeAsk: Asking {
     }
     func saveAs(_ name: String) -> URL? { saveTo }
     func importFile() -> URL? { chosen }
-    func newName() -> String? { named }
     func tell(_ message: String) { told.append(message) }
 }
 
@@ -198,14 +196,14 @@ func wait(_ seconds: Double = 30, until condition: () -> Bool = { false }) async
 /// Runs `code` as the body of an async function in the space's frame (the app's page while the space is blocked)
 /// and returns what it returns.
 @MainActor
-func run(_ window: SpaceWindow, _ code: String) async throws -> Any? {
+func run(_ window: SpaceView, _ code: String) async throws -> Any? {
     let value = try await window.web.callAsyncJavaScript(code, in: window.frame, contentWorld: .page)
     return value is NSNull ? nil : value
 }
 
 /// Waits for the space to finish loading in its frame and `window.done` to be true.
 @MainActor
-func ready(_ window: SpaceWindow) async throws {
+func ready(_ window: SpaceView) async throws {
     guard await wait(until: { !window.web.isLoading && window.frame != nil }) else {
         throw SpaceError("The space did not load: \(window.web.isLoading) \(String(describing: window.web.url)).")
     }

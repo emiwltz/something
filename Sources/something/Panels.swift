@@ -24,8 +24,9 @@ final class Panels {
     let source: PromptSource
     /// Whether panels are put on the screen; a test reads them without showing them.
     let shows: Bool
-    /// Who asks, in words: the agent, its folder, and the space that launched it when one did.
-    var who: (Request) -> String = { _ in "An agent" }
+    /// Who asks: the agent's program ("Claude Code"), and a line with its name, the space that started it when one
+    /// did, and its folder.
+    var who: (Request) -> Asker = { _ in Asker(program: "An agent", line: "") }
     /// The requests waiting for a panel, the shown one first.
     private(set) var waiting: [String] = []
     private(set) var panel: PromptPanel?
@@ -87,6 +88,11 @@ final class Panels {
     }
 }
 
+/// Who asks in a panel: the program, which titles it, and a line that says which of its agents.
+struct Asker: Equatable {
+    var program: String, line: String
+}
+
 /// One request's panel. Its buttons and boxes are kept so that a test can press them as the person would.
 final class PromptPanel: NSPanel {
     let request: Request
@@ -97,11 +103,13 @@ final class PromptPanel: NSPanel {
     private(set) var told = false
     /// For a question: the boxes of each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
+    /// The lines above the request, which stay when the panel says its answer was lost: the title, and who asks.
+    private var heading = 1
 
     /// The panel's width: who asks, with its folder, would otherwise widen it past the screen.
     static let width: CGFloat = 480
 
-    init(_ prompt: Prompt, who: String, decide: @escaping (Answer) -> Void) {
+    init(_ prompt: Prompt, who: Asker, decide: @escaping (Answer) -> Void) {
         request = prompt.request
         self.decide = decide
         super.init(contentRect: NSRect(x: 0, y: 0, width: PromptPanel.width, height: 200), styleMask: [.titled, .utilityWindow],
@@ -109,37 +117,68 @@ final class PromptPanel: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         level = .floating
+        // Over a space in full screen too, and on the Space the person is on.
+        collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+        // Answerable while a sheet of the main window waits for the person: an agent's request does not wait for it.
+        worksWhenModal = true
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
         lines.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         lines.widthAnchor.constraint(equalToConstant: PromptPanel.width).isActive = true
+        let question = prompt.request.kind == "question"
+        let headline = PromptPanel.line(question ? "\(who.program) asks you" : "\(who.program) wants to \(PromptPanel.action(prompt.request.tool))")
+        headline.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 1)
+        lines.addArrangedSubview(headline)
+        if !who.line.isEmpty {
+            let line = PromptPanel.line(who.line)
+            line.textColor = .secondaryLabelColor
+            lines.addArrangedSubview(line)
+            heading = 2
+        }
         let buttons: [NSButton]
-        if prompt.request.kind == "question" {
-            title = "A question from an agent"
-            lines.addArrangedSubview(PromptPanel.line("\(who) asks you:"))
+        if question {
             for question in prompt.questions { add(question, to: lines) }
-            buttons = [NSButton(title: "Don't answer", target: self, action: #selector(deny)),
+            buttons = [NSButton(title: "Don't Answer", target: self, action: #selector(deny)),
                        NSButton(title: "Answer", target: self, action: #selector(reply))]
         } else {
-            title = "Permission"
-            let tool = prompt.request.tool.map { "to use \($0)" } ?? "for permission"
-            lines.addArrangedSubview(PromptPanel.line("\(who) asks \(tool)."))
-            if let what = prompt.input ?? prompt.request.about {
-                let text = PromptPanel.line(what)
-                text.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
-                text.isSelectable = true
-                lines.addArrangedSubview(text)
-            }
-            // No key for "Allow once": a permission takes a click on the button that says what it does.
+            if let what = prompt.input ?? prompt.request.about { lines.addArrangedSubview(PromptPanel.box(what)) }
+            // No key for "Allow Once": a permission takes a click on the button that says what it does.
             buttons = [NSButton(title: "Deny", target: self, action: #selector(deny)),
-                       NSButton(title: "Allow once", target: self, action: #selector(allow))]
+                       NSButton(title: "Allow Once", target: self, action: #selector(allow))]
         }
         buttons[0].keyEquivalent = "\u{1b}"
-        lines.addArrangedSubview(NSStackView(views: buttons))
+        let row = NSStackView(views: buttons)
+        lines.setCustomSpacing(14, after: lines.arrangedSubviews.last!)
+        lines.addArrangedSubview(row)
         contentView = lines
         setContentSize(lines.fittingSize)
         center()
+    }
+
+    /// What a tool does, as the panel's title says it: "run a command", "change a file", or "use <tool>".
+    static func action(_ tool: String?) -> String {
+        guard let tool else { return "do something that needs your permission" }
+        // Claude Code's tool names, Codex's request kinds, and the kinds of the Agent Client Protocol (OpenCode).
+        if ["Bash", "commandExecution", "execute"].contains(tool) { return "run a command" }
+        if ["Edit", "Write", "MultiEdit", "NotebookEdit", "fileChange", "edit", "delete", "move"].contains(tool) { return "change a file" }
+        return tool == "permissions" ? "change its permissions" : "use \(tool)"
+    }
+
+    /// The command or path, monospaced and selectable, on a tinted ground of its own.
+    static func box(_ text: String) -> NSView {
+        let label = line(text)
+        label.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        label.isSelectable = true
+        label.preferredMaxLayoutWidth = width - 52
+        let box = NSStackView(views: [label])
+        box.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
+        box.widthAnchor.constraint(equalToConstant: width - 32).isActive = true
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 6
+        // A layer's color does not follow the appearance by itself: it is taken in the one the panel opens in.
+        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance { box.layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor }
+        return box
     }
 
     private func add(_ question: Question, to lines: NSStackView) {
@@ -167,7 +206,7 @@ final class PromptPanel: NSPanel {
     func tell(_ sentence: String) {
         told = true
         guard let lines = contentView as? NSStackView else { return }
-        lines.arrangedSubviews.dropFirst().forEach { $0.removeFromSuperview() }
+        lines.arrangedSubviews.dropFirst(heading).forEach { $0.removeFromSuperview() }
         let ok = NSButton(title: "OK", target: self, action: #selector(deny))
         ok.keyEquivalent = "\r"
         [PromptPanel.line(sentence), ok].forEach(lines.addArrangedSubview)
@@ -177,7 +216,7 @@ final class PromptPanel: NSPanel {
     }
 
     /// A label that wraps inside the panel's insets.
-    static func line(_ text: String) -> NSTextField { Card.line(text, width: width - 32) }
+    static func line(_ text: String) -> NSTextField { Style.line(text, width: width - 32) }
 
     /// Each question's chosen labels, with the typed text when there is one.
     var choice: [[String]] {

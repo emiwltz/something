@@ -6,17 +6,17 @@ import SomethingAgents
 import SomethingCore
 import WebKit
 
-extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
+extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
     /// Only the open space's own page is answered, while it is displayed. A launch or a resume waits for its program,
     /// looked for off the main queue (Engine.lookFor), and is refused if the page reloaded or closed in the meantime.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
         let loaded = loads
         let answer = { [weak self] in
-            guard let self, self.loads == loaded else { return SpaceWindow.reply(message, open: false, { $0 }, replyHandler) }
-            SpaceWindow.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
+            guard let self, self.loads == loaded else { return SpaceView.reply(message, open: false, { $0 }, replyHandler) }
+            SpaceView.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
         }
-        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let kind = SpaceWindow.lookup(message.body, host: self) else { return answer() }
+        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let kind = SpaceView.lookup(message.body, host: self) else { return answer() }
         engine.lookFor(kind, then: answer)
     }
 
@@ -33,10 +33,10 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
 
     var assistants: Set<String> { engine.assistants }
 
-    var memory: Memory? { kept ? Memory(folder: places.data, space: space.name) : nil }
+    var memory: Memory? { Memory(folder: places.data, space: space.name) }
 
     func journal(_ line: JournalLine) {
-        guard kept else { return }
+        defer { journaled() }
         do { try Journal(folder: places.journals).append(line, space: space.name) } catch {
             FileHandle.standardError.write(Data("\(error.sentence)\n".utf8))
         }
@@ -62,8 +62,8 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
         return id
     }
 
-    /// One link window at a time for this space: a second call while one is open is BUSY. After "Block links until
-    /// reload", every link is answered false without a window.
+    /// One link sheet at a time for this space: a second call while one is open is BUSY. After "Block links until
+    /// reload", every link is answered false without a sheet.
     func open(_ url: URL) throws -> Bool {
         guard !linkOpen else { throw CodedError("BUSY", "A link of this space already waits for the person's answer; try again after it.") }
         guard !linksBlocked else { return false }

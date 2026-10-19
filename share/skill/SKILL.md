@@ -23,8 +23,8 @@ the person's and yours; the contract is in the guide.
    right you declared. Look at the snapshot it writes after each run. Fix each problem with the sentence it gives.
    Check by name, not by a path elsewhere: a space outside `~/something/spaces` has no memory. The check clicks
    nothing: what a button does is proven by reading it against the guide, and by the person in the app.
-5. **Tell the person how to open it:** `something open <name>`, or Open in something's Home. The first opening asks
-   them for the rights.
+5. **Tell the person how to open it:** a click on it in something's sidebar, or `something open <name>`. The first
+   opening asks them for the rights.
 
 ## Traps
 

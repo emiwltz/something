@@ -1,5 +1,5 @@
 // The permission and question panels against a fake prompt source shaped like the Engine's: one panel at a time in
-// the order the requests came, Allow once and Deny, Escape denies, never modal, closed when the agent withdraws its
+// the order the requests came, Allow Once and Deny, Escape denies, never modal, closed when the agent withdraws its
 // request, and a question answered with the chosen and typed answers. No panel is shown.
 import AppKit
 import SomethingAgents
@@ -32,7 +32,7 @@ final class FakePrompts: PromptSource {
     @Test func permissionsAreQueuedAndAnswered() throws {
         let source = FakePrompts()
         let panels = Panels(source: source, shows: false)
-        panels.who = { _ in "Claude Code “shop”, working in /Users/example/code/shop" }
+        panels.who = { _ in Asker(program: "Claude Code", line: "“shop”, working in ~/code/shop") }
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "rm -rf build")]
         panels.refresh()
         #expect(panels.waiting == ["r1", "r2"] && panels.panel?.request.id == "r1")
@@ -66,7 +66,7 @@ final class FakePrompts: PromptSource {
         let top = first.frame.maxY
         first.allow()
         let texts = (first.contentView?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(texts == ["An agent asks to use Bash.", "Claude Code did not receive your answer: it stopped listening."],
+        #expect(texts == ["An agent wants to run a command", "Claude Code did not receive your answer: it stopped listening."],
                 "who asked stays above the sentence")
         #expect(first.frame.maxY == top, "the panel keeps its top")
         #expect(first.told && !first.dismissed && panels.panel === first)
@@ -126,17 +126,36 @@ final class FakePrompts: PromptSource {
 
     /// A long sentence of who asks and a long command wrap: the panel keeps its width instead of growing past the screen.
     @Test func aLongRequestKeepsThePanelsWidth() throws {
-        let who = "Claude Code “an-invented-agent-name-that-goes-on”, working in /Users/example/code/clients/example-agency/"
-            + String(repeating: "a-very-deep-folder/", count: 10) + "website, launched by “Morning review”,"
+        let who = Asker(program: "Claude Code", line: "“an-invented-agent-name-that-goes-on”, started by “Morning review”, working in "
+            + "~/code/clients/example-agency/" + String(repeating: "a-very-deep-folder/", count: 10) + "website")
         let input = "npm test -- " + String(repeating: "--an-invented-flag ", count: 20)
         let panel = PromptPanel(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil,
                                                         at: "2026-10-17T09:00:01Z"), input: input), who: who) { _ in }
         #expect(panel.frame.width <= PromptPanel.width)
     }
 
-    /// The quit window says how many agents stop, in the singular and the plural, and that the others keep running.
-    @Test func theQuitWindowSaysWhoStops() {
-        #expect(Ask.quit(1).informativeText == "The agent something launched stops. Agents you started yourself keep running.")
-        #expect(Ask.quit(2).informativeText == "The 2 agents something launched stop. Agents you started yourself keep running.")
+    /// The panel's title says what the agent wants, by its tool, and who asks: its name, the space that started it,
+    /// and its folder, from the home folder.
+    @Test func thePanelSaysWhatAndWho() throws {
+        let cases: [(String?, String)] = [("Bash", "run a command"), ("commandExecution", "run a command"), ("execute", "run a command"),
+                                          ("Edit", "change a file"), ("fileChange", "change a file"), ("permissions", "change its permissions"),
+                                          ("WebFetch", "use WebFetch"), (nil, "do something that needs your permission")]
+        for (tool, words) in cases { #expect(PromptPanel.action(tool) == words, "\(tool ?? "nil")") }
+        var agent = Agent(id: "a1", kind: "claude", origin: "launched")
+        (agent.name, agent.folder) = ("shop", "/Users/example/code/shop")
+        #expect(App.who(agent, startedBy: "My agents", home: "/Users/example")
+                == Asker(program: "Claude Code", line: "“shop”, started by “My agents”, working in ~/code/shop"))
+        agent.name = nil
+        #expect(App.who(agent, startedBy: nil, home: "/Users/example").line == "Working in ~/code/shop")
+        #expect(App.who(nil, startedBy: nil, home: "/Users/example") == Asker(program: "An agent", line: ""))
+        let question = PromptPanel(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil,
+                                                           at: "2026-10-17T09:00:01Z")), who: Asker(program: "Codex", line: "")) { _ in }
+        #expect((question.contentView?.subviews.first as? NSTextField)?.stringValue == "Codex asks you")
+    }
+
+    /// The quit sheet says how many agents stop, in the singular and the plural.
+    @Test func theQuitSheetSaysWhoStops() {
+        #expect(Ask.quit(1).informativeText == "An agent something started is still running. Quitting stops it.")
+        #expect(Ask.quit(2).informativeText == "2 agents something started are still running. Quitting stops them.")
     }
 }

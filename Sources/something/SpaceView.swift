@@ -1,25 +1,22 @@
-// The window of one open space: one WKWebView with a new non-persistent data store at each opening, the
-// app's page (something://app/) holding the space in a sandboxed frame, something.js and the space's `granted`
-// injected in that frame before its scripts, the something:// scheme as its only source, every navigation away from
-// it cancelled (a clicked http, https or mailto link goes to the link window), no new window, and a reload when a file
-// of the space changes. The rights are asked at the opening and at each reload, before the page runs. What the
-// space's calls do is in SpaceBridge.swift.
+// One open space, shown in the main window's center: one WKWebView with a new non-persistent data store at each
+// opening, the app's page (something://app/) holding the space in a sandboxed frame, something.js and the space's
+// `granted` injected in that frame before its scripts, the something:// scheme as its only source, every navigation
+// away from it cancelled (a clicked http, https or mailto link goes to the link sheet), no new window, and a reload
+// when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs.
+// What the space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents
 import SomethingCore
 import WebKit
 
-final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
+final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let space: Space, places: Places, engine: Engine, ask: Asking
-    /// Whether the space lives in the spaces folder. Only such a space has a memory and a journal, which go by its name.
-    let kept: Bool
     let web: WKWebView
-    private(set) var window: NSWindow?
     private(set) var title: String
     private(set) var granted = Granted()
     /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
-    /// (`Launches`): they run on whatever window is open, so a space closed and opened again still sees and drives them.
-    /// A space with no answers kept is new to the person, and `answer` drops them: it never inherits another's agents.
+    /// (`Launches`): a space closed and opened again still sees and drives them. A space with no answers kept is new
+    /// to the person, and `answer` drops them: it never inherits another's agents.
     let launches: Launches
     var launched: Set<String> {
         get { launches.ids[space.name] ?? [] }
@@ -28,39 +25,40 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
     var linkOpen = false, linksBlocked = false
-    var closed: (SpaceWindow) -> Void = { _ in }
+    /// Called after each load: the title or the problems may have changed, and the window shows them.
+    var loaded: () -> Void = {}
+    /// Called after each line the space adds to its journal: Info shows it.
+    var journaled: () -> Void = {}
     private let bridge: String, scheme: Scheme
     private var stamp: Date?
     private var timer: Timer?
+    private var looking = false
     private var pushed: State?
-    /// The answers for a space opened by path, kept for the life of the window only: kept in app.json under its path,
-    /// they would pass to whatever file lands at that path later, and a space never inherits rights.
-    private var held: Grant?
-    /// The declaration as the last load read it: the one the person was asked about. A switch in the card applies
-    /// new answers to it, never to a newer file that no rights window has shown yet.
+    /// The declaration as the last load read it: the one the person was asked about. A switch in Info applies
+    /// new answers to it, never to a newer file that no rights sheet has shown yet.
     private var reading: DeclarationReading?
     /// The frame that holds the space, once the app's page has asked to load it: pushes and `granted` go to it. The
-    /// bridge and the link window answer the frame `isSpace` recognizes, which the navigation policy makes this same
+    /// bridge and the link sheet answer the frame `isSpace` recognizes, which the navigation policy makes this same
     /// frame. nil before, while the space is blocked, and from each new load of the app's page until its frame asks.
     private(set) var frame: WKFrameInfo?
     /// One more at each load and at the close: a call answered late is refused when the page it came from is gone.
     private(set) var loads = 0
 
-    /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
-    /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
+    /// The space `space` of the spaces folder, not yet loaded. `share` is the folder of something.js; `rules` is
+    /// Lockdown's rule list. Throws a `SpaceError` when something.js cannot be read: without it the space could not
+    /// reach anything.
     init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList, launches: Launches) throws {
-        bridge = try SpaceWindow.bridge(share)
+        bridge = try SpaceView.bridge(share)
         self.launches = launches
         self.space = space
         self.places = places
         self.engine = engine
         self.ask = ask
         title = space.name
-        kept = SpaceWindow.isKept(space, places)
         scheme = Scheme(space: space)
-        web = SpaceWindow.webView(scheme, rules: rules)
+        web = SpaceView.webView(scheme, rules: rules)
         super.init()
-        SpaceWindow.hold(web, by: self)
+        SpaceView.hold(web, by: self)
     }
 
     /// The text of something.js in `share`. Throws a `SpaceError` when it cannot be read: without it the space could
@@ -71,11 +69,6 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             throw SpaceError("something cannot read \(file.path); reinstall something, or restore share/ in its clone.")
         }
         return bridge
-    }
-
-    /// Whether `space` is the one of that name in the spaces folder, the only kind that has a memory and a journal.
-    static func isKept(_ space: Space, _ places: Places) -> Bool {
-        Spaces(root: places.spaces).named(space.name).map { App.same($0, space) } ?? false
     }
 
     /// What answers a web view that holds a space: its calls, its clicked links and its navigations.
@@ -125,42 +118,62 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         web.evaluateJavaScript("window.something && something._push(\(String(decoding: data, as: UTF8.self)))", in: frame, in: .page)
     }
 
-    /// Loads the space and watches its files: when one changes (checked each second), the space reloads.
+    /// Loads the space and watches its files: when one changes (looked at each second, off the main queue), the
+    /// space reloads.
     func open() {
         load()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self, self.space.stamp() != self.stamp else { return }
-            self.load()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.look() }
+    }
+
+    private func look() {
+        guard !looking else { return }
+        looking = true
+        let space = space, loads = loads
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let now = SpaceView.stamp(of: space)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.looking = false
+                if self.loads == loads, now != self.stamp { self.load() }
+            }
         }
     }
 
-    func show() {
-        if window == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 640),
-                                  styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-            window.isReleasedWhenClosed = false
-            window.delegate = self
-            window.center()
-            self.window = window
-            present()
+    /// Past this many entries, a folder space's walk stops: a space that holds a whole project (node_modules) must not
+    /// keep the Mac busy each second. A change among its first entries still reloads it.
+    static let watched = 2_000
+
+    /// The latest modification among the space's visible files, within the first `watched` entries of a folder; nil
+    /// when none can be read. A change of any file, an image as much as the page, changes it.
+    static func stamp(of space: Space) -> Date? {
+        let key = URLResourceKey.contentModificationDateKey
+        // Asked of the file system each time: a URL keeps the values it read once.
+        guard space.form == .folder else { return (try? FileManager.default.attributesOfItem(atPath: space.location.path))?[.modificationDate] as? Date }
+        let walk = FileManager.default.enumerator(at: space.location, includingPropertiesForKeys: [key, .isRegularFileKey],
+                                                  options: [.skipsHiddenFiles])
+        var latest: Date?, seen = 0
+        while seen < watched, let file = walk?.nextObject() as? URL {
+            seen += 1
+            guard let values = try? file.resourceValues(forKeys: [key, .isRegularFileKey]), values.isRegularFile == true,
+                  let date = values.contentModificationDate else { continue }
+            latest = max(latest ?? date, date)
         }
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        return latest
     }
 
     /// Reads the declaration, asks the rights that changed, then loads or reloads the page with the new `granted`;
-    /// or, when the declaration keeps the space from being displayed, says why in the window.
+    /// or, when the declaration keeps the space from being displayed, keeps why in `blocked` for the window to say.
     func load() {
         loads += 1
-        stamp = space.stamp()
+        stamp = SpaceView.stamp(of: space)
         pushed = nil
         frame = nil
         linksBlocked = false
         let reading = Declaration.read(space, home: places.home)
         self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
+        title = reading.declaration?.title ?? space.name
         if let declaration = reading.declaration {
-            title = declaration.title
             granted = Rights.granted(reading, answer(declaration), limits: Engine.limits, home: places.home)
             inject()
             web.load(URLRequest(url: Scheme.shell))
@@ -170,7 +183,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             web.configuration.userContentController.removeAllUserScripts()
             web.loadHTMLString("", baseURL: URL(string: "\(Scheme.name)://\(Scheme.app)/.blocked"))
         }
-        present()
+        loaded()
     }
 
     /// Puts the guards and the bridge, with the `granted` in force, before the scripts of every page the space loads.
@@ -179,7 +192,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private func inject() {
         let controller = web.configuration.userContentController
         controller.removeAllUserScripts()
-        SpaceWindow.scripts(bridge, granted).forEach(controller.addUserScript)
+        SpaceView.scripts(bridge, granted).forEach(controller.addUserScript)
     }
 
     /// The guards, then something.js holding `granted`, for every page that holds a space (the check's too).
@@ -191,50 +204,40 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     }
 
     /// Applies the person's answers as the grants file now keeps them, without asking and without a reload: the page
-    /// hears a `granted` event, and the bridge answers by the new rights from its next call. The space's card calls it
-    /// when a right is switched: a revocation reaches an open space as a `granted` event.
+    /// hears a `granted` event, and the bridge answers by the new rights from its next call. Info calls it when a
+    /// right is switched: a revocation reaches an open space as a `granted` event.
     /// When the grants file does not read, the rights in force stay as they are and the failure is said.
     func regrant() {
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
-        var grant = held
-        if kept {
-            do { grant = try Grants(places.grants).read().spaces[space.name] } catch {
-                return ask.tell(error.sentence)
-            }
-        }
+        let grant: Grant?
+        do { grant = try Grants(places.grants).read().spaces[space.name] } catch { return ask.tell(error.sentence) }
         granted = Rights.granted(reading, grant, limits: Engine.limits, home: places.home)
         inject()
-        if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceWindow.json(granted)))", in: frame, in: .page) }
+        if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceView.json(granted)))", in: frame, in: .page) }
         push()
     }
 
     /// The grant in force after this opening: the person is asked only what changed since they last answered. The
-    /// answers for a space of the spaces folder are kept in the grants file, by its name. nil when nothing was ever
-    /// answered or the file cannot be read.
+    /// answers are kept in the grants file, by the space's name. nil when nothing was ever answered or the file cannot
+    /// be read.
     func answer(_ declaration: Declaration) -> Grant? {
         let grants = Grants(places.grants)
-        var grant = held
-        if kept {
-            do { grant = try grants.read().spaces[space.name] } catch {
-                ask.tell(error.sentence)
-                return nil
-            }
+        let grant: Grant?
+        do { grant = try grants.read().spaces[space.name] } catch {
+            ask.tell(error.sentence)
+            return nil
         }
-        // Forgotten answers (a space deleted, then made again under its name) or a space opened by path, whose answers
-        // die with its window: the agents kept under that name are not this space's.
+        // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
+        // not this space's.
         if grant == nil { launched = [] }
         let toAsk = Rights.toAsk(declaration, since: grant)
         guard !toAsk.isEmpty, let answer = ask.rights(question(declaration, toAsk, grant)) else { return grant }
-        // Applied to the grant as the file holds it after the window, so that a change made meanwhile stays.
+        // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.
         func answered(_ before: Grant?) -> Grant {
             var next = Rights.answered(declaration, allowed: answer.allowed, refused: answer.refused, folder: answer.folder,
                                        at: iso8601.string(from: Date()), after: before)
             next.remap.merge(answer.remap) { $1 }
             return next
-        }
-        guard kept else {
-            held = answered(held)
-            return held
         }
         do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {
             ask.tell(error.sentence)
@@ -242,7 +245,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         }
     }
 
-    /// What the rights window shows: the rights never answered, the scope when it is new or wider, the scope folders
+    /// What the rights sheet shows: the rights never answered, the scope when it is new or wider, the scope folders
     /// that are not on this Mac, and the launch folder when one must be chosen or confirmed.
     func question(_ declaration: Declaration, _ toAsk: ToAsk, _ grant: Grant?) -> RightsQuestion {
         func here(_ path: String) -> String? {
@@ -258,22 +261,6 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
                               folder: toAsk.folder ? FolderQuestion(declared: declaration.folder, found: declaration.folder.flatMap(here)) : nil)
     }
 
-    /// Puts the page, or the reason it cannot be displayed, in the window.
-    private func present() {
-        guard let window else { return }
-        window.title = title
-        if blocked.isEmpty {
-            if window.contentView !== web { window.contentView = web }
-        } else {
-            let lines = blocked.map { "\($0.message) \($0.fix)" }.joined(separator: "\n")
-            let label = NSTextField(wrappingLabelWithString: "This space cannot be displayed.\n\(lines)\nIt reloads when its files change.")
-            let content = NSView()
-            content.addSubview(label)
-            label.frame = NSRect(x: 24, y: 24, width: 852, height: 592)
-            window.contentView = content
-        }
-    }
-
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice
     /// is not sent again.
     func push() {
@@ -284,7 +271,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         bare.at = ""
         guard bare != pushed, let data = try? state.json() else { return }
         pushed = bare
-        SpaceWindow.push(data, in: web, frame: frame)
+        SpaceView.push(data, in: web, frame: frame)
     }
 
     /// `granted` as the JSON the page receives.
@@ -306,7 +293,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        switch SpaceWindow.route(action, frame: frame) {
+        switch SpaceView.route(action, frame: frame) {
         case .shell:
             frame = nil
             pushed = nil
@@ -336,7 +323,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
             // A frame inside the space may not hold a file of the space, so the bridge can tell the space's frame
             // from the frames it holds.
             if frame == nil, action.sourceFrame.isMainFrame { return .space(target) }
-            return SpaceWindow.isSpace(target) ? .allow : .cancel
+            return SpaceView.isSpace(target) ? .allow : .cancel
         }
         // about:blank and about:srcdoc frames are the space's own and inherit its policy. A clicked link was handed
         // over by Lockdown's guard before WebKit followed it; the app's page lets the space's frame go nowhere else
@@ -344,10 +331,10 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         return url.scheme == "about" ? .allow : .cancel
     }
 
-    /// A link the person clicked, from Lockdown's guard: it goes to the link window, unless one is open or links are
+    /// A link the person clicked, from Lockdown's guard: it goes to the link sheet, unless one is open or links are
     /// blocked until the next reload. A link of a frame inside the space goes nowhere.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard SpaceWindow.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
+        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
     }
 
@@ -355,13 +342,10 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
 
-    func windowWillClose(_ notification: Notification) { close() }
-
-    /// Stops watching and lets the window go; its data store goes with it.
+    /// Stops watching and lets the web view go; its data store goes with it.
     func close() {
         loads += 1
         timer?.invalidate()
-        SpaceWindow.release(web)
-        closed(self)
+        SpaceView.release(web)
     }
 }

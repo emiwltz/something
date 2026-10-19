@@ -93,7 +93,7 @@
     const notes = Object.keys(state.kinds).map((k) => state.kinds[k].note).filter(Boolean);
     $("note").textContent = !agent ? notes.join(" ")
       : !agent.can.send ? agent.because.send || "This agent cannot take a message now."
-      : !has("send", agent.kind) ? `This space may not write to ${label(agent.kind)}. Allow it in its card, in Home.` : "";
+      : !has("send", agent.kind) ? `This space may not write to ${label(agent.kind)}. Allow it in Info (⌥⌘I).` : "";
   }
 
   something.on("change", render);

@@ -61,12 +61,12 @@ import Testing
                 == "09:02\tinterrupted pi “shop” — failed (A_LATER_CODE)", "a code this version does not know")
     }
 
-    @Test func theRightsWindowTicksEveryRightAndAllowsFirst() throws {
+    @Test func theRightsSheetTicksEveryRightAndAllowsFirst() throws {
         let question = RightsQuestion(space: "Morning review", description: nil, rights: ["state", "store"], scope: nil, missing: [],
                                       folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
         let window = Ask.rights(question, home: home)
-        #expect(window.alert.buttons.map(\.title) == ["Allow", "Not now"])
-        #expect(window.alert.buttons[1].keyEquivalent == "\u{1b}", "Escape is Not now")
+        #expect(window.alert.buttons.map(\.title) == ["Allow", "Not Now"])
+        #expect(window.alert.buttons[1].keyEquivalent == "\u{1b}", "Escape is Not Now")
         #expect(window.alert.buttons[0].keyEquivalent == "", "Return does not allow every ticked right unread")
         #expect(window.answer() == RightsAnswer(allowed: ["state", "store"], refused: [], folder: "/Users/example/code/shop", remap: [:]))
         let paths = labels(in: try #require(window.alert.accessoryView)).filter { $0.toolTip != nil }

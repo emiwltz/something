@@ -1,5 +1,5 @@
 // The template and the four examples of share/ pass `something check` with no problem at all, as the person's
-// spaces, copied as Home's "Make a copy" copies them: once with every right they declare, then with each of those
+// spaces, copied into the spaces folder: once with every right they declare, then with each of those
 // rights refused, which they must adapt to. Each stays short enough for an agent to read in one go. The checks run
 // in the something program, off the main actor: waiting for them there would hold the queue other suites answer on.
 import Foundation

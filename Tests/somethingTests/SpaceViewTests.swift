@@ -1,4 +1,4 @@
-// The space window in a real WKWebView, never shown: nothing reaches the network, no space reads
+// The open space in a real WKWebView, never shown: nothing reaches the network, no space reads
 // another's storage, the bridge answers the page and only the page, links go to the link window, the rights are
 // asked once and remembered, and the window reloads when the space changes. Serialized: each test turns the run loop.
 import AppKit
@@ -9,7 +9,7 @@ import Testing
 import WebKit
 @testable import something
 
-@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-window-")) struct SpaceWindowTests {
+@MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-window-")) struct SpaceViewTests {
     init() {
         // WebKit's processes talk to an application; this one never shows in the Dock and never takes the focus.
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -213,8 +213,8 @@ import WebKit
         let engine = home.engine()
         let declared = #"{"contract": 1, "title": "Board", "rights": ["launch:claude"], "folder": "~/code/shop"}"#
         let board = try home.space("board", page(declared, "")), other = try home.space("other", page(nil, ""))
-        func opened(_ space: Space) throws -> SpaceWindow {
-            let window = try SpaceWindow(space: space, places: home.places, engine: engine, ask: ask, share: Home.share, rules: rules,
+        func opened(_ space: Space) throws -> SpaceView {
+            let window = try SpaceView(space: space, places: home.places, engine: engine, ask: ask, share: Home.share, rules: rules,
                                          launches: launches)
             window.load()
             return window
@@ -228,7 +228,7 @@ import WebKit
         again.close()
         elsewhere.close()
 
-        try something.Home.forget("board", in: home.places)
+        try Library.forget("board", in: home.places)
         let new = try opened(board)
         defer { new.close() }
         #expect(new.launched.isEmpty)
@@ -422,10 +422,10 @@ import WebKit
         #expect(ask.modes.isEmpty)
     }
 
-    /// The rights window says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
-    @Test func theRightsWindowSaysThatPiNeverAsks() {
-        #expect(Ask.words(for: "launch:pi") == "Launch or continue pi in the folder chosen for it. pi runs commands and edits files without asking you first")
-        #expect(Ask.words(for: "launch") == "Launch or continue agents in the folder chosen for it. One of them, pi, runs commands and edits files without asking you first")
+    /// The rights sheet says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
+    @Test func theRightsSheetSaysThatPiNeverAsks() {
+        #expect(Ask.words(for: "launch:pi") == "Start pi in a folder you choose. pi runs commands and edits files without asking you first")
+        #expect(Ask.words(for: "launch") == "Start agents in a folder you choose. One of them, pi, runs commands and edits files without asking you first")
         #expect(!Ask.words(for: "launch:claude").contains("without asking"))
     }
 
@@ -496,26 +496,36 @@ import WebKit
         #expect(ask.questions.last?.rights == ["state"] && ask.questions.last?.scope == .all)
     }
 
-    /// A space opened by path keeps its answers while its window is open, and nowhere else: a file that lands at the
-    /// same path later is asked again.
-    @Test func aSpaceOpenedByPathIsNotRemembered() async throws {
-        let home = Home(prefix: "something-window-"), ask = FakeAsk()
+    /// The stamp that reloads a space follows each visible file of a folder, an image as much as the page, and stops
+    /// its walk at `watched` entries: a space that holds a whole project does not keep the Mac busy each second.
+    @Test func theStampFollowsEveryVisibleFileWithinItsLimit() throws {
+        let home = Home(prefix: "something-window-")
         defer { home.remove() }
-        let file = home.root.appendingPathComponent("Downloads/board.html")
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try page(#"{"contract": 1, "rights": ["state"]}"#, "<p>one</p>").write(to: file, atomically: true, encoding: .utf8)
-        let space = try #require(Spaces(root: home.places.spaces).locate(file.path))
-        let first = try await home.window(space, ask)
-        first.open()
-        #expect(ask.questions.count == 1 && first.granted.rights == ["state"])
-        first.load()
-        #expect(ask.questions.count == 1, "a reload asks nothing new")
-        first.close()
-        #expect(!FileManager.default.fileExists(atPath: home.places.grants.path))
-        let second = try await home.window(space, ask)
-        defer { second.close() }
-        second.open()
-        #expect(ask.questions.count == 2)
+        let board = home.places.spaces.appendingPathComponent("board")
+        for (path, text) in [("index.html", "<p>Invented.</p>"), ("img/logo.svg", "<svg/>"), (".notes", "hidden"), (".cache/big", "hidden")] {
+            let file = board.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: file, atomically: true, encoding: .utf8)
+        }
+        let space = try #require(Spaces(root: home.places.spaces).named("board"))
+        let set = { (path: String, seconds: TimeInterval) in
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: seconds)],
+                                                  ofItemAtPath: board.appendingPathComponent(path).path)
+        }
+        try set("index.html", 1_800_000_000)
+        try set("img/logo.svg", 1_800_000_100)
+        try set(".notes", 1_900_000_000)
+        try set(".cache/big", 1_900_000_000)
+        #expect(SpaceView.stamp(of: space) == Date(timeIntervalSince1970: 1_800_000_100))
+        try set("img/logo.svg", 1_800_000_200)
+        #expect(SpaceView.stamp(of: space) == Date(timeIntervalSince1970: 1_800_000_200))
+
+        let many = board.appendingPathComponent("many")
+        try FileManager.default.createDirectory(at: many, withIntermediateDirectories: true)
+        for index in 0..<SpaceView.watched { FileManager.default.createFile(atPath: many.appendingPathComponent("\(index)").path, contents: nil) }
+        let start = Date()
+        #expect(SpaceView.stamp(of: space) != nil)
+        #expect(Date().timeIntervalSince(start) < 1, "the walk stops at its limit")
     }
 
     @Test func aGrantsFileThatDoesNotReadIsLeftAndSaid() async throws {

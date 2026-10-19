@@ -14,8 +14,7 @@ enum Command: Equatable {
     static let usage = """
         Usage:
           something                       start something, or bring it to the front
-          something open <name|path>      open a space: a name in ~/something/spaces, or a space's .html file or folder;
-                                          or import an export (a .something file) into Home
+          something open <name>           open a space of ~/something/spaces; or import an export (a .something file)
           something new <name> [--folder] make a space from the template (a folder holds more than one file)
           something guide [--print]       where the guide for the coding agent that writes your spaces is
           something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
@@ -76,11 +75,13 @@ enum Command: Equatable {
                 return 1
             }
             return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
+        case .open(let name) where !Spaces.isName(name):
+            let url = URL(fileURLWithPath: name)
+            say(Command.elsewhere(url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent), true)
+            return 1
         case .open(let name):
-            guard let space = Spaces(root: places.spaces).locate(name) else {
-                say(Spaces.isName(name)
-                    ? "There is no space \(name) in \(places.spaces.path). Type something new \(name) to make it."
-                    : "There is no space at \(name): give a space's .html file, a folder with an index.html, or the name of a space.", true)
+            guard let space = Spaces(root: places.spaces).named(name) else {
+                say("There is no space \(name) in \(places.spaces.path). Type something new \(name) to make it.", true)
                 return 1
             }
             return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
@@ -135,11 +136,18 @@ enum Command: Equatable {
     /// or a file cannot be written; then no space is left.
     static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
-        do { try Home.forget(name, in: places) } catch {
+        do { try Library.forget(name, in: places) } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error
         }
         return space
+    }
+
+    /// What to do with a page outside the spaces folder, named `name` there: something opens only that folder's spaces,
+    /// which have a memory, a journal and kept answers.
+    static func elsewhere(_ name: String) -> String {
+        let named = Spaces.isName(name) ? name : "<name>"
+        return "something opens spaces from ~/something/spaces. Copy it there, then run: something open \(named)"
     }
 
     /// The path that stays the same across upgrades. Homebrew installs in <prefix>/Cellar/something/<version>/ and

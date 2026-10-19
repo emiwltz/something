@@ -16,20 +16,20 @@ import Testing
 
     @Test func aLaunchOrAResumeThatMayGoAheadLooksForItsProgram() throws {
         let host = try host(["state", "launch"])
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "claude"]], host: host) == "claude")
-        #expect(SpaceWindow.lookup(["method": "resume", "params": ["kind": "codex", "thread": "t-1"]], host: host) == "codex")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "claude"]], host: host) == "claude")
+        #expect(SpaceView.lookup(["method": "resume", "params": ["kind": "codex", "thread": "t-1"]], host: host) == "codex")
     }
 
     @Test func everyOtherCallIsAnsweredAtOnce() throws {
         let host = try host(["state", "launch:claude"])
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "claude"]], host: host) == "claude")
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "codex"]], host: host) == nil, "a right not granted")
-        #expect(SpaceWindow.lookup(["method": "launch", "params": [:] as [String: Any]], host: host) == nil, "no kind")
-        #expect(SpaceWindow.lookup(["method": "send", "params": ["kind": "claude"]], host: host) == nil, "another method")
-        #expect(SpaceWindow.lookup("launch", host: host) == nil, "not a request")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "claude"]], host: host) == "claude")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "codex"]], host: host) == nil, "a right not granted")
+        #expect(SpaceView.lookup(["method": "launch", "params": [:] as [String: Any]], host: host) == nil, "no kind")
+        #expect(SpaceView.lookup(["method": "send", "params": ["kind": "claude"]], host: host) == nil, "another method")
+        #expect(SpaceView.lookup("launch", host: host) == nil, "not a request")
         let all = try self.host(["launch"])
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "opencode"]], host: all) == nil, "not installed")
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "omp"]], host: all) == nil, "not launched by something")
-        #expect(SpaceWindow.lookup(["method": "launch", "params": ["kind": "other"]], host: all) == nil, "not a kind")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "opencode"]], host: all) == nil, "not installed")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "omp"]], host: all) == nil, "not launched by something")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "other"]], host: all) == nil, "not a kind")
     }
 }

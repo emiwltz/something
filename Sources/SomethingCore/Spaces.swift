@@ -1,6 +1,6 @@
 // Where spaces live and what they are made of: a single file <name>.html or a folder <name>/index.html under one
-// root (~/something/spaces by default), each one's stamp (to know when to reload it), its weight, and `new`, which
-// starts a space from the template. The root is a parameter so tests never touch a real home.
+// root (~/something/spaces by default), its files, its weight, and `new`, which starts a space from the template.
+// The root is a parameter so tests never touch a real home.
 import Foundation
 
 public struct Space: Equatable, Sendable {
@@ -23,12 +23,6 @@ public struct Space: Equatable, Sendable {
             .map { (path: $0, url: location.appendingPathComponent($0)) }
             .filter { (try? $0.url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true }
             .sorted { $0.path < $1.path }
-    }
-
-    /// The latest modification among the space's files; nil when none can be read. A change of any file, an image
-    /// as much as the page, changes it, so the window reloads.
-    public func stamp() -> Date? {
-        files().compactMap { try? $0.url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.max()
     }
 
     /// What the space weighs: its files' bytes and how many files it has.

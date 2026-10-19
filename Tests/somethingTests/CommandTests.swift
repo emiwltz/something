@@ -134,23 +134,6 @@ final class FakeDoor: Door {
                                                        "CODEX_HOME": "/Users/example/.codex-work"])
     }
 
-    /// A space handed by its path is the one already open by its name: the window is fronted, not reopened.
-    @Test func aSpaceIsTheSameHoweverItsPathIsWritten() throws {
-        let home = Home(prefix: "something-command-")
-        defer { home.remove() }
-        try FileManager.default.createDirectory(at: home.places.spaces, withIntermediateDirectories: true)
-        let spaces = Spaces(root: home.places.spaces)
-        let board = try spaces.new("board", from: Home.share.appendingPathComponent("template.html"), folder: true)
-        let link = home.root.appendingPathComponent("link")
-        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: home.places.spaces)
-        for written in [board.location.path + "/", link.appendingPathComponent("board").path] {
-            let byPath = try #require(spaces.locate(written), "\(written)")
-            #expect(App.same(board, byPath), "\(written)")
-        }
-        let other = try home.space("garden", page(nil, "<p>Invented.</p>"))
-        #expect(!App.same(board, other))
-    }
-
     @Test func startAndOpenGoThroughTheDoor() throws {
         let home = Home(prefix: "something-command-")
         defer { home.remove() }
@@ -158,21 +141,25 @@ final class FakeDoor: Door {
         let door = FakeDoor()
         #expect(Ran([], home, door).status == 0 && door.started == 1)
         #expect(Ran(["open", "board"], home, door).status == 0)
-        #expect(Ran(["open", board.location.path], home, door).status == 0)
-        #expect(door.delivered == [board.location, board.location.standardizedFileURL])
+        #expect(door.delivered == [board.location])
 
         let missing = Ran(["open", "garden"], home, door)
         #expect(missing.status == 1 && missing.err.contains("something new garden"))
-        let nowhere = Ran(["open", "/Users/example/nowhere.html"], home, door)
-        #expect(nowhere.status == 1 && nowhere.err.contains("There is no space at /Users/example/nowhere.html"))
-        #expect(door.delivered.count == 2)
+        // Spaces open by name only: a page elsewhere, even one in the spaces folder given by its path, is told where to go.
+        for path in ["/Users/example/Downloads/board.html", board.location.path, "/Users/example/My Board"] {
+            let elsewhere = Ran(["open", path], home, door)
+            #expect(elsewhere.status == 1 && elsewhere.err.hasPrefix("something opens spaces from ~/something/spaces. Copy it there, then run: something open "))
+        }
+        #expect(Ran(["open", "/Users/example/Downloads/board.html"], home, door).err.hasSuffix("something open board\n"))
+        #expect(Ran(["open", "/Users/example/My Board"], home, door).err.hasSuffix("something open <name>\n"))
+        #expect(door.delivered.count == 1)
 
         // An export goes to the app, which imports it; a missing one is said here.
         let export = home.root.appendingPathComponent("garden.something")
         try Data("{}".utf8).write(to: export)
         #expect(Ran(["open", export.path], home, door).status == 0 && door.delivered.last == export.standardizedFileURL)
         let none = Ran(["open", home.root.appendingPathComponent("nothing.something").path], home, door)
-        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 3)
+        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 2)
 
         door.problem = "something could not be started: invented. Try again."
         let refused = Ran([], home, door)

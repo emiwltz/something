@@ -19,8 +19,8 @@ those started elsewhere, and `resume` continues here a Claude Code or Codex conv
 3. **Declare only the rights the page uses** (see "Rights"). The person is asked for each one.
 4. **Run `something check <name>` until it reports no error and no warning**, then once more with
    `--refuse <right>` for each right you declared: the page must hide what was refused, not throw.
-5. **Tell the person how to open it:** `something open <name>`, or Open in Home. The first opening asks them for the
-   rights. Saving the file again reloads the open space.
+5. **Tell the person how to open it:** a click on it in something's sidebar, or `something open <name>`. The first
+   opening asks them for the rights. Saving the file again reloads the open space.
 
 Rules that hold everywhere:
 
@@ -41,8 +41,8 @@ The same contract as data, for tests: `share/contract/` (`state-example.json`, `
 - A folder: `~/something/spaces/<name>/index.html`, with its own scripts, styles and images next to it.
 - Its memory: `~/something/data/<name>.json` (see "Memory").
 
-`<name>` is lowercase letters, digits and `-`. Only a space in `~/something/spaces` has a memory and a journal; a
-space opened by its path from elsewhere has neither.
+`<name>` is lowercase letters, digits and `-`. something opens only the spaces of `~/something/spaces`, by name: each
+has a memory and a journal. A page elsewhere is copied there first.
 
 **A space has no network.** It loads only its own files, inline code, `data:` and `blob:` URLs: no CDN, no web font,
 no `fetch` to the Internet. Embed a library in the space at an exact version. `eval` and `new Function` are refused,
@@ -50,7 +50,7 @@ so pick a library that does not need them (Alpine.js and the full build of Vue d
 A frame inside your page can hold inline content (`srcdoc`), never another file of the space, and only your page
 reaches `something`. A shadow root your script makes with `attachShadow` is always open (`mode: "closed"` is ignored),
 so that something sees the links clicked inside it; one made from HTML (`shadowrootmode`) keeps its mode.
-`localStorage` works but is emptied when the window closes: the memory is the only lasting state.
+`localStorage` works but is emptied when the space closes: the memory is the only lasting state.
 
 **One space is open at a time.** Opening another closes it. A space cannot open a window, and cannot reach another
 space or its memory.
@@ -78,8 +78,8 @@ A folder space may instead put the same object in `something.json`. If both exis
 | Key | What it says | When absent |
 |---|---|---|
 | `contract` | The contract you wrote for: `1`. | Read as `1`, warning `CONTRACT_MISSING` |
-| `title` | Shown in Home, the window title and the consent window. | The file or folder name |
-| `description` | One sentence, shown in the consent window. | Nothing shown |
+| `title` | Shown in the sidebar, the window title and the rights sheet. | The file or folder name |
+| `description` | One sentence, shown in the rights sheet and in Info. | Nothing shown |
 | `agents` | `{"see":"all"}`, or `{"folders":["~/code/shop"]}`: agents working in those folders or inside them. | Only the agents this space launched |
 | `rights` | What the space asks for (see "Rights"). | No right |
 | `folder` | Where the agents this space launches work. | The person picks one when a `launch` right is asked |
@@ -361,7 +361,7 @@ await something.store.set("seen", [...seen, "a1"]);
 ## What the person sees of your space
 
 - **The journal.** Every write of your space (`send`, `interrupt`, `set`, `launch`, `resume`, `open`), successful or
-  not, adds a line to its journal, shown in its card in Home. It never leaves the Mac.
+  not, adds a line to its journal, shown in Info beside the space. It never leaves the Mac.
 - **Export.** The person can export your space as one `.something` file (JSON: its files in base64, and its memory
   only if they choose so). The export carries the contract your space declares; a something that does not know that
   contract refuses to import it. It never carries the rights they gave, the journal, or anything read from an agent,
