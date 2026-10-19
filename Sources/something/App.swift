@@ -45,6 +45,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand
+        // Before any reading: the conversations there are the person's with their assistant, never a space's to see.
+        engine.assistantFolder = places.spaces.path
         engine.start(often: false)
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }

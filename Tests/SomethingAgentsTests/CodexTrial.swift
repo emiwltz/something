@@ -25,17 +25,19 @@ import SomethingCore
     var rows: [[String: Any]] { exchange.rows }
     private let exchange = Exchange()
     private let owner: Bool
+    /// Whether this run placed the real program at AssistantBuild.fixedProgram, which its cleanup removes.
+    private var placedProgram = false
 
     var home: URL { root.appendingPathComponent("codex") }
     /// The folder Codex works in.
     let work: URL
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
-    /// With `assistant`, its value for askEverything, Codex is the person's assistant, working in ~/something/spaces
-    /// with an invented `something` first in its PATH, whose `check` is this clone's real program (AssistantBuild),
-    /// and the person's own temporary folder, as the app gives it.
+    /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces with an invented
+    /// `something` first in its PATH, whose `check` is this clone's real program run from the fixed path of plan A.4
+    /// (AssistantBuild.fixedProgram), and the person's own temporary folder, as the app gives it.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
-         assistant: Bool? = nil) throws {
+         assistant: Assistant? = nil) throws {
         self.name = name
         owner = after == nil
         api = try after?.api ?? FakeResponsesAPI()
@@ -64,10 +66,11 @@ import SomethingCore
         var environment = ["HOME": folders[1].path, "CODEX_HOME": folders[0].path, "TMPDIR": root.path,
                            "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "SOMETHING_TRIAL_KEY": "test-key"]
         if let assistant {
-            (launch.assistant, launch.askEverything) = (true, assistant)
+            launch.assistant = assistant
             environment["PATH"] = try AssistantBuild.tools(in: root) + ":" + environment["PATH"]!
             environment["TMPDIR"] = NSTemporaryDirectory()
-            environment["SOMETHING_TRIAL_PROGRAM"] = AssistantBuild.clonesProgram
+            environment["SOMETHING_TRIAL_PROGRAM"] = try AssistantBuild.placeProgram()
+            placedProgram = true
         }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
                       folder: folders[2].path, environment: environment)
@@ -150,6 +153,7 @@ import SomethingCore
         guard owner else { return }
         api.stop()
         try? FileManager.default.removeItem(at: root)
+        if placedProgram { AssistantBuild.removeProgram() }
     }
 
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway folders.
@@ -313,7 +317,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
     /// The number to meet is two windows at most. What a real model would also ask for: running again, outside the
     /// sandbox, each `something check` that could not run inside it. The finding is written in the commit of slice S3.
     @Test func theAssistantsStandardBuildInTheSandbox() async throws {
-        let run = try CodexRun("assistant-build", assistant: false)
+        let run = try CodexRun("assistant-build", assistant: .building)
         defer { run.cleanup() }
         run.api.build = AssistantBuild.codexSteps(tools: run.root.appendingPathComponent("tools").path)
         try await run.until("the thread") { run.state.thread != nil }

@@ -30,7 +30,7 @@ final class Replay {
     static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false) -> Replay {
         var launch = Launch(agent: "codex-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
                             effort: effort, thread: resume ?? "", resume: resume != nil)
-        launch.assistant = assistant
+        launch.assistant = assistant ? .building : nil
         return Replay(CodexDriver.self, launch)
     }
 

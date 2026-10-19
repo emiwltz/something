@@ -130,17 +130,17 @@ import SomethingCore
     /// The person's assistant (E-1): its thread starts in Codex's workspace-write sandbox, in its folder; with Ask
     /// Before Every Change, and for any launch a space asks for, as Codex's own settings say.
     @Test func theAssistantWorksInTheSandbox() {
-        func start(_ assistant: Bool, askEverything: Bool = false) -> [String: Any]? {
+        func start(_ assistant: Assistant?) -> [String: Any]? {
             var launch = Launch(agent: "codex-1", folder: "/Users/example/something/spaces")
-            (launch.assistant, launch.askEverything) = (assistant, askEverything)
+            launch.assistant = assistant
             let replay = Replay(CodexDriver.self, launch)
             replay.feed(["id": 1, "result": ["codexHome": "/Users/example/.codex", "platformFamily": "unix", "platformOs": "macos", "userAgent": "something/0.163.0"]])
             return Self.params(replay, "thread/start")
         }
-        #expect(start(true)?["sandbox"] as? String == "workspace-write")
-        #expect(start(true)?["cwd"] as? String == "/Users/example/something/spaces")
-        #expect(start(true, askEverything: true)?["sandbox"] == nil)
-        #expect(start(false)?.keys.sorted() == ["cwd"])
+        #expect(start(.building)?["sandbox"] as? String == "workspace-write")
+        #expect(start(.building)?["cwd"] as? String == "/Users/example/something/spaces")
+        #expect(start(.askingEverything)?["sandbox"] == nil)
+        #expect(start(nil)?.keys.sorted() == ["cwd"])
     }
 
     @Test func theCommandIsTheAppServer() {

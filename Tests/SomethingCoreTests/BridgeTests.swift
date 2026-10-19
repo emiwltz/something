@@ -107,14 +107,18 @@ struct BridgeTests {
     }
 
     /// The person's assistant (a1 here): a space with every right, seeing every agent, even one that launched it,
-    /// finds it listed as it is, but can neither write to it nor read its conversation, held messages or requests.
+    /// finds it listed as it is, but can neither write to it nor read its conversation, held messages, requests, or
+    /// the words of its error.
     @Test func noSpaceWritesToOrReadsTheAssistant() throws {
         let host = try FakeHost(["state", "send", "launch", "store"])
         (host.assistants, host.launched) = (["a1"], ["a1"])
+        host.state.agents[0].error = AgentError(code: "TURN_FAILED", message: "Claude Code dropped the message “Invented secret words.” without reading it.")
+        host.state.agents[0].detail = ["invented": .string("Invented detail.")]
         let state = Bridge.visible(host)
         let assistant = try #require(state.agents.first { $0.id == "a1" })
         #expect((assistant.origin, assistant.state, assistant.waiting) == ("launched", "waiting", "permission"), "listed honestly")
-        #expect(assistant.can == Can() && assistant.thread == nil && assistant.queue.isEmpty)
+        #expect(assistant.can == Can() && assistant.thread == nil && assistant.queue.isEmpty && assistant.detail.isEmpty)
+        #expect(assistant.error == AgentError(code: "TURN_FAILED", message: "The person's assistant met an error."))
         for key in ["send", "interrupt", "model", "mode", "effort"] {
             #expect(assistant.because[key] == "This is the person's assistant: spaces cannot write to it.")
         }
@@ -122,6 +126,7 @@ struct BridgeTests {
         let page = try JSONSerialization.data(withJSONObject: try #require(Bridge.answer(["method": "state"], host: host)["result"]))
         let text = String(decoding: page, as: UTF8.self)
         #expect(!text.contains("c0ffee00-0000-4000-8000-000000000001") && !text.contains("Then run the tests.") && !text.contains(#""r1""#))
+        #expect(!text.contains("Invented secret words") && !text.contains("Invented detail"))
         let writes: [(String, [String: Any])] = [("send", ["agent": "a1", "text": "Invented."]), ("send", ["agent": "a1", "text": "Invented.", "when": "now"]),
                                                  ("interrupt", ["agent": "a1"]), ("set", ["agent": "a1", "mode": "plan"]),
                                                  ("set", ["agent": "a1", "model": "sonnet"]), ("set", ["agent": "a1", "effort": "low"])]

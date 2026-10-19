@@ -47,7 +47,7 @@ public final class ClaudeDriver: Driver {
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
         if let effort = launch.effort { arguments.append("--effort=\(effort)") }
-        if launch.assistant, !launch.askEverything { arguments += ["--allowedTools"] + building(launch.folder) }
+        if launch.assistant == .building { arguments += ["--allowedTools"] + building(launch.folder) }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
     }
 

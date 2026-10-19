@@ -147,7 +147,7 @@ final class CheckRunner {
             report.console = rendered.console
             report.snapshot = rendered.snapshot?.path
             // Only what reached the page is said as received.
-            if rendered.pushed { report.received = CheckRunner.received(Rights.visible(state, granted, launched: []), source: check.state ?? "invented") }
+            if rendered.pushed { report.received = CheckRunner.received(Bridge.visible(host), source: check.state ?? "invented") }
             let found = rendered.rejections.map { host.problem($0, refused: refused) } + host.problems(refused: refused)
             for problem in found where !report.problems.contains(problem) { report.problems.append(problem) }
             report.calls = host.recorded

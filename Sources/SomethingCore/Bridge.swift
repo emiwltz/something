@@ -146,12 +146,14 @@ public enum Bridge {
     }
 
     /// The state as this space sees it. The person's assistant is listed, honestly, as an agent no space can write
-    /// to, without its conversation, its held messages or its requests: those are the person's words, not a space's.
+    /// to, without its conversation, its held messages, its requests or the words of its error (which may quote the
+    /// person or the model): those are the person's, not a space's.
     public static func visible(_ host: BridgeHost) -> State {
         var state = Rights.visible(host.state, host.granted, launched: host.launched)
         let mine = host.assistants
         for index in state.agents.indices where mine.contains(state.agents[index].id) {
-            (state.agents[index].can, state.agents[index].thread, state.agents[index].queue) = (Can(), nil, [])
+            (state.agents[index].can, state.agents[index].thread, state.agents[index].queue, state.agents[index].detail) = (Can(), nil, [], [:])
+            state.agents[index].error = state.agents[index].error.map { AgentError(code: $0.code, message: "The person's assistant met an error.") }
             for key in ["send", "interrupt", "model", "mode", "effort"] { state.agents[index].because[key] = "This is the person's assistant: spaces cannot write to it." }
         }
         (state.threads, state.requests) = (state.threads.filter { !mine.contains($0.agent) }, state.requests.filter { !mine.contains($0.agent) })

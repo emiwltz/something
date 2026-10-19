@@ -343,7 +343,8 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   says why. A permission or a question of an agent started elsewhere is answered where it runs: it is no `request`.
 - **The person's assistant is read-only too**: the agent something's own window talks to is listed as launched, but
   its `can` is all false and `because.send` says why; a write to it answers `READ_ONLY_AGENT`. Its conversation, its
-  held messages and its requests are the person's: they are never in a space's state.
+  held messages and its requests are the person's: they are never in a space's state. Its `error` keeps its `code`
+  but not its words, and no conversation in the spaces folder is ever listed as seen elsewhere.
 - **`other` agents are seen by their process only**: no conversation, no state beyond `unknown`.
 
 ## Memory
@@ -422,7 +423,7 @@ The same list as data: `share/contract/codes.json`.
 | `NO_HOST` | The page is not open in something (opened directly in a browser, for example). | Open the space in something; a browser alone has no agents to give it. |
 | `RIGHT_NOT_GRANTED` | The right was not declared, was refused, or was revoked. | Declare the right, and read something.granted to hide what the person did not allow. |
 | `AGENT_NOT_FOUND` | No such agent in this space's scope. | Use an id from the latest state; agents come and go. |
-| `READ_ONLY_AGENT` | A write to an agent started elsewhere, or to the person's assistant. | Check can before writing; offer resume to continue this conversation here. |
+| `READ_ONLY_AGENT` | A write to an agent started elsewhere. | Check can before writing; offer resume to continue this conversation here. |
 | `NOT_SUPPORTED` | This agent cannot do it: its `can` says false. | Check can and because before the call, and hide what this agent cannot do. |
 | `VALUE_NOT_OFFERED` | `set` with a value not in `options`, a mode never offered, or the agent replied with a different value. | Pick a value from the agent's options. |
 | `AGENT_STOPPED` | The agent has ended. | Launch or resume an agent to go on. |

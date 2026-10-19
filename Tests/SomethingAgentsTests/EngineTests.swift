@@ -160,9 +160,10 @@ import SomethingCore
         }
     }
 
-    /// The person's assistant: the app's launch carries the rules of E-1 and a space's launch never does; a space with
-    /// every right, seeing every agent, finds the assistant listed but can write to it in no way (Bridge.visible). Once
-    /// the state forgot it, its conversation is not shown as one seen elsewhere either; another agent's is.
+    /// The person's assistant: the app's launch carries the rules of E-1, on its folder's real path, and a space's launch
+    /// never does; a space with every right, seeing every agent, finds the assistant listed but can write to it in no
+    /// way (Bridge.visible). No conversation in its folder is shown as seen elsewhere, however its path is written:
+    /// neither its own once the state forgot it, nor one of an earlier run; another agent's is.
     @Test func theAssistantIsTheAppsAloneAndNoSpaceWritesToIt() async throws {
         let place = try Place()
         defer { place.remove() }
@@ -172,10 +173,15 @@ import SomethingCore
         func arguments() -> [String] {
             ((try? String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
         }
-        let id = try engine.launchAssistant("claude", folder: place.work.path, askEverything: false)
+        // The spaces folder, given through a link, as a home behind one is.
+        let spaces = place.work.appendingPathComponent("spaces"), link = place.work.appendingPathComponent("link")
+        try FileManager.default.createDirectory(at: spaces, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: spaces)
+        engine.assistantFolder = link.path
+        let id = try engine.launchAssistant("claude", folder: link.path, askEverything: false)
         #expect(engine.assistants == [id])
         try await until("the assistant's launch") { arguments().contains("--session-id") }
-        #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(place.work.path))
+        #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(HeldFiles.real(spaces.path)))
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         let host = EngineHost(engine, folder: place.work.path)
@@ -201,9 +207,12 @@ import SomethingCore
         now += Engine.endedKept
         engine.update()
         #expect(engine.state.agents.isEmpty)
-        let seen = threads.map { Sighting(kind: "claude", key: $0, facts: StateMap.Facts(alive: false, evidence: "registry", turnOpen: false, waiting: .nothing),
-                                          folder: place.work.path, updated: Date()) }
-        engine.saw(Seen(sightings: seen))
+        func sighting(_ key: String, _ folder: URL) -> Sighting {
+            Sighting(kind: "claude", key: key, facts: StateMap.Facts(alive: false, evidence: "registry", turnOpen: false, waiting: .nothing),
+                     folder: folder.path, updated: Date())
+        }
+        let earlier = "c0ffee00-0000-4000-8000-0000000000ea"
+        engine.saw(Seen(sightings: [sighting(threads[0], spaces), sighting(threads[1], place.work), sighting(earlier, link)]))
         #expect(engine.state.agents.map(\.thread) == [threads[1]])
     }
 

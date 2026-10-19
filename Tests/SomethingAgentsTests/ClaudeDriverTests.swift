@@ -129,16 +129,16 @@ import SomethingCore
 
     /// The person's assistant (E-1): exactly six rules, its folder's files by their absolute path ("//", which trial
     /// T-2 showed Claude matches) and four of something's commands; none with Ask Before Every Change, nor for a
-    /// launch a space asks for, where `assistant` is always false.
+    /// launch a space asks for, where `assistant` is always nil.
     @Test func theAssistantMayBuildSpacesWithoutAsking() {
         var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces", thread: "5b2e0000-0000-4000-8000-000000000001")
         let plain = ClaudeDriver.command(launch).arguments
-        launch.assistant = true
+        launch.assistant = .building
         #expect(ClaudeDriver.command(launch).arguments == plain + [
             "--allowedTools", "Edit(//Users/example/something/spaces/**)", "Write(//Users/example/something/spaces/**)",
             "Bash(something new:*)", "Bash(something check:*)", "Bash(something open:*)", "Bash(something guide:*)"])
         #expect(ClaudeDriver.command(launch, hook: ["/Users/example/something", "hook", "permission"]).arguments.contains("--allowedTools"), "plan B too")
-        launch.askEverything = true
+        launch.assistant = .askingEverything
         #expect(ClaudeDriver.command(launch).arguments == plain)
         #expect(!plain.contains("--allowedTools"))
     }

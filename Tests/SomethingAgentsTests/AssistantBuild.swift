@@ -21,7 +21,29 @@ enum AssistantBuild {
 
     /// This clone's own program, built by `swift build`: the one `swift test` runs beside.
     static let clonesProgram = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().appendingPathComponent(".build/debug/something").path
+        .deletingLastPathComponent().appendingPathComponent(".build/debug/something")
+    /// Where a test runs the real program from (plan A.4): WebKit keeps a folder per program path that cannot be
+    /// deleted, so every clone uses this one path, and its folder is made once per machine.
+    static let fixedProgram = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-test-program/something")
+
+    /// Copies this clone's program to `fixedProgram` and returns that path. Beside it, a link to this clone's share/
+    /// and an empty Package.swift, which is how the program finds its share/ outside the .app (Resources.share).
+    static func placeProgram() throws -> String {
+        removeProgram()
+        let folder = fixedProgram.deletingLastPathComponent(), clone = clonesProgram.deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: clonesProgram, to: fixedProgram)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("share"), withDestinationURL: clone.appendingPathComponent("share"))
+        try Data().write(to: folder.appendingPathComponent("Package.swift"))
+        return fixedProgram.path
+    }
+
+    /// Removes the copy and the picture its `check` of the build left in the person's temporary folder.
+    static func removeProgram() {
+        try? FileManager.default.removeItem(at: fixedProgram.deletingLastPathComponent())
+        try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-check/agents-board.png"))
+    }
 
     /// Writes the invented program as <root>/tools/something and returns that folder's path.
     static func tools(in root: URL) throws -> String {

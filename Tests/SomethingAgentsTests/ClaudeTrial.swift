@@ -25,9 +25,9 @@ final class Stopped: @unchecked Sendable { var done = false }
     var asked = false
 
     /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool. With
-    /// `assistant`, its value for askEverything, Claude is the person's assistant, working in ~/something/spaces with
+    /// `assistant`, Claude is the person's assistant, working that way, working in ~/something/spaces with
     /// an invented `something` program first in its PATH (AssistantBuild).
-    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Bool? = nil) async throws {
+    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Assistant? = nil) async throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
@@ -39,7 +39,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
         let program = trialClaude!
         var launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
-        if let assistant { (launch.assistant, launch.askEverything) = (true, assistant) }
+        launch.assistant = assistant
         self.work = work
         var spool: PermissionSpool?
         var command = ClaudeDriver.command(launch)
@@ -342,7 +342,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     /// T-2 (plan A.2 #6): the standard build of a space by the person's assistant asks the person at most once. Every
     /// step ran, and the edits are in the page.
     @Test func theAssistantsStandardBuildAsksAtMostOnce() async throws {
-        let run = try await ClaudeRun("assistant-build", assistant: false)
+        let run = try await ClaudeRun("assistant-build", assistant: .building)
         defer { run.cleanup() }
         let asked = try await run.build()
         #expect(asked.count <= 1, "asked: \(asked)")
@@ -354,7 +354,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
     /// With Ask Before Every Change, the same build asks before each change and each of something's commands but
     /// `ls`, which Claude Code itself takes as reading only.
     @Test func askingBeforeEveryChangeAsksForEachStep() async throws {
-        let run = try await ClaudeRun("assistant-ask-everything", assistant: true)
+        let run = try await ClaudeRun("assistant-ask-everything", assistant: .askingEverything)
         defer { run.cleanup() }
         let asked = try await run.build()
         #expect(asked.count >= 9, "asked: \(asked)")

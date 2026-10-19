@@ -18,9 +18,9 @@ public struct Launch: Equatable, Sendable {
     public var thread: String
     /// Whether the launch continues the conversation `thread` instead of starting one.
     public var resume: Bool
-    /// Whether this is the person's assistant, launched by the app alone (Engine.launchAssistant), never by a space: its
-    /// driver lets it build spaces without asking, unless `askEverything`.
-    public var assistant = false, askEverything = false
+    /// How the person's assistant works, when this is it: launched by the app alone (Engine.launchAssistant), never by
+    /// a space, whose launches leave it nil.
+    public var assistant: Assistant?
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
                 thread: String = UUID().uuidString.lowercased(), resume: Bool = false) {
@@ -33,6 +33,10 @@ public struct Launch: Equatable, Sendable {
         self.resume = resume
     }
 }
+
+/// How the person's assistant works. `building`: it may change its folder's files and run something's own commands
+/// without asking (E-1). `askingEverything` (Ask Before Every Change): it asks as any agent does.
+public enum Assistant: Sendable { case building, askingEverything }
 
 /// What a native window shows for one request. Richer than the contract's `Request`, which a space sees: a space
 /// never answers a request, the person does.
