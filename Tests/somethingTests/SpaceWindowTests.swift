@@ -196,22 +196,44 @@ import WebKit
     }
 
     /// The agents a space launched outlive its window: the app keeps them by the space's name, so that the space,
-    /// closed and opened again, still sees and drives them, and another space does not.
+    /// closed and opened again, still sees and drives them, and another space does not. A space made again under that
+    /// name after its answers were forgotten is a new space: it sees none of them. The launch goes through the bridge's
+    /// host, with a fake `claude` that only reads its input, on the throwaway engine's PATH.
     @Test func launchedAgentsOutliveTheWindow() async throws {
-        let home = Home(prefix: "something-window-"), launches = Launches(), rules = try await Lockdown.ruleList()
+        let home = Home(prefix: "something-window-"), launches = Launches(), rules = try await Lockdown.ruleList(), ask = FakeAsk()
         defer { home.remove() }
-        let board = try home.space("board", page(nil, "")), other = try home.space("other", page(nil, ""))
-        func window(_ space: Space) throws -> SpaceWindow {
-            try SpaceWindow(space: space, places: home.places, engine: home.engine(), ask: FakeAsk(), share: Home.share, rules: rules,
-                            launches: launches)
+        let bin = home.root.appendingPathComponent("bin"), shop = home.root.appendingPathComponent("code/shop")
+        for folder in [bin, shop] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+        let claude = bin.appendingPathComponent("claude")
+        try "#!/bin/sh\nwhile IFS= read -r line; do :; done\n".write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: shop.path, remap: [:]) }
+        let engine = home.engine()
+        let declared = #"{"contract": 1, "title": "Board", "rights": ["launch:claude"], "folder": "~/code/shop"}"#
+        let board = try home.space("board", page(declared, "")), other = try home.space("other", page(nil, ""))
+        func opened(_ space: Space) throws -> SpaceWindow {
+            let window = try SpaceWindow(space: space, places: home.places, engine: engine, ask: ask, share: Home.share, rules: rules,
+                                         launches: launches)
+            window.load()
+            return window
         }
-        let first = try window(board)
-        first.launched.insert("claude-1")
+        let first = try opened(board)
+        let id = try first.launch("claude", folder: shop.path, model: nil, mode: nil, effort: nil)
         first.close()
-        let again = try window(board), elsewhere = try window(other)
-        defer { again.close(); elsewhere.close() }
-        #expect(again.launched == ["claude-1"])
-        #expect(elsewhere.launched.isEmpty)
+        let again = try opened(board), elsewhere = try opened(other)
+        #expect(Rights.visible(engine.state, again.granted, launched: again.launched).agents.map(\.id) == [id])
+        #expect(Rights.visible(engine.state, elsewhere.granted, launched: elsewhere.launched).agents.isEmpty)
+        again.close()
+        elsewhere.close()
+
+        try something.Home.forget("board", in: home.places)
+        let new = try opened(board)
+        defer { new.close() }
+        #expect(new.launched.isEmpty)
+        #expect(Rights.visible(engine.state, new.granted, launched: new.launched).agents.isEmpty)
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        #expect(await wait(until: { stopped }))
     }
 
     /// Every space has the same origin, something://space, so each window has its own data store. Two spaces open at

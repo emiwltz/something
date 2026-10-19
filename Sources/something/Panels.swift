@@ -62,13 +62,17 @@ final class Panels {
     }
 
     /// Sends the answer. A lost one is said in the panel, which stays until the person puts it away: they believe
-    /// they answered. A panel that says so only goes away.
+    /// they answered. The requests behind it wait until then, as behind any panel: one thing at a time. A panel that
+    /// says so only goes away.
     private func decide(_ request: String, _ answer: Answer) {
         defer { refresh() }
         answered.insert(request)
         waiting.removeAll { $0 == request }
         if panel?.told == false {
-            do { try source.answer(request, answer) } catch { return panel?.tell((error as? CodedError)?.message ?? error.localizedDescription) ?? () }
+            do { try source.answer(request, answer) } catch {
+                panel?.tell((error as? CodedError)?.message ?? error.localizedDescription)
+                return
+            }
         }
         dismiss()
     }
@@ -158,15 +162,18 @@ final class PromptPanel: NSPanel {
         typed.append(field)
     }
 
-    /// Says `sentence` in place of the request, with OK, which puts the panel away, as Escape does.
+    /// Says `sentence` in place of the request, under who asked, with OK, which puts the panel away, as Escape does.
+    /// The panel shrinks from the bottom: its top stays where the person was looking.
     func tell(_ sentence: String) {
         told = true
         guard let lines = contentView as? NSStackView else { return }
-        lines.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        lines.arrangedSubviews.dropFirst().forEach { $0.removeFromSuperview() }
         let ok = NSButton(title: "OK", target: self, action: #selector(deny))
         ok.keyEquivalent = "\r"
         [PromptPanel.line(sentence), ok].forEach(lines.addArrangedSubview)
-        setContentSize(lines.fittingSize)
+        var shrunk = frameRect(forContentRect: NSRect(origin: .zero, size: lines.fittingSize))
+        shrunk.origin = NSPoint(x: frame.minX, y: frame.maxY - shrunk.height)
+        setFrame(shrunk, display: true)
     }
 
     /// A label that wraps inside the panel's insets.

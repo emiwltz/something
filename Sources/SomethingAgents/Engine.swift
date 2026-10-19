@@ -38,8 +38,9 @@ public final class Engine {
     /// Called on the main queue when the state changed. The app decides how often it pushes.
     public var changed: () -> Void = {}
 
-    /// The whole state, before any space's scope is applied: made once at each change, read many times a second.
-    public private(set) lazy var state = made()
+    /// The whole state before any space's scope, made once at each change and read many times a second, as of the read.
+    public var state: State { var state = made; state.at = Engine.now(); return state }
+    private lazy var made = make()
 
     /// `environment` is the one agents are started in: the terminal's when something was started from one,
     /// otherwise the app's own, and Programs then reads the login shell's PATH.
@@ -71,8 +72,7 @@ public final class Engine {
     /// The agents whose stop something asked for: their end is no failure.
     private var stopping: Set<String> = []
     private var count = 0
-    /// The launched agents seen ended, in that order: each leaves the state `endedKept` seconds after its end, and only
-    /// the last `endedMost` stay until then, so that an app open all day does not push every agent it ever launched.
+    /// The launched agents seen ended, in that order, with the time `clock` gave for their end (`forgetEnded`).
     private var ended: [(id: String, at: Date)] = []
     static let endedKept: TimeInterval = 600, endedMost = 20
     /// The clock of those ends; a test moves it.
@@ -97,14 +97,14 @@ public final class Engine {
         }
     }
 
-    /// Forgets the ended agents whose time is over, makes the state again and tells the app.
+    /// Forgets the ended agents whose time is over, makes the state again and tells the app (internal: a test calls it).
     func update() {
         forgetEnded()
-        state = made()
+        made = make()
         changed()
     }
 
-    private func made() -> State {
+    private func make() -> State {
         let kinds = Programs.kinds.map { kind in
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
@@ -132,13 +132,13 @@ public final class Engine {
         if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { update() }
     }
 
-    /// Drops from the state the launched agents ended `endedKept` seconds ago, and the ended ones beyond the last
-    /// `endedMost`. Their conversations, when a reader sees them, are then shown as seen elsewhere.
+    /// Drops from the state the launched agents ended `endedKept` seconds ago and the ended ones beyond the last
+    /// `endedMost`, so that an app open all day does not push every agent it ever launched; a reader may then show their
+    /// conversations as seen elsewhere. Nothing else may change the state by an end's time, so a timer makes it then.
     private func forgetEnded() {
         let now = clock()
         for entry in launched where entry.agent.agent.alive == false && !ended.contains(where: { $0.id == entry.agent.agent.id }) {
             ended.append((entry.agent.agent.id, now))
-            // No other change may come by then: the state is made again when this one's time is over.
             DispatchQueue.main.asyncAfter(deadline: .now() + Engine.endedKept) { [weak self] in self?.update() }
         }
         let gone = Set(ended.enumerated().filter { $0.offset < ended.count - Engine.endedMost
@@ -200,11 +200,11 @@ public final class Engine {
     /// The details of an open request, or nil once it closed (the app then closes its window).
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }
 
-    /// The person's answer, from a native window. A request that closed meanwhile is left as it is, and so is one
-    /// the answer does not fit. Throws AGENT_STOPPED, in words for the person, when the agent no longer reads.
+    /// The person's answer, from a native window; a request that closed meanwhile is left as it is. Throws the driver's
+    /// error for an answer that does not fit, and AGENT_STOPPED, in words for the person, when the agent no longer reads.
     public func answer(_ request: String, _ answer: Answer) throws {
         guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return }
-        do { _ = try agent.answer(request, answer) } catch {
+        do { _ = try agent.answer(request, answer) } catch let error as CodedError where error.code == "AGENT_STOPPED" {
             throw CodedError("AGENT_STOPPED", "\(Programs.name(of: agent.agent.kind)) did not receive your answer: it stopped listening.")
         }
     }

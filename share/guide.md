@@ -48,8 +48,8 @@ space opened by its path from elsewhere has neither.
 no `fetch` to the Internet. Embed a library in the space at an exact version. `eval` and `new Function` are refused,
 so pick a library that does not need them (Alpine.js and the full build of Vue do; the runtime build of Vue does not).
 A frame inside your page can hold inline content (`srcdoc`), never another file of the space, and only your page
-reaches `something`. A shadow root your script makes is always open (`attachShadow` ignores `mode: "closed"`), so that
-something sees the links clicked inside it.
+reaches `something`. A shadow root your script makes with `attachShadow` is always open (`mode: "closed"` is ignored),
+so that something sees the links clicked inside it; one made from HTML (`shadowrootmode`) keeps its mode.
 `localStorage` works but is emptied when the window closes: the memory is the only lasting state.
 
 **One space is open at a time.** Opening another closes it. A space cannot open a window, and cannot reach another

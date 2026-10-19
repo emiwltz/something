@@ -183,6 +183,16 @@ import SomethingCore
         #expect(throws: CodedError.self) { try engine.deliver("Late.", to: ids[0], when: "next") }
     }
 
+    /// The state is made once at each change, but its `at` is the time of each read: a page tells how long ago an agent
+    /// was updated by it, and a quiet engine must not make an old change look recent.
+    @Test func theStateIsDatedAtEachRead() async throws {
+        let engine = Engine.throwaway(["HOME": "/Users/example", "PATH": "/usr/bin:/bin"])
+        let first = try #require(iso8601.date(from: engine.state.at))
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        let second = try #require(iso8601.date(from: engine.state.at))
+        #expect(second > first)
+    }
+
     /// An answer the agent can no longer read is said, never lost in silence: the panel shows this sentence. The fake
     /// asks a permission, then closes its input and stays; the next line written to it finds the input closed.
     @Test func anAnswerThatCannotBeWrittenIsSaid() async throws {
@@ -208,6 +218,10 @@ import SomethingCore
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
         try await until("the request") { !engine.state.requests.isEmpty }
         let request = engine.state.requests[0].id
+        // An answer that does not fit is the driver's own error, said as it is: the agent did not stop.
+        #expect(throws: CodedError("BAD_PARAMS", "Answer each of the 0 questions, in their order.")) {
+            try engine.answer(request, .choice([["Invented."]]))
+        }
         // A line written now finds the input closed, and the next write throws: the answer cannot be written.
         try await until("the input found closed") { (try? engine.deliver("Invented steer.", to: id, when: "now")) == nil }
         #expect(engine.state.requests.map(\.id) == [request], "the request is still open")

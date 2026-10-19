@@ -36,7 +36,7 @@ struct Home {
     @MainActor
     func window(_ space: Space, _ ask: FakeAsk = FakeAsk()) async throws -> SpaceWindow {
         try SpaceWindow(space: space, places: places, engine: engine(), ask: ask, share: Home.share,
-                        rules: try await Lockdown.ruleList())
+                        rules: try await Lockdown.ruleList(), launches: Launches())
     }
 
     /// An engine that finds no agent program: its PATH is an empty folder of this home, and the system's install

@@ -45,8 +45,8 @@ enum Lockdown {
 
     /// The guard cannot see a link the page's script activates where no event reaches the window: an element not in
     /// the document, or inside a shadow root. In the page's own world, before its scripts, this makes such an
-    /// activation of a link outside the space do nothing, and makes every shadow root a script makes open, so that the
-    /// guard sees a link clicked inside one. It keeps the functions it uses, so the page cannot change them.
+    /// activation of a link outside the space do nothing, and makes every shadow root `attachShadow` makes open, so that
+    /// the guard sees a link clicked inside one (one parsed from HTML keeps its mode: README, the known gap). It keeps the functions it uses, so the page cannot change them.
     static let activationScript = """
         (function () {
           const apply = Reflect.apply, Address = URL, get = (type, key) => Object.getOwnPropertyDescriptor(type.prototype, key).get;

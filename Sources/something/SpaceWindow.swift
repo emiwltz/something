@@ -19,6 +19,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private(set) var granted = Granted()
     /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
     /// (`Launches`): they run on whatever window is open, so a space closed and opened again still sees and drives them.
+    /// A space with no answers kept is new to the person, and `answer` drops them: it never inherits another's agents.
     let launches: Launches
     var launched: Set<String> {
         get { launches.ids[space.name] ?? [] }
@@ -47,8 +48,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
-    init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList,
-         launches: Launches = Launches()) throws {
+    init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList, launches: Launches) throws {
         bridge = try SpaceWindow.bridge(share)
         self.launches = launches
         self.space = space
@@ -220,6 +220,9 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
                 return nil
             }
         }
+        // Forgotten answers (a space deleted, then made again under its name) or a space opened by path, whose answers
+        // die with its window: the agents kept under that name are not this space's.
+        if grant == nil { launched = [] }
         let toAsk = Rights.toAsk(declaration, since: grant)
         guard !toAsk.isEmpty, let answer = ask.rights(question(declaration, toAsk, grant)) else { return grant }
         // Applied to the grant as the file holds it after the window, so that a change made meanwhile stays.

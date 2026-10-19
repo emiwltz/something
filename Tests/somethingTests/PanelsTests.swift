@@ -63,9 +63,12 @@ final class FakePrompts: PromptSource {
         source.lost = CodedError("AGENT_STOPPED", "Claude Code did not receive your answer: it stopped listening.")
         panels.refresh()
         let first = try #require(panels.panel)
+        let top = first.frame.maxY
         first.allow()
         let texts = (first.contentView?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(texts == ["Claude Code did not receive your answer: it stopped listening."])
+        #expect(texts == ["An agent asks to use Bash.", "Claude Code did not receive your answer: it stopped listening."],
+                "who asked stays above the sentence")
+        #expect(first.frame.maxY == top, "the panel keeps its top")
         #expect(first.told && !first.dismissed && panels.panel === first)
         source.prompts.removeFirst()
         panels.refresh()

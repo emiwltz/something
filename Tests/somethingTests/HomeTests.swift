@@ -440,6 +440,10 @@ import Testing
         #expect(FirstRun.first(test.places)?.name == "agents")
         try FileManager.default.removeItem(at: copy)
         #expect(try FirstRun.prepare(test.places) == false, "a person who removed agents does not get it back: no welcome")
+        // Chosen, not accidental: removing ~/something/data, all that the spaces remember, starts something anew, and
+        // the example comes back (in 0.2 the window's own file says whether the tour was seen).
+        try FileManager.default.removeItem(at: test.places.data)
+        #expect(try FirstRun.prepare(test.places), "a start without ~/something/data is a first start")
     }
 
     /// `something new`, run from a terminal before the app ever opened, makes the spaces folder: the app's own first
