@@ -1,7 +1,8 @@
 #!/bin/bash
 # Assembles something.app in <prefix>: Contents/Info.plist with <version>, Contents/MacOS/something,
 # Contents/Resources/share, then an ad-hoc signature (no Apple account) that seals the bundle. A something.app
-# already in <prefix> is replaced.
+# already in <prefix> is replaced. The program is stamped with the SDK that compiled it: swift build's default build
+# system records an older one, and macOS gives its current look only to a program stamped with a recent SDK.
 #
 #   tools/make-app.sh <prefix> <version> [<executable>]
 #
@@ -38,6 +39,6 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$repository/packaging/Info.plist" "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
-cp "$executable" "$app/Contents/MacOS/something"
+xcrun vtool -set-build-version macos 15.0 "$(xcrun --show-sdk-version)" -replace -output "$app/Contents/MacOS/something" "$executable"
 cp -R "$repository/share" "$app/Contents/Resources/share"
 codesign --force --sign - "$app"

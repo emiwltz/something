@@ -1,8 +1,10 @@
 // `something check`: one invented space per check code gives exactly that code, and a clean space none;
 // --json has every key of share/contract/check-example.json; --refuse, --state, --journal and the three exit statuses.
-// The page paints only while AppKit runs the app, which a test cannot do in its own process: these checks run the
-// something program swift test built, in a throwaway home. The three codes a page cannot be made to give on demand
-// (no window server, a timeout, a web process that ends) run in this process through the runner's own settings.
+// Every check runs in this process, in a throwaway home, and prints through the command's own Check.printed. Not as
+// a program of its own: WebKit gives each program that loads it three folders in $TMPDIR, named by the program's
+// build, that cannot be deleted, so each new build run that way would leave three more on the Mac. The three codes a
+// page cannot be made to give on demand (no window server, a timeout, a web process that ends) run through the
+// runner's settings.
 import AppKit
 import Foundation
 import SomethingCore
@@ -10,39 +12,25 @@ import Testing
 import WebKit
 @testable import something
 
-/// One run of `something check` in `home`: its status, its standard output and error, and the output read as JSON
-/// when it is. Throws when the program cannot start; a run longer than 30 seconds is ended and fails the test.
+/// One `something check` in `home`, run and printed as the command does: its status, what it printed to the
+/// standard output and to the standard error, and the output read as JSON when it is. The snapshots go to the home's
+/// tmp/. Throws when `words` are not a check's.
 struct Checked {
     let status: Int32, out: String, err: String
     var json: [String: Any] { (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? [String: Any] ?? [:] }
     var codes: [String] { (json["problems"] as? [[String: Any]] ?? []).compactMap { $0["code"] as? String } }
 
-    init(_ words: [String], _ home: Home) async throws {
-        let ran = try await offMain { try Checked.run(words, home) }
-        (status, out, err) = (ran.status, ran.out, ran.err)
-        #expect(ran.exited, "something check \(words.joined(separator: " ")) ran over 30 seconds and was ended.")
-    }
-
-    private static func run(_ words: [String], _ home: Home) throws -> (status: Int32, out: String, err: String, exited: Bool) {
-        let process = Process()
-        process.executableURL = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
-        process.arguments = ["check"] + words
-        var environment = ProcessInfo.processInfo.environment
-        (environment["HOME"], environment["TMPDIR"]) = (home.root.path, home.root.appendingPathComponent("tmp").path)
-        process.environment = environment
-        let out = Pipe(), err = Pipe()
-        process.standardOutput = out
-        process.standardError = err
-        try process.run()
-        // A run that never returns would hang the whole suite: it is ended, and the test says which one it was.
-        let deadline = DispatchWorkItem { process.terminate() }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 30, execute: deadline)
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        let errors = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        deadline.cancel()
-        return (process.terminationStatus, String(decoding: data, as: UTF8.self), String(decoding: errors, as: UTF8.self),
-                process.terminationReason == .exit)
+    @MainActor init(_ words: [String], _ home: Home) async throws {
+        guard case .check(let check) = Check.parse(words) else { throw SpaceError("\(words) are not the words of a check.") }
+        let runner = CheckTests.runner(home)
+        let outcome: Result<Report, SpaceError>
+        do { outcome = .success(try await runner.run(check)) } catch { outcome = .failure(try #require(error as? SpaceError)) }
+        var out = "", err = ""
+        // One line per call, to the standard error when it is a problem, as main.swift prints it.
+        status = check.printed(outcome, home: home.places.home.path) { text, problem in
+            if problem { err += text + "\n" } else { out += text + "\n" }
+        }
+        (self.out, self.err) = (out, err)
     }
 }
 
@@ -311,9 +299,21 @@ extension Home {
 
     // MARK: In this process, through the runner's settings
 
-    func runner(_ home: Home) -> CheckRunner {
+    /// A runner for `home`, its snapshots in the home's tmp/. The command paints while AppKit runs the app, which
+    /// tells WebKit its window is on screen; this process does not run the app, so WebKit is told not to wait for
+    /// that (through a private setter these tests alone use), or the page would never paint.
+    static func runner(_ home: Home) -> CheckRunner {
         let runner = CheckRunner(places: home.places, share: Home.share)
         runner.output = home.root.appendingPathComponent("tmp/something-check")
+        runner.created = { web in
+            let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+            guard let method = class_getInstanceMethod(WKWebView.self, selector) else {
+                Issue.record("This WebKit has no \(selector).")
+                return
+            }
+            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+            unsafeBitCast(method_getImplementation(method), to: Setter.self)(web, selector, false)
+        }
         return runner
     }
 
@@ -322,7 +322,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared(""))
-        let runner = runner(home)
+        let runner = CheckTests.runner(home)
         runner.windowServer = false
         try FileManager.default.createDirectory(at: runner.output, withIntermediateDirectories: true)
         let old = runner.output.appendingPathComponent("gone.png"), recent = runner.output.appendingPathComponent("kept.png")
@@ -338,7 +338,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"colour\": \"blue\"", "<script>agnets.length;</script>"))
-        let runner = runner(home)
+        let runner = CheckTests.runner(home)
         runner.windowServer = false
         let report = try await runner.run(Check(space: "x"))
         #expect(report.problems.map(\.code) == ["NO_WINDOW_SERVER", "UNKNOWN_KEY"] && report.exitStatus == 2)
@@ -360,7 +360,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<script>for (;;) {}</script>"))
-        let runner = runner(home)
+        let runner = CheckTests.runner(home)
         var web: WKWebView?
         runner.created = { web = $0 }
         runner.timeout = 1
@@ -375,7 +375,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<p>Invented.</p>"))
-        let runner = runner(home)
+        let runner = CheckTests.runner(home)
         var killed = false
         runner.loaded = { killed = CheckTests.kill($0) }
         let report = try await runner.run(Check(space: "x"))

@@ -24,7 +24,7 @@ import Testing
 import SomethingCore
 
 @Suite(.serialized) @MainActor struct ReadersTrial {
-    static let environment = ProcessInfo.processInfo.environment
+    nonisolated static let environment = ProcessInfo.processInfo.environment
 
     @Test(.enabled(if: trialCodex != nil, "T-2 needs Codex: set SOMETHING_TRIAL_CODEX to its program's path."))
     func aCodexIsReadWithItsLock() async throws {

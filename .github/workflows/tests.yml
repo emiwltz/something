@@ -1,8 +1,9 @@
 # The tests on GitHub's Macs, at each push, on macOS 15, the floor the package, the app and the formula
 # declare, and on macos-latest.
 #
-# Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases, and
-# make-app.sh assembles a signed something.app from a release build. The runner has a logged-in window server, so the
+# Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases,
+# make-app.sh assembles a signed something.app from a release build, and something builds again with the runner's
+# Command Line Tools alone, as on a Mac without Xcode. The runner has a logged-in window server, so the
 # window tests run too (the lockdown test, isolation, the bridge, links, rights, reload) in a real WKWebView that is
 # never shown. On a Mac with no window server those suites say so and are skipped; on CI (CI is set) they always run,
 # so a runner without one turns the run red instead of skipping the lockdown test.
@@ -50,6 +51,14 @@ jobs:
           printf '#!/bin/bash\nexec "%s" "$@"\n' "$prefix/something.app/Contents/MacOS/something" > "$prefix/bin/something"
           chmod +x "$prefix/bin/something"
           test "$("$prefix/bin/something" --version)" = "something 0.0.0-ci"
+      - name: swift build with the Command Line Tools alone
+        # In a build folder of its own: the suite's was made with Xcode's toolchain.
+        run: |
+          if [ -d /Library/Developer/CommandLineTools ]; then
+            DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build --scratch-path "$RUNNER_TEMP/clt-build"
+          else
+            echo "::notice title=Command Line Tools on ${{ matrix.os }}::This runner has none: the build with them alone was not tried."
+          fi
 
   brew:
     strategy:

@@ -8,11 +8,10 @@ import SomethingCore
 import WebKit
 
 extension Check {
-    /// Runs the check in this process, prints its report (--json or the human lines) and returns its exit status.
-    /// The process is an app only while it renders, one macOS never puts in the Dock nor in front: an accessory app
-    /// would take the focus when it starts.
-    @MainActor func main(places: Places, share: URL, say: (String, Bool) -> Void) -> Int32 {
-        let runner = CheckRunner(places: places, share: share)
+    /// Runs the check in this process with `runner`, prints its report (--json or the human lines) and returns its
+    /// exit status. The process is an app only while it renders, one macOS never puts in the Dock nor in front: an
+    /// accessory app would take the focus when it starts.
+    @MainActor func main(_ runner: CheckRunner, say: (String, Bool) -> Void) -> Int32 {
         var outcome: Result<Report, SpaceError>?
         if runner.windowServer { NSApplication.shared.setActivationPolicy(.prohibited) }
         Task { @MainActor in
@@ -29,13 +28,19 @@ extension Check {
         } else {
             while outcome == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
         }
+        guard let outcome else { say("The check stopped before it had a report.", true); return 2 }
+        return printed(outcome, home: runner.places.home.path, say: say)
+    }
+
+    /// Prints the report of `outcome` (--json or the human lines, with `home` written ~) and returns the exit status:
+    /// 2 when the check could not run, and then its sentence is printed as an error.
+    func printed(_ outcome: Result<Report, SpaceError>, home: String, say: (String, Bool) -> Void) -> Int32 {
         let report: Report
         switch outcome {
         case .success(let done): report = done
         case .failure(let wrong): say(wrong.message, true); return 2
-        case nil: say("The check stopped before it had a report.", true); return 2
         }
-        var text = report.text(home: places.home.path)
+        var text = report.text(home: home)
         if json {
             guard let data = try? report.json() else { say("The report could not be written as JSON.", true); return 2 }
             text = String(decoding: data, as: UTF8.self)

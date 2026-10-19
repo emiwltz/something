@@ -9,7 +9,7 @@ import Testing
 import SomethingCore
 
 @MainActor @Suite(.leavesNothing("resume-")) struct ResumeTests {
-    static let fakeCodex = #"""
+    nonisolated static let fakeCodex = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     while IFS= read -r line; do
@@ -26,8 +26,8 @@ import SomethingCore
     done
     """#
 
-    static let claude = "c1a0de00-0000-4000-8000-000000000001"
-    static let codex = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f0001", held = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f0held"
+    nonisolated static let claude = "c1a0de00-0000-4000-8000-000000000001"
+    nonisolated static let codex = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f0001", held = "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f0held"
 
     /// A throwaway home with a Claude record whose process is `running`, and two Codex rollouts, all in the place's work folder.
     final class Home {

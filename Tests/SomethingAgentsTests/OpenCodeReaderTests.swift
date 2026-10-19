@@ -47,11 +47,12 @@ final class OpenCodeHome {
     var database: String { root.appendingPathComponent("data/opencode/opencode.db").path }
     let reader: OpenCodeReader
     private(set) var opened: [String] = []
-    let now = Date()
+    let now: Date
     /// Unix milliseconds, `seconds` before now.
     func ago(_ seconds: Double) -> Int64 { Int64((now.timeIntervalSince1970 - seconds) * 1000) }
 
-    init(legacyOnly: Bool = false) throws {
+    init(legacyOnly: Bool = false, now: Date = Date()) throws {
+        self.now = now
         try FileManager.default.createDirectory(at: root.appendingPathComponent("data/opencode"), withIntermediateDirectories: true)
         reader = OpenCodeReader(environment: ["HOME": root.path, "XDG_DATA_HOME": root.appendingPathComponent("data").path])
         reader.own = OpenCodeHome.own
@@ -130,6 +131,14 @@ final class OpenCodeHome {
 }
 
 @Suite(.leavesNothing("opencode-home-")) struct OpenCodeReaderTests {
+    @Test func threeDaysLaterTheSameIsRead() throws {
+        try sameThreeDaysLater { now in
+            let home = try OpenCodeHome(now: now)
+            defer { home.remove() }
+            return stateWords(home.read().sightings, at: now)
+        }
+    }
+
     @Test func theRecentRootSessionsWithTheirTurns() throws {
         let home = try OpenCodeHome()
         defer { home.remove() }

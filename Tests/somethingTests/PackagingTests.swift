@@ -1,7 +1,7 @@
 // Packaging: tools/make-app.sh assembles something.app in a temporary prefix, from the program this suite built, and
 // the app is then run as Homebrew runs it, through the wrapper its write_exec_script writes: a symlink would break
-// Bundle.main. The bundle's version is read inside it, its ad-hoc signature verifies, and its program answers plan B's
-// hook.
+// Bundle.main. The bundle's version is read inside it, its program carries the SDK that compiled it, its ad-hoc
+// signature verifies, its program answers plan B's hook, and LaunchServices keeps no something.app from $TMPDIR.
 import Foundation
 import Testing
 @testable import something
@@ -36,11 +36,12 @@ import Testing
         try #require(FileManager.default.isExecutableFile(atPath: program.path), "swift test built no something program at \(program.path)")
         let prefix = FileManager.default.temporaryDirectory.appendingPathComponent("something-prefix-\(UUID().uuidString)")
         let app = prefix.appendingPathComponent("something.app")
-        defer {
-            // Running a program inside a bundle may register the bundle with LaunchServices: forget it before deleting it.
-            _ = try? Self.runBlocking("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-u", app.path], quiet: true)
+        // Running a program inside a bundle may register the bundle with LaunchServices: forget it before deleting it.
+        func forget() {
+            _ = try? Self.runBlocking(Self.lsregister, ["-u", app.path], quiet: true)
             try? FileManager.default.removeItem(at: prefix)
         }
+        defer { forget() }
         #expect(try await run(root.appendingPathComponent("tools/make-app.sh").path, [prefix.path, "9.8.7", program.path]).status == 0)
 
         let info = try #require(try PropertyListSerialization.propertyList(
@@ -48,6 +49,11 @@ import Testing
         #expect(info["CFBundleIdentifier"] as? String == "io.github.emiwltz.something")
         #expect(info["CFBundleShortVersionString"] as? String == "9.8.7" && info["CFBundleVersion"] as? String == "9.8.7")
         #expect(FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Resources/share/something.js").path))
+        // macOS gives its current look only to a program stamped with a recent SDK: the one that compiled it.
+        let built = try await run("/usr/bin/xcrun", ["vtool", "-show-build", app.appendingPathComponent("Contents/MacOS/something").path]).out
+        let stamped = built.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { $0.hasPrefix("sdk ") }?.dropFirst(4)
+        let sdk = try await run("/usr/bin/xcrun", ["--show-sdk-version"]).out.trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(stamped?.split(separator: ".").first == sdk.split(separator: ".").first, "stamped \(stamped ?? "nothing"), the SDK is \(sdk)")
 
         let wrapper = prefix.appendingPathComponent("bin/something")
         try FileManager.default.createDirectory(at: wrapper.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -71,6 +77,21 @@ import Testing
         let ran = try await runBuilt(inside, ["hook", "permission", "--spool", spool.path], home: home)
         let decision = hookDecision(ran.out)
         #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
+
+        forget()
+        let registered = try Self.registeredInTemporaryFolder()
+        #expect(registered.isEmpty, "LaunchServices still knows these something.app: \(registered)")
+    }
+
+    static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    /// The something.app bundles under $TMPDIR that LaunchServices knows, by path. Throws when lsregister cannot run.
+    static func registeredInTemporaryFolder() throws -> [String] {
+        let temporary = URL(fileURLWithPath: NSTemporaryDirectory()), real = temporary.resolvingSymlinksInPath().path
+        return try runBlocking(lsregister, ["-dump"], quiet: true).out.split(separator: "\n").compactMap { line in
+            guard line.hasPrefix("path:"), line.contains("something.app"), line.contains(temporary.path) || line.contains(real) else { return nil }
+            return line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+        }
     }
 
     @Test func makeAppRefusesWrongUse() async throws {

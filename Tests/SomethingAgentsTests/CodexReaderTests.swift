@@ -54,14 +54,15 @@ final class CodexHome {
     var locks: URL { codex.appendingPathComponent("thread-writer-locks") }
     let reader: CodexReader
     private(set) var opened: [String] = []
-    let now = Date()
+    let now: Date
 
     func day(_ name: String) -> URL { codex.appendingPathComponent("sessions/\(name)") }
     func rollout(_ day: String, _ id: String) -> URL { self.day(day).appendingPathComponent("rollout-\(day.replacingOccurrences(of: "/", with: "-"))T10-55-00-\(id).jsonl") }
     func lock(_ id: String) -> String { locks.appendingPathComponent("\(id).lock").path }
 
     /// `index` false leaves the index out; `shape` replaces its CREATE TABLE.
-    init(index: Bool = true, shape: String = CodexHome.threads) throws {
+    init(index: Bool = true, shape: String = CodexHome.threads, now: Date = Date()) throws {
+        self.now = now
         reader = CodexReader(environment: ["HOME": root.path])
         for folder in ["2026/10/14", "2026/10/15", "2026/10/16", "2026/10/17"] {
             try FileManager.default.createDirectory(at: day(folder), withIntermediateDirectories: true)
@@ -154,6 +155,14 @@ final class CodexHome {
 }
 
 @Suite(.leavesNothing("codex-home-")) struct CodexReaderTests {
+    @Test func threeDaysLaterTheSameIsRead() throws {
+        try sameThreeDaysLater { now in
+            let home = try CodexHome(now: now)
+            defer { home.remove() }
+            return stateWords(home.read().sightings, at: now)
+        }
+    }
+
     @Test func theIndexGivesTheRecentConversationsOfPeople() throws {
         let home = try CodexHome()
         defer { home.remove() }

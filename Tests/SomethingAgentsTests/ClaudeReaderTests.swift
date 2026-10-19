@@ -1,7 +1,8 @@
 // ClaudeReader against an invented ~/.claude (Tests/Fixtures/claude-home) of the exact shapes Claude Code 2.1.296 to
 // 2.1.299 writes, with fake snapshots: two live sessions in two projects, a record whose pid was reused, a record whose
 // process is gone, and the secret `.key` files beside them, which the reader must never open. Each case copies the
-// home into a throwaway folder, so it can change files, dates and permissions.
+// home into a throwaway folder, so it can change files, dates and permissions, and dates its conversations from its
+// own `now`: no case depends on the day it runs.
 import Foundation
 import Testing
 @testable import SomethingAgents
@@ -17,14 +18,22 @@ final class ClaudeHome {
     var claude: URL { root.appendingPathComponent(".claude") }
     var sessions: URL { claude.appendingPathComponent("sessions") }
     let reader: ClaudeReader
+    let now: Date
     private(set) var opened: [String] = []
 
     /// `prefix` names the folder in $TMPDIR: the default is ClaudeReaderTests' own, and another suite passes its own,
-    /// so that each suite's `.leavesNothing` counts only the folders it made.
-    init(prefix: String = "claude-home-") throws {
+    /// so that each suite's `.leavesNothing` counts only the folders it made. Each conversation was last written as
+    /// long before `now` as its last line is before the shop's moment (17 October 2026, 09:00:10): the shop's 8
+    /// seconds, the blog's 80 minutes, the notes' eleven days.
+    init(prefix: String = "claude-home-", now: Date = Date()) throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
         reader = ClaudeReader(environment: ["HOME": root.path])
+        self.now = now
         try FileManager.default.copyItem(at: ClaudeHome.fixture, to: root)
+        for (folder, id, age) in [("-Users-example-shop", ClaudeHome.shop, 8.0), ("-Users-example-blog-v2", ClaudeHome.blog, 4800),
+                                  ("-Users-example-notes", ClaudeHome.notes, 11 * 86_400)] {
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age)], ofItemAtPath: transcript(folder, id).path)
+        }
         // The secrets Claude keeps beside its records. Never in the repository: a file named *.key would be one there.
         for pid in [41234, 41300, 40001] {
             try Data("{\"peerToken\":\"invented\"}".utf8).write(to: sessions.appendingPathComponent("\(pid).\(String(repeating: "ab", count: 32)).key"))
@@ -47,14 +56,37 @@ final class ClaudeHome {
         return Snapshot(processes)
     }
 
-    func read(_ snapshot: Snapshot = ClaudeHome.snapshot(), discover: Bool = false, now: Date = Date()) -> Reading {
-        reader.read(snapshot, discover: discover, now: now)
+    /// What the reader gives at `now`, the home's own when nil.
+    func read(_ snapshot: Snapshot = ClaudeHome.snapshot(), discover: Bool = false, now: Date? = nil) -> Reading {
+        reader.read(snapshot, discover: discover, now: now ?? self.now)
     }
 
     func transcript(_ folder: String, _ id: String) -> URL { claude.appendingPathComponent("projects/\(folder)/\(id).jsonl") }
 }
 
+/// No time bomb: a reader test reads an invented home dated from its own `now`, never from the day the fixture was
+/// written. `states` reads a home made at `now`; the same home three days later must give the same state words,
+/// by conversation, and some.
+func sameThreeDaysLater(_ states: (Date) throws -> [String: String]) throws {
+    let today = try states(Date())
+    #expect(!today.isEmpty)
+    #expect(try states(Date().addingTimeInterval(3 * 86_400)) == today)
+}
+
+/// The state word of each sighting at `now`, by the last part of its key (a pi or OMP key is the log's path).
+func stateWords(_ sightings: [Sighting], at now: Date) -> [String: String] {
+    Dictionary(uniqueKeysWithValues: sightings.map { (($0.key as NSString).lastPathComponent, StateMap.map($0.facts, now: now).state) })
+}
+
 @Suite(.leavesNothing("claude-home-")) struct ClaudeReaderTests {
+    @Test func threeDaysLaterTheSameIsRead() throws {
+        try sameThreeDaysLater { now in
+            let home = try ClaudeHome(now: now)
+            defer { home.remove() }
+            return stateWords(home.read().sightings, at: now)
+        }
+    }
+
     @Test func twoLiveSessionsAreReadAndTheStaleOnesIgnored() throws {
         let home = try ClaudeHome()
         defer { home.remove() }
@@ -129,9 +161,7 @@ final class ClaudeHome {
         _ = home.read()
         // The shop's Claude exits normally (its record goes); the blog's dies (its record stays behind).
         try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
-        // Read at the fixture's own time: its conversations ended on 17 October 2026, and an ended one is listed a day.
-        let then = Date(timeIntervalSince1970: 1_792_227_610)
-        let reading = home.read(ClaudeHome.snapshot(shop: false, blog: false), now: then)
+        let reading = home.read(ClaudeHome.snapshot(shop: false, blog: false))
         let sightings = Dictionary(uniqueKeysWithValues: reading.sightings.map { ($0.key, $0) })
         let shop = try #require(sightings[ClaudeHome.shop]), blog = try #require(sightings[ClaudeHome.blog])
         #expect(shop.facts.alive == false && shop.facts.ended && StateMap.map(shop.facts, now: Date()).state == "done")
@@ -139,7 +169,7 @@ final class ClaudeHome {
                 "gone mid-turn, its record left behind")
         #expect(FileManager.default.fileExists(atPath: home.sessions.appendingPathComponent("41300.json").path), "never deleted")
         // A day after its last write, an ended conversation is no longer listed.
-        #expect(home.read(ClaudeHome.snapshot(shop: false, blog: false), now: Date().addingTimeInterval(Watch.recent + 60)).sightings.isEmpty)
+        #expect(home.read(ClaudeHome.snapshot(shop: false, blog: false), now: home.now.addingTimeInterval(Watch.recent + 60)).sightings.isEmpty)
     }
 
     /// Claude rewrites a record whole: one caught mid-write (or too big) keeps the session as it was.

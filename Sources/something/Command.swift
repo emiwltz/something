@@ -119,7 +119,7 @@ enum Command: Equatable {
             say(Command.usage, false)
             return 0
         case .check(let check):
-            return check.main(places: places, share: share, say: say)
+            return check.main(CheckRunner(places: places, share: share), say: say)
         case .hook(let words):
             return SpoolHook.main(words)
         case .trial(let words):

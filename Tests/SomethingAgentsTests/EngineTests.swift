@@ -7,7 +7,7 @@ import Testing
 import SomethingCore
 
 @MainActor @Suite(.leavesNothing("engine-")) struct EngineTests {
-    static let fake = #"""
+    nonisolated static let fake = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     env > "$FAKE_OUT/environment"
@@ -29,7 +29,7 @@ import SomethingCore
     """#
 
     /// A fake `codex app-server`: answers each call by its id, as 0.163.0 does (Tests/Exchanges/codex), text invented.
-    static let fakeCodex = #"""
+    nonisolated static let fakeCodex = #"""
     #!/bin/sh
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     thread='"threadId":"01a14bae-0000-7000-8000-000000000001"'
@@ -56,7 +56,7 @@ import SomethingCore
 
     /// A fake `opencode acp`: answers each call by its id, as 2.0.20 does (Tests/Exchanges/opencode), text invented.
     /// A message holding "wait" is answered only when something cancels it.
-    static let fakeOpenCode = #"""
+    nonisolated static let fakeOpenCode = #"""
     #!/bin/sh
     trap 'echo TERM > "$FAKE_OUT/signalled"; exit 143' TERM
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
@@ -360,20 +360,20 @@ import SomethingCore
         let engine = Engine.throwaway(place.environment.merging(["PATH": "/usr/bin:/bin", "SHELL": shell.path]) { _, finder in finder })
         // The main queue ticks while the shell sleeps; one held by the shell could never. Counting ticks instead would
         // fail on a busy runner, where the other suites' main-actor tests hold the main queue too.
-        final class Ticks { var duringShell = 0, running = true }
+        final class Ticks { var duringShell = 0 }
         let ticks = Ticks(), sleeping = place.out.appendingPathComponent("shell-sleeps").path
-        func tick() {
-            guard ticks.running else { return }
-            if FileManager.default.fileExists(atPath: sleeping) { ticks.duringShell += 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: tick)
+        let ticker = Task { @MainActor in
+            while !Task.isCancelled {
+                if FileManager.default.fileExists(atPath: sleeping) { ticks.duringShell += 1 }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
         }
-        tick()
         let begun = Date()
         engine.start(often: false)
         var id: String?
         engine.lookFor("claude") { id = try? engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil) }
         try await until("the launch") { id != nil }
-        ticks.running = false
+        ticker.cancel()
         let waited = Date().timeIntervalSince(begun)
         #expect(waited >= 1.8, "the launch waited for the shell")
         #expect(ticks.duringShell >= 1, "the main queue ran while the login shell was read")

@@ -16,11 +16,12 @@ final class PiHome {
     static let ompShop = "01a14bbb-0000-7000-8000-000000000001", ompBlog = "01a14bbb-0000-7000-8000-000000000002"
 
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("pi-home-\(UUID().uuidString)")
-    let now = Date()
+    let now: Date
     let pi: PiReader, omp: OMPReader
     private(set) var opened: [String] = []
 
-    init() throws {
+    init(now: Date = Date()) throws {
+        self.now = now
         try FileManager.default.copyItem(at: PiHome.fixture, to: root)
         // The secrets pi and OMP keep beside their sessions, made here: the readers must never open them.
         try Data(#"{"example-provider":{"key":"invented"}}"#.utf8).write(to: root.appendingPathComponent(".pi/agent/auth.json"))
@@ -84,6 +85,15 @@ final class PiHome {
 }
 
 @Suite(.leavesNothing("pi-home-")) struct PiReaderTests {
+    @Test func threeDaysLaterTheSameIsRead() throws {
+        try sameThreeDaysLater { now in
+            let home = try PiHome(now: now)
+            defer { home.remove() }
+            let pi = home.read([PiHome.pi(52001, in: "/Users/example/shop", started: now.addingTimeInterval(-3600))])
+            return stateWords(Array(pi.values) + Array(home.readOMP().values), at: now)
+        }
+    }
+
     @Test func twoPiInOneFolderAreNotToldApart() throws {
         let home = try PiHome()
         defer { home.remove() }
