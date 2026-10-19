@@ -1,10 +1,12 @@
 // The sheets that ask the person, on the main window: the rights a space declares, a mode that makes an agent ask less,
 // a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// moving a space to the Trash, quitting while agents run. A space cannot draw them, so a space cannot answer them.
+// moving a space to the Trash, quitting while agents run, switching the assistant's builder, and how to get one. A
+// space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window.
 import AppKit
 import SomethingAgents
 import SomethingCore
+import SwiftUI
 import UniformTypeIdentifiers
 
 /// What the rights sheet asks about one space: only what changed since the person last answered.
@@ -294,11 +296,33 @@ enum Ask {
               buttons: ["Move to Trash", "Cancel"], escape: 1)
     }
 
-    /// The sheet that asks before quitting while `count` agents something launched run: Quit, then Cancel.
-    static func quit(_ count: Int) -> NSAlert {
-        let running = count == 1 ? "An agent something started is still running. Quitting stops it."
+    /// The sheet that asks before quitting while `count` agents something launched run, the person's assistant among
+    /// them when `assistant`: Quit, then Cancel.
+    static func quit(_ count: Int, assistant: Bool = false) -> NSAlert {
+        let others = assistant ? count - 1 : count
+        let running = assistant && others == 0 ? "Your assistant is still running. Quitting stops it."
+            : assistant ? "Your assistant and \(others) other agent\(others == 1 ? "" : "s") something started are still running. Quitting stops them."
+            : count == 1 ? "An agent something started is still running. Quitting stops it."
             : "\(count) agents something started are still running. Quitting stops them."
         return alert("Quit something?", running, buttons: ["Quit", "Cancel"], escape: 1)
+    }
+
+    /// The sheet before a switch of builder ends the conversation: Switch, then Cancel.
+    static func switching(from: String, to: String) -> NSAlert {
+        alert("Switch to \(to)?", "Your conversation with \(from) ends here. \(from) keeps it in its own history.",
+              buttons: ["Switch", "Cancel"], escape: 1)
+    }
+
+    /// How to Get One: each coding agent something builds with, its install command and a Copy button; Look Again,
+    /// then Close. something downloads nothing itself.
+    static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
+        let alert = alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.",
+                          buttons: ["Look Again", "Close"], escape: 1)
+        let rows = AssistantModel.builders.compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
+        let list = NSHostingView(rootView: InstallList(rows: rows, copy: copy))
+        list.frame.size = list.fittingSize
+        alert.accessoryView = list
+        return alert
     }
 
     /// A right in plain words, with its warning when it has one: what Info says.

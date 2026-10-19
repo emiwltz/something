@@ -190,7 +190,7 @@ final class Watch {
             // A reader names the holder better (Codex's background service), so its reason wins; but for a kind
             // something cannot continue, that comes first and the reader's note follows, so it never hides why.
             var notes = sighting.because
-            if !Engine.continuable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {
+            if !Watch.resumable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {
                 agent.because["resume"] = "\(reason) \(note)"
             }
             agent.because.merge(notes) { _, reader in reader }
@@ -203,12 +203,15 @@ final class Watch {
         return (agents, threads)
     }
 
+    /// The kinds whose conversations seen elsewhere can be continued here.
+    static let resumable: Set = ["claude", "codex"]
+
     /// Whether a conversation seen elsewhere can be continued here, and why not. Only one no process
     /// holds: one still held would get a second writer. Codex refuses a second writer by itself, so a Codex
     /// conversation whose holder is unknown is offered; Codex says so if its background service holds it.
     static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
         let name = Programs.name(of: kind)
-        guard Engine.continuable.contains(kind) else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
+        guard Watch.resumable.contains(kind) else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
         switch alive {
         case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
         case false?: return (true, nil)

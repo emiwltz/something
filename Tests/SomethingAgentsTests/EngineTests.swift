@@ -178,9 +178,16 @@ import SomethingCore
         try FileManager.default.createDirectory(at: spaces, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: spaces)
         engine.assistantFolder = link.path
+        // something's own program, whose folder comes first in the assistant's PATH only.
+        engine.hookCommand = ["/Users/example/tools/something", "hook", "permission"]
+        func path() -> String? {
+            ((try? String(contentsOf: place.out.appendingPathComponent("environment"), encoding: .utf8)) ?? "")
+                .split(separator: "\n").first { $0.hasPrefix("PATH=") }.map { String($0.dropFirst(5)) }
+        }
         let id = try engine.launchAssistant("claude", folder: link.path, askEverything: false)
         #expect(engine.assistants == [id])
         try await until("the assistant's launch") { arguments().contains("--session-id") }
+        #expect(path()?.hasPrefix("/Users/example/tools:\(place.bin.path):") == true, "\(path() ?? "no PATH")")
         #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(HeldFiles.real(spaces.path)))
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
@@ -198,6 +205,7 @@ import SomethingCore
         #expect(other != id && engine.assistants == [id])
         try await until("the space's launch") { arguments().contains("--session-id") }
         #expect(!arguments().contains("--allowedTools"), "a space's launch is never the assistant's")
+        try await until("the space's environment") { path()?.hasPrefix(place.bin.path + ":") == true }
 
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
@@ -214,6 +222,36 @@ import SomethingCore
         let earlier = "c0ffee00-0000-4000-8000-0000000000ea"
         engine.saw(Seen(sightings: [sighting(threads[0], spaces), sighting(threads[1], place.work), sighting(earlier, link)]))
         #expect(engine.state.agents.map(\.thread) == [threads[1]])
+    }
+
+    /// One agent stops alone (the assistant's New Conversation), and its end is no failure; the others run on.
+    @Test func oneAgentStopsAlone() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        let ids = try (0..<2).map { _ in try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil) }
+        try await until("both running") { engine.state.agents.filter { $0.alive == true }.count == 2 }
+        var stopped = false
+        engine.stopAll(within: 6, only: ids[0]) { stopped = true }
+        try await until("the stop") { stopped && engine.state.agents.first { $0.id == ids[0] }?.alive == false }
+        #expect(engine.state.agents.first { $0.id == ids[0] }?.error == nil)
+        #expect(engine.state.agents.first { $0.id == ids[1] }?.alive == true)
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the end") { engine.state.agents.allSatisfy { $0.alive == false } }
+    }
+
+    /// Look for Agents Again finds a program installed after the first look.
+    @Test func lookingAgainFindsANewProgram() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        try FileManager.default.removeItem(at: place.bin.appendingPathComponent("opencode"))
+        let engine = Engine.throwaway(place.environment)
+        engine.start(often: false)
+        try await until("the first look") { engine.state.kinds["opencode"]?.installed == false }
+        try EngineTests.fakeOpenCode.write(to: place.bin.appendingPathComponent("opencode"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: place.bin.appendingPathComponent("opencode").path)
+        engine.lookAgain()
+        try await until("the second look") { engine.state.kinds["opencode"]?.installed == true }
     }
 
     /// Ended launched agents leave the state: beyond the last 20 at once, and every one ten minutes after its end, so

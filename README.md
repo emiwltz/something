@@ -45,7 +45,7 @@ reads from an agent goes into an export. It also looks at the list of running pr
 from one that ended.
 
 something writes no hook, no MCP server, no skill and no setting into any agent's configuration. What it writes is its
-own: `~/something/` (your spaces and their memory) and `~/Library/Application Support/something/` (your answers to the
+own: `~/something/` (your spaces, their memory and your assistant's `AGENTS.md` and `CLAUDE.md`) and `~/Library/Application Support/something/` (your answers to the
 rights sheets, the window's memory, the journals of what spaces asked agents to do, and plan B's spool, below).
 
 ## What it launches, and how
@@ -68,6 +68,24 @@ Started from a terminal, something gives the agents that terminal's environment,
 terminal finds (less the variables that only say where the terminal runs, such as `TMUX`); started from Finder, it
 asks your login shell for its `PATH`. Closing the window keeps something running, with its agents: its Dock icon or
 `something` shows the window again. Quitting stops the agents it launched, after asking you.
+
+## Your assistant
+
+At the bottom of the window, a bar talks to your own coding agent, which builds and changes spaces with you: Claude
+Code, OpenCode or pi, the one you choose among those installed (Codex can't build spaces yet: inside its sandbox
+`something check` cannot load a page). Nothing starts before your first message; it then works in
+`~/something/spaces`, with your account and settings, as in Terminal. Each message starts with one line from
+something saying which space is open. After 30 minutes without a turn it is stopped to save memory, and a new
+conversation starts each time something starts.
+
+something never answers for you. Your assistant may change your spaces and run something's own commands without
+asking; everything else it does asks you, as your agent's own settings decide. For Claude Code that is
+`--allowedTools` with edits and writes in `~/something/spaces` and `something new`, `check`, `open` and `guide`; for
+OpenCode and pi nothing is added (pi never asks). "Ask Before Every Change", in the bar's agent menu, turns that off
+from the next conversation. No space can see what you say to your assistant, or write to it.
+
+To tell it what something is, something writes `AGENTS.md` and `CLAUDE.md` into `~/something/spaces` at each start. A
+file whose first line you removed is yours: something leaves it alone.
 
 ## Permissions and the windows of the Mac
 

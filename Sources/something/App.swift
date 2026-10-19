@@ -1,14 +1,14 @@
-// The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift)
-// and Info (Inspector.swift); the spaces and exports LaunchServices hands it; the permission and question panels; the
-// state pushed at most four times a second; and quitting, which asks first while agents something launched run, then
-// stops them. Closing the window keeps the app and its agents running, as a Mac app with one main window does; the
-// open space closes with it, and opens again when the window comes back.
+// The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
+// Info (Inspector.swift) and the assistant (Assistant.swift); the spaces and exports LaunchServices hands it; the
+// permission and question panels; the state pushed at most four times a second; and quitting, which asks first while
+// agents something launched run, then stops them. Closing the window keeps the app and its agents running, as a Mac app
+// with one main window does; the open space closes with it, and opens again when the window comes back.
 import AppKit
 import SomethingAgents
 import SomethingCore
 import WebKit
 
-final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
     /// The space named on the command line, or the path of an export; nil to open the last space open.
     let opening: String?
     let places = Places.person
@@ -17,7 +17,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     let launches = Launches()
     lazy var library = Library(places: places, ask: ask)
     lazy var info = Info(places: places, ask: ask)
-    lazy var shell = Shell(library: library, info: info, autosave: true)
+    lazy var assistant = AssistantModel(engine: engine, places: places)
+    lazy var shell = Shell(library: library, info: info, assistant: assistant, autosave: true)
     lazy var panels = Panels(source: engine)
     /// The open space. One at a time: opening another closes it.
     var current: SpaceView?
@@ -45,6 +46,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand
+        assistant.confirmSwitch = { [weak self] from, to, switched in self?.sheet(Ask.switching(from: from, to: to), then: switched) }
+        assistant.howTo = { [weak self] in
+            guard let self else { return }
+            sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.engine.lookAgain() }
+        }
+        assistant.showRequest = { [weak self] in self?.panels.panel?.orderFrontRegardless() }
+        library.relisted = { [weak self] in
+            guard let self, let new = assistant.appeared(library.entries, open: library.selection) else { return }
+            library.select(new)
+        }
         // Before any reading: the conversations there are the person's with their assistant, never a space's to see.
         engine.assistantFolder = places.spaces.path
         engine.start(often: false)
@@ -52,6 +63,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
             do { try Library.prepare(places) } catch { fail(error.sentence) }
+            do { try AssistantModel.writeKnowledge(places, share: Resources.share) } catch { ask.tell(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             do { try Library.forgetGone(places) } catch { ask.tell(error.sentence) }
             library.watch()
@@ -107,7 +119,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let name, current?.space.name == name { return }
         current?.close()
         current = nil
+        assistant.fault = nil
+        assistant.unkept = false
         defer {
+            assistant.place = current.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
             info.show(current?.space)
             // The readers look often while a space is open, and rarely when nobody is looking.
             engine.start(often: current != nil)
@@ -124,9 +139,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 guard let self, let view, current === view else { return }
                 shell.show(view)
                 info.show(view.space)
+                assistant.place = .space(title: view.title, name: view.space.name, page: view.space.page.path)
                 library.relist()
             }
             view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
+            view.unkept = { [weak self] in self?.assistant.unkept = true }
+            view.faulted = { [weak self, weak view] in
+                guard let self, let view, current === view else { return }
+                assistant.fault = AssistantModel.Fault(title: view.title, name: view.space.name, codes: view.faults)
+            }
             current = view
             // Blank behind the rights sheet, which the first load may show before the page runs.
             shell.show(view)
@@ -140,13 +161,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Who asks in a panel: the agent's program, its name, the space that started it when one did, and its folder.
     func who(_ request: Request) -> Asker {
         let starter = launches.ids.first { $0.value.contains(request.agent) }.map { library.entry($0.key)?.title ?? $0.key }
-        return App.who(engine.state.agents.first { $0.id == request.agent }, startedBy: starter, home: places.home.path)
+        return App.who(engine.state.agents.first { $0.id == request.agent }, startedBy: starter, home: places.home.path,
+                       assistant: engine.assistants.contains(request.agent))
     }
 
     /// `agent` in a panel's words ("Claude Code" / "“shop”, started by “My agents”, working in ~/code/shop"), with the
-    /// title of the space that started it when one did; "An agent" when the state no longer holds it.
-    static func who(_ agent: Agent?, startedBy space: String?, home: String) -> Asker {
+    /// title of the space that started it when one did; "Your assistant, working in ~/something/spaces" for the
+    /// person's assistant; "An agent" when the state no longer holds it.
+    static func who(_ agent: Agent?, startedBy space: String?, home: String, assistant: Bool = false) -> Asker {
         guard let agent else { return Asker(program: "An agent", line: "") }
+        if assistant {
+            return Asker(program: Programs.name(of: agent.kind), line: "Your assistant, working in " + Words.path(agent.folder ?? "", home: home))
+        }
         let parts = [agent.name.map { "“\($0)”" }, space.map { "started by “\($0)”" },
                      agent.folder.map { "working in " + Words.path($0, home: home) }].compactMap { $0 }
         let line = parts.joined(separator: ", ")
@@ -161,6 +187,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             self?.pushing = false
             self?.current?.push()
             self?.panels.refresh()
+            self?.assistant.refresh()
         }
     }
 
@@ -175,18 +202,40 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if let entry = library.entry(current?.space.name) { confirmTrash(entry) }
     }
 
+    @objc func askAssistant(_ sender: Any?) {
+        front()
+        assistant.focus()
+    }
+    @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
+    @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
+    @objc func chooseBuilder(_ sender: NSMenuItem) { (sender.representedObject as? String).map(assistant.choose) }
+
+    /// Build With ▸, made again each time it opens: the builders found (the agent menu of the capsule has the rest).
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        for entry in assistant.entries {
+            let item = NSMenuItem(title: entry.title, action: entry.enabled ? #selector(chooseBuilder) : nil, keyEquivalent: "")
+            (item.representedObject, item.state, item.toolTip) = (entry.id, entry.checked ? .on : .off, entry.note)
+            menu.addItem(item)
+        }
+    }
+
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
+        if item.action == #selector(stopAssistant) { return [.working, .waiting].contains(assistant.light) }
+        return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
             ? current != nil : true
+    }
+
+    /// Shows `alert` as a sheet on the window; `then` runs when its first button is clicked.
+    func sheet(_ alert: NSAlert, then: @escaping () -> Void) {
+        shell.front()
+        guard shell.window.attachedSheet == nil else { return }
+        alert.beginSheetModal(for: shell.window) { if $0 == .alertFirstButtonReturn { then() } }
     }
 
     /// Asks in a sheet, then moves the space and its memory to the Trash.
     func confirmTrash(_ entry: Library.Entry) {
-        shell.front()
-        guard shell.window.attachedSheet == nil else { return }
-        Ask.trash(entry.title).beginSheetModal(for: shell.window) { [weak self] answer in
-            if answer == .alertFirstButtonReturn { self?.library.trash(entry.id) }
-        }
+        sheet(Ask.trash(entry.title)) { [weak self] in self?.library.trash(entry.id) }
     }
 
     // MARK: The window and quitting
@@ -201,7 +250,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Asks first in a sheet when agents something launched still run, then stops them all before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let running = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }.count
+        let alive = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }
+        let running = alive.count
         let stop = { [engine] in engine.stopAll(within: 5) { NSApp.reply(toApplicationShouldTerminate: true) } }
         guard running > 0 else {
             stop()
@@ -210,7 +260,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         shell.front()
         // A question left open is answered as its Cancel would be: Quit always asks, never does nothing.
         Shell.endSheets(of: shell.window)
-        Ask.quit(running).beginSheetModal(for: shell.window) { answer in
+        Ask.quit(running, assistant: alive.contains { engine.assistants.contains($0.id) }).beginSheetModal(for: shell.window) { answer in
             if answer == .alertFirstButtonReturn { stop() } else { NSApp.reply(toApplicationShouldTerminate: false) }
         }
         return .terminateLater

@@ -62,7 +62,11 @@ public final class Engine {
         watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) }
         guard !looked else { return }
         looked = true
-        // Reading the login shell can take 3 s: never on the main queue.
+        lookAgain()
+    }
+
+    /// Looks for every kind's program again, off the main queue (the login shell can take 3 s); `installed` follows.
+    public func lookAgain() {
         lookups.async { [self] in
             let found = Dictionary(uniqueKeysWithValues: Programs.kinds.compactMap { kind in programs.installed(kind).map { (kind, $0) } })
             DispatchQueue.main.async { [self] in installed = found; update() }
@@ -124,8 +128,8 @@ public final class Engine {
         ended.removeAll { gone.contains($0.id) }
     }
 
-    /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without
-    /// any is left out. Static, so that `something check` gives the same without an engine.
+    /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
+    /// Static, so that `something check` gives the same without an engine.
     public static var limits: [String: [String]] { drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
@@ -225,7 +229,8 @@ public final class Engine {
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
     /// `hook permission` runs `SpoolHook.main`. Nil until its owner sets it (the app and `something try` set
-    /// `ownHookCommand`), and plan B is then not offered.
+    /// `ownHookCommand`), and plan B is then not offered. Its folder comes first in the assistant's PATH, so that the
+    /// `something` the assistant runs is this one, the one its rules allow.
     public var hookCommand: [String]?
 
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
@@ -251,8 +256,8 @@ public final class Engine {
     }
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
-    /// With `resume`, the program continues that conversation in `folder`; a pi
-    /// conversation is its file, which must exist (THREAD_NOT_FOUND), and runs in the folder its header names.
+    /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
+    /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way.
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, assistant: Assistant? = nil,
@@ -272,16 +277,17 @@ public final class Engine {
         return launch.agent
     }
 
-    /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude
-    /// that refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same
-    /// one for a resume).
+    /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude that
+    /// refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same one
+    /// for a resume).
     private func start(_ type: any Driver.Type, _ launch: Launch, _ program: Program, planB: Bool,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
         let spool = planB && type is ClaudeDriver.Type ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
         guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
+        let first = launch.assistant == nil ? nil : hookCommand?.first.map { ($0 as NSString).deletingLastPathComponent }
         let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? type.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
-                          environment: program.environment(environment, adding: command.adding, removing: command.removing))
+                          environment: program.environment(environment, adding: command.adding, removing: command.removing, first: first))
         let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
         agent.changed = { [weak self] in self?.update() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
@@ -301,14 +307,11 @@ public final class Engine {
         return (agent, spawn)
     }
 
-    /// The kinds whose conversations seen elsewhere can be continued here.
-    static let continuable: Set = ["claude", "codex"]
-
     /// Continues here the conversation `thread` of `agent`, an agent seen elsewhere, in the conversation's own folder,
-    /// and returns the id of the agent launched for it, which lists it from then on. Throws
-    /// THREAD_NOT_FOUND when no agent seen now holds that conversation, STILL_RUNNING while its process runs,
-    /// NOT_SUPPORTED when it cannot be continued here, then as `launch` does. Codex's background service holding the
-    /// conversation comes after the launch, as the agent's HELD_ELSEWHERE error.
+    /// and returns the id of the agent launched for it, which lists it from then on. Throws THREAD_NOT_FOUND when no
+    /// agent seen now holds that conversation, STILL_RUNNING while its process runs, NOT_SUPPORTED when it cannot be
+    /// continued here, then as `launch` does. Codex's background service holding the conversation comes after the
+    /// launch, as the agent's HELD_ELSEWHERE error.
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
         guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(Programs.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
@@ -319,10 +322,11 @@ public final class Engine {
         return try launch(type, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
     }
 
-    /// Stops every agent something launched, all at once, within `seconds`, then calls `done` on the main queue.
-    public func stopAll(within seconds: TimeInterval, done: @escaping () -> Void) {
-        stopping.formUnion(launched.map(\.agent.agent.id))
-        Spawn.stopAll(launched.map(\.spawn), cap: seconds) { DispatchQueue.main.async(execute: done) }
+    /// Stops every agent something launched, or only `only`, all at once, within `seconds`, then calls `done` on the main queue.
+    public func stopAll(within seconds: TimeInterval, only: String? = nil, done: @escaping () -> Void) {
+        let chosen = launched.filter { only == nil || $0.agent.agent.id == only }
+        stopping.formUnion(chosen.map(\.agent.agent.id))
+        Spawn.stopAll(chosen.map(\.spawn), cap: seconds) { DispatchQueue.main.async(execute: done) }
     }
 
     /// Starts `spawn` for one launch and joins it to its driver: lines and the end come back on the main queue.

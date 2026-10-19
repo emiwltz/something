@@ -113,7 +113,12 @@ struct GalleryTests {
         info.show(review.space)
         try await draw(shell, library: library, web: review.web, "window-info-rights" + suffix, fixture)
 
-        // A space that cannot be shown, Info hidden.
+        // A space that cannot be shown, Info hidden, Claude Code found to fix it.
+        try installFakeClaude(fixture)
+        shell.assistant.engine.lookAgain()
+        #expect(await wait(until: { shell.assistant.engine.state.kinds["claude"]?.installed == true }))
+        shell.assistant.refresh()
+        shell.assistant.place = .space(title: "Garden plan", name: "newer", page: fixture.places.spaces.appendingPathComponent("newer.html").path)
         let newer = try fixture.space("newer", page(#"{"contract": 2, "title": "Garden plan"}"#, ""))
         let unshown = try await fixture.window(newer)
         defer { unshown.close() }
@@ -162,6 +167,8 @@ struct GalleryTests {
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
         try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
 
+        try await drawAssistant(suffix: suffix, fixture)
+
         // The template and each example in a space's view, against the invented state `something check` gives.
         for name in ["template"] + ExamplesTests.examples {
             let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
@@ -176,7 +183,7 @@ struct GalleryTests {
         let library = Library(places: fixture.places, ask: ask), info = Info(places: fixture.places, ask: ask)
         info.agents = { self.agents() }
         library.relist()
-        let shell = Shell(library: library, info: info, autosave: false)
+        let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: fixture.engine(), places: fixture.places), autosave: false)
         return (shell, library, info)
     }
 
@@ -206,7 +213,78 @@ struct GalleryTests {
             place.size.height -= top
             side.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
+            // The assistant floats over the page, which was drawn over it.
+            if web != nil, let floating = shell.floating, let over = try? bitmap(floating.bounds.size) {
+                floating.cacheDisplay(in: floating.bounds, to: over)
+                over.draw(in: floating.convert(floating.bounds, to: frame), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
         }
+        withExtendedLifetime(offscreen) {}
+    }
+
+    /// The assistant in each of its states, driven by AssistantTests' fake `claude` (invented text): not started,
+    /// ready, the conversation with its tools, working, waiting for the person, the red row, no agent found, a space's
+    /// error; and How to Get One.
+    func drawAssistant(suffix: String, _ fixture: Home) async throws {
+        try installFakeClaude(fixture)
+        let engine = fixture.engine(), model = AssistantModel(engine: engine, places: fixture.places)
+        engine.changed = { model.refresh() }
+        defer { engine.stopAll(within: 3) {} }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        try await draw(model, "assistant-off" + suffix, fixture)
+        model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
+        func say(_ text: String, until: () -> Bool) async {
+            model.draft = text
+            model.send()
+            #expect(await wait(until: until), "the fake did not answer \(text)")
+        }
+        await say("Make the waiting tiles span the whole width, and play a soft sound when one starts waiting. make-board") {
+            model.light == .ready && model.rows.count > 5
+        }
+        try await draw(model, "assistant-ready" + suffix, fixture)
+        model.drawer = true
+        try await draw(model, "assistant-conversation" + suffix, height: 640, fixture)
+        model.drawer = false
+        model.newConversation()
+        await say("go-slow") { model.light == .working }
+        try await draw(model, "assistant-working" + suffix, fixture)
+        model.newConversation()
+        await say("ask-first") { model.light == .waiting }
+        try await draw(model, "assistant-waiting" + suffix, fixture)
+        model.newConversation()
+        model.place = .blank
+        await say("sign-in-please") { model.problem != nil }
+        try await draw(model, "assistant-error" + suffix, height: 420, fixture)
+        model.newConversation()
+        model.drawer = false
+        model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
+        model.fault = AssistantModel.Fault(title: "My agents", name: "agents", codes: ["SCRIPT_ERROR"])
+        try await draw(model, "assistant-space-error" + suffix, fixture)
+        let none = AssistantModel(engine: Home(prefix: "something-gallery-").engine(), places: fixture.places)
+        none.engine.changed = { none.refresh() }
+        none.engine.lookAgain()
+        #expect(await wait(until: { none.noAgent }))
+        try await draw(none, "assistant-no-agent" + suffix, fixture)
+        try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
+    }
+
+    /// Puts AssistantTests' fake `claude` in the PATH of `fixture`'s engines.
+    func installFakeClaude(_ fixture: Home) throws {
+        let bin = fixture.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+    }
+
+    /// The assistant alone at the bottom of a 760-point-wide center `height` points high, as the window floats it.
+    func draw(_ model: AssistantModel, _ name: String, height: CGFloat = 150, _ fixture: Home) async throws {
+        let center = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: height))
+        let offscreen = Offscreen(center)
+        offscreen.window.setContentSize(NSSize(width: 760, height: height))
+        Shell.float(Floater(rootView: AssistantView(model: model)), in: center)
+        await wait(1)
+        try draw(center, name, fixture)
         withExtendedLifetime(offscreen) {}
     }
 

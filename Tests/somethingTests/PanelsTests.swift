@@ -149,15 +149,21 @@ final class FakePrompts: PromptSource {
         agent.name = nil
         #expect(App.who(agent, startedBy: nil, home: "/Users/example").line == "Working in ~/code/shop")
         #expect(App.who(nil, startedBy: nil, home: "/Users/example") == Asker(program: "An agent", line: ""))
+        agent.folder = "/Users/example/something/spaces"
+        #expect(App.who(agent, startedBy: nil, home: "/Users/example", assistant: true)
+                == Asker(program: "Claude Code", line: "Your assistant, working in ~/something/spaces"))
         let question = PromptPanel(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil,
                                                            at: "2026-10-17T09:00:01Z")), who: Asker(program: "Codex", line: "")) { _ in }
         #expect((question.contentView?.subviews.first as? NSTextField)?.stringValue == "Codex asks you")
     }
 
-    /// The quit sheet says how many agents stop, in the singular and the plural.
+    /// The quit sheet says how many agents stop, in the singular and the plural, the person's assistant first.
     @Test func theQuitSheetSaysWhoStops() {
         #expect(Ask.quit(1).informativeText == "An agent something started is still running. Quitting stops it.")
         #expect(Ask.quit(2).informativeText == "2 agents something started are still running. Quitting stops them.")
+        #expect(Ask.quit(1, assistant: true).informativeText == "Your assistant is still running. Quitting stops it.")
+        #expect(Ask.quit(2, assistant: true).informativeText == "Your assistant and 1 other agent something started are still running. Quitting stops them.")
+        #expect(Ask.quit(3, assistant: true).informativeText == "Your assistant and 2 other agents something started are still running. Quitting stops them.")
     }
 
     /// A sheet the app waits for (the rights, a link, an export) returns the button it ended with, and leaves no sheet

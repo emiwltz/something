@@ -368,6 +368,11 @@ await something.store.set("seen", [...seen, "a1"]);
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
   exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
+- **The assistant.** The person's assistant floats at the bottom of the window, over the bottom of your space: keep
+  what matters out of the last 80 points, or let it scroll. ⌘K, ⌘J, ⌘R and ⌘N belong to something; a space should not
+  rely on them. An error your page does not catch shows "This space has an error.", and the person may ask their
+  assistant to fix it: something tells the assistant the codes (`SCRIPT_ERROR`, `PROMISE_REJECTED`), never your
+  page's words.
 
 ## Checking your space
 

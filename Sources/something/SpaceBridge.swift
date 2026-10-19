@@ -39,6 +39,7 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
         defer { journaled() }
         do { try Journal(folder: places.journals).append(line, space: space.name) } catch {
             FileHandle.standardError.write(Data("\(error.sentence)\n".utf8))
+            unkept()
         }
     }
 

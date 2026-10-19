@@ -2,7 +2,8 @@
 // opening, the app's page (something://app/) holding the space in a sandboxed frame, something.js and the space's
 // `granted` injected in that frame before its scripts, the something:// scheme as its only source, every navigation
 // away from it cancelled (a clicked http, https or mailto link goes to the link sheet), no new window, and a reload
-// when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs.
+// when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs. An
+// error the page does not catch is reported by its code alone, for the window's "This space has an error."
 // What the space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents
@@ -29,6 +30,12 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     var loaded: () -> Void = {}
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
+    /// Called when a line could not be added to the journal: the window says so.
+    var unkept: () -> Void = {}
+    /// The codes of the errors the page did not catch since it loaded (SCRIPT_ERROR, PROMISE_REJECTED), never their
+    /// words, which the page writes; `faulted` is called at each new one.
+    private(set) var faults: [String] = []
+    var faulted: () -> Void = {}
     private let bridge: String, scheme: Scheme
     private var stamp: Date?
     private var timer: Timer?
@@ -59,7 +66,17 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         web = SpaceView.webView(scheme, rules: rules)
         super.init()
         SpaceView.hold(web, by: self)
+        web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "fault")
     }
+
+    /// Reports each error the space's page leaves uncaught, by its code only, from something's own world, where the
+    /// page cannot reach the handler: a page can make an error happen, never choose what it says to the assistant.
+    static let faultScript = """
+        if (window !== top && parent === top) {
+          addEventListener("error", (event) => { if (event.target === window) webkit.messageHandlers.fault.postMessage("SCRIPT_ERROR"); }, true);
+          addEventListener("unhandledrejection", () => webkit.messageHandlers.fault.postMessage("PROMISE_REJECTED"));
+        }
+        """
 
     /// The text of something.js in `share`. Throws a `SpaceError` when it cannot be read: without it the space could
     /// not reach anything.
@@ -169,6 +186,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         pushed = nil
         frame = nil
         linksBlocked = false
+        faults = []
         let reading = Declaration.read(space, home: places.home)
         self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
@@ -193,6 +211,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         let controller = web.configuration.userContentController
         controller.removeAllUserScripts()
         SpaceView.scripts(bridge, granted).forEach(controller.addUserScript)
+        controller.addUserScript(WKUserScript(source: SpaceView.faultScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
     }
 
     /// The guards, then something.js holding `granted`, for every page that holds a space (the check's too).
@@ -332,9 +351,15 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     }
 
     /// A link the person clicked, from Lockdown's guard: it goes to the link sheet, unless one is open or links are
-    /// blocked until the next reload. A link of a frame inside the space goes nowhere.
+    /// blocked until the next reload. A link of a frame inside the space goes nowhere. Or an error code (`faultScript`).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String, let url = URL(string: text) else { return }
+        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String else { return }
+        if message.name == "fault" {
+            guard ["SCRIPT_ERROR", "PROMISE_REJECTED"].contains(text), !faults.contains(text) else { return }
+            faults.append(text)
+            return faulted()
+        }
+        guard let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
     }
 

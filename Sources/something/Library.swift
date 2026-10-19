@@ -22,6 +22,8 @@ import SomethingCore
     private(set) var selection: String?
     /// What selecting does: the app opens the space, or closes the open one for nil.
     @ObservationIgnored var opened: (String?) -> Void = { _ in }
+    /// Called when the list changed: a space the assistant made may have appeared.
+    @ObservationIgnored var relisted: () -> Void = {}
     /// What Move to Trash… does before it moves anything: the window asks the person.
     @ObservationIgnored var trashing: (Entry) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
@@ -58,7 +60,10 @@ import SomethingCore
             let order = one.title.compare(other.title, options: [.caseInsensitive, .diacriticInsensitive])
             return order == .orderedSame ? one.id < other.id : order == .orderedAscending
         }
-        if listed != entries { entries = listed }
+        if listed != entries {
+            entries = listed
+            relisted()
+        }
         if let selection, !entries.contains(where: { $0.id == selection }) { select(nil) }
     }
 
@@ -116,17 +121,31 @@ import SomethingCore
         }
     }
 
-    /// What window.json keeps: the UI's own memory, apart from the grants, so that app.json changes only when a grant does.
+    /// What window.json keeps: the UI's own memory, apart from the grants, so that app.json changes only when a grant
+    /// does. The assistant keeps its builder and Ask Before Every Change there too.
     struct WindowFile: Codable {
-        var lastOpen: String?
+        var lastOpen: String?, assistant: String?, askEverything: Bool?
+
+        /// What `places` keep; nil when window.json is missing or does not read.
+        static func read(_ places: Places) -> WindowFile? {
+            (try? Data(contentsOf: places.window)).flatMap { try? JSONDecoder().decode(WindowFile.self, from: $0) }
+        }
+
+        /// Changes what window.json keeps; a file that cannot be written loses only this memory of the UI.
+        static func update(_ places: Places, _ change: (inout WindowFile) -> Void) {
+            var file = read(places) ?? WindowFile()
+            change(&file)
+            try? FileManager.default.createDirectory(at: places.support, withIntermediateDirectories: true)
+            try? JSONEncoder().encode(file).write(to: places.window, options: .atomic)
+        }
     }
 
     /// The space to open at the start: the last one open, when it is still listed. 1.0 kept a default space in
     /// app.json instead; it is read once, as the last one open.
     func last() -> String? {
         var name: String?
-        if let data = try? Data(contentsOf: places.window) {
-            name = (try? JSONDecoder().decode(WindowFile.self, from: data))?.lastOpen
+        if FileManager.default.fileExists(atPath: places.window.path) {
+            name = WindowFile.read(places)?.lastOpen
         } else {
             let old = (try? Data(contentsOf: places.grants)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             name = old?["default"] as? String
@@ -136,9 +155,7 @@ import SomethingCore
     }
 
     private func remember(_ name: String?) {
-        let file = WindowFile(lastOpen: name)
-        try? FileManager.default.createDirectory(at: places.support, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(file).write(to: places.window, options: .atomic)
+        WindowFile.update(places) { $0.lastOpen = name }
     }
 
     /// Drops the grants of every name whose file and folder are both gone from the spaces folder (deleted, or renamed

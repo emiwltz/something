@@ -13,10 +13,12 @@ public struct Program: Equatable, Sendable {
     /// The child's PATH: the program's folder first, then the folders it was found through.
     public let folders: [String]
 
-    /// The environment to launch it in: `base` without `removing`, plus `adding`, with this program's PATH.
-    public func environment(_ base: [String: String], adding: [String: String] = [:], removing: Set<String> = []) -> [String: String] {
+    /// The environment to launch it in: `base` without `removing`, plus `adding`, with this program's PATH, after the
+    /// folder `first` when there is one.
+    public func environment(_ base: [String: String], adding: [String: String] = [:], removing: Set<String> = [],
+                            first: String? = nil) -> [String: String] {
         var environment = base.filter { !removing.contains($0.key) }.merging(adding) { _, added in added }
-        environment["PATH"] = folders.joined(separator: ":")
+        environment["PATH"] = ([first].compactMap { $0 } + folders).joined(separator: ":")
         return environment
     }
 }
@@ -28,7 +30,7 @@ public final class Programs {
 
     /// What to type to install each kind something launches, in Terminal. pi's is its README's (1.0.0), and
     /// `npm view` gives that package name.
-    static let install = [
+    public static let install = [
         "claude": "brew install --cask claude-code",
         "codex": "brew install --cask codex",
         "opencode": "brew install opencode",

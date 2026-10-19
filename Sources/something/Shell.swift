@@ -1,6 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), a toolbar with
 // the sidebar toggle, the open space's title and file, Reload and Info; and the menus. The center holds the open
-// space's web view edge to edge under the toolbar, what keeps a space from being shown, or "No space is open."
+// space's web view edge to edge under the toolbar, what keeps a space from being shown, or "No space is open.", with
+// the assistant floating over it at the bottom.
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -12,13 +13,18 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The center: one of its three states at a time.
     let center = NSView()
     let inspector: NSSplitViewItem
+    let assistant: AssistantModel
+    /// What the center shows, and the assistant over it.
+    private var shown: NSView?
+    private(set) var floating: NSView?
     static let reload = NSToolbarItem.Identifier("reload")
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
-    init(library: Library, info: Info, autosave: Bool) {
+    init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
+        self.assistant = assistant
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SidebarView(library: library)))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
         let content = NSViewController()
@@ -50,7 +56,35 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
+        let floating = Floater(rootView: AssistantView(model: assistant))
+        Shell.float(floating, in: center)
+        self.floating = floating
         show(nil)
+    }
+
+    /// Puts the assistant at the bottom of `center`, at most 640 points wide, its conversation at most 45% of the
+    /// center's height (plus the capsule's): it takes its own size, its shadows inside its margin.
+    static func float(_ host: Floater, in center: NSView) {
+        host.sizingOptions = [.intrinsicContentSize]
+        host.translatesAutoresizingMaskIntoConstraints = false
+        center.addSubview(host)
+        let margin = AssistantView.margin, wide = host.widthAnchor.constraint(equalToConstant: 640 + 2 * margin)
+        wide.priority = .defaultHigh
+        NSLayoutConstraint.activate([wide, host.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: 2 * margin - 48),
+                                     host.centerXAnchor.constraint(equalTo: center.centerXAnchor),
+                                     host.bottomAnchor.constraint(equalTo: center.bottomAnchor),
+                                     host.heightAnchor.constraint(lessThanOrEqualTo: center.heightAnchor, multiplier: 0.45, constant: 90 + 2 * margin)])
+    }
+
+    /// ⌘J: shows or hides the conversation. In full screen it also hides the whole assistant, for a space alone.
+    @objc func toggleConversation(_ sender: Any?) {
+        if window.styleMask.contains(.fullScreen), assistant.drawer || assistant.hidden {
+            assistant.drawer = false
+            assistant.hidden.toggle()
+        } else {
+            assistant.drawer.toggle()
+            assistant.hidden = false
+        }
     }
 
     func windowWillClose(_ notification: Notification) { closed() }
@@ -73,18 +107,20 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Shows `space` in the center, or "No space is open." for nil, with its title and file in the toolbar.
     func show(_ space: SpaceView?) {
-        center.subviews.forEach { $0.removeFromSuperview() }
+        self.shown?.removeFromSuperview()
         let shown: NSView
         if let space, space.blocked.isEmpty {
             shown = space.web
         } else if let space {
-            shown = Shell.hosted(Unshown(title: space.title, problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }))
+            let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
+            shown = Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant))
         } else {
             shown = Shell.hosted(Text("No space is open.").font(.title3).foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity))
         }
         shown.translatesAutoresizingMaskIntoConstraints = false
-        center.addSubview(shown)
+        center.addSubview(shown, positioned: .below, relativeTo: floating)
+        self.shown = shown
         // A space starts under the toolbar, never behind it.
         NSLayoutConstraint.activate([shown.topAnchor.constraint(equalTo: center.safeAreaLayoutGuide.topAnchor),
                                      shown.bottomAnchor.constraint(equalTo: center.bottomAnchor),
@@ -150,8 +186,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         ]))
         main.addItem(submenu("View", [
             item("Show Sidebar", "toggleSidebar:", "s", [.command, .control]), item("Show Info", "toggleInspector:", "i", [.command, .option]),
-            item("Reload Space", "reloadSpace:", "r"), .separator(),
+            item("Show Conversation", "toggleConversation:", "j"), item("Reload Space", "reloadSpace:", "r"), .separator(),
             item("Enter Full Screen", "toggleFullScreen:", "f", [.command, .control]),
+        ]))
+        let builders = submenu("Build With", [])
+        builders.submenu?.delegate = NSApp.delegate as? NSMenuDelegate
+        main.addItem(submenu("Assistant", [
+            item("Ask…", "askAssistant:", "k"), item("Stop", "stopAssistant:", "."),
+            item("New Conversation", "newConversation:", "k", [.command, .shift]), .separator(), builders,
         ]))
         let windows = submenu("Window", [item("Minimize", "performMiniaturize:", "m"), item("Zoom", "performZoom:"), .separator(),
                                          item("Bring All to Front", "arrangeInFront:")])
@@ -161,19 +203,32 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 }
 
-/// The center when a space cannot be shown: what keeps it from being displayed, one problem per line with its code.
+/// The center when a space cannot be shown: what keeps it from being displayed, one problem per line with its code,
+/// and the assistant asked to fix it, with something's own words only.
 struct Unshown: View {
-    let title: String, problems: [String]
+    let problems: [String], fault: AssistantModel.Fault
+    let assistant: AssistantModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("“\(title)” can't be shown").font(.title2.weight(.semibold))
+            Text("“\(fault.title)” can't be shown").font(.title2.weight(.semibold))
             ForEach(problems, id: \.self) { Text($0).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
             Text("It reloads by itself when its files change.").foregroundStyle(.secondary)
+            if assistant.kind != nil {
+                Button("Ask \(assistant.name) to Fix It") { assistant.fix(fault) }
+            }
         }
         .frame(maxWidth: 520, alignment: .leading)
         .padding(28)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The assistant's hosting view. Its margin, where the shadows fall, lets the clicks through to the space under it.
+final class Floater: NSHostingView<AssistantView> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let margin = AssistantView.margin
+        return bounds.insetBy(dx: margin, dy: margin).contains(convert(point, from: superview)) ? super.hitTest(point) : nil
     }
 }

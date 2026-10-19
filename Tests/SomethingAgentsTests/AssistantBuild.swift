@@ -1,6 +1,7 @@
 // The standard build of a space by the person's assistant (plan A.2 #6), for the trials of Claude Code and Codex: the
 // tool sequence a real agent runs to make "Who is waiting for me" from a template, and an invented `something`
 // program that answers that sequence's commands in the real one's shape, with invented text.
+// Tests/somethingTests/AssistantBuild.swift is a link to this file, for the app's own trial (AssistantTrial).
 import Darwin
 import Foundation
 

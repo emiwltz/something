@@ -343,7 +343,8 @@ import Testing
     @Test func closingTheWindowIsSaid() throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let shell = Shell(library: library(test, ask), info: Info(places: test.places, ask: ask), autosave: false)
+        let shell = Shell(library: library(test, ask), info: Info(places: test.places, ask: ask),
+                          assistant: AssistantModel(engine: test.engine(), places: test.places), autosave: false)
         var closed = 0
         shell.closed = { closed += 1 }
         shell.window.close()
