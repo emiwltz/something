@@ -59,8 +59,9 @@ import Testing
         #expect(library.entries.map(\.isSpace) == [true, false, true, true])
     }
 
-    /// A space made in the folder, by an agent or in Finder, is listed within a second, and so is a page rewritten in
-    /// place; one removed goes away, and the open one is closed; a spaces folder removed and made again is still watched.
+    /// A space made in the folder, by an agent or in Finder, is listed at the watch's next look, and so is a page
+    /// rewritten in place; one removed goes away, and the open one is closed; a spaces folder removed and made again is
+    /// still watched.
     @Test func theFolderWatchSeesASpaceComeAndGo() async throws {
         let test = Home(prefix: "something-library-")
         defer { test.remove() }
@@ -70,12 +71,13 @@ import Testing
         library.opened = { opened.append($0) }
         library.watch()
         defer { library.stop() }
+        // The watch looks every half second. Each wait gives it three: while the other suites start agents and WebKit
+        // at once, a 3-core runner's main queue was seen late by more than a second (CI, 19 October 2026).
+        let soon: Double = 3
         try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
-        // The watch looks every half second; this first look comes while every suite starts its programs and WebKit
-        // at once, and a busy runner's main queue may then be late by more than a second (seen on CI).
-        #expect(await wait(3, until: { library.entries.map(\.id) == ["garden"] }))
+        #expect(await wait(soon, until: { library.entries.map(\.id) == ["garden"] }))
         library.select("garden")
-        #expect(await wait(1, until: { opened == ["garden"] }), "the space opens just after it is selected")
+        #expect(await wait(soon, until: { opened == ["garden"] }), "the space opens just after it is selected")
 
         // Rewritten in place, as an editor without an atomic save does: no entry of the folder changes.
         let file = test.places.spaces.appendingPathComponent("garden.html")
@@ -83,16 +85,16 @@ import Testing
         try handle.truncate(atOffset: 0)
         try handle.write(contentsOf: Data(page(#"{"contract": 1, "title": "Kitchen garden"}"#, "").utf8))
         try handle.close()
-        #expect(await wait(1, until: { library.entries.map(\.title) == ["Kitchen garden"] }))
+        #expect(await wait(soon, until: { library.entries.map(\.title) == ["Kitchen garden"] }))
 
         try FileManager.default.removeItem(at: file)
-        #expect(await wait(1, until: { library.entries.isEmpty && opened == ["garden", nil] }))
+        #expect(await wait(soon, until: { library.entries.isEmpty && opened == ["garden", nil] }))
         #expect(library.selection == nil)
 
         try FileManager.default.removeItem(at: test.places.spaces)
         try Library.prepare(test.places)
         try test.space("pond", page(#"{"contract": 1, "title": "Pond"}"#, ""))
-        #expect(await wait(1, until: { library.entries.map(\.id) == ["pond"] }))
+        #expect(await wait(soon, until: { library.entries.map(\.id) == ["pond"] }))
     }
 
     /// The last space open is opened at the next start; 1.0's default space, kept in app.json, is read once in its place.
