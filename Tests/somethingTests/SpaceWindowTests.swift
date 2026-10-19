@@ -184,12 +184,14 @@ import WebKit
         window.open()
         try await ready(window)
         let offscreen = Offscreen(window.web)
+        // Waited for, not timed: on a busy runner a click can take more than 3 s to reach the link window.
         try offscreen.click(x: 200, y: 320)
-        await wait(3)
+        await wait(15, until: { !ask.links.isEmpty })
+        await wait(1)
         #expect(ask.links.map(\.path) == ["/scripted"])
         #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         try offscreen.click(x: 650, y: 320)
-        await wait(3)
+        await wait(15, until: { !listener.hits.isEmpty })
         withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root of the HTML") {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
