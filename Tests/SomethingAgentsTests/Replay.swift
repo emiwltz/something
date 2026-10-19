@@ -25,9 +25,13 @@ final class Replay {
 
     init<D: Driver>(_ type: D.Type, _ launch: Launch) { start(type, launch) }
 
-    /// A Codex launched in /Users/example/shop as agent codex-1, continuing `resume` when given.
-    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil) -> Replay {
-        Replay(CodexDriver.self, Launch(agent: "codex-1", folder: "/Users/example/shop", mode: mode, effort: effort, thread: resume ?? "", resume: resume != nil))
+    /// A Codex launched in /Users/example/shop as agent codex-1, continuing `resume` when given; with `assistant`, the
+    /// person's assistant, in /Users/example/something/spaces.
+    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false) -> Replay {
+        var launch = Launch(agent: "codex-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
+                            effort: effort, thread: resume ?? "", resume: resume != nil)
+        launch.assistant = assistant
+        return Replay(CodexDriver.self, launch)
     }
 
     /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given.
@@ -66,7 +70,7 @@ final class Replay {
 
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
     /// "resume" makes a Codex, OpenCode or pi launch that continues that thread, "model" an OpenCode or pi launch with
-    /// that model, and "effort" a pi launch with that thinking level.
+    /// that model, "effort" a pi launch with that thinking level, and "assistant" a Codex launched as the person's assistant.
     /// `database` is the OpenCode database the driver reads at the end, as the engine sets it.
     static func play(_ name: String, kind: String = "claude", database: String? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -76,7 +80,7 @@ final class Replay {
         }
         let resume = rows.first?["resume"] as? String
         let model = rows.first?["model"] as? String
-        let replay = kind == "codex" ? codex(resume: resume) : kind == "opencode" ? opencode(model: model, resume: resume)
+        let replay = kind == "codex" ? codex(resume: resume, assistant: rows.first?["assistant"] as? Bool ?? false) : kind == "opencode" ? opencode(model: model, resume: resume)
             : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay()
         (replay.agent.driver as? ACPDriver)?.database = database
         var read = 0

@@ -47,7 +47,15 @@ public final class ClaudeDriver: Driver {
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
         if let effort = launch.effort { arguments.append("--effort=\(effort)") }
+        if launch.assistant, !launch.askEverything { arguments += ["--allowedTools"] + building(launch.folder) }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
+    }
+
+    /// What the person's assistant may do without asking (E-1, Emi's decision of 19 October 2026): change files in
+    /// `folder`, the spaces folder, and run four of something's own commands. The rules fail toward asking: any other
+    /// command or path still asks. In Claude's rules "//" starts an absolute path ("/" alone is the project's root).
+    static func building(_ folder: String) -> [String] {
+        ["Edit(/\(folder)/**)", "Write(/\(folder)/**)"] + ["new", "check", "open", "guide"].map { "Bash(something \($0):*)" }
     }
 
     private let launch: Launch

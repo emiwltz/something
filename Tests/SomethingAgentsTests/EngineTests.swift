@@ -160,6 +160,53 @@ import SomethingCore
         }
     }
 
+    /// The person's assistant: the app's launch carries the rules of E-1 and a space's launch never does; a space with
+    /// every right, seeing every agent, finds the assistant listed but can write to it in no way (Bridge.visible). Once
+    /// the state forgot it, its conversation is not shown as one seen elsewhere either; another agent's is.
+    @Test func theAssistantIsTheAppsAloneAndNoSpaceWritesToIt() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        var now = Date()
+        engine.clock = { now }
+        func arguments() -> [String] {
+            ((try? String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        }
+        let id = try engine.launchAssistant("claude", folder: place.work.path, askEverything: false)
+        #expect(engine.assistants == [id])
+        try await until("the assistant's launch") { arguments().contains("--session-id") }
+        #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(place.work.path))
+        try await until("the models") { engine.state.agents.first?.options.model != nil }
+
+        let host = EngineHost(engine, folder: place.work.path)
+        host.granted.rights = ["state", "send", "launch", "store"]
+        for (method, params) in [("send", ["agent": id, "text": "Invented."]), ("interrupt", ["agent": id]), ("set", ["agent": id, "model": "sonnet"])] {
+            let answer = Bridge.answer(["method": method, "params": params], host: host)
+            #expect((answer["error"] as? [String: Any])?["code"] as? String == "READ_ONLY_AGENT", "\(method)")
+        }
+        #expect(Bridge.visible(host).agents.first { $0.id == id }?.can == Can())
+        #expect(engine.state.threads.first { $0.agent == id }?.turns.isEmpty == true, "nothing was delivered to it")
+        try FileManager.default.removeItem(at: place.out.appendingPathComponent("arguments"))
+        let launched = Bridge.answer(["method": "launch", "params": ["kind": "claude"]], host: host)
+        let other = try #require(launched["result"] as? String)
+        #expect(other != id && engine.assistants == [id])
+        try await until("the space's launch") { arguments().contains("--session-id") }
+        #expect(!arguments().contains("--allowedTools"), "a space's launch is never the assistant's")
+
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+        try await until("the ends") { engine.state.agents.allSatisfy { $0.alive == false } }
+        let threads = try [id, other].map { agent in try #require(engine.state.agents.first { $0.id == agent }?.thread) }
+        now += Engine.endedKept
+        engine.update()
+        #expect(engine.state.agents.isEmpty)
+        let seen = threads.map { Sighting(kind: "claude", key: $0, facts: StateMap.Facts(alive: false, evidence: "registry", turnOpen: false, waiting: .nothing),
+                                          folder: place.work.path, updated: Date()) }
+        engine.saw(Seen(sightings: seen))
+        #expect(engine.state.agents.map(\.thread) == [threads[1]])
+    }
+
     /// Ended launched agents leave the state: beyond the last 20 at once, and every one ten minutes after its end, so
     /// that an app open all day does not push every agent it ever launched. The clock is the engine's, moved here.
     @Test func endedAgentsLeaveTheState() async throws {

@@ -204,6 +204,8 @@ public final class CodexDriver: Driver {
                 var params: [String: Any] = ["cwd": launch.folder]
                 if let mode = launch.mode { params["approvalPolicy"] = mode }
                 if let model = launch.model { params["model"] = model }
+                // The person's assistant changes files in its folder without asking (E-1); what the sandbox blocks asks.
+                if launch.assistant, !launch.askEverything { params["sandbox"] = "workspace-write" }
                 if launch.resume {
                     // Its history is left out: a long thread's answer can weigh megabytes.
                     params.merge(["threadId": launch.thread, "excludeTurns": true]) { _, new in new }

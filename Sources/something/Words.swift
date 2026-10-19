@@ -102,7 +102,7 @@ enum Words {
             "REFUSED": "you said no",
             "RIGHT_NOT_GRANTED": "refused: you did not allow it",
             "FOLDER_NOT_GRANTED": "refused: outside the folder you chose for it",
-            "READ_ONLY_AGENT": "refused: this agent was started outside something",
+            "READ_ONLY_AGENT": "refused: spaces cannot write to this agent",
             "AGENT_NOT_FOUND": "refused: the space cannot see this agent",
             "NOT_SUPPORTED": "refused: this agent cannot do that",
             "VALUE_NOT_OFFERED": "refused: this agent does not offer that value",

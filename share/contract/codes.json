@@ -14,7 +14,7 @@
     "NO_HOST": { "from": "bridge", "level": "error", "when": "The page is not open in something.", "fix": "Open the space in something; a browser alone has no agents to give it." },
     "RIGHT_NOT_GRANTED": { "from": "bridge", "level": "error", "when": "The right was not declared, was refused, or was revoked.", "fix": "Declare the right, and read something.granted to hide what the person did not allow." },
     "AGENT_NOT_FOUND": { "from": "bridge", "level": "error", "when": "No such agent in this space's scope.", "fix": "Use an id from the latest state; agents come and go." },
-    "READ_ONLY_AGENT": { "from": "bridge", "level": "error", "when": "A write to an agent started elsewhere.", "fix": "Check can before writing; offer resume to continue this conversation here." },
+    "READ_ONLY_AGENT": { "from": "bridge", "level": "error", "when": "A write to an agent started elsewhere, or to the person's assistant.", "fix": "Check can before writing; offer resume to continue this conversation here." },
     "NOT_SUPPORTED": { "from": "bridge", "level": "error", "when": "This agent cannot do it (its can says false).", "fix": "Check can and because before the call, and hide what this agent cannot do." },
     "VALUE_NOT_OFFERED": { "from": "bridge", "level": "error", "when": "set with a value not in options, or the agent replied with a different value.", "fix": "Pick a value from the agent's options." },
     "AGENT_STOPPED": { "from": "bridge", "level": "error", "when": "The agent has ended.", "fix": "Launch or resume an agent to go on." },

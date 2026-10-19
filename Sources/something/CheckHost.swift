@@ -14,6 +14,8 @@ final class CheckHost: BridgeHost {
 
     let state: State, granted: Granted
     var launched: Set<String> = []
+    /// No assistant runs in a check.
+    let assistants: Set<String> = []
     let memory: Memory?
     /// The rights the space declares, before `--refuse` takes any.
     let declared: [String]

@@ -187,6 +187,7 @@ final class EngineHost: BridgeHost {
     var granted = Granted()
     var launched: Set<String> = []
     var state: State { engine.state }
+    var assistants: Set<String> { engine.assistants }
     var memory: Memory? { nil }
 
     init(_ engine: Engine, folder: String) {

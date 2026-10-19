@@ -11,6 +11,8 @@ public protocol BridgeHost: AnyObject {
     var granted: Granted { get }
     /// The agents this space launched or resumed: always in its scope.
     var launched: Set<String> { get }
+    /// The agents launched as the person's assistant, which no space may write to or read the words of.
+    var assistants: Set<String> { get }
     /// The space's memory; nil for a space opened by path, outside the spaces folder, which has none.
     var memory: Memory? { get }
     /// Keeps one line of the space's journal; a journal that cannot be written must not fail the call it records.
@@ -143,8 +145,18 @@ public enum Bridge {
         }
     }
 
-    /// The state as this space sees it.
-    static func visible(_ host: BridgeHost) -> State { Rights.visible(host.state, host.granted, launched: host.launched) }
+    /// The state as this space sees it. The person's assistant is listed, honestly, as an agent no space can write
+    /// to, without its conversation, its held messages or its requests: those are the person's words, not a space's.
+    public static func visible(_ host: BridgeHost) -> State {
+        var state = Rights.visible(host.state, host.granted, launched: host.launched)
+        let mine = host.assistants
+        for index in state.agents.indices where mine.contains(state.agents[index].id) {
+            (state.agents[index].can, state.agents[index].thread, state.agents[index].queue) = (Can(), nil, [])
+            for key in ["send", "interrupt", "model", "mode", "effort"] { state.agents[index].because[key] = "This is the person's assistant: spaces cannot write to it." }
+        }
+        (state.threads, state.requests) = (state.threads.filter { !mine.contains($0.agent) }, state.requests.filter { !mine.contains($0.agent) })
+        return state
+    }
 
     /// The agent `id` when this space may write to it. A space without any send right learns nothing about ids;
     /// an agent out of scope is reported as not found, so a space cannot probe for it.
@@ -154,7 +166,7 @@ public enum Bridge {
         guard let agent = visible(host).agents.first(where: { $0.id == id }) else { throw CodedError("AGENT_NOT_FOUND", "No agent \(id) in this space; use an id from the latest state.") }
         line.kind = agent.kind
         guard Rights.covers(rights, "send:\(agent.kind)") else { throw CodedError("RIGHT_NOT_GRANTED", "The right send:\(agent.kind) was not granted.") }
-        guard agent.origin == "launched" else {
+        guard agent.origin == "launched", !host.assistants.contains(agent.id) else {
             throw CodedError("READ_ONLY_AGENT", agent.because["send"] ?? "This agent was started outside something; something only reads it.")
         }
         guard agent.alive != false else { throw CodedError("AGENT_STOPPED", "This agent has ended; launch or resume one to go on.") }

@@ -9,6 +9,7 @@ final class FakeHost: BridgeHost {
     var state: State
     var granted: Granted
     var launched: Set<String> = []
+    var assistants: Set<String> = []
     var memory: Memory?
     var lines: [JournalLine] = []
     var calls: [String] = []
@@ -103,6 +104,34 @@ struct BridgeTests {
         var refused = Granted()
         (refused.rights, refused.refused, refused.agents) = (["state"], ["send"], .all)
         #expect(code("send", hello, try FakeHost(granted: refused)) == "RIGHT_NOT_GRANTED")
+    }
+
+    /// The person's assistant (a1 here): a space with every right, seeing every agent, even one that launched it,
+    /// finds it listed as it is, but can neither write to it nor read its conversation, held messages or requests.
+    @Test func noSpaceWritesToOrReadsTheAssistant() throws {
+        let host = try FakeHost(["state", "send", "launch", "store"])
+        (host.assistants, host.launched) = (["a1"], ["a1"])
+        let state = Bridge.visible(host)
+        let assistant = try #require(state.agents.first { $0.id == "a1" })
+        #expect((assistant.origin, assistant.state, assistant.waiting) == ("launched", "waiting", "permission"), "listed honestly")
+        #expect(assistant.can == Can() && assistant.thread == nil && assistant.queue.isEmpty)
+        for key in ["send", "interrupt", "model", "mode", "effort"] {
+            #expect(assistant.because[key] == "This is the person's assistant: spaces cannot write to it.")
+        }
+        #expect(state.threads.isEmpty && state.requests.isEmpty)
+        let page = try JSONSerialization.data(withJSONObject: try #require(Bridge.answer(["method": "state"], host: host)["result"]))
+        let text = String(decoding: page, as: UTF8.self)
+        #expect(!text.contains("c0ffee00-0000-4000-8000-000000000001") && !text.contains("Then run the tests.") && !text.contains(#""r1""#))
+        let writes: [(String, [String: Any])] = [("send", ["agent": "a1", "text": "Invented."]), ("send", ["agent": "a1", "text": "Invented.", "when": "now"]),
+                                                 ("interrupt", ["agent": "a1"]), ("set", ["agent": "a1", "mode": "plan"]),
+                                                 ("set", ["agent": "a1", "model": "sonnet"]), ("set", ["agent": "a1", "effort": "low"])]
+        for (method, params) in writes { #expect(code(method, params, host) == "READ_ONLY_AGENT", "\(method) \(params)") }
+        #expect(code("resume", ["kind": "claude", "thread": "c0ffee00-0000-4000-8000-000000000001"], host) == "THREAD_NOT_FOUND")
+        #expect(host.calls.isEmpty && host.confirmed.isEmpty)
+        #expect(host.lines.map(\.result).allSatisfy { $0 != "ok" } && host.lines.count == writes.count + 1)
+        // Any other agent something launched stays writable.
+        host.assistants = ["a0"]
+        #expect(code("send", ["agent": "a1", "text": "Invented."], host) == "ok")
     }
 
     @Test func anIdleAgentStartsATurnWhateverItsSteerOrQueue() throws {

@@ -87,6 +87,26 @@ import SomethingCore
         #expect(replay.fold.agent.options.mode?.map(\.value) == ["default", "acceptEdits", "plan", "auto", "dontAsk"])
     }
 
+    /// The person's assistant builds a space (ClaudeTrial, T-2): twelve steps, none of which asks the person; each
+    /// shows it was allowed by a rule (the launch's, or Claude's own for `ls` and the read).
+    @Test func assistantBuild() throws {
+        let replay = try Replay.play("assistant-build")
+        let tools = replay.items.filter { $0.kind == "tool" }
+        #expect(tools.count == 12 && tools.allSatisfy { $0.tool?.status == "done" })
+        #expect(tools.allSatisfy { $0.decision == Decision(by: "rule", outcome: "allowed") }, "\(tools.map { [$0.text, $0.decision?.by ?? "-"] })")
+        #expect(tools.map(\.tool?.name) == ["Bash", "Bash", "Bash", "Read", "Edit", "Edit", "Edit", "Bash", "Bash", "Bash", "Bash", "Bash"])
+        #expect(replay.fold.turns.map(\.state) == ["done"])
+    }
+
+    /// With Ask Before Every Change, the same build asks before ten of its twelve steps: all but `ls` and the read.
+    @Test func assistantAskEverything() throws {
+        let replay = try Replay.play("assistant-ask-everything")
+        let tools = replay.items.filter { $0.kind == "tool" }
+        #expect(tools.count == 12 && tools.allSatisfy { $0.tool?.status == "done" })
+        #expect(tools.filter { $0.decision == Decision(by: "person", outcome: "allowed") }.count == 10)
+        #expect(tools.filter { $0.decision?.by == "rule" }.map(\.text) == ["ls", "/Users/example/something/spaces/agents-board.html"])
+    }
+
     @Test func stop() throws {
         let replay = try Replay.play("stop")
         #expect(replay.fold.agent.error == nil)
@@ -105,6 +125,22 @@ import SomethingCore
         #expect(command.adding == ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"])
         #expect(command.removing == ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
         #expect(!ClaudeDriver.modes.contains { $0.value == "bypassPermissions" })
+    }
+
+    /// The person's assistant (E-1): exactly six rules, its folder's files by their absolute path ("//", which trial
+    /// T-2 showed Claude matches) and four of something's commands; none with Ask Before Every Change, nor for a
+    /// launch a space asks for, where `assistant` is always false.
+    @Test func theAssistantMayBuildSpacesWithoutAsking() {
+        var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces", thread: "5b2e0000-0000-4000-8000-000000000001")
+        let plain = ClaudeDriver.command(launch).arguments
+        launch.assistant = true
+        #expect(ClaudeDriver.command(launch).arguments == plain + [
+            "--allowedTools", "Edit(//Users/example/something/spaces/**)", "Write(//Users/example/something/spaces/**)",
+            "Bash(something new:*)", "Bash(something check:*)", "Bash(something open:*)", "Bash(something guide:*)"])
+        #expect(ClaudeDriver.command(launch, hook: ["/Users/example/something", "hook", "permission"]).arguments.contains("--allowedTools"), "plan B too")
+        launch.askEverything = true
+        #expect(ClaudeDriver.command(launch).arguments == plain)
+        #expect(!plain.contains("--allowedTools"))
     }
 
     @Test func aFreshAgentCanDoAll() {

@@ -7,6 +7,17 @@ import Testing
 import SomethingCore
 
 @Suite struct CodexReplayTests {
+    /// The person's assistant builds a space in the sandbox (CodexTrial, T-1): nothing asks, and the check reports
+    /// that the sandbox has no window server. Codex 0.163.0 sent items for the first eight of the twelve calls only
+    /// (the model received all twelve outputs, which the trial counts).
+    @Test func assistantBuild() throws {
+        let replay = try Replay.play("assistant-build", kind: "codex")
+        let tools = replay.items.filter { $0.kind == "tool" }
+        #expect(tools.count == 8 && tools.allSatisfy { $0.decision == nil }, "\(tools.map(\.text))")
+        #expect(tools.map(\.tool?.status) == Array(repeating: "done", count: 7) + ["failed"], "the check ends with status 2")
+        #expect(replay.fold.turns.map(\.state) == ["done"] && replay.fold.requests.isEmpty)
+    }
+
     @Test func permissionOnce() throws {
         let replay = try Replay.play("permission-once", kind: "codex")
         let tool = try #require(replay.items.first { $0.kind == "tool" })
@@ -114,6 +125,22 @@ import SomethingCore
         replay.feed(["id": id, "result": ["turn": ["id": turn, "status": "inProgress", "items": []]]])
         replay.feed(["method": "thread/status/changed", "params": ["threadId": thread, "status": ["type": "active", "activeFlags": []]]])
         replay.feed(["method": "turn/started", "params": ["threadId": thread, "turn": ["id": turn, "status": "inProgress"]]])
+    }
+
+    /// The person's assistant (E-1): its thread starts in Codex's workspace-write sandbox, in its folder; with Ask
+    /// Before Every Change, and for any launch a space asks for, as Codex's own settings say.
+    @Test func theAssistantWorksInTheSandbox() {
+        func start(_ assistant: Bool, askEverything: Bool = false) -> [String: Any]? {
+            var launch = Launch(agent: "codex-1", folder: "/Users/example/something/spaces")
+            (launch.assistant, launch.askEverything) = (assistant, askEverything)
+            let replay = Replay(CodexDriver.self, launch)
+            replay.feed(["id": 1, "result": ["codexHome": "/Users/example/.codex", "platformFamily": "unix", "platformOs": "macos", "userAgent": "something/0.163.0"]])
+            return Self.params(replay, "thread/start")
+        }
+        #expect(start(true)?["sandbox"] as? String == "workspace-write")
+        #expect(start(true)?["cwd"] as? String == "/Users/example/something/spaces")
+        #expect(start(true, askEverything: true)?["sandbox"] == nil)
+        #expect(start(false)?.keys.sorted() == ["cwd"])
     }
 
     @Test func theCommandIsTheAppServer() {

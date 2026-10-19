@@ -6,34 +6,6 @@
 import Foundation
 import SomethingCore
 
-/// What a native window shows for one request. Richer than the contract's `Request`, which a space sees: a space
-/// never answers a request, the person does.
-public struct Prompt: Equatable, Sendable {
-    public var request: Request
-    /// For a permission: what the agent wants to run or change, as it sent it (a command, a path, a diff).
-    public var input: String?
-    /// For a question: what the agent asks, in its order.
-    public var questions: [Question]
-
-    public init(request: Request, input: String? = nil, questions: [Question] = []) {
-        (self.request, self.input, self.questions) = (request, input, questions)
-    }
-}
-
-public struct Question: Equatable, Sendable {
-    public var header: String?, text: String, options: [String], multiple: Bool
-    public init(header: String?, text: String, options: [String], multiple: Bool) {
-        (self.header, self.text, self.options, self.multiple) = (header, text, options, multiple)
-    }
-}
-
-/// The person's answer to a request. Permissions are allowed once or denied, never always.
-public enum Answer: Equatable, Sendable {
-    case once, deny
-    /// For a question: the chosen labels (or the typed text) for each question, in its order.
-    case choice([[String]])
-}
-
 public final class Engine {
     /// Called on the main queue when the state changed. The app decides how often it pushes.
     public var changed: () -> Void = {}
@@ -121,7 +93,7 @@ public final class Engine {
         let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
         // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
         let keys = launched.compactMap(\.agent.agent.thread)
-        return Watch.elsewhere(seen, groups: groups, keys: Set(keys), now: Date())
+        return Watch.elsewhere(seen, groups: groups, keys: Set(keys).union(formerAssistants), now: Date())
     }
 
     /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.
@@ -144,6 +116,7 @@ public final class Engine {
         let gone = Set(ended.enumerated().filter { $0.offset < ended.count - Engine.endedMost
             || now.timeIntervalSince($0.element.at) >= Engine.endedKept }.map(\.element.id))
         guard !gone.isEmpty else { return }
+        formerAssistants.formUnion(launched.filter { gone.contains($0.agent.agent.id) && assistants.contains($0.agent.agent.id) }.compactMap(\.agent.agent.thread))
         launched.removeAll { gone.contains($0.agent.agent.id) }
         stopping.subtract(gone)
         ended.removeAll { gone.contains($0.id) }
@@ -259,18 +232,36 @@ public final class Engine {
     /// Where plan B's spool folders go; a test's own folder in tests.
     var spools = Spool.root
 
+    /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
+    public private(set) var assistants: Set<String> = []
+    /// The conversations of the assistants the state forgot: the readers must not show them as seen elsewhere.
+    private var formerAssistants: Set<String> = []
+
+    /// Starts the person's assistant, an agent of `kind` working in `folder` (the spaces folder), and returns its id,
+    /// which `assistants` holds from then on. Its driver lets it build spaces without asking, unless `askEverything`.
+    /// Only the app calls this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
+    public func launchAssistant(_ kind: String, folder: String, askEverything: Bool) throws -> String {
+        try Engine.checkLaunch(kind, model: nil, mode: nil, effort: nil)
+        return try launch(Engine.drivers[kind]!, folder: folder, model: nil, mode: nil, effort: nil, planB: false, assistant: askEverything)
+    }
+
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
     /// With `resume`, the program continues that conversation in `folder`; a pi
     /// conversation is its file, which must exist (THREAD_NOT_FOUND), and runs in the folder its header names.
+    /// With `assistant`, its value for `askEverything`, the launch is the person's assistant.
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
-                resume: String? = nil, record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
+                resume: String? = nil, assistant askEverything: Bool? = nil,
+                record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
         let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
         let program = try found[type.kind]?.get() ?? programs.find(type.kind)
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
+        if let askEverything { (launch.assistant, launch.askEverything) = (true, askEverything) }
         let started = try start(type, launch, program, planB: planB, record: record)
+        // Marked before the state changes, so that no space ever sees the assistant as one it may write to.
+        if launch.assistant { assistants.insert(launch.agent) }
         launched.append(started)
         update()
         return launch.agent

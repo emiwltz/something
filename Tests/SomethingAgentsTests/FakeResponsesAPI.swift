@@ -14,6 +14,8 @@ final class FakeResponsesAPI {
     private var count = 0
     /// Whether the chat completions call pi's tool (`bash`) rather than OpenCode's.
     var pi = false
+    /// The exec_command calls a "run-build" message plays, one per request, in order; then a closing text. Set by a trial.
+    var build: [[String: Any]] = []
     /// The command pi's run-wait tool call runs: a duration no other program uses, so a trial can tell it is gone.
     static let piWait = "sleep 30.25"
 
@@ -106,7 +108,7 @@ final class FakeResponsesAPI {
                     if let output { outputs.append(output) }
                     people.append((json["input"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "message" && $0["role"] as? String == "user" }.count)
                     count += 1
-                    return FakeResponsesAPI.reply(to: last, toolOutput: output)
+                    return building(json) ?? FakeResponsesAPI.reply(to: last, toolOutput: output)
                 }
                 guard stream(client, step, number: lock.withLock { count }) else { return }
                 continue
@@ -199,6 +201,15 @@ final class FakeResponsesAPI {
         }
         let done = "data: [DONE]\n\n"
         return send(client, "\(String(done.utf8.count, radix: 16))\r\n\(done)\r\n0\r\n\r\n")
+    }
+
+    /// The next step of `build` when the conversation is a "run-build" one: the step after the tool outputs so far.
+    private func building(_ body: [String: Any]) -> Step? {
+        let input = body["input"] as? [[String: Any]] ?? []
+        let texts = input.flatMap { $0["content"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }
+        guard !build.isEmpty, texts.contains(where: { $0.contains("run-build") }) else { return nil }
+        let done = input.filter { $0["type"] as? String == "function_call_output" }.count
+        return done < build.count ? .call(name: "exec_command", arguments: build[done]) : .message("Invented: the board is ready.", slow: false)
     }
 
     /// A chat message's text: a string, or the text parts of a list.

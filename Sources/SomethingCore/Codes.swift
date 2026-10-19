@@ -23,7 +23,7 @@ public enum Codes {
         "NO_HOST": Code("bridge", .error, "The page is not open in something.", "Open the space in something; a browser alone has no agents to give it."),
         "RIGHT_NOT_GRANTED": Code("bridge", .error, "The right was not declared, was refused, or was revoked.", "Declare the right, and read something.granted to hide what the person did not allow."),
         "AGENT_NOT_FOUND": Code("bridge", .error, "No such agent in this space's scope.", "Use an id from the latest state; agents come and go."),
-        "READ_ONLY_AGENT": Code("bridge", .error, "A write to an agent started elsewhere.", "Check can before writing; offer resume to continue this conversation here."),
+        "READ_ONLY_AGENT": Code("bridge", .error, "A write to an agent started elsewhere, or to the person's assistant.", "Check can before writing; offer resume to continue this conversation here."),
         "NOT_SUPPORTED": Code("bridge", .error, "This agent cannot do it (its can says false).", "Check can and because before the call, and hide what this agent cannot do."),
         "VALUE_NOT_OFFERED": Code("bridge", .error, "set with a value not in options, or the agent replied with a different value.", "Pick a value from the agent's options."),
         "AGENT_STOPPED": Code("bridge", .error, "The agent has ended.", "Launch or resume an agent to go on."),

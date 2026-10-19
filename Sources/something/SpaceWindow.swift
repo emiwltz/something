@@ -278,7 +278,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// is not sent again.
     func push() {
         guard blocked.isEmpty, let frame else { return }
-        let state = Rights.visible(engine.state, granted, launched: launched)
+        let state = Bridge.visible(self)
         var bare = state
         // `at` changes at every reading; only a change of what the space sees is worth a push.
         bare.at = ""

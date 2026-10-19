@@ -13,6 +13,8 @@ final class FakeMessagesAPI {
     private var efforts: [String?] = []
     private var results: [String] = []
     private var count = 0
+    /// The tool calls a "run-build" message plays, one per request, in order; then a closing text. Set by the trial.
+    var build: [(name: String, input: [String: Any])] = []
 
     /// What the script answers to the person's last words; tools only on the trigger words, so nothing else runs.
     static func reply(to last: String, toolResult: String?) -> [[String: Any]] {
@@ -96,7 +98,7 @@ final class FakeMessagesAPI {
             efforts.append(FakeMessagesAPI.effort(body))
             if let toolResult { results.append(toolResult) }
             count += 1
-            return FakeMessagesAPI.reply(to: last, toolResult: toolResult)
+            return building(body) ?? FakeMessagesAPI.reply(to: last, toolResult: toolResult)
         }
         let model = body["model"] as? String ?? "claude-example"
         if body["stream"] as? Bool != true {
@@ -126,6 +128,17 @@ final class FakeMessagesAPI {
         let stop = blocks.contains { $0["type"] as? String == "tool_use" } ? "tool_use" : "end_turn"
         event(client, "message_delta", ["type": "message_delta", "delta": ["stop_reason": stop, "stop_sequence": NSNull()], "usage": ["output_tokens": 6]])
         event(client, "message_stop", ["type": "message_stop"])
+    }
+
+    /// The next step of `build` when the conversation is a "run-build" one: the step after the tool results so far.
+    private func building(_ body: [String: Any]) -> [[String: Any]]? {
+        let messages = body["messages"] as? [[String: Any]] ?? []
+        let blocks = messages.filter { $0["role"] as? String == "user" }.flatMap { $0["content"] as? [[String: Any]] ?? [] }
+        let texts = messages.compactMap { $0["content"] as? String } + blocks.compactMap { $0["text"] as? String }
+        guard !build.isEmpty, texts.contains(where: { $0.contains("run-build") }) else { return nil }
+        let done = blocks.filter { $0["type"] as? String == "tool_result" }.count
+        guard done < build.count else { return [["type": "text", "text": "Invented: the board is ready."]] }
+        return [["type": "text", "text": "Invented: step \(done + 1)."], ["type": "tool_use", "name": build[done].name, "input": build[done].input]]
     }
 
     /// The person's last text in a request, and the text of a tool result when the last message carries one.

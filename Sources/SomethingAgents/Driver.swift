@@ -1,7 +1,8 @@
-// Driver: what every launched agent's driver is, and Launched, one agent something launched: its driver
-// and its held queue, joined. A driver is a pure function over lines: it reads the program's lines, writes lines
-// through the closure it is given, and emits events; it never touches an Agent, and no process is needed to replay it.
-// Launched is where the engine and the replays of Tests/Exchanges meet, so both run the same code.
+// Driver: what every launched agent's driver is, with what the person's windows show of a request and their answer
+// (Prompt, Answer), and Launched, one agent something launched: its driver and its held queue, joined. A driver is a
+// pure function over lines: it reads the program's lines, writes lines through the closure it is given, and emits
+// events; it never touches an Agent, and no process is needed to replay it. Launched is where the engine and the
+// replays of Tests/Exchanges meet, so both run the same code.
 import Foundation
 import SomethingCore
 
@@ -17,6 +18,9 @@ public struct Launch: Equatable, Sendable {
     public var thread: String
     /// Whether the launch continues the conversation `thread` instead of starting one.
     public var resume: Bool
+    /// Whether this is the person's assistant, launched by the app alone (Engine.launchAssistant), never by a space: its
+    /// driver lets it build spaces without asking, unless `askEverything`.
+    public var assistant = false, askEverything = false
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
                 thread: String = UUID().uuidString.lowercased(), resume: Bool = false) {
@@ -28,6 +32,34 @@ public struct Launch: Equatable, Sendable {
         self.thread = thread
         self.resume = resume
     }
+}
+
+/// What a native window shows for one request. Richer than the contract's `Request`, which a space sees: a space
+/// never answers a request, the person does.
+public struct Prompt: Equatable, Sendable {
+    public var request: Request
+    /// For a permission: what the agent wants to run or change, as it sent it (a command, a path, a diff).
+    public var input: String?
+    /// For a question: what the agent asks, in its order.
+    public var questions: [Question]
+
+    public init(request: Request, input: String? = nil, questions: [Question] = []) {
+        (self.request, self.input, self.questions) = (request, input, questions)
+    }
+}
+
+public struct Question: Equatable, Sendable {
+    public var header: String?, text: String, options: [String], multiple: Bool
+    public init(header: String?, text: String, options: [String], multiple: Bool) {
+        (self.header, self.text, self.options, self.multiple) = (header, text, options, multiple)
+    }
+}
+
+/// The person's answer to a request. Permissions are allowed once or denied, never always.
+public enum Answer: Equatable, Sendable {
+    case once, deny
+    /// For a question: the chosen labels (or the typed text) for each question, in its order.
+    case choice([[String]])
 }
 
 /// The program's arguments for a launch, and what the launch changes in the person's environment.

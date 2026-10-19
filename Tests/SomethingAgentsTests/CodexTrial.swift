@@ -27,15 +27,22 @@ import SomethingCore
     private let owner: Bool
 
     var home: URL { root.appendingPathComponent("codex") }
-    var work: URL { root.appendingPathComponent("work/shop") }
+    /// The folder Codex works in.
+    let work: URL
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
-    init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil) throws {
+    /// With `assistant`, its value for askEverything, Codex is the person's assistant, working in ~/something/spaces
+    /// with an invented `something` first in its PATH, whose `check` is this clone's real program (AssistantBuild),
+    /// and the person's own temporary folder, as the app gives it.
+    init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
+         assistant: Bool? = nil) throws {
         self.name = name
         owner = after == nil
         api = try after?.api ?? FakeResponsesAPI()
         root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("codex-trial-\(UUID().uuidString)")
-        let folders = [root.appendingPathComponent("codex"), root.appendingPathComponent("home"), root.appendingPathComponent("work/shop")]
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        work = assistant == nil ? root.appendingPathComponent("work/shop") : AssistantBuild.real(root).appendingPathComponent("home/something/spaces")
+        let folders = [root.appendingPathComponent("codex"), root.appendingPathComponent("home"), work]
         for folder in folders { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
         try """
             check_for_update_on_startup = false
@@ -53,9 +60,15 @@ import SomethingCore
 
             """.write(to: folders[0].appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
         let program = trialCodex!
-        let launch = Launch(agent: "codex-1", folder: folders[2].path, mode: mode, effort: effort, thread: thread ?? "", resume: thread != nil)
-        let environment = ["HOME": folders[1].path, "CODEX_HOME": folders[0].path, "TMPDIR": root.path,
+        var launch = Launch(agent: "codex-1", folder: folders[2].path, mode: mode, effort: effort, thread: thread ?? "", resume: thread != nil)
+        var environment = ["HOME": folders[1].path, "CODEX_HOME": folders[0].path, "TMPDIR": root.path,
                            "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "SOMETHING_TRIAL_KEY": "test-key"]
+        if let assistant {
+            (launch.assistant, launch.askEverything) = (true, assistant)
+            environment["PATH"] = try AssistantBuild.tools(in: root) + ":" + environment["PATH"]!
+            environment["TMPDIR"] = NSTemporaryDirectory()
+            environment["SOMETHING_TRIAL_PROGRAM"] = AssistantBuild.clonesProgram
+        }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
                       folder: folders[2].path, environment: environment)
         agent = try Engine.start(CodexDriver.self, launch, spawn, asked: { _ in false }, record: { [exchange] written, line in
@@ -293,6 +306,36 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         #expect((run.state.mode, run.state.effort) == ("never", "high"))
         #expect(run.api.modelsAsked.last == "other-model")
         #expect(run.api.effortsAsked.last == "high")
+        try await run.finish()
+    }
+
+    /// T-1 (plan A.2 #6): the standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
+    /// The number to meet is two windows at most. What a real model would also ask for: running again, outside the
+    /// sandbox, each `something check` that could not run inside it. The finding is written in the commit of slice S3.
+    @Test func theAssistantsStandardBuildInTheSandbox() async throws {
+        let run = try CodexRun("assistant-build", assistant: false)
+        defer { run.cleanup() }
+        run.api.build = AssistantBuild.codexSteps(tools: run.root.appendingPathComponent("tools").path)
+        try await run.until("the thread") { run.state.thread != nil }
+        _ = try run.send("Please run-build a board of my agents.")
+        var asked: [String] = []
+        try await run.until("the build", seconds: 180) {
+            if let request = run.request {
+                asked.append("\(request.tool ?? "?") \(request.about ?? "")")
+                _ = try? run.answer(.once)
+            }
+            return run.state.state == "idle" && run.items.contains { $0.author == "agent" && $0.text.contains("the board is ready") }
+        }
+        let outputs = run.api.toolOutputs
+        let blocked = outputs.suffix(AssistantBuild.checks.count).filter { $0.contains("NO_WINDOW_SERVER") }
+        print("T-1: \(asked.count) window(s) asked: \(asked); \(blocked.count) of \(AssistantBuild.checks.count) checks could not load the page in the sandbox.")
+        #expect(outputs.count == AssistantBuild.codexSteps(tools: "").count)
+        // Seen on 0.163.0: nothing asks, but the sandbox has no window server, so no check loads the page. A real model
+        // would ask to run each check again outside the sandbox: five windows, over the number (plan A.1: Codex is
+        // not offered as a builder in 0.2).
+        #expect(asked.isEmpty && blocked.count == AssistantBuild.checks.count, "T-1 changed: \(asked), \(outputs)")
+        let page = try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8)
+        #expect(page.contains("Invented three"), "the patches were applied in the sandbox")
         try await run.finish()
     }
 

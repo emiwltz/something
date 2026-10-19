@@ -24,16 +24,23 @@ final class Stopped: @unchecked Sendable { var done = false }
     var lines: [(written: Bool, line: String)] = []
     var asked = false
 
-    /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool.
-    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false) async throws {
+    /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool. With
+    /// `assistant`, its value for askEverything, Claude is the person's assistant, working in ~/something/spaces with
+    /// an invented `something` program first in its PATH (AssistantBuild).
+    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Bool? = nil) async throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
-        let home = root.appendingPathComponent("home"), work = root.appendingPathComponent("work/shop")
+        let home = root.appendingPathComponent("home")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        // The assistant's folder by its real path, as ~/something/spaces is: $TMPDIR itself is behind a link.
+        let work = assistant == nil ? root.appendingPathComponent("work/shop") : AssistantBuild.real(root).appendingPathComponent("home/something/spaces")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
         let program = trialClaude!
-        let launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
+        var launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
+        if let assistant { (launch.assistant, launch.askEverything) = (true, assistant) }
+        self.work = work
         var spool: PermissionSpool?
         var command = ClaudeDriver.command(launch)
         if planB {
@@ -44,13 +51,15 @@ final class Stopped: @unchecked Sendable { var done = false }
             spool = PermissionSpool(folder: root.appendingPathComponent("Application Support/spool/claude-trial-\(launch.thread)").path)
             command = ClaudeDriver.command(launch, hook: [hook, "hook", "permission", "--spool", spool!.folder])
         }
+        let tools = assistant == nil ? "" : try AssistantBuild.tools(in: root) + ":"
         var environment = ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
-                           "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
+                           "PATH": "\(tools)\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
                            "ANTHROPIC_BASE_URL": api.url, "ANTHROPIC_API_KEY": "test-key",
                            "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
                            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"]
         environment.merge(command.adding) { _, added in added }
-        spawn = Spawn(path: program, arguments: command.arguments + ["--tools", "Bash,Edit,Read,AskUserQuestion"], folder: work.path, environment: environment)
+        let allowed = assistant == nil ? "Bash,Edit,Read,AskUserQuestion" : "Bash,Edit,Write,Read"
+        spawn = Spawn(path: program, arguments: command.arguments + ["--tools", allowed], folder: work.path, environment: environment)
         var record: (Bool, Data) -> Void = { _, _ in }
         agent = try Engine.start(ClaudeDriver.self, launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
         record = { [weak self] written, line in
@@ -59,7 +68,25 @@ final class Stopped: @unchecked Sendable { var done = false }
     }
 
     let name: String
+    /// The folder Claude works in.
+    let work: URL
     var state: Agent { agent.agent }
+
+    /// Plays the standard build (AssistantBuild.steps) to its end, allowing once each request on the way, and
+    /// returns what was asked: each request's tool and what it named.
+    func build() async throws -> [String] {
+        api.build = AssistantBuild.steps(work.path)
+        _ = try agent.send("Please run-build a board of my agents.", when: "next")
+        var asked: [String] = []
+        try await until("the build", seconds: 120) {
+            if let request, let open = agent.prompt(request.id) {
+                asked.append("\(request.tool ?? "?") \(open.input ?? "")")
+                _ = try? agent.answer(request.id, .once)
+            }
+            return state.state == "idle" && items.contains { $0.author == "agent" && $0.text.contains("the board is ready") }
+        }
+        return asked
+    }
 
     func until(_ what: String, seconds: Double = 40, _ condition: () -> Bool) async throws {
         let end = Date().addingTimeInterval(seconds)
@@ -309,6 +336,29 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
         #expect(try run.agent.answer(try #require(run.request).id, .deny))
         try await run.until("the end of the turn") { run.state.state == "idle" && run.items.contains { $0.tool?.status == "failed" } }
         #expect(run.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "denied"))
+        try await run.finish()
+    }
+
+    /// T-2 (plan A.2 #6): the standard build of a space by the person's assistant asks the person at most once. Every
+    /// step ran, and the edits are in the page.
+    @Test func theAssistantsStandardBuildAsksAtMostOnce() async throws {
+        let run = try await ClaudeRun("assistant-build", assistant: false)
+        defer { run.cleanup() }
+        let asked = try await run.build()
+        #expect(asked.count <= 1, "asked: \(asked)")
+        #expect(run.items.filter { $0.kind == "tool" }.map(\.tool?.status) == Array(repeating: "done", count: AssistantBuild.count), "\(run.items.map(\.text))")
+        #expect(try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8).contains("Invented three"))
+        try await run.finish()
+    }
+
+    /// With Ask Before Every Change, the same build asks before each change and each of something's commands but
+    /// `ls`, which Claude Code itself takes as reading only.
+    @Test func askingBeforeEveryChangeAsksForEachStep() async throws {
+        let run = try await ClaudeRun("assistant-ask-everything", assistant: true)
+        defer { run.cleanup() }
+        let asked = try await run.build()
+        #expect(asked.count >= 9, "asked: \(asked)")
+        #expect(asked.filter { $0.hasPrefix("Edit ") }.count == 3, "asked: \(asked)")
         try await run.finish()
     }
 

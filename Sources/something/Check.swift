@@ -280,7 +280,7 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
                             + "it cannot be read, or it is a link to a file outside the space."))
                 return rendered
             }
-            if let frame, let data = try? Rights.visible(host.state, host.granted, launched: host.launched).json() {
+            if let frame, let data = try? Bridge.visible(host).json() {
                 SpaceWindow.push(data, in: web, frame: frame)
                 rendered.pushed = true
             }

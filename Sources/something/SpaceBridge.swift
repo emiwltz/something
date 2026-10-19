@@ -31,6 +31,8 @@ extension SpaceWindow: BridgeHost, WKScriptMessageHandlerWithReply {
 
     var state: State { engine.state }
 
+    var assistants: Set<String> { engine.assistants }
+
     var memory: Memory? { kept ? Memory(folder: places.data, space: space.name) : nil }
 
     func journal(_ line: JournalLine) {
