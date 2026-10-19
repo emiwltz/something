@@ -198,7 +198,7 @@ import SomethingCore
                   echo '{"type":"system","subtype":"init","cwd":"/Users/example/shop","session_id":"s1","model":"claude-example","permissionMode":"default"}'
                   echo '{"type":"control_request","request_id":"r-1","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"touch invented.txt"},"tool_use_id":"toolu_1"}}'
                   exec 0<&-
-                  sleep 3
+                  sleep 30
                   exit 0 ;;
               esac
             done
@@ -207,11 +207,12 @@ import SomethingCore
         let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
         try await until("the request") { !engine.state.requests.isEmpty }
-        // This line finds the input closed; the answer after it cannot be written.
-        _ = try? engine.deliver("Invented steer.", to: id, when: "now")
-        try await Task.sleep(nanoseconds: 300_000_000)
+        let request = engine.state.requests[0].id
+        // A line written now finds the input closed, and the next write throws: the answer cannot be written.
+        try await until("the input found closed") { (try? engine.deliver("Invented steer.", to: id, when: "now")) == nil }
+        #expect(engine.state.requests.map(\.id) == [request], "the request is still open")
         #expect(throws: CodedError("AGENT_STOPPED", "Claude Code did not receive your answer: it stopped listening.")) {
-            try engine.answer(engine.state.requests[0].id, .once)
+            try engine.answer(request, .once)
         }
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
