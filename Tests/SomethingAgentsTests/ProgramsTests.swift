@@ -179,7 +179,10 @@ func code(_ body: () throws -> Void) -> CodedError? {
         let deadline = Date().addingTimeInterval(2)
         while processExists(pid) && Date() < deadline { usleep(20_000) }
         #expect(!processExists(pid))
+        // The slow shell is kept a minute: the next look does not wait for it again.
+        let again = Date()
         let error = code { _ = try finder.find("codex") }
+        #expect(Date().timeIntervalSince(again) < 1)
         #expect(error?.code == "NOT_INSTALLED")
         #expect(error?.message.hasSuffix("start it from Terminal by typing: something") == true)
         // From a Terminal, the shell is not needed and what is not found is not there.

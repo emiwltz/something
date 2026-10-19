@@ -160,6 +160,64 @@ import SomethingCore
         }
     }
 
+    /// Ended launched agents leave the state: beyond the last 20 at once, and every one ten minutes after its end, so
+    /// that an app open all day does not push every agent it ever launched. The clock is the engine's, moved here.
+    @Test func endedAgentsLeaveTheState() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        var now = Date()
+        engine.clock = { now }
+        let ids = try (0..<21).map { _ in try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil) }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+        try await until("the ends") { engine.state.agents.allSatisfy { $0.alive == false } }
+        #expect(engine.state.agents.count == 20, "the first ended agent beyond the last 20 left")
+        now += Engine.endedKept - 1
+        engine.update()
+        #expect(engine.state.agents.count == 20)
+        now += 1
+        engine.update()
+        #expect(engine.state.agents.isEmpty && engine.state.threads.isEmpty)
+        #expect(throws: CodedError.self) { try engine.deliver("Late.", to: ids[0], when: "next") }
+    }
+
+    /// An answer the agent can no longer read is said, never lost in silence: the panel shows this sentence. The fake
+    /// asks a permission, then closes its input and stays; the next line written to it finds the input closed.
+    @Test func anAnswerThatCannotBeWrittenIsSaid() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        try #"""
+            #!/bin/sh
+            while IFS= read -r line; do
+              case "$line" in
+                *'"subtype":"initialize"'*)
+                  echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[]}}}' ;;
+                *'"type":"user"'*)
+                  echo '{"type":"system","subtype":"init","cwd":"/Users/example/shop","session_id":"s1","model":"claude-example","permissionMode":"default"}'
+                  echo '{"type":"control_request","request_id":"r-1","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"touch invented.txt"},"tool_use_id":"toolu_1"}}'
+                  exec 0<&-
+                  sleep 3
+                  exit 0 ;;
+              esac
+            done
+            """#.write(to: place.bin.appendingPathComponent("claude"), atomically: true, encoding: .utf8)
+        let engine = Engine.throwaway(place.environment)
+        let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
+        try await until("the request") { !engine.state.requests.isEmpty }
+        // This line finds the input closed; the answer after it cannot be written.
+        _ = try? engine.deliver("Invented steer.", to: id, when: "now")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(throws: CodedError("AGENT_STOPPED", "Claude Code did not receive your answer: it stopped listening.")) {
+            try engine.answer(engine.state.requests[0].id, .once)
+        }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+    }
+
     /// Codex through the engine: launched with its mode, a turn, its input closed at the stop, which ends it cleanly.
     @Test func aLaunchedCodexTalksAndStops() async throws {
         let place = try Place()

@@ -183,7 +183,7 @@ import SomethingCore
         #expect((try FileManager.default.attributesOfItem(atPath: folder)[.posixPermissions] as? Int) == 0o700)
         #expect(try FileManager.default.contentsOfDirectory(atPath: folder).contains { $0.hasSuffix(".ask.json") })
 
-        engine.answer(request.id, .once)
+        try engine.answer(request.id, .once)
         try await until("the tool to run") { tool(engine)?.tool?.status == "done" && engine.state.agents.first?.state == "idle" }
         #expect(tool(engine)?.decision == Decision(by: "person", outcome: "allowed"))
         #expect(place.decision?["behavior"] as? String == "allow")
@@ -200,7 +200,7 @@ import SomethingCore
         defer { place.remove() }
         let engine = place.engine(extra: ["FAKE_DENIED_FRAME": "1"])
         let (_, request) = try await ask(place, engine)
-        engine.answer(request.id, .deny)
+        try engine.answer(request.id, .deny)
         try await until("the tool to fail") { tool(engine)?.tool?.status == "failed" && engine.state.agents.first?.state == "idle" }
         #expect(tool(engine)?.decision == Decision(by: "person", outcome: "denied"))
         #expect(place.decision?["behavior"] as? String == "deny")
@@ -363,18 +363,18 @@ import SomethingCore
         #expect(engine.state.agents.first?.error == nil)
         #expect(try engine.deliver("Please run-echo now.", to: id, when: "next") == "started")
         try await until("the request") { !engine.state.requests.isEmpty }
-        engine.answer(engine.state.requests[0].id, .once)
+        try engine.answer(engine.state.requests[0].id, .once)
         try await until("the tool to run") { tool(engine)?.tool?.status == "done" }
         try await stop(engine)
     }
 
     @Test func wrongWords() {
-        #expect(PermissionHook.main(["hook", "permission"]) == 2)
-        #expect(PermissionHook.main(["hook", "permission", "--spool"]) == 2)
-        #expect(Trial.main(["try", "nope"]) == 2)
-        #expect(Trial.main(["try", "claude", "--bogus"]) == 2)
-        #expect(Trial.main(["claude", "--record"]) == 2, "the words begin with try")
-        #expect(PermissionHook.main(["permission", "--spool", "/Users/example/spool"]) == 2, "the words begin with hook permission")
+        #expect(SpoolHook.main(["hook", "permission"]) == 2)
+        #expect(SpoolHook.main(["hook", "permission", "--spool"]) == 2)
+        #expect(DeveloperTrial.main(["try", "nope"]) == 2)
+        #expect(DeveloperTrial.main(["try", "claude", "--bogus"]) == 2)
+        #expect(DeveloperTrial.main(["claude", "--record"]) == 2, "the words begin with try")
+        #expect(SpoolHook.main(["permission", "--spool", "/Users/example/spool"]) == 2, "the words begin with hook permission")
     }
 
     @Test func aRefusedInitializeFallsBackOnlyBeforeAnyMessage() throws {

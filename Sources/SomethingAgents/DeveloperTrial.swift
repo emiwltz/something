@@ -6,7 +6,7 @@
 import Foundation
 import SomethingCore
 
-enum DeveloperTrial {
+public enum DeveloperTrial {
     static let usage = """
         usage: something try <kind> [--record <file>] [--plan-b]
         Then type a message, or: /now <message> (steer), /interrupt, /allow, /deny, /answer <label>[; <label>…], /stop.
@@ -39,7 +39,7 @@ enum DeveloperTrial {
     }
 
     /// Returns the exit status: 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
-    static func main(_ arguments: [String]) -> Int32 {
+    public static func main(_ arguments: [String]) -> Int32 {
         let asked: Asked
         switch parse(arguments) {
         case .success(let words): asked = words
@@ -101,12 +101,12 @@ enum DeveloperTrial {
             case "/allow", "/deny":
                 guard let request else { print("No request is open."); break }
                 row(["answer": request, "with": line == "/allow" ? "once" : "deny"])
-                engine.answer(request, line == "/allow" ? .once : .deny)
+                try engine.answer(request, line == "/allow" ? .once : .deny)
             case _ where line.hasPrefix("/answer "):
                 guard let request else { print("No request is open."); break }
                 let chosen = line.dropFirst(8).split(separator: ";").map { [$0.trimmingCharacters(in: .whitespaces)] }
                 row(["answer": request, "with": chosen])
-                engine.answer(request, .choice(chosen))
+                try engine.answer(request, .choice(chosen))
             default:
                 let steer = line.hasPrefix("/now ")
                 let text = steer ? String(line.dropFirst(5)) : line

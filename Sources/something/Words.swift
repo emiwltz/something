@@ -72,7 +72,7 @@ enum Words {
     /// `at`, an ISO 8601 date, in local time: the hour alone today, with the day this year, with the year before.
     /// A date that does not read is shown as it is written.
     static func time(_ at: String, now: Date, calendar: Calendar, locale: Locale, clock: Locale) -> String {
-        guard let date = Words.iso.date(from: at) else { return at }
+        guard let date = iso8601.date(from: at) else { return at }
         // "j" is the hour as `clock` writes it: "a" in its pattern says it counts 12 hours.
         let twelve = DateFormatter.dateFormat(fromTemplate: "j", options: 0, locale: clock)?.contains("a") ?? false
         let hour = Words.formatter(twelve ? "hmma" : "HHmm", locale, calendar.timeZone).string(from: date)
@@ -81,7 +81,6 @@ enum Words {
         return Words.formatter(sameYear ? "MMMd" : "yMMMd", locale, calendar.timeZone).string(from: date) + " " + hour
     }
 
-    private static let iso = ISO8601DateFormatter()
     /// Made once each: the card draws up to 100 lines at each look at Home.
     private static var formatters: [String: DateFormatter] = [:]
 

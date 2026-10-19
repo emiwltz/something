@@ -97,8 +97,9 @@ navigation policy that cancels every page change outside the space. `window.open
 no port, listens on nothing and sends no telemetry.
 
 One gap is known: when you click with the mouse on a link that opens a new window (`target="_blank"`) inside a closed
-shadow root (a part of a page hidden from scripts outside it), WebKit looks up the link's server name and opens one
-connection to it before it refuses the window. No request is sent on it, but the server and the name lookup see that
+shadow root written in the page's HTML (a part of a page hidden from scripts outside it; a closed shadow root a script
+makes is opened by something, so its links are stopped like any other), WebKit looks up the link's server name and
+opens one connection to it before it refuses the window. No request is sent on it, but the server and the name lookup see that
 it happened, and the page chooses the name, so a page could put a few words in it. It takes your click on such a
 link; every other link you click, and every link a page's own script activates, is stopped before any connection.
 
@@ -222,7 +223,8 @@ Tests/                     the Swift suites, recorded exchanges with invented te
 
 ## Security
 
-something opens no port and listens on nothing; a space cannot reach the Internet, nor draw the windows that ask you.
+something opens no port and listens on nothing; a space cannot reach the Internet (except the gap described in
+[No network for spaces](#no-network-for-spaces)), nor draw the windows that ask you.
 The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A
 space is code your agent wrote: read what you open.
 

@@ -12,7 +12,8 @@ protocol PromptSource: AnyObject {
     var requests: [Request] { get }
     /// The details of an open request, or nil once it closed.
     func prompt(_ request: String) -> Prompt?
-    func answer(_ request: String, _ answer: Answer)
+    /// Throws, in words for the person, when the answer did not reach the agent.
+    func answer(_ request: String, _ answer: Answer) throws
 }
 
 extension Engine: PromptSource {
@@ -43,7 +44,7 @@ final class Panels {
         answered.formIntersection(open)
         waiting.removeAll { !open.contains($0) }
         waiting += open.filter { !waiting.contains($0) && !answered.contains($0) }
-        if let panel, !waiting.contains(panel.request.id) { dismiss() }
+        if let panel, !panel.told, !waiting.contains(panel.request.id) { dismiss() }
         while panel == nil, let first = waiting.first {
             guard let prompt = source.prompt(first) else {
                 waiting.removeFirst()
@@ -60,12 +61,16 @@ final class Panels {
         }
     }
 
+    /// Sends the answer. A lost one is said in the panel, which stays until the person puts it away: they believe
+    /// they answered. A panel that says so only goes away.
     private func decide(_ request: String, _ answer: Answer) {
-        source.answer(request, answer)
+        defer { refresh() }
         answered.insert(request)
         waiting.removeAll { $0 == request }
+        if panel?.told == false {
+            do { try source.answer(request, answer) } catch { return panel?.tell((error as? CodedError)?.message ?? error.localizedDescription) ?? () }
+        }
         dismiss()
-        refresh()
     }
 
     /// Puts the panel away. It is released only after the current event: a button of the panel may be the one
@@ -84,6 +89,8 @@ final class PromptPanel: NSPanel {
     let decide: (Answer) -> Void
     /// Set once the panel was put away, answered or withdrawn.
     private(set) var dismissed = false
+    /// Set once the panel says that the answer did not reach the agent.
+    private(set) var told = false
     /// For a question: the boxes of each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
 
@@ -149,6 +156,17 @@ final class PromptPanel: NSPanel {
         lines.addArrangedSubview(field)
         boxes.append(options)
         typed.append(field)
+    }
+
+    /// Says `sentence` in place of the request, with OK, which puts the panel away, as Escape does.
+    func tell(_ sentence: String) {
+        told = true
+        guard let lines = contentView as? NSStackView else { return }
+        lines.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let ok = NSButton(title: "OK", target: self, action: #selector(deny))
+        ok.keyEquivalent = "\r"
+        [PromptPanel.line(sentence), ok].forEach(lines.addArrangedSubview)
+        setContentSize(lines.fittingSize)
     }
 
     /// A label that wraps inside the panel's insets.

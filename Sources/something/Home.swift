@@ -97,20 +97,16 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     /// in Finder), and returns the grants file. A spaces folder that cannot be listed drops nothing.
     /// Throws a `SpaceError` when the grants file does not read or cannot be written.
     static func forgetGone(_ places: Places) throws -> AppFile {
-        var file = try AppFile.read(places.grants)
-        guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return file }
-        let gone = file.spaces.keys.filter { !there.contains($0) && !there.contains("\($0).html") }
-        guard !gone.isEmpty else { return file }
-        gone.forEach { file.spaces[$0] = nil }
-        try file.write(places.grants)
-        return file
+        try Grants(places.grants).update { file in
+            guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return }
+            file.spaces = file.spaces.filter { there.contains($0.key) || there.contains("\($0.key).html") }
+        }
     }
 
     /// Drops what the grants file kept for `name`: a new space of that name never inherits the answers a deleted
     /// one left. Throws a `SpaceError` when the grants file does not read or cannot be written.
     static func forget(_ name: String, in places: Places) throws {
-        var file = try AppFile.read(places.grants)
-        if file.spaces.removeValue(forKey: name) != nil { try file.write(places.grants) }
+        try Grants(places.grants).update { $0.spaces[name] = nil }
     }
 
     private static func reselect(_ list: NSTableView, _ spaces: [Space], _ name: String?) {
@@ -132,13 +128,7 @@ final class Home: NSObject, NSTableViewDataSource, NSTableViewDelegate, NSWindow
     /// Makes the selected space the one the app opens at its start.
     @objc func makeDefault() {
         guard let space = selected else { return }
-        do {
-            var file = try AppFile.read(places.grants)
-            file.default = space.name
-            try file.write(places.grants)
-        } catch {
-            ask.tell(error.sentence)
-        }
+        do { try Grants(places.grants).update { $0.default = space.name } } catch { ask.tell(error.sentence) }
         reload()
     }
 

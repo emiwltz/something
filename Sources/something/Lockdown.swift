@@ -44,8 +44,9 @@ enum Lockdown {
         """
 
     /// The guard cannot see a link the page's script activates where no event reaches the window: an element not in
-    /// the document, or inside a closed shadow root. In the page's own world, before its scripts, this makes such an
-    /// activation of a link outside the space do nothing. It keeps the functions it uses, so the page cannot change them.
+    /// the document, or inside a shadow root. In the page's own world, before its scripts, this makes such an
+    /// activation of a link outside the space do nothing, and makes every shadow root a script makes open, so that the
+    /// guard sees a link clicked inside one. It keeps the functions it uses, so the page cannot change them.
     static let activationScript = """
         (function () {
           const apply = Reflect.apply, Address = URL, get = (type, key) => Object.getOwnPropertyDescriptor(type.prototype, key).get;
@@ -53,6 +54,7 @@ enum Lockdown {
           const baseOf = get(Node, "baseURI"), eventType = get(Event, "type");
           const matches = Element.prototype.matches, attribute = Element.prototype.getAttribute;
           const click = HTMLElement.prototype.click, dispatch = EventTarget.prototype.dispatchEvent;
+          const attach = Element.prototype.attachShadow, assign = Object.assign;
           // Whether activating `node` would follow a link outside the space that the guard on the window cannot hear.
           function unseen(node) {
             let link = null, hidden = false;
@@ -73,6 +75,7 @@ enum Lockdown {
           }
           function isNode(value) { try { apply(typeOf, value, []); return true; } catch (error) { return false; } }
           HTMLElement.prototype.click = function () { if (!unseen(this)) apply(click, this, []); };
+          Element.prototype.attachShadow = function (init) { return apply(attach, this, [assign({}, init, { mode: "open" })]); };
           EventTarget.prototype.dispatchEvent = function (event) {
             if (apply(eventType, event, []) === "click" && isNode(this) && unseen(this)) return false;
             return apply(dispatch, this, [event]);

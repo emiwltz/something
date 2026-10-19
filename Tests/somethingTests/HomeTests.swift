@@ -402,12 +402,12 @@ import Testing
     @Test func theStartMakesItsFoldersAndChoosesWhatToShow() throws {
         let test = Home(prefix: "something-home-")
         defer { test.remove() }
-        try FirstRun.prepare(test.places)
+        #expect(try FirstRun.prepare(test.places), "the start that makes ~/something/data is the first")
         for folder in [test.places.spaces, test.places.data] {
             #expect(FileManager.default.fileExists(atPath: folder.path), "\(folder.path)")
             #expect(folder.path.hasPrefix(test.root.path))
         }
-        try FirstRun.prepare(test.places)
+        #expect(try FirstRun.prepare(test.places) == false)
         #expect(FirstRun.first(test.places) == nil, "no space: Home")
         try test.space("agents", page(nil, ""))
         #expect(FirstRun.first(test.places)?.name == "agents", "agents while it is the only space")
@@ -430,19 +430,16 @@ import Testing
         var file = AppFile()
         file.spaces["agents"] = answered(declared: ["state"], granted: ["state"])
         try file.write(test.places.grants)
-        try FirstRun.prepare(test.places)
+        #expect(try FirstRun.prepare(test.places))
         let problem = FirstRun.welcome(test.places, examples: test.root.appendingPathComponent("nowhere"))
         #expect(problem?.hasPrefix("The example agents is missing from ") == true, "\(problem ?? "nil")")
-        #expect(try AppFile.read(test.places.grants).welcomed == nil, "a welcome that failed is tried again")
         #expect(FirstRun.welcome(test.places, examples: Home.share.appendingPathComponent("examples")) == nil)
         let copy = test.places.spaces.appendingPathComponent("agents.html")
         #expect(try Data(contentsOf: copy) == Data(contentsOf: Home.share.appendingPathComponent("examples/agents.html")))
         #expect(try AppFile.read(test.places.grants).spaces["agents"] == nil, "the copy has no grant")
-        #expect(try AppFile.read(test.places.grants).welcomed == true)
         #expect(FirstRun.first(test.places)?.name == "agents")
         try FileManager.default.removeItem(at: copy)
-        #expect(FirstRun.welcome(test.places, examples: Home.share.appendingPathComponent("examples")) == nil)
-        #expect(!FileManager.default.fileExists(atPath: copy.path), "a person who removed agents does not get it back")
+        #expect(try FirstRun.prepare(test.places) == false, "a person who removed agents does not get it back: no welcome")
     }
 
     /// `something new`, run from a terminal before the app ever opened, makes the spaces folder: the app's own first
@@ -451,7 +448,7 @@ import Testing
         let test = Home(prefix: "something-home-")
         defer { test.remove() }
         _ = try Command.new("shop", folder: false, places: test.places, template: Home.share.appendingPathComponent("template.html"))
-        try FirstRun.prepare(test.places)
+        #expect(try FirstRun.prepare(test.places))
         #expect(FirstRun.welcome(test.places, examples: Home.share.appendingPathComponent("examples")) == nil)
         #expect(Spaces(root: test.places.spaces).list().map(\.name).sorted() == ["agents", "shop"])
     }

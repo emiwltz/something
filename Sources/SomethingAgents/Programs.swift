@@ -52,7 +52,8 @@ public final class Programs {
     private let lock = NSLock()
     /// The login shell's folders by `interactive`, kept once read, until `until`. A failed login read is tried again.
     /// An interactive shell that ended without the PATH ends so every time: that failure is kept. One that took too
-    /// long is kept a minute, so one look at every kind waits 3 s once, and a busy Mac is not believed for good.
+    /// long, login or interactive, is kept a minute, so one look at every kind waits 3 s once, and a busy Mac is not
+    /// believed for good.
     private var shellFolders: [Bool: (folders: [String]?, until: Date)] = [:]
     static let slowShellKept: TimeInterval = 60
 
@@ -190,7 +191,7 @@ public final class Programs {
         let until: Date? = switch read {
         case .path: .distantFuture
         case .ended: interactive ? .distantFuture : nil
-        case .slow: interactive ? Date().addingTimeInterval(Programs.slowShellKept) : nil
+        case .slow: Date().addingTimeInterval(Programs.slowShellKept)
         }
         if let until { lock.withLock { shellFolders[interactive] = (read.folders, until) } }
         return read.folders

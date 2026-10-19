@@ -3,7 +3,7 @@
 // the main run loop turned forever, stalls every test after it. The rule, for every file of Tests/:
 // - an Engine is made with `Engine.throwaway`, which finds programs on its environment's PATH only, never in the
 //   system's install folders (a test puts its fake programs on that PATH);
-// - `something try` (Trial.main, DeveloperTrial.main, the command's "try") is run only with words it refuses.
+// - `something try` (DeveloperTrial.main, the command's "try") is run only with words it refuses.
 // A live trial is a file whose suite is `.enabled(if: trial…)`; it starts the program its variable names.
 // Behind the scan, Spawn itself refuses under the tests any program that is not a fake (TestRunGuard).
 import Foundation

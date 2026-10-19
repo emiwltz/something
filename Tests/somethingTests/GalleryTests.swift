@@ -129,6 +129,9 @@ struct GalleryTests {
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
                                                  at: "2026-10-17T09:00:01Z"), input: "npm test -- --runInBand src/cart")
         try draw(try #require(PromptPanel(permission, who: who) { _ in }.contentView), "permission-panel" + suffix, fixture)
+        let lost = PromptPanel(permission, who: who) { _ in }
+        lost.tell("Claude Code did not receive your answer: it stopped listening.")
+        try draw(try #require(lost.contentView), "permission-panel-lost" + suffix, fixture)
         let question = Prompt(request: Request(id: "r2", agent: "a1", kind: "question", tool: nil, about: "Which test runner?",
                                                at: "2026-10-17T09:00:02Z"),
                               questions: [Question(header: "Runner", text: "Which test runner should the cart use?",

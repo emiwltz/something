@@ -17,7 +17,13 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     private(set) var window: NSWindow?
     private(set) var title: String
     private(set) var granted = Granted()
-    var launched: Set<String> = []
+    /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
+    /// (`Launches`): they run on whatever window is open, so a space closed and opened again still sees and drives them.
+    let launches: Launches
+    var launched: Set<String> {
+        get { launches.ids[space.name] ?? [] }
+        set { launches.ids[space.name] = newValue }
+    }
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
     var linkOpen = false, linksBlocked = false
@@ -41,8 +47,10 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
 
     /// A window for `space`, not yet shown. `share` is the folder of something.js; `rules` is Lockdown's rule list.
     /// Throws a `SpaceError` when something.js cannot be read: without it the space could not reach anything.
-    init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList) throws {
+    init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList,
+         launches: Launches = Launches()) throws {
         bridge = try SpaceWindow.bridge(share)
+        self.launches = launches
         self.space = space
         self.places = places
         self.engine = engine
@@ -190,7 +198,7 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
         var grant = held
         if kept {
-            do { grant = try AppFile.read(places.grants).spaces[space.name] } catch {
+            do { grant = try Grants(places.grants).read().spaces[space.name] } catch {
                 return ask.tell(error.sentence)
             }
         }
@@ -204,26 +212,31 @@ final class SpaceWindow: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptM
     /// answers for a space of the spaces folder are kept in the grants file, by its name. nil when nothing was ever
     /// answered or the file cannot be read.
     func answer(_ declaration: Declaration) -> Grant? {
-        var file = AppFile()
+        let grants = Grants(places.grants)
+        var grant = held
         if kept {
-            do { file = try AppFile.read(places.grants) } catch {
+            do { grant = try grants.read().spaces[space.name] } catch {
                 ask.tell(error.sentence)
                 return nil
             }
         }
-        var grant = kept ? file.spaces[space.name] : held
         let toAsk = Rights.toAsk(declaration, since: grant)
         guard !toAsk.isEmpty, let answer = ask.rights(question(declaration, toAsk, grant)) else { return grant }
-        grant = Rights.answered(declaration, allowed: answer.allowed, refused: answer.refused, folder: answer.folder,
-                                at: ISO8601DateFormatter().string(from: Date()), after: grant)
-        grant?.remap.merge(answer.remap) { $1 }
-        guard kept else {
-            held = grant
-            return grant
+        // Applied to the grant as the file holds it after the window, so that a change made meanwhile stays.
+        func answered(_ before: Grant?) -> Grant {
+            var next = Rights.answered(declaration, allowed: answer.allowed, refused: answer.refused, folder: answer.folder,
+                                       at: iso8601.string(from: Date()), after: before)
+            next.remap.merge(answer.remap) { $1 }
+            return next
         }
-        file.spaces[space.name] = grant
-        do { try file.write(places.grants) } catch { ask.tell(error.sentence) }
-        return grant
+        guard kept else {
+            held = answered(held)
+            return held
+        }
+        do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {
+            ask.tell(error.sentence)
+            return answered(grant)
+        }
     }
 
     /// What the rights window shows: the rights never answered, the scope when it is new or wider, the scope folders

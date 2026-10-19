@@ -11,9 +11,14 @@ import Testing
 final class FakePrompts: PromptSource {
     var prompts: [Prompt] = []
     var answers: [(String, Answer)] = []
+    /// What `answer` throws, as the Engine does when the agent stopped reading.
+    var lost: CodedError?
     var requests: [Request] { prompts.map(\.request) }
     func prompt(_ request: String) -> Prompt? { prompts.first { $0.request.id == request } }
-    func answer(_ request: String, _ answer: Answer) { answers.append((request, answer)) }
+    func answer(_ request: String, _ answer: Answer) throws {
+        answers.append((request, answer))
+        if let lost { throw lost }
+    }
 
     func permission(_ id: String, about: String) -> Prompt {
         Prompt(request: Request(id: id, agent: "a1", kind: "permission", tool: "Bash", about: about, at: "2026-10-17T09:00:01Z"),
@@ -47,6 +52,27 @@ final class FakePrompts: PromptSource {
         try #require(panels.panel).cancelOperation(nil)
         #expect(source.answers.map(\.0) == ["r1", "r2"] && source.answers[1].1 == .deny)
         #expect(panels.panel == nil)
+    }
+
+    /// An answer the agent no longer reads is said in the panel, which stays, even once the request left the state,
+    /// until the person puts it away; then the next request has its panel.
+    @Test func aLostAnswerIsSaidInThePanel() throws {
+        let source = FakePrompts()
+        let panels = Panels(source: source, shows: false)
+        source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "git push")]
+        source.lost = CodedError("AGENT_STOPPED", "Claude Code did not receive your answer: it stopped listening.")
+        panels.refresh()
+        let first = try #require(panels.panel)
+        first.allow()
+        let texts = (first.contentView?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
+        #expect(texts == ["Claude Code did not receive your answer: it stopped listening."])
+        #expect(first.told && !first.dismissed && panels.panel === first)
+        source.prompts.removeFirst()
+        panels.refresh()
+        #expect(panels.panel === first && !first.dismissed, "the sentence stays when the request leaves the state")
+        first.cancelOperation(nil)
+        #expect(first.dismissed && source.answers.count == 1, "putting it away answers nothing")
+        #expect(panels.panel?.request.id == "r2")
     }
 
     @Test func aWithdrawnRequestClosesItsPanel() throws {

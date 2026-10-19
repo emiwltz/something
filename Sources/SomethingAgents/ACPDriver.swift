@@ -297,7 +297,7 @@ public final class ACPDriver: Driver {
     /// What a turn streamed belongs to it: a tool cut by its end never finishes, and the next turn names new
     /// messages and tool calls.
     private func forgetTurn() {
-        for (id, var item) in tools {
+        for var item in tools.values {
             item.tool?.status = nil
             emit(.itemUpdated(item))
         }

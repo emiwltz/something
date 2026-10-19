@@ -55,7 +55,7 @@ final class FakeDoor: Door {
             ["check", "a", "--refuse", "--json"], ["check", "a", "--fast"],
         ]
         #expect(Command.parse(["morning-review"]) == .wrong(
-            "something does not know \"morning-review\": to open the space morning-review, type something open morning-review, and type something --help to see what it does."))
+            "something does not know \"morning-review\". Type something --help to see what it does."))
         for words in wrong {
             guard case .wrong(let sentence) = Command.parse(words) else {
                 Issue.record("\(words) was not refused")

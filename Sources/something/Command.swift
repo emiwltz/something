@@ -51,9 +51,6 @@ enum Command: Equatable {
         case "check": return Check.parse(rest)
         case "hook" where rest.first == "permission": return .hook(words)
         case "try": return .trial(words)
-        // `something <name>` was how a space opened before 1.0.
-        case let name where rest.isEmpty && Spaces.isName(name):
-            return .wrong("something does not know \"\(name)\": to open the space \(name), type something open \(name), and type something --help to see what it does.")
         default: return .wrong("something does not know \"\(words.joined(separator: " "))\". Type something --help to see what it does.")
         }
     }
@@ -124,9 +121,9 @@ enum Command: Equatable {
         case .check(let check):
             return check.main(places: places, share: share, say: say)
         case .hook(let words):
-            return PermissionHook.main(words)
+            return SpoolHook.main(words)
         case .trial(let words):
-            return Trial.main(words)
+            return DeveloperTrial.main(words)
         case .wrong(let sentence):
             say(sentence + "\n\n" + Command.usage, true)
             return 2

@@ -124,6 +124,35 @@ struct RightsTests {
         #expect(throws: SpaceError.self) { try AppFile.read(url) }
     }
 
+    /// Two writers at once, as the app and `something new` in a terminal: 200 updates from two threads, each update on
+    /// a file descriptor of its own (a lock belongs to an open file, so this is what two processes do), and no change
+    /// is lost. An update that changes nothing writes nothing.
+    @Test func concurrentUpdatesOfTheGrantsLoseNothing() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("grants-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let grants = Grants(folder.appendingPathComponent("something/app.json"))
+        let asked = Asked(declaration([])), failures = NSLock()
+        var failed: [String] = []
+        DispatchQueue.concurrentPerform(iterations: 2) { thread in
+            for index in 0..<100 {
+                do {
+                    try grants.update { file in
+                        file.spaces["space-\(thread)-\(index)"] = Grant(declared: asked, at: "2026-10-17T09:00:00Z")
+                    }
+                } catch { failures.withLock { failed.append("\(error)") } }
+            }
+        }
+        #expect(failed.isEmpty, "\(failed)")
+        #expect(try grants.read().spaces.count == 200)
+        let written = try FileManager.default.attributesOfItem(atPath: grants.url.path)[.modificationDate] as? Date
+        try grants.update { _ in }
+        #expect(try FileManager.default.attributesOfItem(atPath: grants.url.path)[.modificationDate] as? Date == written)
+        // A file that does not read is never replaced by an update.
+        try Data("{".utf8).write(to: grants.url)
+        #expect(throws: SpaceError.self) { try grants.update { $0.default = "agents" } }
+        #expect(try Data(contentsOf: grants.url) == Data("{".utf8))
+    }
+
     @Test func aScopeFolderNotOnThisMacIsReplacedByTheOneThePersonChose() {
         var reading = DeclarationReading()
         reading.declaration = declaration(["state"], agents: .folders(["~/code/shop", "~/code/blog"]))

@@ -27,8 +27,6 @@ public struct Asked: Codable, Equatable, Sendable {
 public struct AppFile: Codable, Equatable, Sendable {
     public var app = 1
     public var `default`: String?
-    /// Whether the app has made its first-start copy of the agents example: only the app writes it.
-    public var welcomed: Bool?
     public var spaces: [String: Grant] = [:]
     public init() {}
     /// The file at `url`, or an empty one when it does not exist yet. Throws a `SpaceError` when it is there but does
@@ -50,6 +48,36 @@ public struct AppFile: Codable, Equatable, Sendable {
         } catch {
             throw SpaceError("The grants could not be written to \(url.path): \(error.localizedDescription)")
         }
+    }
+}
+
+/// The grants file's one owner: every change, in the app as in the command, is a read, a change and a write under an
+/// exclusive lock on app.json.lock, so `something new` in a terminal and a rights window in the app never undo each
+/// other. The lock is taken on a file descriptor of its own at each update, so two threads exclude each other as two
+/// processes do. It is never held while the person is asked.
+public struct Grants: Sendable {
+    public let url: URL
+    public init(_ url: URL) { self.url = url }
+
+    /// The file as it is now. Throws as `AppFile.read`.
+    public func read() throws -> AppFile { try AppFile.read(url) }
+
+    /// Reads the file, applies `change`, and writes it when it changed; returns the file as it is after. Throws a
+    /// `SpaceError` when the lock cannot be taken, as `AppFile.read` and `write` do, or what `change` throws.
+    @discardableResult
+    public func update(_ change: (inout AppFile) throws -> Void) throws -> AppFile {
+        let lock = url.appendingPathExtension("lock").path
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let held = open(lock, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        guard held >= 0 else { throw SpaceError("The grants cannot be changed: \(lock) cannot be opened (\(String(cString: strerror(errno)))).") }
+        // Closing the descriptor releases the lock, whatever happens below.
+        defer { close(held) }
+        guard flock(held, LOCK_EX) == 0 else { throw SpaceError("The grants cannot be changed: \(lock) cannot be locked.") }
+        var file = try AppFile.read(url)
+        let before = file
+        try change(&file)
+        if file != before { try file.write(url) }
+        return file
     }
 }
 

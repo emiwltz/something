@@ -14,6 +14,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let ask = NativeAsk()
     /// The open space. One at a time: opening another closes it.
     var current: SpaceWindow?
+    let launches = Launches()
     lazy var home = Home(places: places, share: Resources.share, ask: ask)
     lazy var panels = Panels(source: engine)
     var statusItem: NSStatusItem?
@@ -48,8 +49,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
             do {
-                try FirstRun.prepare(places)
-                if let problem = FirstRun.welcome(places, examples: home.examples) { ask.tell(problem) }
+                if try FirstRun.prepare(places), let problem = FirstRun.welcome(places, examples: home.examples) { ask.tell(problem) }
             } catch { fail(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             home.forgetGone()
@@ -102,7 +102,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         guard let rules else { return "something is still starting; try again in a moment." }
         do {
-            let window = try SpaceWindow(space: space, places: places, engine: engine, ask: ask, share: Resources.share, rules: rules)
+            let window = try SpaceWindow(space: space, places: places, engine: engine, ask: ask, share: Resources.share, rules: rules,
+                                         launches: launches)
             // Closing its window closes the space; a space whose window was never shown is closed directly.
             if let shown = current?.window {
                 shown.close()
@@ -217,4 +218,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ask.tell(message)
         exit(1)
     }
+}
+
+/// The agents each space launched or resumed, by space name, for the app's whole life: an agent outlives the window
+/// of the space that launched it, and that space, opened again, still sees and drives it.
+final class Launches {
+    var ids: [String: Set<String>] = [:]
 }

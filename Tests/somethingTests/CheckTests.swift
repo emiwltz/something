@@ -317,6 +317,22 @@ extension Home {
         return runner
     }
 
+    /// Each check removes the snapshots older than a day, whatever space they were of; newer ones stay.
+    @Test func aCheckRemovesTheSnapshotsOfMoreThanADay() async throws {
+        let home = Home(prefix: "something-check-")
+        defer { home.remove() }
+        try home.space("x", declared(""))
+        let runner = runner(home)
+        runner.windowServer = false
+        try FileManager.default.createDirectory(at: runner.output, withIntermediateDirectories: true)
+        let old = runner.output.appendingPathComponent("gone.png"), recent = runner.output.appendingPathComponent("kept.png")
+        for file in [old, recent] { try Data("invented".utf8).write(to: file) }
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-86_500)], ofItemAtPath: old.path)
+        _ = try await runner.run(Check(space: "x"))
+        #expect(!FileManager.default.fileExists(atPath: old.path))
+        #expect(FileManager.default.fileExists(atPath: recent.path))
+    }
+
     /// In an agent's sandbox there is no window server: the static checks run, the page does not, and the check says so.
     @Test func withoutAWindowServerOnlyTheStaticChecksRun() async throws {
         let home = Home(prefix: "something-check-")

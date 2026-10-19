@@ -53,7 +53,7 @@ public enum Bridge {
             line.result = coded.code
         }
         if writes.contains(method) {
-            host.journal(JournalLine(at: ISO8601DateFormatter().string(from: Date()), action: method, agent: line.agent, kind: line.kind,
+            host.journal(JournalLine(at: iso8601.string(from: Date()), action: method, agent: line.agent, kind: line.kind,
                                      when: line.when, text: line.text, result: line.result))
         }
         return answer

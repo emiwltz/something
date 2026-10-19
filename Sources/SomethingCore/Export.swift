@@ -42,7 +42,7 @@ public enum Export {
             guard let bytes = try? Data(contentsOf: file.url) else { throw SpaceError("\(file.url.path) cannot be read, so \(space.name) was not exported.") }
             encoded[file.path] = bytes.base64EncodedString()
         }
-        let object: [String: Any] = ["format": format, "contract": Declaration.declared(in: space).contract, "exported": ISO8601DateFormatter().string(from: at),
+        let object: [String: Any] = ["format": format, "contract": Declaration.declared(in: space).contract, "exported": iso8601.string(from: at),
                                      "app": app, "name": space.name, "form": space.form.rawValue, "files": encoded,
                                      "data": data.map { $0 as Any } ?? NSNull()]
         guard JSONSerialization.isValidJSONObject(object) else { throw SpaceError("The memory of \(space.name) is not JSON; it cannot be exported.") }

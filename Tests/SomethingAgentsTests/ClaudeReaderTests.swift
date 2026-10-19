@@ -129,7 +129,9 @@ final class ClaudeHome {
         _ = home.read()
         // The shop's Claude exits normally (its record goes); the blog's dies (its record stays behind).
         try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
-        let reading = home.read(ClaudeHome.snapshot(shop: false, blog: false))
+        // Read at the fixture's own time: its conversations ended on 17 October 2026, and an ended one is listed a day.
+        let then = Date(timeIntervalSince1970: 1_792_227_610)
+        let reading = home.read(ClaudeHome.snapshot(shop: false, blog: false), now: then)
         let sightings = Dictionary(uniqueKeysWithValues: reading.sightings.map { ($0.key, $0) })
         let shop = try #require(sightings[ClaudeHome.shop]), blog = try #require(sightings[ClaudeHome.blog])
         #expect(shop.facts.alive == false && shop.facts.ended && StateMap.map(shop.facts, now: Date()).state == "done")

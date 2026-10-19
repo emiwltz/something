@@ -32,6 +32,10 @@ public enum Limits {
     public static let turns = 10, items = 50, characters = 4_000
 }
 
+/// How the contract, the journal and the grants write a time: ISO 8601 in UTC, to the second. One formatter for every
+/// caller, on any thread: making one is slow, and the state is stamped at each change.
+public let iso8601 = ISO8601DateFormatter()
+
 public struct State: Codable, Equatable, Sendable, EveryKey {
     public var contract = 1
     public var at: String

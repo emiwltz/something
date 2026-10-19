@@ -141,8 +141,8 @@ import WebKit
         #expect(try await run(window, "return window.own") as? [Bool] == [true, true], "the space's own loads failed")
         #expect(try await run(window, "return window.evaluated") as? Bool == false, "eval is refused, as the guide says")
         #expect(try await run(window, "return window.declaredClicked") as? Bool == true, "the declarative shadow root's script ran")
-        // Real clicks of the mouse, sent to the view of a window that is never shown: on a link of the page, and on
-        // links inside closed shadow roots, where no script of something can see them.
+        // Real clicks of the mouse, sent to the view of a window that is never shown: on a link of the page, and on a
+        // link inside a shadow root the page made closed.
         let offscreen = Offscreen(window.web)
         for x in [50.0, 400] {
             try offscreen.click(x: x, y: 590)
@@ -151,35 +151,67 @@ import WebKit
         await wait(3)
         #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
         #expect(listener.hits.count == 1, "reached: \(listener.hits.dropFirst().joined(separator: " | "))")
-        // A clicked link goes to the link window instead, which the person cancelled here.
-        #expect(ask.links.map(\.path) == ["/link", "/blank", "/dispatched", "/area", "/svg", "/top-link", "/parent-link", "/real-click"])
+        // A clicked link goes to the link window instead, which the person cancelled here, one in a closed shadow root
+        // included: a script's shadow root is open to something's guard.
+        #expect(ask.links.map(\.path) == ["/link", "/blank", "/dispatched", "/area", "/svg", "/top-link", "/parent-link", "/real-click",
+                                         "/real-shadow"])
         #expect(window.web.url == Scheme.shell, "the app's page is still the main frame")
         #expect(try await run(window, "return location.origin + location.pathname") as? String == "something://space/lockdown.html")
     }
 
-    /// The one gap left (README, "Security"): a real click on a link that opens a new window (target="_blank") inside a
-    /// closed shadow root, where no script of something sees it, makes WebKit open one connection to the link's server
+    /// A shadow root a script makes is open whatever the page asked (Lockdown.activationScript), so a real click on a
+    /// link inside one goes to the link window, new-window links included, and nothing reaches the network. The gap
+    /// left (README, "No network for spaces"): a closed shadow root written in the HTML itself, which no script makes,
+    /// where a real click on a new-window link (target="_blank") makes WebKit open one connection to the link's server
     /// before the sandbox refuses the window. Marked as known: when WebKit stops doing it, Swift Testing reports that
     /// the known issue was not recorded, and this test and the README's paragraph are updated.
-    @Test func theKnownGap() async throws {
-        let home = Home(prefix: "something-window-"), listener = try Listener()
+    @Test func aLinkInAShadowRootGoesToTheLinkWindow() async throws {
+        let home = Home(prefix: "something-window-"), listener = try Listener(), ask = FakeAsk()
         defer { home.remove(); listener.stop() }
+        let base = "http://127.0.0.1:\(listener.port)"
         let window = try await home.window(try home.space("gap", page(nil, """
-            <div id="host" style="position: fixed; inset: 0"></div>
+            <div id="host" style="position: fixed; left: 0; top: 0; width: 450px; height: 640px"></div>
+            <div><template shadowrootmode="closed">
+              <a target="_blank" href="\(base)/declared" style="position: fixed; left: 450px; top: 0; width: 450px; height: 640px">gap</a>
+            </template></div>
             <script>
-              document.getElementById("host").attachShadow({ mode: "closed" }).innerHTML =
-                `<a target="_blank" href="http://127.0.0.1:\(listener.port)/gap" style="position: fixed; inset: 0">gap</a>`;
+              const root = document.getElementById("host").attachShadow({ mode: "closed" });
+              root.innerHTML = `<a target="_blank" href="\(base)/scripted" style="position: fixed; left: 0; top: 0; width: 450px; height: 640px">x</a>`;
               window.done = true;
             </script>
-            """)))
+            """)), ask)
         defer { window.close() }
         window.open()
         try await ready(window)
-        try Offscreen(window.web).click(x: 450, y: 320)
+        let offscreen = Offscreen(window.web)
+        try offscreen.click(x: 200, y: 320)
         await wait(3)
-        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root") {
+        #expect(ask.links.map(\.path) == ["/scripted"])
+        #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
+        try offscreen.click(x: 650, y: 320)
+        await wait(3)
+        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root of the HTML") {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
+    }
+
+    /// The agents a space launched outlive its window: the app keeps them by the space's name, so that the space,
+    /// closed and opened again, still sees and drives them, and another space does not.
+    @Test func launchedAgentsOutliveTheWindow() async throws {
+        let home = Home(prefix: "something-window-"), launches = Launches(), rules = try await Lockdown.ruleList()
+        defer { home.remove() }
+        let board = try home.space("board", page(nil, "")), other = try home.space("other", page(nil, ""))
+        func window(_ space: Space) throws -> SpaceWindow {
+            try SpaceWindow(space: space, places: home.places, engine: home.engine(), ask: FakeAsk(), share: Home.share, rules: rules,
+                            launches: launches)
+        }
+        let first = try window(board)
+        first.launched.insert("claude-1")
+        first.close()
+        let again = try window(board), elsewhere = try window(other)
+        defer { again.close(); elsewhere.close() }
+        #expect(again.launched == ["claude-1"])
+        #expect(elsewhere.launched.isEmpty)
     }
 
     /// Every space has the same origin, something://space, so each window has its own data store. Two spaces open at

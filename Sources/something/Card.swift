@@ -52,7 +52,7 @@ final class Card: NSObject {
         notes = kinds().sorted { $0.key < $1.key }.compactMap { kind, about in about.note.map { "\(Programs.name(of: kind)): \($0)" } }
         if let space {
             do {
-                let grant = try AppFile.read(places.grants).spaces[space.name]
+                let grant = try Grants(places.grants).read().spaces[space.name]
                 if let grant { rights = Card.standings(Declaration.read(space, home: places.home), grant, home: places.home) }
                 folder = grant?.folder
             } catch {
@@ -99,7 +99,7 @@ final class Card: NSObject {
             next.granted += keptAllowed.filter { !next.granted.contains($0) }
             next.refused += keptRefused.filter { !next.refused.contains($0) }
             if allowed { next.granted.append(right) } else { next.refused.append(right) }
-            next.at = ISO8601DateFormatter().string(from: Date())
+            next.at = iso8601.string(from: Date())
             grant = next
         }
         if let space { window(space.name)?.regrant() }
@@ -117,13 +117,7 @@ final class Card: NSObject {
     /// Changes the space's grant in the grants file, then shows the card again; says a failure.
     private func change(_ edit: (inout Grant?) -> Void) {
         guard let space else { return }
-        do {
-            var file = try AppFile.read(places.grants)
-            edit(&file.spaces[space.name])
-            try file.write(places.grants)
-        } catch {
-            ask.tell(error.sentence)
-        }
+        do { try Grants(places.grants).update { edit(&$0.spaces[space.name]) } } catch { ask.tell(error.sentence) }
         show(space)
     }
 

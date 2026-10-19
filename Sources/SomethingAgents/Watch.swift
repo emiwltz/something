@@ -217,5 +217,5 @@ final class Watch {
         }
     }
 
-    static func iso(_ date: Date) -> String { ISO8601DateFormatter().string(from: date) }
+    static func iso(_ date: Date) -> String { iso8601.string(from: date) }
 }

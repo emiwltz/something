@@ -68,12 +68,22 @@ final class CheckRunner {
     /// when a --refuse word names no right the space declares, as wrong words of the command.
     func run(_ check: Check) async throws -> Report {
         let start = Date()
+        CheckRunner.prune(output, before: start.addingTimeInterval(-86_400))
         var report = try await checked(check)
         // Fatal problems first, then errors, warnings and information, each in the order it was found.
         let order: [Level] = [.fatal, .error, .warning, .info]
         report.problems = order.flatMap { level in report.problems.filter { $0.level == level } }
         report.ms = Int(Date().timeIntervalSince(start) * 1000)
         return report
+    }
+
+    /// Removes what `folder` holds from before `date`: nothing else removes the snapshot each check leaves there.
+    static func prune(_ folder: URL, before date: Date) {
+        let key = URLResourceKey.contentModificationDateKey
+        for file in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [key])) ?? []
+        where ((try? file.resourceValues(forKeys: [key]))?.contentModificationDate ?? date) < date {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     private func checked(_ check: Check) async throws -> Report {

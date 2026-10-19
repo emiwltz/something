@@ -38,6 +38,9 @@ public final class Engine {
     /// Called on the main queue when the state changed. The app decides how often it pushes.
     public var changed: () -> Void = {}
 
+    /// The whole state, before any space's scope is applied: made once at each change, read many times a second.
+    public private(set) lazy var state = made()
+
     /// `environment` is the one agents are started in: the terminal's when something was started from one,
     /// otherwise the app's own, and Programs then reads the login shell's PATH.
     public init(environment: [String: String]) {
@@ -68,6 +71,12 @@ public final class Engine {
     /// The agents whose stop something asked for: their end is no failure.
     private var stopping: Set<String> = []
     private var count = 0
+    /// The launched agents seen ended, in that order: each leaves the state `endedKept` seconds after its end, and only
+    /// the last `endedMost` stay until then, so that an app open all day does not push every agent it ever launched.
+    private var ended: [(id: String, at: Date)] = []
+    static let endedKept: TimeInterval = 600, endedMost = 20
+    /// The clock of those ends; a test moves it.
+    var clock: () -> Date = Date.init
 
     /// The agents started elsewhere: the readers, on their timer once `start` was called.
     lazy var watch = Watch(readers: Watch.readers(environment))
@@ -84,12 +93,18 @@ public final class Engine {
         // Reading the login shell can take 3 s: never on the main queue.
         lookups.async { [self] in
             let found = Dictionary(uniqueKeysWithValues: Programs.kinds.compactMap { kind in programs.installed(kind).map { (kind, $0) } })
-            DispatchQueue.main.async { [self] in installed = found; changed() }
+            DispatchQueue.main.async { [self] in installed = found; update() }
         }
     }
 
-    /// The whole state, before any space's scope is applied.
-    public var state: State {
+    /// Forgets the ended agents whose time is over, makes the state again and tells the app.
+    func update() {
+        forgetEnded()
+        state = made()
+        changed()
+    }
+
+    private func made() -> State {
         let kinds = Programs.kinds.map { kind in
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
@@ -114,7 +129,24 @@ public final class Engine {
         let before = elsewhere, kinds = self.seen.kinds
         self.seen = seen
         let after = elsewhere
-        if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { changed() }
+        if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { update() }
+    }
+
+    /// Drops from the state the launched agents ended `endedKept` seconds ago, and the ended ones beyond the last
+    /// `endedMost`. Their conversations, when a reader sees them, are then shown as seen elsewhere.
+    private func forgetEnded() {
+        let now = clock()
+        for entry in launched where entry.agent.agent.alive == false && !ended.contains(where: { $0.id == entry.agent.agent.id }) {
+            ended.append((entry.agent.agent.id, now))
+            // No other change may come by then: the state is made again when this one's time is over.
+            DispatchQueue.main.asyncAfter(deadline: .now() + Engine.endedKept) { [weak self] in self?.update() }
+        }
+        let gone = Set(ended.enumerated().filter { $0.offset < ended.count - Engine.endedMost
+            || now.timeIntervalSince($0.element.at) >= Engine.endedKept }.map(\.element.id))
+        guard !gone.isEmpty else { return }
+        launched.removeAll { gone.contains($0.agent.agent.id) }
+        stopping.subtract(gone)
+        ended.removeAll { gone.contains($0.id) }
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without
@@ -169,10 +201,12 @@ public final class Engine {
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }
 
     /// The person's answer, from a native window. A request that closed meanwhile is left as it is, and so is one
-    /// the answer does not fit (its window stays open).
-    public func answer(_ request: String, _ answer: Answer) {
+    /// the answer does not fit. Throws AGENT_STOPPED, in words for the person, when the agent no longer reads.
+    public func answer(_ request: String, _ answer: Answer) throws {
         guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return }
-        _ = try? agent.answer(request, answer)
+        do { _ = try agent.answer(request, answer) } catch {
+            throw CodedError("AGENT_STOPPED", "\(Programs.name(of: agent.agent.kind)) did not receive your answer: it stopped listening.")
+        }
     }
 
     // What a space asks through the bridge (SomethingCore/Bridge.swift checked the call first). Each throws a
@@ -193,7 +227,7 @@ public final class Engine {
     /// Returns "now" or "next-turn". Throws AGENT_NOT_FOUND, AGENT_STOPPED, NOT_SUPPORTED.
     public func set(_ agent: String, model: String?, mode: String?, effort: String?) throws -> String {
         let applied = try running(agent).driver.set(model: model, mode: mode, effort: effort)
-        changed()
+        update()
         return applied
     }
 
@@ -203,10 +237,7 @@ public final class Engine {
     public func lookFor(_ kind: String, then: @escaping () -> Void) {
         lookups.async { [self] in
             let result = Result { try programs.find(kind) }
-            DispatchQueue.main.async { [self] in
-                found[kind] = result
-                then()
-            }
+            DispatchQueue.main.async { [self] in found[kind] = result; then() }
         }
     }
 
@@ -214,12 +245,11 @@ public final class Engine {
     /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED. Called after `lookFor(kind)`, it does not wait for the login shell.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
         try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
-        let type = Engine.drivers[kind]!
-        return try launch(type, folder: folder, model: model, mode: mode, effort: effort, planB: false)
+        return try launch(Engine.drivers[kind]!, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
-    /// `hook permission` runs `PermissionHook.main`. Nil until its owner sets it (the app and `something try` set
+    /// `hook permission` runs `SpoolHook.main`. Nil until its owner sets it (the app and `something try` set
     /// `ownHookCommand`), and plan B is then not offered.
     public var hookCommand: [String]?
 
@@ -242,7 +272,7 @@ public final class Engine {
         if let resume { (launch.thread, launch.resume) = (resume, true) }
         let started = try start(type, launch, program, planB: planB, record: record)
         launched.append(started)
-        changed()
+        update()
         return launch.agent
     }
 
@@ -257,7 +287,7 @@ public final class Engine {
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing))
         let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
-        agent.changed = { [weak self] in self?.changed() }
+        agent.changed = { [weak self] in self?.update() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
             claude.fallback = { [weak self, weak spawn] in
                 guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
@@ -268,7 +298,7 @@ public final class Engine {
                 // The first program's end now reaches a Launched no longer listed: it changes nothing.
                 spawn.stop()
                 launched[index] = started
-                changed()
+                update()
                 return true
             }
         }
@@ -366,19 +396,5 @@ public final class Engine {
         return found.agent
     }
 
-    static func now() -> String { ISO8601DateFormatter().string(from: Date()) }
-}
-
-/// `something hook permission --spool <dir>`: Claude's plan B. Returns the exit status.
-/// `arguments` are every word after `something`, `hook permission` first, as the command routes them. Returns 0 once
-/// a decision was printed for Claude (a deny when nobody can answer), 2 for wrong words.
-public enum PermissionHook {
-    public static func main(_ arguments: [String]) -> Int32 { SpoolHook.main(arguments) }
-}
-
-/// `something try <kind> [--record <file>] [--plan-b]`: a developer's trial of one driver against a real agent.
-public enum Trial {
-    /// `arguments` are every word after `something`, `try` first, as the command routes them. Returns the exit status:
-    /// 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
-    public static func main(_ arguments: [String]) -> Int32 { DeveloperTrial.main(arguments) }
+    static func now() -> String { iso8601.string(from: Date()) }
 }

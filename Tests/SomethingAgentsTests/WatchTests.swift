@@ -79,11 +79,13 @@ import SomethingCore
         defer { home.remove() }
         var snapshot = ClaudeHome.snapshot()
         let watch = Watch(readers: [home.reader], snapshot: { snapshot })
-        _ = watch.tick(now: Date())
+        // The fixture's own time: its conversations ended on 17 October 2026, and an ended one is listed a day.
+        let then = Date(timeIntervalSince1970: 1_792_227_610)
+        _ = watch.tick(now: then)
         try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
         snapshot = ClaudeHome.snapshot(shop: false)
-        let seen = watch.tick(now: Date())
-        let shop = try #require(Watch.elsewhere(seen, groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
+        let seen = watch.tick(now: then)
+        let shop = try #require(Watch.elsewhere(seen, groups: [], keys: [], now: then).agents.first { $0.thread == ClaudeHome.shop })
         #expect(shop.alive == false && shop.pid == nil)
         #expect(shop.can.resume && shop.because["send"] == "This agent was started outside something; something only reads it. Continue it here to write to it.")
     }
