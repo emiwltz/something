@@ -1,5 +1,6 @@
 // The spaces of ~/something/spaces as the sidebar lists them, sorted by title; the open one; the last one open, kept
-// in window.json; the folder watched, so that a space made, renamed or removed in Finder or by an agent shows at once;
+// in window.json; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
+// by an agent shows at once;
 // and what acts on a space: import, export, Show in Finder, Move to Trash.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
@@ -27,7 +28,9 @@ import SomethingCore
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
     /// Moves a file to the Trash; a test moves it into its own home, so that nothing reaches the person's Trash.
     @ObservationIgnored var recycle: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
-    @ObservationIgnored private var watcher: DispatchSourceFileSystemObject?
+    @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var looked: [String: Date] = [:]
+    @ObservationIgnored private var looking = false
 
     init(places: Places, ask: Asking) {
         self.places = places
@@ -59,34 +62,58 @@ import SomethingCore
         if let selection, !entries.contains(where: { $0.id == selection }) { select(nil) }
     }
 
-    /// Lists the spaces, and lists them again each time the folder changes, from now on.
+    /// Lists the spaces, and lists them again each time the folder changes, from now on. The folder is looked at
+    /// twice a second, off the main queue: a file rewritten in place, a folder space's page and a spaces folder
+    /// removed then made again are seen, which a watch of the folder's own entries would miss.
     func watch() {
+        // Taken before the list is read: a change made while it is read is seen at the next look.
+        looked = Library.stamp(places.spaces)
         relist()
-        watcher?.cancel()
-        let folder = open(places.spaces.path, O_EVTONLY)
-        guard folder >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: folder, eventMask: [.write, .rename, .delete], queue: .main)
-        source.setEventHandler { [weak self] in
-            self?.relist()
-            // The folder itself was moved or removed: the next one at its path is watched.
-            if source.data.contains(.rename) || source.data.contains(.delete) { self?.watch() }
+        timer?.invalidate()
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.look() }
+        timer.tolerance = 0.2
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    private func look() {
+        guard !looking else { return }
+        looking = true
+        let root = places.spaces
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let now = Library.stamp(root)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.looking = false
+                if self.looked != now { self.relist() }
+                self.looked = now
+            }
         }
-        source.setCancelHandler { close(folder) }
-        source.resume()
-        watcher = source
+    }
+
+    /// What the list depends on: each space's name and when its page last changed.
+    static func stamp(_ root: URL) -> [String: Date] {
+        let pages = Spaces(root: root).list().map { space in
+            (space.name, (try? FileManager.default.attributesOfItem(atPath: space.page.path))?[.modificationDate] as? Date ?? .distantPast)
+        }
+        return Dictionary(pages) { first, _ in first }
     }
 
     func stop() {
-        watcher?.cancel()
-        watcher = nil
+        timer?.invalidate()
+        timer = nil
     }
 
-    /// Opens the space `name`, or closes the open one for nil, and remembers it for the next start.
+    /// Opens the space `name`, or closes the open one for nil, and remembers it for the next start. The space opens
+    /// just after: the sidebar calls this while it changes its selection, and opening may wait for the rights sheet.
     func select(_ name: String?) {
         guard name != selection else { return }
         selection = name
         if let name { remember(name) }
-        opened(name)
+        DispatchQueue.main.async { [weak self] in
+            // A second click before this one opened: only the last one opens.
+            if let self, self.selection == name { self.opened(name) }
+        }
     }
 
     /// What window.json keeps: the UI's own memory, apart from the grants, so that app.json changes only when a grant does.

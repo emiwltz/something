@@ -14,11 +14,15 @@ import SwiftUI
     @ObservationIgnored var current: () -> SpaceView? = { nil }
     /// The agents of the state, so that the journal names each one it still knows.
     @ObservationIgnored var agents: () -> [Agent] = { [] }
+    /// Show in Finder, by the space's name: the library's, which a test replaces so that Finder never opens.
+    @ObservationIgnored var reveal: (String) -> Void = { _ in }
     private(set) var space: Space?
     private(set) var title = ""
     private(set) var about: String?
     /// The declared rights and where each stands; empty until the person answered the space once.
     private(set) var rights: [(right: String, standing: Standing)] = []
+    /// Set when the space declares no right: it only shows its page, and is never asked about.
+    private(set) var asksNothing = false
     /// The journal, newest first: a time and a sentence each.
     private(set) var activity: [(time: String, what: String)] = []
     /// Where the agents the space launches work, when a folder was chosen.
@@ -49,6 +53,7 @@ import SwiftUI
         let reading = Declaration.read(space, home: places.home)
         title = reading.declaration?.title ?? space.name
         about = reading.declaration?.description
+        asksNothing = reading.declaration?.rights.isEmpty ?? true
         do {
             let grant = try Grants(places.grants).read().spaces[space.name]
             if let grant { rights = Info.standings(reading, grant, home: places.home) }
@@ -107,9 +112,12 @@ import SwiftUI
     /// again now if it is open, otherwise at its next opening.
     func askAgain() {
         change { $0?.refused = [] }
-        guard let open = open() else { return }
-        open.load()
-        show(space)
+        // Just after the button's action: the rights sheet waits for the person, and the view must not wait inside it.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let open = open() else { return }
+            open.load()
+            show(space)
+        }
     }
 
     /// The open space's view, when it is the one shown here.
@@ -137,7 +145,7 @@ struct InspectorView: View {
                     part("Location") {
                         Text(Words.path(space.location.path, home: info.places.home.path))
                             .lineLimit(1).truncationMode(.middle).help(space.location.path).textSelection(.enabled)
-                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([space.location]) }
+                        Button("Show in Finder") { info.reveal(space.name) }
                             .buttonStyle(.link)
                     }
                     if let folder = info.folder {
@@ -159,6 +167,8 @@ struct InspectorView: View {
     @ViewBuilder private var permissions: some View {
         if let problem = info.problem {
             Text(problem)
+        } else if info.asksNothing {
+            Text("It asks for nothing: it only shows its page.").foregroundStyle(.secondary)
         } else if info.rights.isEmpty {
             Text("Not answered yet: it asks when it opens.").foregroundStyle(.secondary)
         }

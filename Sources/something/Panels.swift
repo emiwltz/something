@@ -148,12 +148,20 @@ final class PromptPanel: NSPanel {
                        NSButton(title: "Allow Once", target: self, action: #selector(allow))]
         }
         buttons[0].keyEquivalent = "\u{1b}"
-        let row = NSStackView(views: buttons)
+        let row = PromptPanel.trailing(buttons)
         lines.setCustomSpacing(14, after: lines.arrangedSubviews.last!)
         lines.addArrangedSubview(row)
         contentView = lines
         setContentSize(lines.fittingSize)
         center()
+    }
+
+    /// `buttons` at the trailing edge, as in every Mac dialog, the last one rightmost.
+    static func trailing(_ buttons: [NSButton]) -> NSStackView {
+        let row = NSStackView()
+        row.setViews(buttons, in: .trailing)
+        row.widthAnchor.constraint(equalToConstant: width - 32).isActive = true
+        return row
     }
 
     /// What a tool does, as the panel's title says it: "run a command", "change a file", or "use <tool>".
@@ -171,13 +179,11 @@ final class PromptPanel: NSPanel {
         label.font = .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
         label.isSelectable = true
         label.preferredMaxLayoutWidth = width - 52
-        let box = NSStackView(views: [label])
+        let box = Tinted(views: [label])
         box.edgeInsets = NSEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
         box.widthAnchor.constraint(equalToConstant: width - 32).isActive = true
         box.wantsLayer = true
         box.layer?.cornerRadius = 6
-        // A layer's color does not follow the appearance by itself: it is taken in the one the panel opens in.
-        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance { box.layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor }
         return box
     }
 
@@ -209,7 +215,7 @@ final class PromptPanel: NSPanel {
         lines.arrangedSubviews.dropFirst(heading).forEach { $0.removeFromSuperview() }
         let ok = NSButton(title: "OK", target: self, action: #selector(deny))
         ok.keyEquivalent = "\r"
-        [PromptPanel.line(sentence), ok].forEach(lines.addArrangedSubview)
+        [PromptPanel.line(sentence), PromptPanel.trailing([ok])].forEach(lines.addArrangedSubview)
         var shrunk = frameRect(forContentRect: NSRect(origin: .zero, size: lines.fittingSize))
         shrunk.origin = NSPoint(x: frame.minX, y: frame.maxY - shrunk.height)
         setFrame(shrunk, display: true)
@@ -240,4 +246,11 @@ final class PromptPanel: NSPanel {
     @objc func reply() { decide(.choice(choice)) }
     /// Does nothing: AppKit groups radio buttons by a shared action, and only that grouping is needed.
     @objc func chose() {}
+}
+
+/// A stack on a tinted ground, drawn again in each appearance: it follows the Mac from light to dark.
+final class Tinted: NSStackView {
+    override var wantsUpdateLayer: Bool { true }
+    override func updateLayer() { layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor }
+    override func viewDidChangeEffectiveAppearance() { needsDisplay = true }
 }

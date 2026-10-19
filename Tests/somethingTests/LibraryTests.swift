@@ -59,8 +59,8 @@ import Testing
         #expect(library.entries.map(\.isSpace) == [true, false, true, true])
     }
 
-    /// A space made in the folder, by an agent or in Finder, is listed within a second; one removed goes away, and
-    /// the open one is closed.
+    /// A space made in the folder, by an agent or in Finder, is listed within a second, and so is a page rewritten in
+    /// place; one removed goes away, and the open one is closed; a spaces folder removed and made again is still watched.
     @Test func theFolderWatchSeesASpaceComeAndGo() async throws {
         let test = Home(prefix: "something-library-")
         defer { test.remove() }
@@ -73,9 +73,24 @@ import Testing
         try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
         #expect(await wait(1, until: { library.entries.map(\.id) == ["garden"] }))
         library.select("garden")
-        try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("garden.html"))
-        #expect(await wait(1, until: { library.entries.isEmpty }))
-        #expect(library.selection == nil && opened == ["garden", nil])
+        #expect(await wait(1, until: { opened == ["garden"] }), "the space opens just after it is selected")
+
+        // Rewritten in place, as an editor without an atomic save does: no entry of the folder changes.
+        let file = test.places.spaces.appendingPathComponent("garden.html")
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: Data(page(#"{"contract": 1, "title": "Kitchen garden"}"#, "").utf8))
+        try handle.close()
+        #expect(await wait(1, until: { library.entries.map(\.title) == ["Kitchen garden"] }))
+
+        try FileManager.default.removeItem(at: file)
+        #expect(await wait(1, until: { library.entries.isEmpty && opened == ["garden", nil] }))
+        #expect(library.selection == nil)
+
+        try FileManager.default.removeItem(at: test.places.spaces)
+        try Library.prepare(test.places)
+        try test.space("pond", page(#"{"contract": 1, "title": "Pond"}"#, ""))
+        #expect(await wait(1, until: { library.entries.map(\.id) == ["pond"] }))
     }
 
     /// The last space open is opened at the next start; 1.0's default space, kept in app.json, is read once in its place.
@@ -120,7 +135,7 @@ import Testing
         #expect(ask.told.isEmpty)
     }
 
-    @Test func exportAsksForTheDataAndImportStartsWithoutGrants() throws {
+    @Test func exportAsksForTheDataAndImportStartsWithoutGrants() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
@@ -152,7 +167,8 @@ import Testing
         ask.chosen = saved
         library.importChosen()
         #expect(ask.told.isEmpty, "\(ask.told)")
-        #expect(library.selection == "board-2" && opened == ["board-2"] && library.entry("board-2")?.space.form == .folder)
+        #expect(library.selection == "board-2" && library.entry("board-2")?.space.form == .folder)
+        #expect(await wait(1, until: { opened == ["board-2"] }))
         #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
 
@@ -280,6 +296,7 @@ import Testing
         // "Not Now": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
         ask.answer = nil
         info.askAgain()
+        #expect(await wait(1, until: { ask.questions.count == 2 }), "asked just after the click")
         #expect(ask.questions.map(\.rights) == [["state", "store"], ["store"]])
         let grant = try #require(try AppFile.read(test.places.grants).spaces["board"])
         #expect(grant.granted == ["state"] && grant.refused.isEmpty)
@@ -289,6 +306,7 @@ import Testing
         // Answered: Info shows the new answer at once.
         ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
         info.askAgain()
+        #expect(await wait(1, until: { ask.questions.count == 3 }))
         #expect(info.rights.map(\.standing) == [.allowed, .allowed])
         #expect(window.granted.rights == ["state", "store"])
     }
@@ -308,6 +326,28 @@ import Testing
         let after = try #require(try AppFile.read(test.places.grants).spaces["shop"])
         #expect(after.granted == ["send:codex"] && after.refused == ["send:claude"])
         #expect(info.rights.map(\.standing) == [.refused, .allowed, .notAnswered(inForce: [])])
+    }
+
+    /// A space that declares no right is never asked about: Info does not say it will be.
+    @Test func aSpaceWithoutRightsAsksForNothing() throws {
+        let test = Home(prefix: "something-library-"), ask = FakeAsk()
+        defer { test.remove() }
+        let plain = try test.space("clock", page(#"{"contract": 1}"#, ""))
+        let info = info(test, ask, plain)
+        #expect(info.asksNothing && info.rights.isEmpty && info.problem == nil)
+        info.show(try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "")))
+        #expect(!info.asksNothing && info.rights.isEmpty, "declared, never answered: it asks when it opens")
+    }
+
+    /// Closing the window closes the open space: its page stops, and nothing asks from a window nobody sees.
+    @Test func closingTheWindowIsSaid() throws {
+        let test = Home(prefix: "something-library-"), ask = FakeAsk()
+        defer { test.remove() }
+        let shell = Shell(library: library(test, ask), info: Info(places: test.places, ask: ask), autosave: false)
+        var closed = 0
+        shell.closed = { closed += 1 }
+        shell.window.close()
+        #expect(closed == 1)
     }
 
     @Test func aWiderRightDeclaredLaterShowsWhatIsInForce() throws {

@@ -145,21 +145,22 @@ final class FakeDoor: Door {
 
         let missing = Ran(["open", "garden"], home, door)
         #expect(missing.status == 1 && missing.err.contains("something new garden"))
-        // Spaces open by name only: a page elsewhere, even one in the spaces folder given by its path, is told where to go.
-        for path in ["/Users/example/Downloads/board.html", board.location.path, "/Users/example/My Board"] {
+        // A page elsewhere is told where to go; one of the spaces folder, given by its path, opens.
+        #expect(Ran(["open", board.location.path], home, door).status == 0 && door.delivered == [board.location, board.location])
+        for path in ["/Users/example/Downloads/board.html", "/Users/example/My Board"] {
             let elsewhere = Ran(["open", path], home, door)
             #expect(elsewhere.status == 1 && elsewhere.err.hasPrefix("something opens spaces from ~/something/spaces. Copy it there, then run: something open "))
         }
         #expect(Ran(["open", "/Users/example/Downloads/board.html"], home, door).err.hasSuffix("something open board\n"))
         #expect(Ran(["open", "/Users/example/My Board"], home, door).err.hasSuffix("something open <name>\n"))
-        #expect(door.delivered.count == 1)
+        #expect(door.delivered.count == 2)
 
         // An export goes to the app, which imports it; a missing one is said here.
         let export = home.root.appendingPathComponent("garden.something")
         try Data("{}".utf8).write(to: export)
         #expect(Ran(["open", export.path], home, door).status == 0 && door.delivered.last == export.standardizedFileURL)
         let none = Ran(["open", home.root.appendingPathComponent("nothing.something").path], home, door)
-        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 2)
+        #expect(none.status == 1 && none.err.contains("give the path of an export") && door.delivered.count == 3)
 
         door.problem = "something could not be started: invented. Try again."
         let refused = Ran([], home, door)

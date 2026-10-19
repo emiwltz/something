@@ -1,17 +1,20 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), a toolbar with
 // the sidebar toggle, the open space's title and file, Reload and Info; and the menus. The center holds the open
 // space's web view edge to edge under the toolbar, what keeps a space from being shown, or "No space is open."
-// Closing the window keeps the app and its agents running: the Dock icon or `something` shows it again.
+// Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
+// shows the window again.
 import AppKit
 import SwiftUI
 
-final class Shell: NSObject, NSToolbarDelegate {
+final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let window: NSWindow
     let split = NSSplitViewController()
     /// The center: one of its three states at a time.
     let center = NSView()
     let inspector: NSSplitViewItem
     static let reload = NSToolbarItem.Identifier("reload")
+    /// Called when the person closes the window: the app closes the open space, whose page stops.
+    var closed: () -> Void = {}
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -35,6 +38,7 @@ final class Shell: NSObject, NSToolbarDelegate {
         inspector.isCollapsed = true
         window.contentMinSize = NSSize(width: 820, height: 560)
         window.isReleasedWhenClosed = false
+        window.delegate = self
         window.collectionBehavior.insert(.fullScreenPrimary)
         let toolbar = NSToolbar(identifier: "main")
         toolbar.delegate = self
@@ -48,6 +52,8 @@ final class Shell: NSObject, NSToolbarDelegate {
         }
         show(nil)
     }
+
+    func windowWillClose(_ notification: Notification) { closed() }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, Shell.reload, .toggleInspector]
@@ -97,6 +103,13 @@ final class Shell: NSObject, NSToolbarDelegate {
         let host = NSHostingView(rootView: view)
         host.sizingOptions = []
         return host
+    }
+
+    /// Ends the sheets on `window`, the innermost first, as their Cancel would.
+    static func endSheets(of window: NSWindow) {
+        guard let sheet = window.attachedSheet else { return }
+        endSheets(of: sheet)
+        window.endSheet(sheet, returnCode: .cancel)
     }
 
     /// Brings the window to the front, made again if it was closed.

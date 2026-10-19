@@ -65,8 +65,13 @@ final class NativeAsk: Asking {
     /// sheet is up: one question at a time, and the second is answered as Escape would.
     private func wait(_ sheet: NSWindow, _ begin: (NSWindow, @escaping (NSApplication.ModalResponse) -> Void) -> Void) -> NSApplication.ModalResponse? {
         guard let window = window(), window.attachedSheet == nil else { return nil }
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
+        // The focus stays where the person is: an app in the background shows the sheet behind and bounces its icon.
+        if NSApp.isActive {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFront(nil)
+            NSApp.requestUserAttention(.informationalRequest)
+        }
         begin(window) { NSApp.stopModal(withCode: $0) }
         return NSApp.runModal(for: sheet)
     }
@@ -259,10 +264,11 @@ enum Ask {
         })
     }
 
-    /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button.
-    static func lowers(_ mode: String, kind: String, folder: String?, space: String) -> NSAlert {
+    /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button. The
+    /// folder is shown from `home`.
+    static func lowers(_ mode: String, kind: String, folder: String?, space: String, home: String = NSHomeDirectory()) -> NSAlert {
         alert("Let “\(space)” put \(Programs.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
-              "The agent works in \(folder ?? "a folder something does not know"). In this mode it asks you less before it acts.",
+              "The agent works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"). In this mode it asks you less before it acts.",
               buttons: ["Allow", "Don't Allow"], escape: 1)
     }
 

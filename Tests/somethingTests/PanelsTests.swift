@@ -1,6 +1,7 @@
 // The permission and question panels against a fake prompt source shaped like the Engine's: one panel at a time in
 // the order the requests came, Allow Once and Deny, Escape denies, never modal, closed when the agent withdraws its
-// request, and a question answered with the chosen and typed answers. No panel is shown.
+// request, and a question answered with the chosen and typed answers. A sheet the app waits for returns the button
+// it ended with. No panel is shown.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -157,5 +158,25 @@ final class FakePrompts: PromptSource {
     @Test func theQuitSheetSaysWhoStops() {
         #expect(Ask.quit(1).informativeText == "An agent something started is still running. Quitting stops it.")
         #expect(Ask.quit(2).informativeText == "2 agents something started are still running. Quitting stops them.")
+    }
+
+    /// A sheet the app waits for (the rights, a link, an export) returns the button it ended with, and leaves no sheet
+    /// behind. Its window is offscreen and the app inactive: nothing is shown and the focus is not taken.
+    @Test func aSheetWaitedForReturnsTheButtonItEndedWith() throws {
+        let offscreen = Offscreen(NSView())
+        let ask = NativeAsk()
+        ask.window = { offscreen.window }
+        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
+            guard let sheet = offscreen.window.attachedSheet else { return }
+            offscreen.window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
+            // Ended from a timer, the modal loop returns at the next event: one is posted, as a click brings one.
+            if let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
+                                              context: nil, subtype: 0, data1: 0, data2: 0) { NSApp.postEvent(event, atStart: false) }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        defer { timer.invalidate() }
+        #expect(ask.withData("board", keys: ["seen"], bytes: 12) == true, "With Its Data is the second button")
+        #expect(offscreen.window.attachedSheet == nil)
+        #expect(!NSApp.isActive)
     }
 }

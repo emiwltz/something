@@ -76,9 +76,15 @@ enum Command: Equatable {
             }
             return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
         case .open(let name) where !Spaces.isName(name):
-            let url = URL(fileURLWithPath: name)
-            say(Command.elsewhere(url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent), true)
-            return 1
+            // A path is a space only when it is one of the spaces folder, given by its path.
+            let url = URL(fileURLWithPath: name).standardizedFileURL
+            let named = url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
+            guard let space = Spaces(root: places.spaces).named(named),
+                  space.location.resolvingSymlinksInPath().path == url.resolvingSymlinksInPath().path else {
+                say(Command.elsewhere(named), true)
+                return 1
+            }
+            return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
         case .open(let name):
             guard let space = Spaces(root: places.spaces).named(name) else {
                 say("There is no space \(name) in \(places.spaces.path). Type something new \(name) to make it.", true)

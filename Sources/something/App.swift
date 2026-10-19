@@ -1,7 +1,8 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift)
 // and Info (Inspector.swift); the spaces and exports LaunchServices hands it; the permission and question panels; the
 // state pushed at most four times a second; and quitting, which asks first while agents something launched run, then
-// stops them. Closing the window keeps the app and its agents running, as a Mac app with one main window does.
+// stops them. Closing the window keeps the app and its agents running, as a Mac app with one main window does; the
+// open space closes with it, and opens again when the window comes back.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -37,6 +38,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
         info.current = { [weak self] in self?.current }
         info.agents = { [weak self] in self?.engine.state.agents ?? [] }
+        info.reveal = { [weak self] in self?.library.showInFinder($0) }
+        // The space stays selected, so that it opens again with the window.
+        shell.closed = { [weak self] in self?.open(nil) }
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent", line: "") }
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
@@ -76,19 +80,31 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Imports an export, or opens a space of the spaces folder; says how to open any other page.
     func receive(_ url: URL) {
-        shell.front()
-        if url.pathExtension == "something" { return library.importSpace(from: url) }
+        if url.pathExtension == "something" {
+            shell.front()
+            return library.importSpace(from: url)
+        }
         let name = url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
         let real = { (url: URL) in url.resolvingSymlinksInPath().path }
         guard let space = Spaces(root: places.spaces).named(name), real(space.location) == real(url) else {
+            shell.front()
             return ask.tell(Command.elsewhere(name))
         }
         library.relist()
         library.select(space.name)
+        front()
     }
 
-    /// Closes the open space and opens the space `name` in the center; nil leaves the center empty.
+    /// Shows the window; the space open when it was closed opens again.
+    func front() {
+        shell.front()
+        if current == nil, let name = library.selection { open(name) }
+    }
+
+    /// Closes the open space and opens the space `name` in the center; nil leaves the center empty. The space already
+    /// open stays as it is.
     func open(_ name: String?) {
+        if let name, current?.space.name == name { return }
         current?.close()
         current = nil
         defer {
@@ -179,7 +195,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// A click on the Dock icon, or `something` typed again, shows the window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        if !hasVisibleWindows { shell.front() }
+        if !hasVisibleWindows { front() }
         return true
     }
 
@@ -192,7 +208,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return .terminateLater
         }
         shell.front()
-        guard shell.window.attachedSheet == nil else { return .terminateCancel }
+        // A question left open is answered as its Cancel would be: Quit always asks, never does nothing.
+        Shell.endSheets(of: shell.window)
         Ask.quit(running).beginSheetModal(for: shell.window) { answer in
             if answer == .alertFirstButtonReturn { stop() } else { NSApp.reply(toApplicationShouldTerminate: false) }
         }
