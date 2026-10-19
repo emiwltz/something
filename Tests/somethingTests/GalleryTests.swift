@@ -118,7 +118,6 @@ struct GalleryTests {
         shell.assistant.engine.lookAgain()
         #expect(await wait(until: { shell.assistant.engine.state.kinds["claude"]?.installed == true }))
         shell.assistant.refresh()
-        shell.assistant.place = .space(title: "Garden plan", name: "newer", page: fixture.places.spaces.appendingPathComponent("newer.html").path)
         let newer = try fixture.space("newer", page(#"{"contract": 2, "title": "Garden plan"}"#, ""))
         let unshown = try await fixture.window(newer)
         defer { unshown.close() }
@@ -127,6 +126,7 @@ struct GalleryTests {
         library.select("newer")
         shell.inspector.isCollapsed = true
         shell.show(unshown)
+        shell.assistant.place = AssistantModel.place(unshown)
         try await draw(shell, library: library, web: nil, "window-cannot-be-shown" + suffix, fixture)
 
         // A first start: no space yet, none open.

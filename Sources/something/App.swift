@@ -122,7 +122,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.fault = nil
         assistant.unkept = false
         defer {
-            assistant.place = current.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
+            assistant.place = AssistantModel.place(current)
             info.show(current?.space)
             // The readers look often while a space is open, and rarely when nobody is looking.
             engine.start(often: current != nil)
@@ -139,7 +139,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 guard let self, let view, current === view else { return }
                 shell.show(view)
                 info.show(view.space)
-                assistant.place = .space(title: view.title, name: view.space.name, page: view.space.page.path)
+                assistant.place = AssistantModel.place(view)
                 library.relist()
             }
             view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
@@ -218,10 +218,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             (item.representedObject, item.state, item.toolTip) = (entry.id, entry.checked ? .on : .off, entry.note)
             menu.addItem(item)
         }
+        if menu.items.isEmpty { menu.addItem(NSMenuItem(title: "No coding agent found", action: nil, keyEquivalent: "")) }
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(stopAssistant) { return [.working, .waiting].contains(assistant.light) }
+        if item.action == #selector(askAssistant) { return !assistant.noAgent }
         return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
             ? current != nil : true
     }

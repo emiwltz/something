@@ -201,6 +201,31 @@ import WebKit
         await finish(home, model)
     }
 
+    /// Messages written while the agent starts wait for it: one agent gets them all. Stop while it starts ends the
+    /// launch, and no agent starts.
+    @Test func theAgentStartsOnceWhateverIsWrittenMeanwhile() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "First message."
+        model.send()
+        model.fix(AssistantModel.Fault(title: "Shop", name: "shop", codes: ["SCRIPT_ERROR"]))
+        model.draft = "Second message."
+        model.send()
+        #expect(model.launching && model.light == .working)
+        #expect(await wait(until: { input(home).filter { $0.contains(#""type":"user""#) }.count == 3 }), "input: \(input(home).count) lines")
+        #expect(model.engine.assistants.count == 1 && model.engine.state.agents.count == 1)
+        model.newConversation()
+        #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))
+        model.draft = "Never sent."
+        model.send()
+        model.stop()
+        #expect(!model.launching && model.light == .off)
+        try await Task.sleep(for: .seconds(1))
+        #expect(model.engine.assistants.count == 1 && model.id == nil, "a stopped launch started an agent")
+        await finish(home, model)
+    }
+
     /// After 30 minutes without a turn, by the assistant's clock, the agent stops; the drawer says so, and the next
     /// message starts a new one.
     @Test func anIdleAssistantStopsAfterHalfAnHour() async throws {
@@ -276,7 +301,8 @@ import WebKit
         await finish(home, model)
     }
 
-    /// The margin around the assistant, where its shadows fall, lets clicks through to the space under it.
+    /// The margin around the assistant, where its shadows fall, and the room beside and between its pieces let clicks
+    /// through to the space under it.
     @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheAssistantReachTheSpace() throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -290,6 +316,16 @@ import WebKit
         #expect(center.hitTest(NSPoint(x: frame.minX + 4, y: frame.midY)) !== floater)
         #expect(center.hitTest(NSPoint(x: frame.midX, y: frame.minY + 4)) !== floater)
         #expect(center.hitTest(NSPoint(x: frame.midX, y: frame.minY + AssistantView.margin + 20))?.isDescendant(of: floater) == true)
+        // Beside the status line, and between it and the capsule, nothing is drawn: the space gets the click.
+        model.unkept = true
+        center.layoutSubtreeIfNeeded()
+        offscreen.window.displayIfNeeded()
+        let status = try #require(model.drawn.min { $0.width < $1.width }, "no piece was drawn")
+        let grown = floater.frame, y = { (top: CGFloat) in grown.maxY - top }
+        #expect(model.drawn.count == 2 && status.width < 400)
+        #expect(center.hitTest(NSPoint(x: grown.minX + AssistantView.margin + 6, y: y(status.midY))) !== floater)
+        #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.maxY + 3))) !== floater)
+        #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.midY)))?.isDescendant(of: floater) == true)
         withExtendedLifetime(offscreen) {}
     }
 

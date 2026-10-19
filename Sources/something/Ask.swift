@@ -313,12 +313,13 @@ enum Ask {
               buttons: ["Switch", "Cancel"], escape: 1)
     }
 
-    /// How to Get One: each coding agent something builds with, its install command and a Copy button; Look Again,
+    /// How to Get One: each coding agent something builds with (none it refuses), its install command and a Copy button; Look Again,
     /// then Close. something downloads nothing itself.
     static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
         let alert = alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.",
                           buttons: ["Look Again", "Close"], escape: 1)
-        let rows = AssistantModel.builders.compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
+        let rows = AssistantModel.builders.filter { AssistantModel.cannotBuild[$0] == nil }
+            .compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
         let list = NSHostingView(rootView: InstallList(rows: rows, copy: copy))
         list.frame.size = list.fittingSize
         alert.accessoryView = list

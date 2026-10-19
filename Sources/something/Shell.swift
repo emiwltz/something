@@ -89,6 +89,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) { closed() }
 
+    /// Out of full screen, an assistant ⌘J hid comes back: a window offers no other way to find it.
+    func windowDidExitFullScreen(_ notification: Notification) { assistant.hidden = false }
+
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, Shell.reload, .toggleInspector]
     }
@@ -225,10 +228,13 @@ struct Unshown: View {
     }
 }
 
-/// The assistant's hosting view. Its margin, where the shadows fall, lets the clicks through to the space under it.
+/// The assistant's hosting view. It takes only the clicks on what it draws: those beside its pieces, between them and
+/// in its margin, where the shadows fall, reach the space under it.
 final class Floater: NSHostingView<AssistantView> {
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let margin = AssistantView.margin
-        return bounds.insetBy(dx: margin, dy: margin).contains(convert(point, from: superview)) ? super.hitTest(point) : nil
+        let inside = convert(point, from: superview)
+        // SwiftUI's frames start at the top-left corner, like this view's own when it is flipped.
+        let flipped = isFlipped ? inside : NSPoint(x: inside.x, y: bounds.height - inside.y)
+        return rootView.model.drawn.contains { $0.contains(flipped) } ? super.hitTest(point) : nil
     }
 }

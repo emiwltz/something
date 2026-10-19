@@ -20,10 +20,13 @@ struct AssistantView: View {
         }
         .frame(maxWidth: 640)
         .padding(AssistantView.margin)
+        .coordinateSpace(.named(Drawn.space))
+        .onPreferenceChange(Drawn.self) { model.drawn = $0 }
         .onChange(of: model.focusing) { typing = true }
     }
 
-    /// Room around the assistant for its shadows: the window lets the clicks there through (Floater).
+    /// Room around the assistant for its shadows. The window lets through the clicks there, and anywhere else nothing
+    /// is drawn (Floater).
     static let margin: CGFloat = 16
 
     // MARK: The capsule
@@ -45,6 +48,8 @@ struct AssistantView: View {
                 .lineLimit(1...5)
                 .focused($typing)
                 .onKeyPress(.return, phases: .down) { press in
+                    // Return first confirms what an input method composes (Japanese, Chinese, Korean).
+                    if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true { return .ignored }
                     if !press.modifiers.contains(.shift) {
                         model.send()
                     } else if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) {
@@ -60,7 +65,7 @@ struct AssistantView: View {
         }
         .padding(.leading, 7).padding(.trailing, 7).padding(.vertical, 7)
         .frame(minHeight: 44)
-        .modifier(Floating(radius: 22))
+        .modifier(Floating(shape: Capsule()))
     }
 
     private var working: Bool { model.light == .working || model.light == .waiting }
@@ -125,7 +130,7 @@ struct AssistantView: View {
         .controlSize(.small)
         .padding(.horizontal, 16)
         .frame(height: 44)
-        .modifier(Floating(radius: 22))
+        .modifier(Floating(shape: Capsule()))
     }
 
     private func statusLine(_ status: String) -> some View {
@@ -133,7 +138,7 @@ struct AssistantView: View {
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10).padding(.vertical, 3)
-            .modifier(Floating(radius: 10))
+            .modifier(Floating(shape: Capsule()))
             .onTapGesture { if model.light == .waiting { model.showRequest() } }
     }
 
@@ -149,7 +154,7 @@ struct AssistantView: View {
         .font(.system(size: 12))
         .controlSize(.small)
         .padding(.horizontal, 12).padding(.vertical, 6)
-        .modifier(Floating(radius: 14))
+        .modifier(Floating(shape: Capsule()))
     }
 
     // MARK: The drawer
@@ -169,12 +174,20 @@ struct AssistantView: View {
                 conversation
                 ScrollView { conversation }
                     .defaultScrollAnchor(.bottom)
-                    .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08)], startPoint: .top, endPoint: .bottom))
+                    .contentMargins(.top, 16, for: .scrollContent)
+                    .mask {
+                        // A line cut by the top edge fades out over 20 points, whatever the drawer's height.
+                        VStack(spacing: 0) {
+                            LinearGradient(stops: [.init(color: .clear, location: 0.25), .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom)
+                                .frame(height: 20)
+                            Color.black
+                        }
+                    }
             }
         }
         .padding(EdgeInsets(top: 12, leading: 16, bottom: 14, trailing: 16))
         .frame(maxHeight: 560)
-        .modifier(Floating(radius: 16))
+        .modifier(Floating(shape: RoundedRectangle(cornerRadius: 16, style: .continuous)))
     }
 
     private var conversation: some View {
@@ -192,7 +205,7 @@ struct AssistantView: View {
         switch row {
         case .mine(let caption, let text):
             VStack(alignment: .trailing, spacing: 2) {
-                if let caption { Text(caption).font(.system(size: 10.5)).foregroundStyle(.tertiary) }
+                if let caption { Text(caption).font(.system(size: 10.5)).foregroundStyle(.secondary) }
                 Text(text)
                     .font(.system(size: 13))
                     .padding(.horizontal, 11).padding(.vertical, 7)
@@ -240,17 +253,25 @@ struct AssistantView: View {
     }
 }
 
-/// Material, a hairline and a soft shadow: the assistant floats over the space.
-struct Floating: ViewModifier {
-    var radius: CGFloat
+/// Material, a hairline and a soft shadow: the assistant floats over the space. A pill is a `Capsule`: a continuous
+/// rounded rectangle as tall as twice its radius draws a mark at each end.
+struct Floating<Ground: InsettableShape>: ViewModifier {
+    var shape: Ground
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        // The ground's shadow alone: on the content, every text and bubble would cast its own.
+        // The ground's shadow alone, cast by its shape: on the content, every text and bubble would cast its own.
         content
-            .background(.regularMaterial.shadow(.drop(color: .black.opacity(0.15), radius: 10, y: 4)), in: shape)
+            .background { shape.fill(.regularMaterial).shadow(color: .black.opacity(0.15), radius: 10, y: 4) }
             .overlay(shape.strokeBorder(.separator, lineWidth: 0.5))
+            .background { GeometryReader { Color.clear.preference(key: Drawn.self, value: [$0.frame(in: .named(Drawn.space))]) } }
     }
+}
+
+/// The frames of the floating pieces, in the assistant's own coordinate space.
+struct Drawn: PreferenceKey {
+    static let space = "assistant"
+    static let defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
 }
 
 /// How to Get One's list: each agent, the command that installs it, and a button that copies that command.

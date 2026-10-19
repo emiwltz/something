@@ -80,6 +80,12 @@ import SomethingCore
     @ObservationIgnored private var active = Date()
     @ObservationIgnored private var told = false
     @ObservationIgnored private var timer: Timer?
+    /// The messages written while the agent starts, sent once it runs; and the number of the launch that may still
+    /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
+    @ObservationIgnored private var queued: [String] = []
+    @ObservationIgnored private var launch = 0
+    /// Where the assistant's pieces are drawn, in its hosting view: the window takes the clicks there only (Floater).
+    @ObservationIgnored var drawn: [CGRect] = []
 
     init(engine: Engine, places: Places) {
         self.engine = engine
@@ -115,19 +121,24 @@ import SomethingCore
     // MARK: What the window shows
 
     /// Takes what the engine's state says now: the builders found, this conversation's agent and its thread. Called
-    /// at each change of the state.
+    /// at each change of the state, up to four times a second: only what changed is written, so the window draws the
+    /// assistant again only then.
     func refresh() {
         let state = engine.state
-        installed = state.kinds.filter { AssistantModel.builders.contains($0.key) }.compactMapValues(\.installed)
-        notes = state.kinds.compactMapValues(\.note)
+        keep(\.installed, state.kinds.filter { AssistantModel.builders.contains($0.key) }.compactMapValues(\.installed))
+        keep(\.notes, state.kinds.compactMapValues(\.note))
         let offered = AssistantModel.builders.filter { installed[$0] == true && AssistantModel.cannotBuild[$0] == nil }
         if !offered.contains(kind ?? "") { kind = offered.first { $0 == preferred } ?? offered.first }
-        agent = state.agents.first { $0.id == id }
-        rows = AssistantModel.rows(state.threads.first { $0.agent == id })
+        keep(\.agent, state.agents.first { $0.id == id })
+        keep(\.rows, AssistantModel.rows(state.threads.first { $0.agent == id }))
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
         // The drawer opens on a new problem: the person must see why nothing happened.
         if problem != nil, !told { drawer = true }
         told = problem != nil
+    }
+
+    private func keep<Value: Equatable>(_ property: ReferenceWritableKeyPath<AssistantModel, Value>, _ value: Value) {
+        if self[keyPath: property] != value { self[keyPath: property] = value }
     }
 
     var name: String { Programs.name(of: kind ?? preferred ?? "claude") }
@@ -226,8 +237,9 @@ import SomethingCore
         focusing += 1
     }
 
-    /// Stops the running turn; the agent stays for the next message.
+    /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch.
     func stop() {
+        if launching { return endLaunch() }
         if let id, light == .working || light == .waiting { _ = try? engine.interrupt(id) }
     }
 
@@ -251,15 +263,15 @@ import SomethingCore
     /// Chooses the builder `kind`; a conversation running with another one ends, after the person said so.
     func choose(_ chosen: String) {
         guard chosen != kind, AssistantModel.cannotBuild[chosen] == nil else { return }
-        let keep = { [self] in
-            if id != nil { newConversation() }
+        let switched = { [self] in
+            newConversation()
             (kind, preferred) = (chosen, chosen)
             Library.WindowFile.update(places) { $0.assistant = chosen }
         }
         if id != nil, agent?.alive != false, !stopped {
-            confirmSwitch(name, Programs.name(of: chosen), keep)
+            confirmSwitch(name, Programs.name(of: chosen), switched)
         } else {
-            keep()
+            switched()
         }
     }
 
@@ -286,31 +298,45 @@ import SomethingCore
     }
 
     private func halt() {
+        endLaunch()
         if let id, agent?.alive != false { engine.stopAll(within: 5, only: id) {} }
         stopped = true
     }
 
+    private func endLaunch() { (launching, queued, launch) = (false, [], launch + 1) }
+
+    /// Sends `message` to this conversation's agent; launches it first when there is none, once: what is written while
+    /// it starts waits for it.
     private func deliver(_ message: String) {
         guard let kind else { return }
         (last, failure, active) = (message, nil, clock())
+        if launching { return queued.append(message) }
         if let id, agent?.alive != false, !stopped {
             do { _ = try engine.deliver(message, to: id, when: "next") } catch { failure = error.sentence }
             return refresh()
         }
-        launching = true
+        (launching, queued) = (true, [message])
+        let number = launch
         engine.lookFor(kind) { [weak self] in
-            guard let self else { return }
-            launching = false
+            // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
+            guard let self, number == launch else { return }
+            let messages = queued
+            (launching, queued) = (false, [])
             do {
                 let id = try engine.launchAssistant(kind, folder: places.spaces.path, askEverything: askEverything)
                 (self.id, asking, stopped, idled) = (id, askEverything, false, false)
-                _ = try engine.deliver(message, to: id, when: "next")
+                for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { failure = error.sentence }
             refresh()
         }
     }
 
     // MARK: Words
+
+    /// Where the person is with `view` open: its title as its declaration gave it, else its name; the blank page for nil.
+    static func place(_ view: SpaceView?) -> Place {
+        view.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
+    }
 
     /// The line something puts before each message, which the drawer strips: which space is open, by the title and
     /// name the declaration validated, the title kept on its line and out of brackets.
