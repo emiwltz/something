@@ -71,7 +71,9 @@ import Testing
         library.watch()
         defer { library.stop() }
         try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
-        #expect(await wait(1, until: { library.entries.map(\.id) == ["garden"] }))
+        // The watch looks every half second; this first look comes while every suite starts its programs and WebKit
+        // at once, and a busy runner's main queue may then be late by more than a second (seen on CI).
+        #expect(await wait(3, until: { library.entries.map(\.id) == ["garden"] }))
         library.select("garden")
         #expect(await wait(1, until: { opened == ["garden"] }), "the space opens just after it is selected")
 
