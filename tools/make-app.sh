@@ -39,6 +39,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$repository/packaging/Info.plist" "$app/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
-xcrun vtool -set-build-version macos 15.0 "$(xcrun --show-sdk-version)" -replace -output "$app/Contents/MacOS/something" "$executable"
+minimum=$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")
+xcrun vtool -set-build-version macos "$minimum" "$(xcrun --show-sdk-version)" -replace -output "$app/Contents/MacOS/something" "$executable"
 cp -R "$repository/share" "$app/Contents/Resources/share"
 codesign --force --sign - "$app"

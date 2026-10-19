@@ -2,11 +2,12 @@
 # declare, and on macos-latest.
 #
 # Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases,
-# make-app.sh assembles a signed something.app from a release build, and something builds again with the runner's
-# Command Line Tools alone, as on a Mac without Xcode. The runner has a logged-in window server, so the
-# window tests run too (the lockdown test, isolation, the bridge, links, rights, reload) in a real WKWebView that is
-# never shown. On a Mac with no window server those suites say so and are skipped; on CI (CI is set) they always run,
-# so a runner without one turns the run red instead of skipping the lockdown test.
+# make-app.sh assembles a signed something.app from a release build, whose something check of the template is clean,
+# and something and its tests build again with the runner's Command Line Tools alone, as on a Mac without Xcode. The
+# runner has a logged-in window server, so the window tests run too (the lockdown test, isolation, the bridge, links,
+# rights, reload) in a real WKWebView that is never shown. On a Mac with no window server those suites say so and are
+# skipped; on CI (CI is set) they always run, so a runner without one turns the run red instead of skipping the
+# lockdown test.
 #
 # Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
 # at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
@@ -51,11 +52,23 @@ jobs:
           printf '#!/bin/bash\nexec "%s" "$@"\n' "$prefix/something.app/Contents/MacOS/something" > "$prefix/bin/something"
           chmod +x "$prefix/bin/something"
           test "$("$prefix/bin/something" --version)" = "something 0.0.0-ci"
-      - name: swift build with the Command Line Tools alone
-        # In a build folder of its own: the suite's was made with Xcode's toolchain.
+      - name: something check, the whole command, through the assembled program
+        # The suite runs every check in its own process; this is main.swift and Check.main as a person runs them,
+        # in an empty home. The runner is thrown away, so the folders WebKit leaves in $TMPDIR do not matter here.
+        run: |
+          prefix="$RUNNER_TEMP/prefix"
+          mkdir "$RUNNER_TEMP/home"
+          HOME="$RUNNER_TEMP/home" "$prefix/bin/something" check "$prefix/something.app/Contents/Resources/share/template.html" --json \
+            > "$RUNNER_TEMP/check.json" 2> "$RUNNER_TEMP/check.err"
+          test ! -s "$RUNNER_TEMP/check.err"
+          python3 -c 'import json, sys; r = json.load(open(sys.argv[1])); assert r["problems"] == [] and open(r["snapshot"], "rb").read(4) == b"\x89PNG", r' "$RUNNER_TEMP/check.json"
+      - name: swift build --build-tests with the Command Line Tools alone
+        # In a build folder of its own: the suite's was made with Xcode's toolchain. --build-tests compiles the test
+        # targets and Swift Testing's macros, which Package.swift points at with the Command Line Tools.
         run: |
           if [ -d /Library/Developer/CommandLineTools ]; then
-            DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build --scratch-path "$RUNNER_TEMP/clt-build"
+            DEVELOPER_DIR=/Library/Developer/CommandLineTools swift --version
+            DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build --build-tests --scratch-path "$RUNNER_TEMP/clt-build"
           else
             echo "::notice title=Command Line Tools on ${{ matrix.os }}::This runner has none: the build with them alone was not tried."
           fi

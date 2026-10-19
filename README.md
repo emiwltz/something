@@ -198,6 +198,9 @@ node --test Tests/something-js.test.mjs     # something.js against the contract'
 tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app and signs it ad hoc, as the formula does
 ```
 
+With the Command Line Tools alone and no Xcode, `swift test` is proven with the Command Line Tools 27 only; GitHub
+builds the tests with the older ones of its runners at each push.
+
 The Homebrew formula is [packaging/homebrew/something.rb](packaging/homebrew/something.rb); the rules for changing
 the code are in [AGENTS.md](AGENTS.md).
 

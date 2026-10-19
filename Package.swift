@@ -11,13 +11,16 @@ import PackageDescription
 // toolchain at each run, and under one of them it does not give the compiler the folder of Swift Testing's macros:
 // many runs of `swift test` then fail with "plugin for module 'TestingMacros' not found". The test targets name
 // that folder themselves, only when the Command Line Tools are the developer folder (as xcrun finds it: DEVELOPER_DIR,
-// then the folder xcode-select chose if it still exists), so a build with Xcode keeps Xcode's own macros.
+// then the folder xcode-select chose if it still exists) and have it, so a build with Xcode keeps Xcode's own macros.
+// Seen on a Mac whose xcode-select still named a removed Xcode, with or without DEVELOPER_DIR; not yet tried on one
+// whose xcode-select names the Command Line Tools.
 let commandLineTools = "/Library/Developer/CommandLineTools"
 let developer = Context.environment["DEVELOPER_DIR"]
     ?? (try? FileManager.default.destinationOfSymbolicLink(atPath: "/var/db/xcode_select_link")).flatMap { FileManager.default.fileExists(atPath: $0) ? $0 : nil }
     ?? commandLineTools
-let testing: [SwiftSetting] = developer.hasPrefix(commandLineTools)
-    ? [.unsafeFlags(["-plugin-path", commandLineTools + "/usr/lib/swift/host/plugins/testing"])] : []
+let plugins = commandLineTools + "/usr/lib/swift/host/plugins/testing"
+let testing: [SwiftSetting] = developer.hasPrefix(commandLineTools) && FileManager.default.fileExists(atPath: plugins)
+    ? [.unsafeFlags(["-plugin-path", plugins])] : []
 
 let package = Package(
     name: "something",

@@ -4,7 +4,7 @@
 // a program of its own: WebKit gives each program that loads it three folders in $TMPDIR, named by the program's
 // build, that cannot be deleted, so each new build run that way would leave three more on the Mac. The three codes a
 // page cannot be made to give on demand (no window server, a timeout, a web process that ends) run through the
-// runner's settings.
+// runner's settings. The whole command, main.swift and Check.main, runs on CI through the assembled program.
 import AppKit
 import Foundation
 import SomethingCore
@@ -22,7 +22,7 @@ struct Checked {
 
     @MainActor init(_ words: [String], _ home: Home) async throws {
         guard case .check(let check) = Check.parse(words) else { throw SpaceError("\(words) are not the words of a check.") }
-        let runner = CheckTests.runner(home)
+        let runner = try CheckTests.runner(home)
         let outcome: Result<Report, SpaceError>
         do { outcome = .success(try await runner.run(check)) } catch { outcome = .failure(try #require(error as? SpaceError)) }
         var out = "", err = ""
@@ -299,22 +299,32 @@ extension Home {
 
     // MARK: In this process, through the runner's settings
 
+    /// WebKit's private setter that turns off its window occlusion detection, looked up once; nil when this WebKit
+    /// does not have it.
+    static let occlusionSetter: (@convention(c) (AnyObject, Selector, Bool) -> Void)? = {
+        guard let method = class_getInstanceMethod(WKWebView.self, NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")) else { return nil }
+        return unsafeBitCast(method_getImplementation(method), to: (@convention(c) (AnyObject, Selector, Bool) -> Void).self)
+    }()
+
     /// A runner for `home`, its snapshots in the home's tmp/. The command paints while AppKit runs the app, which
     /// tells WebKit its window is on screen; this process does not run the app, so WebKit is told not to wait for
-    /// that (through a private setter these tests alone use), or the page would never paint.
-    static func runner(_ home: Home) -> CheckRunner {
+    /// that (through a private setter these tests alone use), or the page would never paint. Throws at once when
+    /// this WebKit has no such setter, rather than letting every check wait for its timeout.
+    static func runner(_ home: Home) throws -> CheckRunner {
+        let setter = try #require(occlusionSetter, "This WebKit has no _setWindowOcclusionDetectionEnabled:, so a check in this process would never paint.")
         let runner = CheckRunner(places: home.places, share: Home.share)
         runner.output = home.root.appendingPathComponent("tmp/something-check")
-        runner.created = { web in
-            let selector = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
-            guard let method = class_getInstanceMethod(WKWebView.self, selector) else {
-                Issue.record("This WebKit has no \(selector).")
-                return
-            }
-            typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
-            unsafeBitCast(method_getImplementation(method), to: Setter.self)(web, selector, false)
-        }
+        runner.created = { setter($0, NSSelectorFromString("_setWindowOcclusionDetectionEnabled:"), false) }
         return runner
+    }
+
+    /// The command's snapshots go to $TMPDIR/something-check. Check.main itself is not run here: Swift Testing runs
+    /// this suite inside a job of the main queue, which NSApp.run cannot drain, so the report would never come. CI
+    /// runs it through the assembled program instead.
+    @Test func theSnapshotsGoToTheTemporaryFolder() {
+        let temporary = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+        let runner = CheckRunner(places: Home(prefix: "something-check-").places, share: Home.share)
+        #expect(runner.output == URL(fileURLWithPath: temporary).appendingPathComponent("something-check"))
     }
 
     /// Each check removes the snapshots older than a day, whatever space they were of; newer ones stay.
@@ -322,7 +332,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared(""))
-        let runner = CheckTests.runner(home)
+        let runner = try CheckTests.runner(home)
         runner.windowServer = false
         try FileManager.default.createDirectory(at: runner.output, withIntermediateDirectories: true)
         let old = runner.output.appendingPathComponent("gone.png"), recent = runner.output.appendingPathComponent("kept.png")
@@ -338,7 +348,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("\"colour\": \"blue\"", "<script>agnets.length;</script>"))
-        let runner = CheckTests.runner(home)
+        let runner = try CheckTests.runner(home)
         runner.windowServer = false
         let report = try await runner.run(Check(space: "x"))
         #expect(report.problems.map(\.code) == ["NO_WINDOW_SERVER", "UNKNOWN_KEY"] && report.exitStatus == 2)
@@ -360,9 +370,10 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<script>for (;;) {}</script>"))
-        let runner = CheckTests.runner(home)
+        let runner = try CheckTests.runner(home)
         var web: WKWebView?
-        runner.created = { web = $0 }
+        let paint = runner.created
+        runner.created = { paint($0); web = $0 }
         runner.timeout = 1
         let report = try await runner.run(Check(space: "x"))
         // The page's process still loops; it ends with the web view only when it is killed.
@@ -375,7 +386,7 @@ extension Home {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared("<p>Invented.</p>"))
-        let runner = CheckTests.runner(home)
+        let runner = try CheckTests.runner(home)
         var killed = false
         runner.loaded = { killed = CheckTests.kill($0) }
         let report = try await runner.run(Check(space: "x"))

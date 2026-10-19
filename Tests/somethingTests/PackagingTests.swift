@@ -79,18 +79,20 @@ import Testing
         #expect(ran.status == 0 && decision.behavior == "deny" && decision.message?.contains("something is not running") == true, "\(ran)")
 
         forget()
-        let registered = try Self.registeredInTemporaryFolder()
-        #expect(registered.isEmpty, "LaunchServices still knows these something.app: \(registered)")
+        // lsregister -dump prints tens of megabytes: not on a thread of the shared pool.
+        let known = try await offMain { try Self.registered() }
+        try #require(!known.isEmpty, "lsregister -dump gave no path: line, so the check below would prove nothing")
+        let temporary = URL(fileURLWithPath: NSTemporaryDirectory()), real = temporary.resolvingSymlinksInPath().path
+        let left = known.filter { $0.contains("something.app") && ($0.contains(temporary.path) || $0.contains(real)) }
+        #expect(left.isEmpty, "LaunchServices still knows these something.app: \(left)")
     }
 
     static let lsregister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
-    /// The something.app bundles under $TMPDIR that LaunchServices knows, by path. Throws when lsregister cannot run.
-    static func registeredInTemporaryFolder() throws -> [String] {
-        let temporary = URL(fileURLWithPath: NSTemporaryDirectory()), real = temporary.resolvingSymlinksInPath().path
-        return try runBlocking(lsregister, ["-dump"], quiet: true).out.split(separator: "\n").compactMap { line in
-            guard line.hasPrefix("path:"), line.contains("something.app"), line.contains(temporary.path) || line.contains(real) else { return nil }
-            return line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+    /// Every path LaunchServices knows, as lsregister -dump prints them. Throws when lsregister cannot run.
+    static func registered() throws -> [String] {
+        try runBlocking(lsregister, ["-dump"], quiet: true).out.split(separator: "\n").compactMap { line in
+            line.hasPrefix("path:") ? line.dropFirst(5).trimmingCharacters(in: .whitespaces) : nil
         }
     }
 
@@ -104,6 +106,8 @@ import Testing
     @Test func everyPlaceSaysMacOS15() throws {
         func text(_ path: String) throws -> String { try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8) }
         #expect(try text("Package.swift").contains(#"platforms: [.macOS("15.0")]"#))
+        // make-app.sh stamps the program with the floor it reads from Info.plist.
+        #expect(try text("tools/make-app.sh").contains(#"vtool -set-build-version macos "$minimum""#))
         #expect(try text("packaging/Info.plist").contains("<key>LSMinimumSystemVersion</key>\n\t<string>15.0</string>"))
         #expect(try text("packaging/homebrew/something.rb").contains("depends_on macos: :sequoia"))
         #expect(try text("README.md").contains("macOS 15 or later") && text("share/guide.md").contains("macOS 15 or later"))
