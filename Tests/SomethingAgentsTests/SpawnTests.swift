@@ -154,11 +154,14 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         let fixture = try Fixture("trap '' TERM; echo ready; while :; do sleep 0.05; done")
         #expect(await fixture.wait(for: "ready"))
         let start = Date(), first = DispatchSemaphore(value: 0), second = DispatchSemaphore(value: 0)
+        // The time is taken when the ladder calls back, not when this task resumes: on a busy runner the resumption
+        // alone took seconds. The semaphore orders the write before the read.
+        var ended = Date.distantFuture
         fixture.spawn.stop { first.signal() }
-        fixture.spawn.stop(cap: 1) { second.signal() }
+        fixture.spawn.stop(cap: 1) { ended = Date(); second.signal() }
         #expect(try await waitOffPool(first, 3))
         #expect(try await waitOffPool(second, 1))
-        #expect(Date().timeIntervalSince(start) < 1.5)
+        #expect(ended.timeIntervalSince(start) < 1.5)
         #expect(!processExists(fixture.spawn.pid))
     }
 
