@@ -303,7 +303,7 @@ import WebKit
 
     /// The margin around the assistant, where its shadows fall, and the room beside and between its pieces let clicks
     /// through to the space under it.
-    @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheAssistantReachTheSpace() throws {
+    @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheAssistantReachTheSpace() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
         let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), floater = Floater(rootView: AssistantView(model: model))
@@ -318,11 +318,15 @@ import WebKit
         #expect(center.hitTest(NSPoint(x: frame.midX, y: frame.minY + AssistantView.margin + 20))?.isDescendant(of: floater) == true)
         // Beside the status line, and between it and the capsule, nothing is drawn: the space gets the click.
         model.unkept = true
-        center.layoutSubtreeIfNeeded()
-        offscreen.window.displayIfNeeded()
+        // SwiftUI reports the new piece's frame at its next update, which may come a little later on a busy runner.
+        #expect(await wait(until: {
+            center.layoutSubtreeIfNeeded()
+            offscreen.window.displayIfNeeded()
+            return model.drawn.count == 2
+        }), "drawn: \(model.drawn)")
         let status = try #require(model.drawn.min { $0.width < $1.width }, "no piece was drawn")
         let grown = floater.frame, y = { (top: CGFloat) in grown.maxY - top }
-        #expect(model.drawn.count == 2 && status.width < 400)
+        #expect(status.width < 400)
         #expect(center.hitTest(NSPoint(x: grown.minX + AssistantView.margin + 6, y: y(status.midY))) !== floater)
         #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.maxY + 3))) !== floater)
         #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.midY)))?.isDescendant(of: floater) == true)
