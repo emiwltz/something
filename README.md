@@ -4,8 +4,8 @@ something is a Mac app for **spaces**: pages you build with your own coding agen
 for you, a morning paper of what your agents did or a small game for your breaks. something shows them safely, and
 lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP) and talk to the first four.
 
-*Version 0.2. Until its tag `v0.2.0` is published, the install builds from source (`--HEAD`, a few minutes) and
-updates with `brew upgrade --fetch-HEAD something`.*
+*Version 0.2.0. `brew upgrade something` brings the next one; `brew install --HEAD emiwltz/tap/something` builds the
+latest `main` from source instead (a few minutes).*
 
 ## The first five minutes
 
@@ -13,7 +13,7 @@ You need a Mac with macOS 15 or later and [Homebrew](https://brew.sh), and no Xc
 in advance for your Mac (a "bottle"), or where none fits, builds one with Apple's Command Line Tools alone.
 
 ```sh
-brew install --HEAD emiwltz/tap/something    # until v0.2.0; builds from source, a few minutes
+brew install emiwltz/tap/something
 something
 ```
 
