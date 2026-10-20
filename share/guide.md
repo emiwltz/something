@@ -7,8 +7,8 @@ launches them, and shows **spaces**: HTML pages that you write for the person. A
 summary of the day, a small game: what they ask for. something gives you an empty page and this contract, version 1. The
 look and the content are yours and theirs; the contract only says what a space can rely on.
 
-*Status: something 1.0 is being built; no version is tagged yet. The state lists the agents something launched and
-those started elsewhere, and `resume` continues here a Claude Code or Codex conversation started elsewhere.*
+*This guide is for something 0.2. The state lists the agents something launched and those started elsewhere, and
+`resume` continues here a Claude Code or Codex conversation started elsewhere.*
 
 ## The five steps
 
@@ -57,6 +57,15 @@ also start from one in something's Templates (File › Templates).
   Template asks the person for it and does so.
 - What they show of the agents is rebuilt from the state each time they open (the threads' last turns), not only
   what happened while they were open; what they keep goes in `store`.
+
+## If you are something's assistant
+
+When something's own window started you, you work in `~/something/spaces` and each message starts with one line from
+something, `[something] …`, saying which space is open: "this space" means that one. The folder's `AGENTS.md`, which
+something writes there, says how to work in it: read it after this guide. Changing the files of that folder and
+running `something new`, `check`, `open` and `guide` does not ask the person (with Claude Code, unless they chose Ask
+Before Every Change); anything else asks them, as their own settings decide. A space you make there opens by itself
+in the window. No space can write to you or read what the person tells you.
 
 ## Where a space lives
 
@@ -181,7 +190,7 @@ What each `delivery` means today:
   `AGENT_STOPPED`): such a call never answers `"steered"`.
 - `"queued"`: a turn was running and `when` was `"next"`; the message is in the agent's `queue`.
 - `"unconfirmed"`: kept in contract 1 for a message the agent took without confirming it within 10 seconds.
-  something 1.0 never gives it, since it answers as soon as the message is written; treat it as `"steered"`.
+  something 0.2 never gives it, since it answers as soon as the message is written; treat it as `"steered"`.
 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
@@ -359,7 +368,7 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   write the question in its reply.
 - **pi has no mode**: pi never asks permission, by design; it runs commands and edits files without asking.
 - **OMP is not launched**: something only reads it (`launch:omp` and `send:omp` are unavailable).
-- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 1.0 only a
+- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 0.2 only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,
   with the `launch` right for that kind. For `opencode`, `pi` and `omp`, `can.resume` is false and `because.resume`

@@ -18,11 +18,11 @@ Everything in the repository is in English: code, comments, data keys, commit me
 ## What must stay true
 
 1. **Nothing in the agents.** something writes no hook, no MCP server, no skill and no setting into an agent's configuration. What a launch needs is passed on the command line, to the agents something launches.
-2. **Every permission is shown.** A request from an agent something launched waits for a click in a window of the Mac: "Allow once" or "Deny". A space cannot draw that window or answer it.
+2. **Every permission is shown.** A request from an agent something launched waits for a click in a window of the Mac: "Allow Once" or "Deny". A space cannot draw that window or answer it. One exception, Emi's decision of 19 Oct 2026: the assistant's own building work. The promise, in the same words in the README and the app: "something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide." For Claude Code that is exactly edits and writes in `~/something/spaces` and `something new`, `check`, `open` and `guide`; its rules fail toward asking, never a broader path or `Bash(something:*)`. "Ask Before Every Change" turns it off.
 3. **The unknown is said.** What is not known is `null`; a state no source gives is `"unknown"`, never `"idle"`, never a guess.
-4. **No orchestration.** something launches, shows and passes messages it is asked to pass. It never chains agents by itself, gives them roles, or decides for the person.
+4. **No orchestration.** something launches, shows and passes messages it is asked to pass. It never chains agents by itself, gives them roles, or decides for the person. The assistant is Emi's decision of 19 Oct 2026: the app launches the person's chosen agent in `~/something/spaces` to build spaces with them; it is a launch like any other, with the narrow pre-allowances of rule 2; no space can write to it or read its conversation.
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
-6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by `BudgetTests`: the core (`Sources/SomethingCore`) 1,750 lines in all; in `Sources/SomethingAgents`, each driver 600, each other file 400; the Mac app (`Sources/something`) 4,800 in all, a soft budget that Emi may raise. Every line counts, comments too.
+6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by `BudgetTests`: the core (`Sources/SomethingCore`) 1,750 lines in all; in `Sources/SomethingAgents`, each driver 600, each other file 400; the Mac app (`Sources/something`) 4,800 in all, a soft budget that Emi may raise. `TemplatesTests` keeps each template under 700 lines: an agent reads it as an example. Every line counts, comments too.
 7. **Clear.** Each file has one role, said in its first comment. A public function says what it returns and when it throws. A comment says why, not what.
 
 ## The contract
@@ -54,6 +54,7 @@ swift test
 node --test Tests/something-js.test.mjs    # name the file: node 22 does not take a folder
 ```
 
+- **The Command Line Tools alone.** A newcomer has no Xcode, and Homebrew builds from source with the Command Line Tools when no bottle fits. On a Mac with Xcode, also run `DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build`. Some SwiftUI attributes are macros whose plugin only Xcode ships (`@State`, `@Entry`): `ToolchainTests` allows only a list of attributes in `Sources/`, and a word joins it only after `Sources/` built with it under the Command Line Tools alone.
 - **Fakes shaped exactly like real data.** Fake agents that speak each channel, fake session files with invented text. A fixture that does not match the real shape proves nothing.
 - **A fresh environment after each commit**: the suite also passes from a clean clone with an empty home folder.
 
@@ -63,6 +64,12 @@ node --test Tests/something-js.test.mjs    # name the file: node 22 does not tak
   code=$?; rm -rf "$tmp"; (exit $code)
   ```
 
+- **Tests leave nothing behind.**
+  - No test, trial or tool leaves an `.app` registered with LaunchServices: any `.app` is made under `$TMPDIR`, then unregistered (`lsregister -u`) and removed. `PackagingTests` checks that `lsregister -dump` names no `something.app` under `$TMPDIR`. No test runs Spotlight's importer (`mdimport` registers what it reads).
+  - WebKit's folders cannot be deleted, so no test may make a new set: every `something check` a test runs is in-process, except one subprocess test, which runs the program from the fixed path `$TMPDIR/something-test-program/something`.
+  - No test depends on the calendar: fixture times are relative to now, or the read takes `now:`.
+  - Nothing goes to the real Trash: `Library.trash` goes through a seam the tests replace.
+  - After each commit, these three counts are the same before and after one `swift test` and one clean-clone run: `ls -d $TMPDIR/com.apple.WebKit.*+something-* | wc -l`, `ls $TMPDIR | grep -c '^something'`, and `lsregister -dump | grep -c 'something.app'`.
 - **Other machines.** GitHub runs the suite on macOS at each push (`.github/workflows/tests.yml`). A red run is fixed before anything else.
 - **A virtual machine before a version is tagged:** the full trial of a newcomer, `brew install` included, on a fresh macOS.
 - **Green tests do not replace a trial with real agents.** Readers are also checked, read-only, against real session files; drivers against the real programs.
