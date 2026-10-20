@@ -20,7 +20,9 @@ struct AssistantView: View {
                 }
             }
         }
-        .frame(maxWidth: 640)
+        // The window sizes the assistant by its ideal size, measured at its ideal width: without one, every line
+        // would be measured unwrapped, and the conversation, wrapped at 640 points, would not fit what it asked for.
+        .frame(idealWidth: 640, maxWidth: 640)
         .padding(AssistantView.margin)
         .coordinateSpace(.named(Drawn.space))
         .onPreferenceChange(Drawn.self) { model.drawn = $0 }
@@ -56,7 +58,7 @@ struct AssistantView: View {
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10).padding(.vertical, 3)
-            .modifier(Floating(shape: Capsule()))
+            .modifier(Floating(shape: Capsule(style: .circular)))
             .onTapGesture { if let ready { model.openReady(ready.id) } else if model.light == .waiting { model.showRequest() } }
     }
 
@@ -72,13 +74,13 @@ struct AssistantView: View {
         .font(.system(size: 12))
         .controlSize(.small)
         .padding(.horizontal, 12).padding(.vertical, 6)
-        .modifier(Floating(shape: Capsule()))
+        .modifier(Floating(shape: Capsule(style: .circular)))
     }
 
     // MARK: The drawer
 
     private var drawer: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Assistant · \(model.name)").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                 Spacer()
@@ -87,21 +89,20 @@ struct AssistantView: View {
                     .menuIndicator(.hidden)
                     .fixedSize()
             }
-            // The whole conversation when it fits, else the end of it, which stays in view while at the bottom.
-            ViewThatFits(in: .vertical) {
-                conversation
-                ScrollView { conversation }
-                    .defaultScrollAnchor(.bottom)
-                    .contentMargins(.top, 16, for: .scrollContent)
-                    .mask {
-                        // A line cut by the top edge fades out over 20 points, whatever the drawer's height.
-                        VStack(spacing: 0) {
-                            LinearGradient(stops: [.init(color: .clear, location: 0.25), .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom)
-                                .frame(height: 20)
-                            Color.black
-                        }
+            // The scroll view asks for the whole conversation's height, and the window gives it what is left under its
+            // cap: all of it when it fits, else its end, which stays in view while at the bottom.
+            ScrollView { conversation }
+                .defaultScrollAnchor(.bottom)
+                .scrollBounceBehavior(.basedOnSize)
+                .contentMargins(.top, 16, for: .scrollContent)
+                .mask {
+                    // A line cut by the top edge fades out over 20 points, whatever the drawer's height.
+                    VStack(spacing: 0) {
+                        LinearGradient(stops: [.init(color: .clear, location: 0.25), .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 20)
+                        Color.black
                     }
-            }
+                }
         }
         .padding(EdgeInsets(top: 12, leading: 16, bottom: 14, trailing: 16))
         .frame(maxHeight: 560)
@@ -195,7 +196,7 @@ struct Composer: View {
             HStack(spacing: 8) { builder; field; chevron; send }
                 .padding(7)
                 .frame(minHeight: 44)
-                .modifier(Floating(shape: Capsule()))
+                .modifier(Floating(shape: Capsule(style: .circular)))
         }
     }
 
@@ -283,12 +284,12 @@ struct NoAgent: View {
         .controlSize(.small)
         .padding(.horizontal, 16)
         .frame(height: 44)
-        .modifier(Floating(shape: Capsule()))
+        .modifier(Floating(shape: Capsule(style: .circular)))
     }
 }
 
-/// Material, a hairline and a soft shadow: the assistant floats over the space. A pill is a `Capsule`: a continuous
-/// rounded rectangle as tall as twice its radius draws a mark at each end.
+/// Material, a hairline and a soft shadow: the assistant floats over the space. A pill is a circular `Capsule`: the
+/// material of a continuous one ends in a point at each side.
 struct Floating<Ground: InsettableShape>: ViewModifier {
     var shape: Ground
 

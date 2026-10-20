@@ -89,12 +89,9 @@ enum Command: Equatable {
             }
             return door.deliver(URL(fileURLWithPath: name).standardizedFileURL).map { say($0, true); return 1 } ?? 0
         case .open(let name) where !Spaces.isName(name):
-            // A path is a space only when it is one of the spaces folder, given by its path.
             let url = URL(fileURLWithPath: name).standardizedFileURL
-            let named = url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
-            guard let space = Spaces(root: places.spaces).named(named),
-                  space.location.resolvingSymlinksInPath().path == url.resolvingSymlinksInPath().path else {
-                say(Command.elsewhere(named), true)
+            guard let space = Command.kept(url, places) else {
+                say(Command.elsewhere(url), true)
                 return 1
             }
             return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
@@ -178,10 +175,21 @@ enum Command: Equatable {
         return space
     }
 
-    /// What to do with a page outside the spaces folder, named `name` there: something opens only that folder's spaces,
-    /// which have a memory, a journal and kept answers.
-    static func elsewhere(_ name: String) -> String {
-        let named = Spaces.isName(name) ? name : "<name>"
+    /// The space of the spaces folder whose file or folder is at `url`, however the path is written; nil for a page
+    /// anywhere else. Only such a space has a memory, a journal and kept answers.
+    static func kept(_ url: URL, _ places: Places) -> Space? {
+        let real = { (url: URL) in url.resolvingSymlinksInPath().path }
+        return Spaces(root: places.spaces).named(name(of: url)).flatMap { real($0.location) == real(url) ? $0 : nil }
+    }
+
+    /// The name a space at `url` would have: its file's name without .html, or its folder's.
+    static func name(of url: URL) -> String {
+        url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
+    }
+
+    /// What to do with the page at `url`, outside the spaces folder: something opens only that folder's spaces.
+    static func elsewhere(_ url: URL) -> String {
+        let named = Spaces.isName(name(of: url)) ? name(of: url) : "<name>"
         return "something opens spaces from ~/something/spaces. Copy it there, then run: something open \(named)"
     }
 

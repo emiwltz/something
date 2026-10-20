@@ -16,6 +16,18 @@ struct BlankView: View {
     let library: Library
 
     var body: some View {
+        // Centered in the window, and scrolled when a small window cannot hold it all.
+        GeometryReader { window in
+            ScrollView { page.frame(minHeight: window.size.height, alignment: model.drawer ? .top : .center) }
+                .scrollBounceBehavior(.basedOnSize)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if !model.building { Button("Skip for now") { library.select(Library.gallery) }.buttonStyle(.link).padding(24) }
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private var page: some View {
         VStack(spacing: 18) {
             Text("What do you want to make?").font(.system(size: 28, weight: .semibold))
             if model.noAgent {
@@ -23,7 +35,7 @@ struct BlankView: View {
             } else {
                 Text("\(model.name) builds it with you, in \(Words.path(model.places.spaces.path, home: model.places.home.path)).")
                     .foregroundStyle(.secondary)
-                Composer(model: model, big: true).frame(width: 620)
+                Composer(model: model, big: true).frame(maxWidth: 620).padding(.horizontal, 24)
                 if model.building {
                     Text("It opens here when it is ready. You will be asked what it may do.").foregroundStyle(.secondary)
                 } else {
@@ -45,22 +57,22 @@ struct BlankView: View {
             }
             if !model.building, !library.templates.isEmpty {
                 Text("Or start from a template").font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 22)
-                HStack(alignment: .top, spacing: 14) {
+                // One row when the window is wide enough, else as many rows as it takes.
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 148, maximum: 148), spacing: 14, alignment: .top)], spacing: 14) {
                     ForEach(library.templates) { template in
                         VStack(spacing: 6) {
-                            Preview(template: template, use: library.use).frame(width: 148)
+                            Preview(template: template, use: library.use)
                             Text(template.title).font(.system(size: 11.5)).foregroundStyle(.secondary)
                         }
                     }
                 }
+                .frame(maxWidth: 6 * 148 + 5 * 14)
+                .padding(.horizontal, 24)
             }
         }
         // Up, out of the way of the conversation, once it is open.
         .padding(model.drawer ? .top : .bottom, 40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.drawer ? .top : .center)
-        .overlay(alignment: .bottomTrailing) {
-            if !model.building { Button("Skip for now") { library.select(Library.gallery) }.buttonStyle(.link).padding(24) }
-        }
-        .background(Color(nsColor: .textBackgroundColor))
+        .padding(.top, 20)
+        .frame(maxWidth: .infinity)
     }
 }

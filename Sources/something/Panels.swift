@@ -222,7 +222,7 @@ final class PromptPanel: NSPanel {
     }
 
     /// A label that wraps inside the panel's insets.
-    static func line(_ text: String) -> NSTextField { Style.line(text, width: width - 32) }
+    static func line(_ text: String) -> NSTextField { Ask.line(text, width: width - 32) }
 
     /// Each question's chosen labels, with the typed text when there is one.
     var choice: [[String]] {

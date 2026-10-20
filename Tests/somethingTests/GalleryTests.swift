@@ -75,6 +75,9 @@ struct GalleryTests {
 
     @Test func drawsEveryWindow() async throws {
         defer { NSApp.appearance = nil }
+        // The sheets and the tour show the app's icon, as in the app; this test program has none of its own.
+        NSApp.applicationIconImage = NSImage(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("packaging/something.icns"))
+
         // One after the other: the appearance is the app's, so two drawings at once would mix them.
         for dark in [false, true] {
             NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -105,6 +108,7 @@ struct GalleryTests {
         shell.assistant.place = AssistantModel.place(board)
         info.show(board.space)
         shell.inspector.isCollapsed = false
+        await settle(board)
         try await draw(shell, library: library, web: board.web, "window-space-info" + suffix, fixture)
         let review = try await fixture.window(try #require(library.entry("morning-review")?.space))
         defer { review.close() }
@@ -113,6 +117,7 @@ struct GalleryTests {
         shell.show(review)
         shell.assistant.place = AssistantModel.place(review)
         info.show(review.space)
+        await settle(review)
         try await draw(shell, library: library, web: review.web, "window-info-rights" + suffix, fixture)
 
         // A space that cannot be shown, Info hidden, Claude Code found to fix it.
@@ -201,30 +206,45 @@ struct GalleryTests {
     }
 
     /// Draws the whole window, title bar and toolbar included, into `name`.png at 2x, with the page of `web` composed
-    /// in its place: WebKit draws in another process, which a view's own drawing does not reach. The sidebar's rows
-    /// are vibrant, blended by the window server, which a view's drawing does not reach either: the same sidebar is
-    /// drawn apart, on a plain background, and composed in its column.
+    /// in its place: WebKit draws in another process, which a view's own drawing does not reach. The sidebar's and
+    /// Info's contents are vibrant, blended by the window server, which a view's drawing does not reach either: the
+    /// same views are drawn apart, on a plain background, and composed in their columns.
     func draw(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, _ fixture: Home) async throws {
-        let column = shell.split.splitViewItems[0].viewController.view, folded = shell.split.splitViewItems[0].isCollapsed
-        let sidebar = NSHostingView(rootView: SidebarView(library: library, assistant: shell.assistant))
-        let offscreen = Offscreen(sidebar)
-        // Below the title bar, as the sidebar's own list starts.
+        // Below the title bar, as the columns' own contents start.
         let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
-        offscreen.window.setContentSize(NSSize(width: max(column.bounds.width, 232), height: max(column.bounds.height - top, 100)))
+        let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
+        let columns: [(item: NSSplitViewItem, view: NSView)] = [
+            (shell.split.splitViewItems[0], NSHostingView(rootView: SidebarView(library: library, assistant: shell.assistant))),
+            (shell.inspector, NSHostingView(rootView: inspector.rootView)),
+        ].filter { !$0.0.isCollapsed }
+        let offscreens = columns.map { column in
+            let offscreen = Offscreen(column.view), bounds = column.item.viewController.view.bounds
+            offscreen.window.setContentSize(NSSize(width: max(bounds.width, 232), height: max(bounds.height - top, 100)))
+            return offscreen
+        }
         // SwiftUI and WebKit draw on the run loop.
         await wait(1.5)
         let frame = try #require(shell.window.contentView?.superview)
         disguise(frame, fixture.root.path)
         frame.layoutSubtreeIfNeeded()
-        let rep = try bitmap(frame.bounds.size), side = try bitmap(sidebar.bounds.size)
+        let rep = try bitmap(frame.bounds.size)
         frame.cacheDisplay(in: frame.bounds, to: rep)
-        sidebar.cacheDisplay(in: sidebar.bounds, to: side)
+        let apart = try columns.map { column in
+            disguise(column.view, fixture.root.path)
+            let drawn = try bitmap(column.view.bounds.size)
+            selected(column.view) { column.view.cacheDisplay(in: column.view.bounds, to: drawn) }
+            var place = column.item.viewController.view.convert(column.item.viewController.view.bounds, to: frame)
+            place.size.height -= top
+            return (drawn, place)
+        }
         let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
         try png(of: frame.bounds.size, name) {
             rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            var place = column.convert(column.bounds, to: frame)
-            place.size.height -= top
-            if !folded { side.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
+            for (drawn, place) in apart {
+                NSColor.windowBackgroundColor.setFill()
+                place.fill()
+                drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
             if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
             // The assistant floats over the page, which was drawn over it.
             if web != nil, let floating = shell.floating, let over = try? bitmap(floating.bounds.size) {
@@ -232,7 +252,7 @@ struct GalleryTests {
                 over.draw(in: floating.convert(floating.bounds, to: frame), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
         }
-        withExtendedLifetime(offscreen) {}
+        withExtendedLifetime(offscreens) {}
     }
 
     /// The assistant in each of its states, driven by AssistantTests' fake `claude` (invented text): not started,
@@ -253,12 +273,12 @@ struct GalleryTests {
             model.send()
             #expect(await wait(until: until), "the fake did not answer \(text)")
         }
-        await say("Make the waiting tiles span the whole width, and play a soft sound when one starts waiting. make-board") {
+        await say("Make the waiting tiles span the whole width, and play a soft sound when one starts waiting.") {
             model.light == .ready && model.rows.count > 5
         }
         try await draw(model, "assistant-ready" + suffix, fixture)
         model.drawer = true
-        try await draw(model, "assistant-conversation" + suffix, height: 640, fixture)
+        try await draw(model, "assistant-conversation" + suffix, height: 748, fixture)
         model.drawer = false
         model.newConversation()
         await say("go-slow") { model.light == .working }
@@ -267,8 +287,8 @@ struct GalleryTests {
         await say("ask-first") { model.light == .waiting }
         try await draw(model, "assistant-waiting" + suffix, fixture)
         model.newConversation()
-        await say("sign-in-please") { model.problem != nil }
-        try await draw(model, "assistant-error" + suffix, height: 420, fixture)
+        await say("Add a clock in the corner.") { model.problem != nil }
+        try await draw(model, "assistant-error" + suffix, height: 748, fixture)
         model.newConversation()
         model.drawer = false
         model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
@@ -287,7 +307,6 @@ struct GalleryTests {
     /// with the conversation open, without an agent), a space the assistant made said ready, the rights sheet of a
     /// space it made, and Help › What something Does and Doesn't.
     func drawOnboarding(suffix: String, _ fixture: Home) async throws {
-        NSApp.applicationIconImage = NSImage(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("packaging/something.icns"))
         /// The window of a home whose PATH has `programs`, the builders looked for.
         func onboarding(_ programs: [String]) async throws -> (shell: Shell, library: Library, home: Home) {
             let home = Home(prefix: "something-gallery-")
@@ -328,6 +347,10 @@ struct GalleryTests {
         model.engine.lookAgain()
         #expect(await wait(until: { model.kind == "claude" }))
         try await draw(shell, library: library, web: nil, "blank" + suffix, fixture)
+        // The smallest window: the templates wrap, nothing is cut.
+        shell.window.setContentSize(NSSize(width: 820, height: 560))
+        try await draw(shell, library: library, web: nil, "blank-smallest" + suffix, fixture)
+        shell.window.setContentSize(NSSize(width: 1240, height: 800))
         model.draft = BlankView.chips[2].1
         model.send()
         #expect(await wait(until: { model.rows.count >= 4 && model.light == .working }), "the fake did not start building")
@@ -351,6 +374,14 @@ struct GalleryTests {
                                   folder: nil, made: true)
         try draw(Ask.rights(made, home: "/Users/example").alert, "rights-made-by-agent" + suffix, fixture)
         try draw(Ask.doesAndDoesnt(), "does-and-doesnt" + suffix, fixture)
+    }
+
+    /// Ends the page's animations that end, as its first second on the screen would: a window never shown has no
+    /// animation clock, and a tile that arrives from transparent would stay transparent in the picture.
+    func settle(_ view: SpaceView) async {
+        guard let frame = view.frame else { return }
+        _ = try? await view.web.evaluateJavaScript("document.getAnimations().forEach((one) => { try { one.finish(); } catch (error) {} }); 0",
+                                                   in: frame, contentWorld: .page)
     }
 
     /// Puts AssistantTests' fake `claude` in the PATH of `fixture`'s engines.
@@ -419,6 +450,8 @@ struct GalleryTests {
 
     /// Draws an alert's window as it would be shown.
     func draw(_ alert: NSAlert, _ name: String, _ fixture: Home) throws {
+        // The app's icon, as the .app shows it: this test program's own is a generic one.
+        alert.icon = NSApp.applicationIconImage
         alert.layout()
         try draw(try #require(alert.window.contentView), name, fixture)
     }
@@ -430,11 +463,28 @@ struct GalleryTests {
         if view.frame.isEmpty { view.frame.size = view.fittingSize }
         view.layoutSubtreeIfNeeded()
         let rep = try bitmap(view.bounds.size)
-        view.cacheDisplay(in: view.bounds, to: rep)
+        selected(view) { view.cacheDisplay(in: view.bounds, to: rep) }
         // Over the background: a bitmap's plain draw copies its transparent pixels over it.
         try png(of: view.bounds.size, name) {
             rep.draw(in: NSRect(origin: .zero, size: view.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
+    }
+
+    /// Runs `draw` with the selected rows of `view`'s lists in the color of a selection: a row's highlight is a view of
+    /// the selection material, its layer black, and the window server colors it on the screen with a filter
+    /// (vibrantColorMatrixSourceOver) that no drawing in this process applies: cacheDisplay, CALayer.render and
+    /// CARenderer all give black. Meanwhile it is the gray of the selection of a window that is not key, as this one.
+    func selected(_ view: NSView, _ draw: () -> Void) {
+        func highlights(_ view: NSView) -> [CALayer] {
+            let own = (view as? NSVisualEffectView)?.material == .selection ? view.layer?.sublayers ?? [] : []
+            return own + view.subviews.flatMap(highlights)
+        }
+        let layers = highlights(view), before = layers.map(\.backgroundColor)
+        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance {
+            layers.forEach { $0.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor.cgColor }
+        }
+        draw()
+        zip(layers, before).forEach { $0.backgroundColor = $1 }
     }
 
     func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {

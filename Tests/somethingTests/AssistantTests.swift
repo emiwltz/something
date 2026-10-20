@@ -13,8 +13,9 @@ import WebKit
 @MainActor @Suite(.serialized, .leavesNothing("something-assistant-")) struct AssistantTests {
     /// A fake `claude`: it keeps each line it reads in $HOME/out/input and its arguments in $HOME/out/arguments, and
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a signed-out Claude Code
-    /// gives. For the gallery, "make-board" runs four tools before its reply, "go-slow" never ends its turn, "small
-    /// game" starts building one and never ends its turn, and "ask-first" asks a permission.
+    /// gives. For the gallery, "clock in the corner" gives that error too, "waiting tiles" runs four tools before its
+    /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, and "ask-first"
+    /// asks a permission.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -37,7 +38,7 @@ import WebKit
         *'ask-first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_9"}}' ;;
-        *'make-board'*'"type":"user"'*)
+        *'waiting tiles'*'"type":"user"'*)
           tool 1 Bash '{"command":"something guide --print"}'
           tool 2 Read "{\"file_path\":\"$page\"}"
           tool 3 Edit "{\"file_path\":\"$page\"}"
@@ -46,7 +47,7 @@ import WebKit
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u6"}' ;;
         *'"subtype":"initialize"'*)
           echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"}]}}}' ;;
-        *'sign-in-please'*'"type":"user"'*)
+        *'sign-in-please'*'"type":"user"'*|*'clock in the corner'*'"type":"user"'*)
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"Invalid API key · Please run /login","session_id":"s1","uuid":"u3"}' ;;
         *'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_1","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Invented reply."}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'

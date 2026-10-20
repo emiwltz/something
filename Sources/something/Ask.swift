@@ -2,7 +2,8 @@
 // a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
 // the folder a template follows, moving a space to the Trash, quitting while agents run, switching the assistant's
 // builder, and how to get one. A space cannot draw them, so a space cannot answer them.
-// Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window.
+// Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window. The
+// sheets and the panels share two labels: a line that wraps at a width, and a path on one line.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -113,23 +114,26 @@ final class NativeAsk: Asking {
         }
     }
 
+    private func chosen(_ panel: NSSavePanel) -> URL? {
+        wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
+    }
+
     func saveAs(_ name: String) -> URL? {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = name
-        return wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
+        return chosen(panel)
     }
 
     func importFile() -> URL? {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json]
-        return wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
+        return chosen(panel)
     }
 
     func folder(_ message: String) -> URL? {
         let panel = NSOpenPanel()
         (panel.canChooseDirectories, panel.canChooseFiles, panel.message, panel.prompt) = (true, false, message, "Choose")
-        return wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
+        return chosen(panel)
     }
 
     /// Says `message` on standard error, which a terminal shows, and in a sheet once the window has none.
@@ -203,15 +207,14 @@ final class Chooser: NSObject {
 
     private func say(_ text: String, _ folder: String?) {
         row.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        row.addArrangedSubview(Style.line(text, width: width))
-        if let folder { row.addArrangedSubview(Style.path(folder, home: home, width: width)) }
+        row.addArrangedSubview(Ask.line(text, width: width))
+        if let folder { row.addArrangedSubview(Ask.path(folder, home: home, width: width)) }
     }
 
     /// Asks for a folder in a sheet over the rights sheet.
     @objc func choose() {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
+        (panel.canChooseDirectories, panel.canChooseFiles) = (true, false)
         guard let sheet = row.window else { return }
         panel.beginSheetModal(for: sheet) { [weak self] answer in
             if answer == .OK, let url = panel.url { self?.picked(url.path) }
@@ -241,6 +244,26 @@ enum Ask {
         return alert
     }
 
+    /// A label that wraps at `width` points: a long sentence must not widen its window.
+    static func line(_ text: String, width: CGFloat) -> NSTextField {
+        let label = NSTextField(wrappingLabelWithString: text)
+        label.preferredMaxLayoutWidth = width
+        return label
+    }
+
+    /// `path` on one line, with ~ for `home`, its middle names given way to "…" until it fits `width`; the whole path
+    /// shows when the pointer rests on it.
+    static func path(_ path: String, home: String, width: CGFloat) -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        let font = label.font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        label.stringValue = Words.path(path, home: home) { ($0 as NSString).size(withAttributes: [.font: font]).width <= width }
+        label.toolTip = path
+        // Even its first and last names may not fit: AppKit then cuts what is left, rather than widen the window.
+        label.lineBreakMode = .byTruncatingMiddle
+        label.widthAnchor.constraint(lessThanOrEqualToConstant: width).isActive = true
+        return label
+    }
+
     /// How wide the rights sheet's lines wrap: a long folder or many of them would otherwise widen it past the screen.
     static let rightsWidth: CGFloat = 400
 
@@ -267,20 +290,20 @@ enum Ask {
         for (right, box) in zip(question.rights, boxes) {
             box.state = .on
             lines.addArrangedSubview(box)
-            if let warning = Ask.warning(for: right) { indented(Style.line(warning + ".", width: Ask.rightsWidth - 20)) }
+            if let warning = Ask.warning(for: right) { indented(Ask.line(warning + ".", width: Ask.rightsWidth - 20)) }
         }
         if let scope = question.scope {
             let sentence = "With “\(Ask.title(for: "state"))”, it sees "
             switch scope {
-            case .all: lines.addArrangedSubview(Style.line(sentence + "all your agents.", width: Ask.rightsWidth))
+            case .all: lines.addArrangedSubview(Ask.line(sentence + "all your agents.", width: Ask.rightsWidth))
             case .folders(let folders) where folders.isEmpty:
-                lines.addArrangedSubview(Style.line(sentence + "only the agents it starts.", width: Ask.rightsWidth))
+                lines.addArrangedSubview(Ask.line(sentence + "only the agents it starts.", width: Ask.rightsWidth))
             case .folders(let folders):
-                lines.addArrangedSubview(Style.line(sentence + "only the agents working in:", width: Ask.rightsWidth))
+                lines.addArrangedSubview(Ask.line(sentence + "only the agents working in:", width: Ask.rightsWidth))
                 // Six at most: a sheet does not scroll, and twenty folders would push its buttons off the screen.
-                folders.prefix(6).forEach { indented(Style.path($0, home: home, width: Ask.rightsWidth - 20)) }
+                folders.prefix(6).forEach { indented(Ask.path($0, home: home, width: Ask.rightsWidth - 20)) }
                 if folders.count > 6 {
-                    let more = Style.line("and \(folders.count - 6) more", width: Ask.rightsWidth - 20)
+                    let more = Ask.line("and \(folders.count - 6) more", width: Ask.rightsWidth - 20)
                     more.toolTip = folders.dropFirst(6).joined(separator: "\n")
                     indented(more)
                 }
@@ -299,7 +322,7 @@ enum Ask {
             choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared, then: "Agents it starts will work in:",
                                     button: "Choose…", home: home) { folder = $0 })
         }
-        let footer = Style.line("You can change this anytime in Info (⌥⌘I).", width: Ask.rightsWidth)
+        let footer = Ask.line("You can change this anytime in Info (⌥⌘I).", width: Ask.rightsWidth)
         footer.textColor = .secondaryLabelColor
         lines.addArrangedSubview(footer)
         lines.setCustomSpacing(14, after: lines.arrangedSubviews[lines.arrangedSubviews.count - 2])

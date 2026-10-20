@@ -102,11 +102,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             shell.front()
             return library.importSpace(from: url)
         }
-        let name = url.pathExtension == "html" ? url.deletingPathExtension().lastPathComponent : url.lastPathComponent
-        let real = { (url: URL) in url.resolvingSymlinksInPath().path }
-        guard let space = Spaces(root: places.spaces).named(name), real(space.location) == real(url) else {
+        guard let space = Command.kept(url, places) else {
             shell.front()
-            return ask.tell(Command.elsewhere(name))
+            return ask.tell(Command.elsewhere(url))
         }
         library.relist()
         library.select(space.name)

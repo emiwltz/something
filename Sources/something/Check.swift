@@ -101,9 +101,8 @@ final class CheckRunner {
             return report
         }
         var report = Report(space: space.name, path: space.location.path)
-        // Only the space of that name in the spaces folder, however its path is written, has a memory and a journal.
-        let real = { (space: Space) in space.location.resolvingSymlinksInPath().path }
-        let kept = Spaces(root: places.spaces).named(space.name).map { real($0) == real(space) } ?? false
+        // Only a space of the spaces folder, however its path is written, has a memory and a journal.
+        let kept = Command.kept(space.location, places) != nil
         report.size = space.size()
         if check.journal { journal(of: space, kept: kept, into: &report) }
         let reading = Declaration.read(space, home: places.home)
