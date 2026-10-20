@@ -194,7 +194,9 @@ import SomethingCore
     var status: String? {
         if failure != nil { return "Couldn't reach \(name)." }
         switch light {
-        case .working: return "Working…"
+        case .working:
+            guard let retry, !retry.signIn else { return "Working…" }
+            return "\(name) can't reach its model (attempt \(retry.attempt)). It keeps trying."
         case .waiting: return "Waiting for you: answer in the \(agent?.waiting == "answer" ? "question" : "permission") window."
         default: break
         }
@@ -202,6 +204,18 @@ import SomethingCore
         if agent?.alive == false, !stopped, agent?.error == nil { return "\(name) stopped." }
         return unkept ? "Couldn't keep this space's journal: its activity is not saved." : nil
     }
+
+    /// The last retry the agent reported in its turn while it could not reach its model (Claude Code's
+    /// `detail.apiRetry`): its number, and whether the model's server refused its sign-in. Not "of how many": Claude
+    /// Code says 10, but gives up after three in a row from a busy server (529, measured in S12).
+    var retry: (attempt: Int, signIn: Bool)? {
+        guard case .object(let retry)? = agent?.detail["apiRetry"], case .number(let attempt)? = retry["attempt"] else { return nil }
+        let refused = retry["error"] == .string("authentication_failed") || [.number(401), .number(403)].contains(retry["errorStatus"])
+        return (Int(attempt), refused)
+    }
+
+    /// Whether the last message failed because the model's server refused the agent's sign-in.
+    var signedOut: Bool { failure == nil && light == .error && retry?.signIn == true }
 
     /// What went wrong with the last message, for the red row; nil when nothing did.
     var problem: String? {

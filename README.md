@@ -26,8 +26,9 @@ suggestion such as "Who is waiting for me", and your agent builds it. It opens b
 you what it may do. Ask for changes in the bar at the bottom of the window: the space reloads as your agent saves it.
 
 Your agent must be installed and signed in as you use it in Terminal (`claude`, `opencode`, `pi`): something uses
-your own account and settings. With none, the bar's How to Get One lists the commands that install one; the
-templates work without an agent.
+your own account and settings. While Claude Code cannot reach its model, the line above the bar says so as it
+retries. With none, the bar's How to Get One lists the commands that install one; the templates work without an
+agent.
 
 ## Six templates
 

@@ -82,6 +82,11 @@ public final class ClaudeDriver: Driver {
     private var interrupting = false
     /// Set when the model's server refused Claude's sign-in: the turn fails with it, whatever ends the turn.
     private var refused: AgentError?
+    /// The last retry Claude reported in this turn while it could not reach its model, as `detail.apiRetry` shows it;
+    /// empty once the model answered or a new turn started. Kept after a turn that failed: it says why.
+    private var retry: [String: JSONValue] = [:] {
+        didSet { if retry != oldValue { emit(.detail(retry.isEmpty ? [:] : ["apiRetry": .object(retry)])) } }
+    }
     private var heard = false
     /// The models `initialize` listed, and the one in use: the one asked for (an alias such as "opus"), then the one
     /// Claude reports running (a model id, an entry's resolvedModel). The efforts offered are that model's; nil until
@@ -245,10 +250,17 @@ public final class ClaudeDriver: Driver {
             let by = ["rule": "rule", "mode": "mode", "classifier": "mode", "hook": "hook"][frame["decision_reason_type"] as? String ?? ""]
             if let tool = frame["tool_use_id"] as? String, let by, decisions[tool]?.by != "person" { decide(tool, Decision(by: by, outcome: "denied")) }
         case "api_retry":
-            // Claude retries a refused sign-in ten times over about four minutes before it says so (measured in
-            // S11 with a model server answering 401): the turn fails at the first retry, and Claude is told to stop.
+            // Claude retries a refused sign-in or a server out of reach ten times over about four minutes, a busy
+            // server (529) three times, saying nothing else meanwhile (measured in S11 and S12). The assistant's window
+            // says each retry (`detail.apiRetry`, which no space sees: a space's own agents get no new fact). A refused
+            // sign-in never passes by retrying: the turn fails at the first retry, and Claude is told to stop.
+            guard turnOpen else { return }
             let status = frame["error_status"] as? Int
-            guard turnOpen, refused == nil, frame["error"] as? String == "authentication_failed" || status == 401 || status == 403 else { return }
+            if launch.assistant != nil {
+                retry = ["attempt": .number(frame["attempt"] as? Double ?? 0), "maxRetries": .number(frame["max_retries"] as? Double ?? 0),
+                         "errorStatus": status.map { .number(Double($0)) } ?? .null, "error": (frame["error"] as? String).map(JSONValue.string) ?? .null]
+            }
+            guard refused == nil, frame["error"] as? String == "authentication_failed" || status == 401 || status == 403 else { return }
             refused = AgentError(code: "AGENT_ERROR", message: "The model's server refused Claude Code's sign-in (error \(status.map(String.init) ?? "401")).")
             try? control("interrupt", ["cancel_queued": true])
         default: break
@@ -256,6 +268,7 @@ public final class ClaudeDriver: Driver {
     }
 
     private func assistant(_ frame: [String: Any]) {
+        retry = [:]   // the model answered
         let message = frame["message"] as? [String: Any] ?? [:]
         let blocks = message["content"] as? [[String: Any]] ?? []
         // Claude Code writes its own failures (a refused key, a reached limit) as a message from a "<synthetic>"
@@ -426,7 +439,10 @@ public final class ClaudeDriver: Driver {
     private func turn(open: Bool) {
         guard open != turnOpen else { return }
         turnOpen = open
-        if open { return emit(.turnStarted(id: nil)) }
+        if open {
+            retry = [:]
+            return emit(.turnStarted(id: nil))
+        }
         let ended = refused.map(Outcome.failed) ?? outcome ?? (interrupting ? .interrupted : .done)
         (outcome, interrupting, refused) = (nil, false, nil)
         emit(.turnEnded(ended))

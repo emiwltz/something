@@ -362,6 +362,19 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
         try await run.finish()
     }
 
+    /// S12: while the model's server is busy (529), Claude retries, and the assistant shows each retry
+    /// (`detail.apiRetry`) until the model answers.
+    @Test func theAssistantShowsEachRetry() async throws {
+        let run = try await ClaudeRun("assistant-retry", assistant: .building)
+        defer { run.cleanup() }
+        run.api.overloading = 2
+        _ = try run.agent.send("Hello there.", when: "next")
+        try await run.until("a retry", seconds: 15) { run.state.detail["apiRetry"] != nil }
+        try await run.until("a reply") { run.state.state == "idle" && run.items.contains { $0.author == "agent" } }
+        #expect(run.state.detail.isEmpty, "the model answered: \(run.state.detail)")
+        try await run.finish()
+    }
+
     @Test func endSessionStopsCleanly() async throws {
         let run = try await ClaudeRun("stop")
         defer { run.cleanup() }

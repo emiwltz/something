@@ -260,8 +260,8 @@ struct GalleryTests {
     }
 
     /// The assistant in each of its states, driven by AssistantTests' fake `claude` (invented text): not started,
-    /// ready, the conversation with its tools, working, waiting for the person, the red row, no agent found, a space's
-    /// error; and How to Get One.
+    /// ready, the conversation with its tools, working, retrying its model, its sign-in refused, waiting for the
+    /// person, the red row, no agent found, a space's error; and How to Get One.
     func drawAssistant(suffix: String, _ fixture: Home) async throws {
         try installFakeClaude(fixture)
         let engine = fixture.engine(), model = AssistantModel(engine: engine, places: fixture.places)
@@ -289,6 +289,12 @@ struct GalleryTests {
         model.newConversation()
         await say("go-slow") { model.light == .working }
         try await draw(model, "assistant-working" + suffix, fixture)
+        model.newConversation()
+        await say("Make the counters bigger.") { model.retry?.attempt == 2 }
+        try await draw(model, "assistant-retrying" + suffix, fixture)
+        model.newConversation()
+        await say("Give it a darker header.") { model.signedOut }
+        try await draw(model, "assistant-signed-out" + suffix, height: 748, fixture)
         model.newConversation()
         await say("ask-first") { model.light == .waiting }
         try await draw(model, "assistant-waiting" + suffix, fixture)

@@ -107,6 +107,23 @@ import SomethingCore
         #expect(tools.filter { $0.decision?.by == "rule" }.map(\.text) == ["ls", "/Users/example/something/spaces/agents-board.html"])
     }
 
+    /// S12: the model's server was busy twice (529); the assistant's detail says each retry, then nothing once the
+    /// model answered.
+    @Test func assistantRetry() throws {
+        let replay = try Replay.play("assistant-retry")
+        #expect(replay.fold.turns.map(\.state) == ["done"])
+        #expect(replay.fold.agent.error == nil)
+    }
+
+    /// A space's own Claude gets no new fact: only the person's assistant says its retries.
+    @Test func aSpacesAgentKeepsItsRetriesToItself() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        replay.feed(["type": "system", "subtype": "api_retry", "attempt": 1, "max_retries": 10, "retry_delay_ms": 512, "error_status": 529, "error": "overloaded"])
+        #expect(replay.fold.agent.detail.isEmpty)
+    }
+
     @Test func stop() throws {
         let replay = try Replay.play("stop")
         #expect(replay.fold.agent.error == nil)
@@ -183,7 +200,7 @@ import SomethingCore
     /// The shape Claude Code 2.1.296 writes before each retry of a request the model's server refused (S11, a fake
     /// server answering 401): the turn fails at the first one, not after ten retries over four minutes.
     @Test func aRefusedSignInFailsTheTurnAtTheFirstRetry() throws {
-        let replay = Replay()
+        let replay = Replay(assistant: true)
         _ = try replay.agent.send("Hello.", when: "next")
         replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
         let retry: [String: Any] = ["type": "system", "subtype": "api_retry", "attempt": 1, "max_retries": 10, "retry_delay_ms": 512,
@@ -196,6 +213,11 @@ import SomethingCore
         replay.feed(["type": "system", "subtype": "session_state_changed", "state": "idle"])
         #expect(replay.fold.agent.state == "error")
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "The model's server refused Claude Code's sign-in (error 401)."))
+        #expect(replay.fold.agent.detail["apiRetry"] == .object(["attempt": .number(2), "maxRetries": .number(10), "errorStatus": .number(401),
+                                                                   "error": .string("authentication_failed")]), "the failed turn keeps why")
+        _ = try replay.agent.send("Again.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        #expect(replay.fold.agent.detail.isEmpty, "a new turn starts without it")
     }
 
     @Test func aRetryForAnotherReasonIsLeftToClaude() throws {

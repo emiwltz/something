@@ -14,8 +14,9 @@ import WebKit
     /// A fake `claude`: it keeps each line it reads in $HOME/out/input and its arguments in $HOME/out/arguments, and
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a signed-out Claude Code
     /// gives. For the gallery, "clock in the corner" gives that error too, "waiting tiles" runs four tools before its
-    /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, and "ask-first"
-    /// asks a permission.
+    /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, "ask-first"
+    /// asks a permission, "counters bigger" retries its model twice and never ends its turn, and "darker header"
+    /// retries a refused sign-in once, then fails its turn (S12, the shapes Claude Code 2.1.296 writes).
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -35,6 +36,14 @@ import WebKit
           tool 2 Bash '{"command":"something new stack"}'
           tool 3 Write '{"file_path":"/Users/example/something/spaces/stack.html"}'
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}' ;;
+        *'counters bigger'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          for n in 1 2; do echo "{\"type\":\"system\",\"subtype\":\"api_retry\",\"attempt\":$n,\"max_retries\":10,\"retry_delay_ms\":512,\"error_status\":529,\"error\":\"overloaded\",\"uuid\":\"r$n\",\"session_id\":\"s1\"}"; done ;;
+        *'darker header'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":512,"error_status":401,"error":"authentication_failed","uuid":"r1","session_id":"s1"}'
+          echo '{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming","session_id":"s1","uuid":"u3"}'
+          echo '{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u4","session_id":"s1"}' ;;
         *'ask-first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_9"}}' ;;
@@ -289,6 +298,28 @@ import WebKit
         model.tryAgain()
         #expect(await wait(until: { model.id != first && model.problem != nil }))
         #expect(input(home).filter { $0.contains("sign-in-please") }.count == 2)
+        await finish(home, model)
+    }
+
+    /// S12: while Claude Code retries its model, the status line says so; a refused sign-in fails the turn at once,
+    /// and the red row says only that it isn't signed in, with Try Again and Copy Command.
+    @Test func theStatusLineSaysWhyTheAssistantWaits() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "Make the counters bigger."
+        model.send()
+        #expect(await wait(until: { model.retry?.attempt == 2 }))
+        #expect(model.light == .working && !model.signedOut)
+        #expect(model.status == "Claude Code can't reach its model (attempt 2). It keeps trying.")
+        model.newConversation()
+        model.draft = "Give it a darker header."
+        model.send()
+        #expect(await wait(until: { model.light == .error }))
+        #expect(model.signedOut && model.drawer && model.status == nil)
+        #expect(model.problem == "The model's server refused Claude Code's sign-in (error 401).")
+        model.tryAgain()
+        #expect(!model.signedOut, "Try Again starts a new agent, which has not retried")
         await finish(home, model)
     }
 

@@ -125,8 +125,9 @@ struct AssistantTrial {
 
     /// Plan S11: a Claude Code never signed in fails at the first message, and the drawer's red row says what it said;
     /// signed in with a key the model's server refuses (401), it fails at once too, where Claude Code alone retries
-    /// for about four minutes; once the key is good, Try Again gets an answer; after 30 idle minutes the agent is
-    /// stopped, the drawer says so, and the next message starts a new one.
+    /// for about four minutes; a busy model server (529) is said in the status line at each retry (S12), until
+    /// Claude Code gives up and the red row says so; once the server is free, Try Again gets an answer; after 30
+    /// idle minutes the agent is stopped, the drawer says so, and the next message starts a new one.
     @Test func signedOutThenRefusedThenTryAgainThenTheIdleStop() async throws {
         let api = try FakeMessagesAPI()
         defer { api.stop() }
@@ -146,14 +147,25 @@ struct AssistantTrial {
             let refused = "The model's server refused Claude Code's sign-in (error 401)."
             #expect(await wait(60) { model.problem == refused }, "problem: \(model.problem ?? "none"); rows: \(model.rows)")
             #expect(Date().timeIntervalSince(asked) < 30, "the refusal shows at the first retry")
-            #expect(model.light == .error && model.status == nil)
+            #expect(model.light == .error && model.status == nil && model.signedOut)
             print("AssistantTrial: a refused key showed after \(Int(Date().timeIntervalSince(asked))) s.")
 
-            api.refusing = false
+            // S12: a busy model server (529) is retried by Claude Code, and the status line says each retry.
+            (api.refusing, api.overloading) = (false, 3)
+            let busy = Date()
+            model.tryAgain()
+            #expect(await wait(30) { model.status?.hasPrefix("Claude Code can't reach its model (attempt ") == true }, "status: \(model.status ?? "none")")
+            #expect(Date().timeIntervalSince(busy) < 10, "the status line changes within a few seconds")
+            print("AssistantTrial: \(model.status ?? "") showed after \(Int(Date().timeIntervalSince(busy))) s.")
+            // Claude Code gives up after three 529s in a row (measured): the red row says what it said.
+            #expect(await wait(60) { model.problem != nil }, "status: \(model.status ?? "none")")
+            #expect(model.light == .error && model.status == nil && !model.signedOut)
+            #expect(model.problem?.contains("529") == true, "problem: \(model.problem ?? "none")")
+
             model.tryAgain()
             let answered = { model.light == .ready && model.rows.contains { if case .reply(let text) = $0 { text.hasPrefix("Invented reply") } else { false } } }
             #expect(await wait(90, until: answered), "rows: \(model.rows); problem: \(model.problem ?? "none")")
-            #expect(model.problem == nil)
+            #expect(model.problem == nil && model.status == nil)
             let first = try #require(model.id)
 
             model.clock = { Date().addingTimeInterval(AssistantModel.idleLimit + 60) }

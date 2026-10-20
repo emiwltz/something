@@ -22,6 +22,12 @@ final class FakeMessagesAPI {
         set { lock.withLock { refused = newValue } }
     }
     private var refused = false
+    /// How many messages are still answered 529 (overloaded), as the API answers when it is busy; Claude retries them.
+    var overloading: Int {
+        get { lock.withLock { overloaded } }
+        set { lock.withLock { overloaded = newValue } }
+    }
+    private var overloaded = 0
 
     /// What the script answers to the person's last words; tools only on the trigger words, so nothing else runs.
     static func reply(to last: String, toolResult: String?) -> [[String: Any]] {
@@ -102,6 +108,10 @@ final class FakeMessagesAPI {
         if refusing {
             let answer = #"{"type":"error","error":{"type":"authentication_error","message":"Invented: this key is not known."}}"#
             return send(client, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: \(answer.utf8.count)\r\nConnection: close\r\n\r\n\(answer)")
+        }
+        if lock.withLock({ () -> Bool in overloaded -= 1; return overloaded >= 0 }) {
+            let answer = #"{"type":"error","error":{"type":"overloaded_error","message":"Invented: overloaded."}}"#
+            return send(client, "HTTP/1.1 529 Overloaded\r\nContent-Type: application/json\r\nContent-Length: \(answer.utf8.count)\r\nConnection: close\r\n\r\n\(answer)")
         }
         let (last, toolResult) = FakeMessagesAPI.lastWords(body)
         let blocks = lock.withLock { () -> [[String: Any]] in

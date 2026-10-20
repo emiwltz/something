@@ -155,11 +155,13 @@ struct AssistantView: View {
         }
     }
 
-    /// The red row: what the agent said went wrong, and how to sign it in.
+    /// The red row: what the agent said went wrong, and how to sign it in; only that when its sign-in was refused.
     private func failure(_ problem: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("\(model.name) couldn't answer: \(problem)").fontWeight(.semibold)
-            Text("If it isn't signed in, open Terminal, type \(model.kind ?? "claude") and sign in. Then click Try Again.")
+            let command = model.kind ?? "claude"
+            Text(model.signedOut ? "\(model.name) isn't signed in to its model." : "\(model.name) couldn't answer: \(problem)").fontWeight(.semibold)
+            Text(model.signedOut ? "Open Terminal, type \(command) and sign in, then click Try Again."
+                 : "If it isn't signed in, open Terminal, type \(command) and sign in. Then click Try Again.")
                 .foregroundStyle(.secondary)
             HStack {
                 Spacer()

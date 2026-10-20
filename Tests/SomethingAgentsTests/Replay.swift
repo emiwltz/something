@@ -18,8 +18,12 @@ final class Replay {
     var scheduled: [() -> Void] = []
     var quit = false
 
-    init(mode: String = "default") {
-        let launch = Launch(agent: "claude-1", folder: "/Users/example/shop", mode: mode, thread: "5b2e0000-0000-4000-8000-000000000001")
+    /// A Claude launched in /Users/example/shop as agent claude-1; with `assistant`, the person's assistant, in
+    /// /Users/example/something/spaces.
+    init(mode: String = "default", assistant: Bool = false) {
+        var launch = Launch(agent: "claude-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
+                            thread: "5b2e0000-0000-4000-8000-000000000001")
+        launch.assistant = assistant ? .building : nil
         start(ClaudeDriver.self, launch)
     }
 
@@ -70,7 +74,7 @@ final class Replay {
 
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
     /// "resume" makes a Codex, OpenCode or pi launch that continues that thread, "model" an OpenCode or pi launch with
-    /// that model, "effort" a pi launch with that thinking level, and "assistant" a Codex launched as the person's assistant.
+    /// that model, "effort" a pi launch with that thinking level, and "assistant" a Claude or Codex launched as the person's assistant.
     /// `database` is the OpenCode database the driver reads at the end, as the engine sets it.
     static func play(_ name: String, kind: String = "claude", database: String? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
@@ -80,8 +84,9 @@ final class Replay {
         }
         let resume = rows.first?["resume"] as? String
         let model = rows.first?["model"] as? String
-        let replay = kind == "codex" ? codex(resume: resume, assistant: rows.first?["assistant"] as? Bool ?? false) : kind == "opencode" ? opencode(model: model, resume: resume)
-            : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay()
+        let assistant = rows.first?["assistant"] as? Bool ?? false
+        let replay = kind == "codex" ? codex(resume: resume, assistant: assistant) : kind == "opencode" ? opencode(model: model, resume: resume)
+            : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
         (replay.agent.driver as? ACPDriver)?.database = database
         var read = 0
         for (number, row) in rows.enumerated() {
@@ -129,6 +134,10 @@ final class Replay {
         if let mode = check["mode"] as? String { #expect(agent.mode == mode, "\(at)") }
         if let count = check["requests"] as? Int { #expect(fold.requests.count == count, "\(at)") }
         if let queue = check["queue"] as? [String] { #expect(agent.queue.map(\.text) == queue, "\(at)") }
+        if let detail = check["detail"] as? NSDictionary {
+            let shown = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(agent.detail)) as? NSDictionary
+            #expect(shown == detail, "\(at): detail \(agent.detail)")
+        }
     }
 
     /// Equal JSON, but for a string starting with "*", which matches any string ("*<uuid>" binds that uuid to it).

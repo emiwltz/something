@@ -23,6 +23,8 @@ public enum AgentEvent: Equatable, Sendable {
     case requestOpened(Request)
     case requestClosed(id: String)
     case error(AgentError)
+    /// Harness-specific facts (`detail`), replacing those the driver reported before.
+    case detail([String: JSONValue])
     /// The process ended, with the error that ended it if any.
     case stopped(AgentError?)
 }
@@ -87,6 +89,7 @@ public struct Fold: Sendable {
         case .requestClosed(let id):
             requests.removeAll { $0.id == id }; waitingFromRequests()
         case .error(let error): agent.error = error
+        case .detail(let detail): agent.detail = detail
         case .stopped(let error):
             // A process gone mid-turn did not end normally: the open turn makes StateMap say "interrupted".
             if facts.turnOpen == true { close("interrupted", at: at) }
