@@ -2,10 +2,10 @@
 
 something is a Mac app for **spaces**: pages you build with your own coding agent, such as a board of who is waiting
 for you, a morning paper of what your agents did or a small game for your breaks. something shows them safely, and
-lets them see and talk to the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP).
+lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP) and talk to the first four.
 
-*Version 0.2. Until its tag `v0.2.0` is published, install with `brew install --HEAD emiwltz/tap/something`, which
-builds from source.*
+*Version 0.2. Until its tag `v0.2.0` is published, the install builds from source (`--HEAD`, a few minutes) and
+updates with `brew upgrade --fetch-HEAD something`.*
 
 ## The first five minutes
 
@@ -13,7 +13,7 @@ You need a Mac with macOS 15 or later and [Homebrew](https://brew.sh), and no Xc
 in advance for your Mac (a "bottle"), or where none fits, builds one with Apple's Command Line Tools alone.
 
 ```sh
-brew install emiwltz/tap/something           # later, brew upgrade something updates it
+brew install --HEAD emiwltz/tap/something    # until v0.2.0; builds from source, a few minutes
 something
 ```
 
@@ -202,12 +202,15 @@ Homebrew. All on Apple silicon: Intel Macs are not tested.
 
 ## Uninstall
 
+Quit something first (⌘Q): quitting stops the agents it launched.
+
 ```sh
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
 rm -rf ~/Applications/something.app                  # the launcher, if the tour added it
 rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
+rm -rf "$TMPDIR/something-check"                     # the snapshots something check took
 ```
 
 macOS and WebKit may also have made folders named after the app's identifier, which this lists:

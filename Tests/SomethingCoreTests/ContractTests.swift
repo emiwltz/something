@@ -141,6 +141,19 @@ enum Frozen {
         }
     }
 
+    /// AGENTS.md rule 2: the assistant's promise is the same words in the README, AGENTS.md and the app's tour.
+    @Test func theAssistantsPromiseIsTheSameWordsEverywhere() throws {
+        let promise = "something never answers for you. Your assistant may change your spaces and run something's own "
+            + "commands without asking; everything else it does asks you, as your agent's own settings decide."
+        for file in ["README.md", "AGENTS.md", "Sources/something/Ask.swift"] {
+            let text = try String(contentsOf: ContractFiles.root.appendingPathComponent(file), encoding: .utf8)
+            // The documents wrap their lines: compare with every run of white space as one space.
+            let flat = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let holdsThePromise = flat.contains(promise)  // a Bool, so a failure names the file, not its whole text
+            #expect(holdsThePromise, "\(file)")
+        }
+    }
+
     @Test func theStateExampleRoundTripsByteForByte() throws {
         let example = try ContractFiles.data("state-example.json")
         let state = try JSONDecoder().decode(State.self, from: example)
