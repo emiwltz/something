@@ -280,6 +280,8 @@ enum Ask {
         let lines = NSStackView()
         lines.orientation = .vertical
         lines.alignment = .leading
+        // The alert puts its accessory 6 points left of its own text: the boxes line up with the message.
+        lines.edgeInsets.left = 6
         func indented(_ view: NSView) {
             let line = NSStackView(views: [view])
             line.edgeInsets.left = 20

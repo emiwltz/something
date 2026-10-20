@@ -72,7 +72,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         center.addSubview(host)
         let margin = AssistantView.margin, wide = host.widthAnchor.constraint(equalToConstant: 640 + 2 * margin)
         wide.priority = .defaultHigh
-        NSLayoutConstraint.activate([wide, host.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: 2 * margin - 48),
+        NSLayoutConstraint.activate([wide, host.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: 2 * margin - AssistantView.sides),
                                      host.centerXAnchor.constraint(equalTo: center.centerXAnchor),
                                      host.bottomAnchor.constraint(equalTo: center.bottomAnchor),
                                      host.heightAnchor.constraint(lessThanOrEqualTo: center.heightAnchor, multiplier: 0.45, constant: 90 + 2 * margin)])
@@ -256,6 +256,25 @@ struct Unshown: View {
 /// The assistant's hosting view. It takes only the clicks on what it draws: those beside its pieces, between them and
 /// in its margin, where the shadows fall, reach the space under it.
 final class Floater: NSHostingView<AssistantView> {
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        guard let superview else { return }
+        superview.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(resized), name: NSView.frameDidChangeNotification, object: superview)
+        resized()
+    }
+
+    /// The center changed: the assistant is told the width it now has.
+    @objc private func resized() {
+        let room = min(640, max(0, (superview?.bounds.width ?? 0) - AssistantView.sides))
+        if rootView.model.room != room { rootView.model.room = room }
+    }
+
+    override func setFrameSize(_ size: NSSize) {
+        super.setFrameSize(size)
+        if rootView.model.floating != size.height { rootView.model.floating = size.height }
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let inside = convert(point, from: superview)
         // SwiftUI's frames start at the top-left corner, like this view's own when it is flipped.

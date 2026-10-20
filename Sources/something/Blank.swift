@@ -13,13 +13,28 @@ struct BlankView: View {
     ]
 
     @Bindable var model: AssistantModel
+
+    /// The input and what is said under it, kept in sight above the conversation.
+    static let input = "input"
+
+    /// The templates' columns in `width`: six when they fit, else three, two or one, so that every row is full.
+    static func columns(_ width: CGFloat) -> Int {
+        [6, 3, 2].first { (n: Int) -> Bool in CGFloat(n) * 148 + CGFloat(n - 1) * 14 <= width } ?? 1
+    }
     let library: Library
 
     var body: some View {
-        // Centered in the window, and scrolled when a small window cannot hold it all.
+        // Centered above the floating assistant, and scrolled when a small window cannot hold it all: nothing stays
+        // under the conversation, and while it is open the input shows, right above it.
         GeometryReader { window in
-            ScrollView { page.frame(minHeight: window.size.height, alignment: model.drawer ? .top : .center) }
-                .scrollBounceBehavior(.basedOnSize)
+            ScrollViewReader { scroller in
+                ScrollView { page(window.size.width).frame(minHeight: max(0, window.size.height - model.floating), alignment: model.drawer ? .top : .center) }
+                    .contentMargins(.bottom, model.floating, for: .scrollContent)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .onChange(of: window.size.height - model.floating, initial: true) {
+                        if model.drawer { scroller.scrollTo(BlankView.input, anchor: .bottom) }
+                    }
+            }
         }
         .overlay(alignment: .bottomTrailing) {
             if !model.building { Button("Skip for now") { library.select(Library.gallery) }.buttonStyle(.link).padding(24) }
@@ -27,7 +42,7 @@ struct BlankView: View {
         .background(Color(nsColor: .textBackgroundColor))
     }
 
-    private var page: some View {
+    private func page(_ width: CGFloat) -> some View {
         VStack(spacing: 18) {
             Text("What do you want to make?").font(.system(size: 28, weight: .semibold))
             if model.noAgent {
@@ -35,10 +50,14 @@ struct BlankView: View {
             } else {
                 Text("\(model.name) builds it with you, in \(Words.path(model.places.spaces.path, home: model.places.home.path)).")
                     .foregroundStyle(.secondary)
-                Composer(model: model, big: true).frame(maxWidth: 620).padding(.horizontal, 24)
-                if model.building {
-                    Text("It opens here when it is ready. You will be asked what it may do.").foregroundStyle(.secondary)
-                } else {
+                VStack(spacing: 18) {
+                    Composer(model: model, big: true).frame(maxWidth: 620).padding(.horizontal, 24)
+                    if model.building {
+                        Text("It opens here when it is ready. You will be asked what it may do.").foregroundStyle(.secondary)
+                    }
+                }
+                .id(BlankView.input)
+                if !model.building {
                     HStack(spacing: 8) {
                         ForEach(BlankView.chips, id: \.0) { chip in
                             Button { model.send(chip.1) } label: {
@@ -57,8 +76,8 @@ struct BlankView: View {
             }
             if !model.building, !library.templates.isEmpty {
                 Text("Or start from a template").font(.system(size: 12)).foregroundStyle(.secondary).padding(.top, 22)
-                // One row when the window is wide enough, else as many rows as it takes.
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 148, maximum: 148), spacing: 14, alignment: .top)], spacing: 14) {
+                // One row when the window is wide enough, else rows of three, two or one: always full rows.
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(148), spacing: 14, alignment: .top), count: BlankView.columns(width - 48)), spacing: 14) {
                     ForEach(library.templates) { template in
                         VStack(spacing: 6) {
                             Preview(template: template, use: library.use)
@@ -66,7 +85,6 @@ struct BlankView: View {
                         }
                     }
                 }
-                .frame(maxWidth: 6 * 148 + 5 * 14)
                 .padding(.horizontal, 24)
             }
         }

@@ -20,9 +20,9 @@ struct AssistantView: View {
                 }
             }
         }
-        // The window sizes the assistant by its ideal size, measured at its ideal width: without one, every line
-        // would be measured unwrapped, and the conversation, wrapped at 640 points, would not fit what it asked for.
-        .frame(idealWidth: 640, maxWidth: 640)
+        // The window sizes the assistant by its ideal size, measured at its ideal width: the width the center leaves.
+        // Measured wider, or unwrapped, the conversation would not fit what it asked for, and would scroll with room.
+        .frame(idealWidth: model.room, maxWidth: 640)
         .padding(AssistantView.margin)
         .coordinateSpace(.named(Drawn.space))
         .onPreferenceChange(Drawn.self) { model.drawn = $0 }
@@ -31,6 +31,8 @@ struct AssistantView: View {
     /// Room around the assistant for its shadows. The window lets through the clicks there, and anywhere else nothing
     /// is drawn (Floater).
     static let margin: CGFloat = 16
+    /// The least room the assistant leaves on the center's sides, both together.
+    static let sides: CGFloat = 48
 
     /// The agent menu, in the capsule and in the drawer's header.
     @ViewBuilder static func menu(_ model: AssistantModel) -> some View {

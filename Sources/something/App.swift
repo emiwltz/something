@@ -298,20 +298,23 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// Asks first in a sheet when agents something launched still run, then stops them all before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let alive = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }
-        let running = alive.count
-        let stop = { [engine] in engine.stopAll(within: 5) { NSApp.reply(toApplicationShouldTerminate: true) } }
-        guard running > 0 else {
-            stop()
-            return .terminateLater
-        }
-        shell.front()
-        // A question left open is answered as its Cancel would be: Quit always asks, never does nothing.
-        Shell.endSheets(of: shell.window)
-        Ask.quit(running, assistant: alive.contains { engine.assistants.contains($0.id) }).beginSheetModal(for: shell.window) { answer in
-            if answer == .alertFirstButtonReturn { stop() } else { NSApp.reply(toApplicationShouldTerminate: false) }
-        }
+        App.quit(engine, confirm: { [shell] running, assistant, answer in
+            shell.front()
+            // A question left open is answered as its Cancel would be: Quit always asks, never does nothing.
+            Shell.endSheets(of: shell.window)
+            Ask.quit(running, assistant: assistant).beginSheetModal(for: shell.window) { answer($0 == .alertFirstButtonReturn) }
+        }, reply: { NSApp.reply(toApplicationShouldTerminate: $0) })
         return .terminateLater
+    }
+
+    /// Quitting: when agents something launched still run, `confirm` asks the person, given their number and whether
+    /// the assistant is one of them. Then every agent is stopped and `reply` gets true, or it gets false at once when
+    /// the person keeps the app.
+    static func quit(_ engine: Engine, confirm: (Int, Bool, @escaping (Bool) -> Void) -> Void, reply: @escaping (Bool) -> Void) {
+        let alive = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }
+        let stop = { engine.stopAll(within: 5) { reply(true) } }
+        guard !alive.isEmpty else { return stop() }
+        confirm(alive.count, alive.contains { engine.assistants.contains($0.id) }) { $0 ? stop() : reply(false) }
     }
 
     /// Ends the app at its start, before any agent was launched: in a sheet, which is all a person sees when the app

@@ -180,6 +180,34 @@ import SomethingCore
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Invented: too many turns."))
     }
 
+    /// The shape Claude Code 2.1.296 writes before each retry of a request the model's server refused (S11, a fake
+    /// server answering 401): the turn fails at the first one, not after ten retries over four minutes.
+    @Test func aRefusedSignInFailsTheTurnAtTheFirstRetry() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        let retry: [String: Any] = ["type": "system", "subtype": "api_retry", "attempt": 1, "max_retries": 10, "retry_delay_ms": 512,
+                                    "error_status": 401, "error": "authentication_failed", "uuid": "u-retry", "session_id": "s-example"]
+        replay.feed(retry)
+        replay.feed(retry.merging(["attempt": 2]) { $1 })
+        let interrupts = replay.lines().filter { ($0["request"] as? [String: Any])?["subtype"] as? String == "interrupt" }
+        #expect(interrupts.count == 1, "Claude is told once to stop retrying")
+        replay.feed(["type": "result", "subtype": "error_during_execution", "is_error": true, "terminal_reason": "aborted_streaming"])
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "idle"])
+        #expect(replay.fold.agent.state == "error")
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "The model's server refused Claude Code's sign-in (error 401)."))
+    }
+
+    @Test func aRetryForAnotherReasonIsLeftToClaude() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        let sent = replay.lines().count
+        replay.feed(["type": "system", "subtype": "api_retry", "attempt": 1, "max_retries": 10, "retry_delay_ms": 512, "error_status": 529, "error": "overloaded"])
+        #expect(replay.lines().count == sent)
+        #expect(replay.fold.agent.state == "working")
+    }
+
     /// An older Claude that never says its state: `init` and `result` mark the turn.
     @Test func withoutStateEventsInitAndResultMarkTheTurn() throws {
         let replay = Replay()

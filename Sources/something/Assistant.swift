@@ -51,6 +51,10 @@ import SomethingCore
     var drawer = false
     /// Whether ⌘J hid the whole assistant, in full screen.
     var hidden = false
+    /// The width the center leaves the assistant, and the height it floats over there, both set by the window
+    /// (Floater): the conversation is measured as it wraps, and the blank page keeps clear of it.
+    var room: CGFloat = 640
+    var floating: CGFloat = 0
     /// The open space's runtime error, until dismissed or the next opening.
     var fault: Fault?
     /// Whether the open space's journal could not be written.

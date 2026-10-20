@@ -1,7 +1,9 @@
 // A gallery of every native window, drawn offscreen with invented data, one PNG at 2x each, for a person to look at
 // what nobody can see in a test: no window is shown, none takes the focus, and drawing a view into a bitmap needs no
 // permission of macOS (a screenshot would need Screen Recording). Each window is drawn in the light appearance, then
-// in the dark one (its file ends in -dark.png). It runs only when SOMETHING_GALLERY names a folder:
+// in the dark one (its file ends in -dark.png). A window never shown is drawn as an inactive one: default buttons
+// without the accent color, switches that are on in gray (making the windows report themselves key changes nothing,
+// S11 tried). It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
 import SwiftUI
@@ -158,6 +160,8 @@ struct GalleryTests {
         try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)
         try draw(Ask.trash("Morning review"), "trash" + suffix, fixture)
         try draw(Ask.quit(2), "quit-while-agents-run" + suffix, fixture)
+        try draw(Ask.quit(3, assistant: true), "quit-assistant-and-others" + suffix, fixture)
+        try draw(Ask.quit(1, assistant: true), "quit-assistant" + suffix, fixture)
 
         let who = App.who(agents()[0], startedBy: "Morning review", home: "/Users/example")
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
@@ -279,6 +283,8 @@ struct GalleryTests {
         try await draw(model, "assistant-ready" + suffix, fixture)
         model.drawer = true
         try await draw(model, "assistant-conversation" + suffix, height: 748, fixture)
+        // As narrow as the center of the smallest window with the sidebar and Info open.
+        try await draw(model, "assistant-conversation-narrow" + suffix, width: 340, height: 560, fixture)
         model.drawer = false
         model.newConversation()
         await say("go-slow") { model.light == .working }
@@ -355,6 +361,14 @@ struct GalleryTests {
         model.send()
         #expect(await wait(until: { model.rows.count >= 4 && model.light == .working }), "the fake did not start building")
         try await draw(shell, library: library, web: nil, "blank-building" + suffix, fixture)
+        // The smallest window: the page scrolls clear of the conversation; with Info open, the conversation wraps
+        // narrower and still shows whole.
+        shell.window.setContentSize(NSSize(width: 820, height: 560))
+        try await draw(shell, library: library, web: nil, "blank-building-smallest" + suffix, fixture)
+        shell.inspector.isCollapsed = false
+        try await draw(shell, library: library, web: nil, "blank-building-smallest-info" + suffix, fixture)
+        shell.inspector.isCollapsed = true
+        shell.window.setContentSize(NSSize(width: 1240, height: 800))
 
         // The space it made appeared while the person was on another one.
         try fixture.space("stack", page(#"{"contract": 1, "title": "Stack", "rights": ["store"]}"#, ""))
@@ -392,11 +406,11 @@ struct GalleryTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
     }
 
-    /// The assistant alone at the bottom of a 760-point-wide center `height` points high, as the window floats it.
-    func draw(_ model: AssistantModel, _ name: String, height: CGFloat = 150, _ fixture: Home) async throws {
-        let center = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: height))
+    /// The assistant alone at the bottom of a center `width` by `height` points, as the window floats it.
+    func draw(_ model: AssistantModel, _ name: String, width: CGFloat = 760, height: CGFloat = 150, _ fixture: Home) async throws {
+        let center = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         let offscreen = Offscreen(center)
-        offscreen.window.setContentSize(NSSize(width: 760, height: height))
+        offscreen.window.setContentSize(NSSize(width: width, height: height))
         Shell.float(Floater(rootView: AssistantView(model: model)), in: center)
         await wait(1)
         try draw(center, name, fixture)
@@ -473,7 +487,8 @@ struct GalleryTests {
     /// Runs `draw` with the selected rows of `view`'s lists in the color of a selection: a row's highlight is a view of
     /// the selection material, its layer black, and the window server colors it on the screen with a filter
     /// (vibrantColorMatrixSourceOver) that no drawing in this process applies: cacheDisplay, CALayer.render and
-    /// CARenderer all give black. Meanwhile it is the gray of the selection of a window that is not key, as this one.
+    /// CARenderer all give black. Meanwhile it is the gray of a selection whose list does not have the focus, as the
+    /// sidebar's when the person works in the open space: a reconstruction, not the window server's own pixels.
     func selected(_ view: NSView, _ draw: () -> Void) {
         func highlights(_ view: NSView) -> [CALayer] {
             let own = (view as? NSVisualEffectView)?.material == .selection ? view.layer?.sublayers ?? [] : []

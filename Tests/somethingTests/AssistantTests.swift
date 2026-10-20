@@ -136,6 +136,16 @@ import WebKit
         ])
     }
 
+    /// Quit with no agent something launched asks nothing and quits. (With agents running: AssistantTrial.)
+    @Test func quittingWithNoAgentAsksNothing() async {
+        let home = Home(prefix: "something-assistant-")
+        defer { home.remove() }
+        var asked = false, replied: Bool?
+        App.quit(home.engine(), confirm: { _, _, _ in asked = true }, reply: { replied = $0 })
+        #expect(await wait(5) { replied != nil })
+        #expect(!asked && replied == true)
+    }
+
     /// AGENTS.md and CLAUDE.md are written when missing, written again while they keep something's marker, and left
     /// alone once the person removed it.
     @Test func theKnowledgeFilesAreWrittenUnderTheMarkerOnly() throws {

@@ -19,7 +19,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
 struct AssistantTrial {
     /// A throwaway home whose Claude Code talks to `api`, the app's model and library on it, the assistant found.
     struct Trial {
-        let root: URL, engine: Engine, places: Places, library: Library, model: AssistantModel
+        let root: URL, engine: Engine, places: Places, library: Library, model: AssistantModel, ask = FakeAsk()
         private let settings: URL, helper: String
 
         /// Hands Claude Code the made-up key, as signing in once in Terminal would.
@@ -30,29 +30,35 @@ struct AssistantTrial {
             root = FileManager.default.temporaryDirectory.appendingPathComponent("something-trial-\(UUID().uuidString)")
             // The home by its real path, as ~/something/spaces is: $TMPDIR itself is behind a link.
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            let home = AssistantBuild.real(root).appendingPathComponent("home"), program = try #require(trialClaude)
-            try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
-            // Every launch removes ANTHROPIC_API_KEY (ClaudeDriver.credentials): the throwaway settings hand the made-up
-            // key through Claude's own apiKeyHelper instead.
-            let key = root.appendingPathComponent("key.sh")
-            try "#!/bin/sh\necho test-key\n".write(to: key, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: key.path)
-            settings = home.appendingPathComponent(".claude/settings.json")
-            helper = #"{"apiKeyHelper": "\#(key.path)"}"#
-            if signedIn { try helper.write(to: settings, atomically: true, encoding: .utf8) }
-            let tools = try AssistantBuild.tools(in: root)
-            engine = Engine(environment: ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
-                                          "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
-                                          "SHELL": "/bin/sh", "ANTHROPIC_BASE_URL": api.url,
-                                          "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
-                                          "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"])
-            engine.programs.systemFolders = []
-            engine.hookCommand = [tools + "/something", "hook", "permission"]
-            places = Places(home: home)
-            engine.assistantFolder = places.spaces.path
-            try Library.prepare(places)
-            try AssistantModel.writeKnowledge(places, share: Home.share)
-            library = Library(places: places, ask: FakeAsk(), share: Home.share)
+            do {
+                let home = AssistantBuild.real(root).appendingPathComponent("home"), program = try #require(trialClaude)
+                try FileManager.default.createDirectory(at: home.appendingPathComponent(".claude"), withIntermediateDirectories: true)
+                // Every launch removes ANTHROPIC_API_KEY (ClaudeDriver.credentials): the throwaway settings hand the
+                // made-up key through Claude's own apiKeyHelper instead.
+                let key = root.appendingPathComponent("key.sh")
+                try "#!/bin/sh\necho test-key\n".write(to: key, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: key.path)
+                settings = home.appendingPathComponent(".claude/settings.json")
+                helper = #"{"apiKeyHelper": "\#(key.path)"}"#
+                if signedIn { try helper.write(to: settings, atomically: true, encoding: .utf8) }
+                let tools = try AssistantBuild.tools(in: root)
+                engine = Engine(environment: ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
+                                              "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
+                                              "SHELL": "/bin/sh", "ANTHROPIC_BASE_URL": api.url,
+                                              "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
+                                              "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"])
+                engine.programs.systemFolders = []
+                engine.hookCommand = [tools + "/something", "hook", "permission"]
+                places = Places(home: home)
+                engine.assistantFolder = places.spaces.path
+                try Library.prepare(places)
+                try AssistantModel.writeKnowledge(places, share: Home.share)
+            } catch {
+                // Nothing of the trial stays in $TMPDIR when it cannot start.
+                try? FileManager.default.removeItem(at: root)
+                throw error
+            }
+            library = Library(places: places, ask: ask, share: Home.share)
             model = AssistantModel(engine: engine, places: places)
             let (engine, model) = (engine, model)
             engine.changed = { model.refresh() }
@@ -118,10 +124,10 @@ struct AssistantTrial {
     }
 
     /// Plan S11: a Claude Code never signed in fails at the first message, and the drawer's red row says what it said;
-    /// once it is signed in, Try Again gets an answer; after 30 idle minutes the agent is stopped, the drawer says so,
-    /// and the next message starts a new one. (A key that the model refuses with a 401 is retried by Claude Code ten
-    /// times, over about four minutes, before it says so: S11 measured it once with this fake answering 401.)
-    @Test func signedOutThenTryAgainThenTheIdleStop() async throws {
+    /// signed in with a key the model's server refuses (401), it fails at once too, where Claude Code alone retries
+    /// for about four minutes; once the key is good, Try Again gets an answer; after 30 idle minutes the agent is
+    /// stopped, the drawer says so, and the next message starts a new one.
+    @Test func signedOutThenRefusedThenTryAgainThenTheIdleStop() async throws {
         let api = try FakeMessagesAPI()
         defer { api.stop() }
         let trial = try await Trial(api, signedIn: false)
@@ -131,9 +137,19 @@ struct AssistantTrial {
             model.send()
             #expect(await wait(60) { model.problem != nil }, "rows: \(model.rows)")
             #expect(model.light == .error && model.drawer)
-            print("AssistantTrial: the red row says: \(model.problem ?? "nothing")")
+            #expect(model.problem?.contains("/login") == true, "the red row says what Claude Code said: \(model.problem ?? "nothing")")
 
             try trial.signIn()
+            api.refusing = true
+            let asked = Date()
+            model.tryAgain()
+            let refused = "The model's server refused Claude Code's sign-in (error 401)."
+            #expect(await wait(60) { model.problem == refused }, "problem: \(model.problem ?? "none"); rows: \(model.rows)")
+            #expect(Date().timeIntervalSince(asked) < 30, "the refusal shows at the first retry")
+            #expect(model.light == .error && model.status == nil)
+            print("AssistantTrial: a refused key showed after \(Int(Date().timeIntervalSince(asked))) s.")
+
+            api.refusing = false
             model.tryAgain()
             let answered = { model.light == .ready && model.rows.contains { if case .reply(let text) = $0 { text.hasPrefix("Invented reply") } else { false } } }
             #expect(await wait(90, until: answered), "rows: \(model.rows); problem: \(model.problem ?? "none")")
@@ -148,6 +164,63 @@ struct AssistantTrial {
             model.draft = "And the clock too."
             model.send()
             #expect(await wait(90) { model.id != nil && model.id != first && model.light == .ready }, "rows: \(model.rows)")
+        }
+    }
+
+    /// Plan S11: Use Template makes a space and opens it; its rights are asked once, as a space the person chose; the
+    /// drawer offers to make it theirs; the agent edits it and the open space reloads with the edit; Info shows the
+    /// rights as answered. Then Quit asks, says the assistant is running, and stops it.
+    @Test func aTemplateIsMadeYoursThenQuitStopsTheAssistant() async throws {
+        let api = try FakeMessagesAPI()
+        defer { api.stop() }
+        let trial = try await Trial(api)
+        try await trial.run {
+            let (engine, places, library, model, ask) = (trial.engine, trial.places, trial.library, trial.model, trial.ask)
+            library.used = { model.fromTemplate = $0 }
+            let template = try #require(Template.all(Home.share).first { $0.id == "pet" && !$0.follows })
+            library.use(template)
+            let space = try #require(Spaces(root: places.spaces).named("pet"))
+            let window = try SpaceView(space: space, places: places, engine: engine, ask: ask, share: Home.share,
+                                       rules: try await Lockdown.ruleList(), launches: Launches())
+            defer { window.close() }
+            window.open()
+            #expect(ask.questions.map(\.rights) == [template.rights] && ask.questions.first?.made == false)
+            #expect(await wait(until: { !window.web.isLoading && window.frame != nil }))
+            model.place = AssistantModel.place(window)
+            #expect(model.placeholder == "Ask Claude Code to make it yours: colors, sections, anything.")
+
+            let page = space.location.path
+            api.build = [("Read", ["file_path": page]),
+                         ("Edit", ["file_path": page, "old_string": "<title>Pebble</title>", "new_string": "<title>Invented Pebble</title>"])]
+            model.draft = "Please run-build: make it warmer."
+            model.send()
+            #expect(model.fromTemplate == nil)
+            let done = await wait(120) {
+                for request in engine.state.requests { try? engine.answer(request.id, .once) }
+                return model.light == .ready && model.rows.contains { if case .reply(let text) = $0 { text.contains("the board is ready") } else { false } }
+            }
+            #expect(done, "rows: \(model.rows); problem: \(model.problem ?? "none")")
+            var reloaded = false
+            for _ in 0..<300 where !reloaded {
+                reloaded = try await run(window, "return document.title") as? String == "Invented Pebble"
+                if !reloaded { await wait(0.05) }
+            }
+            #expect(reloaded, "the open space shows the agent's edit")
+            #expect(ask.questions.count == 1, "the edit asks nothing again")
+            let info = Info(places: places, ask: ask)
+            info.show(space)
+            #expect(info.rights.map(\.right) == template.rights && info.rights.allSatisfy { $0.standing == .allowed })
+            #expect(info.problem == nil)
+
+            let assistant = try #require(model.id)
+            var confirmed: (count: Int, assistant: Bool)?, replied: Bool?
+            App.quit(engine, confirm: { count, isAssistant, answer in
+                confirmed = (count, isAssistant)
+                answer(true)
+            }, reply: { replied = $0 })
+            #expect(confirmed?.count == 1 && confirmed?.assistant == true)
+            #expect(await wait(15) { replied != nil })
+            #expect(replied == true && engine.state.agents.first { $0.id == assistant }?.alive == false)
         }
     }
 }

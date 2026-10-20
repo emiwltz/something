@@ -16,6 +16,12 @@ final class FakeMessagesAPI {
     private var count = 0
     /// The tool calls a "run-build" message plays, one per request, in order; then a closing text. Set by the trial.
     var build: [(name: String, input: [String: Any])] = []
+    /// When true, every message is refused with a 401, as the API refuses a key it does not know.
+    var refusing: Bool {
+        get { lock.withLock { refused } }
+        set { lock.withLock { refused = newValue } }
+    }
+    private var refused = false
 
     /// What the script answers to the person's last words; tools only on the trigger words, so nothing else runs.
     static func reply(to last: String, toolResult: String?) -> [[String: Any]] {
@@ -92,6 +98,10 @@ final class FakeMessagesAPI {
             let answer = firstLine.hasPrefix("POST /v1/messages/count_tokens") ? #"{"input_tokens":12}"# : #"{"type":"error","error":{"type":"not_found_error","message":"Not in this fake."}}"#
             let status = firstLine.hasPrefix("POST /v1/messages/count_tokens") ? "200 OK" : "404 Not Found"
             return send(client, "HTTP/1.1 \(status)\r\nContent-Type: application/json\r\nContent-Length: \(answer.utf8.count)\r\nConnection: close\r\n\r\n\(answer)")
+        }
+        if refusing {
+            let answer = #"{"type":"error","error":{"type":"authentication_error","message":"Invented: this key is not known."}}"#
+            return send(client, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: \(answer.utf8.count)\r\nConnection: close\r\n\r\n\(answer)")
         }
         let (last, toolResult) = FakeMessagesAPI.lastWords(body)
         let blocks = lock.withLock { () -> [[String: Any]] in
