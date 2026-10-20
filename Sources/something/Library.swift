@@ -1,7 +1,6 @@
 // The spaces of ~/something/spaces as the sidebar lists them, sorted by title; the open one; the last one open, kept
 // in window.json; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
-// by an agent shows at once;
-// and what acts on a space: import, export, Show in Finder, Move to Trash.
+// by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
 import AppKit
@@ -22,8 +21,6 @@ import SomethingCore
     private(set) var selection: String?
     /// What selecting does: the app opens the space, or closes the open one for nil.
     @ObservationIgnored var opened: (String?) -> Void = { _ in }
-    /// Called when the list changed: a space the assistant made may have appeared.
-    @ObservationIgnored var relisted: () -> Void = {}
     /// What Move to Trash… does before it moves anything: the window asks the person.
     @ObservationIgnored var trashing: (Entry) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
@@ -60,10 +57,7 @@ import SomethingCore
             let order = one.title.compare(other.title, options: [.caseInsensitive, .diacriticInsensitive])
             return order == .orderedSame ? one.id < other.id : order == .orderedAscending
         }
-        if listed != entries {
-            entries = listed
-            relisted()
-        }
+        if listed != entries { entries = listed }
         if let selection, !entries.contains(where: { $0.id == selection }) { select(nil) }
     }
 

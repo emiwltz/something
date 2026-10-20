@@ -218,14 +218,18 @@ final class Chooser: NSObject {
 }
 
 enum Ask {
-    /// An alert that says `message`, with `details` below it and `buttons` (none: OK), the first one the default.
-    /// The button at `escape`, if any, is the one Escape presses.
-    static func alert(_ message: String, _ details: String = "", buttons: [String] = [], escape: Int? = nil) -> NSAlert {
+    /// An alert that says `message`, with `details` below it, `accessory` under them, and `buttons` (none: OK), the
+    /// first one the default. The button at `escape`, if any, is the one Escape presses.
+    static func alert(_ message: String, _ details: String = "", buttons: [String] = [], escape: Int? = nil, accessory: NSView? = nil) -> NSAlert {
         let alert = NSAlert()
         alert.messageText = message
         alert.informativeText = details
         buttons.forEach { alert.addButton(withTitle: $0) }
         if let escape { alert.buttons[escape].keyEquivalent = "\u{1b}" }
+        if let accessory {
+            accessory.frame.size = accessory.fittingSize
+            alert.accessoryView = accessory
+        }
         return alert
     }
 
@@ -350,21 +354,13 @@ enum Ask {
     /// How to Get One: each coding agent something builds with (none it refuses), its install command and a Copy button; Look Again,
     /// then Close. something downloads nothing itself.
     static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
-        let alert = alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.",
-                          buttons: ["Look Again", "Close"], escape: 1)
-        let list = NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy))
-        list.frame.size = list.fittingSize
-        alert.accessoryView = list
-        return alert
+        alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.", buttons: ["Look Again", "Close"],
+              escape: 1, accessory: NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy)))
     }
 
     /// Help › What something Does and Doesn't: two columns, and the promise.
     static func doesAndDoesnt() -> NSAlert {
-        let alert = alert("What something does and doesn't")
-        let columns = NSHostingView(rootView: Promise())
-        columns.frame.size = columns.fittingSize
-        alert.accessoryView = columns
-        return alert
+        alert("What something does and doesn't", accessory: NSHostingView(rootView: Promise()))
     }
 
     /// A right in plain words, with its warning when it has one: what Info says.

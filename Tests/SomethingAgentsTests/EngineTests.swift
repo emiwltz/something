@@ -186,7 +186,8 @@ import SomethingCore
         }
         let id = try engine.launchAssistant("claude", folder: link.path, askEverything: false)
         #expect(engine.assistants == [id])
-        try await until("the assistant's launch") { arguments().contains("--session-id") }
+        // The fake writes its arguments, then its environment: both are waited for.
+        try await until("the assistant's launch") { arguments().contains("--session-id") && path() != nil }
         #expect(path()?.hasPrefix("/Users/example/tools:\(place.bin.path):") == true, "\(path() ?? "no PATH")")
         #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(HeldFiles.real(spaces.path)))
         try await until("the models") { engine.state.agents.first?.options.model != nil }

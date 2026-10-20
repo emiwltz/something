@@ -20,6 +20,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let reload = NSToolbarItem.Identifier("reload")
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
+    /// The tour while it is shown: the blank page stays behind it until it ends.
+    private(set) var touring: Tour?
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -108,8 +110,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         return item
     }
 
-    /// Shows `space` in the center, or the blank page for nil, with its title and file in the toolbar.
-    func show(_ space: SpaceView?) {
+    /// Shows `space` in the center, or the blank page for nil, with its title and file in the toolbar. While the tour
+    /// is shown, nil keeps it unless `endingTour`, and a space ends it.
+    func show(_ space: SpaceView?, endingTour: Bool = false) {
+        if let touring, space == nil, !endingTour { return show(touring) }
+        touring = nil
         let shown: NSView
         if let space, space.blocked.isEmpty {
             shown = space.web
@@ -130,6 +135,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Shows the tour in the center, alone: the sidebar folded, Info and the assistant hidden.
     func show(_ tour: Tour) {
+        touring = tour
         put(Shell.hosted(TourView(tour: tour, assistant: assistant)))
         floating?.isHidden = true
         split.splitViewItems[0].isCollapsed = true

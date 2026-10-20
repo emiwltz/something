@@ -11,8 +11,7 @@ struct SidebarView: View {
     static let new = "+new", pending = "+pending"
 
     var body: some View {
-        let pending = assistant.building && library.selection == nil
-        List(selection: Binding(get: { library.selection ?? (pending ? SidebarView.pending : SidebarView.new) }, set: { tag in
+        List(selection: Binding(get: { library.selection ?? (assistant.building ? SidebarView.pending : SidebarView.new) }, set: { tag in
             if tag == SidebarView.new || tag == SidebarView.pending {
                 library.select(nil)
                 assistant.focus()
@@ -27,10 +26,10 @@ struct SidebarView: View {
             }
             .tag(SidebarView.new)
             Section("Spaces") {
-                if pending {
+                if assistant.building {
                     Label("New Space", systemImage: "sparkle").italic().tag(SidebarView.pending)
                 }
-                if library.entries.isEmpty, !pending {
+                if library.entries.isEmpty, !assistant.building {
                     Text("No spaces yet.").foregroundStyle(.secondary)
                 }
                 ForEach(library.entries) { entry in

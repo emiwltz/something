@@ -12,7 +12,7 @@ enum Launcher {
     /// something.app (or a link to it, such as <prefix>/opt/something); nil for any other place.
     static func prefix(of app: URL) -> String? {
         let parts = app.resolvingSymlinksInPath().pathComponents
-        guard parts.count > 4, parts.last == "something.app", parts[parts.count - 4] == "Cellar", parts[parts.count - 3] == "something" else {
+        guard parts.count > 4, !parts.contains(where: { $0.contains("'") }), parts.last == "something.app", parts[parts.count - 4] == "Cellar", parts[parts.count - 3] == "something" else {
             return nil
         }
         return NSString.path(withComponents: Array(parts.dropLast(4)))

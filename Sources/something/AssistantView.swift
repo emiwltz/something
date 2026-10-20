@@ -50,13 +50,14 @@ struct AssistantView: View {
     }
 
     private func statusLine(_ status: String) -> some View {
-        // "“Pebble” is ready. Open": Open reads as the link it is.
-        (model.ready == nil ? Text(status) : Text(status.dropLast(4)) + Text("Open").foregroundColor(.accentColor))
+        // "“Pebble” is ready. Open": Open reads as the link it is. The line says it only when nothing more pressing.
+        let ready = model.failure == nil && !model.working ? model.ready : nil
+        return (ready.map { Text("“\($0.title)” is ready. ") + Text("Open").foregroundColor(.accentColor) } ?? Text(status))
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10).padding(.vertical, 3)
             .modifier(Floating(shape: Capsule()))
-            .onTapGesture { model.light == .waiting ? model.showRequest() : model.ready.map { model.openReady($0.id) } }
+            .onTapGesture { if let ready { model.openReady(ready.id) } else if model.light == .waiting { model.showRequest() } }
     }
 
     private func banner(_ fault: AssistantModel.Fault) -> some View {

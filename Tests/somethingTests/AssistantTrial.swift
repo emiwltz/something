@@ -52,7 +52,10 @@ struct AssistantTrial {
         defer { library.stop() }
         var opened: [String?] = []
         library.opened = { opened.append($0) }
-        library.relisted = { if let new = model.appeared(library.entries, open: library.selection) { library.select(new) } }
+        model.ended = {
+            library.relist()
+            if let new = model.appeared(library.entries, open: library.selection) { library.select(new) }
+        }
         library.watch()
         engine.changed = { model.refresh() }
         engine.lookAgain()

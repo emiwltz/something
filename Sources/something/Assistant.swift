@@ -42,8 +42,9 @@ import SomethingCore
     /// How to Get One, and bringing the permission panel forward: the window's.
     @ObservationIgnored var howTo: () -> Void = {}
     @ObservationIgnored var showRequest: () -> Void = {}
-    /// Opens a space the status line says is ready: the window's.
+    /// The window's: opening a space said ready, and, when a build from the blank page ended, its space.
     @ObservationIgnored var openReady: (String) -> Void = { _ in }
+    @ObservationIgnored var ended: () -> Void = {}
 
     var place = Place.blank
     var draft = ""
@@ -76,9 +77,10 @@ import SomethingCore
     private(set) var idled = false
     /// The last message delivered, its context line included: Try Again sends it again.
     private(set) var last: String?
-    /// The spaces there were when the person asked from the blank page: the first new one opens by itself, or, when
-    /// the person went to another space meanwhile, is said ready in the status line.
-    private(set) var before: Set<String>?
+    /// The spaces there were and the conversation's last turn when the person asked from the blank page, until the
+    /// turn that followed ends (answered, stopped, failed, or never started); the last turn now.
+    private(set) var before: (spaces: Set<String>, turn: String?)?
+    @ObservationIgnored private var turn: Turn?
     var ready: Library.Entry?
     /// The spaces made while the person waited for one: their rights sheet says the agent made them.
     private(set) var made: Set<String> = []
@@ -136,11 +138,19 @@ import SomethingCore
         let offered = AssistantModel.builders.filter { installed[$0] == true && AssistantModel.cannotBuild[$0] == nil }
         if !offered.contains(kind ?? "") { kind = offered.first { $0 == preferred } ?? offered.first }
         keep(\.agent, state.agents.first { $0.id == id })
-        keep(\.rows, AssistantModel.rows(state.threads.first { $0.agent == id }))
+        let thread = state.threads.first { $0.agent == id }
+        keep(\.rows, AssistantModel.rows(thread))
+        turn = thread?.turns.last
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
         // The drawer opens on a new problem: the person must see why nothing happened.
         if problem != nil, !told { drawer = true }
         told = problem != nil
+        guard let before, !launching else { return }
+        let answered = turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
+        if answered || id == nil || stopped || light == .error || agent?.alive == false {
+            ended()
+            self.before = nil
+        }
     }
 
     private func keep<Value: Equatable>(_ property: ReferenceWritableKeyPath<AssistantModel, Value>, _ value: Value) {
@@ -229,14 +239,15 @@ import SomethingCore
 
     // MARK: What the person does
 
-    /// Sends the draft, with the context line, launching the agent first when this conversation has none.
-    func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Sends `sentence` (a suggestion), or else the draft, with the context line, launching the agent first when this
+    /// conversation has none.
+    func send(_ sentence: String? = nil) {
+        let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, kind != nil else { return }
-        draft = ""
-        if place == .blank {
-            // The first build is watched: the conversation shows what the agent does.
-            (before, drawer) = (Set(Spaces(root: places.spaces).list().map(\.name)), true)
+        if sentence == nil { draft = "" }
+        if place == .blank, before == nil {
+            // The build is watched from its first message: the conversation shows what the agent does.
+            (before, drawer) = ((Set(Spaces(root: places.spaces).list().map(\.name)), turn?.id), true)
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -305,10 +316,10 @@ import SomethingCore
         idled = true
     }
 
-    /// The space to open by itself: the first new space listed since the person asked from the blank page, while no
-    /// other space is open. When one is, the new space is said `ready` instead, and nil returned.
+    /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
+    /// while no other space is open. When one is, the new space is said `ready` instead, and nil returned.
     func appeared(_ entries: [Library.Entry], open: String?) -> String? {
-        guard let before, let new = entries.first(where: { $0.isSpace && !before.contains($0.id) }) else { return nil }
+        guard let before, let new = entries.first(where: { $0.isSpace && !before.spaces.contains($0.id) }) else { return nil }
         self.before = nil
         made.insert(new.id)
         if open == nil { return new.id }
@@ -338,14 +349,16 @@ import SomethingCore
         let number = launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
-            guard let self, number == launch else { return }
+            guard let self, number == launch else { self?.refresh(); return }
             let messages = queued
-            (launching, queued) = (false, [])
+            queued = []
             do {
                 let id = try engine.launchAssistant(kind, folder: places.spaces.path, askEverything: askEverything)
                 (self.id, asking, stopped, idled) = (id, askEverything, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { failure = error.sentence }
+            // Only now: the launch changes the state, and a build watched must not see it ended with no agent yet.
+            launching = false
             refresh()
         }
     }

@@ -27,10 +27,7 @@ struct BlankView: View {
                 } else {
                     HStack(spacing: 8) {
                         ForEach(BlankView.chips, id: \.0) { chip in
-                            Button {
-                                model.draft = chip.1
-                                model.send()
-                            } label: {
+                            Button { model.send(chip.1) } label: {
                                 Label(chip.0, systemImage: "sparkle")
                                     .padding(.horizontal, 12).padding(.vertical, 6)
                                     .background(.quaternary.opacity(0.6), in: Capsule())

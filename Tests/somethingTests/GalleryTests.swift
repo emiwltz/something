@@ -307,7 +307,7 @@ struct GalleryTests {
             try await draw(window.shell, library: window.library, web: nil, name + suffix, window.home)
         }
         none.shell.split.splitViewItems[0].isCollapsed = false
-        none.shell.show(nil)
+        none.shell.show(nil, endingTour: true)
         try await draw(none.shell, library: none.library, web: nil, "blank-no-agent" + suffix, none.home)
 
         // The blank page of a home with spaces: idle, then building the third suggestion.

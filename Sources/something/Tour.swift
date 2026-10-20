@@ -91,14 +91,13 @@ struct TourView: View {
                          ("lock", "Nothing leaves your Mac: no account, no tracking.")], id: \.0) { line in
                     GridRow { Image(systemName: line.0).gridColumnAlignment(.center); Text(line.1) }
                 }
+                if tour.offersLauncher {
+                    GridRow { Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]); Toggle("Add something to Applications, so Spotlight finds it.", isOn: $tour.addLauncher) }
+                }
             }
             .multilineTextAlignment(.leading)
             .foregroundStyle(.secondary)
-            .padding(.top, 6)
-            if tour.offersLauncher {
-                Toggle("Add something to Applications, so Spotlight finds it.", isOn: $tour.addLauncher)
-                    .foregroundStyle(.secondary)
-            }
+            .fixedSize().padding(.top, 6)
             buttons { Button("Continue") { tour.step = 1 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }
         }
     }
@@ -130,7 +129,7 @@ struct TourView: View {
             .frame(width: 420)
             Text(assistant.firstLines[0]).font(.system(size: 12.5)).foregroundStyle(.secondary).frame(width: 420)
             Text("It uses your own account and settings, as in Terminal. Nothing starts until you send it a first message.")
-                .font(.system(size: 12.5)).foregroundStyle(.secondary).padding(.top, 6)
+                .font(.system(size: 12.5)).foregroundStyle(.secondary).frame(width: 420).padding(.top, 6)
             buttons {
                 Button("Back") { tour.step = 0 }
                 Button("Continue") { tour.end() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
