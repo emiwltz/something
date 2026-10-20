@@ -1,8 +1,8 @@
 # The Homebrew formula of something as it goes into the tap emiwltz/homebrew-tap, at Formula/something.rb. Its twin,
 # packaging/homebrew/something.rb in https://github.com/emiwltz/something, is the one that repository's CI installs;
-# everything from depends_on down is the same in both (PackagingTests checks it). On release day this file gets the
-# tag's url and sha256 and is copied into the tap; the bottle block is then written there by `brew pr-pull`
-# (publish.yml) and lives only in the tap.
+# both are the same but for comments and the url and sha256 lines (PackagingTests checks it). On release day this
+# file gets the tag's sha256 (and, for a tag other than v0.2.0, that tag in its url and root_url comment) and is
+# copied into the tap; the bottle block is then written there by `brew pr-pull` (publish.yml) and lives only in the tap.
 class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"

@@ -4,8 +4,9 @@
 class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"
-  # The url and sha256 lines are added on release day, here and in the tap's formula, before license: the tag's
-  # tarball, and the SHA-256 of that downloaded file (shasum -a 256 <file>). Until then the formula builds main
+  # On release day these two lines are added here, before license: the tag's tarball, and the SHA-256 of that
+  # downloaded file (shasum -a 256 <file>). The tap's formula already names v0.2.0 and gets only its sha256; with
+  # another tag, its url and the version in its root_url comment change too. Until then this one builds main
   # (brew install --HEAD):
   #   url "https://github.com/emiwltz/something/archive/refs/tags/<the tag>.tar.gz"
   #   sha256 "<64 hexadecimal digits>"

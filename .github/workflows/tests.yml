@@ -128,8 +128,13 @@ jobs:
           stamped=$(xcrun vtool -show-build "$program" | awk '$1 == "sdk" {print $2; exit}')
           sdk=$(xcrun --show-sdk-version)
           echo "::notice title=SDK stamp on ${{ matrix.os }}::the installed program is stamped with SDK $stamped; the runner's SDK is $sdk"
-          if [ -z "$stamped" ] || [ "${stamped%%.*}" -lt "${sdk%%.*}" ]; then
-            echo "::error title=SDK stamp on ${{ matrix.os }}::stamped with SDK ${stamped:-nothing}, below the runner's $sdk"
+          # vtool prints "n/a" for an empty stamp: anything but a number fails, before any comparison.
+          major=${stamped%%.*}
+          case "$major" in
+            '' | *[!0-9]*) echo "::error title=SDK stamp on ${{ matrix.os }}::stamped with SDK ${stamped:-nothing}, not a version"; exit 1 ;;
+          esac
+          if [ "$major" -lt "${sdk%%.*}" ]; then
+            echo "::error title=SDK stamp on ${{ matrix.os }}::stamped with SDK $stamped, below the runner's $sdk"
             exit 1
           fi
       - name: brew style and brew audit, on the formula as it goes into the tap

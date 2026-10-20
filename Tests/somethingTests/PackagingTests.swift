@@ -114,15 +114,19 @@ import Testing
         #expect(try text("README.md").contains("macOS 15 or later") && text("share/guide.md").contains("macOS 15 or later"))
     }
 
-    /// The tap's formula builds exactly as the one CI installs: the bottles come from its steps.
+    /// The tap's formula builds exactly as the one CI installs: the bottles come from its steps. Only comments, blank
+    /// lines and the release-day lines (url, sha256) may differ.
     @Test func theTapsFormulaIsTheTwinOfThisOne() throws {
-        func steps(_ path: String) throws -> Substring {
+        func steps(_ path: String) throws -> [Substring] {
             let formula = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
-            let start = try #require(formula.range(of: "\n  depends_on "), "\(path) has no depends_on line")
-            return formula[start.lowerBound...]
+            let start = try #require(formula.range(of: "class Something < Formula\n"), "\(path) has no class line")
+            return formula[start.lowerBound...].split(separator: "\n").filter { line in
+                let trimmed = line.drop { $0 == " " }
+                return !["#", "url ", "sha256 "].contains { trimmed.hasPrefix($0) }
+            }
         }
         let ours = try steps("packaging/homebrew/something.rb")
         #expect(try steps("packaging/homebrew/tap/Formula/something.rb") == ours)
-        #expect(ours.contains("Start something once: it can add itself to ~/Applications so Spotlight finds it."))
+        #expect(ours.contains("      Start something once: it can add itself to ~/Applications so Spotlight finds it."))
     }
 }

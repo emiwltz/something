@@ -2,12 +2,14 @@
 # is kept in this repository with the formula it serves, under packaging/homebrew/tap/, where GitHub does not run it.
 #
 # Installs something from this tap the way a person would, on GitHub's fresh Macs: tap, install (a bottle: no
-# compiler involved), test, start the command. It runs when the formula changes, once a week, and by hand. A push
-# made by publish.yml (GITHUB_TOKEN) does not start it: run it by hand after a publish.
+# compiler involved), test, start the command. It runs when the formula or this workflow changes on main, once a
+# week, and by hand. A push made by publish.yml (GITHUB_TOKEN) does not start it: run it by hand after a publish.
 name: install
 
 on:
   push:
+    branches: [main]
+    paths: [Formula/something.rb, .github/workflows/install.yml]
   workflow_dispatch:
   schedule:
     - cron: "17 6 * * 1"
@@ -35,8 +37,13 @@ jobs:
           echo "::notice::brew install took $(( $(date +%s) - start )) s on ${{ matrix.os }}"
       - name: Poured from a bottle, sealed, not quarantined
         run: |
-          brew info --json=v2 --installed emiwltz/tap/something |
-            python3 -c 'import json,sys; i=json.load(sys.stdin)["formulae"][0]["installed"][0]; assert i["poured_from_bottle"], i'
+          # Not --installed: with it, brew info lists every installed formula and ignores the name.
+          brew info --json=v2 emiwltz/tap/something | python3 -c '
+          import json, sys
+          f = json.load(sys.stdin)["formulae"][0]
+          assert f["name"] == "something", f["name"]
+          i = f["installed"][0]
+          assert i["poured_from_bottle"], i'
           app="$(brew --prefix)/opt/something/something.app"
           codesign --verify --deep --strict "$app"
           if xattr -r "$app" | grep -q com.apple.quarantine; then echo "::error::the app is quarantined"; exit 1; fi
