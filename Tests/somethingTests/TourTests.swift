@@ -85,7 +85,7 @@ import Testing
     }
 
     /// Under a Homebrew prefix, the tour offers the launcher once and makes it in the home's Applications: a bundle of
-    /// its own, never shown in the Dock, read by Spotlight's importer, never registered with LaunchServices.
+    /// its own, never shown in the Dock, never registered with LaunchServices.
     @Test func theLauncherIsMadeOnceUnderHomebrew() async throws {
         let home = Home(prefix: "something-tour-")
         defer { home.remove() }
@@ -100,11 +100,12 @@ import Testing
         tour.finished = { problem = $0 }
         tour.end()
         let launcher = Launcher.place(home.places)
-        defer { _ = try? PackagingTests.runBlocking(PackagingTests.lsregister, ["-u", launcher.path], quiet: true) }
         #expect(problem == nil)
         let info = try #require(try PropertyListSerialization.propertyList(
             from: Data(contentsOf: launcher.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any])
         #expect(info["CFBundleIdentifier"] as? String == "io.github.emiwltz.something.launcher" && info["LSUIElement"] as? Bool == true)
+        // What Spotlight shows of an app: its name, its kind and its icon.
+        #expect(info["CFBundleName"] as? String == "something" && info["CFBundlePackageType"] as? String == "APPL" && info["CFBundleIconFile"] as? String == "something")
         let script = try String(contentsOf: launcher.appendingPathComponent("Contents/MacOS/something"), encoding: .utf8)
         #expect(script.contains("exec /usr/bin/open '\(home.root.path)/brew/opt/something/something.app'"))
         #expect(FileManager.default.isExecutableFile(atPath: launcher.appendingPathComponent("Contents/MacOS/something").path))
@@ -115,10 +116,7 @@ import Testing
         try Launcher.make(prefix: home.root.appendingPathComponent("brew").path, places: home.places, icon: nil)
         #expect(FileManager.default.fileExists(atPath: launcher.appendingPathComponent("Contents/kept").path))
 
-        // Spotlight's importer reads it (-t: test mode, nothing is stored).
-        let imported = try await offMain { try PackagingTests.runBlocking("/usr/bin/mdimport", ["-t", "-d1", launcher.path], quiet: true) }
-        #expect(imported.status == 0)
-        _ = try PackagingTests.runBlocking(PackagingTests.lsregister, ["-u", launcher.path], quiet: true)
+        // Nothing registered it with LaunchServices. (Spotlight's importer, mdimport, would: a test never runs it.)
         let known = try await offMain { try PackagingTests.registered() }
         #expect(!known.contains { $0.contains(home.root.path) || $0.contains(home.root.resolvingSymlinksInPath().path) })
     }

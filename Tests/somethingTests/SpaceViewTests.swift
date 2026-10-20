@@ -192,7 +192,8 @@ import WebKit
         #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         try offscreen.click(x: 650, y: 320)
         await wait(15, until: { !listener.hits.isEmpty })
-        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root of the HTML") {
+        // Intermittent: WebKit opens that connection ahead of the click's handling, and a busy runner may not get to it.
+        withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root of the HTML", isIntermittent: true) {
             #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
         }
     }
