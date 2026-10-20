@@ -22,8 +22,12 @@ The full name `emiwltz/tap/something` tells Homebrew that you trust this one for
 `brew upgrade --fetch-HEAD something` builds the latest code again.
 
 `something` opens the app's window: your spaces in the sidebar, the open one in the middle, and Info (⌥⌘I) beside it.
-At its first start it makes `~/something/spaces` (your spaces) and `~/something/data` (their memory); the sidebar
-stays empty until a space is there. At its first opening, a sheet asks you which rights that space may have.
+At its first start it makes `~/something/spaces` (your spaces) and `~/something/data` (their memory), and shows a
+short tour (again from Help › Welcome Tour): what something is, then which of your coding agents builds your spaces.
+It starts no agent. Installed with Homebrew, the tour also offers to add something to `~/Applications`, so that
+Spotlight finds it (Spotlight does not look where Homebrew installs apps): a small launcher that opens it. The tour
+ends on the blank page (New Space, ⌘N): describe the space you want, or click a suggestion, and your assistant builds
+it; it opens by itself when it is ready. At its first opening, a sheet asks you which rights that space may have.
 
 For a space of your own, ask your coding agent. `something guide` prints where the guide for that agent is, and the
 skill next to it. Tell your agent, for example: "Read the guide at that path, then make me a space that shows which
@@ -202,6 +206,7 @@ brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
 rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
+rm -rf ~/Applications/something.app                  # the launcher, if the tour added it
 ```
 
 macOS and WebKit may also have made folders named after the app's identifier; this lists them:

@@ -1,13 +1,12 @@
 // The assistant in the window (plan B.3), floating at the bottom of the center: the capsule with the agent menu, the
-// input and the send or stop button; the status line above it; the drawer with the conversation; the open space's
-// error banner; and, when no coding agent is found, a notice in the capsule's place. Its state is AssistantModel's;
-// the view keeps only the input's focus.
+// input and the send or stop button (Composer, which the blank page shows bigger); the status line above it; the
+// drawer with the conversation; the open space's error banner; and, when no coding agent is found, a notice in the
+// capsule's place. Its state is AssistantModel's; the views keep only the input's focus.
+import SomethingAgents
 import SwiftUI
 
 struct AssistantView: View {
     @Bindable var model: AssistantModel
-    @FocusState private var typing: Bool
-    @Environment(\.accessibilityReduceMotion) private var still
 
     var body: some View {
         VStack(spacing: 6) {
@@ -15,93 +14,24 @@ struct AssistantView: View {
                 if model.drawer { drawer }
                 if let fault = model.fault { banner(fault) }
                 if let status = model.status { statusLine(status) }
-                if model.noAgent { notice } else { capsule }
+                // The blank page has its own, bigger input.
+                if model.place != .blank {
+                    if model.noAgent { NoAgent(model: model) } else { Composer(model: model, big: false) }
+                }
             }
         }
         .frame(maxWidth: 640)
         .padding(AssistantView.margin)
         .coordinateSpace(.named(Drawn.space))
         .onPreferenceChange(Drawn.self) { model.drawn = $0 }
-        .onChange(of: model.focusing) { typing = true }
     }
 
     /// Room around the assistant for its shadows. The window lets through the clicks there, and anywhere else nothing
     /// is drawn (Floater).
     static let margin: CGFloat = 16
 
-    // MARK: The capsule
-
-    private var capsule: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                dot
-                Menu { menu } label: { Text(model.name) }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-            }
-            .font(.system(size: 12.5, weight: .medium))
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(.quaternary, in: Capsule())
-            TextField(model.placeholder, text: $model.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13.5))
-                .lineLimit(1...5)
-                .focused($typing)
-                .onKeyPress(.return, phases: .down) { press in
-                    // Return first confirms what an input method composes (Japanese, Chinese, Korean).
-                    if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true { return .ignored }
-                    if !press.modifiers.contains(.shift) {
-                        model.send()
-                    } else if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) {
-                        model.draft += "\n"
-                    }
-                    return .handled
-                }
-            Button { model.drawer.toggle() } label: { Image(systemName: model.drawer ? "chevron.down" : "chevron.up") }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.tertiary)
-                .help(model.drawer ? "Hide Conversation (⌘J)" : "Show Conversation (⌘J)")
-            sendButton
-        }
-        .padding(.leading, 7).padding(.trailing, 7).padding(.vertical, 7)
-        .frame(minHeight: 44)
-        .modifier(Floating(shape: Capsule()))
-    }
-
-    private var working: Bool { model.light == .working || model.light == .waiting }
-
-    private var sendButton: some View {
-        let empty = model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return Button { working ? model.stop() : model.send() } label: {
-            Image(systemName: working ? "stop.fill" : "arrow.up")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(working ? Color(nsColor: .windowBackgroundColor) : .white)
-                .frame(width: 30, height: 30)
-                .background(working ? Color.primary : Color.accentColor.opacity(empty ? 0.45 : 1), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!working && (empty || model.kind == nil))
-        .help(working ? "Stop (⌘.)" : "Send (Return)")
-    }
-
-    /// Gray not started, green ready, pulsing blue working, orange waiting for the person, red when it went wrong.
-    private var dot: some View {
-        let color: Color = switch model.light {
-        case .off: .gray
-        case .ready: .green
-        case .working: .blue
-        case .waiting: .orange
-        case .error: .red
-        }
-        return Image(systemName: "circle.fill")
-            .font(.system(size: 7))
-            .foregroundStyle(color)
-            .symbolEffect(.pulse, isActive: model.light == .working && !still)
-            .accessibilityLabel(model.light.rawValue)
-    }
-
     /// The agent menu, in the capsule and in the drawer's header.
-    @ViewBuilder private var menu: some View {
+    @ViewBuilder static func menu(_ model: AssistantModel) -> some View {
         Section("Build With") {
             ForEach(model.entries) { entry in
                 Toggle(entry.title, isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) }))
@@ -111,7 +41,7 @@ struct AssistantView: View {
         }
         Divider()
         Button("New Conversation") { model.newConversation() }
-        Button("Stop") { model.stop() }.disabled(!working)
+        Button("Stop") { model.stop() }.disabled(!model.working)
         if model.canAskEverything {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
@@ -119,27 +49,14 @@ struct AssistantView: View {
         Button("Look for Agents Again") { model.engine.lookAgain() }
     }
 
-    /// In the capsule's place when no installed agent can build spaces.
-    private var notice: some View {
-        HStack(spacing: 8) {
-            Text(model.notice).font(.system(size: 13.5))
-            Spacer()
-            Button("How to Get One") { model.howTo() }
-            Button("Look Again") { model.engine.lookAgain() }.buttonStyle(.borderedProminent)
-        }
-        .controlSize(.small)
-        .padding(.horizontal, 16)
-        .frame(height: 44)
-        .modifier(Floating(shape: Capsule()))
-    }
-
     private func statusLine(_ status: String) -> some View {
-        Text(status)
+        // "“Pebble” is ready. Open": Open reads as the link it is.
+        (model.ready == nil ? Text(status) : Text(status.dropLast(4)) + Text("Open").foregroundColor(.accentColor))
             .font(.system(size: 11.5))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10).padding(.vertical, 3)
             .modifier(Floating(shape: Capsule()))
-            .onTapGesture { if model.light == .waiting { model.showRequest() } }
+            .onTapGesture { model.light == .waiting ? model.showRequest() : model.ready.map { model.openReady($0.id) } }
     }
 
     private func banner(_ fault: AssistantModel.Fault) -> some View {
@@ -164,7 +81,7 @@ struct AssistantView: View {
             HStack {
                 Text("Assistant · \(model.name)").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                 Spacer()
-                Menu { menu } label: { Image(systemName: "ellipsis") }
+                Menu { AssistantView.menu(model) } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton)
                     .menuIndicator(.hidden)
                     .fixedSize()
@@ -253,6 +170,122 @@ struct AssistantView: View {
     }
 }
 
+/// The input and what goes with it: the builder's dot and menu, the conversation's chevron and the send or stop
+/// button. In the capsule it is one line that grows to five; on the blank page (`big`) it is a box of its own, the
+/// input above, the rest below.
+struct Composer: View {
+    @Bindable var model: AssistantModel
+    let big: Bool
+    @FocusState private var typing: Bool
+    @Environment(\.accessibilityReduceMotion) private var still
+
+    var body: some View {
+        if big {
+            VStack(alignment: .leading, spacing: 14) {
+                field
+                HStack(spacing: 8) { builder; Spacer(); chevron; send }
+            }
+            .padding(EdgeInsets(top: 16, leading: 18, bottom: 10, trailing: 12))
+            // On the page itself, not floating over a space: an opaque ground.
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.separator, lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.1), radius: 18, y: 8)
+        } else {
+            HStack(spacing: 8) { builder; field; chevron; send }
+                .padding(7)
+                .frame(minHeight: 44)
+                .modifier(Floating(shape: Capsule()))
+        }
+    }
+
+    private var builder: some View {
+        HStack(spacing: 6) {
+            dot
+            Menu { AssistantView.menu(model) } label: { Text(model.name) }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+        }
+        .font(.system(size: 12.5, weight: .medium))
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(.quaternary, in: Capsule())
+    }
+
+    private var field: some View {
+        TextField(model.placeholder, text: $model.draft, axis: .vertical)
+            .textFieldStyle(.plain)
+            .font(.system(size: big ? 16 : 13.5))
+            .lineLimit(big ? 2...8 : 1...5)
+            .focused($typing)
+            .onChange(of: model.focusing) { typing = true }
+            .onAppear { if big { typing = true } }
+            .onKeyPress(.return, phases: .down) { press in
+                // Return first confirms what an input method composes (Japanese, Chinese, Korean).
+                if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true { return .ignored }
+                if !press.modifiers.contains(.shift) {
+                    model.send()
+                } else if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) {
+                    model.draft += "\n"
+                }
+                return .handled
+            }
+    }
+
+    private var chevron: some View {
+        Button { model.drawer.toggle() } label: { Image(systemName: model.drawer ? "chevron.down" : "chevron.up") }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.tertiary)
+            .help(model.drawer ? "Hide Conversation (⌘J)" : "Show Conversation (⌘J)")
+    }
+
+    private var send: some View {
+        let empty = model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, working = model.working
+        return Button { working ? model.stop() : model.send() } label: {
+            Image(systemName: working ? "stop.fill" : "arrow.up")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(working ? Color(nsColor: .windowBackgroundColor) : .white)
+                .frame(width: 30, height: 30)
+                .background(working ? Color.primary : Color.accentColor.opacity(empty ? 0.45 : 1), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!working && (empty || model.kind == nil))
+        .help(working ? "Stop (⌘.)" : "Send (Return)")
+    }
+
+    /// Gray not started, green ready, pulsing blue working, orange waiting for the person, red when it went wrong.
+    private var dot: some View {
+        let color: Color = switch model.light {
+        case .off: .gray
+        case .ready: .green
+        case .working: .blue
+        case .waiting: .orange
+        case .error: .red
+        }
+        return Image(systemName: "circle.fill")
+            .font(.system(size: 7))
+            .foregroundStyle(color)
+            .symbolEffect(.pulse, isActive: model.light == .working && !still)
+            .accessibilityLabel(model.light.rawValue)
+    }
+}
+
+/// In the input's place when no installed agent can build spaces.
+struct NoAgent: View {
+    let model: AssistantModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(model.notice).font(.system(size: 13.5))
+            Spacer()
+            Button("How to Get One") { model.howTo() }
+            Button("Look Again") { model.engine.lookAgain() }.buttonStyle(.borderedProminent)
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .modifier(Floating(shape: Capsule()))
+    }
+}
+
 /// Material, a hairline and a soft shadow: the assistant floats over the space. A pill is a `Capsule`: a continuous
 /// rounded rectangle as tall as twice its radius draws a mark at each end.
 struct Floating<Ground: InsettableShape>: ViewModifier {
@@ -277,6 +310,12 @@ struct Drawn: PreferenceKey {
 /// How to Get One's list: each agent, the command that installs it, and a button that copies that command.
 struct InstallList: View {
     let rows: [(name: String, command: String)], copy: (String) -> Void
+
+    /// The coding agents something builds with (none it refuses), each with its install command.
+    static var builders: [(name: String, command: String)] {
+        AssistantModel.builders.filter { AssistantModel.cannotBuild[$0] == nil }
+            .compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
+    }
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {

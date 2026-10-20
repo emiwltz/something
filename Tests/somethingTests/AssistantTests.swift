@@ -13,8 +13,8 @@ import WebKit
 @MainActor @Suite(.serialized, .leavesNothing("something-assistant-")) struct AssistantTests {
     /// A fake `claude`: it keeps each line it reads in $HOME/out/input and its arguments in $HOME/out/arguments, and
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a signed-out Claude Code
-    /// gives. For the gallery, "make-board" runs four tools before its reply, "go-slow" never ends its turn, and
-    /// "ask-first" asks a permission.
+    /// gives. For the gallery, "make-board" runs four tools before its reply, "go-slow" never ends its turn, "small
+    /// game" starts building one and never ends its turn, and "ask-first" asks a permission.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -28,6 +28,11 @@ import WebKit
       printf '%s\n' "$line" >> "$HOME/out/input"
       case "$line" in
         *'go-slow'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}' ;;
+        *'small game'*'"type":"user"'*)
+          tool 1 Bash '{"command":"something guide --print"}'
+          tool 2 Bash '{"command":"something new stack"}'
+          tool 3 Write '{"file_path":"/Users/example/something/spaces/stack.html"}'
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}' ;;
         *'ask-first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
@@ -55,8 +60,8 @@ import WebKit
 
     /// A home with the given programs in its PATH (`claude` is the fake; any other is an empty script), and the
     /// assistant of an engine that finds only them, following the engine's state as the app does.
-    func assistant(_ programs: [String] = ["claude"]) throws -> (home: Home, model: AssistantModel) {
-        let home = Home(prefix: "something-assistant-")
+    func assistant(_ programs: [String] = ["claude"], prefix: String = "something-assistant-") throws -> (home: Home, model: AssistantModel) {
+        let home = Home(prefix: prefix)
         let bin = home.root.appendingPathComponent("bin")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: home.places.spaces, withIntermediateDirectories: true)
@@ -306,6 +311,8 @@ import WebKit
     @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheAssistantReachTheSpace() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
+        // Over a space: on the blank page the capsule is the page's own.
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
         let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), floater = Floater(rootView: AssistantView(model: model))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(center.frame.size)

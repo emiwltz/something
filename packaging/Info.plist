@@ -7,6 +7,8 @@
 	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>something</string>
+	<key>CFBundleIconFile</key>
+	<string>something</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.emiwltz.something</string>
 	<key>CFBundleInfoDictionaryVersion</key>

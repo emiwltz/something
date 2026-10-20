@@ -50,6 +50,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var frame: WKFrameInfo?
     /// One more at each load and at the close: a call answered late is refused when the page it came from is gone.
     private(set) var loads = 0
+    /// Whether the person's assistant made this space while they waited for it: the rights sheet says so.
+    var made = false
 
     /// The space `space` of the spaces folder, not yet loaded. `share` is the folder of something.js; `rules` is
     /// Lockdown's rule list. Throws a `SpaceError` when something.js cannot be read: without it the space could not
@@ -277,7 +279,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if case .folders(let folders) = declaration.agents { missing = folders.filter { here($0) == nil && grant?.remap[$0] == nil } }
         return RightsQuestion(space: declaration.title, description: declaration.description, rights: toAsk.rights,
                               scope: toAsk.scope ? declaration.agents : nil, missing: missing,
-                              folder: toAsk.folder ? FolderQuestion(declared: declaration.folder, found: declaration.folder.flatMap(here)) : nil)
+                              folder: toAsk.folder ? FolderQuestion(declared: declaration.folder, found: declaration.folder.flatMap(here)) : nil,
+                              made: made)
     }
 
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice

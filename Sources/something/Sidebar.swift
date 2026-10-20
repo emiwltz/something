@@ -1,23 +1,36 @@
-// The sidebar: New Space first, the spaces sorted by title (one click opens one), and Templates pinned at the
-// bottom. A page whose declaration does not read is listed too, in secondary color: "not a space yet". Each space has
-// Show in Finder, Export… and Move to Trash… in its context menu.
+// The sidebar: New Space first, selected on the blank page; the spaces sorted by title (one click opens one), with
+// an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
+// declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
+// the person was elsewhere has a dot. Each space has Show in Finder, Export… and Move to Trash… in its context menu.
 import SwiftUI
 
 struct SidebarView: View {
     @Bindable var library: Library
+    let assistant: AssistantModel
+    /// The tags of the two rows that are not spaces; a space's name never starts with "+".
+    static let new = "+new", pending = "+pending"
 
     var body: some View {
-        List(selection: Binding(get: { library.selection }, set: { library.select($0) })) {
-            // New Space and Templates come with the blank page and the gallery; until then they are shown, not offered.
+        let pending = assistant.building && library.selection == nil
+        List(selection: Binding(get: { library.selection ?? (pending ? SidebarView.pending : SidebarView.new) }, set: { tag in
+            if tag == SidebarView.new || tag == SidebarView.pending {
+                library.select(nil)
+                assistant.focus()
+            } else {
+                library.select(tag)
+            }
+        })) {
             HStack {
-                Label("New Space", systemImage: "plus.circle.fill")
+                Label { Text("New Space") } icon: { Image(systemName: "plus.circle.fill").foregroundStyle(.tint) }
                 Spacer()
                 Text("⌘N").foregroundStyle(.tertiary)
             }
-            .foregroundStyle(.tertiary)
-            .disabled(true)
+            .tag(SidebarView.new)
             Section("Spaces") {
-                if library.entries.isEmpty {
+                if pending {
+                    Label("New Space", systemImage: "sparkle").italic().tag(SidebarView.pending)
+                }
+                if library.entries.isEmpty, !pending {
                     Text("No spaces yet.").foregroundStyle(.secondary)
                 }
                 ForEach(library.entries) { entry in
@@ -53,6 +66,9 @@ struct SidebarView: View {
             }
         } icon: {
             Image(systemName: "square.text.square")
+                .overlay(alignment: .topTrailing) {
+                    if assistant.ready?.id == entry.id { Circle().fill(.tint).frame(width: 7, height: 7).offset(x: 3, y: -3) }
+                }
         }
         .lineLimit(1)
     }

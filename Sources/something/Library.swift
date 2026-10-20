@@ -122,9 +122,10 @@ import SomethingCore
     }
 
     /// What window.json keeps: the UI's own memory, apart from the grants, so that app.json changes only when a grant
-    /// does. The assistant keeps its builder and Ask Before Every Change there too.
+    /// does. The assistant keeps its builder and Ask Before Every Change there too, and the tour whether it was
+    /// seen and whether it offered the launcher.
     struct WindowFile: Codable {
-        var lastOpen: String?, assistant: String?, askEverything: Bool?
+        var lastOpen: String?, assistant: String?, askEverything: Bool?, toured: Bool?, launcherOffered: Bool?
 
         /// What `places` keep; nil when window.json is missing or does not read.
         static func read(_ places: Places) -> WindowFile? {

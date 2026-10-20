@@ -21,6 +21,8 @@ struct RightsQuestion: Equatable {
     var missing: [String]
     /// Set when the folder for launches must be chosen or confirmed.
     var folder: FolderQuestion?
+    /// Whether the person's assistant made the space while they waited for it: the sheet says so first.
+    var made = false
 }
 
 struct FolderQuestion: Equatable {
@@ -136,6 +138,37 @@ final class NativeAsk: Asking {
     }
 }
 
+/// What something does, and what it never does, side by side.
+struct Promise: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 18) {
+                column("something will", "checkmark.circle.fill", .green, ["See what your coding agents are doing, by reading what they write.",
+                                                                      "Start your agent to build spaces with you.",
+                                                                      "Ask you, in a window of the Mac, before anything sensitive."])
+                column("something never", "xmark.circle.fill", .red, ["Writes into your agents' sessions or settings.", "Lets a space reach the Internet.",
+                                                                      "Answers for you."])
+            }
+            // The promise, in the README's words.
+            Text("something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(width: 440)
+        .padding(.vertical, 4)
+    }
+
+    private func column(_ title: String, _ symbol: String, _ tint: Color, _ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).fontWeight(.semibold)
+            ForEach(lines, id: \.self) { line in
+                Label { Text(line).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: symbol).foregroundStyle(tint) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// One line of the rights sheet with a folder chooser: a sentence, the folder on a line of its own below it, so that
 /// a path is never broken, and the button beside them. Once a folder is chosen, the sentence becomes `then`, which
 /// still says what the folder is for, and the chosen folder is shown below it.
@@ -204,7 +237,8 @@ enum Ask {
     /// not press. Paths are shown from `home`.
     /// The sheet is built apart from showing it so that a test can draw it without showing it.
     static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (alert: NSAlert, answer: () -> RightsAnswer) {
-        let alert = Ask.alert("Allow “\(question.space)” to:", question.description ?? "", buttons: ["Allow", "Not Now"], escape: 1)
+        let about = ([question.made ? "Your agent made this space." : nil, question.description].compactMap { $0 }).joined(separator: "\n\n")
+        let alert = Ask.alert("Allow “\(question.space)” to:", about, buttons: ["Allow", "Not Now"], escape: 1)
         // Every box is ticked, and this sheet opens by itself at a first opening: Return must not allow it all
         // unread. Allow is clicked; Escape is Not Now.
         alert.buttons[0].keyEquivalent = ""
@@ -318,11 +352,18 @@ enum Ask {
     static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
         let alert = alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.",
                           buttons: ["Look Again", "Close"], escape: 1)
-        let rows = AssistantModel.builders.filter { AssistantModel.cannotBuild[$0] == nil }
-            .compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
-        let list = NSHostingView(rootView: InstallList(rows: rows, copy: copy))
+        let list = NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy))
         list.frame.size = list.fittingSize
         alert.accessoryView = list
+        return alert
+    }
+
+    /// Help › What something Does and Doesn't: two columns, and the promise.
+    static func doesAndDoesnt() -> NSAlert {
+        let alert = alert("What something does and doesn't")
+        let columns = NSHostingView(rootView: Promise())
+        columns.frame.size = columns.fittingSize
+        alert.accessoryView = columns
         return alert
     }
 

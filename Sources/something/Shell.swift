@@ -1,7 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), a toolbar with
 // the sidebar toggle, the open space's title and file, Reload and Info; and the menus. The center holds the open
-// space's web view edge to edge under the toolbar, what keeps a space from being shown, or "No space is open.", with
-// the assistant floating over it at the bottom.
+// space's web view edge to edge under the toolbar, what keeps a space from being shown, the blank page, or the tour,
+// with the assistant floating over it at the bottom (not over the tour).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -25,7 +25,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
         self.assistant = assistant
-        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SidebarView(library: library)))
+        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SidebarView(library: library, assistant: assistant)))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
         let content = NSViewController()
         content.view = center
@@ -108,9 +108,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         return item
     }
 
-    /// Shows `space` in the center, or "No space is open." for nil, with its title and file in the toolbar.
+    /// Shows `space` in the center, or the blank page for nil, with its title and file in the toolbar.
     func show(_ space: SpaceView?) {
-        self.shown?.removeFromSuperview()
         let shown: NSView
         if let space, space.blocked.isEmpty {
             shown = space.web
@@ -118,9 +117,31 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             shown = Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant))
         } else {
-            shown = Shell.hosted(Text("No space is open.").font(.title3).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity))
+            shown = Shell.hosted(BlankView(model: assistant))
         }
+        put(shown)
+        window.title = space?.title ?? "New Space"
+        window.subtitle = space?.space.location.lastPathComponent ?? ""
+        for item in window.toolbar?.items ?? [] where [Shell.reload, .toggleInspector].contains(item.itemIdentifier) {
+            item.isHidden = space == nil
+        }
+        if space == nil { inspector.isCollapsed = true }
+    }
+
+    /// Shows the tour in the center, alone: the sidebar folded, Info and the assistant hidden.
+    func show(_ tour: Tour) {
+        put(Shell.hosted(TourView(tour: tour, assistant: assistant)))
+        floating?.isHidden = true
+        split.splitViewItems[0].isCollapsed = true
+        inspector.isCollapsed = true
+        (window.title, window.subtitle) = ("something", "")
+        window.toolbar?.items.filter { [Shell.reload, .toggleInspector].contains($0.itemIdentifier) }.forEach { $0.isHidden = true }
+    }
+
+    /// Puts `shown` in the center in place of what was there, under the assistant.
+    private func put(_ shown: NSView) {
+        self.shown?.removeFromSuperview()
+        floating?.isHidden = false
         shown.translatesAutoresizingMaskIntoConstraints = false
         center.addSubview(shown, positioned: .below, relativeTo: floating)
         self.shown = shown
@@ -129,12 +150,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                                      shown.bottomAnchor.constraint(equalTo: center.bottomAnchor),
                                      shown.leadingAnchor.constraint(equalTo: center.leadingAnchor),
                                      shown.trailingAnchor.constraint(equalTo: center.trailingAnchor)])
-        window.title = space?.title ?? "something"
-        window.subtitle = space?.space.location.lastPathComponent ?? ""
-        for item in window.toolbar?.items ?? [] where [Shell.reload, .toggleInspector].contains(item.itemIdentifier) {
-            item.isHidden = space == nil
-        }
-        if space == nil { inspector.isCollapsed = true }
     }
 
     /// `view` in the center: it takes the window's size, and never asks the window for its own.
@@ -176,9 +191,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             item("Hide something", "hide:", "h"), item("Hide Others", "hideOtherApplications:", "h", [.command, .option]),
             item("Show All", "unhideAllApplications:"), .separator(), item("Quit something", "terminate:", "q"),
         ]))
-        // New Space and Templates come with the blank page and the gallery: shown, not yet offered.
+        // Templates comes with the gallery: shown, not yet offered.
         main.addItem(submenu("File", [
-            item("New Space", nil, "n"), item("Templates", nil, "t", [.command, .shift]), .separator(),
+            item("New Space", "newSpace:", "n"), item("Templates", nil, "t", [.command, .shift]), .separator(),
             item("Import Space…", "importSpace:", "i", [.command, .shift]), item("Export Space…", "exportSpace:", "e", [.command, .shift]),
             item("Show in Finder", "showInFinder:", "r", [.command, .option]), item("Move to Trash…", "moveToTrash:"), .separator(),
             item("Close Window", "performClose:", "w"),
@@ -202,6 +217,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                                          item("Bring All to Front", "arrangeInFront:")])
         main.addItem(windows)
         NSApp.windowsMenu = windows.submenu
+        let help = submenu("Help", [item("Welcome Tour", "showTour:"), item("What something Does and Doesn't", "showPromise:"), .separator(),
+                                    item("something Help", "openHelp:"), item("Guide for Coding Agents", "showGuide:")])
+        main.addItem(help)
+        NSApp.helpMenu = help.submenu
         return main
     }
 }

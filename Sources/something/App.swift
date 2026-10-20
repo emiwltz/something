@@ -1,5 +1,6 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
-// Info (Inspector.swift) and the assistant (Assistant.swift); the spaces and exports LaunchServices hands it; the
+// Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the Help menu;
+// the spaces and exports LaunchServices hands it; the
 // permission and question panels; the state pushed at most four times a second; and quitting, which asks first while
 // agents something launched run, then stops them. Closing the window keeps the app and its agents running, as a Mac app
 // with one main window does; the open space closes with it, and opens again when the window comes back.
@@ -52,6 +53,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.engine.lookAgain() }
         }
         assistant.showRequest = { [weak self] in self?.panels.panel?.orderFrontRegardless() }
+        assistant.openReady = { [weak self] in self?.library.select($0) }
         library.relisted = { [weak self] in
             guard let self, let new = assistant.appeared(library.entries, open: library.selection) else { return }
             library.select(new)
@@ -78,6 +80,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 library.select(opening)
             } else if !early.isEmpty {
                 early.forEach(receive)
+            } else if Library.WindowFile.read(places)?.toured != true {
+                showTour(nil)
             } else {
                 library.select(library.last())
             }
@@ -107,6 +111,41 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         front()
     }
 
+    /// Shows the tour in the window, the open space closed; it ends on the blank page.
+    @objc func showTour(_ sender: Any?) {
+        library.select(nil)
+        let tour = Tour(places: places)
+        tour.finished = { [weak self] problem in
+            guard let self else { return }
+            shell.split.splitViewItems[0].isCollapsed = false
+            shell.show(nil)
+            problem.map(ask.tell)
+        }
+        shell.show(tour)
+        shell.front()
+    }
+
+    @objc func newSpace(_ sender: Any?) {
+        library.select(nil)
+        front()
+        assistant.focus()
+    }
+
+    @objc func showPromise(_ sender: Any?) { sheet(Ask.doesAndDoesnt()) {} }
+
+    /// something Help: the README on GitHub, in the person's browser, once they said so.
+    @objc func openHelp(_ sender: Any?) {
+        guard let readme = URL(string: "https://github.com/emiwltz/something#readme") else { return }
+        sheet(Ask.alert("Open something's Help on GitHub?", readme.absoluteString, buttons: ["Open", "Cancel"], escape: 1)) {
+            NSWorkspace.shared.open(readme)
+        }
+    }
+
+    /// The guide for coding agents, shown in Finder: the person hands its path to their agent.
+    @objc func showGuide(_ sender: Any?) {
+        NSWorkspace.shared.activateFileViewerSelecting([Resources.share.appendingPathComponent("guide.md")])
+    }
+
     /// Shows the window; the space open when it was closed opens again.
     func front() {
         shell.front()
@@ -121,6 +160,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         current = nil
         assistant.fault = nil
         assistant.unkept = false
+        if assistant.ready?.id == name { assistant.ready = nil }
         defer {
             assistant.place = AssistantModel.place(current)
             info.show(current?.space)
@@ -142,6 +182,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 assistant.place = AssistantModel.place(view)
                 library.relist()
             }
+            view.made = assistant.made.contains(name)
             view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
             view.faulted = { [weak self, weak view] in
@@ -222,7 +263,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(stopAssistant) { return [.working, .waiting].contains(assistant.light) }
+        if item.action == #selector(stopAssistant) { return assistant.working }
         if item.action == #selector(askAssistant) { return !assistant.noAgent }
         return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
             ? current != nil : true

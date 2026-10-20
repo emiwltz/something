@@ -42,6 +42,8 @@ import SomethingCore
     /// How to Get One, and bringing the permission panel forward: the window's.
     @ObservationIgnored var howTo: () -> Void = {}
     @ObservationIgnored var showRequest: () -> Void = {}
+    /// Opens a space the status line says is ready: the window's.
+    @ObservationIgnored var openReady: (String) -> Void = { _ in }
 
     var place = Place.blank
     var draft = ""
@@ -74,8 +76,12 @@ import SomethingCore
     private(set) var idled = false
     /// The last message delivered, its context line included: Try Again sends it again.
     private(set) var last: String?
-    /// The spaces there were when the person asked from the blank page: the first new one opens by itself.
+    /// The spaces there were when the person asked from the blank page: the first new one opens by itself, or, when
+    /// the person went to another space meanwhile, is said ready in the status line.
     private(set) var before: Set<String>?
+    var ready: Library.Entry?
+    /// The spaces made while the person waited for one: their rights sheet says the agent made them.
+    private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
     @ObservationIgnored private var active = Date()
     @ObservationIgnored private var told = false
@@ -152,6 +158,11 @@ import SomethingCore
         return found.isEmpty ? "No coding agent found." : "\(found.map(Programs.name).joined(separator: ", ")) can't build spaces yet."
     }
 
+    /// Whether a space is being made from the blank page: the sidebar shows a "New Space" row meanwhile.
+    var building: Bool { before != nil }
+
+    var working: Bool { light == .working || light == .waiting }
+
     var light: Light {
         if failure != nil { return .error }
         guard let agent, !stopped else { return launching ? .working : .off }
@@ -171,6 +182,7 @@ import SomethingCore
         case .waiting: return "Waiting for you: answer in the \(agent?.waiting == "answer" ? "question" : "permission") window."
         default: break
         }
+        if let ready { return "“\(ready.title)” is ready. Open" }
         if agent?.alive == false, !stopped, agent?.error == nil { return "\(name) stopped." }
         return unkept ? "Couldn't keep this space's journal: its activity is not saved." : nil
     }
@@ -222,7 +234,10 @@ import SomethingCore
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, kind != nil else { return }
         draft = ""
-        if place == .blank { before = Set(Spaces(root: places.spaces).list().map(\.name)) }
+        if place == .blank {
+            // The first build is watched: the conversation shows what the agent does.
+            (before, drawer) = (Set(Spaces(root: places.spaces).list().map(\.name)), true)
+        }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
 
@@ -240,13 +255,14 @@ import SomethingCore
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch.
     func stop() {
         if launching { return endLaunch() }
-        if let id, light == .working || light == .waiting { _ = try? engine.interrupt(id) }
+        if let id, working { _ = try? engine.interrupt(id) }
     }
 
     /// Ends the conversation: its agent stops, and the next message starts a new one.
     func newConversation() {
         halt()
         (id, agent, rows, failure, idled, last, stopped) = (nil, nil, [], nil, false, nil, false)
+        (before, ready) = (nil, nil)
     }
 
     /// Relaunches, then sends the last message again.
@@ -290,11 +306,14 @@ import SomethingCore
     }
 
     /// The space to open by itself: the first new space listed since the person asked from the blank page, while no
-    /// other space is open.
+    /// other space is open. When one is, the new space is said `ready` instead, and nil returned.
     func appeared(_ entries: [Library.Entry], open: String?) -> String? {
-        guard let before, open == nil, let new = entries.first(where: { $0.isSpace && !before.contains($0.id) }) else { return nil }
+        guard let before, let new = entries.first(where: { $0.isSpace && !before.contains($0.id) }) else { return nil }
         self.before = nil
-        return new.id
+        made.insert(new.id)
+        if open == nil { return new.id }
+        ready = new
+        return nil
     }
 
     private func halt() {

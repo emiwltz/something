@@ -102,6 +102,7 @@ struct GalleryTests {
         SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"]).json(), in: board.web, frame: try #require(board.frame))
         library.select("agents")
         shell.show(board)
+        shell.assistant.place = AssistantModel.place(board)
         info.show(board.space)
         shell.inspector.isCollapsed = false
         try await draw(shell, library: library, web: board.web, "window-space-info" + suffix, fixture)
@@ -110,6 +111,7 @@ struct GalleryTests {
         review.open()
         library.select("morning-review")
         shell.show(review)
+        shell.assistant.place = AssistantModel.place(review)
         info.show(review.space)
         try await draw(shell, library: library, web: review.web, "window-info-rights" + suffix, fixture)
 
@@ -168,6 +170,7 @@ struct GalleryTests {
         try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
 
         try await drawAssistant(suffix: suffix, fixture)
+        try await drawOnboarding(suffix: suffix, fixture)
 
         // The template and each example in a space's view, against the invented state `something check` gives.
         for name in ["template"] + ExamplesTests.examples {
@@ -192,12 +195,12 @@ struct GalleryTests {
     /// are vibrant, blended by the window server, which a view's drawing does not reach either: the same sidebar is
     /// drawn apart, on a plain background, and composed in its column.
     func draw(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, _ fixture: Home) async throws {
-        let column = shell.split.splitViewItems[0].viewController.view
-        let sidebar = NSHostingView(rootView: SidebarView(library: library))
+        let column = shell.split.splitViewItems[0].viewController.view, folded = shell.split.splitViewItems[0].isCollapsed
+        let sidebar = NSHostingView(rootView: SidebarView(library: library, assistant: shell.assistant))
         let offscreen = Offscreen(sidebar)
         // Below the title bar, as the sidebar's own list starts.
         let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
-        offscreen.window.setContentSize(NSSize(width: column.bounds.width, height: column.bounds.height - top))
+        offscreen.window.setContentSize(NSSize(width: max(column.bounds.width, 232), height: max(column.bounds.height - top, 100)))
         // SwiftUI and WebKit draw on the run loop.
         await wait(1.5)
         let frame = try #require(shell.window.contentView?.superview)
@@ -211,7 +214,7 @@ struct GalleryTests {
             rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             var place = column.convert(column.bounds, to: frame)
             place.size.height -= top
-            side.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            if !folded { side.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
             if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
             // The assistant floats over the page, which was drawn over it.
             if web != nil, let floating = shell.floating, let over = try? bitmap(floating.bounds.size) {
@@ -232,8 +235,9 @@ struct GalleryTests {
         defer { engine.stopAll(within: 3) {} }
         engine.lookAgain()
         #expect(await wait(until: { model.kind == "claude" }))
-        try await draw(model, "assistant-off" + suffix, fixture)
+        // Over a space: on the blank page, the capsule is the page's own input.
         model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
+        try await draw(model, "assistant-off" + suffix, fixture)
         func say(_ text: String, until: () -> Bool) async {
             model.draft = text
             model.send()
@@ -253,7 +257,6 @@ struct GalleryTests {
         await say("ask-first") { model.light == .waiting }
         try await draw(model, "assistant-waiting" + suffix, fixture)
         model.newConversation()
-        model.place = .blank
         await say("sign-in-please") { model.problem != nil }
         try await draw(model, "assistant-error" + suffix, height: 420, fixture)
         model.newConversation()
@@ -262,11 +265,82 @@ struct GalleryTests {
         model.fault = AssistantModel.Fault(title: "My agents", name: "agents", codes: ["SCRIPT_ERROR"])
         try await draw(model, "assistant-space-error" + suffix, fixture)
         let none = AssistantModel(engine: Home(prefix: "something-gallery-").engine(), places: fixture.places)
+        none.place = model.place
         none.engine.changed = { none.refresh() }
         none.engine.lookAgain()
         #expect(await wait(until: { none.noAgent }))
         try await draw(none, "assistant-no-agent" + suffix, fixture)
         try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
+    }
+
+    /// The tour's screens (welcome with the launcher's box; four builders, one, none), the blank page (idle, building
+    /// with the conversation open, without an agent), a space the assistant made said ready, the rights sheet of a
+    /// space it made, and Help › What something Does and Doesn't.
+    func drawOnboarding(suffix: String, _ fixture: Home) async throws {
+        NSApp.applicationIconImage = NSImage(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("packaging/something.icns"))
+        /// The window of a home whose PATH has `programs`, the builders looked for.
+        func onboarding(_ programs: [String]) async throws -> (shell: Shell, library: Library, home: Home) {
+            let home = Home(prefix: "something-gallery-")
+            try Library.prepare(home.places)
+            let bin = home.root.appendingPathComponent("bin")
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            for name in programs { try AssistantTests().install(name, in: bin) }
+            let (shell, library, _) = window(home)
+            shell.assistant.engine.changed = { shell.assistant.refresh() }
+            shell.assistant.engine.lookAgain()
+            #expect(await wait(until: { shell.assistant.installed.count == 4 }))
+            return (shell, library, home)
+        }
+        let four = try await onboarding(["claude", "codex", "opencode", "pi"])
+        defer { four.home.remove() }
+        let welcome = Tour(places: four.home.places, app: four.home.root.appendingPathComponent("brew/Cellar/something/0.2.0/something.app"))
+        four.shell.show(welcome)
+        try await draw(four.shell, library: four.library, web: nil, "tour-welcome" + suffix, four.home)
+        welcome.step = 1
+        try await draw(four.shell, library: four.library, web: nil, "tour-builders-four" + suffix, four.home)
+        let one = try await onboarding(["claude"]), none = try await onboarding([])
+        defer { one.home.remove(); none.home.remove() }
+        for (window, name) in [(one, "tour-builders-one"), (none, "tour-none")] {
+            let tour = Tour(places: window.home.places)
+            tour.step = 1
+            window.shell.show(tour)
+            try await draw(window.shell, library: window.library, web: nil, name + suffix, window.home)
+        }
+        none.shell.split.splitViewItems[0].isCollapsed = false
+        none.shell.show(nil)
+        try await draw(none.shell, library: none.library, web: nil, "blank-no-agent" + suffix, none.home)
+
+        // The blank page of a home with spaces: idle, then building the third suggestion.
+        let (shell, library, _) = window(fixture)
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        defer { model.engine.stopAll(within: 3) {} }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        try await draw(shell, library: library, web: nil, "blank" + suffix, fixture)
+        model.draft = BlankView.chips[2].1
+        model.send()
+        #expect(await wait(until: { model.rows.count >= 4 && model.light == .working }), "the fake did not start building")
+        try await draw(shell, library: library, web: nil, "blank-building" + suffix, fixture)
+
+        // The space it made appeared while the person was on another one.
+        try fixture.space("stack", page(#"{"contract": 1, "title": "Stack", "rights": ["store"]}"#, ""))
+        library.relist()
+        _ = model.appeared(library.entries, open: "garden-notes")
+        model.newConversation()
+        (model.ready, model.drawer) = (library.entry("stack"), false)
+        model.place = .space(title: "Garden notes", name: "garden-notes", page: fixture.places.spaces.appendingPathComponent("garden-notes.html").path)
+        try await draw(model, "assistant-space-ready" + suffix, fixture)
+        let side = NSHostingView(rootView: SidebarView(library: library, assistant: model))
+        let offscreen = Offscreen(side)
+        offscreen.window.setContentSize(NSSize(width: 232, height: 320))
+        side.frame.size = NSSize(width: 232, height: 320)
+        await wait(1)
+        try draw(side, "sidebar-ready" + suffix, fixture)
+        let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", rights: ["store"], scope: nil, missing: [],
+                                  folder: nil, made: true)
+        try draw(Ask.rights(made, home: "/Users/example").alert, "rights-made-by-agent" + suffix, fixture)
+        try draw(Ask.doesAndDoesnt(), "does-and-doesnt" + suffix, fixture)
     }
 
     /// Puts AssistantTests' fake `claude` in the PATH of `fixture`'s engines.
