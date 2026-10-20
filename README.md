@@ -228,15 +228,16 @@ tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app a
 With the Command Line Tools alone and no Xcode, `swift test` is proven with the Command Line Tools 27 only; GitHub
 builds the tests with the older ones of its runners at each push.
 
-The Homebrew formula is [packaging/homebrew/something.rb](packaging/homebrew/something.rb); the rules for changing
-the code are in [AGENTS.md](AGENTS.md).
+The Homebrew formula is [packaging/homebrew/something.rb](packaging/homebrew/something.rb); what goes into the tap
+on release day (its formula and the workflows that make the bottles) is in [packaging/homebrew/tap/](packaging/homebrew/tap).
+The rules for changing the code are in [AGENTS.md](AGENTS.md).
 
 ```text
 share/                     something.js, the template, the templates and their previews, the skill, the guide, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
 Sources/SomethingAgents/   the engine, a driver per agent it launches, a reader per agent it reads
 Sources/something/         the command and the Mac app: the window, its sidebar and Info, the open space, the sheets and panels that ask you
-packaging/, tools/         the app's Info.plist, the Homebrew formula, make-app.sh, previews.sh (the templates' pictures)
+packaging/, tools/         the app's Info.plist, the Homebrew formula and the tap's files, make-app.sh, previews.sh (the templates' pictures)
 .github/workflows/         the suite and a Homebrew install, run by GitHub at each push
 Tests/                     the Swift suites, recorded exchanges with invented text, and the node tests of something.js
 ```

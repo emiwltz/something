@@ -12,7 +12,8 @@
 # Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
 # at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
 # how long brew install alone took, and fails above five minutes: a newcomer's brew install and first start must take
-# less than that together, and the first start cannot be timed on a runner.
+# less than that together, and the first start cannot be timed on a runner. The installed program must carry the
+# runner's SDK stamp, the one that gives it the current look of macOS.
 #
 # No secret is used; the token can only read the repository.
 name: tests
@@ -119,6 +120,18 @@ jobs:
           something --version
           something guide
           something check "$(brew --prefix)/opt/something/something.app/Contents/Resources/share/template.html"
+      - name: The installed program is stamped with the runner's SDK
+        # make-app.sh stamps the SDK that compiled the program; inside Homebrew's build that must still be the
+        # runner's, or a bottle made the same way would look old.
+        run: |
+          program="$(brew --prefix)/opt/something/something.app/Contents/MacOS/something"
+          stamped=$(xcrun vtool -show-build "$program" | awk '$1 == "sdk" {print $2; exit}')
+          sdk=$(xcrun --show-sdk-version)
+          echo "::notice title=SDK stamp on ${{ matrix.os }}::the installed program is stamped with SDK $stamped; the runner's SDK is $sdk"
+          if [ -z "$stamped" ] || [ "${stamped%%.*}" -lt "${sdk%%.*}" ]; then
+            echo "::error title=SDK stamp on ${{ matrix.os }}::stamped with SDK ${stamped:-nothing}, below the runner's $sdk"
+            exit 1
+          fi
       - name: brew style and brew audit, on the formula as it goes into the tap
         run: |
           cp packaging/homebrew/something.rb "$TAP/Formula/something.rb"

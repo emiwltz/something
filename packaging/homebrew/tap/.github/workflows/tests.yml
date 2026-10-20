@@ -1,0 +1,90 @@
+# Goes into the tap emiwltz/homebrew-tap as .github/workflows/tests.yml (copied there on the first release day). It
+# is kept in this repository with the formula it serves, under packaging/homebrew/tap/, where GitHub does not run it.
+#
+# What `brew tap-new` generates (Homebrew 7.0.9, .github/workflows/tap-new-tests.yml), with three changes: the
+# matrix is the three Macs that make the bottles (no Linux: the formula is macOS only), the GitHub Packages lines are
+# left out (bottles go to this tap's GitHub Releases, test-bot's default for a third-party tap), and a last step checks
+# the poured bottle the way a person gets it.
+#
+# On a pull request that changes Formula/something.rb, each Mac builds the formula from source, tests it, makes a
+# bottle (brew bottle), reinstalls from that bottle, and keeps it as an artifact "bottles_<os>". publish.yml then
+# turns those artifacts into a release and a bottle block.
+#
+#   macos-26       -> arm64_tahoe   (also poured on macOS 27: Homebrew falls back to the newest older tag)
+#   macos-15       -> arm64_sequoia
+#   macos-15-intel -> sequoia       (Intel, also poured on macOS 26 Intel; macOS 27 has no Intel)
+name: brew test-bot
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+jobs:
+  test-bot:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@e99025eb970cfa124b8284a35463d87426917478 # 2026.09.28.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Homebrew Bundler RubyGems
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
+          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.os }}-rubygems-
+
+      - run: brew test-bot --only-cleanup-before
+
+      - run: brew test-bot --only-setup
+
+      - run: brew test-bot --only-tap-syntax
+
+      - run: brew test-bot --only-formulae
+        if: github.event_name == 'pull_request'
+
+      - name: The poured bottle, as a person gets it
+        if: github.event_name == 'pull_request'
+        run: |
+          bottle=$(ls something--*.bottle.tar.gz)
+          brew uninstall --formula --force something || true
+          brew install "./$bottle"
+          app="$(brew --prefix)/opt/something/something.app"
+          # Homebrew's relocation must not have touched the bundle: the ad-hoc seal still holds.
+          codesign --verify --deep --strict "$app"
+          something --version
+          # The SDK the program is stamped with decides its look: 26 or later gets macOS 26's design. A swift build
+          # whose stamp falls back to the deployment target (15.0) would look old on macOS 26 and 27.
+          sdk=$(otool -l "$app/Contents/MacOS/something" | awk '/LC_BUILD_VERSION/{f=1} f&&$1=="sdk"{print $2; exit}')
+          echo "::notice title=${{ matrix.os }}::$bottle, program stamped with SDK $sdk"
+          if [[ "${{ matrix.os }}" == macos-26 && "${sdk%%.*}" -lt 26 ]]; then
+            echo "::error::the arm64_tahoe bottle is stamped with SDK $sdk: it would not get macOS 26's design"
+            exit 1
+          fi
+
+      - name: Upload bottles as artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bottles_${{ matrix.os }}
+          path: '*.bottle.*'

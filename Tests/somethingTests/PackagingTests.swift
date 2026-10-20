@@ -1,7 +1,8 @@
 // Packaging: tools/make-app.sh assembles something.app in a temporary prefix, from the program this suite built, and
 // the app is then run as Homebrew runs it, through the wrapper its write_exec_script writes: a symlink would break
 // Bundle.main. The bundle's version is read inside it, its program carries the SDK that compiled it, its ad-hoc
-// signature verifies, its program answers plan B's hook, and LaunchServices keeps no something.app from $TMPDIR.
+// signature verifies, its program answers plan B's hook, and LaunchServices keeps no something.app from $TMPDIR. The
+// tap's formula builds with the very steps of the one CI installs.
 import Foundation
 import Testing
 @testable import something
@@ -111,5 +112,17 @@ import Testing
         #expect(try text("packaging/Info.plist").contains("<key>LSMinimumSystemVersion</key>\n\t<string>15.0</string>"))
         #expect(try text("packaging/homebrew/something.rb").contains("depends_on macos: :sequoia"))
         #expect(try text("README.md").contains("macOS 15 or later") && text("share/guide.md").contains("macOS 15 or later"))
+    }
+
+    /// The tap's formula builds exactly as the one CI installs: the bottles come from its steps.
+    @Test func theTapsFormulaIsTheTwinOfThisOne() throws {
+        func steps(_ path: String) throws -> Substring {
+            let formula = try String(contentsOf: root.appendingPathComponent(path), encoding: .utf8)
+            let start = try #require(formula.range(of: "\n  depends_on "), "\(path) has no depends_on line")
+            return formula[start.lowerBound...]
+        }
+        let ours = try steps("packaging/homebrew/something.rb")
+        #expect(try steps("packaging/homebrew/tap/Formula/something.rb") == ours)
+        #expect(ours.contains("Start something once: it can add itself to ~/Applications so Spotlight finds it."))
     }
 }

@@ -1,11 +1,12 @@
-# The Homebrew formula of something, kept here so that it changes with the code it builds. Copy it into the tap
-# emiwltz/homebrew-tap as Formula/something.rb; the CI of this repository installs this very file on a fresh Mac
-# (.github/workflows/tests.yml, job "brew").
+# The Homebrew formula of something, kept here so that it changes with the code it builds. The CI of this repository
+# installs this very file on a fresh Mac (.github/workflows/tests.yml, job "brew"). The tap emiwltz/homebrew-tap gets
+# its twin, packaging/homebrew/tap/Formula/something.rb: the same steps, plus the tag's url and sha256.
 class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"
-  # No version is tagged yet, so the formula builds main (brew install --HEAD). At the first tag, add these two lines
-  # here, before license: the tag's tarball, and the SHA-256 of that downloaded file (shasum -a 256 <file>):
+  # The url and sha256 lines are added on release day, here and in the tap's formula, before license: the tag's
+  # tarball, and the SHA-256 of that downloaded file (shasum -a 256 <file>). Until then the formula builds main
+  # (brew install --HEAD):
   #   url "https://github.com/emiwltz/something/archive/refs/tags/<the tag>.tar.gz"
   #   sha256 "<64 hexadecimal digits>"
   license "MIT"
@@ -26,6 +27,13 @@ class Something < Formula
     system "tools/make-app.sh", prefix, version.to_s, ".build/release/something"
     # A script that execs the program inside the .app: through a symlink, Bundle.main would not be the .app.
     bin.write_exec_script prefix/"something.app/Contents/MacOS/something"
+  end
+
+  # Spotlight does not index Homebrew's prefix; the tour offers a launcher in ~/Applications instead.
+  def caveats
+    <<~EOS
+      Start something once: it can add itself to ~/Applications so Spotlight finds it.
+    EOS
   end
 
   test do

@@ -1,0 +1,55 @@
+# Goes into the tap emiwltz/homebrew-tap as .github/workflows/install.yml (copied there on the first release day). It
+# is kept in this repository with the formula it serves, under packaging/homebrew/tap/, where GitHub does not run it.
+#
+# Installs something from this tap the way a person would, on GitHub's fresh Macs: tap, install (a bottle: no
+# compiler involved), test, start the command. It runs when the formula changes, once a week, and by hand. A push
+# made by publish.yml (GITHUB_TOKEN) does not start it: run it by hand after a publish.
+name: install
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - run: brew tap emiwltz/tap
+      - name: brew install emiwltz/tap/something (timed)
+        run: |
+          start=$(date +%s)
+          brew install emiwltz/tap/something
+          echo "::notice::brew install took $(( $(date +%s) - start )) s on ${{ matrix.os }}"
+      - name: Poured from a bottle, sealed, not quarantined
+        run: |
+          brew info --json=v2 --installed emiwltz/tap/something |
+            python3 -c 'import json,sys; i=json.load(sys.stdin)["formulae"][0]["installed"][0]; assert i["poured_from_bottle"], i'
+          app="$(brew --prefix)/opt/something/something.app"
+          codesign --verify --deep --strict "$app"
+          if xattr -r "$app" | grep -q com.apple.quarantine; then echo "::error::the app is quarantined"; exit 1; fi
+      - run: brew test emiwltz/tap/something
+      - run: something --version
+      - run: something guide
+      - name: something check on the template
+        run: |
+          template="$(brew --prefix)/opt/something/something.app/Contents/Resources/share/template.html"
+          something check "$template"
+      - name: The head still builds from source with the Command Line Tools
+        if: matrix.os == 'macos-15'
+        run: |
+          brew uninstall something
+          brew install --HEAD emiwltz/tap/something
+          something --version
