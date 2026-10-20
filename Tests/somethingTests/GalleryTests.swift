@@ -290,7 +290,7 @@ struct GalleryTests {
         await say("go-slow") { model.light == .working }
         try await draw(model, "assistant-working" + suffix, fixture)
         model.newConversation()
-        await say("Make the counters bigger.") { model.retry?.attempt == 2 }
+        await say("Make the counters bigger.") { model.retry == 2 }
         try await draw(model, "assistant-retrying" + suffix, fixture)
         model.newConversation()
         await say("Give it a darker header.") { model.signedOut }

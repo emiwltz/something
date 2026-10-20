@@ -71,9 +71,10 @@ import Testing
         library.opened = { opened.append($0) }
         library.watch()
         defer { library.stop() }
-        // The watch looks every half second. Each wait gives it three: while the other suites start agents and WebKit
-        // at once, a 3-core runner's main queue was seen late by more than a second (CI, 19 October 2026).
-        let soon: Double = 3
+        // The watch looks every half second. Each wait gives it ten seconds and ends as soon as it sees: while the
+        // other suites start agents and WebKit at once, a 3-core runner's main queue was seen late by more than a
+        // second (CI, 19 October 2026), and a clean clone's first run missed three seconds (S12).
+        let soon: Double = 10
         try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
         #expect(await wait(soon, until: { library.entries.map(\.id) == ["garden"] }))
         library.select("garden")

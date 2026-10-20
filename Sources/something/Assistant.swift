@@ -195,8 +195,8 @@ import SomethingCore
         if failure != nil { return "Couldn't reach \(name)." }
         switch light {
         case .working:
-            guard let retry, !retry.signIn else { return "Working…" }
-            return "\(name) can't reach its model (attempt \(retry.attempt)). It keeps trying."
+            guard let retry else { return "Working…" }
+            return "\(name) can't reach its model (attempt \(retry)). It keeps trying."
         case .waiting: return "Waiting for you: answer in the \(agent?.waiting == "answer" ? "question" : "permission") window."
         default: break
         }
@@ -205,17 +205,28 @@ import SomethingCore
         return unkept ? "Couldn't keep this space's journal: its activity is not saved." : nil
     }
 
-    /// The last retry the agent reported in its turn while it could not reach its model (Claude Code's
-    /// `detail.apiRetry`): its number, and whether the model's server refused its sign-in. Not "of how many": Claude
-    /// Code says 10, but gives up after three in a row from a busy server (529, measured in S12).
-    var retry: (attempt: Int, signIn: Bool)? {
-        guard case .object(let retry)? = agent?.detail["apiRetry"], case .number(let attempt)? = retry["attempt"] else { return nil }
-        let refused = retry["error"] == .string("authentication_failed") || [.number(401), .number(403)].contains(retry["errorStatus"])
-        return (Int(attempt), refused)
+    /// What the agent reported while it could not reach its model (Claude Code's `detail.apiRetry`): its last retry,
+    /// or, with no attempt, its sign-in refused before any request.
+    private var apiRetry: [String: JSONValue] {
+        guard case .object(let retry)? = agent?.detail["apiRetry"] else { return [:] }
+        return retry
     }
 
-    /// Whether the last message failed because the model's server refused the agent's sign-in.
-    var signedOut: Bool { failure == nil && light == .error && retry?.signIn == true }
+    /// The number of the agent's last retry in this turn, nil when it did not retry. Not "of how many": Claude Code
+    /// says 10, but gives up after three in a row from a busy server (529, measured in S12).
+    var retry: Int? {
+        guard case .number(let attempt)? = apiRetry["attempt"] else { return nil }
+        return Int(attempt)
+    }
+
+    /// Whether the last message failed because the model's server refused the agent's sign-in: signing in cures it.
+    var signedOut: Bool {
+        guard failure == nil, light == .error else { return false }
+        var (status, error): (Int?, String?) = (nil, nil)
+        if case .number(let number)? = apiRetry["errorStatus"] { status = Int(number) }
+        if case .string(let kind)? = apiRetry["error"] { error = kind }
+        return ClaudeDriver.refusesSignIn(status: status, error: error)
+    }
 
     /// What went wrong with the last message, for the red row; nil when nothing did.
     var problem: String? {

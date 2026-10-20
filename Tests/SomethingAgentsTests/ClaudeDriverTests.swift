@@ -198,9 +198,10 @@ import SomethingCore
     }
 
     /// The shape Claude Code 2.1.296 writes before each retry of a request the model's server refused (S11, a fake
-    /// server answering 401): the turn fails at the first one, not after ten retries over four minutes.
-    @Test func aRefusedSignInFailsTheTurnAtTheFirstRetry() throws {
-        let replay = Replay(assistant: true)
+    /// server answering 401): the turn fails at the first one, not after ten retries over four minutes, for a space's
+    /// own Claude and for the assistant; only the assistant's detail keeps why (S12).
+    @Test(arguments: [false, true]) func aRefusedSignInFailsTheTurnAtTheFirstRetry(assistant: Bool) throws {
+        let replay = Replay(assistant: assistant)
         _ = try replay.agent.send("Hello.", when: "next")
         replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
         let retry: [String: Any] = ["type": "system", "subtype": "api_retry", "attempt": 1, "max_retries": 10, "retry_delay_ms": 512,
@@ -213,11 +214,60 @@ import SomethingCore
         replay.feed(["type": "system", "subtype": "session_state_changed", "state": "idle"])
         #expect(replay.fold.agent.state == "error")
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "The model's server refused Claude Code's sign-in (error 401)."))
-        #expect(replay.fold.agent.detail["apiRetry"] == .object(["attempt": .number(2), "maxRetries": .number(10), "errorStatus": .number(401),
-                                                                   "error": .string("authentication_failed")]), "the failed turn keeps why")
+        let why: [String: JSONValue] = assistant ? ["apiRetry": .object(["attempt": .number(2), "maxRetries": .number(10), "errorStatus": .number(401),
+                                                                         "error": .string("authentication_failed")])] : [:]
+        #expect(replay.fold.agent.detail == why, "the failed turn keeps why, for the assistant only")
         _ = try replay.agent.send("Again.", when: "next")
         replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
         #expect(replay.fold.agent.detail.isEmpty, "a new turn starts without it")
+    }
+
+    /// Claude gives up after three 529s with a "<synthetic>" message (S12, measured): the turn fails with its words,
+    /// and the retries stay in the assistant's detail, since they say why.
+    @Test func retriesGivenUpStayAfterTheFailure() throws {
+        let replay = Replay(assistant: true)
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        for attempt in 1...3 {
+            replay.feed(["type": "system", "subtype": "api_retry", "attempt": attempt, "max_retries": 10, "retry_delay_ms": 512, "error_status": 529, "error": "overloaded"])
+        }
+        replay.feed(["type": "assistant", "message": ["id": "msg-x", "model": "<synthetic>", "role": "assistant",
+                                                      "content": [["type": "text", "text": "Invented: the server stayed busy."]]],
+                     "parent_tool_use_id": NSNull(), "error": "overloaded", "is_api_error_message": true])
+        replay.feed(["type": "result", "subtype": "success", "is_error": true, "terminal_reason": "completed", "result": "Invented: the server stayed busy."])
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "idle"])
+        #expect(replay.fold.agent.state == "error")
+        #expect(replay.fold.agent.detail["apiRetry"] == .object(["attempt": .number(3), "maxRetries": .number(10), "errorStatus": .number(529),
+                                                                   "error": .string("overloaded")]))
+    }
+
+    /// A Claude Code never signed in fails before any request, with a "<synthetic>" message whose `error` says so (the
+    /// shape 2.1.296 writes, S12): the assistant's detail says it, with no attempt, so the window says the same as for
+    /// a refused key.
+    @Test func aClaudeNeverSignedInSaysSo() throws {
+        let replay = Replay(assistant: true)
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        replay.feed(["type": "assistant", "message": ["id": "msg-x", "model": "<synthetic>", "role": "assistant",
+                                                      "content": [["type": "text", "text": "Invented: no key."]]],
+                     "parent_tool_use_id": NSNull(), "error": "authentication_failed", "is_api_error_message": true])
+        #expect(replay.fold.agent.detail["apiRetry"] == .object(["attempt": .null, "maxRetries": .null, "errorStatus": .null,
+                                                                   "error": .string("authentication_failed")]))
+    }
+
+    /// A key without access (403) fails the turn too, but is not said as signed out: signing in may not cure it. A
+    /// retry that does not say its number keeps it unknown.
+    @Test func aForbiddenKeyIsNotASignIn() throws {
+        #expect(ClaudeDriver.refusesSignIn(status: 401, error: nil) && ClaudeDriver.refusesSignIn(status: nil, error: "authentication_failed"))
+        #expect(!ClaudeDriver.refusesSignIn(status: 403, error: "authentication_failed") && !ClaudeDriver.refusesSignIn(status: 529, error: "overloaded"))
+        let replay = Replay(assistant: true)
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "running"])
+        replay.feed(["type": "system", "subtype": "api_retry", "error_status": 403, "error": "invented_forbidden"])
+        replay.feed(["type": "system", "subtype": "session_state_changed", "state": "idle"])
+        #expect(replay.fold.agent.error?.message == "The model's server refused Claude Code's sign-in (error 403).")
+        #expect(replay.fold.agent.detail["apiRetry"] == .object(["attempt": .null, "maxRetries": .null, "errorStatus": .number(403),
+                                                                   "error": .string("invented_forbidden")]))
     }
 
     @Test func aRetryForAnotherReasonIsLeftToClaude() throws {

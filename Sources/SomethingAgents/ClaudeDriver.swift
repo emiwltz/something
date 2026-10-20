@@ -82,11 +82,10 @@ public final class ClaudeDriver: Driver {
     private var interrupting = false
     /// Set when the model's server refused Claude's sign-in: the turn fails with it, whatever ends the turn.
     private var refused: AgentError?
-    /// The last retry Claude reported in this turn while it could not reach its model, as `detail.apiRetry` shows it;
-    /// empty once the model answered or a new turn started. Kept after a turn that failed: it says why.
-    private var retry: [String: JSONValue] = [:] {
-        didSet { if retry != oldValue { emit(.detail(retry.isEmpty ? [:] : ["apiRetry": .object(retry)])) } }
-    }
+    /// The last retry Claude reported in this turn while it could not reach its model, as `detail.apiRetry` shows it
+    /// (the assistant's only); empty once the model answered or a new turn started. Kept after a turn that failed: it
+    /// says why. Changed through `remember(retry:)`, which tells the state.
+    private var retry: [String: JSONValue] = [:]
     private var heard = false
     /// The models `initialize` listed, and the one in use: the one asked for (an alias such as "opus"), then the one
     /// Claude reports running (a model id, an entry's resolvedModel). The efforts offered are that model's; nil until
@@ -255,12 +254,12 @@ public final class ClaudeDriver: Driver {
             // says each retry (`detail.apiRetry`, which no space sees: a space's own agents get no new fact). A refused
             // sign-in never passes by retrying: the turn fails at the first retry, and Claude is told to stop.
             guard turnOpen else { return }
-            let status = frame["error_status"] as? Int
-            if launch.assistant != nil {
-                retry = ["attempt": .number(frame["attempt"] as? Double ?? 0), "maxRetries": .number(frame["max_retries"] as? Double ?? 0),
-                         "errorStatus": status.map { .number(Double($0)) } ?? .null, "error": (frame["error"] as? String).map(JSONValue.string) ?? .null]
-            }
-            guard refused == nil, frame["error"] as? String == "authentication_failed" || status == 401 || status == 403 else { return }
+            let status = frame["error_status"] as? Int, error = frame["error"] as? String
+            let number = { (key: String) in (frame[key] as? Double).map(JSONValue.number) ?? .null }
+            remember(retry: ["attempt": number("attempt"), "maxRetries": number("max_retries"), "errorStatus": number("error_status"),
+                             "error": error.map(JSONValue.string) ?? .null])
+            // A forbidden key (403) does not pass by retrying either, but signing in again may not cure it.
+            guard refused == nil, ClaudeDriver.refusesSignIn(status: status, error: error) || status == 403 else { return }
             refused = AgentError(code: "AGENT_ERROR", message: "The model's server refused Claude Code's sign-in (error \(status.map(String.init) ?? "401")).")
             try? control("interrupt", ["cancel_queued": true])
         default: break
@@ -268,15 +267,19 @@ public final class ClaudeDriver: Driver {
     }
 
     private func assistant(_ frame: [String: Any]) {
-        retry = [:]   // the model answered
         let message = frame["message"] as? [String: Any] ?? [:]
         let blocks = message["content"] as? [[String: Any]] ?? []
-        // Claude Code writes its own failures (a refused key, a reached limit) as a message from a "<synthetic>"
-        // model: an error, not the agent speaking, and not its model.
+        // Claude Code writes its own failures (a refused key, a reached limit, retries given up) as a message from a
+        // "<synthetic>" model: an error, not the agent speaking, and not its model. The retries it gave up stay: they
+        // say why. A Claude Code never signed in fails here before any request: the assistant's detail says so too.
         if message["model"] as? String == "<synthetic>" {
+            if retry.isEmpty, let error = frame["error"] as? String, ClaudeDriver.refusesSignIn(status: nil, error: error) {
+                remember(retry: ["attempt": .null, "maxRetries": .null, "errorStatus": .null, "error": .string(error)])
+            }
             let text = blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
             return emit(.error(AgentError(code: "AGENT_ERROR", message: text.isEmpty ? "Claude Code could not answer." : text)))
         }
+        remember(retry: [:])   // the model answered
         // A subagent's frames carry the tool call that started it; its model (often a smaller one) is not the agent's.
         let sub = !(frame["parent_tool_use_id"] is NSNull) && frame["parent_tool_use_id"] != nil
         if !sub, let model = message["model"] as? String {
@@ -431,6 +434,21 @@ public final class ClaudeDriver: Driver {
         return fallback()
     }
 
+    /// Keeps `retry` and tells the state, for the person's assistant only: a space's own agents get no new fact.
+    private func remember(retry: [String: JSONValue]) {
+        guard launch.assistant != nil, retry != self.retry else { return }
+        self.retry = retry
+        emit(.detail(retry.isEmpty ? [:] : ["apiRetry": .object(retry)]))
+    }
+
+    /// Whether Claude's failure means the model's server refused its sign-in (a missing or rejected key), which signing
+    /// in again in Terminal cures. `status` is the HTTP status when there was one (401 only: a 403 is a key without
+    /// access, which signing in may not cure), `error` Claude's error kind otherwise.
+    public static func refusesSignIn(status: Int?, error: String?) -> Bool {
+        if let status { return status == 401 }
+        return error == "authentication_failed"
+    }
+
     private func appendPerson(_ text: String) {
         messagesWritten += 1
         emit(.itemAppended(Item(id: "\(launch.thread)/person/\(messagesWritten)", kind: "message", author: "person", text: text, at: now())))
@@ -440,7 +458,7 @@ public final class ClaudeDriver: Driver {
         guard open != turnOpen else { return }
         turnOpen = open
         if open {
-            retry = [:]
+            remember(retry: [:])
             return emit(.turnStarted(id: nil))
         }
         let ended = refused.map(Outcome.failed) ?? outcome ?? (interrupting ? .interrupted : .done)

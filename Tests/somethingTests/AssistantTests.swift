@@ -12,8 +12,9 @@ import WebKit
 
 @MainActor @Suite(.serialized, .leavesNothing("something-assistant-")) struct AssistantTests {
     /// A fake `claude`: it keeps each line it reads in $HOME/out/input and its arguments in $HOME/out/arguments, and
-    /// answers a message with an invented reply; one holding "sign-in-please" with the error a signed-out Claude Code
-    /// gives. For the gallery, "clock in the corner" gives that error too, "waiting tiles" runs four tools before its
+    /// answers a message with an invented reply; one holding "sign-in-please" with the error a Claude Code never
+    /// signed in gives (the shape Claude Code 2.1.296 writes, S12). For the gallery, "clock in the corner" fails for
+    /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "counters bigger" retries its model twice and never ends its turn, and "darker header"
     /// retries a refused sign-in once, then fails its turn (S12, the shapes Claude Code 2.1.296 writes).
@@ -56,8 +57,11 @@ import WebKit
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u6"}' ;;
         *'"subtype":"initialize"'*)
           echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"}]}}}' ;;
-        *'sign-in-please'*'"type":"user"'*|*'clock in the corner'*'"type":"user"'*)
+        *'sign-in-please'*'"type":"user"'*)
+          echo '{"type":"assistant","message":{"id":"msg_0","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Invalid API key · Please run /login"}]},"parent_tool_use_id":null,"error":"authentication_failed","is_api_error_message":true,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"Invalid API key · Please run /login","session_id":"s1","uuid":"u3"}' ;;
+        *'clock in the corner'*'"type":"user"'*)
+          echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' ;;
         *'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_1","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Invented reply."}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Invented reply.","session_id":"s1","uuid":"u3"}' ;;
@@ -291,7 +295,7 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.problem != nil }))
         #expect(model.problem == "Invalid API key · Please run /login")
-        #expect(model.drawer && model.light == .error)
+        #expect(model.drawer && model.light == .error && model.signedOut, "a Claude Code never signed in gets the sign-in row")
         model.copyCommand()
         #expect(copied == ["claude"])
         let first = model.id
@@ -309,7 +313,7 @@ import WebKit
         await look(model)
         model.draft = "Make the counters bigger."
         model.send()
-        #expect(await wait(until: { model.retry?.attempt == 2 }))
+        #expect(await wait(until: { model.retry == 2 }))
         #expect(model.light == .working && !model.signedOut)
         #expect(model.status == "Claude Code can't reach its model (attempt 2). It keeps trying.")
         model.newConversation()
