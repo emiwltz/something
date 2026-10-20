@@ -30,9 +30,11 @@ final class FakeDoor: Door {
             ([], .start),
             (["open", "morning-review"], .open("morning-review")),
             (["open", "/Users/example/board/index.html"], .open("/Users/example/board/index.html")),
-            (["new", "garden"], .new("garden", folder: false)),
-            (["new", "garden", "--folder"], .new("garden", folder: true)),
-            (["new", "--folder", "garden"], .new("garden", folder: true)),
+            (["new", "garden"], .new("garden", folder: false, from: nil)),
+            (["new", "garden", "--folder"], .new("garden", folder: true, from: nil)),
+            (["new", "--folder", "garden"], .new("garden", folder: true, from: nil)),
+            (["new", "board", "--from", "agents"], .new("board", folder: false, from: "agents")),
+            (["new", "--from", "brief", "paper"], .new("paper", folder: false, from: "brief")),
             (["guide"], .guide(print: false)),
             (["guide", "--print"], .guide(print: true)),
             (["--version"], .version),
@@ -50,6 +52,7 @@ final class FakeDoor: Door {
         let wrong: [[String]] = [
             ["open"], ["open", "a", "b"], ["open", "--folder"],
             ["new"], ["new", "a", "b"], ["new", "--folder"], ["new", "a", "--folder", "--folder"], ["new", "-x"],
+            ["new", "a", "--from"], ["new", "a", "--from", "--folder"], ["new", "a", "--from", "agents", "--folder"], ["new", "--from", "agents"],
             ["guide", "--json"], ["--version", "now"], ["hook"], ["hook", "other"], ["start"], ["morning-review"],
             ["check"], ["check", "a", "b"], ["check", "a", "--refuse"], ["check", "a", "--state"],
             ["check", "a", "--refuse", "--json"], ["check", "a", "--fast"],
@@ -189,6 +192,26 @@ final class FakeDoor: Door {
         #expect(Ran(["new", "Garden"], home).status == 1)
         #expect(Ran(["new", "plot", "--folder"], home).status == 0)
         #expect(Spaces(root: home.places.spaces).named("plot")?.form == .folder)
+    }
+
+    @Test func newFromATemplateCopiesIt() throws {
+        let home = Home(prefix: "something-command-")
+        defer { home.remove() }
+        let made = Ran(["new", "board", "--from", "agents"], home)
+        #expect(made.status == 0 && made.out.contains("something open board"))
+        let space = try #require(Spaces(root: home.places.spaces).named("board"))
+        #expect(try Data(contentsOf: space.page) == Data(contentsOf: Home.share.appendingPathComponent("templates/agents.html")))
+        let unknown = Ran(["new", "plot", "--from", "garden"], home)
+        #expect(unknown.status == 1 && unknown.err.hasPrefix("There is no template garden. The templates are: agents, project, brief."))
+        #expect(Command.usage(Home.share).contains("make a space from a template: agents, project, brief\n"), "the usage names only the templates there are")
+        #expect(Ran(["new", "plot", "--from", "../template"], home).status == 1)
+        #expect(Spaces(root: home.places.spaces).named("plot") == nil)
+        let folder = Ran(["new", "plot", "--from", "agents", "--folder"], home)
+        #expect(folder.status == 2 && folder.err.hasPrefix("A template is one file: leave out --folder"))
+        #expect(!made.out.contains("placeholder"))
+        // Project watch follows a folder this home does not have: the command says to write the real one.
+        let project = Ran(["new", "watch", "--from", "project"], home)
+        #expect(project.status == 0 && project.out.contains("It follows ~/code/your-project, a placeholder: write the project folder in its place, then run: something check watch"))
     }
 
     @Test func aNewSpaceIsUndoneWhenTheGrantsCannotBeRead() throws {

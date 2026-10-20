@@ -14,7 +14,7 @@ import Testing
 
     /// The library of the test's home; its Trash is the folder `Trash` of that home, and Finder is never opened.
     func library(_ test: Home, _ ask: FakeAsk) -> Library {
-        let library = Library(places: test.places, ask: ask)
+        let library = Library(places: test.places, ask: ask, share: Home.share)
         library.reveal = { _ in Issue.record("Show in Finder was not expected") }
         let trash = test.root.appendingPathComponent("Trash")
         library.recycle = { url in

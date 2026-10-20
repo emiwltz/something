@@ -1,0 +1,329 @@
+<!doctype html>
+<!-- Template "Daily brief", for something (contract 1). A morning paper written from the agents' conversations: the
+     lead story is the busiest agent, who waits for the person is boxed, and each day's edition is kept in memory so
+     the next one can say what changed. Rights: "state" over every agent, "store". It never writes to an agent. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Daily Brief</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Daily brief",
+  "description": "What your agents did, like a morning paper.",
+  "agents": { "see": "all" },
+  "rights": ["state", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Newsprint by day; the night edition in dark mode. */
+  :root {
+    color-scheme: light dark;
+    --paper: #f4efe4; --ink: #1b1a17; --soft: #5a554b; --rule: rgba(27, 26, 23, .35); --red: #b23a2b;
+    --display: Didot, "Bodoni 72", ui-serif, Georgia, serif;
+    font: clamp(15px, 1.12vw, 18px)/1.5 ui-serif, "New York", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #1c1a16; --ink: #e9e2d0; --soft: #a59d8a; --rule: rgba(233, 226, 208, .28); --red: #e0725f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); }
+  /* A page's width; the columns and their rules run down to the desk, which sits at the foot of the sheet. */
+  main { max-width: 1120px; min-height: 100vh; margin: 0 auto; padding: 22px 36px 28px; display: flex; flex-direction: column; }
+  #paper { flex: 1; }
+  .ink { animation: ink 300ms ease-out; }                /* the only motion: a new edition fades in like fresh ink */
+  @keyframes ink { from { opacity: 0; } }
+  .caps { font-variant: small-caps; letter-spacing: .07em; }
+
+  .ears { display: flex; justify-content: space-between; font-size: 12px; color: var(--soft); }
+  .mast { text-align: center; border-bottom: 3px double var(--ink); padding-bottom: 4px; }
+  /* padding-bottom: Didot's descender (the "y" of Daily) clears the double rule. */
+  .mast h1 { font: 700 clamp(46px, 9vw, 118px)/1.02 var(--display); margin: 2px 0 0; padding-bottom: .12em; letter-spacing: -.01em; }
+  .dateline { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; font-size: 13px; border-bottom: 1px solid var(--ink);
+              padding: 6px 0; margin-bottom: 20px; }
+  .dateline b { color: var(--red); font-weight: 600; }
+  .dateline span:last-child { text-align: right; }
+
+  .cols { display: grid; grid-template-columns: 1.7fr 1fr 1fr; }
+  .cols > section { padding: 0 20px; border-right: 1px solid var(--rule); min-width: 0; }
+  .cols > section:first-child { padding-left: 0; }
+  .cols > section:last-child { border-right: 0; padding-right: 0; }
+  .kicker { font-size: 12px; color: var(--red); margin-bottom: 4px; }
+  h2 { font: 700 clamp(26px, 2.6vw, 38px)/1.08 var(--display); margin: 0 0 8px; }
+  h3 { font-size: 18px; line-height: 1.2; margin: 0 0 4px; }
+  .byline { font-style: italic; color: var(--soft); font-size: 13px; margin-bottom: 10px; }
+  p { margin: 0 0 10px; text-align: justify; hyphens: auto; }
+  .cols > section + section p { text-align: left; }      /* narrow columns: no rivers between words */
+  .drop::first-letter { float: left; font: 700 64px/.82 var(--display); padding: 6px 8px 0 0; }
+  blockquote { margin: 12px 0; padding: 8px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+               font-style: italic; font-size: 17px; line-height: 1.4; }
+  article + article { border-top: 1px solid var(--rule); padding-top: 12px; margin-top: 4px; }
+  .box { border: 1.5px solid var(--ink); padding: 10px 12px; margin-bottom: 16px; }
+  .box h4 { margin: 0 0 6px; font-size: 14px; font-variant: small-caps; letter-spacing: .1em; color: var(--red); }
+  .box p { font-size: 14px; margin: 0 0 6px; text-align: left; }
+  .weather { font-style: italic; }
+  .notice { font-size: 13px; color: var(--soft); }
+  .label { font-size: 13px; font-variant: small-caps; letter-spacing: .1em; border-bottom: 1px solid var(--ink); margin: 0 0 8px; padding-bottom: 2px; }
+  button { font: inherit; font-size: 13px; font-variant: small-caps; letter-spacing: .08em; color: var(--ink); background: none;
+           border: 1px solid var(--ink); padding: 5px 12px; cursor: pointer; }
+  button:hover { background: var(--ink); color: var(--paper); }
+  .archive li { margin-bottom: 8px; }
+  .record { list-style: none; padding: 0; margin: 0 0 10px; font-size: 14px; }
+  .record li { display: grid; grid-template-columns: 52px 1fr; padding: 4px 0; border-bottom: 1px dotted var(--rule); }
+  .record time { font-variant-numeric: tabular-nums; color: var(--red); }
+  section > .label:not(:first-child) { margin-top: 18px; }
+  /* The desk: which programs this paper can report on, set like a markets table. */
+  .desk { display: flex; flex-wrap: wrap; gap: 4px 28px; border-top: 3px double var(--ink); margin-top: 26px; padding-top: 8px; font-size: 13px; }
+  .desk b { font-variant: small-caps; letter-spacing: .08em; }
+  .desk span { color: var(--soft); }
+  .archive { padding-left: 18px; }
+  #problem { border: 1px solid var(--red); color: var(--red); padding: 8px 12px; margin: 0 0 16px; }
+
+  main .cols > section.solo { grid-column: 1 / -1; max-width: 760px; border: 0; padding: 0; margin: 0; columns: auto; }
+  @media (max-width: 900px) {
+    main { padding: 14px 22px 30px; }
+    .cols { grid-template-columns: 1.5fr 1fr; }
+    .cols > section:nth-child(2) { border-right: 0; padding-right: 0; }
+    .cols > section:last-child { grid-column: 1 / -1; border-top: 1px solid var(--rule); padding: 14px 0 0; margin-top: 10px;
+                                 columns: 2; column-gap: 28px; column-rule: 1px solid var(--rule); }
+  }
+  @media (prefers-reduced-motion: reduce) { .ink { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="ears caps"><span id="volume">Vol. 1</span><span>Printed on this Mac by something</span></div>
+  <header class="mast"><h1>The Daily Brief</h1></header>
+  <div class="dateline caps"><span id="date"></span><b id="weather-line"></b><span id="edition"></span></div>
+  <p id="problem" role="alert" hidden></p>
+  <div id="paper" class="cols"></div>
+  <div class="desk" id="desk"></div>
+</main>
+<script>
+  // something.js is injected before this script. Each call returns a promise; a rejection carries .code and .message,
+  // one sentence for the person: this page prints it in #problem.
+  const $ = (id) => document.getElementById(id);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "other agent";
+  const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+  const make = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text ?? "" });
+  const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : "a folder nobody knows";
+  const pad = (n) => String(n).padStart(2, "0");
+  const time = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const DAYS = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
+  const MONTHS = "January February March April May June July August September October November December".split(" ");
+  const longDate = (d) => `${DAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const dayKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const clip = (text, n) => text.length > n ? text.slice(0, n - 1).trimEnd() + "…" : text;
+  const headline = (text) => text.replace(/\.$/, "");             // a headline takes no final period
+  const ORDER = ["claude", "codex", "opencode", "pi", "omp"];       // the desk lists the programs in a fixed order
+  const word = (state) => ["waiting", "working", "idle", "done", "error", "interrupted"].includes(state) ? state : "unknown";
+  const rank = (kind) => ORDER.includes(kind) ? ORDER.indexOf(kind) : ORDER.length;
+  function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+
+  let skew = 0;                                    // the state's clock ("at") minus this Mac's
+  const today = () => new Date(Date.now() + skew);
+  let memory = { editions: {}, seen: null };       // what the space's memory holds
+  let lastReading = null, printed = null, state = null, showing = "today";
+
+  // ---- Reporting: sentences built only from what the state says; what it does not say is not written ----
+  const items = (agent) => (state.threads.find((t) => t.id === agent.thread) || { turns: [] }).turns.flatMap((t) => t.items);
+  const turns = (agent) => (state.threads.find((t) => t.id === agent.thread) || { turns: [] }).turns;
+  function standing(agent) {
+    const request = state.requests.find((r) => r.agent === agent.id);
+    if (request) return request.kind === "permission"
+      ? `It stopped to ask permission to run ${request.tool ?? "a tool"}${request.about ? ` (${request.about})` : ""}, and waits for you in something's window.`
+      : "It asked you a question, and waits for your answer in something's window.";
+    return {
+      working: "Its turn is still running.", idle: "It is idle, ready for the next request.",
+      done: `It finished${agent.updated ? " at " + time(agent.updated) : ""}.`, waiting: "It waits for you.",
+      error: `Its last turn failed${agent.error ? ": " + agent.error.message : "."}`, interrupted: "Its last turn was stopped before its end.",
+    }[agent.state] || "What it is doing now is unknown.";
+  }
+  function story(agent) {
+    const all = items(agent), asked = all.filter((i) => i.author === "person" && i.kind === "message").pop();
+    const said = all.filter((i) => i.author === "agent" && i.kind === "message").pop();
+    const tools = all.filter((i) => i.kind === "tool");
+    const where = agent.folder ? ` in ${tilde(agent.folder)}` : "";
+    const since = agent.started ? ` since ${time(agent.started)}` : "";
+    const kicker = `${agent.kind === "other" ? "Other agent" : label(agent.kind)}${where}`;
+    // An agent without a reader: one sentence, plus its state only when something knows it.
+    if (agent.kind === "other") return { kicker, headline: agent.name ?? "An agent without a name", quote: null, by: "Other agent" + since,
+      body: `something sees only its process${where}.` + (word(agent.state) === "unknown" ? "" : " " + standing(agent)) };
+    const over = ["done", "error", "interrupted"].includes(agent.state), n = turns(agent).length;
+    const lines = [`${label(agent.kind)} ${over ? "worked" : "has been at work"}${where}${agent.started ? (over ? " from " : " since ") + time(agent.started) : ""}.`];
+    if (agent.origin === "elsewhere") lines.push("It was started outside something, which only reads it.");
+    if (asked) lines.push(`You asked it: “${clip(asked.text, 160)}”`);
+    if (n > 1) lines.push(`${n} turns of this conversation are in view.`);
+    if (tools.length) lines.push(`Its latest step: ${tools.at(-1).tool ? tools.at(-1).tool.name + ", " : ""}“${clip(tools.at(-1).text, 60)}”.`);
+    if (!n && agent.origin === "elsewhere") lines.push("Its conversation is not in view.");
+    lines.push(standing(agent));
+    return {
+      kicker, headline: asked ? headline(clip(asked.text.split("\n")[0], 90)) : agent.name ?? "An agent without a name",
+      body: lines.join(" "), quote: said ? clip(said.text, 280) : null, by: label(agent.kind) + since,
+    };
+  }
+  function weather() {
+    const n = (s) => state.agents.filter((a) => a.state === s).length;
+    const parts = [["working", n("working")], ["waiting", n("waiting")], ["idle", n("idle")], ["done", n("done")]].filter(([, c]) => c);
+    if (!has("state") && !state.agents.length) return "No reports";
+    if (!parts.length) return state.agents.length ? "Conditions unknown" : "Calm, no agent about";
+    const top = parts.slice().sort((a, b) => b[1] - a[1])[0][0];
+    const rest = parts.filter(([w]) => w !== top).map(([w, c]) => `${c === 1 ? "one" : c} ${w}`);
+    return `Mostly ${top}` + (rest.length ? ", " + rest.join(", ") : "");
+  }
+
+  // ---- The edition: lead, the waiting box, other stories, and the column of what changed ----
+  function edition() {
+    const d = today();
+    $("date").textContent = longDate(d);
+    $("weather-line").textContent = weather();
+    const number = Object.keys(memory.editions).filter((k) => k !== dayKey(d)).length + 1;
+    $("edition").textContent = has("store") ? `Edition ${number}` : "Today's edition";
+    $("volume").textContent = `Vol. ${d.getFullYear() - 2025}`;
+    if (!has("state") && !state.agents.length) {
+      return alone([make("h2", "", "No news reached the desk"),
+        make("p", "drop", "This paper has no reporters: it may not see your agents. Allow “See your agents” in the space's Info, and this page fills in.")]);
+    }
+    // The lead is the agent with the most in view, then the most recent.
+    const ranked = state.agents.slice().sort((a, b) => items(b).length - items(a).length || (b.updated || "").localeCompare(a.updated || ""));
+    const lead = ranked[0];
+    const columns = [];
+    if (lead) {
+      const s = story(lead);
+      const nodes = [make("div", "kicker caps", "Lead · " + s.kicker), make("h2", "", s.headline), make("div", "byline", "By " + s.by), make("p", "drop", s.body)];
+      if (s.quote) nodes.push(make("blockquote", "", `“${s.quote}”`));
+      // The record: the lead's conversation, line by line, as the paper's chronology.
+      const record = items(lead).slice(-8);
+      if (record.length) {
+        const list = make("ol", "record");
+        record.forEach((i) => {
+          const li = make("li");
+          li.append(make("time", "", time(i.at)), make("span", "", (i.kind === "tool" ? (i.tool ? i.tool.name + ": " : "") : i.author === "person" ? "You: " : "")
+            + clip(i.text.split("\n")[0], 110) + (i.tool && i.tool.status === "running" ? " (running)" : "")));
+          list.append(li);
+        });
+        nodes.push(make("h4", "label", "From the record"), list);
+      }
+      columns.push(column(nodes));
+    } else {
+      columns.push(column([make("h2", "", "A quiet day"), make("p", "drop", "No agent was at work on this Mac when this edition went to print. Start one, and it makes the next edition.")]));
+    }
+    // Who waits: requests are answered in something's window, never from a page.
+    const box = make("div", "box");
+    box.append(make("h4", "", "Waiting for you"));
+    const waiting = state.agents.filter((a) => a.state === "waiting");
+    waiting.forEach((a) => box.append(make("p", "", `${label(a.kind)} “${a.name ?? "unnamed"}”: ${standing(a)}`)));
+    if (!waiting.length) box.append(make("p", "", "No one. Every agent can carry on without you."));
+    const second = [box];
+    ranked.slice(1).forEach((agent) => {
+      const s = story(agent), article = make("article");
+      article.append(make("div", "kicker caps", s.kicker), make("h3", "", s.headline), make("p", "", s.body));
+      second.push(article);
+    });
+    columns.push(column(second));
+    columns.push(column(sinceColumn()));
+    return columns;
+  }
+  function column(nodes) { const c = make("section"); c.append(...nodes); return c; }
+  // One story alone (nothing to report, or an archived edition) takes the whole width.
+  function alone(nodes) { const c = column(nodes); c.className = "solo"; return [c]; }
+
+  // What happened since the last reading, rebuilt from the threads' turn times: works even after days closed.
+  function sinceColumn() {
+    const nodes = [];
+    if (has("store")) {
+      nodes.push(make("h4", "label", "Since your last reading"));
+      if (lastReading) {
+        const ended = state.threads.flatMap((t) => t.turns).filter((t) => t.ended && t.ended > lastReading).length;
+        const started = state.threads.flatMap((t) => t.turns).filter((t) => t.started > lastReading).length;
+        nodes.push(make("p", "", `Last read ${longDate(new Date(lastReading))} at ${time(lastReading)}. Since then, ${started || "no"} turn${started === 1 ? "" : "s"} began and ${ended || "none"} ended.`));
+      } else nodes.push(make("p", "", "This is your first reading. From the next one, this column tells what changed in between."));
+      const older = Object.keys(memory.editions).filter((k) => k < dayKey(today())).sort();
+      if (older.length) {
+        const button = make("button", "", "The previous edition");
+        button.onclick = () => { showing = older.at(-1); print(true); };
+        nodes.push(button);
+      }
+    } else {
+      nodes.push(make("h4", "label", "Archives"), make("p", "notice", "You did not allow this paper to remember, so no edition is kept and none can say what changed. Allow it in the space's Info."));
+    }
+    // The weather itself is in the dateline; here, only how many agents and folders the paper reports on.
+    const n = state.agents.length, folders = new Set(state.agents.map((a) => a.folder).filter(Boolean)).size;
+    nodes.push(make("h4", "label", "In view"), make("p", "weather", n
+      ? `${n} agent${n === 1 ? "" : "s"}${folders ? `, in ${folders} folder${folders === 1 ? "" : "s"}` : ""}.` : "No agent."));
+    const notes = Object.entries(state.kinds).filter(([, k]) => k.note);
+    if (notes.length) {
+      nodes.push(make("h4", "label", "Notices"));
+      notes.forEach(([kind, k]) => nodes.push(make("p", "notice", `${label(kind)}: ${k.note}`)));
+    }
+    return nodes;
+  }
+
+  // An older edition from memory: its date, its weather, its headlines.
+  function archive(key) {
+    const old = memory.editions[key] || { stories: [] };
+    const [y, m, d] = key.split("-").map(Number);
+    const list = make("ol", "archive");
+    old.stories.forEach((s) => { const li = make("li"); li.append(make("b", "", s.headline), make("span", "", " · " + s.kicker)); list.append(li); });
+    const back = make("button", "", "Back to today");
+    back.onclick = () => { showing = "today"; print(true); };
+    return alone([make("div", "kicker caps", "From the archives"), make("h2", "", "The edition of " + longDate(new Date(y, m - 1, d))),
+      make("p", "weather", (old.weather || "Weather unknown") + "."), list, back]);
+  }
+
+  // fresh: a different edition is shown (another day, or the person opened one), so it fades in like fresh ink.
+  function print(fresh) {
+    const paper = $("paper");
+    paper.replaceChildren(...(showing === "today" ? edition() : archive(showing)));
+    paper.classList.remove("ink");
+    if (fresh) { void paper.offsetWidth; paper.classList.add("ink"); }
+  }
+
+  // Today's edition is kept (headlines and weather, a few hundred bytes), with the last seven days at most.
+  let saveTimer = null;
+  function keepEdition() {
+    if (!has("store") || !state.agents.length) return;
+    const stories = state.agents.map(story).map((s) => ({ kicker: s.kicker, headline: s.headline }));
+    memory.editions[dayKey(today())] = { weather: weather(), stories };
+    const keys = Object.keys(memory.editions).sort().slice(-7);
+    memory.editions = Object.fromEntries(keys.map((k) => [k, memory.editions[k]]));
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      something.store.set("editions", memory.editions).catch(problem);
+      something.store.set("seen", today().toISOString()).catch(problem);
+    }, 2000);
+  }
+
+  function render(next) {
+    state = next;
+    if (state.at) skew = Date.parse(state.at) - Date.now();
+    const day = dayKey(today());
+    if (showing === "today") print(printed !== null && printed !== day);   // a new day: a new edition
+    printed = day;
+    const kinds = Object.entries(state.kinds).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
+    $("desk").replaceChildren(make("b", "", "The desk"), ...kinds.map(([kind, k]) =>
+      make("span", "", `${label(kind)}, ${k.installed === null ? "unknown" : k.installed ? "found" : "not found"}${k.reader === "changed" ? " (reads changed)" : ""}`)));
+    keepEdition();
+  }
+
+  async function load() {
+    try {
+      if (has("store")) {
+        // Read the memory first: the column "since your last reading" compares with the previous visit.
+        const kept = (await something.store.get("")) || {};
+        memory = { editions: kept.editions || {}, seen: kept.seen || null };
+        if (lastReading === null) lastReading = memory.seen;
+      }
+      render(await something.state());
+      problem(null);
+    } catch (error) { problem(error); }
+  }
+  something.on("change", render);
+  something.on("granted", load);
+  load();
+</script>
+</body>
+</html>

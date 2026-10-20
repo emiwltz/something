@@ -1,6 +1,6 @@
 // The spaces of ~/something/spaces as the sidebar lists them, sorted by title; the open one; the last one open, kept
 // in window.json; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
-// by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash.
+// by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash, and Use Template.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
 import AppKit
@@ -16,9 +16,16 @@ import SomethingCore
 
     @ObservationIgnored let places: Places
     @ObservationIgnored let ask: Asking
+    /// share/ and its templates, for the gallery, the blank page and the welcome.
+    @ObservationIgnored let share: URL
+    @ObservationIgnored let templates: [Template]
     private(set) var entries: [Entry] = []
-    /// The name of the open space; nil when none is.
+    /// The name of the open space, `Library.gallery` for the templates; nil when neither is shown.
     private(set) var selection: String?
+    /// What the selection is while the templates are shown; a space's name never starts with "+".
+    static let gallery = "+templates"
+    /// Told the name of each space made from a template: its assistant offers to make it yours.
+    @ObservationIgnored var used: (String) -> Void = { _ in }
     /// What selecting does: the app opens the space, or closes the open one for nil.
     @ObservationIgnored var opened: (String?) -> Void = { _ in }
     /// What Move to Trash… does before it moves anything: the window asks the person.
@@ -30,10 +37,13 @@ import SomethingCore
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var looked: [String: Date] = [:]
     @ObservationIgnored private var looking = false
+    /// True from Use Template until the space it made opened: a double click makes one space, not two.
+    @ObservationIgnored private var using = false
 
-    init(places: Places, ask: Asking) {
+    init(places: Places, ask: Asking, share: URL) {
         self.places = places
         self.ask = ask
+        (self.share, templates) = (share, Template.all(share))
     }
 
     /// Makes ~/something/spaces and ~/something/data under the places' home when they are missing. Throws a
@@ -58,7 +68,7 @@ import SomethingCore
             return order == .orderedSame ? one.id < other.id : order == .orderedAscending
         }
         if listed != entries { entries = listed }
-        if let selection, !entries.contains(where: { $0.id == selection }) { select(nil) }
+        if let selection, selection != Library.gallery, !entries.contains(where: { $0.id == selection }) { select(nil) }
     }
 
     /// Lists the spaces, and lists them again each time the folder changes, from now on. The folder is looked at
@@ -103,12 +113,13 @@ import SomethingCore
         timer = nil
     }
 
-    /// Opens the space `name`, or closes the open one for nil, and remembers it for the next start. The space opens
-    /// just after: the sidebar calls this while it changes its selection, and opening may wait for the rights sheet.
+    /// Opens the space `name` (or the templates), or closes the open one for nil, and remembers a space for the next
+    /// start. It opens just after: the sidebar calls this while it changes its selection, and opening may wait for the
+    /// rights sheet.
     func select(_ name: String?) {
         guard name != selection else { return }
         selection = name
-        if let name { remember(name) }
+        if let name, name != Library.gallery { remember(name) }
         DispatchQueue.main.async { [weak self] in
             // A second click before this one opened: only the last one opens.
             if let self, self.selection == name { self.opened(name) }
@@ -212,6 +223,32 @@ import SomethingCore
             }
         } catch {
             ask.tell("\(space.name) was not exported. \(error.sentence)")
+        }
+    }
+
+    /// Makes `template` a new space, under its name or the first free one after it (agents-2, agents-3…), and opens
+    /// it. A template that follows a folder asks for it first, and the copy follows the one chosen; Cancel makes
+    /// nothing. Says what failed. A second call before the first space opened does nothing.
+    func use(_ template: Template) {
+        guard !using else { return }
+        var folder: String?
+        if template.follows {
+            guard let chosen = ask.folder("Choose the project folder this space follows") else { return }
+            folder = Words.path(chosen.path, home: places.home.path)
+        }
+        let spaces = Spaces(root: places.spaces)
+        let free = ([template.id] + (2...99).map { "\(template.id)-\($0)" }).first { spaces.named($0) == nil } ?? template.id
+        do {
+            let page = share.appendingPathComponent("templates/\(template.id).html")
+            let space = try Command.new(free, folder: false, places: places, template: page, following: folder)
+            relist()
+            used(space.name)
+            select(space.name)
+            // Queued after the opening select asked for, which runs first and may wait for the rights sheet.
+            using = true
+            DispatchQueue.main.async { [weak self] in self?.using = false }
+        } catch {
+            ask.tell("“\(template.title)” was not made. \(error.sentence)")
         }
     }
 

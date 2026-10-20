@@ -12,10 +12,11 @@ the person's and yours; the contract is in the guide.
 ## The five steps
 
 1. **Read the guide whole:** `something guide --print`. It is the contract; this skill does not replace it.
-   `something guide` says where it is: the template and the examples (`examples/agents.html`, `chat.html`,
-   `today.html`, `game.html`) are next to it.
-2. **Start from the template:** `something new <name>` (lowercase letters, digits and `-`; `--folder` for several
-   files). Then make it the page the person asked for.
+   `something guide` says where it is: the template and the templates (`templates/agents.html`, `project.html`,
+   `brief.html`) are next to it.
+2. **Start from the closest template:** `something new <name> --from <template>`, or from the empty one with
+   `something new <name>` (lowercase letters, digits and `-`; `--folder` for several files). Then make it the page
+   the person asked for.
 3. **Declare only the rights the page uses**, in its `<script type="application/json" id="something">` block:
    `state` to see agents, `send` to write to them, `launch` to start them, `store` for a memory, each with
    `:claude`, `:codex`, `:opencode` or `:pi` to limit it to one kind. The person allows or refuses each one.

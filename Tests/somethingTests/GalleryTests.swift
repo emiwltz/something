@@ -19,7 +19,7 @@ struct GalleryTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// A home with the space morning-review and a second one, a grant, ten journal lines of yesterday and today, and a
-    /// share folder with the template and the examples; its temporary path is shown as /Users/example in the pictures.
+    /// share folder with the template and the templates; its temporary path is shown as /Users/example in the pictures.
     func invented() throws -> (fixture: Home, share: URL) {
         let fixture = Home(prefix: "something-gallery-")
         let declaration = #"{"contract": 1, "title": "Morning review", "description": "Reads what the agents said overnight and asks each one for a summary.", "agents": {"folders": ["~/code/shop"]}, "folder": "~/code/shop", "rights": ["state", "send:claude", "launch:claude", "store"]}"#
@@ -53,7 +53,7 @@ struct GalleryTests {
         }
         let share = fixture.root.appendingPathComponent("share")
         try FileManager.default.createDirectory(at: share, withIntermediateDirectories: true)
-        for name in ["template.html", "examples"] {
+        for name in ["template.html", "templates"] {
             try FileManager.default.copyItem(at: Home.share.appendingPathComponent(name), to: share.appendingPathComponent(name))
         }
         return (fixture, share)
@@ -89,15 +89,15 @@ struct GalleryTests {
         defer { fixture.remove() }
         let invented = try JSONDecoder().decode(SomethingCore.State.self, from: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json")))
 
-        // The window with a space and Info: the agents example against the invented agents, then a space whose
+        // The window with a space and Info: the My agents template against the invented agents, then a space whose
         // rights were answered, one refused, with its activity.
-        try fixture.space("agents", try String(contentsOf: Home.share.appendingPathComponent("examples/agents.html"), encoding: .utf8))
+        try fixture.space("agents", try String(contentsOf: Home.share.appendingPathComponent("templates/agents.html"), encoding: .utf8))
         try fixture.space("draft", page(nil, "<p>Scratch.</p>"))
         let (shell, library, info) = window(fixture)
         let board = try await fixture.window(try #require(library.entry("agents")?.space))
         defer { board.close() }
         board.open()
-        #expect(await wait(until: { !board.web.isLoading && board.frame != nil }), "the agents example did not load")
+        #expect(await wait(until: { !board.web.isLoading && board.frame != nil }), "the agents template did not load")
         board.launched = ["a1"]
         SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"]).json(), in: board.web, frame: try #require(board.frame))
         library.select("agents")
@@ -172,18 +172,28 @@ struct GalleryTests {
         try await drawAssistant(suffix: suffix, fixture)
         try await drawOnboarding(suffix: suffix, fixture)
 
-        // The template and each example in a space's view, against the invented state `something check` gives.
-        for name in ["template"] + ExamplesTests.examples {
-            let source = Home.share.appendingPathComponent(name == "template" ? "template.html" : "examples/\(name).html")
-            let state = name == "agents" ? elsewhere(invented) : invented
-            try await drawSpace("example-\(name)", try String(contentsOf: source, encoding: .utf8), state, "space-\(name)" + suffix, fixture)
+        // The template in a space's view, against the invented state `something check` gives.
+        try await drawSpace("example-template", try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8),
+                            invented, "space-template" + suffix, fixture)
+
+        // The templates: the gallery three and two cards wide, then each one as `something check` draws it, big.
+        let (templates, templatesLibrary, _) = window(fixture)
+        templatesLibrary.select(Library.gallery)
+        templates.show(nil, gallery: true)
+        templates.assistant.place = .templates
+        try await draw(templates, library: templatesLibrary, web: nil, "templates" + suffix, fixture)
+        templates.window.setContentSize(NSSize(width: 900, height: 760))
+        try await draw(templates, library: templatesLibrary, web: nil, "templates-narrow" + suffix, fixture)
+        for name in TemplatesTests.names {
+            let image = try await TemplatesTests.snapshot(name, size: NSSize(width: 1600, height: 1000), dark: !suffix.isEmpty)
+            try png(of: NSSize(width: 1600, height: 1000), "template-\(name)" + suffix) { image.draw(in: NSRect(x: 0, y: 0, width: 1600, height: 1000)) }
         }
     }
 
     /// The window of `fixture`'s home, never shown, with its spaces listed; the agents of `agents()` named in Info.
     func window(_ fixture: Home) -> (shell: Shell, library: Library, info: Info) {
         let ask = FakeAsk()
-        let library = Library(places: fixture.places, ask: ask), info = Info(places: fixture.places, ask: ask)
+        let library = Library(places: fixture.places, ask: ask, share: Home.share), info = Info(places: fixture.places, ask: ask)
         info.agents = { self.agents() }
         library.relist()
         let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: fixture.engine(), places: fixture.places), autosave: false)

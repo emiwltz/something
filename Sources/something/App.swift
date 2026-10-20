@@ -16,7 +16,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     let engine = Engine(environment: ProcessInfo.processInfo.environment)
     let ask = NativeAsk()
     let launches = Launches()
-    lazy var library = Library(places: places, ask: ask)
+    lazy var library = Library(places: places, ask: ask, share: Resources.share)
     lazy var info = Info(places: places, ask: ask)
     lazy var assistant = AssistantModel(engine: engine, places: places)
     lazy var shell = Shell(library: library, info: info, assistant: assistant, autosave: true)
@@ -38,6 +38,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         ask.window = { [weak self] in self?.shell.window }
         library.opened = { [weak self] name in self?.open(name) }
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
+        library.used = { [weak self] name in self?.assistant.fromTemplate = name }
         info.current = { [weak self] in self?.current }
         info.agents = { [weak self] in self?.engine.state.agents ?? [] }
         info.reveal = { [weak self] in self?.library.showInFinder($0) }
@@ -131,6 +132,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         askAssistant(sender)
     }
 
+    @objc func showTemplates(_ sender: Any?) {
+        library.select(Library.gallery)
+        shell.front()
+    }
+
     @objc func showPromise(_ sender: Any?) { sheet(Ask.doesAndDoesnt()) {} }
 
     /// something Help: the README on GitHub, in the person's browser, once they said so.
@@ -162,12 +168,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.unkept = false
         if assistant.ready?.id == name { assistant.ready = nil }
         defer {
-            assistant.place = AssistantModel.place(current)
+            assistant.place = name == Library.gallery ? .templates : AssistantModel.place(current)
             info.show(current?.space)
             // The readers look often while a space is open, and rarely when nobody is looking.
             engine.start(often: current != nil)
         }
-        guard let name, let space = library.entry(name)?.space else { return shell.show(nil) }
+        guard let name, let space = library.entry(name)?.space else { return shell.show(nil, gallery: name == Library.gallery) }
         guard let rules else {
             shell.show(nil)
             return ask.tell("something is still starting; try again in a moment.")
@@ -265,7 +271,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(stopAssistant) { return assistant.working }
         if item.action == #selector(askAssistant) { return !assistant.noAgent }
-        if item.action == #selector(newSpace) { return shell.touring == nil }
+        if [#selector(newSpace), #selector(showTemplates)].contains(item.action) { return shell.touring == nil }
         return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
             ? current != nil : true
     }

@@ -7,19 +7,23 @@ import SomethingAgents
 import SomethingCore
 
 enum Command: Equatable {
-    case start, open(String), new(String, folder: Bool), guide(print: Bool), version, help
+    case start, open(String), new(String, folder: Bool, from: String?), guide(print: Bool), version, help
     case check(Check), hook([String]), trial([String])
     case wrong(String)
 
-    static let usage = """
+    /// The usage, with the templates `share` holds.
+    static func usage(_ share: URL) -> String {
+        """
         Usage:
           something                       start something, or bring it to the front
           something open <name>           open a space of ~/something/spaces; or import an export (a .something file)
           something new <name> [--folder] make a space from the template (a folder holds more than one file)
+          something new <name> --from <t> make a space from a template: \(Template.present(share).joined(separator: ", "))
           something guide [--print]       where the guide for the coding agent that writes your spaces is
           something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
           something --version
         """
+    }
 
     /// Whether this process is the app: the command passes --app to LaunchServices, and Finder, the Dock or
     /// Spotlight start the app with launchd (pid 1) as its parent and no words. Words make it the command, whoever
@@ -37,11 +41,20 @@ enum Command: Equatable {
             }
             return .open(rest[0])
         case "new":
-            let names = rest.filter { $0 != "--folder" }
-            guard names.count == 1, !names[0].hasPrefix("-"), rest.count - names.count <= 1 else {
+            var words = rest, from: String?
+            if let at = words.firstIndex(of: "--from") {
+                guard at + 1 < words.count, !words[at + 1].hasPrefix("-") else { return .wrong("--from takes a template, for example: something new my-agents --from agents") }
+                from = words.remove(at: at + 1)
+                words.remove(at: at)
+            }
+            let names = words.filter { $0 != "--folder" }
+            guard names.count == 1, !names[0].hasPrefix("-"), words.count - names.count <= 1 else {
                 return .wrong("something new takes the name of the new space, for example: something new morning-review")
             }
-            return .new(names[0], folder: names.count < rest.count)
+            if let from, names.count < words.count {
+                return .wrong("A template is one file: leave out --folder, for example: something new \(names[0]) --from \(from)")
+            }
+            return .new(names[0], folder: names.count < words.count, from: from)
         case "guide":
             guard rest.isEmpty || rest == ["--print"] else { return .wrong("Type something guide, or something guide --print to read it here.") }
             return .guide(print: !rest.isEmpty)
@@ -91,10 +104,17 @@ enum Command: Equatable {
                 return 1
             }
             return door.deliver(space.location).map { say($0, true); return 1 } ?? 0
-        case .new(let name, let folder):
+        case .new(let name, let folder, let from):
             do {
-                let space = try Command.new(name, folder: folder, places: places, template: share.appendingPathComponent("template.html"))
+                let template = from.map { share.appendingPathComponent("templates/\($0).html") } ?? share.appendingPathComponent("template.html")
+                if let from, !Template.present(share).contains(from) {
+                    throw SpaceError("There is no template \(from). The templates are: \(Template.present(share).joined(separator: ", ")).")
+                }
+                let space = try Command.new(name, folder: folder, places: places, template: template)
                 say("Made \(space.page.path). Open it with: something open \(name)", false)
+                if from != nil, (try? String(contentsOf: space.page, encoding: .utf8))?.contains("\"\(Template.placeholder)\"") == true {
+                    say("It follows \(Template.placeholder), a placeholder: write the project folder in its place, then run: something check \(name)", false)
+                }
                 return 0
             } catch {
                 say(error.sentence, true)
@@ -107,7 +127,7 @@ enum Command: Equatable {
                     The guide for the coding agent that writes your spaces:
                       \(Command.stable(guide).path)
                     Give your agent this path. It says how a space is written (an HTML page in \(places.spaces.path)), \
-                    and what it may ask for. Next to it are the template, the examples in examples/, and a skill to add \
+                    and what it may ask for. Next to it are the template, the templates in templates/, and a skill to add \
                     to your agent yourself, so that it knows how to build a space anywhere:
                       \(Command.stable(guide).deletingLastPathComponent().appendingPathComponent("skill/SKILL.md").path)
                     """, false)
@@ -123,7 +143,7 @@ enum Command: Equatable {
             say("something \(Resources.version)", false)
             return 0
         case .help:
-            say(Command.usage, false)
+            say(Command.usage(share), false)
             return 0
         case .check(let check):
             return check.main(CheckRunner(places: places, share: share), say: say)
@@ -132,17 +152,26 @@ enum Command: Equatable {
         case .trial(let words):
             return DeveloperTrial.main(words)
         case .wrong(let sentence):
-            say(sentence + "\n\n" + Command.usage, true)
+            say(sentence + "\n\n" + Command.usage(share), true)
             return 2
         }
     }
 
-    /// Makes the space `name` from the template and returns it. A new space never inherits the answers a deleted
-    /// space of the same name left in the grants file. Throws a `SpaceError` when the name is not free
-    /// or a file cannot be written; then no space is left.
-    static func new(_ name: String, folder: Bool, places: Places, template: URL) throws -> Space {
+    /// Makes the space `name` from `template` and returns it; one that follows the placeholder folder follows
+    /// `following` instead, when given. A new space never inherits the answers a deleted space of the same name left
+    /// in the grants file. Throws a `SpaceError` when the name is not free or a file cannot be written; then no space
+    /// is left.
+    static func new(_ name: String, folder: Bool, places: Places, template: URL, following: String? = nil) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
-        do { try Library.forget(name, in: places) } catch {
+        do {
+            // A folder named "</script>" must not end the declaration's block: "<" is written as \u003c.
+            if let following, let quoted = String(data: try JSONSerialization.data(withJSONObject: following, options: [.fragmentsAllowed, .withoutEscapingSlashes]), encoding: .utf8)?
+                .replacingOccurrences(of: "<", with: "\\u003c") {
+                let text = try String(contentsOf: space.page, encoding: .utf8)
+                try text.replacingOccurrences(of: "\"\(Template.placeholder)\"", with: quoted).write(to: space.page, atomically: true, encoding: .utf8)
+            }
+            try Library.forget(name, in: places)
+        } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error
         }

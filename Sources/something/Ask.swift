@@ -1,7 +1,7 @@
 // The sheets that ask the person, on the main window: the rights a space declares, a mode that makes an agent ask less,
 // a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// moving a space to the Trash, quitting while agents run, switching the assistant's builder, and how to get one. A
-// space cannot draw them, so a space cannot answer them.
+// the folder a template follows, moving a space to the Trash, quitting while agents run, switching the assistant's
+// builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window.
 import AppKit
 import SomethingAgents
@@ -54,6 +54,8 @@ protocol Asking: AnyObject {
     func saveAs(_ name: String) -> URL?
     /// The .something file to import; nil when the person cancels.
     func importFile() -> URL?
+    /// A folder the person chooses, `message` saying what for; nil when they cancel.
+    func folder(_ message: String) -> URL?
     /// Says a failure that has no window of its own.
     func tell(_ message: String)
 }
@@ -121,6 +123,12 @@ final class NativeAsk: Asking {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json]
+        return wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
+    }
+
+    func folder(_ message: String) -> URL? {
+        let panel = NSOpenPanel()
+        (panel.canChooseDirectories, panel.canChooseFiles, panel.message, panel.prompt) = (true, false, message, "Choose")
         return wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
     }
 

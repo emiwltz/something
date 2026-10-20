@@ -82,6 +82,8 @@ import SomethingCore
     private(set) var before: (spaces: Set<String>, turn: String?)?
     @ObservationIgnored private var turn: Turn?
     var ready: Library.Entry?
+    /// The space just made from a template, until the person writes: the input offers to make it theirs.
+    var fromTemplate: String?
     /// The spaces made while the person waited for one: their rights sheet says the agent made them.
     private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
@@ -206,6 +208,7 @@ import SomethingCore
 
     var placeholder: String {
         switch place {
+        case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _): return "Ask \(name) to change \(title)…"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
@@ -245,6 +248,7 @@ import SomethingCore
         let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, kind != nil else { return }
         if sentence == nil { draft = "" }
+        fromTemplate = nil
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
             (before, drawer) = ((Set(Spaces(root: places.spaces).list().map(\.name)), turn?.id), true)

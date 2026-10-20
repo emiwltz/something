@@ -48,7 +48,7 @@ struct AssistantTrial {
         engine.assistantFolder = places.spaces.path
         try Library.prepare(places)
         try AssistantModel.writeKnowledge(places, share: Home.share)
-        let library = Library(places: places, ask: FakeAsk()), model = AssistantModel(engine: engine, places: places)
+        let library = Library(places: places, ask: FakeAsk(), share: Home.share), model = AssistantModel(engine: engine, places: places)
         defer { library.stop() }
         var opened: [String?] = []
         library.opened = { opened.append($0) }

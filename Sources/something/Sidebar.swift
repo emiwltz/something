@@ -11,7 +11,7 @@ struct SidebarView: View {
     static let new = "+new", pending = "+pending"
 
     var body: some View {
-        List(selection: Binding(get: { library.selection ?? (assistant.building ? SidebarView.pending : SidebarView.new) }, set: { tag in
+        List(selection: Binding(get: { library.selection == Library.gallery ? nil : library.selection ?? (assistant.building ? SidebarView.pending : SidebarView.new) }, set: { tag in
             if tag == SidebarView.new || tag == SidebarView.pending {
                 library.select(nil)
                 assistant.focus()
@@ -44,11 +44,15 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
-            Label("Templates", systemImage: "square.grid.2x2")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                .foregroundStyle(.tertiary)
-                .disabled(true)
+            Button { library.select(Library.gallery) } label: {
+                Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(.tint) }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8).padding(.vertical, 6)
+                    .background(library.selection == Library.gallery ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(10)
         }
     }
 

@@ -45,7 +45,7 @@ import SwiftUI
 
 struct TourView: View {
     @Bindable var tour: Tour
-    let assistant: AssistantModel
+    let assistant: AssistantModel, templates: [Template]
 
     var body: some View {
         VStack(spacing: 14) {
@@ -86,6 +86,10 @@ struct TourView: View {
             title("Welcome to something")
             Text("Make your own spaces: pages built for you by your coding agent, shown safely here.")
                 .font(.system(size: 17, weight: .medium))
+            HStack(spacing: 12) {
+                ForEach(templates.filter { ["agents", "brief", "pet"].contains($0.id) }) { Preview(template: $0).frame(width: 150) }
+            }
+            .padding(.top, 8)
             Grid(alignment: .leading, verticalSpacing: 8) {
                 ForEach([("text.bubble", "You describe it. Your agent builds it."), ("hand.raised", "something shows it, and asks you before anything sensitive."),
                          ("lock", "Nothing leaves your Mac: no account, no tracking.")], id: \.0) { line in

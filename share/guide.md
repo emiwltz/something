@@ -12,10 +12,11 @@ those started elsewhere, and `resume` continues here a Claude Code or Codex conv
 
 ## The five steps
 
-1. **Read this guide.** `something guide` prints where it is; next to it are `template.html`, the four examples in
-   `examples/` (`agents.html`, `chat.html`, `today.html`, `game.html`) and the skill in `skill/SKILL.md`.
-2. **Start from the template:** `something new <name>` writes `~/something/spaces/<name>.html` from it
-   (`--folder` makes `<name>/index.html`, for a space of several files). Read the examples for what is possible.
+1. **Read this guide.** `something guide` prints where it is; next to it are `template.html`, the templates in
+   `templates/` (see "The templates") and the skill in `skill/SKILL.md`.
+2. **Start from the closest template**, or from the empty one: `something new <name> --from <template>` copies a
+   template to `~/something/spaces/<name>.html`; `something new <name>` writes the empty template there (`--folder`
+   makes `<name>/index.html`, for a space of several files). Read the templates for what is possible.
 3. **Declare only the rights the page uses** (see "Rights"). The person is asked for each one.
 4. **Run `something check <name>` until it reports no error and no warning**, then once more with
    `--refuse <right>` for each right you declared: the page must hide what was refused, not throw.
@@ -34,6 +35,25 @@ Rules that hold everywhere:
   (`omp`); a kind you do not know is "other agent".
 
 The same contract as data, for tests: `share/contract/` (`state-example.json`, `shape.json`, `codes.json`).
+
+## The templates
+
+Finished spaces, each one HTML file in `templates/` next to this guide, each passing `something check` with no
+problem, with every right it declares and with each one refused. Copy the closest one and change it; the person can
+also start from one in something's Templates (File › Templates).
+
+| Template | What it is | Rights |
+|---|---|---|
+| `agents` (My agents) | Who works, who waits for you, and a word to each. | `state` (all agents), `send` |
+| `project` (Project watch) | One folder's progress, and the agents working in it. | `state` (one folder), `send`, `launch`, `store` |
+| `brief` (Daily brief) | What your agents did, like a morning paper. | `state` (all agents), `store` |
+
+- `something new <name> --from <template>` copies one; a template is one file, so `--folder` is refused with it.
+- Project watch declares the folder `~/code/your-project` in `agents.folders` and `folder`: a placeholder. Write the
+  person's project folder in its place in the copy (until then, `check` warns FOLDER_MISSING); something's Use
+  Template asks the person for it and does so.
+- What they show of the agents is rebuilt from the state each time they open (the threads' last turns), not only
+  what happened while they were open; what they keep goes in `store`.
 
 ## Where a space lives
 

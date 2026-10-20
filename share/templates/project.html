@@ -1,0 +1,457 @@
+<!doctype html>
+<!-- Template "Project watch", for something (contract 1). A blueprint of one project folder: the agents working in it,
+     a timeline of their last turns, milestones the person ticks, and buttons to start an agent there.
+     Rights: "state" (scoped to the folder), "send", "launch" (in that folder), "store" (milestones, last look).
+     Its folder (agents.folders and folder) is the project it follows; the template ships the placeholder
+     ~/code/your-project, which Use Template replaces with the folder the person chooses. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project watch</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Project watch",
+  "description": "One folder's progress, and the agents working in it.",
+  "agents": { "folders": ["~/code/your-project"] },
+  "rights": ["state", "send", "launch", "store"],
+  "folder": "~/code/your-project"
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Dark: a blueprint, white lines on Prussian blue. Light: a whiteprint, blue lines on pale paper. */
+  :root {
+    color-scheme: light dark;
+    --paper: #eef3f7; --line: #0e2a47; --soft: rgba(14, 42, 71, .62); --faint: rgba(14, 42, 71, .3);
+    --grid: rgba(0, 119, 182, .10); --grid-major: rgba(0, 119, 182, .16); --accent: #0077b6; --wait: #a86f00; --fail: #c0392b;
+    --head: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", sans-serif;
+    --mono: Menlo, ui-monospace, monospace;
+    font: 13px/1.45 "Avenir Next", "Helvetica Neue", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0e2a47; --line: #e7f3ff; --soft: rgba(231, 243, 255, .7); --faint: rgba(231, 243, 255, .3);
+      --grid: rgba(95, 211, 255, .12); --grid-major: rgba(95, 211, 255, .2); --accent: #5fd3ff; --wait: #ffd166; --fail: #ff7a6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background-color: var(--paper); color: var(--line);
+    background-image:   /* a 24 px grid, with a heavier line every 96 px */
+      linear-gradient(var(--grid-major) 1px, transparent 1px), linear-gradient(90deg, var(--grid-major) 1px, transparent 1px),
+      linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+  }
+  /* The drawing's frame: a double border inset from the sheet's edge. */
+  main { position: relative; min-height: calc(100vh - 28px); margin: 14px; border: 1.5px solid var(--line);
+         outline: .5px solid var(--faint); outline-offset: -6px; padding: 26px 30px 30px;
+         display: grid; grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: auto auto 1fr auto; gap: 22px 40px;
+         grid-template-areas: "head head" "problem problem" "side main" "foot foot"; }
+  h1, h2, .stamp b, button, .block b { font-family: var(--head); font-weight: 600; text-transform: uppercase; }
+  h1 { margin: 0; font-size: clamp(36px, 4vw, 64px); line-height: 1; letter-spacing: .1em; }
+  h2 { margin: 0 0 10px; font-size: 13px; letter-spacing: .22em; color: var(--soft); display: flex; gap: 10px; align-items: center; }
+  h2::after { content: ""; flex: 1; border-top: 1px dashed var(--faint); }
+  .path { font: 12px var(--mono); color: var(--accent); margin-top: 6px; }
+  .why { font: 11.5px var(--mono); color: var(--soft); border-left: 2px solid var(--faint); padding-left: 8px; margin: 6px 0; }
+  #problem { grid-area: problem; margin: 0; font: 12px var(--mono); color: var(--fail); border: 1px solid var(--fail); padding: 8px 12px; }
+
+  header { grid-area: head; display: flex; align-items: flex-end; gap: 30px; flex-wrap: wrap; }
+  .launch { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+  .launch .why { max-width: 340px; margin: 0; }
+  button { font-size: 12.5px; letter-spacing: .14em; color: var(--line); background: transparent; border: 1.5px solid var(--line);
+           padding: 8px 14px; cursor: pointer; }
+  button:hover { background: var(--line); color: var(--paper); }
+  button.quiet { border-width: 1px; font-size: 11px; padding: 5px 10px; }
+
+  /* Milestones: a ring and the list it counts. */
+  .ring { display: block; margin: 4px auto 14px; overflow: visible; }
+  .ring text { fill: var(--line); }
+  .ring .track { stroke: var(--faint); }
+  .ring .fill { stroke: var(--accent); }
+  .ready .ring .fill { transition: stroke-dashoffset 600ms ease; }   /* after the first paint: the ring fills when ticked */
+  ul.milestones { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .milestones li { display: flex; align-items: center; gap: 8px; }
+  .milestones label { flex: 1; display: flex; gap: 8px; cursor: pointer; }
+  .milestones input { accent-color: var(--accent); }
+  .milestones .done span { color: var(--soft); text-decoration: line-through; text-decoration-color: var(--accent); }
+  .milestones .x { background: none; border: 0; color: var(--soft); padding: 0 4px; font-size: 14px; }
+  .milestones .x:hover { color: var(--fail); background: none; }
+  form.add { display: flex; gap: 6px; }
+  input[type=text], textarea { font: 12px var(--mono); color: var(--line); background: transparent; border: 0;
+                               border-bottom: 1px solid var(--soft); padding: 5px 2px; flex: 1; min-width: 0; resize: none; }
+  input[type=text]:focus, textarea:focus { outline: 1px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
+
+  /* The timeline is an SVG drawn to the width it is given; its lines draw in. */
+  #timeline svg { display: block; width: 100%; overflow: visible; }
+  #timeline text { font: 10.5px var(--mono); fill: var(--soft); }
+  #timeline .lane { font: 600 11.5px var(--head); letter-spacing: .12em; fill: var(--line); text-transform: uppercase; }
+  /* A line that appears after the first paint (a new turn, a new agent) draws itself in. The first paint shows the
+     drawing complete, so a snapshot taken at load (the gallery's preview) is never half drawn. */
+  .draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 600ms ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+
+  /* Agents as stamped cards. */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; }
+  .stamp { position: relative; border: 1.5px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 5px;
+           background: color-mix(in srgb, var(--paper) 70%, transparent); }
+  .stamp.waiting { border-color: var(--wait); }
+  .stamp b { font-size: 19px; letter-spacing: .1em; padding-right: 90px; }
+  .stamp .meta { font: 11.5px var(--mono); color: var(--soft); }
+  .stamp .seal { position: absolute; top: 10px; right: 10px; font: 600 11px var(--head); letter-spacing: .16em; text-transform: uppercase;
+                 border: 1.5px solid currentColor; padding: 2px 7px; transform: rotate(-4deg); color: var(--soft); }
+  .stamp.waiting .seal { color: var(--wait); } .stamp.working .seal { color: var(--accent); } .stamp.error .seal { color: var(--fail); }
+  .stamp .ask { font: 12px var(--mono); color: var(--wait); border-left: 2px solid var(--wait); padding-left: 8px; margin: 4px 0; }
+  .stamp form { display: flex; gap: 8px; align-items: flex-end; margin-top: 6px; }
+  .stamp .said { font: 11px var(--mono); color: var(--accent); }
+  /* With no agent, one drawn element: a dashed sheet that waits for its first turn, the Launch buttons inside. */
+  .awaiting { flex: 1; min-height: 240px; border: 1.5px dashed var(--soft); display: flex; flex-direction: column; align-items: center;
+              justify-content: center; gap: 16px; text-align: center; padding: 30px;
+              background: repeating-linear-gradient(-45deg, transparent 0 14px, var(--grid) 14px 15px); }
+  .awaiting h2 { font-size: 22px; letter-spacing: .3em; color: var(--line); }
+  .awaiting h2::after { display: none; }
+  .awaiting p { margin: 0; font: 12px var(--mono); color: var(--soft); max-width: 460px; }
+  .awaiting .launch { margin: 0; }
+  .awaiting .why { border: 0; padding: 0; max-width: 460px; }   /* centered in the frame: no side rule */
+
+  /* Revisions: the turns since the last look, as a drawing's revision table. */
+  .revs { width: 100%; border-collapse: collapse; font: 11.5px var(--mono); }
+  .revs th { font: 600 11px var(--head); letter-spacing: .16em; text-transform: uppercase; color: var(--soft); text-align: left; }
+  .revs th, .revs td { border: .5px solid var(--faint); padding: 6px 10px; }
+  .revs td:nth-child(3) { width: 58%; }
+  .revs .new td:first-child { box-shadow: inset 3px 0 var(--accent); }
+
+  /* The foot of the sheet, as on a technical drawing: the revision table, then the title block, which sits in the
+     corner of the inner frame (the negative margins reach that line: padding 30 px, inner line 4.5 px inside). */
+  .foot { grid-area: foot; display: flex; align-items: flex-end; gap: 28px; margin: 0 -25.5px -25.5px 0; }
+  .foot > section { flex: 1; min-width: 0; padding-bottom: 25.5px; }
+  .block { flex: none; display: grid; grid-template-columns: auto auto; border: 1.5px solid var(--line);
+           font: 10.5px var(--mono); background: var(--paper); margin-left: auto; }
+  .block span, .block b { padding: 6px 14px; border: .5px solid var(--faint); }
+  .block b { font-size: 11px; letter-spacing: .14em; color: var(--soft); }
+  .block .big { grid-column: 1 / -1; font: 600 20px var(--head); letter-spacing: .14em; text-transform: uppercase; padding: 8px 14px; }
+  .side { grid-area: side; }
+  .main { grid-area: main; display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+
+  @media (max-width: 800px) {
+    main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "head" "problem" "side" "main" "foot"; }
+    .foot { flex-wrap: wrap; }
+    h1 { font-size: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .draw { animation: none; stroke-dashoffset: 0; } .ring .fill { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1 id="title">Project</h1><div class="path" id="path"></div></div>
+    <div class="launch" id="launch"></div>
+  </header>
+  <p id="problem" role="alert" hidden></p>
+  <section class="side">
+    <h2>Milestones</h2>
+    <div id="milestones-area">
+      <svg class="ring" width="180" height="180" viewBox="0 0 180 180" aria-hidden="true">
+        <circle class="track" cx="90" cy="90" r="74" fill="none" stroke-width="2" pathLength="1"/>
+        <circle class="fill" id="ring" cx="90" cy="90" r="74" fill="none" stroke-width="10" pathLength="1"
+                stroke-dasharray="1" stroke-dashoffset="1" transform="rotate(-90 90 90)"/>
+        <text id="ring-count" x="90" y="96" text-anchor="middle" font-family="Avenir Next Condensed, sans-serif" font-weight="600" font-size="40">0/0</text>
+        <text x="90" y="120" text-anchor="middle" font-family="Menlo, monospace" font-size="9.5" letter-spacing="1.5">MILESTONES</text>
+      </svg>
+      <ul class="milestones" id="milestones"></ul>
+      <form class="add" id="add"><input type="text" id="milestone" placeholder="Add a milestone…" aria-label="New milestone"><button class="quiet">Add</button></form>
+    </div>
+    <p class="why" id="no-store" hidden>You did not allow this space to remember, so milestones are not kept. Allow it in the space's Info.</p>
+  </section>
+  <div class="main">
+    <section id="timeline"><h2>Last turns</h2><svg id="lines"></svg></section>
+    <section id="agents"><h2>Agents in this folder</h2><div class="cards" id="cards"></div></section>
+    <section class="awaiting" id="awaiting" hidden>
+      <h2>Sheet awaiting its first turn</h2>
+      <p id="awaiting-text"></p>
+      <div class="launch" id="awaiting-launch"></div>
+    </section>
+  </div>
+  <div class="foot">
+    <section id="revisions"><h2 id="rev-title">Revisions</h2><table class="revs"><thead><tr><th>Time</th><th>By</th><th>Turn</th><th>State</th></tr></thead><tbody id="revs"></tbody></table></section>
+    <div class="block" aria-label="Title block">
+      <span class="big" id="b-name"></span>
+      <b>Rev.</b><span id="b-rev"></span>
+      <b>Since last look</b><span id="b-since">unknown</span>
+      <b>Scale</b><span>1:1</span>
+    </div>
+  </div>
+</main>
+<script>
+  // something.js is injected before this script. Every call returns a promise; a rejection carries .code and
+  // .message (one sentence for the person): this page shows it in #problem.
+  const $ = (id) => document.getElementById(id);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "other agent";
+  const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
+  const make = (tag, className, text) => Object.assign(document.createElement(tag), { className, textContent: text ?? "" });
+  // SVG elements take the namespace of the page's own <svg> (no URL written here: the page names no address at all).
+  const svg = (tag, attrs) => { const n = document.createElementNS($("lines").namespaceURI, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+  const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : "unknown";
+  const pad = (n) => String(n).padStart(2, "0");
+  const hhmm = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+
+  let painted = false;                            // true once the first state was drawn
+  const drawn = new Set();                        // turns already on the timeline
+  let skew = 0;                                   // the state's clock ("at") minus this Mac's: times stay consistent
+  const now = () => Date.now() + skew;
+  let state = null, memory = { milestones: [], seen: null }, previousLook = null, looked = false;
+
+  // The folder this space follows: the scope the person granted, or the launch folder.
+  const folder = () => (something.granted.agents && something.granted.agents.folders || [])[0] || something.granted.folder || null;
+
+  function header() {
+    // Until Use Template writes the real folder, the placeholder's name is not a title: the template's name is.
+    const last = folder() ? folder().split("/").filter(Boolean).pop() : null;
+    const name = last && last !== "your-project" ? last : "Project watch";
+    $("title").textContent = name;
+    $("path").textContent = (folder() ? tilde(folder()) : "folder unknown") + "  ·  project watch";
+    $("b-name").textContent = name.slice(0, 24);
+    const d = new Date(now());
+    $("b-rev").textContent = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${String(d.getFullYear()).slice(2)}`;
+  }
+
+  // Launch buttons: only for a kind something can launch, found on this Mac, granted to this space, with a folder.
+  // They sit in the header, or inside the empty sheet when no agent works here yet.
+  function launchers() {
+    const host = state && !state.agents.length ? $("awaiting-launch") : $("launch");
+    $(host.id === "launch" ? "awaiting-launch" : "launch").replaceChildren();
+    const kinds = state ? ["claude", "codex"].filter((k) => state.kinds[k] && state.kinds[k].launch && state.kinds[k].installed !== false) : [];
+    const allowed = kinds.filter((k) => has("launch", k) && something.granted.folder);
+    host.replaceChildren(...allowed.map((kind) => {
+      const button = make("button", "", "Launch " + label(kind));
+      button.onclick = () => something.launch(kind).then(() => problem(null)).catch(problem);
+      return button;
+    }));
+    if (kinds.length && !allowed.length) {
+      host.append(make("p", "why", !something.granted.folder ? "No folder was granted for launches. Choose one in the space's Info."
+        : "You did not allow this space to start agents. Allow it in the space's Info."));
+    }
+  }
+
+  // ---- Milestones, kept in the space's memory ----
+  function milestones() {
+    const list = memory.milestones;
+    const done = list.filter((m) => m.done).length;
+    $("ring").style.strokeDashoffset = list.length ? 1 - done / list.length : 1;
+    $("ring-count").textContent = `${done}/${list.length}`;
+    $("milestones").replaceChildren(...list.map((m) => {
+      const item = make("li", m.done ? "done" : "");
+      const box = Object.assign(make("input"), { type: "checkbox", checked: m.done });
+      box.onchange = () => keep(list.map((x) => x.id === m.id ? { ...x, done: box.checked } : x));
+      const line = make("label");
+      line.append(box, make("span", "", m.text));
+      const remove = Object.assign(make("button", "x", "×"), { title: "Remove" });
+      remove.onclick = () => keep(list.filter((x) => x.id !== m.id));
+      item.append(line, remove);
+      return item;
+    }));
+    if (!list.length) $("milestones").append(make("li", "why", "No milestone yet. Name the next step of this project."));
+  }
+  function keep(list) {
+    memory.milestones = list;
+    milestones();
+    something.store.set("milestones", list).catch(problem);   // whole value, written at once
+  }
+  $("add").onsubmit = (event) => {
+    event.preventDefault();
+    const text = $("milestone").value.trim();
+    if (!text) return;
+    $("milestone").value = "";
+    keep([...memory.milestones, { id: String(Date.now()), text, done: false }]);
+  };
+
+  // ---- The timeline: one lane per agent, one bar per turn, rebuilt from the threads ----
+  const age = (ms) => { const sec = Math.max(0, Math.round(ms / 1000)); return sec < 60 ? `${sec} s` : sec < 3600 ? `${Math.floor(sec / 60)} min` : `${Math.floor(sec / 3600)} h`; };
+  function timeline() {
+    const lanes = state.agents.map((agent) => ({ agent, turns: (state.threads.find((t) => t.id === agent.thread) || { turns: [] }).turns }));
+    $("timeline").hidden = !lanes.some((l) => l.turns.length);    // no turn yet: the section is not drawn at all
+    if ($("timeline").hidden) return;
+    const host = $("lines"), width = Math.max(320, host.clientWidth || 800);
+    // The domain runs from the earliest event shown, less a tenth of the span, to now.
+    const times = lanes.flatMap((l) => [Date.parse(l.agent.started), ...l.turns.map((t) => Date.parse(t.started))]).filter(Number.isFinite);
+    const end = now(), span = Math.max(2 * 60e3, end - Math.min(end, ...times)), start = end - span * 1.1;
+    const left = 4, right = width - 12, x = (ms) => left + (right - left) * (ms - start) / (end - start);
+    const height = 30 + lanes.length * 92;
+    host.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    host.setAttribute("height", height);
+    const parts = [svg("line", { x1: left, x2: right, y1: 18, y2: 18, stroke: "currentColor", "stroke-width": 1 })];
+    // Ticks: the smallest round step that gives at most seven of them (so five to seven for most spans).
+    const step = [1, 2, 5, 10, 15, 30, 60, 120, 360, 720, 1440].map((m) => m * 60e3).find((st) => (end - start) / st <= 7) || 1440 * 60e3;
+    for (let t = Math.ceil(start / step) * step; t <= end; t += step) {
+      parts.push(svg("line", { x1: x(t), x2: x(t), y1: 14, y2: height, stroke: "currentColor", "stroke-opacity": .18, "stroke-dasharray": "2 4" }));
+      const anchor = x(t) < 24 ? "start" : x(t) > right - 24 ? "end" : "middle";
+      const tick = svg("text", { x: x(t), y: 9, "text-anchor": anchor }); tick.textContent = hhmm(t); parts.push(tick);
+    }
+    lanes.forEach(({ agent, turns }, i) => {
+      const y = 62 + i * 92, color = agent.state === "waiting" ? "var(--wait)" : agent.state === "error" ? "var(--fail)" : "var(--accent)";
+      const name = svg("text", { x: left, y: y - 14, class: "lane" });   // the lane's name sits above its line
+      name.textContent = `${label(agent.kind)} · ${(agent.name ?? "unknown").slice(0, 30)}`;
+      parts.push(name, svg("line", { x1: left, x2: right, y1: y, y2: y, stroke: "currentColor", "stroke-opacity": .25 }));
+      if (agent.started) parts.push(svg("path", { d: `M${x(Date.parse(agent.started))} ${y - 5}l5 5-5 5-5-5z`, fill: "var(--paper)", stroke: "currentColor" }));
+      turns.forEach((turn) => {
+        const a = x(Date.parse(turn.started)), b = Math.max(a + 6, turn.ended ? x(Date.parse(turn.ended)) : x(end));   // 6 px at least
+        const bar = svg("line", { x1: a, x2: b, y1: y, y2: y, stroke: turn.ended ? "currentColor" : color, "stroke-width": 5 });
+        if (painted && !drawn.has(turn.id)) { bar.classList.add("draw"); bar.style.setProperty("--len", b - a + 1); }
+        drawn.add(turn.id);
+        parts.push(bar, svg("line", { x1: a, x2: a, y1: y - 8, y2: y + 8, stroke: "currentColor" }));
+        dimension(parts, turn, a, b, y, right);
+        if (turn.ended) parts.push(svg("line", { x1: b, x2: b, y1: y - 8, y2: y + 8, stroke: "currentColor" }));
+        else {
+          // The running turn ends in a dot, labelled with what it does now (its length is on its dimension line).
+          const running = svg("text", { x: b, y: y - 14, "text-anchor": "end" });
+          running.textContent = agent.state === "waiting" ? "waiting for you" : "running";
+          parts.push(svg("circle", { cx: b, cy: y, r: 6, fill: color }), running);
+        }
+      });
+    });
+    host.replaceChildren(...parts);
+  }
+
+  // A dimension line under a turn, as on a drawing: its span, its length in time and what the person asked. Only
+  // for a turn wide enough to carry the words, or the lane's last one (which is labelled from its end).
+  function dimension(parts, turn, a, b, y, right) {
+    const last = turn === turnsOf(turn).at(-1);
+    if (b - a < 140 && !last) return;
+    const asked = turn.items.find((i) => i.kind === "message" && i.author === "person");
+    const took = age((turn.ended ? Date.parse(turn.ended) : now()) - Date.parse(turn.started));
+    const words = `${took}${asked ? "  ·  " + asked.text.split("\n")[0] : ""}`;
+    const room = Math.max(b - a, last ? b - 4 : 0), fit = Math.floor(room / 6.6);   // Menlo 10.5 px: about 6.6 px a character
+    const y2 = y + 22, mark = { stroke: "currentColor", "stroke-opacity": .55 };
+    parts.push(svg("line", { x1: a, x2: b, y1: y2, y2: y2, ...mark }),
+      svg("line", { x1: a, x2: a, y1: y + 12, y2: y2 + 4, ...mark }), svg("line", { x1: b, x2: b, y1: y + 12, y2: y2 + 4, ...mark }));
+    const text = svg("text", b - a >= 140 ? { x: (a + b) / 2, y: y2 + 15, "text-anchor": "middle" } : { x: b, y: y2 + 15, "text-anchor": "end" });
+    text.textContent = words.length > fit ? words.slice(0, Math.max(0, fit - 1)) + "…" : words;
+    parts.push(text);
+  }
+  const turnsOf = (turn) => (state.threads.find((t) => t.turns.includes(turn)) || { turns: [turn] }).turns;
+
+  // ---- Agents as stamped cards; a card's reply box is kept across redraws, so typed text survives a change ----
+  const cards = new Map();
+  function card(agent) {
+    const node = make("article", "stamp");
+    node.innerHTML = `<span class="seal"></span><b></b><span class="meta folder"></span><span class="meta last"></span>
+      <span class="ask" hidden></span><span class="meta queue" hidden></span>
+      <form hidden><textarea rows="1" aria-label="Message" placeholder="Message for after this turn…"></textarea><button class="quiet stop" type="button">Interrupt</button><button class="quiet">Send</button></form>
+      <span class="said"></span><p class="why" hidden></p>`;
+    const form = node.querySelector("form"), said = node.querySelector(".said");
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      const text = form.querySelector("textarea").value.trim();
+      if (!text) return;
+      // "next": after the running turn (on a waiting agent, after the person answered in something's window).
+      something.send(agent.id, text, { when: "next" }).then(({ delivery }) => {
+        form.querySelector("textarea").value = "";
+        said.textContent = { started: "Sent: a new turn begins.", queued: "Held for after this turn.", steered: "Sent into the running turn." }[delivery] || "Sent.";
+      }).catch(problem);
+    };
+    form.querySelector(".stop").onclick = () => something.interrupt(agent.id).then(({ interrupted }) => {
+      said.textContent = interrupted ? "Interrupted." : "No turn was running.";
+    }).catch(problem);
+    return node;
+  }
+  function agents() {
+    for (const [id, node] of cards) if (!state.agents.some((a) => a.id === id)) { node.remove(); cards.delete(id); }
+    const host = $("cards");
+    state.agents.forEach((agent, index) => {
+      if (!cards.has(agent.id)) cards.set(agent.id, card(agent));
+      const node = cards.get(agent.id), q = (s) => node.querySelector(s);
+      const status = ["waiting", "working", "idle", "done", "error", "interrupted"].includes(agent.state) ? agent.state : "unknown";
+      node.className = "stamp " + status;
+      q(".seal").textContent = status;
+      q("b").textContent = `${label(agent.kind)} · ${agent.name ?? "unknown"}`;
+      q(".folder").textContent = tilde(agent.folder) + (agent.origin === "elsewhere" ? "  ·  started elsewhere" : "");
+      const thread = state.threads.find((t) => t.id === agent.thread);
+      const turn = thread && thread.turns[thread.turns.length - 1], item = turn && turn.items[turn.items.length - 1];
+      q(".last").textContent = item ? `${hhmm(Date.parse(item.at))}  ${item.kind === "tool" ? "› " : ""}${item.text.split("\n")[0].slice(0, 90)}` : "";
+      // A request is answered in something's window, never from a page.
+      const request = state.requests.find((r) => r.agent === agent.id);
+      q(".ask").hidden = !request;
+      q(".ask").textContent = request ? `Asks ${request.kind === "permission" ? "to run " + (request.tool ?? "a tool") + (request.about ? ": " + request.about : "") : "a question"}. Answer in something's window.` : "";
+      q(".queue").hidden = !agent.queue.length;
+      q(".queue").textContent = `${agent.queue.length} message${agent.queue.length > 1 ? "s" : ""} held for the next turn`;
+      const may = has("send", agent.kind);
+      q("form").hidden = !(agent.can.send && may);
+      q(".stop").hidden = !agent.can.interrupt || !["working", "waiting"].includes(status);
+      q(".why").hidden = agent.can.send && may;
+      q(".why").textContent = !agent.can.send ? agent.because.send || "This agent cannot take a message now."
+        : `You did not allow this space to write to ${label(agent.kind)}. Allow it in the space's Info.`;
+      if (host.children[index] !== node) host.insertBefore(node, host.children[index] || null);
+    });
+    $("agents").hidden = !state.agents.length;
+    $("awaiting").hidden = !!state.agents.length;
+    $("awaiting-text").textContent = !has("state", "") ? "This space may not see the agents in this folder. Allow it in the space's Info."
+      : `No agent works in ${tilde(folder())} right now.` + ($("awaiting-launch").querySelector("button") ? " Start one here, and its turns are drawn on this sheet." : "");
+  }
+
+  // The revision table: the last turns of the folder's agents, newest first; those after the last look are marked.
+  function revisions() {
+    const rows = state.threads.flatMap((thread) => {
+      const agent = state.agents.find((a) => a.id === thread.agent);
+      return thread.turns.map((turn) => ({ turn, agent }));
+    }).sort((a, b) => (b.turn.started || "").localeCompare(a.turn.started || "")).slice(0, 8);
+    $("revisions").hidden = !rows.length;                       // no turn yet: no table
+    const fresh = (turn) => previousLook && ((turn.ended || turn.started || "") > previousLook || !turn.ended);
+    $("rev-title").textContent = previousLook ? "Revisions since your last look" : "Revisions";
+    $("revs").replaceChildren(...rows.map(({ turn, agent }) => {
+      const row = make("tr", fresh(turn) ? "new" : "");
+      const asked = turn.items.find((i) => i.kind === "message" && i.author === "person");
+      // The running turn shows its agent's state: "waiting" says more than the turn's own "working".
+      const status = !turn.ended && agent && agent.state === "waiting" ? "waiting" : turn.state;
+      [hhmm(Date.parse(turn.started)), agent ? label(agent.kind) : "unknown", asked ? asked.text.split("\n")[0].slice(0, 120) : "(no message from you in this turn)", status]
+        .forEach((text) => row.append(make("td", "", text)));
+      return row;
+    }));
+  }
+
+  // Turns that ended since the person last looked, counted from the threads: what happened while the space was closed.
+  function since() {
+    if (!has("store", "")) { $("b-since").textContent = "not kept"; return; }
+    if (!previousLook) { $("b-since").textContent = "first look"; return; }
+    const ended = state.threads.flatMap((t) => t.turns).filter((t) => t.ended && t.ended > previousLook).length;
+    $("b-since").textContent = `${ended} turn${ended === 1 ? "" : "s"} ended`;
+  }
+
+  let lastWrite = 0;
+  function render(next) {
+    state = next;
+    if (state.at) skew = Date.parse(state.at) - Date.now();
+    header(); launchers(); timeline(); agents(); revisions(); since();
+    if (!painted) { painted = true; requestAnimationFrame(() => document.body.classList.add("ready")); }
+    // Remember this look, at most once a minute: the next opening counts what happened after it.
+    if (has("store", "") && Date.now() - lastWrite > 60e3) {
+      lastWrite = Date.now();
+      something.store.set("seen", new Date(now()).toISOString()).catch(problem);
+    }
+  }
+
+  async function load() {
+    $("milestones-area").hidden = !has("store", "");
+    $("no-store").hidden = has("store", "");
+    try {
+      if (has("store", "")) {
+        // Read the memory before the first render, so "since last look" compares with the previous visit.
+        const kept = await something.store.get("");
+        memory = { milestones: (kept && kept.milestones) || [], seen: (kept && kept.seen) || null };
+        if (!looked) previousLook = memory.seen;      // a later reload (a right changed) keeps the first one
+        looked = true;
+        milestones();
+      }
+      render(await something.state());
+      problem(null);
+    } catch (error) { problem(error); }
+  }
+  something.on("change", render);
+  something.on("granted", load);
+  addEventListener("resize", () => state && timeline());
+  load();
+</script>
+</body>
+</html>

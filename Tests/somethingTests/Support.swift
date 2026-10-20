@@ -72,6 +72,8 @@ final class FakeAsk: Asking {
     var shown: [[String]] = []
     /// Where the save panel saves, and the file the open panel chooses; nil cancels.
     var saveTo: URL?, chosen: URL?
+    /// The folder the folder panel chooses, nil cancels; and what each one said it was for.
+    var folder: URL?, folderMessages: [String] = []
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
@@ -92,6 +94,10 @@ final class FakeAsk: Asking {
     }
     func saveAs(_ name: String) -> URL? { saveTo }
     func importFile() -> URL? { chosen }
+    func folder(_ message: String) -> URL? {
+        folderMessages.append(message)
+        return folder
+    }
     func tell(_ message: String) { told.append(message) }
 }
 

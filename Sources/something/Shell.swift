@@ -1,7 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), a toolbar with
 // the sidebar toggle, the open space's title and file, Reload and Info; and the menus. The center holds the open
-// space's web view edge to edge under the toolbar, what keeps a space from being shown, the blank page, or the tour,
-// with the assistant floating over it at the bottom (not over the tour).
+// space's web view edge to edge under the toolbar, what keeps a space from being shown, the blank page, the templates
+// or the tour, with the assistant floating over it at the bottom (not over the tour).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -13,7 +13,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The center: one of its three states at a time.
     let center = NSView()
     let inspector: NSSplitViewItem
-    let assistant: AssistantModel
+    let assistant: AssistantModel, library: Library
     /// What the center shows, and the assistant over it.
     private var shown: NSView?
     private(set) var floating: NSView?
@@ -26,7 +26,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
-        self.assistant = assistant
+        (self.assistant, self.library) = (assistant, library)
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SidebarView(library: library, assistant: assistant)))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
         let content = NSViewController()
@@ -110,38 +110,39 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         return item
     }
 
-    /// Shows `space` in the center, or the blank page for nil, with its title and file in the toolbar. While the tour
-    /// is shown, nil keeps it unless `endingTour`, and a space ends it.
-    func show(_ space: SpaceView?, endingTour: Bool = false) {
+    /// Shows `space` in the center, or the blank page for nil (the templates for `gallery`), with its title and file
+    /// in the toolbar. While the tour is shown, nil keeps it unless `endingTour`, and a space ends it.
+    func show(_ space: SpaceView?, endingTour: Bool = false, gallery: Bool = false) {
         if let touring, space == nil, !endingTour { return show(touring) }
         touring = nil
-        let shown: NSView
-        if let space, space.blocked.isEmpty {
-            shown = space.web
-        } else if let space {
-            let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
-            shown = Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant))
+        guard let space else {
+            put(gallery ? Shell.hosted(GalleryView(library: library)) : Shell.hosted(BlankView(model: assistant, library: library)))
+            return gallery ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
+        }
+        if space.blocked.isEmpty {
+            put(space.web)
         } else {
-            shown = Shell.hosted(BlankView(model: assistant))
+            let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
+            put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
         }
-        put(shown)
-        window.title = space?.title ?? "New Space"
-        window.subtitle = space?.space.location.lastPathComponent ?? ""
-        for item in window.toolbar?.items ?? [] where [Shell.reload, .toggleInspector].contains(item.itemIdentifier) {
-            item.isHidden = space == nil
-        }
-        if space == nil { inspector.isCollapsed = true }
+        (window.title, window.subtitle) = (space.title, space.space.location.lastPathComponent)
+        window.toolbar?.items.filter { [Shell.reload, .toggleInspector].contains($0.itemIdentifier) }.forEach { $0.isHidden = false }
     }
 
     /// Shows the tour in the center, alone: the sidebar folded, Info and the assistant hidden.
     func show(_ tour: Tour) {
         touring = tour
-        put(Shell.hosted(TourView(tour: tour, assistant: assistant)))
+        put(Shell.hosted(TourView(tour: tour, assistant: assistant, templates: library.templates)))
         floating?.isHidden = true
         split.splitViewItems[0].isCollapsed = true
-        inspector.isCollapsed = true
-        (window.title, window.subtitle) = ("something", "")
+        bare("something", "")
+    }
+
+    /// The toolbar's title and subtitle when no space is shown, without Reload and Info, which Info follows.
+    private func bare(_ title: String, _ subtitle: String) {
+        (window.title, window.subtitle) = (title, subtitle)
         window.toolbar?.items.filter { [Shell.reload, .toggleInspector].contains($0.itemIdentifier) }.forEach { $0.isHidden = true }
+        inspector.isCollapsed = true
     }
 
     /// Puts `shown` in the center in place of what was there, under the assistant.
@@ -197,9 +198,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             item("Hide something", "hide:", "h"), item("Hide Others", "hideOtherApplications:", "h", [.command, .option]),
             item("Show All", "unhideAllApplications:"), .separator(), item("Quit something", "terminate:", "q"),
         ]))
-        // Templates comes with the gallery: shown, not yet offered.
         main.addItem(submenu("File", [
-            item("New Space", "newSpace:", "n"), item("Templates", nil, "t", [.command, .shift]), .separator(),
+            item("New Space", "newSpace:", "n"), item("Templates", "showTemplates:", "t", [.command, .shift]), .separator(),
             item("Import Space…", "importSpace:", "i", [.command, .shift]), item("Export Space…", "exportSpace:", "e", [.command, .shift]),
             item("Show in Finder", "showInFinder:", "r", [.command, .option]), item("Move to Trash…", "moveToTrash:"), .separator(),
             item("Close Window", "performClose:", "w"),

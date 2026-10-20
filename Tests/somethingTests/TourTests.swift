@@ -67,12 +67,12 @@ import Testing
         model.engine.lookAgain()
         #expect(await wait(until: { model.kind == "claude" }))
         // What App does when a build ends, with the space the agent made written just before.
-        let library = Library(places: home.places, ask: FakeAsk())
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
         var making: (name: String, title: String)?, open: String?, opened: [String?] = [], answers: [Int] = []
         model.ended = {
             // Never before the agent answered: a build ends with its turn, not with its launch.
             answers.append(model.rows.filter { $0 == .reply("Invented reply.") }.count)
-            if let making { try? home.space(making.name, page(#"{"contract": 1, "title": "\#(making.title)"}"#, "")) }
+            if let making { _ = try? home.space(making.name, page(#"{"contract": 1, "title": "\#(making.title)"}"#, "")) }
             library.relist()
             opened.append(model.appeared(library.entries, open: open))
         }
@@ -166,7 +166,7 @@ import Testing
 
     /// The window of `home`, never shown, with `model` as its assistant.
     func window(_ home: Home, _ model: AssistantModel) -> (Shell, Library, Info) {
-        let library = Library(places: home.places, ask: FakeAsk()), info = Info(places: home.places, ask: FakeAsk())
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share), info = Info(places: home.places, ask: FakeAsk())
         return (Shell(library: library, info: info, assistant: model, autosave: false), library, info)
     }
 }
