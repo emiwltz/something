@@ -1,11 +1,13 @@
 // The templates of share/templates (plan B.5) pass `something check` with no problem at all, as the person's spaces
 // in a throwaway home: once with every right they declare, then with each of those rights refused, which they must
 // adapt to. Each has its preview, made from the HTML it has now (previews.json keeps the SHA-256 of that HTML), loads
-// nothing from the network and uses only fonts every Mac has. Use Template and `something new --from` make them spaces.
+// nothing from the network and uses only fonts every Mac has. Stack plays, and Pebble remembers between openings. Use
+// Template and `something new --from` make them spaces.
 // With SOMETHING_PREVIEWS naming share/templates, `makesThePreviews` draws the previews again (tools/previews.sh).
 import AppKit
 import CryptoKit
 import Foundation
+import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -33,7 +35,7 @@ import WebKit
         let files = try FileManager.default.contentsOfDirectory(atPath: TemplatesTests.folder.path)
         let pages = files.filter { $0.hasSuffix(".html") }.map { String($0.dropLast(5)) }
         #expect(Set(pages) == Set(TemplatesTests.names), "share/templates holds a page that is not one of Template.names: \(pages)")
-        #expect(TemplatesTests.names.count >= 3)
+        #expect(TemplatesTests.names == Template.names, "share/templates lacks a template: \(Set(Template.names).subtracting(pages).sorted())")
         let kept = try JSONSerialization.jsonObject(with: Data(contentsOf: TemplatesTests.folder.appendingPathComponent("previews.json"))) as? [String: String]
         for name in TemplatesTests.names {
             #expect(files.contains("\(name).png"), "\(name) has no preview")
@@ -137,6 +139,74 @@ import WebKit
         let chosen = "~/code/my \"shop\" </script>"
         #expect(declaration.folder == chosen && declaration.agents == .folders([chosen]))
         #expect(library.selection == "project")
+    }
+
+    // MARK: Playing them
+
+    /// Stack plays: Space starts a game, then three drops made at once each land on the floor below with a part cut off
+    /// (a block that just appeared hangs at the edge of its swing), and the score says three floors.
+    @MainActor @Test func stackPlays() async throws {
+        let home = try home()
+        defer { home.remove() }
+        try home.space("stack", try String(contentsOf: TemplatesTests.folder.appendingPathComponent("stack.html"), encoding: .utf8))
+        guard case .check(let check) = Check.parse(["stack"]) else { throw SpaceError("These are not the words of a check.") }
+        let runner = try CheckTests.runner(home), created = runner.created
+        // The space runs in a frame of its own: a script added to every frame plays in the one that holds the game, as
+        // soon as its own script ran, and says the score in the console, which the check reports.
+        let play = """
+            if (document.getElementById("score")) {
+              for (let i = 0; i < 4; i++) dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " " }));
+              console.log("score: " + document.getElementById("score").textContent + " " + document.getElementById("unit").textContent);
+            }
+            """
+        runner.created = { web in
+            created(web)
+            web.configuration.userContentController.addUserScript(WKUserScript(source: play, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: .page))
+        }
+        let report = try await runner.run(check)
+        #expect(report.problems.isEmpty, "\(report.problems)")
+        #expect("\(report.console)".contains("score: 3 FLOORS"), "\(report.console)")
+    }
+
+    /// Pebble remembers: opened with a memory two hours old and one turn ended since, its meters have aged, it ate that
+    /// turn as a snack, and it wrote all of it back; opened again, it shows the same values, and eats nothing twice.
+    @MainActor @Test func pebbleRemembersBetweenOpenings() async throws {
+        let home = try home()
+        defer { home.remove() }
+        let space = try home.space("pet", try String(contentsOf: TemplatesTests.folder.appendingPathComponent("pet.html"), encoding: .utf8))
+        // The invented state, with its working turn ended at 08:59:58, after what Pebble last ate (08:00).
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: Home.share.appendingPathComponent("contract/state-example.json"))) as? [String: Any])
+        var threads = try #require(json["threads"] as? [[String: Any]]), turns = try #require(threads[0]["turns"] as? [[String: Any]])
+        turns[0]["state"] = "done"
+        turns[0]["ended"] = "2026-10-17T08:59:58Z"
+        threads[0]["turns"] = turns
+        json["threads"] = threads
+        let state = try JSONDecoder().decode(State.self, from: JSONSerialization.data(withJSONObject: json))
+        let folder = home.root.appendingPathComponent("memory"), memory = Memory(folder: folder, space: "pet")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let kept: [String: Any] = ["seen": "2026-10-17T08:00:00Z", "pebble": ["food": 58, "joy": 70, "energy": 60, "at": "2026-10-17T07:00:04Z",
+                                   "asleep": false, "born": "2026-10-14T09:00:00Z", "snacks": 4, "diary": []]]
+        try JSONSerialization.data(withJSONObject: kept).write(to: memory.file)
+        var seen: [[String: Any]] = []
+        for _ in 0..<2 {
+            let reading = Declaration.read(space, home: home.root), declaration = try #require(reading.declaration)
+            var grant = Grant(declared: Asked(declaration), at: "")
+            grant.granted = declaration.rights
+            let granted = Rights.granted(reading, grant, limits: Engine.limits, home: CheckRunner.invented)
+            let host = CheckHost(state: state, granted: granted, declared: declaration.rights, memory: memory)
+            let page = try CheckPage(space: space, host: host, share: Home.share, rules: try await Lockdown.ruleList())
+            try CheckTests.runner(home).created(page.web)
+            let rendered = await page.render(within: 15, snapshot: home.root.appendingPathComponent("pet.png"))
+            #expect(rendered.problems.isEmpty && rendered.rejections.isEmpty, "\(rendered.problems) \(rendered.rejections.map(\.message))")
+            seen.append(try #require(try memory.get("pebble") as? [String: Any]))
+            #expect(try memory.get("seen") as? String == "2026-10-17T08:59:58Z")
+        }
+        // Two hours awake: Tummy 58 - 14, Joy 70 - 10, Energy 60 - 8; then the snack: Tummy + 6, Joy + 2.
+        for pebble in seen {
+            #expect(abs((pebble["food"] as? Double ?? 0) - 50) < 0.2 && abs((pebble["joy"] as? Double ?? 0) - 62) < 0.2, "\(pebble)")
+            #expect(abs((pebble["energy"] as? Double ?? 0) - 52) < 0.2, "\(pebble)")
+            #expect(pebble["snacks"] as? Int == 5 && pebble["born"] as? String == "2026-10-14T09:00:00Z", "\(pebble)")
+        }
     }
 
     // MARK: The previews

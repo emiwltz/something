@@ -1,0 +1,322 @@
+<!doctype html>
+<!-- Template "Stack", for something (contract 1). A one-key game in Bauhaus colours: a block slides over the tower,
+     Space or a click drops it, what hangs over the edge is cut off and falls. It shows that a space need not be about
+     agents at all. Rights: "store" only, for the best score and the last visit. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stack</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Stack",
+  "description": "A one-key game for your breaks.",
+  "rights": ["store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Off-white paper and three primaries by day; the same primaries on near-black at night. */
+  :root {
+    color-scheme: light dark;
+    --paper: #f5f1e8; --ink: #111; --red: #e63946; --blue: #1d4ed8; --yellow: #ffc300; --soft: rgba(17, 17, 17, .62);
+    --shape: #111;
+    --futura: Futura, "Avenir Next", "Helvetica Neue", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #141518; --ink: #f5f1e8; --soft: rgba(245, 241, 232, .62); --shape: #f5f1e8; --blue: #3b6cf0; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--futura); overflow: hidden;
+         user-select: none; -webkit-user-select: none; cursor: pointer; }
+
+  /* The composition: a black triangle rising from the left, a yellow sun setting on the right, a red bar on top. */
+  .shape { position: fixed; pointer-events: none; }
+  .tri { left: -4vh; bottom: 0; width: 0; height: 0; border-left: 19vh solid transparent; border-right: 19vh solid transparent;
+         border-bottom: 30vh solid var(--shape); opacity: .92; }
+  .sun { right: -9vh; bottom: -9vh; width: 38vh; height: 38vh; border-radius: 50%; background: var(--yellow); }
+  .bar { right: 25vh; top: 0; width: 1.4vh; height: 22vh; background: var(--red); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+
+  /* The score, huge, top left; the best as a blue disc, top right. */
+  .score { position: fixed; left: 5vh; top: 2.5vh; line-height: .82; pointer-events: none; }
+  #score { font: 800 21vh/.82 var(--futura); font-stretch: condensed; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .unit { font: 700 1.9vh/1 var(--futura); letter-spacing: .32em; margin: 1.6vh 0 0 .6vh; }
+  #best { position: fixed; right: 5vh; top: 4vh; width: 14vh; height: 14vh; border-radius: 50%; background: var(--blue);
+          color: #fff; display: grid; place-content: center; text-align: center; pointer-events: none; }
+  #best b { font: 800 5.4vh/1 var(--futura); font-stretch: condensed; }
+  #best small { font: 700 1.3vh/1 var(--futura); letter-spacing: .3em; margin-top: .5vh; padding-left: .3em; }
+
+  /* What to do next, set like a poster's caption; it appears before a game, after it, and when paused. */
+  .side { position: fixed; left: 5vh; top: 36vh; width: 30vw; pointer-events: none; }
+  #call h2 { font: 800 6.4vh/.95 var(--futura); font-stretch: condensed; text-transform: uppercase; margin: 0 0 1.6vh; }
+  #call p { font: 700 1.7vh/1.4 var(--futura); letter-spacing: .22em; text-transform: uppercase; margin: 0; }
+  #call p kbd { font: inherit; background: var(--ink); color: var(--paper); padding: .3vh 1vh; margin-right: .6vh; }
+  #call .sticker { display: inline-block; background: var(--yellow); color: #111; font: 800 1.8vh/1 var(--futura);
+                   letter-spacing: .2em; padding: 1vh 1.4vh; transform: rotate(-4deg); margin-bottom: 2vh; }
+  .foot { margin-top: 4vh; font: 500 1.6vh/1.5 var(--futura); color: var(--soft); max-width: 24em; }
+  #problem { color: var(--red); }
+
+  @media (max-width: 700px) { .side { width: 70vw; } }
+</style>
+</head>
+<body>
+<div class="shape tri"></div><div class="shape sun"></div><div class="shape bar"></div>
+<canvas id="game" aria-label="The tower"></canvas>
+<div class="score"><div id="score">0</div><div class="unit" id="unit">FLOORS</div></div>
+<div id="best" hidden><b id="best-n">0</b><small>BEST</small></div>
+<div class="side"><div id="call" aria-live="polite"></div>
+<div class="foot"><div id="record"></div><div id="no-store" hidden>Your best score is not kept: you did not allow this
+  game to remember. Allow it in the space's Info.</div><div id="problem" role="alert" hidden></div></div></div>
+<script>
+  // something.js is injected before this script. The game itself needs nothing from something; only the memory goes
+  // through it (something.store), and each call's rejection carries a .message for the person, shown in #problem.
+  const $ = (id) => document.getElementById(id);
+  const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+  function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+
+  const canvas = $("game"), pen = canvas.getContext("2d");
+  let W = 0, H = 0, BH = 34;                       // the view in CSS pixels, and a block's height
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  let palette = [];                                // block colours, read from the CSS so dark mode changes them
+  function colours() { palette = [css("--red"), css("--blue"), css("--yellow"), css("--shape")]; }
+
+  // ---- The world: floors from the ground up, x in pixels from the left, a block is {x, w, colour}.
+  let tower = [], mover = null, falling = [], rings = [], hover = null;
+  let mode = "ready", floors = 0, streak = 0, camera = 0, phase = 0, paused = false;
+  let best = 0, played = 0, seen = null;
+  let ended = -Infinity;                           // when the last game ended: a click in the next 400 ms does not restart
+
+  function resize() {
+    const ratio = window.devicePixelRatio || 1;
+    W = innerWidth; H = innerHeight;
+    BH = Math.round(Math.max(24, Math.min(46, H / 24)));
+    canvas.width = W * ratio; canvas.height = H * ratio;
+    pen.setTransform(ratio, 0, 0, ratio, 0, 0);
+    if (mode === "ready") demo();
+    draw();
+    wake();
+  }
+  const baseWidth = () => Math.round(Math.min(W * 0.34, 440));
+
+  // Before the first game the tower is a still poster: eight floors on the ground block, slightly off, as if someone
+  // had played; the big numeral counts them, so the poster leads with a number that is true of what it shows.
+  function demo() {
+    const w = baseWidth(), offsets = [0, 10, 18, 22, 36, 38, 50, 50, 58], cut = [0, 12, 20, 34, 56, 64, 82, 82, 96];
+    tower = offsets.map((o, i) => ({ x: W / 2 - w / 2 + o, w: w - cut[i], colour: i }));
+    tower[0] = { x: W / 2 - w / 2, w, colour: 3 };
+    // and one block waiting above it, off to the right, the way the poster in the gallery shows it
+    const top = tower[tower.length - 1];
+    hover = { x: top.x + w * 0.22, w: top.w, colour: 0 };
+    mover = null; camera = 0;
+    floors = tower.length - 1;
+    score();
+  }
+
+  function start() {
+    const w = baseWidth();
+    tower = [{ x: W / 2 - w / 2, w, colour: 3 }];
+    falling = []; rings = []; hover = null; floors = 0; streak = 0; camera = 0;
+    score();
+    mode = "play"; next();
+    caption();
+    wake();
+  }
+  // The next block slides over the top one, from the left or the right in turn. Its swing widens and quickens with
+  // height: the first floors are forgiving, the tenth is not.
+  function next() {
+    const top = tower[tower.length - 1];
+    phase = floors % 2 ? Math.PI / 2 : -Math.PI / 2;
+    const swing = top.w * Math.min(1.4, 0.7 + floors * 0.05);
+    mover = { x: top.x + Math.sin(phase) * swing, w: top.w, colour: tower.length % palette.length, swing };
+  }
+  const speed = () => Math.min(4.4, 1.7 + floors * 0.09);   // radians a second
+
+  function drop() {
+    if (mode !== "play" || !mover || paused) return;
+    const top = tower[tower.length - 1];
+    let x = mover.x, w = mover.w;
+    const dx = x - top.x;
+    if (Math.abs(dx) <= Math.max(3, w * 0.03)) {
+      // A perfect drop: snapped onto the floor below, a yellow flash, and after three in a row the block grows back.
+      x = top.x; streak += 1;
+      if (streak >= 3 && w < baseWidth()) { const grow = Math.min(12, baseWidth() - w); x -= grow / 2; w += grow; }
+      rings.push({ x, y: tower.length, w, t: performance.now() });
+    } else {
+      streak = 0;
+      const left = Math.max(x, top.x), right = Math.min(x + w, top.x + top.w);
+      if (right - left < 2) { falling.push(piece(x, w, mover.colour, dx > 0 ? 1 : -1)); mover = null; return over(); }
+      // What hangs over the edge is cut off and falls, spinning away from the tower.
+      const cutX = dx > 0 ? right : x, cutW = w - (right - left);
+      falling.push(piece(cutX, cutW, mover.colour, dx > 0 ? 1 : -1));
+      x = left; w = right - left;
+    }
+    tower.push({ x, w, colour: mover.colour, landed: performance.now() });
+    floors += 1;
+    score();
+    next();
+    wake();
+  }
+  function score() { $("score").textContent = floors; $("unit").textContent = floors === 1 ? "FLOOR" : "FLOORS"; }
+  const piece = (x, w, colour, side) => ({ x, w, colour, y: tower.length, vx: side * 60, vy: 0, turn: 0, spin: side * 3.2 });
+
+  function over() {
+    mode = "over";
+    ended = performance.now();
+    played += 1;
+    const record = floors > best;
+    if (record) best = floors;
+    if (has("store")) {
+      something.store.set("best", best).catch(problem);
+      something.store.set("played", played).catch(problem);
+      something.store.set("seen", new Date().toISOString()).catch(problem);
+    }
+    caption(record && floors > 0);
+    showBest();
+  }
+
+  // ---- Drawing: the tower moves down as it grows, so the top stays at about half the height.
+  function screenY(level) { return H - (level + 1) * BH + camera; }
+  function block(b, level, now) {
+    let sx = 1, sy = 1;
+    // Squash and stretch on landing: a damped spring over 180 ms, anchored at the block's bottom.
+    if (b.landed && !still.matches) {
+      const k = (now - b.landed) / 180;
+      if (k < 1) { sy = 1 - 0.32 * Math.sin(k * Math.PI * 2) * (1 - k); sx = 1 / sy; }
+    }
+    const w = b.w * sx, h = BH * sy, x = b.x + (b.w - w) / 2, y = screenY(level) + (BH - h);
+    pen.fillStyle = palette[b.colour % palette.length];
+    pen.fillRect(x, y, w, h);
+  }
+  function draw(now = performance.now()) {
+    pen.clearRect(0, 0, W, H);
+    tower.forEach((b, i) => block(b, i, now));
+    if (hover) {
+      pen.fillStyle = palette[hover.colour];
+      pen.fillRect(hover.x, screenY(tower.length + 1.4), hover.w, BH);
+    }
+    if (mover) {
+      pen.fillStyle = palette[mover.colour];
+      pen.fillRect(mover.x, screenY(tower.length), mover.w, BH);
+    }
+    falling.forEach((p) => {
+      pen.save();
+      pen.translate(p.x + p.w / 2, screenY(p.y) + BH / 2);
+      pen.rotate(p.turn);
+      pen.fillStyle = palette[p.colour % palette.length];
+      pen.fillRect(-p.w / 2, -BH / 2, p.w, BH);
+      pen.restore();
+    });
+    // A perfect drop: the block glows yellow, and a yellow frame opens around it and fades (300 ms).
+    rings = rings.filter((r) => now - r.t < 300);
+    rings.forEach((r) => {
+      const k = (now - r.t) / 300, grow = still.matches ? 4 : 4 + k * 22;
+      pen.fillStyle = palette[2];
+      pen.globalAlpha = 1 - k;
+      pen.fillRect(r.x, screenY(r.y), r.w, BH);
+      pen.lineWidth = 4;
+      pen.strokeStyle = palette[2];
+      pen.strokeRect(r.x - grow, screenY(r.y) - grow, r.w + grow * 2, BH + grow * 2);
+      pen.globalAlpha = 1;
+    });
+  }
+
+  // The loop runs only while something moves: a game, a falling piece, a flash, the camera, a landing. A still
+  // poster costs nothing, however long the space stays open. Anything that starts a motion calls wake().
+  let last = 0, running = false;
+  function wake() {
+    if (running) return;
+    running = true; last = 0;
+    requestAnimationFrame(frame);
+  }
+  function frame(now) {
+    const dt = Math.min(0.05, (now - (last || now)) / 1000);
+    last = now;
+    if (mode === "play" && mover) {
+      phase += speed() * dt;
+      const top = tower[tower.length - 1];
+      mover.x = top.x + Math.sin(phase) * mover.swing;
+    }
+    // The camera follows the top; with less motion asked for it jumps instead of easing.
+    const want = Math.max(0, (tower.length + 1) * BH - H * 0.55);
+    camera = still.matches ? want : camera + (want - camera) * Math.min(1, dt * 6);
+    falling.forEach((p) => {
+      if (still.matches) { p.y = -100; return; }       // no fall to watch: the piece is simply gone
+      p.vy += 1400 * dt; p.x += p.vx * dt; p.turn += p.spin * dt;
+      p.y -= (p.vy * dt) / BH;
+    });
+    falling = falling.filter((p) => screenY(p.y) < H + 200);
+    draw(now);
+    const top = tower[tower.length - 1];
+    const moving = (mode === "play" && !paused) || falling.length || rings.length
+      || Math.abs(camera - want) > 0.5 || (top && top.landed && now - top.landed < 180);
+    if (moving) requestAnimationFrame(frame); else running = false;
+  }
+
+  // ---- Words around the game.
+  function caption(record) {
+    const call = $("call");
+    const keys = `<p><kbd>SPACE</kbd> or click</p>`;
+    if (paused) call.innerHTML = `<h2>Paused</h2>${keys}`;
+    else if (mode === "ready") call.innerHTML = `<h2>Build the<br>tallest tower</h2>${keys}`;
+    else if (mode === "over") call.innerHTML = (record ? `<div class="sticker">NEW BEST</div>` : "")
+      + `<h2>${floors} floor${floors === 1 ? "" : "s"}.<br>Again?</h2>${keys}`;
+    else call.innerHTML = "";
+    $("record").textContent = mode === "play" && !paused ? "" : recordLine();   // nothing distracts during a game
+  }
+  function recordLine() {
+    if (!has("store")) return "";
+    const away = seen ? Math.floor((Date.now() - Date.parse(seen)) / 86400000) : null;
+    const games = played ? `${played} game${played === 1 ? "" : "s"} played.` : "No game played yet.";
+    return (away >= 1 ? `Back after ${away} day${away === 1 ? "" : "s"}. ` : "") + games;
+  }
+  // The disc appears once a game was played: a best that does not exist yet is not shown as zero.
+  function showBest() {
+    $("best").hidden = !has("store") || played < 1;
+    $("best-n").textContent = best;
+    $("no-store").hidden = has("store");
+  }
+
+  function press() {
+    if (paused) { paused = false; caption(); wake(); return; }
+    if (mode === "play") drop(); else if (performance.now() - ended > 400) start();
+  }
+  addEventListener("keydown", (event) => {
+    if ((event.code === "Space" || event.key === "Enter") && !event.repeat) { event.preventDefault(); press(); }
+  });
+  addEventListener("pointerdown", (event) => { if (event.button === 0) press(); });
+  // Hidden (another space, another app in front): the game waits, and says so when it comes back.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && mode === "play" && !paused) { paused = true; caption(); }
+  });
+  addEventListener("resize", resize);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { colours(); draw(); wake(); });
+
+  async function load() {
+    showBest();
+    try {
+      if (has("store")) {
+        const kept = (await something.store.get("")) || {};
+        best = Number(kept.best) || 0;
+        played = Number(kept.played) || 0;
+        seen = kept.seen || null;                       // read before it is replaced: "back after 3 days"
+        something.store.set("seen", new Date().toISOString()).catch(problem);
+      }
+      problem(null);
+    } catch (error) { problem(error); }
+    showBest();
+    caption();
+  }
+
+  colours();
+  resize();
+  caption();
+  wake();
+  something.on("granted", load);
+  load();
+</script>
+</body>
+</html>

@@ -1,0 +1,439 @@
+<!doctype html>
+<!-- Template "Logbook", for something (contract 1). A field notebook: the person's notes in ink and the agents' days in
+     rust, one page per day. Agent lines are rebuilt each time it opens from the turns and requests the state still
+     holds, then kept in memory, so a day stays written after its conversation scrolled away. Rights: "state" over
+     every agent, "store". It never writes to an agent. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Logbook</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Logbook",
+  "description": "Your notes and your agents' days, day by day.",
+  "agents": { "see": "all" },
+  "rights": ["state", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Warm paper by day, a lighter dotted sheet for the day pages; olive night in dark mode. Rust is reserved for what
+     the agents did. */
+  :root {
+    color-scheme: light dark;
+    --paper: #ede6d3; --sheet: #f4efe0; --shadow: rgba(70, 60, 30, .28); --dots: rgba(47, 58, 47, .2); --ink: #2f3a2f; --soft: #5f6a5a; --faint: rgba(47, 58, 47, .14);
+    --rust: #c8553d; --rust-text: #ad4630; --tab: #2f3a2f; --tab-ink: #ede6d3; --field: rgba(255, 255, 255, .6);
+    --band: #3d4a3b; --gutter: rgba(47, 58, 47, .16); --rule: rgba(200, 85, 61, .45);
+    --type: "American Typewriter", "Courier New", ui-serif, serif;
+    --round: ui-rounded, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #1e231d; --sheet: #252b23; --shadow: rgba(0, 0, 0, .55); --dots: rgba(220, 222, 200, .1); --ink: #dcdcc6; --soft: #a2a892; --faint: rgba(220, 222, 200, .12);
+            --rust: #e07b5f; --rust-text: #e88a6f; --tab: #c9cbb2; --tab-ink: #1e231d; --field: rgba(255, 255, 255, .05);
+            --band: #6b3a2c; --gutter: rgba(0, 0, 0, .35); }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--type); overflow: hidden; }
+
+  /* The open notebook: the index on the plain paper at left, the day pages as a dotted sheet at right, and the
+     elastic band crossing the sheet's right edge, from the top of the window to the bottom. */
+  .spread { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; height: 100%; }
+  .index { padding: 34px 30px 28px 38px; display: flex; flex-direction: column; gap: 22px; overflow: auto; }
+  .page { min-width: 0; padding: 28px 72px 28px 12px; display: flex; justify-content: center; }
+  .frame { position: relative; width: 100%; max-width: 1000px; height: 100%; }
+  /* The margin rule and the dots are the sheet's background: they stay put and run its full height while the days
+     scroll over them. The rule sits between the times (58 px) and the text, 56 + 64 px from the sheet's edge. */
+  .sheet { height: 100%; overflow: auto; overflow-x: hidden; padding: 0 104px 40px 56px; border-radius: 4px 14px 14px 4px;
+           background: linear-gradient(var(--rule), var(--rule)) 120px 0 / 1px 100% no-repeat,
+                       radial-gradient(var(--dots) 1.1px, transparent 1.3px) 0 0 / 20px 20px, var(--sheet);
+           box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 22px 44px -20px var(--shadow), inset 10px 0 14px -12px var(--gutter); }
+  .band { position: absolute; top: -28px; bottom: -28px; right: 44px; width: 16px; background: var(--band); opacity: .94;
+          box-shadow: inset 3px 0 0 rgba(255, 255, 255, .12), inset -3px 0 0 rgba(0, 0, 0, .18), 2px 0 6px rgba(0, 0, 0, .14); }
+
+  h1 { font: 700 34px/1.1 var(--type); margin: 0; letter-spacing: -.01em; }
+  .sub { font: 600 12px/1.4 var(--round); color: var(--soft); text-transform: uppercase; letter-spacing: .14em; margin: 4px 0 0; }
+  .label { font: 700 11px/1 var(--round); color: var(--soft); text-transform: uppercase; letter-spacing: .14em; margin: 0 0 8px; }
+  input { font: 15px/1.4 var(--round); color: var(--ink); background: var(--field); border: 1px solid var(--faint);
+          border-radius: 10px; padding: 10px 14px; width: 100%; outline: none; }
+  input::placeholder { color: var(--soft); }
+  input:focus { border-color: var(--rust); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rust) 22%, transparent); }
+
+  /* The index: one line per day, with how many lines it holds; a click turns to that day. */
+  .days { list-style: none; margin: 0 -10px; padding: 0; }
+  .days button { display: flex; justify-content: space-between; width: 100%; padding: 7px 10px; border: 0; border-radius: 8px;
+                 background: none; color: inherit; font: 600 14px/1 var(--round); text-align: left; cursor: pointer; }
+  .days button:hover { background: var(--faint); }
+  .days button:focus-visible { outline: 2px solid var(--rust); outline-offset: -2px; }
+  .days button span:last-child { color: var(--soft); font-variant-numeric: tabular-nums; }
+  .days button.new span:last-child { color: var(--rust-text); }
+  .legend { font: 13px/1.5 var(--round); color: var(--soft); display: grid; gap: 4px; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin: -2px 10px 0 2px; background: var(--ink); }
+  .legend i.rust { background: var(--rust); }
+  .fine { font: 13px/1.5 var(--round); color: var(--soft); margin: 0; }
+  .fine.because { color: var(--rust-text); }
+  /* This week, tallied: a dot per line, ink for notes and rust for the agents, as a naturalist counts sightings.
+     Twelve faint places a day, so an empty day reads as empty paper, not as nothing. */
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; align-items: end; }
+  .week div { display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; }
+  .week b { font: 700 11px/1 var(--round); color: var(--soft); margin-top: 6px; }
+  .week b.today { color: var(--ink); }
+  .week i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+  .week i.ink { background: var(--ink); }
+  .week i.rust { background: var(--rust); }
+  .week i.more { background: none; width: auto; height: auto; font: 700 10px/1 var(--round); font-style: normal; color: var(--soft); }
+
+  /* "Write a note…" stays pinned at the top of the sheet, set like a line: the time now in the margin, the field on
+     the text column, the margin rule running on behind it. */
+  #write { position: sticky; top: 0; z-index: 2; padding: 34px 0 14px; display: grid; grid-template-columns: 58px 1fr auto;
+           gap: 14px; align-items: center;
+           background: linear-gradient(var(--rule), var(--rule)) 64px 0 / 1px 100% no-repeat,
+                       linear-gradient(var(--sheet) 78%, transparent); }
+  #write time { font: 13px/1 var(--type); color: var(--soft); font-variant-numeric: tabular-nums; }
+  #write input { font: 16px/1.4 var(--type); padding: 12px 16px; }
+  #write kbd { font: 600 12px/1 var(--round); color: var(--soft); white-space: nowrap; }
+  /* Sentences on the sheet that are not lines start on the text column, right of the margin rule. */
+  #no-store { margin: 34px 0 14px 72px; }
+  .empty { margin-left: 72px; }
+  #problem { font: 14px/1.5 var(--round); color: var(--rust-text); border-left: 3px solid var(--rust); padding: 4px 12px; margin: 0 0 14px 72px; }
+
+  /* A day: a tab from the sheet's edge, then its lines with their times in the margin. */
+  .day { margin: 8px 0 0; padding-bottom: 22px; }
+  .tab { display: inline-block; font: 700 13px/1 var(--round); background: var(--tab); color: var(--tab-ink);
+         padding: 6px 16px 6px 56px; margin: 6px 0 12px -56px; border-radius: 0 12px 12px 0; letter-spacing: .02em; }
+  .tab small { font-weight: 600; opacity: .7; margin-left: 6px; }
+  .line { display: grid; grid-template-columns: 58px 1fr 24px; gap: 14px; padding: 3px 0; position: relative; }
+  .line time { font: 13px/1.6 var(--type); color: var(--soft); padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .line.agent .text { color: var(--rust-text); }
+  /* An agent that waited for the person is the line that matters: a rust tick at the rule, and bold. */
+  .line.ask .text { font-weight: 700; }
+  .line.ask::after { content: ""; position: absolute; left: 62px; top: 7px; bottom: 7px; width: 5px; border-radius: 3px; background: var(--rust); }
+  /* Paths in a typewriter face raise the tilde like an accent: they are set in the system's monospace. */
+  .path { font: .9em/1 ui-monospace, "SF Mono", Menlo, monospace; }
+  .line .text { overflow-wrap: anywhere; white-space: pre-wrap; }
+  /* Lines added since the last look carry a rust tick in the margin. */
+  .line.unseen::before { content: ""; position: absolute; left: -18px; top: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--rust); }
+  .line button { border: 0; background: none; color: var(--soft); font: 18px/1 var(--round); cursor: pointer; opacity: 0; padding: 4px; }
+  .line:hover button, .line button:focus { opacity: 1; }
+  mark { background: color-mix(in srgb, var(--rust) 28%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+  .empty { color: var(--soft); font-style: italic; max-width: 560px; }
+  /* A line arriving while the page is open types itself in; the caret blinks at its end until done. */
+  .typing::after { content: ""; display: inline-block; width: .5em; height: 1.05em; margin-left: 2px; vertical-align: -.15em;
+                   background: currentColor; animation: caret .5s steps(1) infinite; }
+  @keyframes caret { 50% { opacity: 0; } }
+
+  @media (max-width: 1100px) {
+    .page { padding: 20px 40px 20px 0; }
+    .sheet { padding-right: 76px; }
+    .band { right: 30px; top: -20px; bottom: -20px; }
+  }
+  @media (max-width: 760px) {
+    body { overflow: auto; }
+    .spread { display: block; height: auto; }
+    .index { padding: 22px 24px; }
+    .page { padding: 0 24px 24px 0; }
+    .frame, .sheet { height: auto; }
+    .sheet { overflow: visible; padding: 0 48px 30px 32px; background-position: 96px 0, 0 0, 0 0; }
+    #write { background-position: 64px 0, 0 0; }
+    .tab { padding-left: 32px; margin-left: -32px; }
+    .band { right: 16px; width: 10px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .typing::after { animation: none; } }
+</style>
+</head>
+<body>
+<div class="spread">
+  <aside class="index">
+    <div>
+      <h1>Logbook</h1>
+      <p class="sub" id="volume">Field notes</p>
+    </div>
+    <input id="search" type="search" placeholder="Search the notebook" aria-label="Search the notebook" autocomplete="off">
+    <div id="days-block">
+      <p class="label">Days</p>
+      <ul class="days" id="days"></ul>
+    </div>
+    <p class="fine" id="missed" hidden></p>
+    <div id="week-block">
+      <p class="label">This week</p>
+      <div class="week" id="week" aria-label="Lines written each day this week"></div>
+    </div>
+    <div class="legend">
+      <span><i></i>Your notes</span>
+      <span id="legend-agents"><i class="rust"></i>What your agents did</span>
+    </div>
+    <p class="fine" id="coverage">Your agents' turns are copied in from what something still holds of their
+      conversations (the last ten turns), each time this logbook is open. Open it now and then, and no day is lost.</p>
+    <p class="fine because" id="no-state" hidden>This logbook may not see your agents, so only your notes are here.
+      Allow “See your agents” in the space's Info, and their days write themselves in.</p>
+  </aside>
+  <main class="page">
+    <div class="frame">
+      <div class="sheet">
+        <form id="write" autocomplete="off">
+          <time id="now"></time>
+          <input id="note" placeholder="Write a note…" aria-label="Write a note" maxlength="2000">
+          <kbd>↩ to keep it</kbd>
+        </form>
+        <p class="fine because" id="no-store" hidden></p>
+        <p id="problem" role="alert" hidden></p>
+        <div id="entries"></div>
+      </div>
+      <div class="band" aria-hidden="true"></div>
+    </div>
+  </main>
+</div>
+<script>
+  // something.js is injected before this script. Each call returns a promise; a rejection carries .code and .message,
+  // one sentence for the person: this page prints it in #problem.
+  const $ = (id) => document.getElementById(id);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "other agent";
+  // A right counts when granted plainly ("store") or for a kind ("send:claude"). Read it from something.granted.
+  const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+  const make = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text ?? "" });
+  const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : null;
+  const pad = (n) => String(n).padStart(2, "0");
+  const clock = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const dayKey = (iso) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const DAYS = "Sun Mon Tue Wed Thu Fri Sat".split(" ");
+  const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+  const tabName = (key) => { const [y, m, d] = key.split("-").map(Number); const date = new Date(y, m - 1, d);
+    return `${DAYS[date.getDay()]} ${d} ${MONTHS[m - 1]}`; };
+  const clip = (text, n) => { const line = text.split("\n")[0].trim(); return line.length > n ? line.slice(0, n - 1).trimEnd() + "…" : line; };
+  // What was asked, quoted without its own final period: the line ends with one period, after the quote.
+  const quote = (text) => `“${clip(text, 90).replace(/\.+$/, "")}”`;
+  // Search ignores case and accents: "cafe" finds "Café".
+  const fold = (text) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+
+  const KEEP = 400;                                  // agent lines kept in memory, newest first; notes are all kept
+  let skew = 0;                                      // the state's clock ("at") minus this Mac's
+  const now = () => new Date(Date.now() + skew).toISOString();
+  let notes = [];                                    // [{id, at, text}]: the person's lines
+  let logged = {};                                   // {id: {at, text}}: agent lines, kept across visits
+  let seen = null;                                   // the previous visit's time, read once before the first render
+  let painted = false;                               // lines new after the first paint type themselves in
+  const shown = new Set();                           // ids already on the page
+
+  // ---- Agent lines, rebuilt from the state: each has a stable id, so a line is written once however often it is seen.
+  function who(agent) {
+    const name = agent.name ? ` “${clip(agent.name, 60)}”` : "";
+    const last = agent.folder ? agent.folder.split("/").pop() : null;
+    // The folder is said only when the name does not already say it ("shop" in ~/code/shop).
+    const where = agent.folder && last !== agent.name ? ` in ${tilde(agent.folder)}` : "";
+    return { name: (agent.kind === "other" ? "An agent" : label(agent.kind)) + name, where };
+  }
+  function harvest(state) {
+    const found = {};
+    const byId = Object.fromEntries(state.agents.map((a) => [a.id, a]));
+    for (const thread of state.threads) {
+      const agent = byId[thread.agent];
+      if (!agent) continue;
+      const { name, where } = who(agent);
+      for (const turn of thread.turns) {
+        // The turn's first message from the person is what it was about.
+        const asked = turn.items.find((i) => i.author === "person" && i.kind === "message");
+        const about = asked ? quote(asked.text) : null;
+        if (turn.started) found[turn.id + "/began"] = { at: turn.started, text: `${name} began${where}${about ? ": " + about : ""}.` };
+        if (turn.ended) {
+          const verb = { done: "finished", error: "failed", interrupted: "was stopped" }[turn.state] || "ended a turn";
+          const why = turn.state === "error" && agent.error ? ` (${clip(agent.error.message, 90)})` : "";
+          found[turn.id + "/ended"] = { at: turn.ended, text: `${name} ${verb}${about ? ": " + about : ""}${why}.` };
+        }
+      }
+    }
+    // A request is answered in something's window, never here; the log only says that the agent waited. Its id is
+    // paired with its time: an id alone may come back in a later run of something.
+    for (const request of state.requests) {
+      const agent = byId[request.agent];
+      if (!agent) continue;
+      const what = request.kind === "permission"
+        ? `asked permission to run ${request.tool ?? "a tool"}${request.about ? ` (${clip(request.about, 60)})` : ""}`
+        : "asked you a question";
+      found[`${request.id}@${request.at}/asked`] = { at: request.at, text: `${who(agent).name} ${what}, and waited for you.` };
+    }
+    // An agent that ended with no conversation in view (started elsewhere, or older than its last ten turns).
+    for (const agent of state.agents) {
+      const inView = state.threads.some((t) => t.id === agent.thread && t.turns.length);
+      if (inView || !agent.updated || !["done", "error", "interrupted"].includes(agent.state)) continue;
+      const { name, where } = who(agent);
+      const verb = { done: "finished", error: "stopped on an error", interrupted: "was stopped" }[agent.state];
+      found[`${agent.id}@${agent.updated}`] = { at: agent.updated, text: `${name} ${verb}${where}.` };
+    }
+    return found;
+  }
+
+  // ---- The pages: days newest first, lines newest first, filtered by the search.
+  function render() {
+    const query = fold($("search").value.trim());
+    const lines = [
+      ...notes.map((n) => ({ ...n, mine: true })),
+      ...Object.entries(logged).map(([id, l]) => ({ id, at: l.at, text: l.text, mine: false })),
+    ].filter((l) => !query || fold(l.text).includes(query)).sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
+
+    const days = new Map();
+    lines.forEach((l) => { const key = dayKey(l.at); if (!days.has(key)) days.set(key, []); days.get(key).push(l); });
+    const today = dayKey(now());
+
+    $("days-block").hidden = !days.size;
+    $("week-block").hidden = !notes.length && !Object.keys(logged).length;
+    $("entries").replaceChildren(...[...days].map(([key, list]) => {
+      const day = make("section", "day");
+      day.id = "day-" + key;
+      const tab = make("div", "tab", tabName(key));
+      if (key === today) tab.append(make("small", "", "today"));
+      day.append(tab, ...list.map(line));
+      return day;
+    }));
+    if (!lines.length) {
+      $("entries").append(make("p", "empty", query ? `Nothing in the notebook matches “${$("search").value.trim()}”.`
+        : has("store") ? "A new notebook. Write the first line above: a thought, a decision, what is next."
+          + (has("state") ? " Your agents' days write themselves in below." : "")
+        : has("state") ? "Nothing yet. Your agents' days write themselves in here." : "Nothing can be written here yet."));
+    }
+
+    // The index: every day, with its count; a rust count when the day holds lines new since the last look.
+    // Each day is a button, so it is reached with Tab and pressed with Return like any other.
+    $("days").replaceChildren(...[...days].map(([key, list]) => {
+      const go = make("button", list.some(unseen) ? "new" : "");
+      go.type = "button";
+      go.append(make("span", "", tabName(key) + (key === today ? " · today" : "")), make("span", "", String(list.length)));
+      go.onclick = () => $("day-" + key).scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      const li = make("li");
+      li.append(go);
+      return li;
+    }));
+    $("now").textContent = clock(now());
+    tally();
+    lines.forEach((l) => shown.add(l.id));
+    painted = true;
+  }
+  // Seven columns ending today: twelve places each, one filled per line (notes first), then a "+" above.
+  function tally() {
+    const all = [...notes.map((n) => ({ at: n.at, mine: true })), ...Object.values(logged).map((l) => ({ at: l.at, mine: false }))];
+    const end = new Date(now());
+    $("week").replaceChildren(...[6, 5, 4, 3, 2, 1, 0].map((back) => {
+      const date = new Date(end.getFullYear(), end.getMonth(), end.getDate() - back);
+      const key = dayKey(date.toISOString()), of = all.filter((l) => dayKey(l.at) === key);
+      const column = make("div");
+      column.title = `${tabName(key)}: ${of.length} line${of.length === 1 ? "" : "s"}`;
+      column.append(make("b", back ? "" : "today", DAYS[date.getDay()].slice(0, 2)));
+      of.sort((a, b) => b.mine - a.mine);
+      for (let i = 0; i < 12; i++) column.append(make("i", !of[i] ? "" : of[i].mine ? "ink" : "rust"));
+      if (of.length > 12) column.append(make("i", "more", "+" + (of.length - 12)));
+      return column;
+    }));
+  }
+  const unseen = (l) => seen !== null && !l.mine && l.at > seen;
+
+  function line(entry) {
+    const ask = !entry.mine && entry.id.endsWith("/asked");
+    const row = make("div", "line" + (entry.mine ? "" : " agent") + (ask ? " ask" : "") + (unseen(entry) ? " unseen" : ""));
+    const text = make("span", "text");
+    const query = $("search").value.trim();
+    if (painted && !shown.has(entry.id) && !query) typeIn(text, entry.text); else fill(text, entry.text, query);
+    row.append(make("time", "", clock(entry.at)), text);
+    if (entry.mine && has("store")) {
+      const remove = make("button", "", "×");
+      remove.type = "button";
+      remove.title = "Remove this note";
+      remove.onclick = () => { notes = notes.filter((n) => n.id !== entry.id); keep("notes", notes); render(); };
+      row.append(remove);
+    }
+    return row;
+  }
+  // A line's text, its paths ("~/code/blog") set apart, the search's match marked.
+  const PATH = /((?:~|\/Users)\/[^\s“”"]*[^\s“”".,;:!?)])/;
+  function fill(node, text, query) {
+    node.replaceChildren();
+    text.split(PATH).forEach((part, i) => highlight(i % 2 ? node.appendChild(make("span", "path")) : node, part, query));
+  }
+  function highlight(node, text, query) {
+    // Case- and accent-insensitive match, mapped back onto the original text (folding keeps the length of plain letters).
+    const at = query ? fold(text).indexOf(fold(query)) : -1;
+    if (at < 0 || fold(text).length !== text.length) { node.append(text); return; }
+    node.append(text.slice(0, at), make("mark", "", text.slice(at, at + query.length)), text.slice(at + query.length));
+  }
+  // 40 ms a character, the whole line within 600 ms; at once when the person asked for less motion.
+  function typeIn(node, text) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { fill(node, text, ""); return; }
+    const step = Math.min(40, 600 / Math.max(text.length, 1)), started = performance.now();
+    node.classList.add("typing");
+    (function tick() {
+      const n = Math.min(text.length, Math.ceil((performance.now() - started) / step));
+      node.textContent = text.slice(0, n);
+      if (n < text.length) requestAnimationFrame(tick); else { node.classList.remove("typing"); fill(node, text, ""); }
+    })();
+  }
+
+  // ---- Memory: notes and agent lines are written whole, a little after the last change.
+  const timers = {};
+  function keep(key, value) {
+    if (!has("store")) return;
+    clearTimeout(timers[key]);
+    timers[key] = setTimeout(() => something.store.set(key, value).catch(problem), 800);
+  }
+
+  function update(state) {
+    if (state.at) skew = Date.parse(state.at) - Date.now();
+    $("volume").textContent = `Field notes · ${new Date(now()).getFullYear()}`;
+    const found = harvest(state);
+    const fresh = Object.keys(found).filter((id) => !logged[id]);
+    if (fresh.length) {
+      fresh.forEach((id) => { logged[id] = found[id]; });
+      // Keep the newest agent lines only: the memory stays small however long the logbook lives.
+      logged = Object.fromEntries(Object.entries(logged).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, KEEP));
+      keep("log", logged);
+    }
+    render();
+  }
+
+  function rights() {
+    $("no-state").hidden = has("state");
+    $("coverage").hidden = !has("state");
+    $("legend-agents").hidden = !has("state");
+    $("write").hidden = !has("store");
+    $("no-store").hidden = has("store");
+    $("no-store").textContent = "You did not allow this logbook to remember, so it cannot keep your notes, and only your "
+      + "agents' last ten turns are shown. Allow it in the space's Info.";
+  }
+
+  async function load() {
+    rights();
+    try {
+      if (has("store")) {
+        const kept = (await something.store.get("")) || {};
+        notes = Array.isArray(kept.notes) ? kept.notes : [];
+        logged = kept.log && typeof kept.log === "object" ? kept.log : {};
+        if (seen === null) seen = kept.seen || null;      // the previous visit, kept for this whole visit
+      }
+      const state = await something.state();
+      update(state);
+      // What happened while the logbook was closed, said once in the index.
+      const missed = Object.entries(logged).filter(([, l]) => seen && l.at > seen).length;
+      $("missed").hidden = !missed;
+      $("missed").textContent = `${missed} line${missed === 1 ? "" : "s"} from your agents since you last looked, marked in the margin.`;
+      if (has("store")) something.store.set("seen", now()).catch(problem);
+      problem(null);
+    } catch (error) { problem(error); }
+  }
+
+  $("write").onsubmit = (event) => {
+    event.preventDefault();
+    const text = $("note").value.trim();
+    if (!text) return;
+    notes.push({ id: "n" + Date.now().toString(36), at: now(), text });
+    $("note").value = "";
+    keep("notes", notes);
+    render();
+  };
+  $("search").oninput = () => render();
+  something.on("change", update);
+  something.on("granted", load);
+  load();
+</script>
+</body>
+</html>

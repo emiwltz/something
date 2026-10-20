@@ -13,7 +13,8 @@ folder only.
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.
 2. Start from the closest template when one fits: `something new <name> --from <template>`; otherwise
    `something new <name>`. Templates: agents (who works, who waits), project (one folder's progress; write the
-   project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper).
+   project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper), logbook (notes and
+   agent events by day), stack (a one-key game), pet (a creature that lives with the agents).
 3. Make a first version quickly, then `something check <name>`. The person sees it appear and reload as you save:
    something opens it by itself. Refine while they watch.
 4. When it does what was asked: `something check <name>` until 0 errors and 0 warnings, then once

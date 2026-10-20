@@ -1,0 +1,420 @@
+<!doctype html>
+<!-- Template "Pebble", for something (contract 1). A pocket pet that lives to the rhythm of the agents: every turn an
+     agent finishes is a snack, an agent waiting for the person worries it, and it falls asleep when every agent has
+     been quiet for half an hour. Its meters are kept in memory with the time, so it remembers between visits.
+     Rights: "state" over every agent, "store". It never writes to an agent. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pebble</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Pebble",
+  "description": "A little creature that lives to the rhythm of your agents.",
+  "agents": { "see": "all" },
+  "rights": ["state", "store"]
+}
+</script>
+<style>
+  [hidden] { display: none !important; }
+  /* Lilac to peach by day; a plum night in dark mode, where the screen glows. */
+  :root {
+    color-scheme: light dark;
+    --sky: linear-gradient(160deg, #e9d8fd 0%, #fbe1ef 52%, #ffd8c2 100%);
+    --ink: #5b3f74; --soft: #674e80; --card: rgba(255, 255, 255, .55); --line: rgba(91, 63, 116, .14);
+    --egg: linear-gradient(180deg, #ffffff 0%, #f4ecff 100%); --egg-shadow: rgba(120, 80, 160, .28);
+    --screen: #effcf6; --screen-edge: rgba(59, 170, 134, .25);
+    --mint: #9be8c9; --mint-edge: #3baa86; --mint-ink: #20594a; --pink: #ff8fb1; --pink-edge: #e06c92;
+    --lilac: #c9b6f2; --lilac-edge: #9a83d6;
+    --round: ui-rounded, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sky: linear-gradient(160deg, #221a35 0%, #2f1f38 55%, #3a2a30 100%);
+      --ink: #eedff9; --soft: #bba6cf; --card: rgba(255, 255, 255, .06); --line: rgba(238, 223, 249, .14);
+      --egg: linear-gradient(180deg, #3d3456 0%, #2d2640 100%); --egg-shadow: rgba(0, 0, 0, .45);
+      --screen: #15302a; --screen-edge: rgba(155, 232, 201, .25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--sky); color: var(--ink); font: 15px/1.45 var(--round); overflow: hidden; }
+  /* Soft round shapes drift in the background, like bubbles (stars at night). */
+  .bubble { position: fixed; border-radius: 50%; background: rgba(255, 255, 255, .35); pointer-events: none; }
+  @media (prefers-color-scheme: dark) { .bubble { background: rgba(255, 255, 255, .05); } }
+
+  header { position: fixed; left: 48px; top: 36px; }
+  h1 { font: 900 64px/1 var(--round); margin: 0; letter-spacing: -.015em; }
+  .age { font-weight: 700; color: var(--soft); margin-top: 6px; }
+
+  /* The meters: how fed, how happy, how rested. Full is good for all three. */
+  .meters { position: fixed; right: 48px; top: 40px; width: 300px; background: var(--card); border-radius: 22px;
+            padding: 18px 20px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .meter { display: grid; grid-template-columns: 70px 1fr 64px; align-items: center; gap: 10px; font-weight: 800; font-size: 14px; }
+  .meter + .meter { margin-top: 10px; }
+  .meter i { display: block; height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+  .meter i b { display: block; height: 100%; border-radius: 5px; transition: width .6s ease; }
+  .meter span { font-size: 12px; color: var(--soft); text-align: right; font-weight: 700; }
+  .meter span.name { font-size: 14px; color: inherit; text-align: left; font-weight: 800; }
+  .meters .fine { margin: 14px 0 0; }
+
+  /* The device: an egg with a screen and three buttons. */
+  main { height: 100%; display: grid; place-items: center; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 26px; margin-top: -10px; }
+  .egg { width: 380px; height: 480px; border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; background: var(--egg);
+         box-shadow: 0 30px 70px var(--egg-shadow), inset 0 -14px 34px rgba(180, 150, 220, .28), inset 0 10px 20px rgba(255, 255, 255, .5);
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding-top: 30px; }
+  .screen { width: 236px; height: 184px; border-radius: 30px; background: var(--screen); position: relative; overflow: hidden;
+            box-shadow: inset 0 3px 10px rgba(0, 0, 0, .1), 0 0 0 6px var(--screen-edge); display: grid; place-items: center; }
+  .screen.night { background: color-mix(in srgb, var(--screen) 55%, #1c1636); }
+  .buttons { display: flex; gap: 22px; }
+  .buttons button { width: 62px; height: 62px; border-radius: 50%; border: 0; font: 800 12px/1 var(--round); cursor: pointer;
+                    color: #5a1a33; background: var(--pink); box-shadow: 0 5px 0 var(--pink-edge); transition: transform .08s; }
+  .buttons button:nth-child(2) { background: var(--mint); color: var(--mint-ink); box-shadow: 0 5px 0 var(--mint-edge); }
+  .buttons button:nth-child(3) { background: var(--lilac); color: #3f2d6b; box-shadow: 0 5px 0 var(--lilac-edge); }
+  .buttons button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--pink-edge); }
+  .buttons button:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+  .brand { font: 800 10px/1 var(--round); letter-spacing: .3em; color: var(--soft); opacity: .7; }
+
+  /* What Pebble feels, and why, in one line under the device. */
+  #mood { font: 700 17px/1.4 var(--round); text-align: center; max-width: 560px; min-height: 2.8em; }
+  #mood small { display: block; font-weight: 600; font-size: 14px; color: var(--soft); }
+
+  /* Pebble's day: what happened, newest first, including what it missed while the space was closed. */
+  .day { position: fixed; left: 48px; bottom: 40px; width: 340px; background: var(--card); border-radius: 22px; padding: 18px 20px;
+         backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .day h2 { font: 800 12px/1 var(--round); text-transform: uppercase; letter-spacing: .16em; color: var(--soft); margin: 0 0 10px; }
+  .day ol { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .day li { display: grid; grid-template-columns: 48px 1fr; gap: 6px; padding: 3px 0; }
+  .day time { color: var(--soft); font-variant-numeric: tabular-nums; font-weight: 700; }
+  .fine { font-size: 13px; color: var(--soft); margin: 0; }
+  #problem { position: fixed; right: 48px; bottom: 40px; max-width: 360px; color: #c03a63; font-weight: 700; }
+
+  /* The creature. Breathing is a loop from its full size, so a still picture shows it whole. */
+  #pebble { width: 150px; height: 132px; overflow: visible; }
+  .body { transform-origin: 75px 120px; animation: breathe 3s ease-in-out infinite; }
+  @keyframes breathe { 50% { transform: scale(1.03, 1.035); } }
+  .eye { transform-box: fill-box; transform-origin: center; transition: transform .08s; }
+  .blink .eye { transform: scaleY(.1); }
+  .pupil { transition: transform .12s ease-out; }
+  .hop { animation: hop .5s cubic-bezier(.3, .7, .4, 1); }
+  @keyframes hop { 30% { transform: translateY(-22px) scale(.96, 1.06); } 60% { transform: translateY(0) scale(1.06, .94); } }
+  .wiggle { animation: wiggle .6s ease-in-out; }
+  @keyframes wiggle { 25% { transform: rotate(-9deg); } 50% { transform: rotate(8deg); } 75% { transform: rotate(-4deg); } }
+  .face-sleep, .face-worried, .face-hungry, .brows { display: none; }
+  .asleep .face-awake, .worried .face-awake, .hungry .face-awake { display: none; }
+  .asleep .face-sleep { display: inline; }
+  .worried:not(.asleep) .face-worried, .worried:not(.asleep) .brows { display: inline; }
+  .hungry:not(.asleep):not(.worried) .face-hungry { display: inline; }
+  .asleep .eyes-open { display: none; }
+  /* Just fed or played with: a smile for a moment, even while worried (the "!" stays, the worry is still true). */
+  .screen.happy:not(.asleep) .face-awake { display: inline; }
+  .screen.happy:not(.asleep) .face-worried, .screen.happy:not(.asleep) .brows,
+  .screen.happy:not(.asleep) .face-hungry { display: none; }
+
+  .bang { position: absolute; top: 12px; right: 16px; background: #fff; color: var(--pink); border-radius: 12px; padding: 2px 10px;
+          font: 900 20px/1.3 var(--round); box-shadow: 0 3px 8px rgba(0, 0, 0, .12); animation: nudge 1.2s ease-in-out infinite; }
+  @keyframes nudge { 50% { transform: translateY(-3px) rotate(6deg); } }
+  .zz { position: absolute; top: 18px; right: 30px; font: 900 18px/1 var(--round); color: var(--lilac); }
+  .zz span { display: inline-block; animation: drift 2.4s ease-in-out infinite; }
+  .zz span:nth-child(2) { animation-delay: .8s; font-size: 14px; }
+  @keyframes drift { 0% { transform: translate(0, 6px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translate(14px, -20px); opacity: 0; } }
+  .say { position: absolute; left: 12px; top: 12px; background: #fff; color: var(--mint-ink); border-radius: 12px; padding: 3px 10px;
+         font: 800 12px/1.3 var(--round); box-shadow: 0 3px 8px rgba(0, 0, 0, .12); }
+  .crumb { position: absolute; width: 7px; height: 7px; border-radius: 2px; background: #f4b860; animation: crumb .7s ease-in forwards; }
+  @keyframes crumb { from { transform: translateY(-50px); } to { transform: translateY(40px); opacity: 0; } }
+
+  /* A smaller window (the gallery's preview is 900 x 640): the device shrinks and the cards move to the corners. */
+  @media (max-height: 760px), (max-width: 1100px) {
+    .stage { zoom: .68; }
+    header { left: 32px; top: 24px; } h1 { font-size: 46px; }
+    .meters { right: 28px; top: 28px; width: 250px; padding: 14px 16px; }
+    .day { left: 32px; bottom: 28px; width: 250px; padding: 14px 16px; }
+    .day li:nth-child(n+4) { display: none; }
+    .bubble.low { display: none; }       /* the two lower bubbles would slide under the cards */
+  }
+  @media (max-width: 700px) {
+    body { overflow: auto; }
+    header, .meters, .day { position: static; margin: 20px; width: auto; }
+    main { height: auto; padding: 20px 0; }
+    .egg { width: 320px; height: 410px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .body, .bang, .zz span { animation: none; }
+    .hop, .wiggle { animation: none; }
+    .zz span { opacity: 1; }
+    .meter i b { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="bubble low" style="left:8%;top:52%;width:120px;height:120px"></div>
+<div class="bubble low" style="left:70%;top:62%;width:60px;height:60px"></div>
+<div class="bubble" style="left:58%;top:12%;width:34px;height:34px"></div>
+<div class="bubble" style="left:28%;top:20%;width:18px;height:18px"></div>
+<header><h1>Pebble</h1><div class="age" id="age"></div></header>
+<section class="meters" aria-label="How Pebble is">
+  <div class="meter"><span class="name">Tummy</span><i><b id="m-food" style="background:var(--mint)"></b></i><span id="w-food"></span></div>
+  <div class="meter"><span class="name">Joy</span><i><b id="m-joy" style="background:var(--pink)"></b></i><span id="w-joy"></span></div>
+  <div class="meter"><span class="name">Energy</span><i><b id="m-energy" style="background:var(--lilac)"></b></i><span id="w-energy"></span></div>
+  <p class="fine" id="no-store" hidden>Pebble forgets everything when this space closes: you did not allow it to remember.
+    Allow it in the space's Info.</p>
+</section>
+<main>
+  <div class="stage">
+    <div class="egg">
+      <div class="screen" id="screen">
+        <svg id="pebble" viewBox="0 0 150 132" aria-label="Pebble">
+          <g id="mover"><g class="body">
+            <path d="M75 10c36 0 60 27 60 62 0 31-25 50-60 50S15 103 15 72c0-35 24-62 60-62z" style="fill:var(--mint);stroke:var(--mint-edge);stroke-width:4"/>
+            <ellipse cx="52" cy="22" rx="12" ry="6" fill="#fff" opacity=".45" transform="rotate(-24 52 22)"/>
+            <g class="eyes-open">
+              <ellipse class="eye" cx="54" cy="66" rx="8" ry="11" style="fill:var(--mint-ink)"/>
+              <ellipse class="eye" cx="96" cy="66" rx="8" ry="11" style="fill:var(--mint-ink)"/>
+              <g class="pupil" id="pupils"><circle cx="57" cy="62" r="3" fill="#fff"/><circle cx="99" cy="62" r="3" fill="#fff"/></g>
+            </g>
+            <g class="brows" style="fill:none;stroke:var(--mint-ink);stroke-width:3;stroke-linecap:round">
+              <path d="M43 50l17-5"/><path d="M107 50l-17-5"/></g>
+            <ellipse cx="38" cy="86" rx="9" ry="5" style="fill:var(--pink)" opacity=".7"/>
+            <ellipse cx="112" cy="86" rx="9" ry="5" style="fill:var(--pink)" opacity=".7"/>
+            <g style="fill:none;stroke:var(--mint-ink);stroke-width:3.5;stroke-linecap:round">
+              <path class="face-awake" d="M67 88q8 8 16 0"/>
+              <path class="face-worried" d="M67 92q4-5 8 0t8 0"/>
+              <ellipse class="face-hungry" cx="75" cy="91" rx="5" ry="6" style="fill:var(--mint-ink)"/>
+              <g class="face-sleep"><path d="M46 68q8 6 16 0"/><path d="M88 68q8 6 16 0"/><path d="M70 92q5 3 10 0"/></g>
+            </g>
+          </g></g>
+        </svg>
+        <div class="bang" id="bang" hidden>!</div>
+        <div class="zz" id="zz" hidden><span>z</span> <span>z</span></div>
+        <div class="say" id="say" hidden></div>
+      </div>
+      <div class="buttons">
+        <button type="button" id="feed">Feed</button>
+        <button type="button" id="play">Play</button>
+        <button type="button" id="sleep">Sleep</button>
+      </div>
+      <div class="brand">POCKET PET</div>
+    </div>
+    <div id="mood" aria-live="polite"></div>
+  </div>
+</main>
+<section class="day" aria-label="Pebble's day">
+  <h2>Pebble's day</h2>
+  <ol id="diary"></ol>
+  <p class="fine" id="no-state" hidden>Pebble cannot see your agents, so it never knows when they finish or wait.
+    Allow “See your agents” in the space's Info, and their turns become its snacks.</p>
+</section>
+<p id="problem" role="alert" hidden></p>
+<script>
+  // something.js is injected before this script. Each call returns a promise; a rejection carries .code and .message,
+  // one sentence for the person: this page prints it in #problem.
+  const $ = (id) => document.getElementById(id);
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const label = (kind) => NAMES[kind] || "other agent";
+  const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
+  const make = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text ?? "" });
+  const pad = (n) => String(n).padStart(2, "0");
+  const clock = (iso) => { const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const clamp = (n) => Math.max(0, Math.min(100, n));
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
+
+  let skew = 0;                                    // the state's clock ("at") minus this Mac's
+  const now = () => Date.now() + skew;
+  const iso = () => new Date(now()).toISOString();
+
+  // ---- What Pebble is, kept whole in memory under "pebble": meters, the time they were true, its day.
+  let pet = { food: 70, joy: 80, energy: 80, at: null, asleep: false, born: null, snacks: 0, diary: [] };
+  let counted = null;          // turns that ended before this time are already eaten
+  let state = { agents: [], threads: [], requests: [] };
+  let wokenAt = 0;             // a person who wakes Pebble keeps it awake for 30 minutes, whatever the agents do
+  let cheered = null;          // a smile for 1.5 s after a snack, a meal or a game
+
+  // Meters fall with time, more slowly while asleep, when Energy comes back. Rates are per hour.
+  function age(to) {
+    const hours = pet.at ? Math.max(0, (to - Date.parse(pet.at)) / 3600000) : 0;
+    if (sleeping()) { pet.food -= 3 * hours; pet.joy -= 1 * hours; pet.energy += 18 * hours; }
+    else { pet.food -= 7 * hours; pet.joy -= 5 * hours; pet.energy -= 4 * hours; }
+    ["food", "joy", "energy"].forEach((k) => { pet[k] = Math.round(clamp(pet[k]) * 10) / 10; });
+    pet.at = new Date(to).toISOString();
+  }
+  function note(text, at = iso()) {
+    pet.diary = [{ at, text }, ...pet.diary].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
+  }
+
+  // ---- The agents: each ended turn is a snack, a waiting agent is a worry, a long quiet is bedtime.
+  const endedTurns = () => state.threads.flatMap((t) => t.turns.filter((u) => u.ended).map((u) => ({ ...u, agent: t.agent })));
+  const who = (id) => { const a = state.agents.find((x) => x.id === id); return a ? label(a.kind) + (a.name ? ` “${a.name}”` : "") : "An agent"; };
+  function eat(fresh) {
+    if (!fresh.length) return;
+    pet.food = clamp(pet.food + 6 * fresh.length); pet.joy = clamp(pet.joy + 2 * fresh.length);
+    pet.snacks += fresh.length;
+    fresh.forEach((t) => note(`${who(t.agent)} finished a turn. A snack!`, t.ended));
+    counted = fresh.map((t) => t.ended).sort().at(-1);
+  }
+  const waiting = () => state.agents.filter((a) => a.state === "waiting");
+  // Asleep by itself when it has agents and none has stirred for 30 minutes (on the state's clock).
+  function quiet() {
+    if (!state.agents.length || state.agents.some((a) => a.state === "working" || a.state === "waiting")) return false;
+    const last = Math.max(...state.agents.map((a) => Date.parse(a.updated || a.started || 0) || 0));
+    return now() - last > 30 * 60000 && now() - wokenAt > 30 * 60000;
+  }
+  // Asleep: put to bed by the person (pet.asleep, remembered) or fallen asleep by itself (quiet, never stored).
+  const sleeping = () => pet.asleep || quiet();
+  function wake() { pet.asleep = false; wokenAt = now(); }
+
+  function update(next) {
+    state = next;
+    if (state.at) skew = Date.parse(state.at) - Date.now();
+    const fresh = endedTurns().filter((t) => counted === null || t.ended > counted);
+    if (counted === null) counted = fresh.length ? fresh.map((t) => t.ended).sort().at(-1) : iso();
+    else if (fresh.length) { eat(fresh); hop(); cheer(); save(); }
+    paint();
+  }
+
+  // ---- Drawing it: classes on the screen choose the face; the line under the device says why.
+  function paint() {
+    const asleep = sleeping(), worried = waiting().length > 0 && has("state");
+    const screen = $("screen");
+    screen.classList.toggle("asleep", asleep);
+    screen.classList.toggle("night", asleep);
+    screen.classList.toggle("worried", worried);
+    screen.classList.toggle("hungry", pet.food < 25);
+    $("bang").hidden = !worried || asleep;
+    $("zz").hidden = !asleep;
+    $("sleep").textContent = asleep ? "Wake" : "Sleep";
+    meter("food", pet.food, ["hungry", "peckish", "full"]);
+    meter("joy", pet.joy, ["bored", "content", "happy"]);
+    meter("energy", pet.energy, ["sleepy", "awake", "bouncy"]);
+    const days = pet.born ? Math.floor((now() - Date.parse(pet.born)) / 86400000) : 0;
+    // The snacks are said once there are some: "0 snacks" would be the first thing a new Pebble says.
+    $("age").textContent = (days < 1 ? "Hatched today" : `${days} day${days === 1 ? "" : "s"} old`)
+      + (pet.snacks ? ` · ${pet.snacks} snack${pet.snacks === 1 ? "" : "s"} from your agents` : "");
+    mood(asleep, worried);
+    $("diary").replaceChildren(...pet.diary.slice(0, 6).map((d) => { const li = make("li"); li.append(make("time", "", clock(d.at)), make("span", "", d.text)); return li; }));
+    if (!pet.diary.length) $("diary").append(make("li", "", "Nothing yet today."));
+  }
+  function meter(key, value, words) {
+    $("m-" + key).style.width = value + "%";
+    $("w-" + key).textContent = words[value < 25 ? 0 : value < 70 ? 1 : 2];
+  }
+  function mood(asleep, worried) {
+    const [line, why] = worried && !asleep
+      ? ["Pebble is worried.", waiting().map((a) => `${who(a.id)} is waiting for you: answer in something's window.`).join(" ")]
+      : asleep ? ["Pebble is asleep.", pet.asleep ? "Wake it when you are back." : "Every agent has been quiet for half an hour."]
+      : pet.food < 25 ? ["Pebble is hungry.", "Feed it, or let an agent finish a turn."]
+      : pet.energy < 15 ? ["Pebble is tired.", "Let it sleep a little."]
+      : pet.joy < 25 ? ["Pebble is bored.", "Play with it."]
+      : ["Pebble is happy.", state.agents.some((a) => a.state === "working") ? "Your agents are at work: snacks are coming." : "All is calm."];
+    $("mood").replaceChildren(line, make("small", "", why));
+  }
+
+  // ---- Little motions: a hop when fed, a wiggle when played with, a blink every four to seven seconds.
+  function once(className) {
+    if (still.matches) return;
+    const mover = $("mover");
+    mover.classList.remove("hop", "wiggle"); void mover.getBoundingClientRect(); mover.classList.add(className);
+  }
+  const hop = () => once("hop");
+  function cheer() {
+    $("screen").classList.add("happy");
+    clearTimeout(cheered); cheered = setTimeout(() => $("screen").classList.remove("happy"), 1500);
+  }
+  function say(text) {
+    $("say").textContent = text; $("say").hidden = false;
+    clearTimeout(say.timer); say.timer = setTimeout(() => { $("say").hidden = true; }, 2200);
+  }
+  function crumbs() {
+    if (still.matches) return;
+    for (let i = 0; i < 6; i++) {
+      const c = make("i", "crumb");
+      c.style.left = 95 + Math.random() * 46 + "px"; c.style.top = 100 + Math.random() * 10 + "px"; c.style.animationDelay = i * 40 + "ms";
+      $("screen").append(c); setTimeout(() => c.remove(), 1000);
+    }
+  }
+  (function blink() {
+    setTimeout(() => {
+      if (!still.matches && !document.hidden) { $("screen").classList.add("blink"); setTimeout(() => $("screen").classList.remove("blink"), 140); }
+      blink();
+    }, 4000 + Math.random() * 3000);
+  })();
+  // When an agent waits, Pebble watches the cursor, as if asking you to look.
+  addEventListener("pointermove", (event) => {
+    if (!$("screen").classList.contains("worried") || still.matches) { $("pupils").style.transform = ""; return; }
+    const box = $("pebble").getBoundingClientRect();
+    const dx = event.clientX - (box.left + box.width / 2), dy = event.clientY - (box.top + box.height / 2);
+    const d = Math.hypot(dx, dy) || 1;
+    $("pupils").style.transform = `translate(${(dx / d) * 3.5}px, ${(dy / d) * 3.5}px)`;
+  });
+
+  // ---- The three buttons.
+  $("feed").onclick = () => {
+    age(now());
+    if (sleeping()) wake();
+    if (pet.food > 92) { say("I'm full!"); }
+    else { pet.food = clamp(pet.food + 22); pet.joy = clamp(pet.joy + 3); hop(); cheer(); crumbs(); say("Yum!"); note("You fed Pebble."); }
+    save(); paint();
+  };
+  $("play").onclick = () => {
+    age(now());
+    if (sleeping()) wake();
+    if (pet.energy < 12) { say("Too tired…"); }
+    else { pet.joy = clamp(pet.joy + 18); pet.energy = clamp(pet.energy - 10); pet.food = clamp(pet.food - 4); once("wiggle"); cheer(); say("Wheee!"); note("You played with Pebble."); }
+    save(); paint();
+  };
+  $("sleep").onclick = () => {
+    age(now());
+    // Asleep by itself or put to bed, this button wakes it; awake, it puts it to bed.
+    if (sleeping()) { wake(); note("You woke Pebble up."); }
+    else { pet.asleep = true; note("You put Pebble to bed."); }
+    save(); paint();
+  };
+
+  // ---- Memory: written whole, a moment after a change, and at once when it opens (what it missed is then kept even
+  // if the space closes right away); the meters also age once a minute while open.
+  let saveTimer = null;
+  function write() {
+    something.store.set("pebble", pet).catch(problem);
+    something.store.set("seen", counted).catch(problem);
+  }
+  function save() {
+    if (!has("store")) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(write, 600);
+  }
+  setInterval(() => { if (!document.hidden) { age(now()); paint(); save(); } }, 60000);
+
+  async function load() {
+    $("no-store").hidden = has("store");
+    $("no-state").hidden = has("state");
+    try {
+      let seen = null;
+      if (has("store")) {
+        const kept = (await something.store.get("")) || {};
+        if (kept.pebble) pet = { ...pet, ...kept.pebble, diary: kept.pebble.diary || [] };
+        seen = kept.seen || null;
+      }
+      state = await something.state();
+      if (state.at) skew = Date.parse(state.at) - Date.now();
+      if (!pet.born) { pet.born = iso(); note("Pebble hatched. Hello!"); }
+      age(now());
+      // What it missed while the space was closed: the turns that ended since the last one it ate.
+      if (seen) {
+        counted = seen;
+        const missed = endedTurns().filter((t) => t.ended > seen);
+        if (missed.length) { eat(missed); cheer(); say(`${missed.length} snack${missed.length === 1 ? "" : "s"} while you were away!`); }
+      } else counted = endedTurns().map((t) => t.ended).sort().at(-1) || iso();
+      paint();
+      if (has("store")) write();
+      problem(null);
+    } catch (error) { problem(error); }
+  }
+  something.on("change", update);
+  something.on("granted", load);
+  load();
+</script>
+</body>
+</html>

@@ -13,7 +13,7 @@ the person's and yours; the contract is in the guide.
 
 1. **Read the guide whole:** `something guide --print`. It is the contract; this skill does not replace it.
    `something guide` says where it is: the template and the templates (`templates/agents.html`, `project.html`,
-   `brief.html`) are next to it.
+   `brief.html`, `logbook.html`, `stack.html`, `pet.html`) are next to it.
 2. **Start from the closest template:** `something new <name> --from <template>`, or from the empty one with
    `something new <name>` (lowercase letters, digits and `-`; `--folder` for several files). Then make it the page
    the person asked for.

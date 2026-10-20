@@ -153,7 +153,7 @@ something                       start something, or bring it to the front
 something open <name>           open a space of ~/something/spaces; or import an export (a .something file), as a
                                 double click does
 something new <name> [--folder] make a space from the template (with --folder, <name>/index.html, which can hold more files)
-something new <name> --from <t> make a space from a template: agents, project, brief (one file; no --folder)
+something new <name> --from <t> make a space from a template: agents, project, brief, logbook, stack, pet (one file; no --folder)
 something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
 something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
                                 test a space as the app loads it, unseen, against an invented state
@@ -169,8 +169,8 @@ The window's sidebar lists your spaces by title; one click opens one, and the wi
 page of the folder without a declaration is listed as "not a space yet". A space's context menu has Show in Finder,
 Export… and Move to Trash… (its memory goes with it); File › Import Space… takes an export. A page elsewhere is not
 opened: copy it into `~/something/spaces` first. One space is open at a time, and it reloads when one of its files
-changes. Templates (File › Templates, or the sidebar) shows finished spaces to start from: My agents, Project watch
-and Daily brief; Use Template makes one of them yours (Project watch first asks which folder it follows), and
+changes. Templates (File › Templates, or the sidebar) shows finished spaces to start from: My agents, Project watch,
+Daily brief, Logbook, Stack and Pebble; Use Template makes one of them yours (Project watch first asks which folder it follows), and
 `something new <name> --from <template>` does the same from a terminal.
 
 ## What each agent allows, and why
