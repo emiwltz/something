@@ -144,9 +144,10 @@ import WebKit
         // Real clicks of the mouse, sent to the view of a window that is never shown: on a link of the page, and on a
         // link inside a shadow root the page made closed.
         let offscreen = Offscreen(window.web)
-        for x in [50.0, 400] {
+        // Each click is waited for before the next: on a busy runner a fixed 0.3 s lost the second one.
+        for (x, path) in [(50.0, "/real-click"), (400, "/real-shadow")] {
             try offscreen.click(x: x, y: 590)
-            await wait(0.3)
+            await wait(10) { ask.links.contains { $0.path == path } }
         }
         await wait(3)
         #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
