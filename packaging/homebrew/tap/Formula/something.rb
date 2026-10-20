@@ -7,7 +7,7 @@ class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"
   url "https://github.com/emiwltz/something/archive/refs/tags/v0.2.0.tar.gz"
-  sha256 "<64 hexadecimal digits: shasum -a 256 of the file at the url above, computed on release day>"
+  sha256 "88ba2489ded5c448b54730cde4c0ed6effb1006064d158fc0a407ead2c224f43"
   license "MIT"
   head "https://github.com/emiwltz/something.git", branch: "main"
 

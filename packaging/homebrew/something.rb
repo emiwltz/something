@@ -1,15 +1,13 @@
 # The Homebrew formula of something, kept here so that it changes with the code it builds. The CI of this repository
 # installs this very file on a fresh Mac (.github/workflows/tests.yml, job "brew"). The tap emiwltz/homebrew-tap gets
-# its twin, packaging/homebrew/tap/Formula/something.rb: the same steps, plus the tag's url and sha256.
+# its twin, packaging/homebrew/tap/Formula/something.rb: the same steps and release; the tap adds the bottles' block.
 class Something < Formula
   desc "Sees every coding agent on your Mac and gives your HTML pages a bridge to them"
   homepage "https://github.com/emiwltz/something"
-  # On release day these two lines are added here, before license: the tag's tarball, and the SHA-256 of that
-  # downloaded file (shasum -a 256 <file>). The tap's formula already names v0.2.0 and gets only its sha256; with
-  # another tag, its url and the version in its root_url comment change too. Until then this one builds main
-  # (brew install --HEAD):
-  #   url "https://github.com/emiwltz/something/archive/refs/tags/<the tag>.tar.gz"
-  #   sha256 "<64 hexadecimal digits>"
+  # The release v0.2.0 (the tap's twin names the same tarball and gets its bottles). At the next tag, both
+  # formulas take that tag's url and the SHA-256 of the downloaded file (shasum -a 256 <file>).
+  url "https://github.com/emiwltz/something/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "88ba2489ded5c448b54730cde4c0ed6effb1006064d158fc0a407ead2c224f43"
   license "MIT"
   head "https://github.com/emiwltz/something.git", branch: "main"
 
