@@ -216,6 +216,8 @@
   let logged = {};                                   // {id: {at, text}}: agent lines, kept across visits
   let seen = null;                                   // the previous visit's time, read once before the first render
   let painted = false;                               // lines new after the first paint type themselves in
+  let painting = null;                               // the day the page was last drawn on
+  let remembered = false;                            // memory was read: a later grant does not read it over the page
   const shown = new Set();                           // ids already on the page
 
   // ---- Agent lines, rebuilt from the state: each has a stable id, so a line is written once however often it is seen.
@@ -310,6 +312,7 @@
     tally();
     lines.forEach((l) => shown.add(l.id));
     painted = true;
+    painting = today;
   }
   // Seven columns ending today: twelve places each, one filled per line (notes first), then a "+" above.
   function tally() {
@@ -369,12 +372,9 @@
     })();
   }
 
-  // ---- Memory: notes and agent lines are written whole, a little after the last change.
-  const timers = {};
+  // ---- Memory: notes and agent lines are written whole, at once: a space may close a moment after a change.
   function keep(key, value) {
-    if (!has("store")) return;
-    clearTimeout(timers[key]);
-    timers[key] = setTimeout(() => something.store.set(key, value).catch(problem), 800);
+    if (has("store")) something.store.set(key, value).catch(problem);
   }
 
   function update(state) {
@@ -388,7 +388,9 @@
       logged = Object.fromEntries(Object.entries(logged).sort((a, b) => b[1].at.localeCompare(a[1].at)).slice(0, KEEP));
       keep("log", logged);
     }
-    render();
+    // A push with nothing new leaves the page as it is (a focused button stays focused, a line keeps typing in),
+    // unless the day turned.
+    if (fresh.length || painting !== dayKey(now())) render();
   }
 
   function rights() {
@@ -404,14 +406,16 @@
   async function load() {
     rights();
     try {
-      if (has("store")) {
+      if (has("store") && !remembered) {
         const kept = (await something.store.get("")) || {};
+        remembered = true;
         notes = Array.isArray(kept.notes) ? kept.notes : [];
         logged = kept.log && typeof kept.log === "object" ? kept.log : {};
         if (seen === null) seen = kept.seen || null;      // the previous visit, kept for this whole visit
       }
       const state = await something.state();
       update(state);
+      render();                                           // a right just granted or refused changes the page
       // What happened while the logbook was closed, said once in the index.
       const missed = Object.entries(logged).filter(([, l]) => seen && l.at > seen).length;
       $("missed").hidden = !missed;
@@ -431,6 +435,8 @@
     render();
   };
   $("search").oninput = () => render();
+  // The time beside "Write a note…" follows the clock, also while no agent stirs.
+  setInterval(() => { $("now").textContent = clock(now()); if (painting !== dayKey(now())) render(); }, 15000);
   something.on("change", update);
   something.on("granted", load);
   load();

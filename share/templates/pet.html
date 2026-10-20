@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Template "Pebble", for something (contract 1). A pocket pet that lives to the rhythm of the agents: every turn an
-     agent finishes is a snack, an agent waiting for the person worries it, and it falls asleep when every agent has
+     agent ends is a snack (one that failed or was stopped too: the agent still worked), an agent waiting for the person worries it, and it falls asleep when every agent has
      been quiet for half an hour. Its meters are kept in memory with the time, so it remembers between visits.
      Rights: "state" over every agent, "store". It never writes to an agent. -->
 <html lang="en">
@@ -71,10 +71,10 @@
   .screen.night { background: color-mix(in srgb, var(--screen) 55%, #1c1636); }
   .buttons { display: flex; gap: 22px; }
   .buttons button { width: 62px; height: 62px; border-radius: 50%; border: 0; font: 800 12px/1 var(--round); cursor: pointer;
-                    color: #5a1a33; background: var(--pink); box-shadow: 0 5px 0 var(--pink-edge); transition: transform .08s; }
-  .buttons button:nth-child(2) { background: var(--mint); color: var(--mint-ink); box-shadow: 0 5px 0 var(--mint-edge); }
-  .buttons button:nth-child(3) { background: var(--lilac); color: #3f2d6b; box-shadow: 0 5px 0 var(--lilac-edge); }
-  .buttons button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--pink-edge); }
+                    color: #5a1a33; background: var(--pink); --edge: var(--pink-edge); box-shadow: 0 5px 0 var(--edge); transition: transform .08s; }
+  .buttons button:nth-child(2) { background: var(--mint); color: var(--mint-ink); --edge: var(--mint-edge); }
+  .buttons button:nth-child(3) { background: var(--lilac); color: #3f2d6b; --edge: var(--lilac-edge); }
+  .buttons button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--edge); }
   .buttons button:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
   .brand { font: 800 10px/1 var(--round); letter-spacing: .3em; color: var(--soft); opacity: .7; }
 
@@ -247,12 +247,14 @@
 
   // ---- The agents: each ended turn is a snack, a waiting agent is a worry, a long quiet is bedtime.
   const endedTurns = () => state.threads.flatMap((t) => t.turns.filter((u) => u.ended).map((u) => ({ ...u, agent: t.agent })));
-  const who = (id) => { const a = state.agents.find((x) => x.id === id); return a ? label(a.kind) + (a.name ? ` “${a.name}”` : "") : "An agent"; };
+  const clip = (text, n) => text.length > n ? text.slice(0, n - 1).trimEnd() + "…" : text;
+  const who = (id) => { const a = state.agents.find((x) => x.id === id); return a ? label(a.kind) + (a.name ? ` “${clip(a.name, 40)}”` : "") : "An agent"; };
   function eat(fresh) {
     if (!fresh.length) return;
     pet.food = clamp(pet.food + 6 * fresh.length); pet.joy = clamp(pet.joy + 2 * fresh.length);
     pet.snacks += fresh.length;
-    fresh.forEach((t) => note(`${who(t.agent)} finished a turn. A snack!`, t.ended));
+    const what = { done: "finished a turn. A snack!", error: "hit an error. A snack anyway.", interrupted: "was stopped. A snack anyway." };
+    fresh.forEach((t) => note(`${who(t.agent)} ${what[t.state] || what.done}`, t.ended));
     counted = fresh.map((t) => t.ended).sort().at(-1);
   }
   const waiting = () => state.agents.filter((a) => a.state === "waiting");
@@ -303,7 +305,8 @@
   }
   function mood(asleep, worried) {
     const [line, why] = worried && !asleep
-      ? ["Pebble is worried.", waiting().map((a) => `${who(a.id)} is waiting for you: answer in something's window.`).join(" ")]
+      ? ["Pebble is worried.", (waiting().length === 1 ? `${who(waiting()[0].id)} is` : `${waiting().length} agents are`)
+          + " waiting for you: answer in something's window."]
       : asleep ? ["Pebble is asleep.", pet.asleep ? "Wake it when you are back." : "Every agent has been quiet for half an hour."]
       : pet.food < 25 ? ["Pebble is hungry.", "Feed it, or let an agent finish a turn."]
       : pet.energy < 15 ? ["Pebble is tired.", "Let it sleep a little."]
@@ -373,17 +376,13 @@
     save(); paint();
   };
 
-  // ---- Memory: written whole, a moment after a change, and at once when it opens (what it missed is then kept even
-  // if the space closes right away); the meters also age once a minute while open.
-  let saveTimer = null;
-  function write() {
-    something.store.set("pebble", pet).catch(problem);
-    something.store.set("seen", counted).catch(problem);
-  }
+  // ---- Memory: written whole, at once after each change (a space may close a moment later); the meters also age
+  // once a minute while open.
+  let remembered = false;      // memory was read: a later grant does not read it over what the page holds
   function save() {
     if (!has("store")) return;
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(write, 600);
+    something.store.set("pebble", pet).catch(problem);
+    something.store.set("seen", counted).catch(problem);
   }
   setInterval(() => { if (!document.hidden) { age(now()); paint(); save(); } }, 60000);
 
@@ -392,11 +391,12 @@
     $("no-state").hidden = has("state");
     try {
       let seen = null;
-      if (has("store")) {
+      if (has("store") && !remembered) {
         const kept = (await something.store.get("")) || {};
         if (kept.pebble) pet = { ...pet, ...kept.pebble, diary: kept.pebble.diary || [] };
         seen = kept.seen || null;
-      }
+        remembered = true;
+      } else if (counted !== null) seen = counted;       // granted again: what it ate is in the page already
       state = await something.state();
       if (state.at) skew = Date.parse(state.at) - Date.now();
       if (!pet.born) { pet.born = iso(); note("Pebble hatched. Hello!"); }
@@ -408,7 +408,7 @@
         if (missed.length) { eat(missed); cheer(); say(`${missed.length} snack${missed.length === 1 ? "" : "s"} while you were away!`); }
       } else counted = endedTurns().map((t) => t.ended).sort().at(-1) || iso();
       paint();
-      if (has("store")) write();
+      save();
       problem(null);
     } catch (error) { problem(error); }
   }

@@ -152,11 +152,13 @@ import WebKit
         guard case .check(let check) = Check.parse(["stack"]) else { throw SpaceError("These are not the words of a check.") }
         let runner = try CheckTests.runner(home), created = runner.created
         // The space runs in a frame of its own: a script added to every frame plays in the one that holds the game, as
-        // soon as its own script ran, and says the score in the console, which the check reports.
+        // soon as its own script ran, and says the score and the widths of the tower's floors, from the ground up, in the
+        // console, which the check reports.
         let play = """
             if (document.getElementById("score")) {
               for (let i = 0; i < 4; i++) dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " " }));
               console.log("score: " + document.getElementById("score").textContent + " " + document.getElementById("unit").textContent);
+              console.log("widths: " + tower.map((b) => Math.round(b.w)).join(","));
             }
             """
         runner.created = { web in
@@ -166,6 +168,9 @@ import WebKit
         let report = try await runner.run(check)
         #expect(report.problems.isEmpty, "\(report.problems)")
         #expect("\(report.console)".contains("score: 3 FLOORS"), "\(report.console)")
+        let said = try #require("\(report.console)".firstMatch(of: #/widths: ([0-9,]+)/#), "\(report.console)")
+        let widths = said.1.split(separator: ",").compactMap { Int($0) }
+        #expect(widths.count == 4 && zip(widths, widths.dropFirst()).allSatisfy { $0 > $1 }, "Each floor is narrower than the one below it: \(widths)")
     }
 
     /// Pebble remembers: opened with a memory two hours old and one turn ended since, its meters have aged, it ate that

@@ -59,7 +59,12 @@
   .foot { margin-top: 4vh; font: 500 1.6vh/1.5 var(--futura); color: var(--soft); max-width: 24em; }
   #problem { color: var(--red); }
 
-  @media (max-width: 700px) { .side { width: 70vw; } }
+  /* A narrow window: the caption moves up under the score, above the tower, smaller. */
+  @media (max-width: 700px) {
+    .side { top: 26vh; width: calc(100vw - 10vh); }
+    #call h2 { font-size: 4.6vh; margin-bottom: 1.2vh; }
+    .foot { margin-top: 2vh; }
+  }
 </style>
 </head>
 <body>
@@ -92,6 +97,9 @@
 
   function resize() {
     const ratio = window.devicePixelRatio || 1;
+    // A game in progress keeps its tower in the middle: everything on the board moves by half the change in width.
+    const shift = (innerWidth - W) / 2;
+    if (mode !== "ready" && W) [...tower, ...falling, ...rings, mover].forEach((b) => { if (b) b.x += shift; });
     W = innerWidth; H = innerHeight;
     BH = Math.round(Math.max(24, Math.min(46, H / 24)));
     canvas.width = W * ratio; canvas.height = H * ratio;
@@ -102,8 +110,8 @@
   }
   const baseWidth = () => Math.round(Math.min(W * 0.34, 440));
 
-  // Before the first game the tower is a still poster: eight floors on the ground block, slightly off, as if someone
-  // had played; the big numeral counts them, so the poster leads with a number that is true of what it shows.
+  // Before a game the tower is a still poster: eight floors on the ground block, slightly off, as if someone had
+  // played. The numeral is the score, and no floor is built yet: it reads 0, whatever the poster shows.
   function demo() {
     const w = baseWidth(), offsets = [0, 10, 18, 22, 36, 38, 50, 50, 58], cut = [0, 12, 20, 34, 56, 64, 82, 82, 96];
     tower = offsets.map((o, i) => ({ x: W / 2 - w / 2 + o, w: w - cut[i], colour: i }));
@@ -112,7 +120,7 @@
     const top = tower[tower.length - 1];
     hover = { x: top.x + w * 0.22, w: top.w, colour: 0 };
     mover = null; camera = 0;
-    floors = tower.length - 1;
+    floors = 0;
     score();
   }
 
