@@ -63,24 +63,25 @@ jobs:
       - run: brew test-bot --only-formulae
         if: github.event_name == 'pull_request'
 
-      - name: The poured bottle, as a person gets it
+      # Homebrew 7 no longer installs a bottle file by its path, so the bottle's app is checked inside the archive:
+      # sealed, answering, stamped with the runner's SDK. Pouring it as a person does is install.yml's job, once
+      # publish.yml has released the bottles.
+      - name: The bottle's app, sealed and stamped
         if: github.event_name == 'pull_request'
         run: |
           bottle=$(ls something--*.bottle.tar.gz)
-          brew uninstall --formula --force something || true
-          brew install "./$bottle"
-          app="$(brew --prefix)/opt/something/something.app"
-          # Homebrew's relocation must not have touched the bundle: the ad-hoc seal still holds.
+          dir=$(mktemp -d)
+          tar -xzf "$bottle" -C "$dir"
+          app=$(ls -d "$dir"/something/*/something.app)
           codesign --verify --deep --strict "$app"
-          something --version
-          # The SDK the program is stamped with decides its look: 26 or later gets macOS 26's design. A swift build
-          # whose stamp falls back to the deployment target (15.0) would look old on macOS 26 and 27.
+          "$app/Contents/MacOS/something" --version
           sdk=$(otool -l "$app/Contents/MacOS/something" | awk '/LC_BUILD_VERSION/{f=1} f&&$1=="sdk"{print $2; exit}')
           echo "::notice title=${{ matrix.os }}::$bottle, program stamped with SDK $sdk"
           if [[ "${{ matrix.os }}" == macos-26 && "${sdk%%.*}" -lt 26 ]]; then
             echo "::error::the arm64_tahoe bottle is stamped with SDK $sdk: it would not get macOS 26's design"
             exit 1
           fi
+          rm -rf "$dir"
 
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
