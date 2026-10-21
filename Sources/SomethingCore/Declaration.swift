@@ -30,13 +30,15 @@ public struct Declaration: Equatable, Sendable, EveryKey {
 public struct Kinds: Equatable, Sendable {
     public let launchable: Set<String>, readOnly: Set<String>
 
-    /// Contract 1's kinds alone (share/contract/frozen-v1.json's rightKinds), and omp, known but not launched.
+    /// The floor: contract 1's kinds (share/contract/frozen-v1.json's rightKinds), and omp, known but not launched.
+    static let floorLaunchable: Set<String> = ["claude", "codex", "opencode", "pi"], floorReadOnly: Set<String> = ["omp"]
+    /// The floor alone, with nothing registered.
     public static let contract1 = Kinds(launchable: [], readOnly: [])
 
-    /// The registered kinds added to contract 1's; a kind launchable in either is launchable.
+    /// The registered kinds, always added to the floor: the result holds both. A kind launchable in either is launchable.
     public init(launchable: Set<String>, readOnly: Set<String>) {
-        self.launchable = launchable.union(["claude", "codex", "opencode", "pi"])
-        self.readOnly = readOnly.union(["omp"]).subtracting(self.launchable)
+        self.launchable = launchable.union(Self.floorLaunchable)
+        self.readOnly = readOnly.union(Self.floorReadOnly).subtracting(self.launchable)
     }
 }
 
@@ -78,7 +80,7 @@ extension Declaration {
     }
 
     /// What the files of `space` declare, before what only the disk can tell.
-    static func declared(in space: Space, kinds: Kinds = .contract1) -> DeclarationReading {
+    static func declared(in space: Space, kinds: Kinds) -> DeclarationReading {
         let page = space.page.lastPathComponent
         var html: String?, pageError: String?
         do { html = String(decoding: try Data(contentsOf: space.page), as: UTF8.self) } catch { pageError = error.localizedDescription }
@@ -94,7 +96,7 @@ extension Declaration {
 
     /// Reads a declaration from the page's HTML and, for a folder space, the bytes of its something.json.
     /// `name` is the default title; `page` names the HTML file in problems.
-    static func read(html: String?, json: Data?, name: String, page: String, kinds: Kinds = .contract1) -> DeclarationReading {
+    static func read(html: String?, json: Data?, name: String, page: String, kinds: Kinds) -> DeclarationReading {
         var reading = DeclarationReading()
         let block = html.flatMap(Self.block(in:))
         let text: Data, file: String

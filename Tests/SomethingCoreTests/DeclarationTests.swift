@@ -65,19 +65,19 @@ import Testing
             "<script\n  id=something\n  type = \"application/json\"\n  data-note=\"x\" >",
         ] {
             let html = "<!doctype html>\n<script>let a = 1;</script>\n\(opening)\n\(json)\n</script >\n<p>Invented.</p>"
-            let reading = Declaration.read(html: html, json: nil, name: "notes", page: "notes.html")
+            let reading = Declaration.read(html: html, json: nil, name: "notes", page: "notes.html", kinds: .contract1)
             #expect(reading.declaration?.title == "Found", "\(opening)")
             #expect(reading.problems.isEmpty, "\(opening): \(reading.problems)")
         }
         // A script that would run as code is not a declaration, nor is another id.
         for html in [#"<script id="something">{"contract": 1}</script>"#, #"<script type="application/json" id="other">{"contract": 1}</script>"#] {
-            #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html").problems.map(\.code) == ["DECLARATION_MISSING"])
+            #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html", kinds: .contract1).problems.map(\.code) == ["DECLARATION_MISSING"])
         }
     }
 
     @Test func oddValuesAreWarnedAndReadAsTheDefault() {
         func codes(_ json: String) -> [String] {
-            Declaration.read(html: nil, json: Data(json.utf8), name: "x", page: "index.html").problems.map(\.code)
+            Declaration.read(html: nil, json: Data(json.utf8), name: "x", page: "index.html", kinds: .contract1).problems.map(\.code)
         }
         #expect(codes(#"[1]"#) == ["DECLARATION_UNREADABLE"])
         #expect(codes(#"{"contract": 1.0}"#) == ["CONTRACT_MISSING"])
@@ -89,7 +89,7 @@ import Testing
         #expect(codes(#"{"contract": 1, "agents": {"folders": ["~/code", "code/shop"]}}"#) == ["SCOPE_INVALID"])
         #expect(codes(#"{"contract": 1, "agents": {"folders": ["~", "~/code", "/Users/example/code"]}}"#).isEmpty)
         func message(_ json: String) -> String? {
-            Declaration.read(html: nil, json: Data(json.utf8), name: "x", page: "index.html").problems.first?.message
+            Declaration.read(html: nil, json: Data(json.utf8), name: "x", page: "index.html", kinds: .contract1).problems.first?.message
         }
         #expect(message(#"{"contract": 0}"#) == "contract is 0, not the whole number 1; it is read as 1.")
         #expect(message(#"{"contract": null}"#) == "contract is null, not the whole number 1; it is read as 1.")
@@ -97,7 +97,7 @@ import Testing
         #expect(codes(#"{"contract": 1, "rights": ["state:claude", "send:", "send:gemini", "send:codex", 3]}"#)
                 == ["UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT"])
         let reading = Declaration.read(html: nil, json: Data(#"{"contract": 1, "rights": ["send", "launch:pi", "send:omp"]}"#.utf8),
-                                       name: "x", page: "index.html")
+                                       name: "x", page: "index.html", kinds: .contract1)
         #expect(reading.declaration?.rights == ["send", "launch:pi"] && reading.unavailable == ["send:omp"])
     }
 
@@ -116,9 +116,9 @@ import Testing
 
     @Test func aBlockInsideAnHtmlCommentDoesNotCount() {
         let html = #"<!-- <script type="application/json" id="something">{"contract": 1, "title": "Old"}</script> -->"#
-        #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html").problems.map(\.code) == ["DECLARATION_MISSING"])
+        #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html", kinds: .contract1).problems.map(\.code) == ["DECLARATION_MISSING"])
         let after = html + #"<script type="application/json" id="something">{"contract": 1, "title": "New"}</script>"#
-        #expect(Declaration.read(html: after, json: nil, name: "notes", page: "notes.html").declaration?.title == "New")
+        #expect(Declaration.read(html: after, json: nil, name: "notes", page: "notes.html", kinds: .contract1).declaration?.title == "New")
     }
 
     @Test func aRelativeFolderIsSaidToBeRelative() throws {
