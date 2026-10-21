@@ -219,11 +219,11 @@ final class Watch {
     }
 
     /// The kinds whose conversations seen elsewhere can be continued here.
-    static let resumable: Set = ["claude", "codex"]
+    static let resumable = Set(AgentDescriptor.all.filter { $0.resume != .never }.map(\.kind))
 
-    /// Whether a conversation seen elsewhere can be continued here, and why not. Only one no process
-    /// holds: one still held would get a second writer. Codex refuses a second writer by itself, so a Codex
-    /// conversation whose holder is unknown is offered; Codex says so if its background service holds it.
+    /// Whether a conversation seen elsewhere can be continued here, and why not, as its kind's `resume` says: only one
+    /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
+    /// itself (Codex), also one whose holder is unknown.
     static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
         let name = Programs.name(of: kind)
         guard Watch.resumable.contains(kind) else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
@@ -231,7 +231,7 @@ final class Watch {
         case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
         case false?: return (true, nil)
         case nil:
-            return kind == "codex" ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
+            return AgentDescriptor.of(kind)?.resume == .unlessKnownHeld ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
         }
     }
 

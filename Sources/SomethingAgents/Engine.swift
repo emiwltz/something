@@ -179,15 +179,9 @@ public final class Engine {
         }
     }
 
-    /// The modes that ask no less than the default, from each program's --help (17 October 2026). Claude 2.1.296:
-    /// acceptEdits, auto, dontAsk and bypassPermissions lower asking; "default" is the name its channel reports
-    /// (its help's "manual" is never offered: ClaudeDriver.modes leaves it out). Codex 0.163: `--ask-for-approval` offers on-request and never; untrusted,
-    /// which older versions offered, asks more. OpenCode 2.0.20: a mode is an agent; build and plan ask as the
-    /// person's settings say, and only `--auto`, which something never passes, asks less. pi 1.0.0 takes no mode and
-    /// never asks: it is not listed, so any mode for pi (as for a kind not known here) counts as lowering asking, which
-    /// is safe, since the bridge refuses a mode pi does not take before any confirmation.
-    static let asksAsMuch: [String: Set<String>] = ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"],
-                                                    "opencode": ["build", "plan"]]
+    /// Per kind, the modes known to ask no less than the default (`AgentDescriptor.asksAsMuch`); a kind without any is
+    /// left out, so any mode for it counts as lowering asking.
+    static let asksAsMuch = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) })
 
     /// The details of an open request, or nil once it closed (the app then closes its window).
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }

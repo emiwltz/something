@@ -24,25 +24,20 @@ public struct Program: Equatable, Sendable {
 }
 
 public final class Programs {
-    /// The kinds something looks for. Any other kind is unknown here (nil, never false). omp's file is looked for,
-    /// to say whether it is installed; something does not launch it.
-    public static let kinds = ["claude", "codex", "opencode", "pi", "omp"]
+    /// The kinds something looks for (`AgentDescriptor.all`). Any other kind is unknown here (nil, never false).
+    public static let kinds = AgentDescriptor.all.map(\.kind)
 
-    /// What to type to install each kind something launches, in Terminal. pi's is its README's (1.0.0), and
-    /// `npm view` gives that package name.
-    public static let install = [
-        "claude": "brew install --cask claude-code",
-        "codex": "brew install --cask codex",
-        "opencode": "brew install opencode",
-        "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
-    ]
-    static let names = ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"]
+    /// What to type to install each kind something launches, in Terminal.
+    public static let install = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.install.map { (agent.kind, $0) } })
+    static let names = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.map { ($0.kind, $0.name) })
 
     /// The name a person knows the agent `kind` by, in every window and sentence; the kind itself when unknown.
     public static func name(of kind: String) -> String { names[kind] ?? kind }
-    /// Interpreters a program needs that its first line does not name: pi's own launcher is a shell script that
-    /// starts a node script.
-    static let runsOn = ["pi": "node"]
+    /// Interpreters a program needs that its first line does not name.
+    static let runsOn = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } })
+    /// The folders under the home where installers put programs, which a shell's PATH may lack: the shared ones, and
+    /// each agent's own where 0.2 put OpenCode's, so that the search order is unchanged.
+    static let homeFolders = [".local/bin", ".bun/bin"] + AgentDescriptor.all.flatMap(\.homeFolders) + [".volta/bin"]
     /// The PATH launchd gives an app opened from the Finder: no folder where agents are installed.
     static let launchdFolders: Set<String> = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
     static let shellTimeout: TimeInterval = 3
@@ -126,7 +121,7 @@ public final class Programs {
         if interactive || !given.fromTerminal {
             if let read = shell(interactive: interactive) { path = read } else { known = false }
         }
-        let fixed = systemFolders + [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"].map { "\(home)/\($0)" }
+        let fixed = systemFolders + Programs.homeFolders.map { "\(home)/\($0)" }
         return (Programs.unique(path + (interactive ? given.folders : []) + fixed), known)
     }
 
@@ -136,12 +131,13 @@ public final class Programs {
         return (folders, folders.contains { !Programs.launchdFolders.contains($0) })
     }
 
-    /// Folders a program's installer filled for it alone: the node pi's installer brings, which pi's launcher puts on
-    /// the PATH itself. It goes last on the child's PATH too, so that a pi started by `#!/usr/bin/env node` finds it.
+    /// Folders a program's installer filled for it alone (`AgentDescriptor.bundled`): the node pi's installer brings,
+    /// which pi's launcher puts on the PATH itself. It goes last on the child's PATH too, so that a pi started by
+    /// `#!/usr/bin/env node` finds it.
     func bundled(_ kind: String) -> [String] {
-        guard kind == "pi" else { return [] }
-        let piNode = "\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/pi-node/current/bin"
-        return FileManager.default.fileExists(atPath: piNode) ? [piNode] : []
+        guard let bundled = AgentDescriptor.of(kind)?.bundled else { return [] }
+        let folder = "\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/\(bundled)"
+        return FileManager.default.fileExists(atPath: folder) ? [folder] : []
     }
 
     /// The sentence for something the login shell's PATH was needed to find, and could not be read.
@@ -150,15 +146,15 @@ public final class Programs {
             + "whether \(what) is on this Mac. Quit something, then start it from Terminal by typing: something"
     }
 
-    /// The first executable file named `kind` in `folders`. The Claude desktop app's own copy is never used: it is
-    /// the app's, updated by the app, and may differ from the Claude Code the person installed.
+    /// The first executable file named `kind` in `folders`, but another app's own copy (`refusedCopies`: the Claude
+    /// desktop app's).
     func first(_ kind: String, in folders: [String]) -> String? {
         folders.lazy.map { "\($0)/\(kind)" }.first { path in
             var folder: ObjCBool = false
             guard FileManager.default.fileExists(atPath: path, isDirectory: &folder), !folder.boolValue,
                   FileManager.default.isExecutableFile(atPath: path) else { return false }
             let real = (path as NSString).resolvingSymlinksInPath
-            return !(kind == "claude" && (real.contains("/Application Support/Claude/") || real.contains("/Claude.app/")))
+            return !(AgentDescriptor.of(kind)?.refusedCopies ?? []).contains { real.contains($0) }
         }
     }
 
