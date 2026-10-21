@@ -225,13 +225,13 @@ final class Watch {
     /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
     /// itself (Codex), also one whose holder is unknown.
     static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
-        let name = Programs.name(of: kind)
-        guard Watch.resumable.contains(kind) else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
+        let name = Programs.name(of: kind), resume = AgentDescriptor.of(kind)?.resume ?? .never
+        guard resume != .never else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
         switch alive {
         case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
         case false?: return (true, nil)
         case nil:
-            return AgentDescriptor.of(kind)?.resume == .unlessKnownHeld ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
+            return resume == .unlessKnownHeld ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
         }
     }
 

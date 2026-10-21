@@ -22,13 +22,15 @@ import Testing
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {
-        // Only Claude refuses another app's copy, only pi has a bundled folder, only Codex continues an unknown holder.
+        // Only Claude refuses another app's copy (ProgramsTests shows both copies refused), only pi has a bundled
+        // folder, only Codex continues an unknown holder.
         #expect(AgentDescriptor.all.filter { !$0.refusedCopies.isEmpty }.map(\.kind) == ["claude"])
-        #expect(AgentDescriptor.claude.refusedCopies == ["/Application Support/Claude/", "/Claude.app/"])
-        #expect(AgentDescriptor.all.compactMap(\.bundled) == ["pi-node/current/bin"])
+        #expect(AgentDescriptor.all.filter { $0.bundled != nil }.map(\.kind) == ["pi"])
         #expect(AgentDescriptor.all.filter { $0.resume == .unlessKnownHeld }.map(\.kind) == ["codex"])
         #expect(Watch.continuable("codex", alive: nil, pid: nil).0)
         #expect(!Watch.continuable("claude", alive: nil, pid: nil).0)
         #expect(AgentDescriptor.of("other") == nil && Programs.name(of: "other") == "other")
+        // A process another agent's own reader claims is never also an `other` agent.
+        #expect(OtherReader.names.isDisjoint(with: AgentDescriptor.all.map(\.kind)))
     }
 }

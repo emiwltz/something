@@ -161,6 +161,17 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(programs.installed("claude") == false)
     }
 
+    @Test func theDesktopAppsBundleCopyIsSkippedForTheNextOnThePath() throws {
+        let mac = try FakeMac()
+        defer { mac.remove() }
+        let bundled = try mac.program("home/Applications/Claude.app/Contents/Resources/claude")
+        try FileManager.default.createDirectory(atPath: "\(mac.root)/term", withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: "\(mac.root)/term/claude", withDestinationPath: bundled)
+        let installed = try mac.program("installed/claude")
+        let programs = mac.programs(["PATH": "\(mac.root)/term:\(mac.root)/installed:/usr/bin", "SHELL": "/Users/example/no-shell"])
+        #expect(try programs.find("claude").path == installed)
+    }
+
     /// From the Finder, a shell that hangs is given up after 3 s and ended. What it would have found is then not
     /// known to be missing: installed says nil, and find says how to give something the PATH.
     @Test func aShellThatHangsIsLeftAfterThreeSeconds() throws {

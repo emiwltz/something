@@ -6,7 +6,7 @@ import SomethingCore
 
 final class OtherReader: Reader {
     let kind = "other"
-    static let names = AgentDescriptor.processOnly
+    static let names: Set<String> = ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"]
     var programs: Set<String> { OtherReader.names.union(Running.interpreters) }
 
     func owns(_ process: Running) -> Bool { process.runs(OtherReader.names) != nil }
