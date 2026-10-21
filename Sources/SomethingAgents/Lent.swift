@@ -47,13 +47,15 @@ public final class Lent: @unchecked Sendable, Equatable {
     let refused: (_ kind: String, _ because: String) -> Void
     /// Where `run` runs, then where its reply is handed back: off the main queue, then on it. A test runs both at once.
     let hop: (@escaping () -> Void, @escaping () -> Void) -> Void
+    /// Where the commands run, one at a time, in the order asked: each check loads a page in a WebKit process of its
+    /// own, and parallel calls would add one each beside the app and the agent, on the same snapshot file.
+    static let queue = DispatchQueue(label: "something.lent", qos: .userInitiated)
 
     public init(tools: [LentTool] = [.check], run: @escaping @Sendable ([String]) -> Reply,
                 refused: @escaping (_ kind: String, _ because: String) -> Void,
-                hop: @escaping (@escaping () -> Void, @escaping () -> Void) -> Void = { work, then in
-                    DispatchQueue.global(qos: .userInitiated).async { work(); DispatchQueue.main.async(execute: then) }
-                }) {
-        (self.tools, self.run, self.refused, self.hop) = (tools, run, refused, hop)
+                hop: ((@escaping () -> Void, @escaping () -> Void) -> Void)? = nil) {
+        (self.tools, self.run, self.refused) = (tools, run, refused)
+        self.hop = hop ?? { work, then in Lent.queue.async { work(); DispatchQueue.main.async(execute: then) } }
     }
 
     public static func == (left: Lent, right: Lent) -> Bool { left === right }
@@ -72,7 +74,8 @@ public final class Lent: @unchecked Sendable, Equatable {
     }
 
     /// Runs `program` (something's own) with the tool's words in `environment`, within `seconds`; the report is what it
-    /// printed. A status of 2 means it could not run: anything less is a report, problems included.
+    /// printed. A status of 2 means it could not run: anything less is a report, problems included. A program stopped
+    /// by a signal, or by the time limit, gave no report, and the reply says which.
     public static func program(_ program: String, environment: [String: String], seconds: TimeInterval = 90) -> @Sendable ([String]) -> Reply {
         { words in
             let process = Process(), output = Pipe()
@@ -81,15 +84,27 @@ public final class Lent: @unchecked Sendable, Equatable {
             process.environment = environment
             (process.standardOutput, process.standardError, process.standardInput) = (output, output, FileHandle.nullDevice)
             do { try process.run() } catch { return Reply(ok: false, text: "something could not run \(program): \(error.localizedDescription)") }
-            let timer = DispatchWorkItem { process.terminate() }
+            let late = Late(), timer = DispatchWorkItem { late.fired = true; process.terminate() }
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timer)
             let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             process.waitUntilExit()
             timer.cancel()
+            let command = "something " + words.joined(separator: " ")
             guard process.terminationReason == .exit else {
-                return Reply(ok: false, text: "something \(words.joined(separator: " ")) did not finish within \(Int(seconds)) seconds.")
+                return Reply(ok: false, text: late.fired ? "\(command) did not finish within \(Int(seconds)) seconds."
+                                                         : "\(command) stopped unexpectedly (signal \(process.terminationStatus)).")
             }
             return Reply(ok: process.terminationStatus < 2, text: text)
+        }
+    }
+
+    /// Whether the time limit stopped a program: set on the timer's queue, read once the program ended.
+    private final class Late: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored = false
+        var fired: Bool {
+            get { lock.withLock { stored } }
+            set { lock.withLock { stored = newValue } }
         }
     }
 

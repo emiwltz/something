@@ -2,10 +2,11 @@
 # declare, and on macos-latest.
 #
 # Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases,
-# make-app.sh assembles a signed something.app from a release build, whose something check of the template is clean,
-# and something and its tests build again with the runner's Command Line Tools alone, as on a Mac without Xcode. The
-# runner has a logged-in window server, so the window tests run too (the lockdown test, isolation, the bridge, links,
-# rights, reload) in a real WKWebView that is never shown. On a Mac with no window server those suites say so and are
+# make-app.sh assembles a signed something.app from a release build, whose something check of the template is clean
+# (also as the app runs it for its assistant, in a space of the spaces folder), and something and its tests build
+# again with the runner's Command Line Tools alone, as on a Mac without Xcode. The runner has a logged-in window
+# server, so the window tests run too (the lockdown test, isolation, the bridge, links, rights, reload) in a real
+# WKWebView that is never shown. On a Mac with no window server those suites say so and are
 # skipped; on CI (CI is set) they always run, so a runner without one turns the run red instead of skipping the
 # lockdown test.
 #
@@ -63,6 +64,19 @@ jobs:
             > "$RUNNER_TEMP/check.json" 2> "$RUNNER_TEMP/check.err"
           test ! -s "$RUNNER_TEMP/check.err"
           python3 -c 'import json, sys; r = json.load(open(sys.argv[1])); assert r["problems"] == [] and open(r["snapshot"], "rb").read(4) == b"\x89PNG", r' "$RUNNER_TEMP/check.json"
+      - name: The check the app lends its assistant, through the app's own executable
+        # What Lent.program runs for something_check: the .app's executable, `check <name>`, in an environment like
+        # the one launchd gives the app (a short PATH, no terminal). A space of the spaces folder has its snapshot in
+        # .check there, where the agent reads it without asking.
+        run: |
+          prefix="$RUNNER_TEMP/prefix" home="$RUNNER_TEMP/lent-home"
+          mkdir -p "$home/something/spaces"
+          cp "$prefix/something.app/Contents/Resources/share/template.html" "$home/something/spaces/board.html"
+          env -i HOME="$home" PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR="$TMPDIR" \
+            "$prefix/something.app/Contents/MacOS/something" check board > "$RUNNER_TEMP/lent.out" 2>&1 || { cat "$RUNNER_TEMP/lent.out"; exit 1; }
+          cat "$RUNNER_TEMP/lent.out"
+          grep -q "0 errors, 0 warnings." "$RUNNER_TEMP/lent.out"
+          test "$(head -c 4 "$home/something/spaces/.check/board.png" | od -An -tx1 | tr -d ' \n')" = 89504e47
       - name: swift build --build-tests with the Command Line Tools alone
         # In a build folder of its own: the suite's was made with Xcode's toolchain. --build-tests compiles the test
         # targets and Swift Testing's macros, which Package.swift points at with the Command Line Tools.

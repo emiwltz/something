@@ -184,7 +184,7 @@ import WebKit
     }
 
     /// Codex builds, with the check something lends it (trial T-1). One that cannot take it is no longer offered, with
-    /// the reason in its menu entry; alone, it leaves the person with the notice. Looking again offers it again (it
+    /// the reason under its menu entry; alone, it leaves the person with the notice. Looking again offers it again (it
     /// may have been updated). Claude Code, once found, is chosen.
     @Test func aCodexThatCannotTakeTheCheckIsNotOffered() async throws {
         let (home, model) = try assistant(["codex"])
@@ -193,16 +193,23 @@ import WebKit
         await look(model)
         #expect(model.kind == "codex" && model.entries.map(\.title) == ["Codex"] && model.entries.allSatisfy(\.enabled))
         #expect(model.lent?.tools.map(\.name) == ["something_check"])
-        model.cannotBuild("codex", "this Codex (0.150.2) is older than 0.163.0; update it")
+        let old = "This Codex (0.150.2) is too old to build spaces: 0.163.0 or later is needed. Update Codex, then look for agents again."
+        // The message that never reached it is back in the composer, without its context line.
+        model.draft = "Make an invented board."
+        model.send()
+        #expect(model.draft.isEmpty)
+        model.cannotBuild("codex", old)
+        model.stop()
+        #expect(model.draft == "Make an invented board.")
         #expect(model.kind == nil && model.noAgent)
-        #expect(model.notice == "Codex can't build spaces: this Codex (0.150.2) is older than 0.163.0; update it.")
-        #expect(model.entries.map(\.title) == ["Codex · can't build spaces: this Codex (0.150.2) is older than 0.163.0; update it"])
+        #expect(model.notice == old)
+        #expect(model.entries.map(\.title) == ["Codex · can't build spaces"] && model.entries.map(\.note) == [old])
         #expect(model.entries.allSatisfy { !$0.enabled })
         model.choose("codex")
         #expect(model.kind == nil)
         model.lookAgain()
         #expect(model.kind == "codex", "looked for again, it is offered again")
-        model.cannotBuild("codex", "this Codex refuses the check something lends it")
+        model.cannotBuild("codex", "This Codex did not accept something's check tool, so it can't build spaces.")
         try install("claude", in: home.root.appendingPathComponent("bin"))
         await look(model)
         #expect(model.kind == "claude" && !model.noAgent && model.name == "Claude Code")

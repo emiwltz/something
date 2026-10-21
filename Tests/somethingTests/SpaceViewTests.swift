@@ -144,10 +144,10 @@ import WebKit
         // Real clicks of the mouse, sent to the view of a window that is never shown: on a link of the page, and on a
         // link inside a shadow root the page made closed.
         let offscreen = Offscreen(window.web)
-        // Each click is waited for before the next: on a busy runner a fixed 0.3 s lost the second one.
+        // Each click is sent until the page saw it, then its link waited for: a busy runner loses some.
         for (x, path) in [(50.0, "/real-click"), (400, "/real-shadow")] {
-            try offscreen.click(x: x, y: 590)
-            await wait(10) { ask.links.contains { $0.path == path } }
+            #expect(try await offscreen.click(x: x, y: 590, on: window), "the page never saw the click on \(path)")
+            await wait(30) { ask.links.contains { $0.path == path } }
         }
         await wait(3)
         #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
@@ -185,13 +185,13 @@ import WebKit
         window.open()
         try await ready(window)
         let offscreen = Offscreen(window.web)
-        // Waited for, not timed: on a busy runner a click can take more than 3 s to reach the link window.
-        try offscreen.click(x: 200, y: 320)
-        await wait(15, until: { !ask.links.isEmpty })
+        // Sent until the page saw it, then waited for, not timed: a busy runner loses clicks, or takes seconds.
+        #expect(try await offscreen.click(x: 200, y: 320, on: window), "the page never saw the click")
+        await wait(30, until: { !ask.links.isEmpty })
         await wait(1)
         #expect(ask.links.map(\.path) == ["/scripted"])
         #expect(listener.hits.isEmpty, "reached: \(listener.hits)")
-        try offscreen.click(x: 650, y: 320)
+        #expect(try await offscreen.click(x: 650, y: 320, on: window), "the page never saw the second click")
         await wait(15, until: { !listener.hits.isEmpty })
         // Intermittent: WebKit opens that connection ahead of the click's handling, and a busy runner may not get to it.
         withKnownIssue("WebKit connects to the server of a new-window link in a closed shadow root of the HTML", isIntermittent: true) {

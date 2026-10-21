@@ -312,6 +312,19 @@ struct GalleryTests {
         none.engine.lookAgain()
         #expect(await wait(until: { none.noAgent }))
         try await draw(none, "assistant-no-agent" + suffix, fixture)
+        // A Codex alone, too old to take the check something lends it.
+        let alone = Home(prefix: "something-gallery-"), bin = alone.root.appendingPathComponent("bin")
+        defer { alone.remove() }
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try "#!/bin/sh\n".write(to: bin.appendingPathComponent("codex"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bin.appendingPathComponent("codex").path)
+        let old = AssistantModel(engine: alone.engine(), places: fixture.places)
+        old.place = model.place
+        old.engine.changed = { old.refresh() }
+        old.engine.lookAgain()
+        #expect(await wait(until: { old.installed["codex"] == true }))
+        old.cannotBuild("codex", "This Codex (0.150.2) is too old to build spaces: 0.163.0 or later is needed. Update Codex, then look for agents again.")
+        try await draw(old, "assistant-cannot-build" + suffix, fixture)
         try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
     }
 

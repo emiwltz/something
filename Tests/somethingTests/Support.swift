@@ -178,6 +178,23 @@ struct Offscreen {
             type == .leftMouseDown ? view.mouseDown(with: event) : view.mouseUp(with: event)
         }
     }
+
+    /// A real click at `x`, `y` on the page of `space`, sent again until the page has seen it, within `seconds`; whether
+    /// it did. A busy runner can lose a press or a release on its way to WebKit's process; a click the page saw is never
+    /// sent again. The counter listens on the window in the capture phase, as something's link guard does (in its own
+    /// world, before it): it sees every click the guard sees, one inside a closed shadow root included.
+    func click(x: Double, y: Double, on space: SpaceView, seconds: Double = 60) async throws -> Bool {
+        let seen = "return window.__clicks ?? (addEventListener('click', () => window.__clicks++, true), window.__clicks = 0)"
+        let before = try await run(space, seen) as? Int ?? 0, end = Date().addingTimeInterval(seconds)
+        while Date() < end {
+            try click(x: x, y: y)
+            for _ in 0..<50 {
+                if try await run(space, seen) as? Int ?? 0 > before { return true }
+                await wait(0.1)
+            }
+        }
+        return false
+    }
 }
 
 /// Runs `work`, which waits for a child process, on a thread of its own, and returns what it returns or throws. The

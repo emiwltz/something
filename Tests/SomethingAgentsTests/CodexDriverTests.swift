@@ -161,28 +161,64 @@ import SomethingCore
         #expect(Self.params(space, "thread/start")?["dynamicTools"] == nil)
     }
 
-    /// A Codex that refuses the tools (a later version changed its experimental channel) ends the launch with a sentence,
-    /// and the app is told it cannot build; so is one older than the first that took them, which would ignore them
-    /// without a word. Any other refusal is said as before.
+    /// A Codex that refuses to start a thread lent the tools ends the launch with a sentence, and the app is told it
+    /// cannot build, whatever words it used: a later Codex may name the tools otherwise. So is one older than the first
+    /// that took them, which would ignore them without a word. Without the tools, a refusal is said as before.
     @Test func aCodexThatCannotTakeTheCheckIsNoBuilder() throws {
-        let refused = Replay.codex(assistant: true)
-        _ = try refused.agent.send("Make a board.", when: "next")
-        refused.feed(["id": 1, "result": ["userAgent": "something/0.170.0 (Mac OS 27.0.0; arm64)"]])
-        refused.feed(["id": 2, "error": ["code": -32600, "message": "thread/start.dynamicTools requires experimentalApi capability"]])
-        #expect(refused.quit && refused.fold.agent.alive == false)
-        #expect(refused.fold.agent.error?.message == "Codex can't build spaces: this Codex refuses the check something lends it. It said: “thread/start.dynamicTools requires experimentalApi capability”. Spaces can still launch it. The message sent to it went nowhere.")
-        #expect(refused.refusals == ["codex: this Codex refuses the check something lends it"])
+        let said = "This Codex did not accept something's check tool, so it can't build spaces. It said: "
+        for words in ["thread/start.dynamicTools requires experimentalApi capability", "Invented: unknown field tools"] {
+            let refused = Replay.codex(assistant: true)
+            _ = try refused.agent.send("Make a board.", when: "next")
+            refused.feed(["id": 1, "result": ["userAgent": "something/0.170.0 (Mac OS 27.0.0; arm64)"]])
+            refused.feed(["id": 2, "error": ["code": -32600, "message": words]])
+            #expect(refused.quit && refused.fold.agent.alive == false)
+            #expect(refused.fold.agent.error?.message == said + "“\(words)”. The message sent to it went nowhere.")
+            #expect(refused.refusals == ["codex: " + said + "“\(words)”."])
+        }
 
         let old = Replay.codex(assistant: true)
         old.feed(["id": 1, "result": ["userAgent": "something/0.150.2 (Mac OS 27.0.0; arm64) unknown (something; 1.0)"]])
         #expect(old.lines().compactMap { $0["method"] as? String } == ["initialize"], "no thread is started")
-        #expect(old.quit && old.refusals == ["codex: this Codex (0.150.2) is older than 0.163.0; update it"])
+        #expect(old.quit && old.refusals == ["codex: This Codex (0.150.2) is too old to build spaces: 0.163.0 or later is needed. Update Codex, then look for agents again."])
 
-        let other = Replay.codex(assistant: true)
-        other.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
-        other.feed(["id": 2, "error": ["code": -32600, "message": "Invented: no such folder"]])
-        #expect(other.refusals.isEmpty)
-        #expect(other.fold.agent.error?.message == "Codex refused to start the conversation: Invented: no such folder")
+        let space = Replay.codex()
+        space.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        space.feed(["id": 2, "error": ["code": -32600, "message": "Invented: no such folder"]])
+        #expect(space.refusals.isEmpty)
+        #expect(space.fold.agent.error?.message == "Codex refused to start the conversation: Invented: no such folder")
+    }
+
+    /// A Codex lent the tools that asks to run `something check` outside its sandbox before it ever called the lent
+    /// one did not get the tool: it would ask at every check, so the launch ends and the app is told. Once it used the
+    /// lent check, a check it runs in the shell is its own choice, and asks as any command does.
+    @Test func aCodexThatChecksInTheShellIsNoBuilder() throws {
+        func asking(after lentCall: Bool) -> Replay {
+            let replay = Replay.codex(assistant: true)
+            replay.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+            replay.feed(["id": 2, "result": ["thread": ["id": Self.thread], "model": "fake-model", "approvalPolicy": "on-request", "reasoningEffort": NSNull()]])
+            if lentCall {
+                replay.feed(["id": 5, "method": "item/tool/call", "params": ["threadId": Self.thread, "turnId": Self.turn, "callId": "call_1",
+                                                                             "tool": "something_check", "arguments": ["name": "board"]]])
+            }
+            replay.feed(["id": 6, "method": "item/commandExecution/requestApproval",
+                         "params": ["threadId": Self.thread, "turnId": Self.turn, "itemId": "call_2", "command": "/bin/zsh -lc 'something check board'"]])
+            return replay
+        }
+        let first = asking(after: false)
+        #expect(first.quit && first.fold.requests.isEmpty)
+        #expect(first.refusals == ["codex: This Codex did not use something's check tool, so it can't build spaces."])
+        let later = asking(after: true)
+        #expect(!later.quit && later.refusals.isEmpty && later.fold.requests.count == 1)
+    }
+
+    /// A lent tool called with wrong arguments is shown as that, not as its raw arguments.
+    @Test func aLentToolWithWrongArgumentsSaysSo() {
+        let replay = Replay.codex(assistant: true)
+        replay.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        replay.feed(["id": 2, "result": ["thread": ["id": Self.thread], "model": "fake-model", "approvalPolicy": "on-request", "reasoningEffort": NSNull()]])
+        replay.feed(["method": "item/completed", "params": ["threadId": Self.thread, "turnId": Self.turn, "item": [
+            "type": "dynamicToolCall", "id": "call_1", "tool": "something_check", "arguments": ["name": "../board"], "status": "failed"]]])
+        #expect(replay.items.first { $0.kind == "tool" }?.text == "something_check (wrong arguments)")
     }
 
     /// Wrong words run nothing: a tool something does not lend, a name that is a path, a right that is a flag. The

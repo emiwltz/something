@@ -60,8 +60,9 @@ For Claude Code, "without asking" is exactly: edits and writes in `~/something/s
 `something new`, `check`, `open` and `guide`. For Codex it is its own sandbox, "workspace-write": it may change files
 and run commands in `~/something/spaces` (and its temporary folders), without the network; what the sandbox blocks
 asks you. Its sandbox cannot load a page, so something lends it one tool, `something_check`: something runs
-`something check` for it, outside the sandbox, and gives it the report (a Codex too old to take the tool is not
-offered, and its menu entry says why). For OpenCode nothing is added: it asks as your own OpenCode settings say.
+`something check` for it, outside the sandbox, one check at a time, and gives it the report (a Codex that does not
+take the tool, too old for instance, is not offered until you choose Look for Agents Again, and its menu entry says
+why). For OpenCode nothing is added: it asks as your own OpenCode settings say.
 pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask Before Every
 Change", in the bar's agent menu, turns the exception off from the next conversation. No space can see what you say
 to your assistant, or write to it.

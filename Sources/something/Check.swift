@@ -137,7 +137,8 @@ final class CheckRunner {
         }
         guard windowServer else {
             report.problems.append(Problem("NO_WINDOW_SERVER", "This session has no window server (an agent's sandbox has none), "
-                                           + "so the page was not loaded; the declaration and the files were checked."))
+                                           + "so the page was not loaded; the declaration and the files were checked. "
+                                           + "If something lends you the tool something_check, check with it instead."))
             return report
         }
         let memory = output.appendingPathComponent("memory-\(UUID().uuidString)")

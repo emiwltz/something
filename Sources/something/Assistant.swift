@@ -175,7 +175,7 @@ import SomethingCore
     /// What the capsule says when no builder is offered.
     var notice: String {
         let found = AssistantModel.builders.filter { installed[$0] == true }
-        if found.count == 1, let because = refused[found[0]] { return "\(Programs.name(of: found[0])) can't build spaces: \(because)." }
+        if found.count == 1, let because = refused[found[0]] { return because }
         return found.isEmpty ? "No coding agent found." : "\(found.map(Programs.name).joined(separator: ", ")) can't build spaces."
     }
 
@@ -265,9 +265,9 @@ import SomethingCore
     /// The builders found, as the agent menus list them.
     var entries: [Entry] {
         AssistantModel.builders.filter { installed[$0] == true }.map { kind in
-            let because = refused[kind].map { "can't build spaces: \($0)" } ?? (kind == "pi" ? "never asks before acting" : nil)
+            let because = refused[kind] != nil ? "can't build spaces" : kind == "pi" ? "never asks before acting" : nil
             let title = [Programs.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
-            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: notes[kind])
+            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind])
         }
     }
 
@@ -347,9 +347,12 @@ import SomethingCore
         engine.lookAgain()
     }
 
-    /// `kind` cannot take what something lends it, `because`: it is no longer offered, and another builder is chosen.
+    /// `kind` cannot take what something lends it, as the sentence `because` says: it is no longer offered, another
+    /// builder is chosen, and a message that never reached it (no thread was started) is back in the composer,
+    /// without the context line, which goes with every message.
     func cannotBuild(_ kind: String, _ because: String) {
         refused[kind] = because
+        if draft.isEmpty, agent?.thread == nil, let last, let line = last.firstIndex(of: "\n") { draft = String(last[last.index(after: line)...]) }
         refresh()
     }
 
@@ -468,12 +471,13 @@ import SomethingCore
         let name = item.tool?.name ?? "tool", file = (item.text as NSString).lastPathComponent
         let after = item.decision?.outcome == "denied" ? " · denied" : item.tool?.status == "failed" ? " · failed" : ""
         if item.text.hasPrefix("something guide") { return .tool(symbol: "book", words: "Read guide" + after, command: nil) }
-        // A tool something lent (something_check): its driver gives the command something ran for it.
-        if name.hasPrefix("something_") { return .tool(symbol: "terminal", words: after, command: item.text) }
+        // A command, or a tool something lent (something_check), for which the driver gives the command something ran.
+        if name.hasPrefix("something_") || ["bash", "commandexecution", "execute"].contains(name.lowercased()) {
+            return .tool(symbol: "terminal", words: after, command: item.text)
+        }
         switch name.lowercased() {
         case "edit", "write", "multiedit", "notebookedit", "filechange": return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
         case "read": return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)
-        case "bash", "commandexecution", "execute": return .tool(symbol: "terminal", words: after, command: item.text)
         default: return .tool(symbol: "wrench.and.screwdriver", words: "Used \(name)" + after, command: nil)
         }
     }
