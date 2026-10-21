@@ -72,6 +72,8 @@ public final class ACPDriver: Driver {
     func take(_ environment: [String: String]) {
         (database, recent) = (ACPDriver.database(environment), ACPDriver.recentModel(environment))
     }
+    /// Whether a model was asked for, by the launch or later: then OpenCode's own last model is not something's to pick.
+    private var modelAsked: Bool
     /// The model in use and those offered, as OpenCode last listed them.
     private var model: String?
     private var models: [String] = []
@@ -93,6 +95,7 @@ public final class ACPDriver: Driver {
         self.write = write
         self.emit = emit
         self.now = now
+        modelAsked = launch.model != nil
         // The mode first, since an agent may bring its own model; the effort last, since the model decides the levels.
         settings = [("mode", launch.mode), ("model", launch.model), ("effort", launch.effort)].compactMap { key, value in value.map { (key, $0) } }
     }
@@ -146,6 +149,7 @@ public final class ACPDriver: Driver {
     /// the state shows what it took (it may keep another model when its catalog was not ready). A turn
     /// that runs keeps the values it started with.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
+        if model != nil { modelAsked = true }
         settings += [("mode", mode), ("model", model), ("effort", effort)].compactMap { key, value in value.map { (key, $0) } }
         try nextSetting()
         return prompting ? "next-turn" : "now"
@@ -164,8 +168,9 @@ public final class ACPDriver: Driver {
         asks[request] = nil
         let allowed = answer == .once && option != nil
         if answer == .once, !allowed { emit(.error(AgentError(code: "AGENT_ERROR", message: ACPDriver.noAllowOnce))) }
-        if !allowed, let about = ask.prompt.request.about ?? ask.prompt.request.tool {
-            halted = "OpenCode stopped its turn because its request “\(Launched.short(about))” was refused. Tell it what to do instead in a new message."
+        if !allowed {
+            let about = (ask.prompt.request.about ?? ask.prompt.request.tool).map { "its request “\(Launched.short($0))”" } ?? "one of its requests"
+            halted = "OpenCode stopped its turn because \(about) was refused. Tell it what to do instead in a new message."
         }
         if let tool = ask.tool { decide(tool, Decision(by: "person", outcome: allowed ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
@@ -228,7 +233,7 @@ public final class ACPDriver: Driver {
             emit(.started(pid: nil, thread: session))
             read(result["configOptions"])
             // Before the effort, which depends on the model; a resumed conversation keeps its own model.
-            if launch.model == nil, !launch.resume, let recent, recent != model, models.contains(recent) {
+            if !modelAsked, !launch.resume, let recent, recent != model, models.contains(recent) {
                 settings.insert(("model", recent), at: settings.firstIndex { $0.key == "effort" } ?? settings.endIndex)
             }
             try? flush()
@@ -248,7 +253,7 @@ public final class ACPDriver: Driver {
             let (cancelled, halted) = (cancelAsked, self.halted)
             (cancelAsked, self.halted) = (false, nil)
             if error != nil {
-                return emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: ACPDriver.failure(error, words, text, model: model)))))
+                return emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: ACPDriver.failure(error, words, text, model: model, picked: !modelAsked && !launch.resume)))))
             }
             switch result["stopReason"] as? String {
             case "cancelled" where cancelled: emit(.turnEnded(.interrupted))
@@ -385,14 +390,17 @@ public final class ACPDriver: Driver {
     }
 
     /// A failed turn in words a newcomer can act on; OpenCode's own words otherwise. A refused sign-in names the
-    /// `model` in use and its provider: OpenCode may be signed in to others, so "sign in" alone would mislead.
-    static func failure(_ error: [String: Any]?, _ words: String, _ text: String, model: String?) -> String {
+    /// `model` in use and its provider: OpenCode may be signed in to others, so "sign in" alone would mislead. Only when
+    /// something `picked` the model (OpenCode's last one) does choosing another in OpenCode change it.
+    static func failure(_ error: [String: Any]?, _ words: String, _ text: String, model: String?, picked: Bool) -> String {
         guard error?["code"] as? Int == -32000 || words.lowercased().contains("authentication required") else {
             return "OpenCode did not finish the message “\(Launched.short(text))”: \(words)"
         }
-        let provider = model.flatMap { $0.contains("/") ? $0.split(separator: "/").first.map { " (\($0))" } : nil } ?? ""
-        let what = model.map { "OpenCode is not signed in to the provider of its model \($0)\(provider)" } ?? "OpenCode is not signed in to its model's provider"
-        return "\(what). Sign in to it in OpenCode (`opencode auth login` in a terminal) and send the message again, or use another model once in OpenCode and start a new conversation: something takes the model you used last there."
+        let provider = model.flatMap { $0.contains("/") ? $0.split(separator: "/").first.map(String.init) : nil } ?? "its provider"
+        let what = model.map { "OpenCode's model \($0) needs a sign-in to \(provider), which OpenCode does not have." }
+            ?? "OpenCode's model needs a sign-in to its provider, which OpenCode does not have."
+        let other = picked ? " Or use another model once in OpenCode and start a new conversation: something takes the model you used last there." : ""
+        return "\(what) Sign in to \(provider) in OpenCode (`opencode auth login` in a terminal) and send the message again.\(other)"
     }
 
     /// OpenCode's last-used model, "provider/model", from `recent` in its state file model.json

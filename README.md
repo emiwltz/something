@@ -70,7 +70,7 @@ file whose first line you removed is yours: something leaves it alone.
 
 something reads, and never writes, each agent's own files: `~/.claude` or `$CLAUDE_CONFIG_DIR` (Claude Code), `~/.codex`
 or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), OpenCode's database (in
-`~/.local/share/opencode`, or `$OPENCODE_DB`) and its last model (`model.json` in `~/.local/state/opencode`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
+`~/.local/share/opencode`, or `$OPENCODE_DB`) and its last model (`model.json` in `~/.local/state/opencode`, or `$XDG_STATE_HOME/opencode`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
 `$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). It opens them read-only and takes only what a space is
 shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.

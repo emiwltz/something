@@ -213,10 +213,12 @@ import SomethingCore
         _ = try replay.agent.send("Hello.", when: "next")
         replay.feed(["jsonrpc": "2.0", "id": 3, "error": ["code": -32000, "message": "Authentication required: provider authentication required"]])
         #expect(replay.fold.turns.map(\.state) == ["error"])
-        #expect(replay.fold.agent.error?.message == "OpenCode is not signed in to the provider of its model fake/fake-model (fake). "
-            + "Sign in to it in OpenCode (`opencode auth login` in a terminal) and send the message again, or use another model once in OpenCode "
+        #expect(replay.fold.agent.error?.message == "OpenCode's model fake/fake-model needs a sign-in to fake, which OpenCode does not have. "
+            + "Sign in to fake in OpenCode (`opencode auth login` in a terminal) and send the message again. Or use another model once in OpenCode "
             + "and start a new conversation: something takes the model you used last there.")
-        #expect(ACPDriver.failure(["code": -32000], "Authentication required", "Hello.", model: nil).hasPrefix("OpenCode is not signed in to its model's provider. Sign in"))
+        #expect(ACPDriver.failure(["code": -32000], "Authentication required", "Hello.", model: nil, picked: false)
+            == "OpenCode's model needs a sign-in to its provider, which OpenCode does not have. Sign in to its provider in OpenCode (`opencode auth login` in a terminal) and send the message again.",
+            "a model a space named stays: choosing another in OpenCode would change nothing")
         _ = try replay.agent.send("Again.", when: "next")
         replay.feed(["jsonrpc": "2.0", "id": 4, "result": ["stopReason": "max_tokens"]])
         #expect(replay.fold.turns.map(\.state) == ["error", "error"])
@@ -277,6 +279,12 @@ import SomethingCore
         #expect(try opened(Replay.opencode(), recent: nil).map { $0["method"] as? String } == ["session/prompt"])
         let named = try opened(Replay.opencode(model: "fake/fake-model"), recent: "fake/other-model")
         #expect(named.compactMap { ($0["params"] as? [String: Any])?["value"] as? String } == ["fake/fake-model"], "the model asked for wins")
+        let replay = Replay.opencode()
+        _ = try replay.agent.driver.set(model: "fake/fake-model", mode: nil, effort: "high")
+        _ = try opened(replay, recent: "fake/other-model")
+        replay.feed(["jsonrpc": "2.0", "id": 3, "result": ["configOptions": [["id": "model", "category": "model", "currentValue": "fake/fake-model"]]]])
+        let set = replay.lines().filter { $0["method"] as? String == "session/set_config_option" }
+        #expect(set.compactMap { ($0["params"] as? [String: Any])?["value"] as? String } == ["fake/fake-model", "high"], "a model set before the session wins")
         let resumed = try opened(Replay.opencode(resume: Self.session), recent: "fake/other-model")
         #expect(resumed.map { $0["method"] as? String } == ["session/prompt"], "a resumed conversation keeps its model")
     }
