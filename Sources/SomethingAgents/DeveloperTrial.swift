@@ -1,20 +1,21 @@
-// DeveloperTrial: `something try <kind> [--record <file>] [--plan-b]`, a developer's trial of one driver against the
-// real program, from a terminal, in the current folder. It launches through the engine, as the app does, prints what
+// DeveloperTrial: `something try <kind> [--record <file>] [--plan-b] [--assistant]`, a developer's trial of one
+// driver against the real program, from a terminal, in the current folder. It launches through the engine, as the app does, prints what
 // the agent does, and reads commands on standard input. With --record it writes the exchange in the format of
 // Tests/Exchanges (one JSON object per line), the raw material of a replay: run it only in a throwaway session whose
 // text is invented, since the file holds every line. --plan-b forces Claude's plan B (PermissionSpool.swift).
+// --assistant launches the person's building assistant, lent something's own commands as the app lends them.
 import Foundation
 import SomethingCore
 
 public enum DeveloperTrial {
     static let usage = """
-        usage: something try <kind> [--record <file>] [--plan-b]
+        usage: something try <kind> [--record <file>] [--plan-b] [--assistant]
         Then type a message, or: /now <message> (steer), /interrupt, /allow, /deny, /answer <label>[; <label>…], /stop.
         """
 
     /// What the words ask for.
     struct Asked {
-        var kind: String, type: any Driver.Type, record: String?, planB = false
+        var kind: String, type: any Driver.Type, record: String?, planB = false, assistant = false
     }
 
     /// What `arguments` (every word after `something`, `try` first) ask for, or the sentence that says why they are
@@ -32,6 +33,7 @@ public enum DeveloperTrial {
             case "--plan-b":
                 guard type is ClaudeDriver.Type else { return .failure(SpaceError("something try: --plan-b is for claude only.")) }
                 asked.planB = true
+            case "--assistant": asked.assistant = true
             default: return .failure(SpaceError(usage))
             }
         }
@@ -64,8 +66,11 @@ public enum DeveloperTrial {
         engine.changed = { if let agent = engine.state.agents.first(where: { $0.id == id }) { printer.show(agent, engine.state) } }
         row(["begin": true])
         do {
+            let lent = Engine.ownHookCommand.map { own in
+                Lent(run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment), refused: { _, because in print("Not a builder: \(because)") })
+            }
             id = try engine.launch(asked.type, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
-                                   planB: asked.planB) { written, line in
+                                   planB: asked.planB, assistant: asked.assistant ? .building : nil, lent: lent) { written, line in
                 row([written ? "something" : asked.kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
             }
         } catch {

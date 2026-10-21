@@ -50,7 +50,7 @@ struct AssistantView: View {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
         Divider()
-        Button("Look for Agents Again") { model.engine.lookAgain() }
+        Button("Look for Agents Again") { model.lookAgain() }
     }
 
     private func statusLine(_ status: String) -> some View {
@@ -283,7 +283,7 @@ struct NoAgent: View {
             Text(model.notice).font(.system(size: 13.5))
             Spacer()
             Button("How to Get One") { model.howTo() }
-            Button("Look Again") { model.engine.lookAgain() }.buttonStyle(.borderedProminent)
+            Button("Look Again") { model.lookAgain() }.buttonStyle(.borderedProminent)
         }
         .controlSize(.small)
         .padding(.horizontal, 16)
@@ -317,10 +317,9 @@ struct Drawn: PreferenceKey {
 struct InstallList: View {
     let rows: [(name: String, command: String)], copy: (String) -> Void
 
-    /// The coding agents something builds with (none it refuses), each with its install command.
+    /// The coding agents something builds with, each with its install command.
     static var builders: [(name: String, command: String)] {
-        AssistantModel.builders.filter { AssistantModel.cannotBuild[$0] == nil }
-            .compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
+        AssistantModel.builders.compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
     }
 
     var body: some View {

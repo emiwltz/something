@@ -8,6 +8,8 @@ folder only.
 ## Before anything
 - Read the guide once: `something guide --print`. It is the contract of a space; follow it.
 - Each message starts with a line from something saying which space is open. "This space" means that one.
+- When something lends you a tool named `something_check`, check with it instead of running `something check`:
+  something runs it for you, outside your sandbox, where the page can load.
 
 ## Make a space
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.

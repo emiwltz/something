@@ -70,14 +70,19 @@ enum AssistantBuild {
             + edits.map { ("Edit", ["file_path": page, "old_string": $0.0, "new_string": $0.1]) } + checks.map(bash)
     }
 
-    /// The build in Codex's one tool, exec_command: the page is read with `cat` and changed with `apply_patch`, as
-    /// Codex's own models do when no patch tool is offered (the fake model is offered none). `something` is called by
-    /// its path in `tools`: Codex runs each command in a login shell, whose PATH puts the system's folders first, where
-    /// an installed something may be. Codex asks by sandbox, not by command, so the path changes nothing it decides.
-    static func codexSteps(tools: String) -> [[String: Any]] {
+    /// The build in Codex's tools: exec_command, where the page is read with `cat` and changed with `apply_patch`, as
+    /// Codex's own models do when no patch tool is offered (the fake model is offered none); and the check something
+    /// lends it, something_check, since `something check` cannot load a page in Codex's sandbox. `something` is called
+    /// by its path in `tools`: Codex runs each command in a login shell, whose PATH puts the system's folders first,
+    /// where an installed something may be. Codex asks by sandbox, not by command, so the path changes nothing it decides.
+    static func codexSteps(tools: String) -> [(name: String, arguments: [String: Any])] {
         let patches = edits.map { "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: agents-board.html\n@@\n-\($0.0)\n+\($0.1)\n*** End Patch\nPATCH" }
-        let named = (commands + ["cat agents-board.html"] + patches + checks).map { $0.hasPrefix("something ") ? tools + "/" + $0 : $0 }
-        return named.map { ["cmd": $0] }
+        let named = (commands + ["cat agents-board.html"] + patches).map { $0.hasPrefix("something ") ? tools + "/" + $0 : $0 }
+        let lent = checks.map { check -> [String: Any] in
+            let refuse = check.components(separatedBy: " --refuse ").dropFirst().map { $0 }
+            return refuse.isEmpty ? ["name": "agents-board"] : ["name": "agents-board", "refuse": refuse]
+        }
+        return named.map { ("exec_command", ["cmd": $0]) } + lent.map { ("something_check", $0) }
     }
 
     /// How many tools the build runs.

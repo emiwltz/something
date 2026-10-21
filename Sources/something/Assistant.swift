@@ -23,9 +23,6 @@ import SomethingCore
 
     /// The kinds that can build, in the order they are offered: by how much each asks before acting.
     static let builders = ["claude", "codex", "opencode", "pi"]
-    /// Why an installed kind is not offered. Trial T-1 (S3): inside Codex's sandbox `something check` finds no window
-    /// server, so it would ask to run each check outside it, more windows than plan A.2 #6 allows.
-    static let cannotBuild = ["codex": "can't build spaces yet: its sandbox blocks something check"]
     static let idleLimit: TimeInterval = 30 * 60
 
     @ObservationIgnored let engine: Engine
@@ -67,6 +64,8 @@ import SomethingCore
     /// What the state says of each builder: installed or not; absent while not known.
     private(set) var installed: [String: Bool] = [:]
     private(set) var notes: [String: String] = [:]
+    /// Why a builder that refused what something lends it is not offered, until the agents are looked for again.
+    private(set) var refused: [String: String] = [:]
     /// This conversation's agent, as the state shows it, and its thread as the drawer shows it.
     private(set) var id: String?
     private(set) var agent: Agent?
@@ -98,6 +97,11 @@ import SomethingCore
     /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
     @ObservationIgnored private var queued: [String] = []
     @ObservationIgnored private var launch = 0
+    /// What the building assistant is lent: something's own commands, run by this program outside the agent's sandbox.
+    @ObservationIgnored private(set) lazy var lent: Lent? = Bundle.main.executableURL.map { program in
+        Lent(run: Lent.program(program.resolvingSymlinksInPath().path, environment: ProcessInfo.processInfo.environment),
+             refused: { [weak self] kind, because in self?.cannotBuild(kind, because) })
+    }
     /// Where the assistant's pieces are drawn, in its hosting view: the window takes the clicks there only (Floater).
     @ObservationIgnored var drawn: [CGRect] = []
 
@@ -141,7 +145,7 @@ import SomethingCore
         let state = engine.state
         keep(\.installed, state.kinds.filter { AssistantModel.builders.contains($0.key) }.compactMapValues(\.installed))
         keep(\.notes, state.kinds.compactMapValues(\.note))
-        let offered = AssistantModel.builders.filter { installed[$0] == true && AssistantModel.cannotBuild[$0] == nil }
+        let offered = AssistantModel.builders.filter { installed[$0] == true && refused[$0] == nil }
         if !offered.contains(kind ?? "") { kind = offered.first { $0 == preferred } ?? offered.first }
         keep(\.agent, state.agents.first { $0.id == id })
         let thread = state.threads.first { $0.agent == id }
@@ -171,7 +175,8 @@ import SomethingCore
     /// What the capsule says when no builder is offered.
     var notice: String {
         let found = AssistantModel.builders.filter { installed[$0] == true }
-        return found.isEmpty ? "No coding agent found." : "\(found.map(Programs.name).joined(separator: ", ")) can't build spaces yet."
+        if found.count == 1, let because = refused[found[0]] { return "\(Programs.name(of: found[0])) can't build spaces: \(because)." }
+        return found.isEmpty ? "No coding agent found." : "\(found.map(Programs.name).joined(separator: ", ")) can't build spaces."
     }
 
     /// Whether a space is being made from the blank page: the sidebar shows a "New Space" row meanwhile.
@@ -260,9 +265,9 @@ import SomethingCore
     /// The builders found, as the agent menus list them.
     var entries: [Entry] {
         AssistantModel.builders.filter { installed[$0] == true }.map { kind in
-            let because = AssistantModel.cannotBuild[kind] ?? (kind == "pi" ? "never asks before acting" : nil)
+            let because = refused[kind].map { "can't build spaces: \($0)" } ?? (kind == "pi" ? "never asks before acting" : nil)
             let title = [Programs.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
-            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: AssistantModel.cannotBuild[kind] == nil, note: notes[kind])
+            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: notes[kind])
         }
     }
 
@@ -322,7 +327,7 @@ import SomethingCore
 
     /// Chooses the builder `kind`; a conversation running with another one ends, after the person said so.
     func choose(_ chosen: String) {
-        guard chosen != kind, AssistantModel.cannotBuild[chosen] == nil else { return }
+        guard chosen != kind, refused[chosen] == nil else { return }
         let switched = { [self] in
             newConversation()
             (kind, preferred) = (chosen, chosen)
@@ -333,6 +338,19 @@ import SomethingCore
         } else {
             switched()
         }
+    }
+
+    /// Looks for the builders again; one that refused what something lends it is tried again (it may have been updated).
+    func lookAgain() {
+        refused = [:]
+        refresh()
+        engine.lookAgain()
+    }
+
+    /// `kind` cannot take what something lends it, `because`: it is no longer offered, and another builder is chosen.
+    func cannotBuild(_ kind: String, _ because: String) {
+        refused[kind] = because
+        refresh()
     }
 
     /// Ask Before Every Change: from the next conversation on.
@@ -386,7 +404,7 @@ import SomethingCore
             let messages = queued
             queued = []
             do {
-                let id = try engine.launchAssistant(kind, folder: places.spaces.path, askEverything: askEverything)
+                let id = try engine.launchAssistant(kind, folder: places.spaces.path, askEverything: askEverything, lent: lent)
                 (self.id, asking, stopped, idled) = (id, askEverything, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { failure = error.sentence }
@@ -450,6 +468,8 @@ import SomethingCore
         let name = item.tool?.name ?? "tool", file = (item.text as NSString).lastPathComponent
         let after = item.decision?.outcome == "denied" ? " · denied" : item.tool?.status == "failed" ? " · failed" : ""
         if item.text.hasPrefix("something guide") { return .tool(symbol: "book", words: "Read guide" + after, command: nil) }
+        // A tool something lent (something_check): its driver gives the command something ran for it.
+        if name.hasPrefix("something_") { return .tool(symbol: "terminal", words: after, command: item.text) }
         switch name.lowercased() {
         case "edit", "write", "multiedit", "notebookedit", "filechange": return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
         case "read": return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)

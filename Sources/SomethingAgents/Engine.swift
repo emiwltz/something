@@ -247,20 +247,20 @@ public final class Engine {
 
     /// Starts the person's assistant, an agent of `kind` working in `folder` (the spaces folder, its links resolved,
     /// since Claude matches its rules against real paths), and returns its id, which `assistants` holds from then on.
-    /// Its driver lets it build spaces without asking, unless `askEverything`. Only the app calls this: a space launches
-    /// through `launch`, which never makes an assistant. Throws as `launch`.
-    public func launchAssistant(_ kind: String, folder: String, askEverything: Bool) throws -> String {
+    /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. Only the app calls
+    /// this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
+    public func launchAssistant(_ kind: String, folder: String, askEverything: Bool, lent: Lent? = nil) throws -> String {
         try Engine.checkLaunch(kind, model: nil, mode: nil, effort: nil)
         return try launch(Engine.drivers[kind]!, folder: HeldFiles.real(folder), model: nil, mode: nil, effort: nil, planB: false,
-                          assistant: askEverything ? .askingEverything : .building)
+                          assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
 
     /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
-    /// With `assistant`, the launch is the person's assistant, working that way.
+    /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
     func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
-                resume: String? = nil, assistant: Assistant? = nil,
+                resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
         let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
@@ -268,7 +268,7 @@ public final class Engine {
         count += 1
         var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
-        launch.assistant = assistant
+        (launch.assistant, launch.lent) = (assistant, assistant == nil ? nil : lent)
         let started = try start(type, launch, program, planB: planB, record: record)
         // Marked before the state changes, so that no space ever sees the assistant as one it may write to.
         if assistant != nil { assistants.insert(launch.agent) }

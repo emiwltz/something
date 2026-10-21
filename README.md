@@ -48,17 +48,20 @@ first asks which folder it follows); from a terminal, `something new <name> --fr
 ## Your assistant
 
 The bar at the bottom of the window talks to your own coding agent, which builds and changes spaces with you: Claude
-Code, OpenCode or pi, the one you choose among those installed (Codex can't build spaces yet: inside its sandbox
-`something check` cannot load a page). It starts at your first message and works in `~/something/spaces`, with your
-account and settings. Each message starts with a line from something saying which space is open, so "make it blue"
-means that one. ⌘K types to it, ⌘J shows the conversation, ⌘. stops it. After 30 minutes without a turn it is stopped
-to save memory; a new conversation starts each time something starts.
+Code, Codex, OpenCode or pi, the one you choose among those installed. It starts at your first message and works in
+`~/something/spaces`, with your account and settings. Each message starts with a line from something saying which
+space is open, so "make it blue" means that one. ⌘K types to it, ⌘J shows the conversation, ⌘. stops it. After 30
+minutes without a turn it is stopped to save memory; a new conversation starts each time something starts.
 
 something never answers for you. Your assistant may change your spaces and run something's own commands without
 asking; everything else it does asks you, as your agent's own settings decide.
 
 For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and the commands
-`something new`, `check`, `open` and `guide`. For OpenCode nothing is added: it asks as your own OpenCode settings say.
+`something new`, `check`, `open` and `guide`. For Codex it is its own sandbox, "workspace-write": it may change files
+and run commands in `~/something/spaces` (and its temporary folders), without the network; what the sandbox blocks
+asks you. Its sandbox cannot load a page, so something lends it one tool, `something_check`: something runs
+`something check` for it, outside the sandbox, and gives it the report (a Codex too old to take the tool is not
+offered, and its menu entry says why). For OpenCode nothing is added: it asks as your own OpenCode settings say.
 pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask Before Every
 Change", in the bar's agent menu, turns the exception off from the next conversation. No space can see what you say
 to your assistant, or write to it.

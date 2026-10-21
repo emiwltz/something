@@ -27,6 +27,8 @@ import SomethingCore
     private let owner: Bool
     /// Whether this run placed the real program at AssistantBuild.fixedProgram, which its cleanup removes.
     private var placedProgram = false
+    /// The words of each command the lent tools ran, and why Codex could not take them.
+    let lent = Lending()
 
     var home: URL { root.appendingPathComponent("codex") }
     /// The folder Codex works in.
@@ -34,8 +36,8 @@ import SomethingCore
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
     /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces with an invented
-    /// `something` first in its PATH, whose `check` is this clone's real program run from the fixed path of plan A.4
-    /// (AssistantBuild.fixedProgram), and the person's own temporary folder, as the app gives it.
+    /// `something` first in its PATH, and lent the check, which this clone's real program runs, from the fixed path of
+    /// plan A.4 (AssistantBuild.fixedProgram), with the person's own temporary folder, as the app gives it.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
          assistant: Assistant? = nil) throws {
         self.name = name
@@ -71,6 +73,11 @@ import SomethingCore
             environment["TMPDIR"] = NSTemporaryDirectory()
             environment["SOMETHING_TRIAL_PROGRAM"] = try AssistantBuild.placeProgram()
             placedProgram = true
+            let check = Lent.program(AssistantBuild.fixedProgram.path, environment: ["HOME": folders[1].path, "TMPDIR": NSTemporaryDirectory()])
+            launch.lent = Lent(run: { [lent] words in
+                lent.lock.withLock { lent.runs.append(words) }
+                return check(words)
+            }, refused: { [lent] kind, because in lent.refusals.append("\(kind): \(because)") })
         }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
                       folder: folders[2].path, environment: environment)
@@ -82,6 +89,7 @@ import SomethingCore
     }
 
     final class Exchange { var rows: [[String: Any]] = [["begin": true]] }
+    final class Lending: @unchecked Sendable { let lock = NSLock(); var runs: [[String]] = [], refusals: [String] = [] }
 
     /// Adds `row`, runs `call`, then completes the row with what the call returned under `key`.
     private func row<T>(_ row: [String: Any], _ key: String, _ call: () throws -> T) rethrows -> T {
@@ -314,8 +322,8 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
     }
 
     /// T-1 (plan A.2 #6): the standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
-    /// The number to meet is two windows at most. What a real model would also ask for: running again, outside the
-    /// sandbox, each `something check` that could not run inside it. The finding is written in the commit of slice S3.
+    /// The number to meet is two windows at most. `something check` cannot load a page in the sandbox (no window
+    /// server, the finding of slice S3), so each check goes through the tool something lends: something runs it.
     @Test func theAssistantsStandardBuildInTheSandbox() async throws {
         let run = try CodexRun("assistant-build", assistant: .building)
         defer { run.cleanup() }
@@ -331,13 +339,13 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
             return run.state.state == "idle" && run.items.contains { $0.author == "agent" && $0.text.contains("the board is ready") }
         }
         let outputs = run.api.toolOutputs
-        let blocked = outputs.suffix(AssistantBuild.checks.count).filter { $0.contains("NO_WINDOW_SERVER") }
-        print("T-1: \(asked.count) window(s) asked: \(asked); \(blocked.count) of \(AssistantBuild.checks.count) checks could not load the page in the sandbox.")
+        let loaded = outputs.suffix(AssistantBuild.checks.count).filter { $0.contains("snapshot") && !$0.contains("NO_WINDOW_SERVER") }
+        print("T-1: \(asked.count) window(s) asked: \(asked); \(loaded.count) of \(AssistantBuild.checks.count) checks loaded the page.")
         #expect(outputs.count == AssistantBuild.codexSteps(tools: "").count)
-        // Seen on 0.163.0: nothing asks, but the sandbox has no window server, so no check loads the page. A real model
-        // would ask to run each check again outside the sandbox: five windows, over the number (plan A.1: Codex is
-        // not offered as a builder in 0.2).
-        #expect(asked.isEmpty && blocked.count == AssistantBuild.checks.count, "T-1 changed: \(asked), \(outputs)")
+        // Seen on 0.163.0: nothing asks, and every check, run by something outside the sandbox, loads the page.
+        #expect(asked.isEmpty && loaded.count == AssistantBuild.checks.count, "T-1 changed: \(asked), \(outputs)")
+        #expect(run.lent.runs == AssistantBuild.checks.map { $0.split(separator: " ").dropFirst().map(String.init) })
+        #expect(run.lent.refusals.isEmpty)
         let page = try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8)
         #expect(page.contains("Invented three"), "the patches were applied in the sandbox")
         try await run.finish()

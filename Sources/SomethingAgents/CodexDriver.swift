@@ -78,12 +78,18 @@ public final class CodexDriver: Driver {
         if let effort = launch.effort { overrides["effort"] = effort }
     }
 
+    /// The oldest Codex seen taking the tools something lends (its experimental dynamic tools): an older one would
+    /// ignore them without a word, and its model would then ask to run each check outside the sandbox.
+    static let lentSince = "0.163.0"
+
     /// `clientInfo.name` becomes the thread's `originator` in Codex's files: it stays "something". The deltas are
-    /// left out: items are read whole, when they complete.
+    /// left out: items are read whole, when they complete. Dynamic tools are experimental: only a launch something
+    /// lends tools to asks for that part of Codex's channel.
     public func begin() throws {
         emit(.options(options()))
-        try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"],
-                                             "capabilities": ["optOutNotificationMethods": CodexDriver.unread]])
+        var capabilities: [String: Any] = ["optOutNotificationMethods": CodexDriver.unread]
+        if launch.lent != nil { capabilities["experimentalApi"] = true }
+        try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"], "capabilities": capabilities])
     }
 
     public func receive(_ line: Data) {
@@ -198,6 +204,10 @@ public final class CodexDriver: Driver {
         if let error = message["error"] as? [String: Any] { return refused(call, error["message"] as? String ?? "") }
         switch call {
         case .initialize:
+            if launch.lent != nil, let version = CodexDriver.version(result["userAgent"]),
+               version.compare(CodexDriver.lentSince, options: .numeric) == .orderedAscending {
+                return notBuilder("this Codex (\(version)) is older than \(CodexDriver.lentSince); update it", said: nil)
+            }
             do {
                 try send(["method": "initialized"])
                 // A resume's settings persist into the thread: only what the person chose is sent.
@@ -206,6 +216,10 @@ public final class CodexDriver: Driver {
                 if let model = launch.model { params["model"] = model }
                 // The person's assistant changes files in its folder without asking (E-1); what the sandbox blocks asks.
                 if launch.assistant == .building { params["sandbox"] = "workspace-write" }
+                // Its sandbox reaches no window server, where `something check` loads a page: something runs it instead.
+                if let lent = launch.lent, !launch.resume {
+                    params["dynamicTools"] = lent.tools.map { ["type": "function", "name": $0.name, "description": $0.description, "inputSchema": $0.schema] }
+                }
                 if launch.resume {
                     // Its history is left out: a long thread's answer can weigh megabytes.
                     params.merge(["threadId": launch.thread, "excludeTurns": true]) { _, new in new }
@@ -247,6 +261,9 @@ public final class CodexDriver: Driver {
     private func refused(_ call: Call, _ words: String) {
         switch call {
         case .initialize, .open:
+            if launch.lent != nil, ["dynamic", "experimental"].contains(where: words.lowercased().contains) {
+                return notBuilder("this Codex refuses the check something lends it", said: words)
+            }
             let held = words.contains("active writer"), missing = words.contains("no rollout found") || words.contains("invalid session id")
             // The messages held for the thread, steers answered "steered" among them, are said lost, never dropped unsaid.
             let lost = early.isEmpty ? "" : "; the \(early.count == 1 ? "message" : "\(early.count) messages") sent to it went nowhere"
@@ -293,7 +310,30 @@ public final class CodexDriver: Driver {
         }
     }
 
+    /// Codex cannot take what something lends it, `because` (a few words for the agent menu), as Codex `said`: the
+    /// launch ends, the app is told, and the messages held for the thread are said lost.
+    private func notBuilder(_ because: String, said: String?) {
+        let lost = early.isEmpty ? "" : " The \(early.count == 1 ? "message" : "\(early.count) messages") sent to it went nowhere."
+        over = true
+        let words = said.map { " It said: “\($0)”." } ?? ""
+        emit(.stopped(AgentError(code: "AGENT_ERROR", message: "Codex can't build spaces: \(because)." + words + " Spaces can still launch it." + lost)))
+        quit()
+        launch.lent?.refused(CodexDriver.kind, because)
+    }
+
+    /// One of the tools something lends: it runs off the main queue, and its report goes back as the tool's result.
+    private func lentCall(_ codexID: Any, _ params: [String: Any]) {
+        guard let lent = launch.lent else {
+            try? send(["id": codexID, "error": ["code": -32601, "message": "something lends no tool to this conversation."]])
+            return
+        }
+        lent.call(params["tool"] as? String ?? "", params["arguments"]) { [weak self] reply in
+            try? self?.send(["id": codexID, "result": ["success": reply.ok, "contentItems": [["type": "inputText", "text": reply.text]]]])
+        }
+    }
+
     private func request(_ method: String, _ codexID: Any, _ params: [String: Any]) {
+        if method == "item/tool/call" { return lentCall(codexID, params) }
         let shownID = id(codexID)
         let kind: String
         var about: String?, input: String?, questions: [Question] = [], questionIDs: [String] = []
@@ -375,7 +415,11 @@ public final class CodexDriver: Driver {
             let text = summary.isEmpty ? (item["content"] as? [String] ?? []).joined(separator: "\n") : summary
             if done, !text.isEmpty { emit(.itemAppended(Item(id: id, kind: "thought", author: "agent", text: text, at: now()))) }
         default:
-            guard let (name, text) = CodexDriver.tool(item) else { return }
+            guard let (name, words) = CodexDriver.tool(item) else { return }
+            var text = words
+            // A lent tool is shown as the command something ran for it.
+            if type == "dynamicToolCall", let tool = launch.lent?.tools.first(where: { $0.name == name }),
+               let command = tool.words(item["arguments"] as? [String: Any] ?? [:]) { text = (["something"] + command).joined(separator: " ") }
             let status = ["inProgress": "running", "completed": "done", "failed": "failed", "declined": "failed"][item["status"] as? String ?? ""]
             let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(),
                              tool: Tool(name: name, status: done ? status ?? "done" : status), decision: decisions[id])
@@ -477,6 +521,13 @@ public final class CodexDriver: Driver {
         case "collabAgentToolCall": return (item["tool"] as? String ?? "agent", item["prompt"] as? String ?? "")
         default: return nil
         }
+    }
+
+    /// Codex's version in its user agent ("<client>/0.163.0 (Mac OS …) …"); nil when it is not there.
+    static func version(_ agent: Any?) -> String? {
+        guard let agent = agent as? String, let slash = agent.firstIndex(of: "/") else { return nil }
+        let version = agent[agent.index(after: slash)...].prefix { $0.isNumber || $0 == "." }
+        return version.isEmpty ? nil : String(version)
     }
 
     static func json(_ value: Any?) -> String? {

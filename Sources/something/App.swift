@@ -51,7 +51,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.confirmSwitch = { [weak self] from, to, switched in self?.sheet(Ask.switching(from: from, to: to), then: switched) }
         assistant.howTo = { [weak self] in
             guard let self else { return }
-            sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.engine.lookAgain() }
+            sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.assistant.lookAgain() }
         }
         assistant.showRequest = { [weak self] in self?.panels.panel?.orderFrontRegardless() }
         assistant.openReady = { [weak self] in self?.library.select($0) }

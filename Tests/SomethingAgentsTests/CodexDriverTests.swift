@@ -7,14 +7,17 @@ import Testing
 import SomethingCore
 
 @Suite struct CodexReplayTests {
-    /// The person's assistant builds a space in the sandbox (CodexTrial, T-1): nothing asks, and the check reports
-    /// that the sandbox has no window server. Codex 0.163.0 sent items for the first eight of the twelve calls only
-    /// (the model received all twelve outputs, which the trial counts).
+    /// The person's assistant builds a space in the sandbox (CodexTrial, T-1) and checks it with the tool something
+    /// lends it: nothing asks, each check is `something check` run by something, and its report goes back to Codex.
     @Test func assistantBuild() throws {
         let replay = try Replay.play("assistant-build", kind: "codex")
         let tools = replay.items.filter { $0.kind == "tool" }
-        #expect(tools.count == 8 && tools.allSatisfy { $0.decision == nil }, "\(tools.map(\.text))")
-        #expect(tools.map(\.tool?.status) == Array(repeating: "done", count: 7) + ["failed"], "the check ends with status 2")
+        #expect(tools.count == 12 && tools.allSatisfy { $0.decision == nil && $0.tool?.status == "done" }, "\(tools.map(\.text))")
+        let checks = ["something check agents-board", "something check agents-board", "something check agents-board",
+                      "something check agents-board --refuse send", "something check agents-board --refuse state"]
+        #expect(tools.filter { $0.tool?.name == "something_check" }.map(\.text) == checks, "shown as the command something ran")
+        #expect(replay.lentRuns == checks.map { $0.split(separator: " ").dropFirst().map(String.init) })
+        #expect(replay.refusals.isEmpty)
         #expect(replay.fold.turns.map(\.state) == ["done"] && replay.fold.requests.isEmpty)
     }
 
@@ -141,6 +144,74 @@ import SomethingCore
         #expect(start(.building)?["cwd"] as? String == "/Users/example/something/spaces")
         #expect(start(.askingEverything)?["sandbox"] == nil)
         #expect(start(nil)?.keys.sorted() == ["cwd"])
+    }
+
+    /// Only the building assistant is lent the check: Codex's experimental channel is asked for, and the thread offers
+    /// the tool. A launch a space asks for gets neither (Engine.launchAssistant lends nothing with Ask Before Every Change).
+    @Test func onlyTheBuildingAssistantIsLentTheCheck() {
+        func capabilities(_ replay: Replay) -> [String: Any]? { Self.params(replay, "initialize")?["capabilities"] as? [String: Any] }
+        let lent = Replay.codex(assistant: true)
+        #expect(capabilities(lent)?["experimentalApi"] as? Bool == true)
+        lent.feed(["id": 1, "result": ["userAgent": "something/0.163.0 (Mac OS 27.0.0; arm64) unknown (something; 1.0)"]])
+        let tools = Self.params(lent, "thread/start")?["dynamicTools"] as? [[String: Any]]
+        #expect(tools?.map { $0["name"] as? String } == ["something_check"])
+        #expect(tools?.first?["type"] as? String == "function" && tools?.first?["inputSchema"] is [String: Any])
+        let space = Self.opened()
+        #expect(capabilities(space)?["experimentalApi"] == nil)
+        #expect(Self.params(space, "thread/start")?["dynamicTools"] == nil)
+    }
+
+    /// A Codex that refuses the tools (a later version changed its experimental channel) ends the launch with a sentence,
+    /// and the app is told it cannot build; so is one older than the first that took them, which would ignore them
+    /// without a word. Any other refusal is said as before.
+    @Test func aCodexThatCannotTakeTheCheckIsNoBuilder() throws {
+        let refused = Replay.codex(assistant: true)
+        _ = try refused.agent.send("Make a board.", when: "next")
+        refused.feed(["id": 1, "result": ["userAgent": "something/0.170.0 (Mac OS 27.0.0; arm64)"]])
+        refused.feed(["id": 2, "error": ["code": -32600, "message": "thread/start.dynamicTools requires experimentalApi capability"]])
+        #expect(refused.quit && refused.fold.agent.alive == false)
+        #expect(refused.fold.agent.error?.message == "Codex can't build spaces: this Codex refuses the check something lends it. It said: “thread/start.dynamicTools requires experimentalApi capability”. Spaces can still launch it. The message sent to it went nowhere.")
+        #expect(refused.refusals == ["codex: this Codex refuses the check something lends it"])
+
+        let old = Replay.codex(assistant: true)
+        old.feed(["id": 1, "result": ["userAgent": "something/0.150.2 (Mac OS 27.0.0; arm64) unknown (something; 1.0)"]])
+        #expect(old.lines().compactMap { $0["method"] as? String } == ["initialize"], "no thread is started")
+        #expect(old.quit && old.refusals == ["codex: this Codex (0.150.2) is older than 0.163.0; update it"])
+
+        let other = Replay.codex(assistant: true)
+        other.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        other.feed(["id": 2, "error": ["code": -32600, "message": "Invented: no such folder"]])
+        #expect(other.refusals.isEmpty)
+        #expect(other.fold.agent.error?.message == "Codex refused to start the conversation: Invented: no such folder")
+    }
+
+    /// Wrong words run nothing: a tool something does not lend, a name that is a path, a right that is a flag. The
+    /// right ones run `something check`, and no one is asked.
+    @Test func aLentToolRunsOnlyWhatItTakes() {
+        let replay = Replay.codex(assistant: true, reports: [Lent.Reply(ok: true, text: "Invented report.")])
+        let calls: [(String, [String: Any])] = [("something_open", ["name": "board"]), ("something_check", ["name": "../board"]),
+                                                ("something_check", ["name": "board", "refuse": ["--state"]]),
+                                                ("something_check", ["name": "board", "refuse": ["send:claude"]])]
+        for (id, call) in calls.enumerated() {
+            replay.feed(["id": id, "method": "item/tool/call", "params": ["threadId": Self.thread, "turnId": Self.turn, "callId": "call_\(id)",
+                                                                           "namespace": NSNull(), "tool": call.0, "arguments": call.1]])
+        }
+        #expect(replay.lentRuns == [["check", "board", "--refuse", "send:claude"]])
+        let results = replay.lines().compactMap { $0["result"] as? [String: Any] }
+        #expect(results.map { $0["success"] as? Bool } == [false, false, false, true])
+        #expect((results.last?["contentItems"] as? [[String: String]]) == [["type": "inputText", "text": "Invented report."]])
+        #expect(replay.fold.requests.isEmpty, "a lent tool asks no one")
+    }
+
+    /// The version is read from the user agent; a newer one, or one that cannot be read, is not refused.
+    @Test func theVersionIsReadFromTheUserAgent() {
+        #expect(CodexDriver.version("something/0.163.0 (Mac OS 27.0.0; arm64) unknown (something; 1.0)") == "0.163.0")
+        #expect(CodexDriver.version("something") == nil && CodexDriver.version(nil) == nil)
+        for agent in ["something/0.163.0", "something/0.170.1 (Mac OS 27.0.0; arm64)", "something/1.0", "something"] {
+            let replay = Replay.codex(assistant: true)
+            replay.feed(["id": 1, "result": ["userAgent": agent]])
+            #expect(replay.refusals.isEmpty && Self.params(replay, "thread/start") != nil, "\(agent)")
+        }
     }
 
     @Test func theCommandIsTheAppServer() {

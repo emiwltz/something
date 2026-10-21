@@ -183,19 +183,26 @@ import WebKit
         #expect(Spaces(root: home.places.spaces).list().isEmpty, "neither is a space")
     }
 
-    /// Codex is found but not offered to build (trial T-1); alone, it leaves the person with the notice. Claude Code,
-    /// once found, is chosen.
-    @Test func codexIsNotOfferedToBuild() async throws {
+    /// Codex builds, with the check something lends it (trial T-1). One that cannot take it is no longer offered, with
+    /// the reason in its menu entry; alone, it leaves the person with the notice. Looking again offers it again (it
+    /// may have been updated). Claude Code, once found, is chosen.
+    @Test func aCodexThatCannotTakeTheCheckIsNotOffered() async throws {
         let (home, model) = try assistant(["codex"])
         defer { home.remove() }
         #expect(!model.noAgent, "nothing is said before the programs were looked for")
         await look(model)
+        #expect(model.kind == "codex" && model.entries.map(\.title) == ["Codex"] && model.entries.allSatisfy(\.enabled))
+        #expect(model.lent?.tools.map(\.name) == ["something_check"])
+        model.cannotBuild("codex", "this Codex (0.150.2) is older than 0.163.0; update it")
         #expect(model.kind == nil && model.noAgent)
-        #expect(model.notice == "Codex can't build spaces yet.")
-        #expect(model.entries.map(\.title) == ["Codex · can't build spaces yet: its sandbox blocks something check"])
+        #expect(model.notice == "Codex can't build spaces: this Codex (0.150.2) is older than 0.163.0; update it.")
+        #expect(model.entries.map(\.title) == ["Codex · can't build spaces: this Codex (0.150.2) is older than 0.163.0; update it"])
         #expect(model.entries.allSatisfy { !$0.enabled })
         model.choose("codex")
         #expect(model.kind == nil)
+        model.lookAgain()
+        #expect(model.kind == "codex", "looked for again, it is offered again")
+        model.cannotBuild("codex", "this Codex refuses the check something lends it")
         try install("claude", in: home.root.appendingPathComponent("bin"))
         await look(model)
         #expect(model.kind == "claude" && !model.noAgent && model.name == "Claude Code")

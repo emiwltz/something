@@ -34,6 +34,7 @@ import SomethingCore
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     thread='"threadId":"01a14bae-0000-7000-8000-000000000001"'
     while IFS= read -r line; do
+      printf '%s\n' "$line" >> "$FAKE_OUT/input-$$"
       id=$(printf '%s' "$line" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
       case "$line" in
         *'"method":"initialize"'*) echo "{\"id\":$id,\"result\":{\"userAgent\":\"something/0.163.0\"}}" ;;
@@ -353,6 +354,29 @@ import SomethingCore
         try await until("the stop") { stopped }
         #expect(engine.state.agents.first?.state == "done")
         #expect(engine.state.agents.first?.error == nil)
+    }
+
+    /// What something lends goes to the building assistant only: not with Ask Before Every Change, never to a launch a
+    /// space asks for, whatever its folder.
+    @Test func onlyTheBuildingAssistantIsLent() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        let lent = Lent(run: { _ in Lent.Reply(ok: true, text: "") }, refused: { _, _ in })
+        _ = try engine.launchAssistant("codex", folder: place.work.path, askEverything: false, lent: lent)
+        _ = try engine.launchAssistant("codex", folder: place.work.path, askEverything: true, lent: lent)
+        _ = try engine.launch("codex", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        func starts() -> [String] {
+            let names = (try? FileManager.default.contentsOfDirectory(atPath: place.out.path)) ?? []
+            return names.filter { $0.hasPrefix("input-") }.compactMap { try? String(contentsOf: place.out.appendingPathComponent($0), encoding: .utf8) }
+                .flatMap { $0.split(separator: "\n").filter { $0.contains("\"thread/start\"") }.map(String.init) }
+        }
+        try await until("three threads") { starts().count == 3 }
+        #expect(starts().filter { $0.contains("\"dynamicTools\"") }.count == 1)
+        #expect(starts().filter { $0.contains("\"dynamicTools\"") && $0.contains("workspace-write") }.count == 1, "the building assistant's")
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
     }
 
     /// OpenCode through the engine: a turn, then a stop during a turn: the ladder cancels it, then closes the input,

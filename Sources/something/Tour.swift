@@ -150,7 +150,7 @@ struct TourView: View {
             InstallList(rows: InstallList.builders, copy: assistant.copy).multilineTextAlignment(.leading).padding(.top, 6)
             buttons {
                 Button("Continue Without an Agent") { tour.end() }
-                Button("Look Again") { assistant.engine.lookAgain() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+                Button("Look Again") { assistant.lookAgain() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
     }

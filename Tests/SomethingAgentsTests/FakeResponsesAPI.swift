@@ -14,8 +14,8 @@ final class FakeResponsesAPI {
     private var count = 0
     /// Whether the chat completions call pi's tool (`bash`) rather than OpenCode's.
     var pi = false
-    /// The exec_command calls a "run-build" message plays, one per request, in order; then a closing text. Set by a trial.
-    var build: [[String: Any]] = []
+    /// The tool calls a "run-build" message plays, one per request, in order; then a closing text. Set by a trial.
+    var build: [(name: String, arguments: [String: Any])] = []
     /// The command pi's run-wait tool call runs: a duration no other program uses, so a trial can tell it is gone.
     static let piWait = "sleep 30.25"
 
@@ -209,7 +209,7 @@ final class FakeResponsesAPI {
         let texts = input.flatMap { $0["content"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }
         guard !build.isEmpty, texts.contains(where: { $0.contains("run-build") }) else { return nil }
         let done = input.filter { $0["type"] as? String == "function_call_output" }.count
-        return done < build.count ? .call(name: "exec_command", arguments: build[done]) : .message("Invented: the board is ready.", slow: false)
+        return done < build.count ? .call(name: build[done].name, arguments: build[done].arguments) : .message("Invented: the board is ready.", slow: false)
     }
 
     /// A chat message's text: a string, or the text parts of a list.

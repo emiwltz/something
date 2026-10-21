@@ -21,6 +21,8 @@ public struct Launch: Equatable, Sendable {
     /// How the person's assistant works, when this is it: launched by the app alone (Engine.launchAssistant), never by
     /// a space, whose launches leave it nil.
     public var assistant: Assistant?
+    /// The commands something lends this launch as tools (Lent.swift): only the building assistant has them.
+    public var lent: Lent?
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
                 thread: String = UUID().uuidString.lowercased(), resume: Bool = false) {
