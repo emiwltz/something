@@ -52,14 +52,20 @@ public final class Engine {
 
     /// The agents started elsewhere: the readers, on their timer once `start` was called.
     lazy var watch = Watch(readers: Watch.readers(environment))
-    /// What the watch saw last, before the dedupe, and the agents seen elsewhere as the state last showed them.
-    private var seen = Seen(), outside: (agents: [Agent], threads: [AgentThread]) = ([], [])
+    /// What the watch saw last, before the dedupe.
+    private var seen = Seen()
+    /// The agents seen elsewhere as the state last showed them.
+    private var outside: (agents: [Agent], threads: [AgentThread]) = ([], [])
 
     /// Starts watching this Mac: every 2 s while a space is open (`often`), 10 s otherwise, not at all while no window
     /// is `visible`, and at once when one is again. Called again, it only changes that: the programs are looked for once.
     public func start(often: Bool, visible: Bool = true) {
         self.often = often
-        if visible { watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) } } else { watch.pause() }
+        if visible {
+            watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) }
+        } else {
+            watch.pause()
+        }
         guard !looked else { return }
         looked = true
         lookAgain()
@@ -74,8 +80,14 @@ public final class Engine {
     }
 
     /// Forgets the ended agents whose time is over, makes the state again and tells the app (internal: a test calls it).
-    func update() {
-        forgetEnded()
+    /// `outside` is the agents seen elsewhere when `saw` just built them; otherwise they are built here.
+    func update(outside: (agents: [Agent], threads: [AgentThread])? = nil) {
+        // An agent just forgotten may now be seen elsewhere: the agents seen elsewhere are then built again.
+        if !forgetEnded(), let outside {
+            self.outside = outside
+        } else {
+            self.outside = elsewhere
+        }
         made = make()
         changed()
     }
@@ -85,7 +97,6 @@ public final class Engine {
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
-        outside = elsewhere
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
                      threads: launched.compactMap(\.agent.thread) + outside.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
     }
@@ -108,13 +119,14 @@ public final class Engine {
         let kinds = self.seen.kinds
         self.seen = seen
         let after = elsewhere
-        if after.agents != outside.agents || after.threads != outside.threads || seen.kinds != kinds { update() }
+        if after.agents != outside.agents || after.threads != outside.threads || seen.kinds != kinds { update(outside: after) }
     }
 
     /// Drops from the state the launched agents ended `endedKept` seconds ago and the ended ones beyond the last
     /// `endedMost`, so that an app open all day does not push every agent it ever launched; a reader may then show their
     /// conversations as seen elsewhere. Nothing else may change the state by an end's time, so a timer makes it then.
-    private func forgetEnded() {
+    /// Returns whether it dropped any.
+    private func forgetEnded() -> Bool {
         let now = clock()
         for entry in launched where entry.agent.agent.alive == false && !ended.contains(where: { $0.id == entry.agent.agent.id }) {
             ended.append((entry.agent.agent.id, now))
@@ -122,10 +134,11 @@ public final class Engine {
         }
         let gone = Set(ended.enumerated().filter { $0.offset < ended.count - Engine.endedMost
             || now.timeIntervalSince($0.element.at) >= Engine.endedKept }.map(\.element.id))
-        guard !gone.isEmpty else { return }
+        guard !gone.isEmpty else { return false }
         launched.removeAll { gone.contains($0.agent.agent.id) }
         stopping.subtract(gone)
         ended.removeAll { gone.contains($0.id) }
+        return true
     }
 
     /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
@@ -327,64 +340,6 @@ public final class Engine {
         let chosen = launched.filter { only == nil || $0.agent.agent.id == only }
         stopping.formUnion(chosen.map(\.agent.agent.id))
         Spawn.stopAll(chosen.map(\.spawn), cap: seconds) { DispatchQueue.main.async(execute: done) }
-    }
-
-    /// Starts `spawn` for one launch and joins it to its driver: lines and the end come back on the main queue.
-    /// `asked` says, on the main queue, whether something asked this agent to stop; `record` sees every line, in
-    /// (true) and out (false), for `something try --record`. Throws as Spawn.start does, and AGENT_STOPPED when the
-    /// program closed its input at once.
-    /// With `spool`, Claude's plan B: the spool starts before the program and stops after its end.
-    static func start(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
-                      record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> Launched {
-        let agent = Launched(type, launch, write: { [weak spawn] line in
-            guard let spawn else { throw CodedError("AGENT_STOPPED", "The agent has ended; launch or resume it to go on.") }
-            try spawn.write(line)
-            record?(true, line)
-        }, now: Engine.now)
-        // A Codex or an OpenCode that cannot open its conversation is told to end.
-        (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
-        if let opencode = agent.driver as? ACPDriver {
-            opencode.quit = { [weak spawn] in spawn?.closeInput() }
-            opencode.take(spawn.environment)
-            // OpenCode's graceful step is an interrupt and its answer, within Spawn's 3 s; the input is closed after.
-            spawn.graceful = { [weak spawn, weak opencode] in
-                DispatchQueue.main.async { _ = try? agent.interrupt() }
-                while spawn?.running == true, opencode?.prompting == true { usleep(20_000) }
-            }
-        } else {
-            let goodbye = agent.driver.goodbye
-            spawn.graceful = { [weak spawn] in
-                guard let spawn, let goodbye, (try? spawn.write(goodbye)) != nil else { return }
-                record?(true, goodbye)
-                // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
-                while spawn.running { usleep(20_000) }
-            }
-        }
-        if let spool {
-            do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
-            let claude = agent.driver as? ClaudeDriver
-            claude?.hookReply = { [weak spool] uuid, decision in spool?.answer(uuid, decision) ?? .gone }
-            spool.asked = { [weak claude] uuid, request in claude?.hookAsked(uuid, request) }
-            spool.withdrawn = { [weak claude] uuid in claude?.hookWithdrawn(uuid) }
-        }
-        do { try startSpawn(type, launch, spawn, spool: spool, agent: agent, asked: asked, record: record) } catch {
-            spool?.stop()
-            throw error
-        }
-        return agent
-    }
-
-    private static func startSpawn(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool?, agent: Launched,
-                                   asked: @escaping (String) -> Bool, record: ((Bool, Data) -> Void)?) throws {
-        try spawn.start(lines: { line in DispatchQueue.main.async { record?(false, line); agent.driver.receive(line) } },
-                        ended: { [weak spawn] code in
-                            let errors = spawn?.errorTail ?? ""
-                            spool?.stop()
-                            DispatchQueue.main.async {
-                                agent.ended(code: code, errors: errors, asked: asked(launch.agent))
-                            }
-                        })
-        try agent.begin(pid: Int(spawn.pid))
     }
 
     /// The launched agent `id`, while its program runs.

@@ -119,11 +119,14 @@ final class Watch {
         }
     }
 
-    /// Stops ticking until `start` is called again, which ticks at once.
+    /// Stops ticking until `start` is called again, which ticks at once and walks: what changed meanwhile, however
+    /// long, is all seen at that tick.
     func pause() {
         cancel?()
         cancel = nil
         interval = 0
+        // `ticks` belongs to the watch's queue, where a tick may be running now.
+        queue.async { [weak self] in self?.ticks = 0 }
     }
 
     deinit { cancel?() }

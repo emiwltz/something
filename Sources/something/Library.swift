@@ -106,6 +106,8 @@ import SomethingCore
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.looking = false
+                // Paused meanwhile: what it saw waits for the look that comes when the window shows.
+                guard self.timer != nil else { return }
                 if self.looked != now { self.relist() }
                 self.looked = now
             }

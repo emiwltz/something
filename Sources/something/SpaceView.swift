@@ -164,7 +164,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.looking = false
-                if self.loads == loads, now != self.stamp { self.load() }
+                if self.timer != nil, self.loads == loads, now != self.stamp { self.load() }
             }
         }
     }

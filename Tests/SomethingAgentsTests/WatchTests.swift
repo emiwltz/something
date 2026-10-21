@@ -101,14 +101,14 @@ import SomethingCore
         watch.start(every: 3600) { _ in }
     }
 
-    /// Decision 3 of 0.3: while no window shows, the watch does not tick at all; the moment one shows, it ticks, then
-    /// keeps the cadence of the moment. On a fake clock, which moves only when the test says.
+    /// Decision 3 of 0.3: while no window shows, the watch does not tick at all; the moment one shows, it ticks and
+    /// walks, then keeps the cadence of the moment. On a fake clock, which moves only when the test says.
     @Test func theWatchSleepsWhileNoWindowShows() async throws {
         let place = try EngineTests.Place(prefix: "watch-engine-")
         defer { place.remove() }
-        let engine = Engine.throwaway(place.environment), clock = FakeClock()
+        let engine = Engine.throwaway(place.environment), clock = FakeClock(), reader = Walks()
         var ticks = 0
-        engine.watch = Watch(readers: [], snapshot: {
+        engine.watch = Watch(readers: [reader], snapshot: {
             ticks += 1
             return ClaudeHome.snapshot()
         })
@@ -124,10 +124,21 @@ import SomethingCore
         #expect(ticks == 3, "no tick while no window shows, whatever the cadence")
         engine.start(often: false, visible: true)
         #expect(ticks == 4, "a tick the moment the window shows")
+        #expect(reader.walks == [true, false, false, true], "and that tick walks, whatever changed while hidden")
         clock.advance(9)
         #expect(ticks == 4)
         clock.advance(1)
         #expect(ticks == 5, "then every 10 s with no space open")
+    }
+
+    /// A reader that finds nothing and remembers, tick by tick, whether it was asked to walk.
+    final class Walks: Reader {
+        let kind = "walks", programs: Set<String> = []
+        var walks: [Bool] = []
+        func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
+            walks.append(discover)
+            return Reading()
+        }
     }
 
     @Test func theEngineMergesLaunchedAndSeenAgents() async throws {
@@ -188,7 +199,7 @@ import SomethingCore
 }
 
 /// A clock for `Watch.repeating` that moves only when `advance` is called, firing each timer at each of its times
-/// passed, on the test's own thread.
+/// passed, on its queue, before `advance` returns.
 final class FakeClock {
     private var now: TimeInterval = 0, made = 0
     private var timers: [Int: (every: TimeInterval, next: TimeInterval, fire: () -> Void)] = [:]
@@ -196,7 +207,7 @@ final class FakeClock {
     func repeating(_ seconds: TimeInterval, _ queue: DispatchQueue, _ fire: @escaping () -> Void) -> () -> Void {
         made += 1
         let id = made
-        timers[id] = (seconds, now, fire)
+        timers[id] = (seconds, now, { queue.sync(execute: fire) })
         advance(0)
         return { [weak self] in self?.timers[id] = nil }
     }

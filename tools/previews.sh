@@ -3,8 +3,10 @@
 # program's tests, against the invented state of share/contract), in its own appearance, and the check's snapshot is
 # kept as <name>.png; previews.json gets the SHA-256 of each HTML its picture was made from, which TemplatesTests
 # compares. The pictures themselves are never compared: the hash says which HTML a picture was made from, not that it
-# looks right, which is for whoever runs this to look at. Run it from anywhere in the clone after changing a template. Needs a window server: run it on a Mac where someone is logged in. Nothing is shown
-# on the screen.
+# looks right, which is for whoever runs this to look at. Run it from anywhere in the clone after changing a template.
+# Needs a window server: run it on a Mac where someone is logged in. Nothing is shown on the screen.
+# The pictures committed in 0.3 were also recompressed once, losslessly, at zlib's best level: a picture drawn again
+# is a fifth to a half larger, about 190 KB more in the app in all, which is not worth a tool of its own.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
