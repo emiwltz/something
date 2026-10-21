@@ -79,13 +79,14 @@
   @keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
   .tile.unknown { border-style: dashed; }
   .tile.error { border-color: var(--fail); }
-  /* A waiting tile spans the board and breathes amber until the person answers. */
-  .tile.waiting { border-color: var(--wait); animation: breathe 2.4s ease-in-out infinite; }
-  .tile.waiting.fresh { animation: arrive 120ms ease-out, breathe 2.4s ease-in-out infinite; }
-  @keyframes breathe {
-    0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 30%, transparent), 0 0 calc(var(--glow) * 26px) color-mix(in srgb, var(--wait) 16%, transparent); }
-    50% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 8%, transparent), 0 0 calc(var(--glow) * 8px) color-mix(in srgb, var(--wait) 5%, transparent); }
-  }
+  /* A waiting tile spans the board and breathes amber until the person answers. The glow is drawn once, on a layer
+     whose opacity alone moves: animating a shadow itself would paint it again at every frame. */
+  .tile.waiting { position: relative; border-color: var(--wait);
+                  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 8%, transparent), 0 0 calc(var(--glow) * 8px) color-mix(in srgb, var(--wait) 5%, transparent); }
+  .tile.waiting::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
+                         box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 30%, transparent), 0 0 calc(var(--glow) * 26px) color-mix(in srgb, var(--wait) 16%, transparent);
+                         animation: breathe 2.4s ease-in-out infinite; }
+  @keyframes breathe { 50% { opacity: 0; } }
   .tile .top { display: flex; justify-content: space-between; gap: 10px; }
   .tile .body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }   /* "why" sits at the tile's foot */
   .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 7px; vertical-align: 1px; }
@@ -141,7 +142,7 @@
     .deck { grid-template-columns: minmax(0, 1fr); }
     .waiting .body { display: flex; flex-direction: column; }
   }
-  @media (prefers-reduced-motion: reduce) { *, *::before { animation: none !important; transition: none !important; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>

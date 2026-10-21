@@ -92,9 +92,9 @@
   .fine { font-size: 13px; color: var(--soft); margin: 0; }
   #problem { position: fixed; right: 48px; bottom: 40px; max-width: 360px; color: #c03a63; font-weight: 700; }
 
-  /* The creature. Breathing is a loop from its full size, so a still picture shows it whole. */
-  #pebble { width: 150px; height: 132px; overflow: visible; }
-  .body { transform-origin: 75px 120px; animation: breathe 3s ease-in-out infinite; }
+  /* The creature. Breathing is a loop from its full size, so a still picture shows it whole. It moves the whole
+     picture, which is drawn once: a transform inside an SVG would draw it again at every frame. */
+  #pebble { width: 150px; height: 132px; overflow: visible; transform-origin: 75px 120px; animation: breathe 3s ease-in-out infinite; }
   @keyframes breathe { 50% { transform: scale(1.03, 1.035); } }
   .eye { transform-box: fill-box; transform-origin: center; transition: transform .08s; }
   .blink .eye { transform: scaleY(.1); }
@@ -142,7 +142,7 @@
     .egg { width: 320px; height: 410px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .body, .bang, .zz span { animation: none; }
+    #pebble, .bang, .zz span { animation: none; }
     .hop, .wiggle { animation: none; }
     .zz span { opacity: 1; }
     .meter i b { transition: none; }
@@ -167,7 +167,7 @@
     <div class="egg">
       <div class="screen" id="screen">
         <svg id="pebble" viewBox="0 0 150 132" aria-label="Pebble">
-          <g id="mover"><g class="body">
+          <g id="mover">
             <path d="M75 10c36 0 60 27 60 62 0 31-25 50-60 50S15 103 15 72c0-35 24-62 60-62z" style="fill:var(--mint);stroke:var(--mint-edge);stroke-width:4"/>
             <ellipse cx="52" cy="22" rx="12" ry="6" fill="#fff" opacity=".45" transform="rotate(-24 52 22)"/>
             <g class="eyes-open">
@@ -185,7 +185,7 @@
               <ellipse class="face-hungry" cx="75" cy="91" rx="5" ry="6" style="fill:var(--mint-ink)"/>
               <g class="face-sleep"><path d="M46 68q8 6 16 0"/><path d="M88 68q8 6 16 0"/><path d="M70 92q5 3 10 0"/></g>
             </g>
-          </g></g>
+          </g>
         </svg>
         <div class="bang" id="bang" hidden>!</div>
         <div class="zz" id="zz" hidden><span>z</span> <span>z</span></div>

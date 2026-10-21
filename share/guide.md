@@ -527,3 +527,5 @@ The same list as data: `share/contract/codes.json`.
 - A `change` may arrive while the person types: keep the input outside what you redraw, or its text and focus are lost.
 - Calling `something.open` from the click handler of an `<a href>` asks the person twice.
 - The memory is one JSON document: keep it small, and write whole values.
+- A space stays open all day: animate only `opacity` and `transform`, never a shadow, a filter or a size, which are
+  painted again at every frame; honor `prefers-reduced-motion`.

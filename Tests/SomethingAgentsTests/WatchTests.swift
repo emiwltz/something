@@ -101,6 +101,35 @@ import SomethingCore
         watch.start(every: 3600) { _ in }
     }
 
+    /// Decision 3 of 0.3: while no window shows, the watch does not tick at all; the moment one shows, it ticks, then
+    /// keeps the cadence of the moment. On a fake clock, which moves only when the test says.
+    @Test func theWatchSleepsWhileNoWindowShows() async throws {
+        let place = try EngineTests.Place(prefix: "watch-engine-")
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment), clock = FakeClock()
+        var ticks = 0
+        engine.watch = Watch(readers: [], snapshot: {
+            ticks += 1
+            return ClaudeHome.snapshot()
+        })
+        engine.watch.repeating = clock.repeating
+        engine.start(often: true)
+        #expect(ticks == 1, "the first tick is at once")
+        clock.advance(4)
+        #expect(ticks == 3, "then every 2 s while a space is open")
+        engine.start(often: true, visible: false)
+        clock.advance(600)
+        engine.start(often: false, visible: false)
+        clock.advance(600)
+        #expect(ticks == 3, "no tick while no window shows, whatever the cadence")
+        engine.start(often: false, visible: true)
+        #expect(ticks == 4, "a tick the moment the window shows")
+        clock.advance(9)
+        #expect(ticks == 4)
+        clock.advance(1)
+        #expect(ticks == 5, "then every 10 s with no space open")
+    }
+
     @Test func theEngineMergesLaunchedAndSeenAgents() async throws {
         let place = try EngineTests.Place(prefix: "watch-engine-")
         defer { place.remove() }
@@ -156,4 +185,29 @@ import SomethingCore
     #expect(Watch.continuable("codex", alive: nil, pid: nil) == (true, nil), "Codex refuses a second writer by itself")
     #expect(Watch.continuable("claude", alive: nil, pid: nil).0 == false)
     #expect(Watch.continuable("pi", alive: false, pid: nil) == (false, "something cannot continue pi conversations started elsewhere yet."))
+}
+
+/// A clock for `Watch.repeating` that moves only when `advance` is called, firing each timer at each of its times
+/// passed, on the test's own thread.
+final class FakeClock {
+    private var now: TimeInterval = 0, made = 0
+    private var timers: [Int: (every: TimeInterval, next: TimeInterval, fire: () -> Void)] = [:]
+
+    func repeating(_ seconds: TimeInterval, _ queue: DispatchQueue, _ fire: @escaping () -> Void) -> () -> Void {
+        made += 1
+        let id = made
+        timers[id] = (seconds, now, fire)
+        advance(0)
+        return { [weak self] in self?.timers[id] = nil }
+    }
+
+    func advance(_ seconds: TimeInterval) {
+        let end = now + seconds
+        while let (id, timer) = timers.filter({ $0.value.next <= end }).min(by: { $0.value.next < $1.value.next }) {
+            now = timer.next
+            timers[id]?.next += timer.every
+            timer.fire()
+        }
+        now = end
+    }
 }

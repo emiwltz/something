@@ -30,6 +30,11 @@ final class PiReader: Reader {
     private var walked = false
     private var pids: Set<Int32> = []
     private var files: [String: PiFile] = [:]
+    /// The logs too old to list when last looked at: a tick looks at them again only when it walks or a pi runs in
+    /// their folder.
+    private var old: Set<String> = []
+    /// Each folder with its links resolved, until the next walk.
+    private var real = HeldFiles.remembered()
 
     init(environment: [String: String]) {
         folder = environment["HOME"].map { ($0 as NSString).appendingPathComponent(".pi") }
@@ -45,20 +50,24 @@ final class PiReader: Reader {
         let every = snapshot.processes.values.filter(owns)
         let running = Set(every.map(\.pid))
         // A pi started since the last walk may have begun a log in a folder the walk has not listed.
-        if discover || !walked || running != pids {
+        let walking = discover || !walked || running != pids
+        if walking {
             walked = true
             pids = running
             walk()
         }
+        let here = Dictionary(grouping: every) { $0.folder.map(real) ?? "" }
         var stamps: [String: Stamp] = [:], byFolder: [String: [String]] = [:]
         for path in logs {
-            guard let stamp = Stamp(path) else { continue }
+            // An old log written again where no pi runs is seen at the next walk, at most 15 ticks later.
+            guard walking || !old.contains(path) || headers[path]?.header.map({ here[real($0.folder)] != nil }) == true,
+                  let stamp = Stamp(path) else { continue }
             if headers[path]?.inode != stamp.inode { headers[path] = (stamp.inode, PiLog.header(path, line: 0, opened: opened)) }
             guard let header = headers[path]?.header else { continue }
             stamps[path] = stamp
-            byFolder[HeldFiles.real(header.folder), default: []].append(path)
+            byFolder[real(header.folder), default: []].append(path)
+            if Watch.isRecent(alive: nil, updated: stamp.modified, now: now) { old.remove(path) } else { old.insert(path) }
         }
-        let here = Dictionary(grouping: every) { $0.folder.map(HeldFiles.real) ?? "" }
         var reading = Reading(health: "ok"), followed: [String: PiFile] = [:], shown: Set<String> = []
         for (place, paths) in byFolder {
             for (path, holder) in PiReader.holders(paths, stamps, pi: here[place] ?? [])
@@ -94,6 +103,8 @@ final class PiReader: Reader {
         logs = PiLog.logs(in: (agentFolders + named).filter(ClaudeReader.isFolder))
         let listed = Set(logs)
         headers = headers.filter { listed.contains($0.key) }
+        old.formIntersection(listed)
+        real = HeldFiles.remembered()
     }
 
     /// Who holds each of one folder's logs, from the pi running in that folder. One pi holds the log written last,

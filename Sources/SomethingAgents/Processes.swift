@@ -212,6 +212,16 @@ final class HeldFiles {
         return String(cString: resolved)
     }
 
+    /// `real`, which remembers each answer: realpath asks the disk, and a folder is asked about at every tick.
+    static func remembered() -> (String) -> String {
+        var known: [String: String] = [:]
+        return { path in
+            if let resolved = known[path] { return resolved }
+            known[path] = real(path)
+            return known[path]!
+        }
+    }
+
     /// What `pids` hold open, as last read when they are the same processes and that read is recent enough.
     func read(_ snapshot: Snapshot, _ pids: Set<Int32>, now: Date) -> Held {
         if let last, last.pids == pids, now.timeIntervalSince(last.at) < every { return last.held }

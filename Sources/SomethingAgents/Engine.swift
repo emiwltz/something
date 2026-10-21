@@ -52,14 +52,14 @@ public final class Engine {
 
     /// The agents started elsewhere: the readers, on their timer once `start` was called.
     lazy var watch = Watch(readers: Watch.readers(environment))
-    /// What the watch saw last, before the dedupe.
-    private var seen = Seen()
+    /// What the watch saw last, before the dedupe, and the agents seen elsewhere as the state last showed them.
+    private var seen = Seen(), outside: (agents: [Agent], threads: [AgentThread]) = ([], [])
 
-    /// Starts watching this Mac. `often` is true while a space is open. Called again, it only changes the cadence:
-    /// the programs are looked for once.
-    public func start(often: Bool) {
+    /// Starts watching this Mac: every 2 s while a space is open (`often`), 10 s otherwise, not at all while no window
+    /// is `visible`, and at once when one is again. Called again, it only changes that: the programs are looked for once.
+    public func start(often: Bool, visible: Bool = true) {
         self.often = often
-        watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) }
+        if visible { watch.start(every: often ? 2 : 10) { [weak self] seen in self?.saw(seen) } } else { watch.pause() }
         guard !looked else { return }
         looked = true
         lookAgain()
@@ -85,9 +85,9 @@ public final class Engine {
             (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
-        let elsewhere = elsewhere
-        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + elsewhere.agents,
-                     threads: launched.compactMap(\.agent.thread) + elsewhere.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
+        outside = elsewhere
+        return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
+                     threads: launched.compactMap(\.agent.thread) + outside.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
     }
 
     /// The agents the watch saw, but those something launched: the groups of its running children and the
@@ -98,17 +98,17 @@ public final class Engine {
         let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
         // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
         let keys = launched.compactMap(\.agent.agent.thread)
-        var seen = seen
-        if let mine = assistantFolder.map(HeldFiles.real) { seen.sightings.removeAll { $0.folder.map(HeldFiles.real) == mine } }
+        let real = HeldFiles.remembered(), mine = assistantFolder.map(real)
+        let seen = Seen(sightings: seen.sightings.filter { mine == nil || $0.folder.map(real) != mine }, kinds: seen.kinds)
         return Watch.elsewhere(seen, groups: groups, keys: Set(keys), now: Date())
     }
 
     /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.
     func saw(_ seen: Seen) {
-        let before = elsewhere, kinds = self.seen.kinds
+        let kinds = self.seen.kinds
         self.seen = seen
         let after = elsewhere
-        if after.agents != before.agents || after.threads != before.threads || seen.kinds != kinds { update() }
+        if after.agents != outside.agents || after.threads != outside.threads || seen.kinds != kinds { update() }
     }
 
     /// Drops from the state the launched agents ended `endedKept` seconds ago and the ended ones beyond the last

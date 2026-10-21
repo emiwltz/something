@@ -1,5 +1,5 @@
 #!/bin/bash
-# Assembles something.app in <prefix>: Contents/Info.plist with <version>, Contents/MacOS/something,
+# Assembles something.app in <prefix>: Contents/Info.plist with <version>, Contents/MacOS/something (stripped),
 # Contents/Resources/share and the icon, then an ad-hoc signature (no Apple account) that seals the bundle. A something.app
 # already in <prefix> is replaced. The program is stamped with the SDK that compiled it: swift build's default build
 # system records an older one, and macOS gives its current look only to a program stamped with a recent SDK.
@@ -41,6 +41,8 @@ plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Inf
 plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
 minimum=$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")
 xcrun vtool -set-build-version macos "$minimum" "$(xcrun --show-sdk-version)" -replace -output "$app/Contents/MacOS/something" "$executable"
+# The local symbols only serve a debugger: without them the program is half its size. The signature comes after.
+strip -x "$app/Contents/MacOS/something"
 cp -R "$repository/share" "$app/Contents/Resources/share"
 cp "$repository/packaging/something.icns" "$app/Contents/Resources/something.icns"
 codesign --force --sign - "$app"

@@ -28,6 +28,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     var rules: WKContentRuleList?
     /// What LaunchServices handed the app before it was ready to open anything; nil once it is.
     var handed: [URL]? = []
+    /// Whether the window can be seen. While it cannot, nothing is looked at: the agents, the spaces folder and the
+    /// open space's files are looked at again the moment it shows.
+    var shown = true
 
     init(opening: String?) {
         self.opening = opening
@@ -44,6 +47,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         info.reveal = { [weak self] in self?.library.showInFinder($0) }
         // The space stays selected, so that it opens again with the window.
         shell.closed = { [weak self] in self?.open(nil) }
+        shell.visible = { [weak self] visible in
+            guard let self, visible != shown else { return }
+            shown = visible
+            engine.start(often: current != nil, visible: visible)
+            library.watching(visible)
+            current?.watching(visible)
+        }
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent", line: "") }
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
@@ -169,7 +179,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             assistant.place = name == Library.gallery ? .templates : AssistantModel.place(current)
             info.show(current?.space)
             // The readers look often while a space is open, and rarely when nobody is looking.
-            engine.start(often: current != nil)
+            engine.start(often: current != nil, visible: shown)
+            current?.watching(shown)
         }
         guard let name, let space = library.entry(name)?.space else { return shell.show(nil, gallery: name == Library.gallery) }
         guard let rules else {

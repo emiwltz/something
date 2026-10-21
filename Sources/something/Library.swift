@@ -35,6 +35,7 @@ import SomethingCore
     /// Moves a file to the Trash; a test moves it into its own home, so that nothing reaches the person's Trash.
     @ObservationIgnored var recycle: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private var watched = false
     @ObservationIgnored private var looked: [String: Date] = [:]
     @ObservationIgnored private var looking = false
     /// True from Use Template until the space it made opened: a double click makes one space, not two.
@@ -78,7 +79,18 @@ import SomethingCore
         // Taken before the list is read: a change made while it is read is seen at the next look.
         looked = Library.stamp(places.spaces)
         relist()
+        watched = true
+        watching(true)
+    }
+
+    /// Looks at the folder twice a second while `on`, and at once when it turns on again: off while nobody can see
+    /// the window. Only once `watch` started.
+    func watching(_ on: Bool) {
+        guard watched, on != (timer != nil) else { return }
         timer?.invalidate()
+        timer = nil
+        guard on else { return }
+        look()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.look() }
         timer.tolerance = 0.2
         RunLoop.main.add(timer, forMode: .common)
@@ -109,8 +121,8 @@ import SomethingCore
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        watching(false)
+        watched = false
     }
 
     /// Opens the space `name` (or the templates), or closes the open one for nil, and remembers a space for the next

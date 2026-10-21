@@ -20,6 +20,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let reload = NSToolbarItem.Identifier("reload")
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
+    /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
+    var visible: (Bool) -> Void = { _ in }
     /// The tour while it is shown: the blank page stays behind it until it ends.
     private(set) var touring: Tour?
 
@@ -89,7 +91,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
     }
 
-    func windowWillClose(_ notification: Notification) { closed() }
+    func windowWillClose(_ notification: Notification) {
+        visible(false)
+        closed()
+    }
+
+    func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
     /// Out of full screen, an assistant ⌘J hid comes back: a window offers no other way to find it.
     func windowDidExitFullScreen(_ notification: Notification) { assistant.hidden = false }
@@ -177,6 +184,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func front() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        visible(true)
     }
 
     /// The app's menus, every item acting through the responder chain: the window, its split view, or the App.

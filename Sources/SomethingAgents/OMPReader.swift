@@ -18,9 +18,12 @@ final class OMPReader: Reader {
     /// Sees every path the reader opens.
     var opened: (String) -> Void = { _ in }
 
-    /// Each log found, and its path with links resolved, as the system names the files a process holds.
-    private var found: [(path: String, real: String)] = []
-    private var walked = false, pids: Set<Int32> = []
+    /// Each log found, its path with links resolved, as the system names the files a process holds, and the id of
+    /// its session, which its name ends with (`<time>_<id>.jsonl`) and its lease names.
+    private var found: [(path: String, real: String, id: String)] = []
+    /// The logs too old to list when last looked at: a tick looks at them again only when it walks or a process holds one.
+    private var old: Set<String> = []
+    private var walked = false, pids: Set<Int32> = [], leases = ""
     private var files: [String: PiFile] = [:]
     /// The headers read, by path, with the inode they were read from.
     private var headers: [String: (inode: UInt64, header: PiLog.Header?)] = [:]
@@ -34,28 +37,31 @@ final class OMPReader: Reader {
         guard let folder, ClaudeReader.isFolder(folder) else { return Reading() }
         let running = Set(snapshot.processes.values.filter(owns).map(\.pid))
         // A session opened since the last walk is held at once: the walk is done again when the omp processes change.
-        if discover || !walked || running != pids {
+        let walking = discover || !walked || running != pids
+        if walking {
             walked = true
             pids = running
             let profiles = ((try? FileManager.default.contentsOfDirectory(atPath: "\(folder)/profiles")) ?? []).map { "\(folder)/profiles/\($0)/agent/sessions" }
             // Only `<cwd folder>/<time>_<id>.jsonl`: a sub-agent's log lies one folder deeper, in its parent's.
-            let known = Dictionary(found.map { ($0.path, $0.real) }) { first, _ in first }
+            let known = Dictionary(found.map { ($0.path, $0) }) { first, _ in first }
             found = PiLog.logs(in: (["\(folder)/agent/sessions"] + profiles).filter(ClaudeReader.isFolder))
-                .filter { ($0 as NSString).lastPathComponent.contains("_") }.map { ($0, known[$0] ?? HeldFiles.real($0)) }
+                .filter { ($0 as NSString).lastPathComponent.contains("_") }
+                .map { known[$0] ?? ($0, HeldFiles.real($0), String(($0 as NSString).lastPathComponent.dropLast(".jsonl".count).split(separator: "_").last ?? "")) }
             let paths = Set(found.map(\.path))
             headers = headers.filter { paths.contains($0.key) }
+            old.formIntersection(paths)
+            leases = HeldFiles.real("\(folder)/run/session-owners") + "/"
         }
         let holding = held.read(snapshot, running, now: now)
-        let leases = HeldFiles.real("\(folder)/run/session-owners") + "/"
         var leased: [String: Int32] = [:]
         for (path, pid) in holding.files where path.hasPrefix(leases) && path.hasSuffix(".lock") { leased[String(path.dropFirst(leases.count).dropLast(5))] = pid }
         var reading = Reading(health: "ok"), followed: [String: PiFile] = [:]
-        for (path, real) in found {
-            guard let stamp = Stamp(path) else { continue }
-            // The lease names the session's id, which its file name ends with (`<time>_<id>.jsonl`).
-            let id = String((path as NSString).lastPathComponent.dropLast(".jsonl".count).split(separator: "_").last ?? "")
+        for (path, real, id) in found {
             let holder = holding.files[path] ?? holding.files[real] ?? leased[id]
-            guard holder != nil || Watch.isRecent(alive: nil, updated: stamp.modified, now: now) else { continue }
+            // An old log written again without a holder is seen at the next walk, at most 15 ticks later.
+            guard holder != nil || walking || !old.contains(path), let stamp = Stamp(path) else { continue }
+            guard holder != nil || Watch.isRecent(alive: nil, updated: stamp.modified, now: now) else { old.insert(path); continue }
+            old.remove(path)
             if headers[path]?.inode != stamp.inode { headers[path] = (stamp.inode, PiLog.header(path, line: 1, opened: opened)) }
             guard let header = headers[path]?.header else { continue }
             var file = files[path] ?? PiFile(path: path, header: header, log: PiLog(name: "OMP"))

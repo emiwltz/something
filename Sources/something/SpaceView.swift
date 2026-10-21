@@ -141,6 +141,17 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// space reloads.
     func open() {
         load()
+        watching(true)
+    }
+
+    /// Looks at the space's files each second while `on`, and at once when it turns on again: off while nobody can
+    /// see the window.
+    func watching(_ on: Bool) {
+        guard on != (timer != nil) else { return }
+        timer?.invalidate()
+        timer = nil
+        guard on else { return }
+        look()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.look() }
     }
 
@@ -373,7 +384,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Stops watching and lets the web view go; its data store goes with it.
     func close() {
         loads += 1
-        timer?.invalidate()
+        watching(false)
         SpaceView.release(web)
     }
 }

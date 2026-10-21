@@ -1,8 +1,8 @@
-// Watch: the loop that sees the agents started elsewhere. One timer, every 2 s while a space is
-// open and 10 s otherwise: one process snapshot, then each reader stats its files and reads only what changed; every
-// 15th tick, readers also walk their folders for what a stat cannot find. The work runs on the watch's own queue and
-// its result is handed to the main queue, where the engine drops what it launched itself (dedupe) and folds the rest
-// into agents through StateMap.
+// Watch: the loop that sees the agents started elsewhere. One timer, every 2 s while a space is open, 10 s otherwise,
+// paused while no window shows: one process snapshot, then each reader stats the files it may list and reads only what
+// changed; every 15th tick, readers also walk their folders for what a stat cannot find, and look again at the files
+// too old to list. The work runs on the watch's own queue and its result is handed to the main queue, where the
+// engine drops what it launched itself (dedupe) and folds the rest into agents through StateMap.
 import Darwin
 import Foundation
 import SomethingCore
@@ -76,8 +76,17 @@ final class Watch {
     let readers: [Reader]
     private let snapshot: () -> Snapshot
     private let queue = DispatchQueue(label: "something.watch")
-    private var timer: DispatchSourceTimer?
+    private var cancel: (() -> Void)?
     private var interval: TimeInterval = 0
+    /// Calls `fire` on `queue` every `seconds`, the first time now, until the closure it returns is called. A test
+    /// gives a clock of its own.
+    var repeating: (_ seconds: TimeInterval, _ queue: DispatchQueue, _ fire: @escaping () -> Void) -> () -> Void = { seconds, queue, fire in
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now(), repeating: seconds, leeway: .milliseconds(500))
+        timer.setEventHandler(handler: fire)
+        timer.resume()
+        return timer.cancel
+    }
     private var ticks = 0
     /// The last tick's result, kept for a tick whose snapshot is not whole.
     private var last = Seen()
@@ -102,19 +111,22 @@ final class Watch {
     func start(every seconds: TimeInterval, _ seen: @escaping (Seen) -> Void) {
         guard seconds != interval else { return }
         interval = seconds
-        timer?.cancel()
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now(), repeating: seconds, leeway: .milliseconds(500))
-        timer.setEventHandler { [weak self] in
+        cancel?()
+        cancel = repeating(seconds, queue) { [weak self] in
             guard let self else { return }
             let result = tick(now: Date())
             DispatchQueue.main.async { seen(result) }
         }
-        self.timer = timer
-        timer.resume()
     }
 
-    deinit { timer?.cancel() }
+    /// Stops ticking until `start` is called again, which ticks at once.
+    func pause() {
+        cancel?()
+        cancel = nil
+        interval = 0
+    }
+
+    deinit { cancel?() }
 
     /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings, and none whose
     /// process descends from something (its children, their descendants and reparented helpers). A

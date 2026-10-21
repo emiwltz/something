@@ -141,6 +141,28 @@ final class PiHome {
         #expect(agent.kind == "pi" && agent.state == "unknown" && agent.evidence == "process" && agent.thread == nil && !agent.can.resume)
     }
 
+    /// A log too old to list is looked at again at the next walk (every 15th tick), not at each tick: written again
+    /// where no process holds it, it is listed then. In a folder where a pi runs, every log is looked at each tick.
+    @Test func anOldLogIsLookedAtAgainAtTheWalk() throws {
+        let home = try PiHome()
+        defer { home.remove() }
+        let blog = home.log(PiHome.blog), ompBlog = home.ompLog(PiHome.ompBlog)
+        func date(_ seconds: TimeInterval, _ paths: [String]) throws {
+            for path in paths { try FileManager.default.setAttributes([.modificationDate: home.now.addingTimeInterval(seconds)], ofItemAtPath: path) }
+        }
+        try date(-3 * 86_400, [blog, ompBlog])
+        #expect(home.read([])[blog] == nil && home.readOMP()[PiHome.ompBlog] == nil)
+        try date(0, [blog, ompBlog])
+        #expect(home.read([], discover: false)[blog] == nil && home.readOMP(discover: false)[PiHome.ompBlog] == nil)
+        #expect(home.read([])[blog] != nil && home.readOMP()[PiHome.ompBlog] != nil, "seen at the walk")
+
+        let pi = PiHome.pi(52005, in: "/Users/example/blog", started: home.now.addingTimeInterval(-60))
+        try date(-3 * 86_400, [blog])
+        #expect(home.read([pi])[blog] == nil)
+        try date(0, [blog])
+        #expect(home.read([pi], discover: false)[blog]?.facts.alive == true, "the pi in its folder writes it again")
+    }
+
     @Test func aPiSomethingLaunchedStillCountsInItsFolder() throws {
         let home = try PiHome()
         defer { home.remove() }

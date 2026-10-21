@@ -96,6 +96,14 @@ import Testing
         try Library.prepare(test.places)
         try test.space("pond", page(#"{"contract": 1, "title": "Pond"}"#, ""))
         #expect(await wait(soon, until: { library.entries.map(\.id) == ["pond"] }))
+
+        // While nobody can see the window, the folder is not looked at; it is again when the window shows.
+        library.watching(false)
+        try test.space("reeds", page(#"{"contract": 1, "title": "Reeds"}"#, ""))
+        await wait(1.5)
+        #expect(library.entries.map(\.id) == ["pond"])
+        library.watching(true)
+        #expect(await wait(soon, until: { library.entries.map(\.id) == ["pond", "reeds"] }))
     }
 
     /// The snapshots `something check` keeps in the spaces folder's hidden .check are no space: the library does not
