@@ -22,8 +22,22 @@ public struct Declaration: Equatable, Sendable, EveryKey {
     public static let known = 1
     static let keys: Set = ["contract", "title", "description", "agents", "rights", "folder"]
     static let rightWords: Set = ["state", "send", "launch", "store"]
-    /// The kinds a send or launch right may name. omp is known, but this engine cannot honour it.
-    static let rightKinds: Set = ["claude", "codex", "opencode", "pi"], unavailableKinds: Set = ["omp"]
+}
+
+/// The kinds a `send:` or `launch:` right may name: those the engine launches, and those it knows but cannot launch,
+/// whose rights are unavailable. The engine registers them; contract 1's own kinds are the floor, so a space written
+/// for contract 1 reads the same whatever is registered, and a kind registered beyond them is an addition.
+public struct Kinds: Equatable, Sendable {
+    public let launchable: Set<String>, readOnly: Set<String>
+
+    /// Contract 1's kinds alone (share/contract/frozen-v1.json's rightKinds), and omp, known but not launched.
+    public static let contract1 = Kinds(launchable: [], readOnly: [])
+
+    /// The registered kinds added to contract 1's; a kind launchable in either is launchable.
+    public init(launchable: Set<String>, readOnly: Set<String>) {
+        self.launchable = launchable.union(["claude", "codex", "opencode", "pi"])
+        self.readOnly = readOnly.union(["omp"]).subtracting(self.launchable)
+    }
 }
 
 /// What reading a declaration found.
@@ -41,9 +55,10 @@ public struct DeclarationReading: Equatable, Sendable {
 extension Declaration {
     /// Reads the declaration of `space` from its files. Adds what only the disk can tell: a declared folder missing
     /// on this Mac (`~` is `home`), and a space heavier than 5 MB. Never throws: a file that cannot be read is a
-    /// declaration that is missing or unreadable, and the problem's message says it could not be read.
-    public static func read(_ space: Space, home: URL) -> DeclarationReading {
-        var reading = declared(in: space)
+    /// declaration that is missing or unreadable, and the problem's message says it could not be read. `kinds` are
+    /// those the engine registered.
+    public static func read(_ space: Space, home: URL, kinds: Kinds) -> DeclarationReading {
+        var reading = declared(in: space, kinds: kinds)
         guard let declaration = reading.declaration else { return reading }
         if let folder = declaration.folder {
             var isFolder: ObjCBool = false
@@ -63,13 +78,13 @@ extension Declaration {
     }
 
     /// What the files of `space` declare, before what only the disk can tell.
-    static func declared(in space: Space) -> DeclarationReading {
+    static func declared(in space: Space, kinds: Kinds = .contract1) -> DeclarationReading {
         let page = space.page.lastPathComponent
         var html: String?, pageError: String?
         do { html = String(decoding: try Data(contentsOf: space.page), as: UTF8.self) } catch { pageError = error.localizedDescription }
         let file = space.location.appendingPathComponent("something.json")
         let json = space.form == .folder && FileManager.default.fileExists(atPath: file.path) ? (try? Data(contentsOf: file)) ?? Data() : nil
-        var reading = read(html: html, json: json, name: space.name, page: page)
+        var reading = read(html: html, json: json, name: space.name, page: page, kinds: kinds)
         // A page that is there but cannot be read may well have a block: saying it has none would be false.
         if let pageError, FileManager.default.fileExists(atPath: space.page.path), let i = reading.problems.firstIndex(where: { $0.code == "DECLARATION_MISSING" }) {
             reading.problems[i] = Problem("DECLARATION_MISSING", "\(page) could not be read (\(pageError)); the space opens with no right.", where: Where(file: page))
@@ -79,7 +94,7 @@ extension Declaration {
 
     /// Reads a declaration from the page's HTML and, for a folder space, the bytes of its something.json.
     /// `name` is the default title; `page` names the HTML file in problems.
-    static func read(html: String?, json: Data?, name: String, page: String) -> DeclarationReading {
+    static func read(html: String?, json: Data?, name: String, page: String, kinds: Kinds = .contract1) -> DeclarationReading {
         var reading = DeclarationReading()
         let block = html.flatMap(Self.block(in:))
         let text: Data, file: String
@@ -140,7 +155,7 @@ extension Declaration {
         case let words as [Any]:
             for word in words {
                 guard let word = word as? String else { add("\(word)", to: &reading.unknown); continue }
-                switch right(word) {
+                switch right(word, kinds: kinds) {
                 case .known: add(word, to: &declaration.rights)
                 case .unavailable: add(word, to: &reading.unavailable)
                 case .unknown: add(word, to: &reading.unknown)
@@ -160,12 +175,12 @@ extension Declaration {
     enum Right { case known, unavailable, unknown }
 
     /// What a right's word is: `state`, `store`, `send`, `launch`, or `send:` and `launch:` with a kind.
-    static func right(_ word: String) -> Right {
+    static func right(_ word: String, kinds: Kinds) -> Right {
         let parts = word.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
         guard rightWords.contains(parts[0]) else { return .unknown }
         guard parts.count == 2 else { return .known }
         guard parts[0] == "send" || parts[0] == "launch" else { return .unknown }
-        return rightKinds.contains(parts[1]) ? .known : unavailableKinds.contains(parts[1]) ? .unavailable : .unknown
+        return kinds.launchable.contains(parts[1]) ? .known : kinds.readOnly.contains(parts[1]) ? .unavailable : .unknown
     }
 
     /// The text of the first <script type="application/json" id="something"> in `html`, whatever the order, case and

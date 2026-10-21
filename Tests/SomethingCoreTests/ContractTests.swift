@@ -252,6 +252,8 @@ enum Frozen {
         let missing = Frozen.missing(frozen: try ContractFiles.object("frozen-v1.json"), shape: try ContractFiles.object("shape.json"),
                                      codes: try ContractFiles.object("codes.json"), guide: ContractFiles.guide)
         #expect(missing.isEmpty, "\(missing)")
+        // The floor of the kinds a right may name is the frozen list.
+        #expect(Set(try ContractFiles.object("frozen-v1.json")["rightKinds"] as? [String] ?? []) == Kinds.contract1.launchable)
     }
 
     /// An agent reads each code an engine or the check can give with its fix: every bridge and check code of

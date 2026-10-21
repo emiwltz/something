@@ -24,6 +24,8 @@ public final class Engine {
     /// The kinds something can launch, by their driver.
     static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self, "opencode": ACPDriver.self,
                                                         "pi": PiDriver.self]
+    /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
+    public static let kinds = Kinds(launchable: Set(drivers.keys), readOnly: Set(AgentDescriptor.all.map(\.kind)).subtracting(drivers.keys))
 
     private let environment: [String: String]
     /// Where programs are found; a test empties its system folders (`Engine.throwaway`).

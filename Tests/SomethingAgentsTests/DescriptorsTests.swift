@@ -3,6 +3,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+import SomethingCore
 
 @Suite struct DescriptorsTests {
     @Test func theTablesAreThoseOf0_2() {
@@ -19,6 +20,8 @@ import Testing
         #expect(Engine.asksAsMuch == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"]])
         #expect(Watch.resumable == ["claude", "codex"])
         #expect(OtherReader.names == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+        // What the core received as its contract 1 list in 0.2: the kinds registered are exactly that floor today.
+        #expect(Engine.kinds.launchable == ["claude", "codex", "opencode", "pi"] && Engine.kinds.readOnly == ["omp"])
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {

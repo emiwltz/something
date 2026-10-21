@@ -5,6 +5,7 @@
 // imported or copied under a name forgets what the grants file kept for it first.
 import AppKit
 import Observation
+import SomethingAgents
 import SomethingCore
 
 @Observable final class Library {
@@ -60,7 +61,7 @@ import SomethingCore
     /// Reads the spaces folder again. The open space, once gone, is closed.
     func relist() {
         let listed = Spaces(root: places.spaces).list().map { space in
-            let reading = Declaration.read(space, home: places.home)
+            let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
             // A page with no declaration block, or one that does not read, is not a space yet: a scratch file, a draft.
             let declared = reading.declaration != nil && !reading.problems.contains { $0.code == "DECLARATION_MISSING" }
             return Entry(space: space, title: reading.declaration?.title ?? space.name, isSpace: declared)

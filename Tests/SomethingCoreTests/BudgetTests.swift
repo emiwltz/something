@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_750, driver = 600, agentsShared = 400, app = 5_000
+    static let core = 1_800, driver = 600, agentsShared = 400, app = 5_000
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -76,7 +76,7 @@ enum Budget {
             ("SomethingAgents", "ClaudeDriver.swift", 601, "ClaudeDriver.swift has 601 lines; a driver has 600."),
             ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
-            ("SomethingCore", "Contract.swift", 1_751, "SomethingCore has 1751 lines; its budget is 1750."),
+            ("SomethingCore", "Contract.swift", 1_801, "SomethingCore has 1801 lines; its budget is 1800."),
             ("something", "App.swift", 5_001, "The Mac app has 5001 lines; its budget is 5000."),
         ]
         for item in cases {

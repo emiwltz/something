@@ -109,7 +109,7 @@ final class CheckRunner {
         let kept = Command.kept(space.location, places) != nil
         report.size = space.size()
         if check.journal { journal(of: space, kept: kept, into: &report) }
-        let reading = Declaration.read(space, home: places.home)
+        let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
         report.declaration = reading.declaration
         report.problems = reading.problems
         // The app does not display such a space, so there is nothing to render.

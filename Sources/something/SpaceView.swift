@@ -200,7 +200,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         frame = nil
         linksBlocked = false
         faults = []
-        let reading = Declaration.read(space, home: places.home)
+        let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
         self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         title = reading.declaration?.title ?? space.name

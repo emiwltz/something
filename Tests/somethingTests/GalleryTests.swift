@@ -28,7 +28,7 @@ struct GalleryTests {
         let space = try fixture.space("morning-review", page(declaration, "<p>Morning review</p>"))
         try fixture.space("garden-notes", page(#"{"contract": 1, "title": "Garden notes", "rights": ["store"]}"#, "<p>Garden</p>"))
         var file = AppFile()
-        var grant = Grant(declared: Asked(try #require(Declaration.read(space, home: fixture.root).declaration)), at: "2026-10-17T08:00:00Z")
+        var grant = Grant(declared: Asked(try #require(Declaration.read(space, home: fixture.root, kinds: Engine.kinds).declaration)), at: "2026-10-17T08:00:00Z")
         grant.granted = ["state", "send:claude", "store"]
         grant.refused = ["launch:claude"]
         grant.folder = fixture.root.appendingPathComponent("code/shop").path

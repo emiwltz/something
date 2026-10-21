@@ -19,7 +19,7 @@ import Testing
         }
         let space = try #require(Spaces(root: root.appendingPathComponent("spaces")).named(name), "\(name) is not found as a space")
         #expect(space.form.rawValue == form)
-        return (Declaration.read(space, home: home), space, root)
+        return (Declaration.read(space, home: home, kinds: .contract1), space, root)
     }
 
     @Test(arguments: ContractFiles.fixtures("declarations"))
@@ -51,9 +51,9 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         try write(#"<script type="application/json" id="something">{"contract": 1}</script>"#, "board/index.html", under: root)
         let space = try #require(Spaces(root: root).named("board"))
-        #expect(Declaration.read(space, home: root).problems.isEmpty)
+        #expect(Declaration.read(space, home: root, kinds: .contract1).problems.isEmpty)
         try Data(count: Size.heavy).write(to: root.appendingPathComponent("board/photo.jpg"))
-        #expect(Declaration.read(space, home: root).problems.map(\.code) == ["TOO_HEAVY"])
+        #expect(Declaration.read(space, home: root, kinds: .contract1).problems.map(\.code) == ["TOO_HEAVY"])
     }
 
     @Test func theBlockIsFoundHoweverItIsWritten() {
@@ -101,6 +101,19 @@ import Testing
         #expect(reading.declaration?.rights == ["send", "launch:pi"] && reading.unavailable == ["send:omp"])
     }
 
+    @Test func theKindsAreGivenWithContract1sAsTheFloor() {
+        let rights = Data(#"{"contract": 1, "rights": ["launch:cursor", "send:omp", "launch:pi"]}"#.utf8)
+        let floor = Declaration.read(html: nil, json: rights, name: "x", page: "index.html", kinds: .contract1)
+        #expect(floor.declaration?.rights == ["launch:pi"] && floor.unavailable == ["send:omp"] && floor.unknown == ["launch:cursor"])
+        // A kind registered beyond contract 1's is an addition; one registered as launchable is no longer read-only;
+        // registering fewer removes none of contract 1's.
+        let more = Kinds(launchable: ["cursor", "omp"], readOnly: ["pi"])
+        #expect(more.launchable == ["claude", "codex", "opencode", "pi", "cursor", "omp"] && more.readOnly.isEmpty)
+        let added = Declaration.read(html: nil, json: rights, name: "x", page: "index.html", kinds: more)
+        #expect(added.declaration?.rights == ["launch:cursor", "send:omp", "launch:pi"] && added.problems.isEmpty)
+        #expect(Kinds(launchable: [], readOnly: []) == .contract1)
+    }
+
     @Test func aBlockInsideAnHtmlCommentDoesNotCount() {
         let html = #"<!-- <script type="application/json" id="something">{"contract": 1, "title": "Old"}</script> -->"#
         #expect(Declaration.read(html: html, json: nil, name: "notes", page: "notes.html").problems.map(\.code) == ["DECLARATION_MISSING"])
@@ -112,7 +125,7 @@ import Testing
         let root = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: root) }
         try write(#"<script type="application/json" id="something">{"contract": 1, "folder": "code/shop"}</script>"#, "notes.html", under: root)
-        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root).problems
+        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root, kinds: .contract1).problems
         #expect(problems.map(\.code) == ["FOLDER_MISSING"])
         #expect(problems.first?.message == "folder is code/shop: it must be absolute or start with ~, for example ~/code/shop.")
     }
@@ -124,7 +137,7 @@ import Testing
         let page = root.appendingPathComponent("notes.html")
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: page.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: page.path) }
-        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root).problems
+        let problems = Declaration.read(try #require(Spaces(root: root).named("notes")), home: root, kinds: .contract1).problems
         #expect(problems.map(\.code) == ["DECLARATION_MISSING"])
         #expect(problems.first?.message.hasPrefix("notes.html could not be read (") == true, "\(problems)")
     }

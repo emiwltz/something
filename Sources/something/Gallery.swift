@@ -2,6 +2,7 @@
 // `something check` took of it (tools/previews.sh). The gallery shows a card per template: its preview, its title and
 // description, what it may do in plain words, and Use Template, which makes it one of the person's spaces (Library.use).
 // The blank page and the welcome show the same previews smaller.
+import SomethingAgents
 import SomethingCore
 import SwiftUI
 
@@ -23,7 +24,7 @@ struct Template: Identifiable {
         let folder = share.appendingPathComponent("templates")
         return present(share).compactMap { name in
             guard let space = Spaces(root: folder).named(name),
-                  let declared = Declaration.read(space, home: URL(fileURLWithPath: "/")).declaration else { return nil }
+                  let declared = Declaration.read(space, home: URL(fileURLWithPath: "/"), kinds: Engine.kinds).declaration else { return nil }
             return Template(id: name, title: declared.title, line: declared.description ?? "", rights: declared.rights,
                             follows: declared.folder == placeholder, preview: NSImage(contentsOf: folder.appendingPathComponent("\(name).png")))
         }
