@@ -199,7 +199,8 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
 
 something requires macOS 15 or later. The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4, no
 Xcode); at each push GitHub runs it on macOS 15.7 (Swift 6.1) and 26.6 (Swift 6.3) and installs the formula there with
-Homebrew. All on Apple silicon: Intel Macs are not tested.
+Homebrew. The bottles of v0.2.0 are built and installed on GitHub's macOS 26 and 15 (Apple silicon) and macOS 15 on
+Intel, where `brew test` and `something check` pass; the suite itself has not run on an Intel Mac.
 
 ## Uninstall
 
