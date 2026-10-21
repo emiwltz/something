@@ -32,13 +32,16 @@ import SomethingCore
         #expect(reply["outcome"] as? [String: String] == ["outcome": "selected", "optionId": "once"], "never \"always\"")
     }
 
-    /// OpenCode ends the turn "cancelled" by itself after a refusal: something did not cancel, so the turn is done.
+    /// OpenCode ends the turn "cancelled" by itself after a refusal: something did not cancel, and the turn did not
+    /// end as a normal one, so it fails with what happened.
     @Test func deny() throws {
         let replay = try Replay.play("deny", kind: "opencode")
         let tool = try #require(replay.items.first { $0.kind == "tool" })
         #expect(tool.tool?.status == "failed")
         #expect(tool.decision == Decision(by: "person", outcome: "denied"))
-        #expect(replay.fold.turns.map(\.state) == ["done"])
+        #expect(replay.fold.turns.map(\.state) == ["error"])
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message:
+            "OpenCode stopped its turn because its request “touch invented.txt” was refused. Tell it what to do instead in a new message."))
         let reply = try #require(replay.lines().first { $0["result"] != nil }?["result"] as? [String: Any])
         #expect(reply["outcome"] as? [String: String] == ["outcome": "selected", "optionId": "reject"])
     }
@@ -46,7 +49,7 @@ import SomethingCore
     @Test func aQuestionIsDismissedByOpenCode() throws {
         let replay = try Replay.play("question", kind: "opencode")
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.questionDismissed))
-        #expect(replay.fold.turns.map(\.state) == ["done"])
+        #expect(replay.fold.turns.map(\.state) == ["error"], "the turn OpenCode cancelled after it is no normal end")
         #expect(replay.items.first { $0.kind == "tool" }?.tool == Tool(name: "question", status: "failed"))
     }
 
@@ -208,9 +211,12 @@ import SomethingCore
     @Test func failedTurnsAreSaidInWords() throws {
         let replay = Self.opened()
         _ = try replay.agent.send("Hello.", when: "next")
-        replay.feed(["jsonrpc": "2.0", "id": 3, "error": ["code": -32000, "message": "provider authentication required"]])
+        replay.feed(["jsonrpc": "2.0", "id": 3, "error": ["code": -32000, "message": "Authentication required: provider authentication required"]])
         #expect(replay.fold.turns.map(\.state) == ["error"])
-        #expect(replay.fold.agent.error?.message.contains("opencode auth login") == true)
+        #expect(replay.fold.agent.error?.message == "OpenCode is not signed in to the provider of its model fake/fake-model (fake). "
+            + "Sign in to it in OpenCode (`opencode auth login` in a terminal) and send the message again, or use another model once in OpenCode "
+            + "and start a new conversation: something takes the model you used last there.")
+        #expect(ACPDriver.failure(["code": -32000], "Authentication required", "Hello.", model: nil).hasPrefix("OpenCode is not signed in to its model's provider. Sign in"))
         _ = try replay.agent.send("Again.", when: "next")
         replay.feed(["jsonrpc": "2.0", "id": 4, "result": ["stopReason": "max_tokens"]])
         #expect(replay.fold.turns.map(\.state) == ["error", "error"])
@@ -231,6 +237,48 @@ import SomethingCore
         #expect(ACPDriver.database(["HOME": "/Users/example", "XDG_DATA_HOME": "/Users/example/data"]) == "/Users/example/data/opencode/opencode.db")
         #expect(ACPDriver.database(["HOME": "/Users/example", "OPENCODE_DB": "/Users/example/other.db"]) == "/Users/example/other.db")
         #expect(ACPDriver.database([:]) == nil)
+    }
+
+    /// OpenCode's model.json, as its terminal app writes it (invented models): the most recent first.
+    static let modelFile = #"{"recent": [{"providerID": "fake", "modelID": "other-model"}, {"providerID": "fake", "modelID": "fake-model"}], "favorite": [], "variant": {}}"#
+
+    @Test func theRecentModelIsReadFromOpenCodesStateFile() throws {
+        let home = try Self.folder()
+        defer { try? FileManager.default.removeItem(at: home) }
+        #expect(ACPDriver.recentModel(["HOME": home.path]) == nil, "no file")
+        let state = home.appendingPathComponent(".local/state/opencode")
+        try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+        for garbage in ["not json", "[]", #"{"recent": []}"#, #"{"recent": [{"providerID": "fake"}]}"#, #"{"recent": [{"providerID": "", "modelID": "m"}]}"#] {
+            try garbage.write(to: state.appendingPathComponent("model.json"), atomically: true, encoding: .utf8)
+            #expect(ACPDriver.recentModel(["HOME": home.path]) == nil, "\(garbage)")
+        }
+        try Self.modelFile.write(to: state.appendingPathComponent("model.json"), atomically: true, encoding: .utf8)
+        #expect(ACPDriver.recentModel(["HOME": home.path]) == "fake/other-model")
+        #expect(ACPDriver.recentModel(["HOME": "/Users/example", "XDG_STATE_HOME": home.appendingPathComponent(".local/state").path]) == "fake/other-model")
+        #expect(ACPDriver.recentModel([:]) == nil)
+    }
+
+    /// A new conversation that names no model takes OpenCode's own last model before the first message, when OpenCode
+    /// offers it; a model the launch names, a resumed conversation and a model not offered keep today's way.
+    @Test func aNewConversationTakesTheRecentModel() throws {
+        func opened(_ replay: Replay, recent: String?) throws -> [[String: Any]] {
+            try #require(replay.agent.driver as? ACPDriver).recent = recent
+            replay.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+            replay.feed(["jsonrpc": "2.0", "id": 2, "result": ["sessionId": Self.session, "configOptions": [
+                ["id": "model", "category": "model", "currentValue": "fake/fake-model", "options": [
+                    ["value": "fake/fake-model", "name": "fake/Fake Model"], ["value": "fake/other-model", "name": "fake/Other Model"]]]]]])
+            _ = try replay.agent.send("Hello.", when: "next")
+            return replay.lines().filter { $0["method"] as? String == "session/set_config_option" || $0["method"] as? String == "session/prompt" }
+        }
+        let taken = try opened(Replay.opencode(), recent: "fake/other-model")
+        #expect(taken.count == 1 && (taken[0]["params"] as? [String: Any])?["value"] as? String == "fake/other-model", "the prompt waits for the model")
+        #expect(try opened(Replay.opencode(), recent: "fake/gone-model").map { $0["method"] as? String } == ["session/prompt"])
+        #expect(try opened(Replay.opencode(), recent: "fake/fake-model").map { $0["method"] as? String } == ["session/prompt"], "already in use")
+        #expect(try opened(Replay.opencode(), recent: nil).map { $0["method"] as? String } == ["session/prompt"])
+        let named = try opened(Replay.opencode(model: "fake/fake-model"), recent: "fake/other-model")
+        #expect(named.compactMap { ($0["params"] as? [String: Any])?["value"] as? String } == ["fake/fake-model"], "the model asked for wins")
+        let resumed = try opened(Replay.opencode(resume: Self.session), recent: "fake/other-model")
+        #expect(resumed.map { $0["method"] as? String } == ["session/prompt"], "a resumed conversation keeps its model")
     }
 
     static func folder() throws -> URL {

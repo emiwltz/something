@@ -435,9 +435,11 @@ to do. Exit status: `0` no error (warnings allowed), `1` errors, `2` the check c
   one, empty at the start. Each call is listed with its answer (for `state`, the ids of the agents your page saw).
 - **What it reports**: uncaught errors with file, line and column, unhandled rejections, `console.error`, missing files,
   loads and navigations the lock blocked, calls a real engine would reject, rights you use without declaring, a
-  declaration that does not read, a page that does not load within 15 seconds or whose process ends. `--json` gives
-  the same as one JSON object, with the console and a snapshot (a PNG of the page after it painted: look at it). The
-  page is still heard for half a second after the snapshot, so a timer that throws soon after the load is reported too.
+  declaration that does not read, a page that does not load within 15 seconds or whose process ends. Each run also
+  writes a snapshot, a PNG of the page after it painted: look at it. A space of `~/something/spaces` has it in the
+  hidden folder `.check/<name>.png` there, which is never a space; a page elsewhere, in `$TMPDIR/something-check/`.
+  `--json` gives the same as one JSON object, with the console and the snapshot's path. The page is still heard for
+  half a second after the snapshot, so a timer that throws soon after the load is reported too.
   `received` says what state the page was given, and is null when the page was not loaded.
 - `--journal` adds the last 100 lines of your space's real journal.
 - **In a sandbox without a window server** (where many coding agents run their commands), only the declaration and the

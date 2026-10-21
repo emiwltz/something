@@ -55,18 +55,21 @@ import SomethingCore
     """#
 
     /// A fake `opencode acp`: answers each call by its id, as 2.0.20 does (Tests/Exchanges/opencode), text invented.
-    /// A message holding "wait" is answered only when something cancels it.
+    /// A message holding "wait" is answered only when something cancels it; a model it is given is taken.
     nonisolated static let fakeOpenCode = #"""
     #!/bin/sh
     trap 'echo TERM > "$FAKE_OUT/signalled"; exit 143' TERM
     printf '%s\n' "$@" > "$FAKE_OUT/arguments"
     session='"sessionId":"ses_invented0000000000000001"'
-    options='"configOptions":[{"id":"model","category":"model","currentValue":"fake/fake-model","options":[{"value":"fake/fake-model","name":"fake/Fake Model"}]}]'
+    options() { echo '"configOptions":[{"id":"model","category":"model","currentValue":"'"$1"'","options":[{"value":"fake/fake-model","name":"fake/Fake Model"},{"value":"fake/other-model","name":"fake/Other Model"}]}]'; }
     while IFS= read -r line; do
       id=$(printf '%s' "$line" | sed -n 's/^{"id":\([0-9]*\),.*/\1/p')
       case "$line" in
         *'"method":"initialize"'*) echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"protocolVersion\":1}}" ;;
-        *'"method":"session/new"'*) echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{$session,$options}}" ;;
+        *'"method":"session/new"'*) echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{$session,$(options fake/fake-model)}}" ;;
+        *'"method":"session/set_config_option"'*)
+          value=$(printf '%s' "$line" | sed -n 's/.*"value":"\([^"]*\)".*/\1/p')
+          echo "{\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{$(options "$value")}}" ;;
         *'"method":"session/prompt"'*'wait'*) waiting=$id ;;
         *'"method":"session/prompt"'*)
           echo "{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{$session,\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"messageId\":\"m$id\",\"content\":{\"type\":\"text\",\"text\":\"Invented reply.\"}}}}"
@@ -385,6 +388,24 @@ import SomethingCore
         #expect(!FileManager.default.fileExists(atPath: place.out.appendingPathComponent("signalled").path), "no signal was needed")
         #expect(engine.state.agents.first?.state == "interrupted")
         #expect(engine.state.agents.first?.error == nil, "this home has no OpenCode database: no claim is said")
+    }
+
+    /// Over ACP OpenCode picks a model of its own: the assistant starts with OpenCode's own last model instead, read
+    /// from its state file in the launch's home, before its first message.
+    @Test func anOpenCodeAssistantStartsWithOpenCodesLastModel() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let state = place.root.appendingPathComponent(".local/state/opencode")
+        try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
+        try ACPDriverTests.modelFile.write(to: state.appendingPathComponent("model.json"), atomically: true, encoding: .utf8)
+        let engine = Engine.throwaway(place.environment)
+        let id = try engine.launchAssistant("opencode", folder: place.work.path, askEverything: false)
+        try await until("the model") { engine.state.agents.first?.model == "fake/other-model" }
+        #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
+        try await until("the reply") { engine.state.threads.first?.turns.first?.state == "done" }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
     }
 
     /// The modes that make an agent ask less are confirmed by the person; an unknown OpenCode agent is too. A mode

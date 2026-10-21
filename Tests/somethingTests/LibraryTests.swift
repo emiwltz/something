@@ -98,6 +98,26 @@ import Testing
         #expect(await wait(soon, until: { library.entries.map(\.id) == ["pond"] }))
     }
 
+    /// The snapshots `something check` keeps in the spaces folder's hidden .check are no space: the library does not
+    /// list them, even a page there, the folder watch does not see them change, and an export does not carry them.
+    @Test func theCheckFolderIsNoSpace() throws {
+        let test = Home(prefix: "something-library-")
+        defer { test.remove() }
+        try Library.prepare(test.places)
+        let garden = try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
+        let check = test.places.spaces.appendingPathComponent(".check")
+        try FileManager.default.createDirectory(at: check, withIntermediateDirectories: true)
+        for name in ["garden.png", "index.html", "stray.html"] { try Data("invented".utf8).write(to: check.appendingPathComponent(name)) }
+        let library = library(test, FakeAsk())
+        #expect(library.entries.map(\.id) == ["garden"])
+        let stamp = Library.stamp(test.places.spaces)
+        try Data("invented again".utf8).write(to: check.appendingPathComponent("garden.png"))
+        try Data("invented".utf8).write(to: check.appendingPathComponent("pond.html"))
+        #expect(Library.stamp(test.places.spaces) == stamp)
+        let export = try JSONSerialization.jsonObject(with: Export.document(garden, data: nil, app: "0.0.0")) as? [String: Any]
+        #expect((export?["files"] as? [String: String])?.keys.sorted() == ["garden.html"])
+    }
+
     /// The last space open is opened at the next start; 1.0's default space, kept in app.json, is read once in its place.
     @Test func theLastSpaceOpenIsRemembered() throws {
         let test = Home(prefix: "something-library-")

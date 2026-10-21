@@ -345,7 +345,7 @@ public final class Engine {
         (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
         if let opencode = agent.driver as? ACPDriver {
             opencode.quit = { [weak spawn] in spawn?.closeInput() }
-            opencode.database = ACPDriver.database(spawn.environment)
+            opencode.take(spawn.environment)
             // OpenCode's graceful step is an interrupt and its answer, within Spawn's 3 s; the input is closed after.
             spawn.graceful = { [weak spawn, weak opencode] in
                 DispatchQueue.main.async { _ = try? agent.interrupt() }

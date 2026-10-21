@@ -56,7 +56,7 @@ final class CheckRunner {
     /// Whether this session can render. An agent's sandbox has no window server: then only the static checks run.
     var windowServer = CGSessionCopyCurrentDictionary() != nil
     var timeout: TimeInterval = 15
-    /// Where the snapshots go, one PNG per space name.
+    /// Where the snapshots of spaces outside the spaces folder go, one PNG per space name, and the check's throwaway memory.
     var output = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()).appendingPathComponent("something-check")
     /// Told the web view when it is made, and once the page loaded, before it paints; for the tests.
     var created: (WKWebView) -> Void = { _ in }, loaded: (WKWebView) -> Void = { _ in }
@@ -73,7 +73,7 @@ final class CheckRunner {
     /// when a --refuse word names no right the space declares, as wrong words of the command.
     func run(_ check: Check) async throws -> Report {
         let start = Date()
-        CheckRunner.prune(output, before: start.addingTimeInterval(-86_400))
+        for folder in [output, CheckRunner.snapshots(places)] { CheckRunner.prune(folder, before: start.addingTimeInterval(-86_400)) }
         var report = try await checked(check)
         // Fatal problems first, then errors, warnings and information, each in the order it was found.
         let order: [Level] = [.fatal, .error, .warning, .info]
@@ -81,6 +81,10 @@ final class CheckRunner {
         report.ms = Int(Date().timeIntervalSince(start) * 1000)
         return report
     }
+
+    /// Where the snapshots of the spaces folder's spaces go: a hidden folder in it, which no space, export or watch
+    /// lists, so that the agent building there reads its snapshot without asking for a folder outside its own.
+    static func snapshots(_ places: Places) -> URL { places.spaces.appendingPathComponent(".check") }
 
     /// Removes what `folder` holds from before `date`: nothing else removes the snapshot each check leaves there.
     static func prune(_ folder: URL, before date: Date) {
@@ -143,7 +147,7 @@ final class CheckRunner {
             let page = try CheckPage(space: space, host: host, share: share, rules: try await Lockdown.ruleList())
             page.loaded = loaded
             created(page.web)
-            let rendered = await page.render(within: timeout, snapshot: output.appendingPathComponent("\(space.name).png"))
+            let rendered = await page.render(within: timeout, snapshot: (kept ? CheckRunner.snapshots(places) : output).appendingPathComponent("\(space.name).png"))
             report.problems += rendered.problems
             report.console = rendered.console
             report.snapshot = rendered.snapshot?.path

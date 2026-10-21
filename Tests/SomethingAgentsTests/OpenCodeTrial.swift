@@ -221,14 +221,14 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         try await run.finish()
     }
 
-    /// OpenCode ends the turn by itself after a refusal ("cancelled"): the turn is done, not interrupted.
+    /// OpenCode ends the turn by itself after a refusal ("cancelled"): not interrupted, and no normal end either.
     @Test func aPermissionIsDenied() async throws {
         let run = try OpenCodeRun("deny")
         defer { run.cleanup() }
         _ = try run.send("Please run-echo now.")
         try await run.until("a permission") { run.request != nil }
         #expect(try run.answer(.deny))
-        try await run.until("the end of the turn") { run.state.state == "idle" && run.turns == ["done"] }
+        try await run.until("the end of the turn") { run.state.state == "error" && run.turns == ["error"] }
         let tool = try #require(run.items.first { $0.kind == "tool" })
         #expect(tool.tool?.status == "failed")
         #expect(tool.decision == Decision(by: "person", outcome: "denied"))
@@ -241,7 +241,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         let run = try OpenCodeRun("question")
         defer { run.cleanup() }
         _ = try run.send("Please ask-me something.")
-        try await run.until("the end of the turn") { run.turns == ["done"] && run.state.state == "idle" }
+        try await run.until("the end of the turn") { run.turns == ["error"] && run.state.state == "error" }
         #expect(run.state.error?.message == ACPDriver.questionDismissed)
         #expect(!run.rows.contains { ($0["opencode"] as? [String: Any])?["method"] as? String == "session/request_permission" })
         try await run.finish()

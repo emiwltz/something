@@ -13,8 +13,8 @@ import WebKit
 @testable import something
 
 /// One `something check` in `home`, run and printed as the command does: its status, what it printed to the
-/// standard output and to the standard error, and the output read as JSON when it is. The snapshots go to the home's
-/// tmp/. Throws when `words` are not a check's.
+/// standard output and to the standard error, and the output read as JSON when it is. The snapshots go to the spaces
+/// folder's .check, or the home's tmp/ for a page elsewhere. Throws when `words` are not a check's.
 struct Checked {
     let status: Int32, out: String, err: String
     var json: [String: Any] { (try? JSONSerialization.jsonObject(with: Data(out.utf8))) as? [String: Any] ?? [:] }
@@ -129,7 +129,7 @@ extension Home {
         let checked = try await Checked(["board", "--json"], home)
         #expect(checked.status == 0 && checked.codes.isEmpty, "\(checked.out)")
         let snapshot = try #require(checked.json["snapshot"] as? String)
-        #expect(snapshot == home.root.appendingPathComponent("tmp/something-check/board.png").path)
+        #expect(snapshot == home.places.spaces.appendingPathComponent(".check/board.png").path, "in the folder the agent works in")
         #expect(try Data(contentsOf: URL(fileURLWithPath: snapshot)).prefix(4) == Data([0x89, 0x50, 0x4E, 0x47]))
         let calls = checked.json["calls"] as? [[String: Any]] ?? []
         #expect(calls.contains { $0["method"] as? String == "state" && ($0["answer"] as? [String: Any])?["agents"] as? [String] == ["a1", "e1", "p1"] })
@@ -318,29 +318,42 @@ extension Home {
         return runner
     }
 
-    /// The command's snapshots go to $TMPDIR/something-check. Check.main itself is not run here: Swift Testing runs
-    /// this suite inside a job of the main queue, which NSApp.run cannot drain, so the report would never come. CI
-    /// runs it through the assembled program instead.
-    @Test func theSnapshotsGoToTheTemporaryFolder() {
+    /// A space of the spaces folder has its snapshot in the hidden folder .check there, where the agent building it
+    /// reads it without asking; a page elsewhere has its own in $TMPDIR/something-check. Check.main itself is not run
+    /// here: Swift Testing runs this suite inside a job of the main queue, which NSApp.run cannot drain, so the report
+    /// would never come. CI runs it through the assembled program instead.
+    @Test func theSnapshotsGoToTheSpacesFolderOrTheTemporaryFolder() async throws {
         let temporary = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
-        let runner = CheckRunner(places: Home(prefix: "something-check-").places, share: Home.share)
-        #expect(runner.output == URL(fileURLWithPath: temporary).appendingPathComponent("something-check"))
+        let home = Home(prefix: "something-check-")
+        defer { home.remove() }
+        #expect(CheckRunner(places: home.places, share: Home.share).output == URL(fileURLWithPath: temporary).appendingPathComponent("something-check"))
+        #expect(CheckRunner.snapshots(home.places) == home.places.spaces.appendingPathComponent(".check"))
+        let elsewhere = home.root.appendingPathComponent("elsewhere/board.html")
+        try FileManager.default.createDirectory(at: elsewhere.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try String(contentsOf: Home.share.appendingPathComponent("template.html"), encoding: .utf8).write(to: elsewhere, atomically: true, encoding: .utf8)
+        let checked = try await Checked([elsewhere.path, "--json"], home)
+        #expect(checked.json["snapshot"] as? String == home.root.appendingPathComponent("tmp/something-check/board.png").path, "\(checked.out)")
+        #expect(!FileManager.default.fileExists(atPath: CheckRunner.snapshots(home.places).path))
     }
 
-    /// Each check removes the snapshots older than a day, whatever space they were of; newer ones stay.
+    /// Each check removes the snapshots older than a day, whatever space they were of, in both places; newer ones stay.
     @Test func aCheckRemovesTheSnapshotsOfMoreThanADay() async throws {
         let home = Home(prefix: "something-check-")
         defer { home.remove() }
         try home.space("x", declared(""))
         let runner = try CheckTests.runner(home)
         runner.windowServer = false
-        try FileManager.default.createDirectory(at: runner.output, withIntermediateDirectories: true)
-        let old = runner.output.appendingPathComponent("gone.png"), recent = runner.output.appendingPathComponent("kept.png")
-        for file in [old, recent] { try Data("invented".utf8).write(to: file) }
-        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-86_500)], ofItemAtPath: old.path)
+        var old: [URL] = [], recent: [URL] = []
+        for folder in [runner.output, CheckRunner.snapshots(home.places)] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            old.append(folder.appendingPathComponent("gone.png"))
+            recent.append(folder.appendingPathComponent("kept.png"))
+        }
+        for file in old + recent { try Data("invented".utf8).write(to: file) }
+        for file in old { try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-86_500)], ofItemAtPath: file.path) }
         _ = try await runner.run(Check(space: "x"))
-        #expect(!FileManager.default.fileExists(atPath: old.path))
-        #expect(FileManager.default.fileExists(atPath: recent.path))
+        #expect(old.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) })
+        #expect(recent.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
     }
 
     /// In an agent's sandbox there is no window server: the static checks run, the page does not, and the check says so.

@@ -18,7 +18,7 @@ folder only.
 3. Make a first version quickly, then `something check <name>`. The person sees it appear and reload as you save:
    something opens it by itself. Refine while they watch.
 4. When it does what was asked: `something check <name>` until 0 errors and 0 warnings, then once
-   `something check <name> --refuse <right>` per declared right. Look at the snapshot `check` writes.
+   `something check <name> --refuse <right>` per declared right. Look at the snapshot `check` writes here, in `.check/<name>.png`.
 5. Say in one sentence what you made and what to look at.
 
 ## Change a space

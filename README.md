@@ -70,7 +70,7 @@ file whose first line you removed is yours: something leaves it alone.
 
 something reads, and never writes, each agent's own files: `~/.claude` or `$CLAUDE_CONFIG_DIR` (Claude Code), `~/.codex`
 or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), OpenCode's database (in
-`~/.local/share/opencode`, or `$OPENCODE_DB`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
+`~/.local/share/opencode`, or `$OPENCODE_DB`) and its last model (`model.json` in `~/.local/state/opencode`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
 `$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). It opens them read-only and takes only what a space is
 shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
@@ -93,7 +93,9 @@ agent's own official channel, with your own configuration:
   with the rules above, unless Ask Before Every Change is on.
 - **Codex**: `codex app-server`, its official JSON-RPC channel, one private server per conversation. something never
   joins the server a Codex in your terminal may share.
-- **OpenCode**: `opencode acp`, the Agent Client Protocol. One conversation per program.
+- **OpenCode**: `opencode acp`, the Agent Client Protocol. One conversation per program. Over that channel OpenCode
+  picks a model of its own, so a new conversation starts with the model you used last in OpenCode, unless a space
+  asks for another; when OpenCode no longer offers it, OpenCode's own choice stays.
 - **pi**: `pi --mode rpc`, its official channel.
 - **OMP** is read, never launched.
 
@@ -171,7 +173,8 @@ something --version
 Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or
 failed, 2 when the words were wrong; `check` has its own: 0 no error, 1 errors, 2 it could not run. `check` loads the
 space with the app's own lock and bridge, in a window nobody sees, against the invented state of
-`share/contract/state-example.json`, never your agents, and writes a snapshot to `$TMPDIR/something-check/`.
+`share/contract/state-example.json`, never your agents, and writes a snapshot of the page to `.check/<name>.png` in
+`~/something/spaces` (a hidden folder, never listed as a space), or to `$TMPDIR/something-check/` for a page elsewhere.
 
 something opens spaces by name, from `~/something/spaces` only, where each has its memory and its journal: copy a
 page from elsewhere there first. A page of that folder without a declaration is listed as "not a space yet". One space
@@ -212,7 +215,7 @@ brew untap emiwltz/tap                               # if you installed nothing 
 rm -rf ~/Applications/something.app                  # the launcher, if the tour added it
 rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
-rm -rf "$TMPDIR/something-check"                     # the snapshots something check took
+rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
 ```
 
 macOS and WebKit may also have made folders named after the app's identifier, which this lists:
