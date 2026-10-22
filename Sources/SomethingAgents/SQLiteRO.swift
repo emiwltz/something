@@ -6,8 +6,8 @@
 import Foundation
 import SQLite3
 
-final class SQLiteRO {
-    struct Failure: Error, Equatable { let message: String }
+package final class SQLiteRO {
+    package struct Failure: Error, Equatable { package let message: String }
 
     /// The tables and columns a reader may use, by table name.
     let whitelist: [String: Set<String>]
@@ -15,7 +15,7 @@ final class SQLiteRO {
 
     /// Opens `path` read-only. Throws Failure when the file is missing or SQLite cannot open it (a database in WAL
     /// mode whose `-shm` file is gone cannot be opened read-only): the reader then says it cannot read.
-    init(_ path: String, whitelist: [String: Set<String>]) throws {
+    package init(_ path: String, whitelist: [String: Set<String>]) throws {
         self.whitelist = whitelist
         guard FileManager.default.fileExists(atPath: path) else { throw Failure(message: "no file") }
         // The URI form takes mode=ro; the path is percent-encoded by URL, so a "?" or "#" in a folder name stays a name.
@@ -35,7 +35,7 @@ final class SQLiteRO {
     deinit { sqlite3_close(db) }
 
     /// The columns of each table of the database, read from its schema only.
-    func tables() throws -> [String: Set<String>] {
+    package func tables() throws -> [String: Set<String>] {
         var tables: [String: Set<String>] = [:]
         for row in try run("SELECT name FROM sqlite_master WHERE type = 'table'", [], checked: false) {
             guard let name = row["name"] as? String else { continue }
@@ -47,7 +47,7 @@ final class SQLiteRO {
 
     /// Whether every table and column of `whitelist` (all of it when nil) is in the database. Throws Failure when its
     /// schema cannot be read.
-    func guarded(_ needs: [String: Set<String>]? = nil) throws -> Bool {
+    package func guarded(_ needs: [String: Set<String>]? = nil) throws -> Bool {
         let tables = try tables()
         return (needs ?? whitelist).allSatisfy { table, columns in tables[table].map(columns.isSubset) ?? false }
     }
@@ -55,7 +55,7 @@ final class SQLiteRO {
     /// The rows of `sql` with `values` bound to its `?` in order, as dictionaries by result column name; a NULL is
     /// left out of its row. Throws Failure when SQLite refuses the query, or when a result column is a stored column
     /// outside the whitelist (an expression over one, such as `json_extract(data, '$.text')`, is the reader's choice).
-    func rows(_ sql: String, _ values: [Any] = []) throws -> [[String: Any]] { try run(sql, values, checked: true) }
+    package func rows(_ sql: String, _ values: [Any] = []) throws -> [[String: Any]] { try run(sql, values, checked: true) }
 
     private func run(_ sql: String, _ values: [Any], checked: Bool) throws -> [[String: Any]] {
         var statement: OpaquePointer?
@@ -103,7 +103,7 @@ final class SQLiteRO {
     private func failure() -> Failure { Failure(message: String(cString: sqlite3_errmsg(db))) }
 
     /// A number SQLite gave, as an integer or a real (JSON numbers come back as either), or nil.
-    static func number(_ value: Any?) -> Double? {
+    package static func number(_ value: Any?) -> Double? {
         switch value {
         case let number as Int64: return Double(number)
         case let number as Double: return number

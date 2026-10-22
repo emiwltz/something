@@ -7,6 +7,8 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
+@testable import AgentCodex
 import SomethingCore
 
 final class Replay {

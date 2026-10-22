@@ -6,6 +6,7 @@ import Foundation
 import SQLite3
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
 import SomethingCore
 
 @Suite struct OpenCodeReplayTests {

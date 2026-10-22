@@ -76,6 +76,10 @@ public struct Command: Equatable, Sendable {
     public var arguments: [String]
     public var adding: [String: String] = [:]
     public var removing: Set<String> = []
+
+    package init(arguments: [String], adding: [String: String] = [:], removing: Set<String> = []) {
+        (self.arguments, self.adding, self.removing) = (arguments, adding, removing)
+    }
 }
 
 /// One launch's driver, made by its kind's `Driving.driver`, which also says what it can do.
@@ -117,6 +121,15 @@ public protocol Driver: AnyObject {
 extension Driver {
     public func join(_ program: ProcessHandle) throws {}
 
+    /// What a tool acts on, as the person reads it: its JSON, keys sorted and indented, or its text.
+    package static func json(_ value: Any?) -> String? {
+        guard let value, JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]) else {
+            return value as? String
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     public func graceful(_ program: ProcessHandle) {
         guard let goodbye, program.write(goodbye) else { return }
         while program.running() { usleep(20_000) }
@@ -154,7 +167,7 @@ let canKeys: [String: WritableKeyPath<Can, Bool>] = ["send": \.send, "steer": \.
 
 /// One agent something launched: its driver and its held queue, on one queue (the engine's main queue). Events from
 /// the driver are folded here, and a held message goes out when a turn ends.
-final class Launched {
+package final class Launched {
     let driver: Driver
     /// What its kind's driver can do.
     let driving: Driving
@@ -243,7 +256,7 @@ final class Launched {
     }
 
     /// The start of a message, to name it in a sentence.
-    static func short(_ text: String) -> String { text.count > 40 ? String(text.prefix(40)) + "…" : text }
+    package static func short(_ text: String) -> String { text.count > 40 ? String(text.prefix(40)) + "…" : text }
 
     /// `send` of something.js. Returns the delivery. Throws AGENT_STOPPED, BAD_PARAMS for an unknown `when`.
     func send(_ text: String, when: String) throws -> String {
@@ -272,4 +285,10 @@ final class Launched {
         changed()
         return running
     }
+}
+
+extension Option {
+    /// Words for the effort levels Claude Code names, which Codex and pi also show; a level not here is shown as the
+    /// agent names it.
+    package static let effortLabels = ["low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high", "max": "Max"]
 }

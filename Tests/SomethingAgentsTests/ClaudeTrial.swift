@@ -12,6 +12,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
 import SomethingCore
 
 final class Stopped: @unchecked Sendable { var done = false }

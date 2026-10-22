@@ -24,25 +24,16 @@ public struct Program: Equatable, Sendable {
 }
 
 public final class Programs {
-    /// The kinds something looks for (`AgentDescriptor.all`). Any other kind is unknown here (nil, never false).
-    static let kinds = AgentDescriptor.all.map(\.kind)
-
-    /// What to type to install each kind something launches, in Terminal.
-    static let install = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.install.map { (agent.kind, $0) } })
-    static let names = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.map { ($0.kind, $0.name) })
-
-    /// The name a person knows the agent `kind` by, in every window and sentence; the kind itself when unknown.
-    static func name(of kind: String) -> String { names[kind] ?? kind }
-    /// Interpreters a program needs that its first line does not name.
-    static let runsOn = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } })
     /// The folders under the home where installers put programs, which a shell's PATH may lack: the shared ones, and
     /// each agent's own where 0.2 put OpenCode's, so that the search order is unchanged.
-    static let homeFolders = [".local/bin", ".bun/bin"] + AgentDescriptor.all.flatMap(\.homeFolders) + [".volta/bin"]
+    let homeFolders: [String]
     /// The PATH launchd gives an app opened from the Finder: no folder where agents are installed.
     static let launchdFolders: Set<String> = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
     static let shellTimeout: TimeInterval = 3
 
     private let environment: [String: String]
+    /// The agents looked for; any other kind is unknown here (nil, never false).
+    private let registry: Registry
     /// Homebrew's folders, which tests empty so that this Mac's own programs are not found.
     var systemFolders = ["/opt/homebrew/bin", "/usr/local/bin"]
     private let home: String
@@ -55,15 +46,17 @@ public final class Programs {
     static let slowShellKept: TimeInterval = 60
 
     /// `environment` is the person's: the Terminal's when something was started from one, else the app's own.
-    public init(environment: [String: String]) {
+    public init(environment: [String: String], registry: Registry) {
         self.environment = environment
+        self.registry = registry
+        homeFolders = [".local/bin", ".bun/bin"] + registry.agents.flatMap(\.homeFolders) + [".volta/bin"]
         home = environment["HOME"] ?? NSHomeDirectory()
     }
 
     /// Whether the program's file was found; nil for a kind something does not look for, and when it was not found
     /// but a shell's PATH, which was needed, could not be read. Never runs the program.
     public func installed(_ kind: String) -> Bool? {
-        guard Programs.kinds.contains(kind) else { return nil }
+        guard registry.agent(kind) != nil else { return nil }
         let search = folders(interactive: false)
         if first(kind, in: search.list) != nil { return true }
         guard search.known else { return nil }
@@ -83,10 +76,10 @@ public final class Programs {
     /// INTERPRETER_NOT_FOUND when what it runs on (node, for example) is missing; each says what to type, or, when
     /// the login shell's PATH could not be read, how to start something from Terminal so that it has that PATH.
     public func find(_ kind: String) throws -> Program {
-        guard let command = Programs.install[kind] else {
+        guard let command = registry.agent(kind)?.install else {
             throw CodedError("NOT_INSTALLED", "something does not know how to launch \(kind).")
         }
-        let name = Programs.name(of: kind)
+        let name = registry.name(of: kind)
         var search = folders(interactive: false)
         var found = first(kind, in: search.list)
         if found == nil, search.known, let interactive = interactiveRetry() {
@@ -121,7 +114,7 @@ public final class Programs {
         if interactive || !given.fromTerminal {
             if let read = shell(interactive: interactive) { path = read } else { known = false }
         }
-        let fixed = systemFolders + Programs.homeFolders.map { "\(home)/\($0)" }
+        let fixed = systemFolders + homeFolders.map { "\(home)/\($0)" }
         return (Programs.unique(path + (interactive ? given.folders : []) + fixed), known)
     }
 
@@ -135,7 +128,7 @@ public final class Programs {
     /// which pi's launcher puts on the PATH itself. It goes last on the child's PATH too, so that a pi started by
     /// `#!/usr/bin/env node` finds it.
     func bundled(_ kind: String) -> [String] {
-        guard let bundled = AgentDescriptor.of(kind)?.bundled else { return [] }
+        guard let bundled = registry.agent(kind)?.bundled else { return [] }
         let folder = "\(environment["XDG_DATA_HOME"] ?? "\(home)/.local/share")/\(bundled)"
         return FileManager.default.fileExists(atPath: folder) ? [folder] : []
     }
@@ -154,13 +147,13 @@ public final class Programs {
             guard FileManager.default.fileExists(atPath: path, isDirectory: &folder), !folder.boolValue,
                   FileManager.default.isExecutableFile(atPath: path) else { return false }
             let real = (path as NSString).resolvingSymlinksInPath
-            return !(AgentDescriptor.of(kind)?.refusedCopies ?? []).contains { real.contains($0) }
+            return !(registry.agent(kind)?.refusedCopies ?? []).contains { real.contains($0) }
         }
     }
 
     /// The interpreter the program needs and `folders` lack, by name or absolute path; nil when nothing is missing.
     func missingInterpreter(of path: String, kind: String, in folders: [String]) -> String? {
-        var needs = Programs.runsOn[kind].map { [$0] } ?? []
+        var needs = registry.agent(kind)?.runsOn.map { [$0] } ?? []
         if let named = Programs.interpreter(of: (path as NSString).resolvingSymlinksInPath) { needs.insert(named, at: 0) }
         return needs.first { need in
             if need.hasPrefix("/") { return !FileManager.default.isExecutableFile(atPath: need) }

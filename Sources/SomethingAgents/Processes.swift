@@ -27,12 +27,12 @@ public struct Running: Equatable, Sendable {
 
 extension Running {
     /// The interpreters a coding agent may run under: the system names its process after them.
-    static let interpreters: Set<String> = ["node", "bun"]
+    package static let interpreters: Set<String> = ["node", "bun"]
 
     /// Which of `names` this process runs, or nil: its own name, its first argument's file name, or, under an
     /// interpreter, the file name of its first argument that is no option. A Node program that renames itself (pi sets
     /// its title) shows its interpreter's arguments until it does, and the arguments are read once per process.
-    func runs(_ names: Set<String>) -> String? {
+    package func runs(_ names: Set<String>) -> String? {
         let words = (arguments ?? []).map { ($0 as NSString).lastPathComponent }
         if names.contains(name) { return name }
         if let first = words.first, names.contains(first) { return first }
@@ -192,28 +192,28 @@ public final class Processes {
 
 /// The files some processes hold open, by path, read again only when those processes change or every `every`
 /// seconds: a conversation opened in a process that runs on is seen within that time.
-final class HeldFiles {
-    struct Held: Equatable {
+package final class HeldFiles {
+    package struct Held: Equatable {
         /// Each path, and the process that holds it (the lowest pid, when several do).
-        var files: [String: Int32] = [:]
+        package var files: [String: Int32] = [:]
         /// false when a process did not give its open files: what it holds is unknown.
-        var whole = true
+        package var whole = true
     }
 
     let every: TimeInterval
     private var last: (pids: Set<Int32>, at: Date, held: Held)?
 
-    init(every: TimeInterval = 10) { self.every = every }
+    package init(every: TimeInterval = 10) { self.every = every }
 
     /// `path` with its links resolved, as the system names the files a process holds ("/private/var", not "/var").
-    static func real(_ path: String) -> String {
+    package static func real(_ path: String) -> String {
         guard let resolved = realpath(path, nil) else { return path }
         defer { free(resolved) }
         return String(cString: resolved)
     }
 
     /// `real`, which remembers each answer: realpath asks the disk, and a folder is asked about at every tick.
-    static func remembered() -> (String) -> String {
+    package static func remembered() -> (String) -> String {
         var known: [String: String] = [:]
         return { path in
             if let resolved = known[path] { return resolved }
@@ -223,7 +223,7 @@ final class HeldFiles {
     }
 
     /// What `pids` hold open, as last read when they are the same processes and that read is recent enough.
-    func read(_ snapshot: Snapshot, _ pids: Set<Int32>, now: Date) -> Held {
+    package func read(_ snapshot: Snapshot, _ pids: Set<Int32>, now: Date) -> Held {
         if let last, last.pids == pids, now.timeIntervalSince(last.at) < every { return last.held }
         var held = Held()
         for pid in pids.sorted(by: >) {

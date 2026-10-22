@@ -12,9 +12,12 @@ public struct Registry: Sendable {
     let launchable: [String: Driving]
     /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
     public let kinds: Kinds
+    /// The program names of coding agents something has no extension for, seen from their process only (OtherReader).
+    public let others: Set<String>
 
-    public init(_ agents: [AgentDescriptor]) {
+    public init(_ agents: [AgentDescriptor], others: Set<String> = []) {
         self.agents = agents
+        self.others = others
         launchable = Dictionary(uniqueKeysWithValues: agents.compactMap(\.driving).map { ($0.kind, $0) })
         kinds = Kinds(launchable: Set(launchable.keys), readOnly: Set(agents.map(\.kind)).subtracting(launchable.keys))
     }
@@ -27,6 +30,28 @@ public struct Registry: Sendable {
 
     /// The agents that can build spaces with the person, in the order they are offered.
     public var builders: [AgentDescriptor] { agents.filter { $0.builder != nil } }
+
+    /// The readers of every agent's files, for the environment something runs in, then the one for `others`.
+    func readers(_ environment: [String: String]) -> [Reader] {
+        agents.compactMap { $0.reader?(environment) } + [OtherReader(names: others)]
+    }
+
+    /// The kinds whose conversations seen elsewhere can be continued here.
+    var resumable: Set<String> { Set(agents.filter { $0.resume != .never }.map(\.kind)) }
+
+    /// Whether a conversation seen elsewhere can be continued here, and why not, as its kind's `resume` says: only one
+    /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
+    /// itself (Codex), also one whose holder is unknown.
+    func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
+        let name = name(of: kind), resume = agent(kind)?.resume ?? .never
+        guard resume != .never else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
+        switch alive {
+        case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
+        case false?: return (true, nil)
+        case nil:
+            return resume == .unlessKnownHeld ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
+        }
+    }
 
     /// What the driver of `kind` can do. Throws NOT_SUPPORTED for a kind without a driver.
     func driving(_ kind: String) throws -> Driving {

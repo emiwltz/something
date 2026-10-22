@@ -250,7 +250,8 @@ bottles), are in [packaging/homebrew/](packaging/homebrew); the rules for changi
 ```text
 share/                     something.js, the empty template, the six templates and their previews, the skill, the guide, the assistant's AGENTS.md, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
-Sources/SomethingAgents/   the engine, a driver per agent it launches, a reader per agent it reads
+Sources/SomethingAgents/   the host: the engine, the watch, the programs, and what an agent extension provides; it names no agent
+Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP for OpenCode, Pi for pi and OMP)
 Sources/something/         the command and the Mac app: the window, its sidebar, Info, the assistant, the tour, the sheets and panels that ask you
 packaging/, tools/         the app's Info.plist and icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh (the templates' pictures)
 .github/workflows/         the suite and a Homebrew install, which GitHub runs at each push

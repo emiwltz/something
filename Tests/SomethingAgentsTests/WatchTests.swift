@@ -20,7 +20,7 @@ import SomethingCore
         let home = try ClaudeHome(prefix: "watch-claude-")
         defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
-        let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
+        let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: Date())
         let shop = try #require(agents.first { $0.thread == ClaudeHome.shop })
         #expect(shop.id == "claude-\(ClaudeHome.shop)" && shop.kind == "claude" && shop.origin == "elsewhere")
         #expect(shop.name == "Dark mode for the cart" && shop.folder == "/Users/example/shop" && shop.pid == 41234)
@@ -41,9 +41,9 @@ import SomethingCore
         defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         // The blog's Claude runs in the group of one of something's children; the shop's conversation is one a driver reported.
-        #expect(Watch.elsewhere(seen, groups: [41290], keys: [], now: Date()).agents.map(\.thread) == [ClaudeHome.shop])
-        #expect(Watch.elsewhere(seen, groups: [], keys: [ClaudeHome.shop], now: Date()).agents.map(\.thread) == [ClaudeHome.blog])
-        #expect(Watch.elsewhere(seen, groups: [41290], keys: [ClaudeHome.shop], now: Date()).threads.isEmpty)
+        #expect(Watch.elsewhere(seen, registry: .described, groups: [41290], keys: [], now: Date()).agents.map(\.thread) == [ClaudeHome.shop])
+        #expect(Watch.elsewhere(seen, registry: .described, groups: [], keys: [ClaudeHome.shop], now: Date()).agents.map(\.thread) == [ClaudeHome.blog])
+        #expect(Watch.elsewhere(seen, registry: .described, groups: [41290], keys: [ClaudeHome.shop], now: Date()).threads.isEmpty)
     }
 
     @Test func aChangedShapeShowsTheProcessesOnly() throws {
@@ -52,7 +52,7 @@ import SomethingCore
         try Data(#"{"pid":41500,"session":"renamed","kind":"interactive"}"#.utf8).write(to: home.sessions.appendingPathComponent("41500.json"))
         let seen = Watch(readers: [home.reader], snapshot: { ClaudeHome.snapshot() }).tick(now: Date())
         #expect(seen.kinds["claude"]?.health == "changed")
-        let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
+        let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: Date())
         #expect(Set(agents.compactMap(\.pid)) == [41234, 41300], "every claude process, and no other")
         #expect(agents.allSatisfy { $0.alive == true && $0.evidence == "process" && $0.state == "unknown" && $0.waiting == nil && $0.thread == nil })
         #expect(threads.isEmpty)
@@ -67,7 +67,7 @@ import SomethingCore
         let good = watch.tick(now: Date())
         snapshot = Snapshot([], whole: false)
         #expect(watch.tick(now: Date()) == good)
-        #expect(Watch.elsewhere(watch.tick(now: Date()), groups: [], keys: [], now: Date()).agents.allSatisfy { $0.alive == true })
+        #expect(Watch.elsewhere(watch.tick(now: Date()), registry: .described, groups: [], keys: [], now: Date()).agents.allSatisfy { $0.alive == true })
         // This Mac's own snapshot holds this process, and is whole.
         let own = Processes(known: []).snapshot()
         #expect(own.whole && own[getpid()] != nil)
@@ -83,7 +83,7 @@ import SomethingCore
         try FileManager.default.removeItem(at: home.sessions.appendingPathComponent("41234.json"))
         snapshot = ClaudeHome.snapshot(shop: false)
         let seen = watch.tick(now: home.now)
-        let shop = try #require(Watch.elsewhere(seen, groups: [], keys: [], now: home.now).agents.first { $0.thread == ClaudeHome.shop })
+        let shop = try #require(Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: home.now).agents.first { $0.thread == ClaudeHome.shop })
         #expect(shop.alive == false && shop.pid == nil)
         #expect(shop.can.resume && shop.because["send"] == "This agent was started outside something; something only reads it. Continue it here to write to it.")
     }
@@ -191,11 +191,11 @@ import SomethingCore
 
 /// Continue here: a conversation no process holds, for the kinds whose drivers resume one.
 @Test func continueHereFollowsTheHolder() {
-    #expect(Watch.continuable("claude", alive: true, pid: 41234) == (false, "Claude Code still runs this conversation (pid 41234). Quit it there first."))
-    #expect(Watch.continuable("claude", alive: false, pid: nil) == (true, nil))
-    #expect(Watch.continuable("codex", alive: nil, pid: nil) == (true, nil), "Codex refuses a second writer by itself")
-    #expect(Watch.continuable("claude", alive: nil, pid: nil).0 == false)
-    #expect(Watch.continuable("pi", alive: false, pid: nil) == (false, "something cannot continue pi conversations started elsewhere yet."))
+    #expect(Registry.described.continuable("claude", alive: true, pid: 41234) == (false, "Claude Code still runs this conversation (pid 41234). Quit it there first."))
+    #expect(Registry.described.continuable("claude", alive: false, pid: nil) == (true, nil))
+    #expect(Registry.described.continuable("codex", alive: nil, pid: nil) == (true, nil), "Codex refuses a second writer by itself")
+    #expect(Registry.described.continuable("claude", alive: nil, pid: nil).0 == false)
+    #expect(Registry.described.continuable("pi", alive: false, pid: nil) == (false, "something cannot continue pi conversations started elsewhere yet."))
 }
 
 /// A clock for `Watch.repeating` that moves only when `advance` is called, firing each timer at each of its times

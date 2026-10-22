@@ -6,6 +6,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentPi
 import SomethingCore
 
 final class PiHome {
@@ -105,7 +106,7 @@ final class PiHome {
         #expect(StateMap.map(a.facts, now: home.now).state == "unknown", "a closed turn without a holder is never idle")
         #expect(PiHome.words(b.facts, home.now) == "working none recent-write")
         #expect(a.folder == "/Users/example/shop" && a.model == "example-model" && a.effort == "high" && a.complete)
-        #expect(a.started == CodexReader.date("2026-10-17T08:00:00.000Z"))
+        #expect(a.started == PiReader.date("2026-10-17T08:00:00.000Z"))
         let turn = try #require(a.turns.last)
         #expect(a.turns.count == 1 && turn.state == "done" && turn.ended == "2026-10-17T08:00:40.000Z")
         #expect(turn.items.map(\.kind) == ["message", "thought", "message", "tool", "message"])
@@ -137,7 +138,7 @@ final class PiHome {
         #expect(seen[home.log(PiHome.shopB)]?.facts.alive == false)
         let fresh = try #require(seen["pid-52004"])
         #expect(fresh.processOnly && fresh.facts.alive == true && fresh.folder == "/Users/example/shop")
-        let agent = try #require(Watch.elsewhere(Seen(sightings: [fresh]), groups: [], keys: [], now: home.now).agents.first)
+        let agent = try #require(Watch.elsewhere(Seen(sightings: [fresh]), registry: .described, groups: [], keys: [], now: home.now).agents.first)
         #expect(agent.kind == "pi" && agent.state == "unknown" && agent.evidence == "process" && agent.thread == nil && !agent.can.resume)
     }
 
@@ -319,8 +320,8 @@ final class PiHome {
             Running(pid: 54200, parent: 1, group: 54200, started: started, name: "node", arguments: ["node", "server.js"], folder: "/Users/example/shop"),
             Running(pid: 54300, parent: 1, group: 54300, started: started, name: "qwen", arguments: ["qwen"]),
         ])
-        let watch = Watch(readers: [OtherReader()], snapshot: { snapshot })
-        let (agents, threads) = Watch.elsewhere(watch.tick(now: started), groups: [], keys: [], now: started)
+        let watch = Watch(readers: [OtherReader(names: Registry.described.others)], snapshot: { snapshot })
+        let (agents, threads) = Watch.elsewhere(watch.tick(now: started), registry: .described, groups: [], keys: [], now: started)
         // Named by their folder, else by their program.
         #expect(agents.map(\.name) == ["blog", "notes", "qwen"] && threads.isEmpty, "oldest first, then by key")
         let gemini = try #require(agents.first { $0.id == "other-gemini-54000" })

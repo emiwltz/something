@@ -6,6 +6,8 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
+@testable import AgentCodex
 import SomethingCore
 
 @MainActor @Suite(.leavesNothing("resume-")) struct ResumeTests {

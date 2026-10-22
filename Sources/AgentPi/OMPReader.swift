@@ -6,6 +6,7 @@
 // takes a lease, ~/.omp/run/session-owners/<id>.lock, which stays on disk after its end: only a holder counts. What
 // OMP waits on (a permission, an answer) is not in its files, so `waiting` is null.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class OMPReader: Reader {
@@ -34,7 +35,7 @@ final class OMPReader: Reader {
     }
 
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
-        guard let folder, ClaudeReader.isFolder(folder) else { return Reading() }
+        guard let folder, OMPReader.isFolder(folder) else { return Reading() }
         let running = Set(snapshot.processes.values.filter(owns).map(\.pid))
         // A session opened since the last walk is held at once: the walk is done again when the omp processes change.
         let walking = discover || !walked || running != pids
@@ -44,7 +45,7 @@ final class OMPReader: Reader {
             let profiles = ((try? FileManager.default.contentsOfDirectory(atPath: "\(folder)/profiles")) ?? []).map { "\(folder)/profiles/\($0)/agent/sessions" }
             // Only `<cwd folder>/<time>_<id>.jsonl`: a sub-agent's log lies one folder deeper, in its parent's.
             let known = Dictionary(found.map { ($0.path, $0) }) { first, _ in first }
-            found = PiLog.logs(in: (["\(folder)/agent/sessions"] + profiles).filter(ClaudeReader.isFolder))
+            found = PiLog.logs(in: (["\(folder)/agent/sessions"] + profiles).filter(OMPReader.isFolder))
                 .filter { ($0 as NSString).lastPathComponent.contains("_") }
                 .map { known[$0] ?? ($0, HeldFiles.real($0), String(($0 as NSString).lastPathComponent.dropLast(".jsonl".count).split(separator: "_").last ?? "")) }
             let paths = Set(found.map(\.path))

@@ -1,7 +1,8 @@
 // Tail: follows a JSONL file a harness appends to, and hands over its new whole lines. Session
 // files reach tens of megabytes and single lines of several (tool outputs, images), so nothing is ever read whole:
 // a file seen for the first time gives its last 512 KB, widened to 4 MB when that is not enough, and a line longer
-// than 4 MB is skipped without being decoded. Lines are filtered by a substring before anyone decodes them.
+// than 4 MB is skipped without being decoded. Lines are filtered by a substring before anyone decodes them. A Stamp
+// tells whether a file changed without reading it.
 import Darwin
 import Foundation
 
@@ -112,5 +113,18 @@ public enum Tail {
         var hasher = Hasher()
         hasher.combine(data)
         return hasher.finalize()
+    }
+}
+
+/// What tells whether a file changed since the last tick, without reading it.
+package struct Stamp: Equatable {
+    package var modified: Date, size: UInt64, inode: UInt64
+
+    package init?(_ path: String) {
+        var status = stat()
+        guard stat(path, &status) == 0 else { return nil }
+        modified = Date(timeIntervalSince1970: TimeInterval(status.st_mtimespec.tv_sec) + TimeInterval(status.st_mtimespec.tv_nsec) / 1e9)
+        size = UInt64(max(status.st_size, 0))
+        inode = UInt64(status.st_ino)
     }
 }

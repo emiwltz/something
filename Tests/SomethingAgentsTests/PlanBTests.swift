@@ -7,6 +7,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
 import SomethingCore
 
 @MainActor @Suite(.serialized, .leavesNothing("plan-b-")) struct PlanBTests {
@@ -96,7 +97,7 @@ import SomethingCore
     /// on a thread of its own, never on the main actor, which the engine's tests and WebKit's share.
     nonisolated static func buildHook(_ path: String, in folder: URL) async throws {
         let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/SomethingAgents/PermissionSpool.swift")
+            .appendingPathComponent("Sources/AgentClaude/PermissionSpool.swift")
         let main = folder.appendingPathComponent("main.swift")
         try "import Foundation\nexit(SpoolHook.main(Array(CommandLine.arguments.dropFirst())))\n".write(to: main, atomically: true, encoding: .utf8)
         let swiftc = Process()

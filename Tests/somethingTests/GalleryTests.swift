@@ -457,7 +457,7 @@ struct GalleryTests {
         let pi = Sighting(kind: "pi", key: "019a2b3c-4d5e-7f60-8a1b-2c3d4e5f00e4",
                           facts: StateMap.Facts(alive: false, evidence: "process", turnOpen: false, waiting: .nothing),
                           folder: "/Users/example/code/scripts", updated: minuteAgo)
-        state.agents += Watch.elsewhere(Seen(sightings: [claude, opencode, pi]), groups: [], keys: [], now: now).agents
+        state.agents += Watch.elsewhere(Seen(sightings: [claude, opencode, pi]), registry: .app, groups: [], keys: [], now: now).agents
         return state
     }
 

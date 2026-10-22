@@ -48,7 +48,7 @@ final class FakeMac {
     }
 
     func programs(_ environment: [String: String]) -> Programs {
-        let programs = Programs(environment: environment.merging(["HOME": home]) { given, _ in given })
+        let programs = Programs(environment: environment.merging(["HOME": home]) { given, _ in given }, registry: .described)
         programs.systemFolders = []
         return programs
     }

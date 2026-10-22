@@ -13,6 +13,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
 import SomethingCore
 
 @Suite(.serialized) struct ClaudeReaderTrial {
@@ -127,7 +128,7 @@ import SomethingCore
             seen = watch.tick(now: Date())
             times.append(Date().timeIntervalSince(begin) * 1000)
         }
-        let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
+        let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: Date())
         func count(_ values: [String?]) -> String {
             Dictionary(grouping: values.map { $0 ?? "null" }, by: { $0 }).mapValues(\.count).sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
         }

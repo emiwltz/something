@@ -8,6 +8,7 @@
 // is OMP's too.
 import Darwin
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class PiReader: Reader {
@@ -45,7 +46,7 @@ final class PiReader: Reader {
     func owns(_ process: Running) -> Bool { process.runs(PiReader.names) != nil }
 
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
-        guard folder.map(ClaudeReader.isFolder) == true || !named.isEmpty else { return Reading() }
+        guard folder.map(PiReader.isFolder) == true || !named.isEmpty else { return Reading() }
         // The pi something launched count when the pi of a folder are counted: a log of that folder may be theirs.
         let every = snapshot.processes.values.filter(owns)
         let running = Set(every.map(\.pid))
@@ -100,7 +101,7 @@ final class PiReader: Reader {
     /// Lists the logs of every sessions folder.
     private func walk() {
         let agentFolders = folder.map { root in ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).map { "\(root)/\($0)/sessions" } } ?? []
-        logs = PiLog.logs(in: (agentFolders + named).filter(ClaudeReader.isFolder))
+        logs = PiLog.logs(in: (agentFolders + named).filter(PiReader.isFolder))
         let listed = Set(logs)
         headers = headers.filter { listed.contains($0.key) }
         old.formIntersection(listed)
@@ -325,7 +326,7 @@ struct PiLog {
         guard lines.count > line + 1, let object = (try? JSONSerialization.jsonObject(with: Data(lines[line]))) as? [String: Any],
               object["type"] as? String == "session", let id = object["id"] as? String, let folder = object["cwd"] as? String, folder.hasPrefix("/")
         else { return nil }
-        return Header(id: id, folder: folder, started: (object["timestamp"] as? String).flatMap(CodexReader.date))
+        return Header(id: id, folder: folder, started: (object["timestamp"] as? String).flatMap(PiReader.date))
     }
 
     /// The logs in each of `folders` and in their sub-folders: `.jsonl` files whose name does not start with a dot.
@@ -334,7 +335,7 @@ struct PiLog {
             ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).filter { !$0.hasPrefix(".") }.map { "\(folder)/\($0)" }
         }
         return folders.flatMap { folder in
-            jsonl(folder).flatMap { ClaudeReader.isFolder($0) ? jsonl($0) : [$0] }.filter { $0.hasSuffix(".jsonl") }
+            jsonl(folder).flatMap { PiReader.isFolder($0) ? jsonl($0) : [$0] }.filter { $0.hasSuffix(".jsonl") }
         }.sorted()
     }
 }

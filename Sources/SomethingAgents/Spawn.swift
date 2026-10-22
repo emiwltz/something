@@ -17,6 +17,8 @@ public final class Spawn {
     /// The driver's own first step of the stop ladder (a goodbye line, a cancel and its answer); it may block, and
     /// gets at most 3 s. Set it before `start`.
     public var graceful: (() -> Void)?
+    /// The kind of agent it runs, which Join sets: under the tests, that kind's trial variable may name the program.
+    var kind: String?
 
     static let keptErrors = 65_536
     private let input: Bool
@@ -59,7 +61,7 @@ public final class Spawn {
         guard FileManager.default.fileExists(atPath: folder, isDirectory: &isFolder), isFolder.boolValue else {
             throw CodedError("LAUNCH_FAILED", "The folder \(folder) does not exist on this Mac.")
         }
-        try TestRunGuard.check(path)
+        try TestRunGuard.check(path, kind: kind)
         var inPipe: [Int32] = [-1, -1]
         var outPipe: [Int32] = [-1, -1]
         var errPipe: [Int32] = [-1, -1]

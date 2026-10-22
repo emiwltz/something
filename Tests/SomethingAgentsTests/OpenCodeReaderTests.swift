@@ -6,6 +6,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
 import SomethingCore
 
 final class OpenCodeHome {
@@ -188,7 +189,7 @@ final class OpenCodeHome {
 
         // Through the watch and the dedupe: the stale claim says why it may come back.
         let seen = Watch(readers: [home.reader], snapshot: { home.snapshot() }).tick(now: home.now)
-        let (agents, threads) = Watch.elsewhere(seen, groups: [52100], keys: [OpenCodeHome.done], now: home.now)
+        let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [52100], keys: [OpenCodeHome.done], now: home.now)
         #expect(Set(agents.compactMap(\.thread)) == [OpenCodeHome.shop, OpenCodeHome.blog, OpenCodeHome.late], "a session something launched is left out by its id")
         let agent = try #require(agents.first { $0.thread == OpenCodeHome.blog })
         #expect(agent.because["resume"] == "something cannot continue OpenCode conversations started elsewhere yet. \(OpenCodeReader.mayResume)" && agent.because["send"] != nil && agent.pid == nil && agent.waiting == "none")
@@ -235,7 +236,7 @@ final class OpenCodeHome {
         #expect(seen.kinds["opencode"]?.health == "changed")
         // something's own `opencode acp`, and the server it starts in a group of its own, are not agents seen elsewhere.
         #expect(seen.sightings.compactMap(\.pid) == [52000] && seen.sightings.allSatisfy(\.processOnly))
-        #expect(Watch.elsewhere(seen, groups: [52100], keys: [], now: home.now).agents.map(\.pid) == [52000])
+        #expect(Watch.elsewhere(seen, registry: .described, groups: [52100], keys: [], now: home.now).agents.map(\.pid) == [52000])
     }
 
     /// OpenCode desktop 1.x keeps writing the 1.x tables of a database OpenCode 2 has moved on from.

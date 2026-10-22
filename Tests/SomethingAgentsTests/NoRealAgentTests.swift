@@ -10,6 +10,10 @@ import Foundation
 import SomethingCore
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
+@testable import AgentClaude
+@testable import AgentCodex
+@testable import AgentPi
 
 extension Engine {
     /// An engine for a test: `environment` should be a throwaway home and a PATH of fake programs. The system's
@@ -23,9 +27,10 @@ extension Engine {
 }
 
 extension Registry {
-    /// Every agent this host describes, as the app registers them (Extensions.swift; somethingTests checks the two
-    /// lists are one).
-    static let described = Registry(AgentDescriptor.all)
+    /// Every agent described by the Agent* targets, as the app registers them (Extensions.swift): DescriptorsTests and
+    /// somethingTests' ExtensionsTests hold both lists to 0.2's.
+    static let described = Registry([.claude, .codex, .opencode, .pi, .omp],
+                                     others: ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
 }
 
 struct NoRealAgentTests {
@@ -110,11 +115,13 @@ struct NoRealAgentTests {
             Issue.record("a program outside the temporary folder was started")
         } catch { #expect((error as? CodedError)?.code == "LAUNCH_FAILED") }
         #expect(spawn.pid == 0)
-        #expect(TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/sysctl"]))
-        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/other"]))
-        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", environment: ["SOMETHING_TRIAL_RECORD": "/usr/sbin/sysctl"]), "only a kind's variable names a program")
-        #expect(TestRunGuard.allowed(NSTemporaryDirectory() + "fake/claude", environment: [:]))
-        #expect(TestRunGuard.allowed("/bin/sh", environment: [:]) && !TestRunGuard.allowed("/opt/homebrew/bin/claude", environment: [:]))
+        #expect(TestRunGuard.allowed("/usr/sbin/sysctl", kind: "claude", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/sysctl"]))
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", kind: "codex", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/sysctl"]), "only its own kind's variable")
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", kind: nil, environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/sysctl"]), "a program that is no agent")
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", kind: "claude", environment: ["SOMETHING_TRIAL_CLAUDE": "/usr/sbin/other"]))
+        #expect(!TestRunGuard.allowed("/usr/sbin/sysctl", kind: "claude", environment: ["SOMETHING_TRIAL_RECORD": "/usr/sbin/sysctl"]), "only a kind's variable names a program")
+        #expect(TestRunGuard.allowed(NSTemporaryDirectory() + "fake/claude", kind: "claude", environment: [:]))
+        #expect(TestRunGuard.allowed("/bin/sh", kind: nil, environment: [:]) && !TestRunGuard.allowed("/opt/homebrew/bin/claude", kind: "claude", environment: [:]))
     }
 
     /// The throwaway engine finds no program its PATH lacks, even one installed on this Mac.

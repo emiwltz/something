@@ -4,6 +4,9 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
+@testable import AgentClaude
+@testable import AgentPi
 import SomethingCore
 
 @MainActor @Suite(.leavesNothing("engine-")) struct EngineTests {
@@ -125,7 +128,7 @@ import SomethingCore
         let place = try Place()
         defer { place.remove() }
         // The fake must be the program found, never the real one of this Mac.
-        #expect(try Programs(environment: place.environment).find("claude").path == place.bin.appendingPathComponent("claude").path)
+        #expect(try Programs(environment: place.environment, registry: .described).find("claude").path == place.bin.appendingPathComponent("claude").path)
         let engine = Engine.throwaway(place.environment)
         var changes = 0
         engine.changed = { changes += 1 }
@@ -336,7 +339,7 @@ import SomethingCore
     @Test func aLaunchedCodexTalksAndStops() async throws {
         let place = try Place()
         defer { place.remove() }
-        #expect(try Programs(environment: place.environment).find("codex").path == place.bin.appendingPathComponent("codex").path)
+        #expect(try Programs(environment: place.environment, registry: .described).find("codex").path == place.bin.appendingPathComponent("codex").path)
         let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("codex", folder: place.work.path, model: nil, mode: "untrusted", effort: nil)
         #expect(id == "codex-1")
@@ -384,7 +387,7 @@ import SomethingCore
     @Test func aLaunchedOpenCodeTalksAndStopsByCancelling() async throws {
         let place = try Place()
         defer { place.remove() }
-        #expect(try Programs(environment: place.environment).find("opencode").path == place.bin.appendingPathComponent("opencode").path)
+        #expect(try Programs(environment: place.environment, registry: .described).find("opencode").path == place.bin.appendingPathComponent("opencode").path)
         let engine = Engine.throwaway(place.environment)
         let id = try engine.launch("opencode", folder: place.work.path, model: nil, mode: nil, effort: nil)
         #expect(id == "opencode-1")

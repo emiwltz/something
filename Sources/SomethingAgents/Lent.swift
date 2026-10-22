@@ -13,7 +13,7 @@ public struct LentTool: @unchecked Sendable {
     /// The JSON schema of its arguments: an object.
     public let schema: [String: Any]
     /// The words of something's command for these arguments (["check", "hello"]); nil when they are wrong.
-    let words: ([String: Any]) -> [String]?
+    package let words: ([String: Any]) -> [String]?
 
     /// `something_check`: `something check <name>` for a space of the spaces folder, with `--refuse` for each right
     /// in `refuse`. It only reads the space and writes its snapshot in the spaces folder's .check.
@@ -44,7 +44,7 @@ public final class Lent: @unchecked Sendable, Equatable {
     /// Runs something's own command with these words, off the main queue, and returns what it gave.
     let run: @Sendable ([String]) -> Reply
     /// Told on the main queue that the agent `kind` cannot take the tools, with the sentence that says why.
-    let refused: (_ kind: String, _ because: String) -> Void
+    package let refused: (_ kind: String, _ because: String) -> Void
     /// Where `run` runs, then where its reply is handed back: off the main queue, then on it. A test runs both at once.
     let hop: (@escaping () -> Void, @escaping () -> Void) -> Void
     /// Where the commands run, one at a time, in the order asked: each check loads a page in a WebKit process of its
@@ -62,7 +62,7 @@ public final class Lent: @unchecked Sendable, Equatable {
 
     /// Runs the tool `name` with the agent's arguments and hands `reply` what the agent reads. A tool something does
     /// not lend, or wrong arguments, get a refusal in words, and nothing runs.
-    func call(_ name: String, _ arguments: Any?, reply: @escaping (Reply) -> Void) {
+    package func call(_ name: String, _ arguments: Any?, reply: @escaping (Reply) -> Void) {
         guard let tool = tools.first(where: { $0.name == name }) else {
             return reply(Reply(ok: false, text: "something lends no tool named \(name)."))
         }

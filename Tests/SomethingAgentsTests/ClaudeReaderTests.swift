@@ -6,6 +6,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
 import SomethingCore
 
 final class ClaudeHome {
@@ -265,7 +266,7 @@ func stateWords(_ sightings: [Sighting], at now: Date) -> [String: String] {
         // A session idle while its background shell runs: a closed turn, said in the detail.
         try original.replacingOccurrences(of: #""status":"waiting","waitingFor":"permission prompt""#, with: #""status":"shell""#)
             .write(to: record, atomically: true, encoding: .utf8)
-        var agent = try #require(Watch.elsewhere(Seen(sightings: home.read().sightings), groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
+        var agent = try #require(Watch.elsewhere(Seen(sightings: home.read().sightings), registry: .described, groups: [], keys: [], now: Date()).agents.first { $0.thread == ClaudeHome.shop })
         #expect(agent.state == "idle" && agent.waiting == "none" && agent.detail["backgroundShell"] == .bool(true))
 
         // A status word the reader does not know: the holder is alive, what it does is unknown, never idle.
@@ -273,7 +274,7 @@ func stateWords(_ sightings: [Sighting], at now: Date) -> [String: String] {
             .write(to: record, atomically: true, encoding: .utf8)
         let shop = try #require(home.read().sightings.first { $0.key == ClaudeHome.shop })
         #expect(!shop.stateKnown && shop.detail["status"] == .string("pondering"))
-        agent = try #require(Watch.elsewhere(Seen(sightings: [shop]), groups: [], keys: [], now: Date()).agents.first)
+        agent = try #require(Watch.elsewhere(Seen(sightings: [shop]), registry: .described, groups: [], keys: [], now: Date()).agents.first)
         #expect(agent.alive == true && agent.evidence == "registry" && agent.state == "unknown" && agent.waiting == nil)
     }
 

@@ -19,7 +19,7 @@ public final class Engine {
     public init(environment: [String: String], registry: Registry) {
         self.environment = environment
         self.registry = registry
-        programs = Programs(environment: environment)
+        programs = Programs(environment: environment, registry: registry)
     }
 
     /// The agents this engine knows: the app's list (Extensions.swift).
@@ -50,7 +50,7 @@ public final class Engine {
     var clock: () -> Date = Date.init
 
     /// The agents started elsewhere: the readers, on their timer once `start` was called.
-    lazy var watch = Watch(readers: Watch.readers(environment))
+    lazy var watch = Watch(readers: registry.readers(environment))
     /// What the watch saw last, before the dedupe.
     private var seen = Seen()
     /// The agents seen elsewhere as the state last showed them.
@@ -110,7 +110,7 @@ public final class Engine {
         let keys = launched.compactMap(\.agent.agent.thread)
         let real = HeldFiles.remembered(), mine = assistantFolder.map(real)
         let seen = Seen(sightings: seen.sightings.filter { mine == nil || $0.folder.map(real) != mine }, kinds: seen.kinds)
-        return Watch.elsewhere(seen, groups: groups, keys: Set(keys), now: Date())
+        return Watch.elsewhere(seen, registry: registry, groups: groups, keys: Set(keys), now: Date())
     }
 
     /// Takes one tick of the watch, on the main queue, and tells the app only when what it shows changed.

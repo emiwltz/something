@@ -6,6 +6,7 @@ import Foundation
 import SQLite3
 import Testing
 @testable import SomethingAgents
+@testable import AgentCodex
 import SomethingCore
 
 /// Writes `sql` into a new SQLite database at `path`. Codex and OpenCode run in WAL mode and leave their `-wal` and
@@ -336,11 +337,11 @@ final class CodexHome {
         let home = try CodexHome()
         defer { home.remove() }
         let seen = Watch(readers: [home.reader], snapshot: { home.snapshot() }).tick(now: home.now)
-        let (agents, _) = Watch.elsewhere(seen, groups: [], keys: [CodexHome.shop], now: home.now)
+        let (agents, _) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [CodexHome.shop], now: home.now)
         #expect(Set(agents.compactMap(\.thread)) == [CodexHome.blog, CodexHome.ours])
         let ours = try #require(agents.first { $0.thread == CodexHome.ours })
         #expect(ours.origin == "elsewhere" && ours.detail["originator"] == .string("something") && ours.id == "codex-\(CodexHome.ours)")
-        #expect(Watch.elsewhere(seen, groups: [51000], keys: [], now: home.now).agents.allSatisfy { $0.thread != CodexHome.shop })
+        #expect(Watch.elsewhere(seen, registry: .described, groups: [51000], keys: [], now: home.now).agents.allSatisfy { $0.thread != CodexHome.shop })
     }
 
     @Test func theTurnMarksMapAsTheDesignSays() {

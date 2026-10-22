@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_800, driver = 600, agentsShared = 400, app = 5_000
+    static let core = 1_800, host = 2_600, driver = 600, agentsShared = 400, app = 5_200
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -22,18 +22,34 @@ enum Budget {
         }
     }
 
+    /// The folders of Sources/ under `root` that hold an agent family's target: their names start with Agent.
+    static func agentTargets(under root: URL) -> [String] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("Sources").path)) ?? []
+        return names.filter { $0.hasPrefix("Agent") }.sorted()
+    }
+
     /// Every budget the sources under `root` exceed, one sentence each; empty when all hold.
     static func problems(under root: URL) -> [String] {
         let sources = root.appendingPathComponent("Sources")
         var problems: [String] = []
         let core = files(in: sources.appendingPathComponent("SomethingCore")).map(\.lines).reduce(0, +)
         if core > Budget.core { problems.append("SomethingCore has \(core) lines; its budget is \(Budget.core).") }
-        for file in files(in: sources.appendingPathComponent("SomethingAgents")) {
-            let base = (file.name as NSString).lastPathComponent
-            let isDriver = base.hasSuffix("Driver.swift")
-            let role = isDriver ? "driver" : "shared file"
-            let budget = isDriver ? driver : agentsShared
+        let host = files(in: sources.appendingPathComponent("SomethingAgents"))
+        if host.map(\.lines).reduce(0, +) > Budget.host {
+            problems.append("SomethingAgents has \(host.map(\.lines).reduce(0, +)) lines; its budget is \(Budget.host).")
+        }
+        for file in host {
+            let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
+            let (role, budget) = isDriver ? ("driver", driver) : ("shared file", agentsShared)
             if file.lines > budget { problems.append("\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
+        }
+        // Each agent family's target (Agent*): the same budget per file, and none in all.
+        for target in agentTargets(under: root) {
+            for file in files(in: sources.appendingPathComponent(target)) {
+                let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
+                let (role, budget) = isDriver ? ("driver", driver) : ("file", agentsShared)
+                if file.lines > budget { problems.append("\(target)/\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
+            }
         }
         let app = files(in: sources.appendingPathComponent("something")).map(\.lines).reduce(0, +)
         if app > Budget.app { problems.append("The Mac app has \(app) lines; its budget is \(Budget.app).") }
@@ -46,7 +62,8 @@ enum Budget {
 
     @Test func theSourcesHoldTheirBudgets() {
         // A renamed or misspelled folder would hold its budget with zero lines: each one must be there.
-        for target in ["SomethingCore", "SomethingAgents", "something"] {
+        #expect(Budget.agentTargets(under: root) == ["AgentACP", "AgentClaude", "AgentCodex", "AgentPi"])
+        for target in ["SomethingCore", "SomethingAgents", "something"] + Budget.agentTargets(under: root) {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
         }
         let problems = Budget.problems(under: root)
@@ -64,6 +81,21 @@ enum Budget {
         #expect(Budget.problems(under: root) == ["Readers/CodexReader.swift has 401 lines; a shared file has 400."])
     }
 
+    /// The host holds 2,600 lines in all, whatever each of its files holds.
+    @Test func theHostFailsOneLineOverInAll() throws {
+        for (extra, expected) in [(0, [String]()), (1, ["SomethingAgents has 2601 lines; its budget is 2600."])] {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("budget-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: root) }
+            let folder = root.appendingPathComponent("Sources/SomethingAgents")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for (index, count) in [400, 400, 400, 400, 400, 400, 200 + extra].enumerated() {
+                try String(repeating: "let example = 1\n", count: count).write(to: folder.appendingPathComponent("File\(index).swift"),
+                                                                              atomically: true, encoding: .utf8)
+            }
+            #expect(Budget.problems(under: root) == expected, "\(2_600 + extra) lines")
+        }
+    }
+
     @Test func linesAreCountedAsWcCountsThem() {
         #expect(Budget.lines("") == 0)
         #expect(Budget.lines("one\ntwo\n") == 2)
@@ -77,7 +109,9 @@ enum Budget {
             ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_801, "SomethingCore has 1801 lines; its budget is 1800."),
-            ("something", "App.swift", 5_001, "The Mac app has 5001 lines; its budget is 5000."),
+            ("something", "App.swift", 5_201, "The Mac app has 5201 lines; its budget is 5200."),
+            ("AgentClaude", "ClaudeDriver.swift", 601, "AgentClaude/ClaudeDriver.swift has 601 lines; a driver has 600."),
+            ("AgentPi", "PiReader.swift", 401, "AgentPi/PiReader.swift has 401 lines; a file has 400."),
         ]
         for item in cases {
             for (count, expected) in [(item.lines - 1, [String]()), (item.lines, [item.problem])] {

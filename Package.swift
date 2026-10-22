@@ -2,8 +2,13 @@
 // The recipe to build something. No package dependency.
 // SomethingCore holds contract 1 and uses Foundation only. It names no agent beyond the kinds a right of contract 1
 // may name.
-// SomethingAgents holds the engine and what is specific to each agent (Foundation and Darwin).
-// The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time.
+// SomethingAgents is the host (Foundation and Darwin): the engine, the watch, the programs, and the contract an agent
+// meets (AgentDescriptor, Driving, Driver, Reader). It names no agent.
+// Each Agent* target is one family of agents, behind that contract: AgentClaude, AgentCodex, AgentACP (OpenCode, over
+// the Agent Client Protocol) and AgentPi (pi and OMP). One never imports another. What they share with the host is
+// `package` (seen by this package's targets only), or public where the app needs it too.
+// The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time, and its
+// Extensions.swift is the one file that names the agents.
 import Foundation
 import PackageDescription
 
@@ -22,6 +27,8 @@ let plugins = commandLineTools + "/usr/lib/swift/host/plugins/testing"
 let testing: [SwiftSetting] = developer.hasPrefix(commandLineTools) && FileManager.default.fileExists(atPath: plugins)
     ? [.unsafeFlags(["-plugin-path", plugins])] : []
 
+let agents = ["AgentClaude", "AgentCodex", "AgentACP", "AgentPi"]
+
 let package = Package(
     name: "something",
     // macOS 15, the oldest macOS this repository's CI runs on; the formula and Info.plist say the same. Tools 5.9
@@ -31,9 +38,11 @@ let package = Package(
     targets: [
         .target(name: "SomethingCore"),
         .target(name: "SomethingAgents", dependencies: ["SomethingCore"]),
-        .executableTarget(name: "something", dependencies: ["SomethingCore", "SomethingAgents"]),
+    ] + agents.map { .target(name: $0, dependencies: ["SomethingCore", "SomethingAgents"]) } + [
+        .executableTarget(name: "something", dependencies: ["SomethingCore", "SomethingAgents"] + agents.map { .target(name: $0) }),
         .testTarget(name: "SomethingCoreTests", dependencies: ["SomethingCore"], swiftSettings: testing),
-        .testTarget(name: "SomethingAgentsTests", dependencies: ["SomethingCore", "SomethingAgents"], swiftSettings: testing),
+        .testTarget(name: "SomethingAgentsTests", dependencies: ["SomethingCore", "SomethingAgents"] + agents.map { .target(name: $0) },
+                    swiftSettings: testing),
         .testTarget(name: "somethingTests", dependencies: ["something", "SomethingCore", "SomethingAgents"], swiftSettings: testing),
     ]
 )

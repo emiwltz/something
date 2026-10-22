@@ -13,6 +13,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentCodex
 import SomethingCore
 
 @MainActor final class CodexRun {

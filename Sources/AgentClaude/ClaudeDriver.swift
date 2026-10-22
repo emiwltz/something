@@ -3,6 +3,7 @@
 // turns, `can_use_tool` into a permission or, for AskUserQuestion, a question, `aborted_*` into an interruption. The
 // channel is undocumented in places; what each choice rests on is said where it is made.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 public final class ClaudeDriver: Driver {
@@ -518,7 +519,7 @@ public final class ClaudeDriver: Driver {
         options.model = models?.compactMap { model in
             (model["value"] as? String).map { Option(value: $0, label: model["displayName"] as? String ?? $0) }
         }
-        options.effort = (entry(model)?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: ClaudeDriver.effortLabels[$0] ?? $0) } }
+        options.effort = (entry(model)?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: Option.effortLabels[$0] ?? $0) } }
         return options
     }
 
@@ -533,9 +534,6 @@ public final class ClaudeDriver: Driver {
     private func send(_ object: [String: Any]) throws {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
-
-    /// Words for the levels Claude names; a level not here is shown as Claude names it.
-    static let effortLabels = ["low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high", "max": "Max"]
 
     /// The start of the sentence for a control request Claude refused.
     static let refusals = ["initialize": "Claude Code refused to start the session", "interrupt": "Claude Code refused to stop the turn",

@@ -16,6 +16,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentPi
 import SomethingCore
 
 @MainActor final class PiRun {

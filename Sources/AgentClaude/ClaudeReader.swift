@@ -6,6 +6,7 @@
 // delete records. A stale record (its process gone, or its pid reused) is ignored and never deleted.
 import Darwin
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class ClaudeReader: Reader {
@@ -218,24 +219,6 @@ final class ClaudeReader: Reader {
             default: return UInt8(ascii: "-")
             }
         }, as: UTF8.self)
-    }
-
-    static func isFolder(_ path: String) -> Bool {
-        var folder: ObjCBool = false
-        return FileManager.default.fileExists(atPath: path, isDirectory: &folder) && folder.boolValue
-    }
-}
-
-/// What tells whether a file changed since the last tick, without reading it.
-struct Stamp: Equatable {
-    var modified: Date, size: UInt64, inode: UInt64
-
-    init?(_ path: String) {
-        var status = stat()
-        guard stat(path, &status) == 0 else { return nil }
-        modified = Date(timeIntervalSince1970: TimeInterval(status.st_mtimespec.tv_sec) + TimeInterval(status.st_mtimespec.tv_nsec) / 1e9)
-        size = UInt64(max(status.st_size, 0))
-        inode = UInt64(status.st_ino)
     }
 }
 

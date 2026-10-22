@@ -2,7 +2,8 @@
 // watch and the app's windows used to keep apart (kinds, names, install sentences, modes that ask as much, which
 // conversations continue here, the builders, the words of tools and modes) are computed from these descriptors, so
 // that knowing one more agent is one more descriptor. For a kind something launches, its Driving says what its
-// driver can do and makes one; each Driving, the driver's code and the reader stay in their own files.
+// driver can do and makes one. Each agent's descriptor, Driving, driver and reader live in its own target (Agent*);
+// this host names none of them.
 import Foundation
 import SomethingCore
 
@@ -15,30 +16,41 @@ public struct AgentDescriptor: Sendable {
     /// What to type in Terminal to install it; nil for a kind something does not launch.
     public var install: String?
     /// An interpreter its program needs that the program's first line does not name.
-    var runsOn: String?
+    package var runsOn: String?
     /// Folders under the home where its installer puts it, which a shell's PATH may lack. They are looked in for
     /// every program, after the shared installers' folders and before `.volta/bin`, the order of 0.2.
-    var homeFolders: [String] = []
+    package var homeFolders: [String]
     /// A folder under the data folder (`$XDG_DATA_HOME`, else `~/.local/share`) that its installer filled for it
     /// alone, which goes last on its PATH: pi's own node.
-    var bundled: String?
+    package var bundled: String?
     /// Parts of a real path that make a copy of its program another app's own, never launched.
-    var refusedCopies: [String] = []
+    package var refusedCopies: [String]
     /// The modes known to ask the person no less than its default, from its program's --help (17 October 2026); any
     /// mode not listed counts as asking less, which is safe.
-    var asksAsMuch: Set<String> = []
+    package var asksAsMuch: Set<String>
     /// When a conversation of it seen elsewhere can be continued here.
-    var resume: Resume = .never
+    package var resume: Resume
     /// How something launches and drives it; nil for a kind it only reads.
-    var driving: Driving?
+    package var driving: Driving?
+    /// Makes the reader of its files, for the environment something runs in; nil for a kind seen by its process only.
+    package var reader: (@Sendable (_ environment: [String: String]) -> any Reader)?
     /// How it builds spaces as the person's assistant; nil for a kind that cannot.
     public var builder: Builder?
     /// Whether, launched, it acts without ever asking the person: the rights sheet and the assistant say so.
-    public var neverAsks = false
+    public var neverAsks: Bool
     /// What its tools and requests do, by the name its driver gives them, for the permission panel's title.
-    public var tools: [String: Tool] = [:]
+    public var tools: [String: Tool]
     /// What each of its modes that lowers asking lets it do, in words that follow "a mode where it".
-    public var modeWords: [String: String] = [:]
+    public var modeWords: [String: String]
+
+    package init(kind: String, name: String, install: String? = nil, runsOn: String? = nil, homeFolders: [String] = [],
+                 bundled: String? = nil, refusedCopies: [String] = [], asksAsMuch: Set<String> = [], resume: Resume = .never,
+                 driving: Driving? = nil, reader: (@Sendable ([String: String]) -> any Reader)? = nil, builder: Builder? = nil,
+                 neverAsks: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:]) {
+        (self.kind, self.name, self.install, self.runsOn, self.homeFolders, self.bundled) = (kind, name, install, runsOn, homeFolders, bundled)
+        (self.refusedCopies, self.asksAsMuch, self.resume, self.driving, self.reader) = (refusedCopies, asksAsMuch, resume, driving, reader)
+        (self.builder, self.neverAsks, self.tools, self.modeWords) = (builder, neverAsks, tools, modeWords)
+    }
 
     /// What the person's assistant gets when it is this agent.
     public struct Builder: Sendable {
@@ -47,12 +59,14 @@ public struct AgentDescriptor: Sendable {
         public var preAllowed = false
         /// The commands something lends it as tools, on its own channel (Lent.swift).
         public var lent: [LentTool] = []
+
+        package init(preAllowed: Bool = false, lent: [LentTool] = []) { (self.preAllowed, self.lent) = (preAllowed, lent) }
     }
 
     /// What a tool or a request does, as the permission panel says it.
     public enum Tool: Sendable { case command, file, permissions }
 
-    enum Resume: Equatable, Sendable {
+    package enum Resume: Equatable, Sendable {
         /// Never: something cannot continue its conversations started elsewhere.
         case never
         /// Only when no process is known to hold it: a second writer would break it.
@@ -67,89 +81,51 @@ public struct AgentDescriptor: Sendable {
     public func refusesSignIn(status: Int?, error: String?) -> Bool { driving?.refusesSignIn?(status, error) ?? false }
 }
 
-extension AgentDescriptor {
-    /// The agents described here, in the order of the state's kinds: what the programs, the watch and the test guard
-    /// look for until each agent moves into an extension of its own. The app registers the same list
-    /// (Extensions.swift), which a test checks.
-    static let all = [claude, codex, opencode, pi, omp]
-
-    /// The descriptor of `kind`; nil for a kind something does not know.
-    static func of(_ kind: String) -> AgentDescriptor? { all.first { $0.kind == kind } }
-
-    /// The Claude desktop app's own copy of `claude` is the app's, updated by the app, and may differ from the
-    /// Claude Code the person installed. Modes (2.1.296): acceptEdits, auto, dontAsk and bypassPermissions lower
-    /// asking; "default" is the name its channel reports (its help's "manual" is never offered: Driving.claude.modes
-    /// leaves it out). As a builder, its rules pre-allow edits in the spaces folder and something's own commands.
-    public static let claude = AgentDescriptor(
-        kind: "claude", name: "Claude Code", install: "brew install --cask claude-code",
-        refusedCopies: ["/Application Support/Claude/", "/Claude.app/"], asksAsMuch: ["default", "plan"], resume: .whenNoneHolds,
-        driving: .claude, builder: Builder(preAllowed: true),
-        tools: ["Bash": .command, "Edit": .file, "Write": .file, "MultiEdit": .file, "NotebookEdit": .file],
-        modeWords: ["acceptEdits": "edits files without asking you", "auto": "decides by itself what to ask you",
-                    "dontAsk": "never asks you, and does only what your settings already allow"])
-
-    /// Codex refuses a second writer by itself, so a conversation whose holder is unknown is offered; Codex says so
-    /// if its background service holds it. Modes (0.163): `--ask-for-approval` offers on-request and never;
-    /// untrusted, which older versions offered, asks more. As a builder, its sandbox may write in the spaces folder,
-    /// and something lends it its check, which the sandbox cannot run.
-    public static let codex = AgentDescriptor(
-        kind: "codex", name: "Codex", install: "brew install --cask codex", asksAsMuch: ["on-request", "untrusted"],
-        resume: .unlessKnownHeld, driving: .codex, builder: Builder(preAllowed: true, lent: [.check]),
-        tools: ["commandExecution": .command, "fileChange": .file, "permissions": .permissions],
-        modeWords: ["never": "never asks you before it runs a command"])
-
-    /// Modes (2.0.20): a mode is an agent; build and plan ask as the person's settings say, and only `--auto`, which
-    /// something never passes, asks less. Its tools are the kinds of the Agent Client Protocol.
-    public static let opencode = AgentDescriptor(
-        kind: "opencode", name: "OpenCode", install: "brew install opencode", homeFolders: [".opencode/bin"],
-        asksAsMuch: ["build", "plan"], driving: .opencode, builder: Builder(),
-        tools: ["execute": .command, "edit": .file, "delete": .file, "move": .file])
-
-    /// The install sentence is pi's README's (1.0.0), and `npm view` gives that package name. Its launcher is a
-    /// shell script that starts a node script, and its installer may bring a node of its own. It takes no mode and
-    /// never asks: none is listed, and the bridge refuses a mode pi does not take before any confirmation.
-    public static let pi = AgentDescriptor(kind: "pi", name: "pi", install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
-                                           runsOn: "node", bundled: "pi-node/current/bin", driving: .pi, builder: Builder(), neverAsks: true)
-
-    /// Looked for, to say whether it is installed, and read; something does not launch it.
-    public static let omp = AgentDescriptor(kind: "omp", name: "OMP")
-}
-
 /// What something knows of a kind it launches: what its driver can do, the program's arguments, and the driver itself.
 /// The engine, Launched and `something check` read these; no driver is asked about itself.
-struct Driving: Sendable {
+package struct Driving: Sendable {
     /// Its descriptor's kind, which DescriptorsTests checks: one value names the agent a launch makes.
-    var kind: String
+    package var kind: String
     /// The newest version of the program its driver was proven on (`kinds.<kind>.tested`).
-    var tested: String
+    package var tested: String
     /// The `can` entries that are always false for this kind, each with its sentence (`because`, `granted.limits`).
-    var limits: [String: String] = [:]
+    package var limits: [String: String]
     /// The modes a launch or `set` may choose; empty when the kind has none.
-    var modes: [Option] = []
+    package var modes: [Option]
     /// Whether `set` may also choose modes the agent lists itself, beyond `modes`: the bridge then checks a `set`
     /// against the agent's `options.mode`, after the person confirmed (Registry.lowersAsking).
-    var listsMoreModes = false
+    package var listsMoreModes: Bool
     /// Whether an effort can be set only when `options.effort` lists levels.
-    var effortOnlyWhenOffered = false
+    package var effortOnlyWhenOffered: Bool
     /// Whether the launch picks the conversation id (`Launch.thread`) for the program. When false, the thread is
     /// unknown until the program names it, unless the launch resumes one.
-    var picksThread = true
+    package var picksThread: Bool
     /// The folder a resume of a conversation runs in, when the conversation names it (pi's file header); nil: the
     /// folder asked. Throws THREAD_NOT_FOUND for a conversation that is not there.
-    var resumeFolder: (@Sendable (_ thread: String) throws -> String)?
+    package var resumeFolder: (@Sendable (_ thread: String) throws -> String)?
     /// The program's arguments for a launch, and what it changes in the person's environment.
-    var command: @Sendable (Launch) -> Command
+    package var command: @Sendable (Launch) -> Command
     /// The command of a launch that takes plan B (`Launch.planB`), for a kind that has one: Claude's permission
     /// hook. Throws LAUNCH_FAILED when the host lacks what it needs.
-    var planB: (@Sendable (Launch, HostFacts) throws -> Command)?
+    package var planB: (@Sendable (Launch, HostFacts) throws -> Command)?
     /// Whether a failure its driver reported (`detail.apiRetry`: an HTTP status, else an error kind) means the
     /// model's server refused the sign-in; nil when its driver reports none (AgentDescriptor.refusesSignIn).
-    var refusesSignIn: (@Sendable (_ status: Int?, _ error: String?) -> Bool)?
+    package var refusesSignIn: (@Sendable (_ status: Int?, _ error: String?) -> Bool)?
     /// Makes the driver of one launch. `write` hands one whole line (without its newline) to the program and throws
     /// AGENT_STOPPED once it no longer reads; `emit` takes what happened; `now` is the time of each item and request
     /// (ISO 8601).
-    var driver: @Sendable (_ launch: Launch, _ write: @escaping (Data) throws -> Void, _ emit: @escaping (AgentEvent) -> Void,
-                           _ now: @escaping () -> String) -> any Driver
+    package var driver: @Sendable (_ launch: Launch, _ write: @escaping (Data) throws -> Void, _ emit: @escaping (AgentEvent) -> Void,
+                                   _ now: @escaping () -> String) -> any Driver
+
+    package init(kind: String, tested: String, limits: [String: String] = [:], modes: [Option] = [], listsMoreModes: Bool = false,
+                 effortOnlyWhenOffered: Bool = false, picksThread: Bool = true, resumeFolder: (@Sendable (String) throws -> String)? = nil,
+                 command: @escaping @Sendable (Launch) -> Command, planB: (@Sendable (Launch, HostFacts) throws -> Command)? = nil,
+                 refusesSignIn: (@Sendable (Int?, String?) -> Bool)? = nil,
+                 driver: @escaping @Sendable (Launch, @escaping (Data) throws -> Void, @escaping (AgentEvent) -> Void, @escaping () -> String) -> any Driver) {
+        (self.kind, self.tested, self.limits, self.modes, self.listsMoreModes) = (kind, tested, limits, modes, listsMoreModes)
+        (self.effortOnlyWhenOffered, self.picksThread, self.resumeFolder) = (effortOnlyWhenOffered, picksThread, resumeFolder)
+        (self.command, self.planB, self.refusesSignIn, self.driver) = (command, planB, refusesSignIn, driver)
+    }
 }
 
 /// What the host knows that a kind's command or driver may need, the same for every launch.

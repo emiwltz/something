@@ -5,6 +5,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentPi
 import SomethingCore
 
 @Suite struct PiReplayTests {

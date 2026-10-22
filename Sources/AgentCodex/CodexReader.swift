@@ -8,6 +8,7 @@
 // lock or its rollout open; the files Codex writes say nothing of what it waits on, so `waiting` is null.
 import Darwin
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class CodexReader: Reader {
@@ -63,7 +64,7 @@ final class CodexReader: Reader {
     }
 
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
-        guard let folder, ClaudeReader.isFolder(folder) else { return Reading() }
+        guard let folder, CodexReader.isFolder(folder) else { return Reading() }
         var reading = Reading(health: "ok")
         let holders = holders(snapshot, now: now)
         var threads: [Thread]
@@ -239,13 +240,6 @@ final class CodexReader: Reader {
         // A background service has no window to quit it from: the gesture that frees the conversation is said instead.
         if let holder, holders.services.contains(holder) { sighting.because["resume"] = CodexDriver.heldByService }
         return sighting
-    }
-
-    /// A Codex time: ISO 8601 in UTC, with milliseconds.
-    static func date(_ text: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 }
 

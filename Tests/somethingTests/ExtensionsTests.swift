@@ -1,14 +1,14 @@
-// Extensions.swift is the app's one list of agents: the host's descriptors, in their order, and the only file of the
-// app that names one. What the windows take from the descriptors gives the words of 0.2.
+// Extensions.swift is the app's one list of agents: the Agent* targets' descriptors, in their order, and the only file
+// of the app that names one. What the windows take from the descriptors gives the words of 0.2.
 import Foundation
 import Testing
 @testable import SomethingAgents
 @testable import something
 
 @Suite struct ExtensionsTests {
-    @Test func theAppRegistersTheAgentsTheHostDescribes() {
-        // The programs, the watch and the test guard still read the host's own list until each agent is an extension.
-        #expect(Registry.app.agents.map(\.kind) == AgentDescriptor.all.map(\.kind))
+    @Test func theAppRegistersTheAgentsOf0_2() {
+        #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp"])
+        #expect(Registry.app.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
         #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi"] && Registry.app.kinds.readOnly == ["omp"])
         #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi"], "0.2's builders, in 0.2's order")
         #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi"])

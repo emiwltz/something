@@ -8,7 +8,7 @@ import Foundation
 import SomethingCore
 
 /// A harness's files read without its program's help. A reader keeps its own cursors, on the watch's queue only.
-protocol Reader: AnyObject {
+package protocol Reader: AnyObject {
     var kind: String { get }
     /// The process names of its program, whose arguments and folder the snapshot reads.
     var programs: Set<String> { get }
@@ -19,47 +19,74 @@ protocol Reader: AnyObject {
 }
 
 extension Reader {
-    func owns(_ process: Running) -> Bool { programs.contains(process.name) }
+    package func owns(_ process: Running) -> Bool { programs.contains(process.name) }
+
+    /// Whether `path` is a folder: a reader looks for its files only where a folder of its agent is.
+    package static func isFolder(_ path: String) -> Bool {
+        var folder: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &folder) && folder.boolValue
+    }
+
+    /// A time as Codex and pi write it: ISO 8601 in UTC, with milliseconds or without.
+    package static func date(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+    }
 }
 
-struct Reading: Equatable {
-    var sightings: [Sighting] = []
+package struct Reading: Equatable {
+    package var sightings: [Sighting] = []
     /// The newest version of the harness found in its files; nil when none says.
-    var version: String?
+    package var version: String?
     /// `kinds.<kind>.reader`: "ok", "changed", "unreadable" or "none".
-    var health = "none"
+    package var health = "none"
     /// One sentence for the person when the health is not "ok" or "none", or when a source beside the files read
     /// cannot be read (OpenCode desktop 1.x's tables).
-    var note: String?
+    package var note: String?
+
+    package init(sightings: [Sighting] = [], version: String? = nil, health: String = "none", note: String? = nil) {
+        (self.sightings, self.version, self.health, self.note) = (sightings, version, health, note)
+    }
 }
 
 /// One conversation a reader saw, in neutral facts: StateMap turns them into state words.
-struct Sighting: Equatable {
-    var kind: String
+package struct Sighting: Equatable {
+    package var kind: String
     /// The harness's own id of the conversation, which a driver also reports for what something launched.
-    var key: String
-    var pid: Int32?
+    package var key: String
+    package var pid: Int32?
     /// The process group of `pid`, from the snapshot, for the dedupe.
-    var group: Int32?
-    var facts: StateMap.Facts
-    var folder: String?
-    var title: String?
+    package var group: Int32?
+    package var facts: StateMap.Facts
+    package var folder: String?
+    package var title: String?
     /// The program's name, the agent's name when neither a title nor a folder gives one.
-    var program: String?
-    var model: String?, mode: String?, effort: String?
-    var started: Date?
+    package var program: String?
+    package var model: String?, mode: String?, effort: String?
+    package var started: Date?
     /// The last activity seen.
-    var updated: Date?
-    var turns: [Turn] = []
-    var complete = true
-    var error: AgentError?
-    var detail: [String: JSONValue] = [:]
+    package var updated: Date?
+    package var turns: [Turn] = []
+    package var complete = true
+    package var error: AgentError?
+    package var detail: [String: JSONValue] = [:]
     /// Seen from its process only, as when its reader no longer knows the shape of its files: its state is unknown.
-    var processOnly = false
+    package var processOnly = false
     /// Its holder is known, but not what it does (a status word the reader does not know): its state is unknown.
-    var stateKnown = true
+    package var stateKnown = true
     /// Why an entry of `can` is false, beyond what is said of every agent seen elsewhere, by entry.
-    var because: [String: String] = [:]
+    package var because: [String: String] = [:]
+
+    package init(kind: String, key: String, pid: Int32? = nil, group: Int32? = nil, facts: StateMap.Facts, folder: String? = nil,
+                 title: String? = nil, program: String? = nil, model: String? = nil, mode: String? = nil, effort: String? = nil,
+                 started: Date? = nil, updated: Date? = nil, turns: [Turn] = [], complete: Bool = true, error: AgentError? = nil,
+                 detail: [String: JSONValue] = [:], processOnly: Bool = false, stateKnown: Bool = true, because: [String: String] = [:]) {
+        (self.kind, self.key, self.pid, self.group, self.facts, self.folder, self.title) = (kind, key, pid, group, facts, folder, title)
+        (self.program, self.model, self.mode, self.effort, self.started, self.updated) = (program, model, mode, effort, started, updated)
+        (self.turns, self.complete, self.error, self.detail) = (turns, complete, error, detail)
+        (self.processOnly, self.stateKnown, self.because) = (processOnly, stateKnown, because)
+    }
 }
 
 /// What one tick saw: the sightings of every reader, and each reader's version, health and note (its sightings moved out).
@@ -68,9 +95,9 @@ struct Seen: Equatable {
     var kinds: [String: Reading] = [:]
 }
 
-final class Watch {
+package final class Watch {
     /// Seen elsewhere, an agent is listed while alive and for this long after its last activity.
-    static let recent: TimeInterval = 24 * 3600
+    package static let recent: TimeInterval = 24 * 3600
     static let discoveryEvery = 15
 
     let readers: [Reader]
@@ -98,12 +125,6 @@ final class Watch {
         self.readers = readers
         let processes = Processes(known: readers.reduce(into: Set<String>()) { $0.formUnion($1.programs) })
         self.snapshot = snapshot ?? processes.snapshot
-    }
-
-    /// The readers for something's own environment: the folders its agents use are found there, never guessed.
-    static func readers(_ environment: [String: String]) -> [Reader] {
-        [ClaudeReader(environment: environment), CodexReader(environment: environment), OpenCodeReader(environment: environment),
-         PiReader(environment: environment), OMPReader(environment: environment), OtherReader()]
     }
 
     /// Ticks every `seconds`, the first one now, and gives each tick's result to `seen` on the main queue. Called
@@ -167,15 +188,15 @@ final class Watch {
     }
 
     /// Whether a conversation is listed: alive, or active within `recent`.
-    static func isRecent(alive: Bool?, updated: Date?, now: Date) -> Bool {
+    package static func isRecent(alive: Bool?, updated: Date?, now: Date) -> Bool {
         alive == true || (updated.map { now.timeIntervalSince($0) < recent } ?? false)
     }
 
     /// The agents and threads of `seen` that something did not launch: a sighting is dropped when its process is in
     /// the group of one of something's children (`groups`: a helper whose leader ended no longer descends from
     /// something), or when its conversation is one a driver reported (`keys`). Ids are stable while the conversation
-    /// is listed.
-    static func elsewhere(_ seen: Seen, groups: Set<Int32>, keys: Set<String>, now: Date) -> (agents: [Agent], threads: [AgentThread]) {
+    /// is listed. `registry` says which conversations can be continued here.
+    static func elsewhere(_ seen: Seen, registry: Registry, groups: Set<Int32>, keys: Set<String>, now: Date) -> (agents: [Agent], threads: [AgentThread]) {
         var agents: [Agent] = [], threads: [AgentThread] = []
         for sighting in seen.sightings where !keys.contains(sighting.key) && !(sighting.group.map(groups.contains) ?? false) {
             var agent = Agent(id: "\(sighting.kind)-\(sighting.key)", kind: sighting.kind, origin: "elsewhere")
@@ -199,13 +220,13 @@ final class Watch {
             agent.updated = sighting.updated.map(iso)
             agent.because = ["send": "This agent was started outside something; something only reads it."]
             if !sighting.processOnly {
-                (agent.can.resume, agent.because["resume"]) = Watch.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
+                (agent.can.resume, agent.because["resume"]) = registry.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
                 if agent.can.resume { agent.because["send"]! += " Continue it here to write to it." }
             }
             // A reader names the holder better (Codex's background service), so its reason wins; but for a kind
             // something cannot continue, that comes first and the reader's note follows, so it never hides why.
             var notes = sighting.because
-            if !Watch.resumable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {
+            if !registry.resumable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {
                 agent.because["resume"] = "\(reason) \(note)"
             }
             agent.because.merge(notes) { _, reader in reader }
@@ -218,22 +239,5 @@ final class Watch {
         return (agents, threads)
     }
 
-    /// The kinds whose conversations seen elsewhere can be continued here.
-    static let resumable = Set(AgentDescriptor.all.filter { $0.resume != .never }.map(\.kind))
-
-    /// Whether a conversation seen elsewhere can be continued here, and why not, as its kind's `resume` says: only one
-    /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
-    /// itself (Codex), also one whose holder is unknown.
-    static func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
-        let name = Programs.name(of: kind), resume = AgentDescriptor.of(kind)?.resume ?? .never
-        guard resume != .never else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
-        switch alive {
-        case true?: return (false, "\(name) still runs this conversation\(pid.map { " (pid \($0))" } ?? ""). Quit it there first.")
-        case false?: return (true, nil)
-        case nil:
-            return resume == .unlessKnownHeld ? (true, nil) : (false, "something cannot tell whether \(name) still runs this conversation, so it cannot continue it here.")
-        }
-    }
-
-    static func iso(_ date: Date) -> String { iso8601.string(from: date) }
+    package static func iso(_ date: Date) -> String { iso8601.string(from: date) }
 }

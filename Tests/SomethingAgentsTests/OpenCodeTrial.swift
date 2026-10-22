@@ -13,6 +13,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
 import SomethingCore
 
 @MainActor final class OpenCodeRun {

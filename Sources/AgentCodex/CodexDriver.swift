@@ -5,6 +5,7 @@
 // permissions, requestUserInput into a question. What each choice rests on is said where it is
 // made.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 public final class CodexDriver: Driver {
@@ -487,7 +488,7 @@ public final class CodexDriver: Driver {
         options.model = shown?.compactMap { entry in (entry["model"] as? String).map { Option(value: $0, label: entry["displayName"] as? String ?? $0) } }
         let entry = models?.first { $0["model"] as? String == model || $0["id"] as? String == model }
         options.effort = (entry?["supportedReasoningEfforts"] as? [[String: Any]])?.compactMap { effort in
-            (effort["reasoningEffort"] as? String).map { Option(value: $0, label: ClaudeDriver.effortLabels[$0] ?? $0) }
+            (effort["reasoningEffort"] as? String).map { Option(value: $0, label: Option.effortLabels[$0] ?? $0) }
         }
         return options
     }
@@ -528,14 +529,6 @@ public final class CodexDriver: Driver {
         guard let agent = agent as? String, let slash = agent.firstIndex(of: "/") else { return nil }
         let version = agent[agent.index(after: slash)...].prefix { $0.isNumber || $0 == "." }
         return version.isEmpty ? nil : String(version)
-    }
-
-    static func json(_ value: Any?) -> String? {
-        guard let value, JSONSerialization.isValidJSONObject(value),
-              let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]) else {
-            return value as? String
-        }
-        return String(decoding: data, as: UTF8.self)
     }
 }
 

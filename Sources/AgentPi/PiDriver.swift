@@ -4,6 +4,7 @@
 // pi's raw words into neutral events: agent_start and agent_settled into turns, the last assistant
 // message's stopReason into the outcome. What each choice rests on is said where it is made.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 public final class PiDriver: Driver {
@@ -293,7 +294,7 @@ public final class PiDriver: Driver {
         guard let id = event["toolCallId"] as? String else { return }
         let name = event["toolName"] as? String ?? "tool"
         let args = event["args"] as? [String: Any]
-        let text = tools[id]?.text ?? args?["command"] as? String ?? args?["path"] as? String ?? CodexDriver.json(args) ?? ""
+        let text = tools[id]?.text ?? args?["command"] as? String ?? args?["path"] as? String ?? PiDriver.json(args) ?? ""
         let status = done ? (event["isError"] as? Bool == true ? "failed" : "done") : "running"
         let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(), tool: Tool(name: name, status: status))
         emit(tools[id] == nil ? .itemAppended(shown) : .itemUpdated(shown))
@@ -339,7 +340,7 @@ public final class PiDriver: Driver {
         return options
     }
 
-    static let levelLabels = ClaudeDriver.effortLabels.merging(["off": "Off", "minimal": "Minimal"]) { first, _ in first }
+    static let levelLabels = Option.effortLabels.merging(["off": "Off", "minimal": "Minimal"]) { first, _ in first }
 
     /// pi's words for a missing key point at a terminal command and a long path inside its install: a newcomer
     /// needs the gesture instead.

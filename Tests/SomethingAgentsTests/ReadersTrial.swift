@@ -21,6 +21,10 @@ import Darwin
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentACP
+@testable import AgentClaude
+@testable import AgentCodex
+@testable import AgentPi
 import SomethingCore
 
 @Suite(.serialized) @MainActor struct ReadersTrial {
@@ -171,7 +175,7 @@ import SomethingCore
     @Test(.enabled(if: environment["SOMETHING_TRIAL_COST"] == "1", "The cost trial reads this Mac's own sessions: set SOMETHING_TRIAL_COST=1."))
     func theCostOfTheWatchLoop() async throws {
         for cadence in [2.0, 10.0] {
-            let watch = Watch(readers: Watch.readers(ReadersTrial.environment))
+            let watch = Watch(readers: Registry.described.readers(ReadersTrial.environment))
             var cpu: [Double] = [], wall: [Double] = [], resident: [Double] = [ReadersTrial.resident()]
             let start = Date()
             var seen = Seen()
@@ -210,7 +214,7 @@ import SomethingCore
             seen = watch.tick(now: Date())
             times.append(Date().timeIntervalSince(begin) * 1000)
         }
-        let (agents, threads) = Watch.elsewhere(seen, groups: [], keys: [], now: Date())
+        let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: Date())
         func count(_ values: [String?]) -> String {
             Dictionary(grouping: values.map { $0 ?? "null" }, by: { $0 }).mapValues(\.count).sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")
         }

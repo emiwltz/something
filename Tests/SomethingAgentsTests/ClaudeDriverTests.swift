@@ -4,6 +4,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentClaude
 import SomethingCore
 
 @Suite struct ClaudeReplayTests {

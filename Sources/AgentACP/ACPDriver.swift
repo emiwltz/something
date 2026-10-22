@@ -5,6 +5,7 @@
 // session/request_permission is a permission. What each choice rests on (OpenCodeTrial.swift, against
 // OpenCode 2.0.20) is said where it is made.
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 public final class ACPDriver: Driver {
@@ -286,7 +287,7 @@ public final class ACPDriver: Driver {
         let shown = Request(id: "\(launch.agent):\(rpcID)", agent: launch.agent, kind: "permission",
                             tool: tool.flatMap { names[$0] } ?? call["kind"] as? String, about: call["title"] as? String, at: now())
         asks[shown.id] = Ask(rpcID: rpcID, options: params["options"] as? [[String: Any]] ?? [], tool: tool,
-                             prompt: Prompt(request: shown, input: input?["command"] as? String ?? CodexDriver.json(input)))
+                             prompt: Prompt(request: shown, input: input?["command"] as? String ?? ACPDriver.json(input)))
         emit(.requestOpened(shown))
     }
 

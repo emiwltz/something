@@ -4,6 +4,7 @@
 import Foundation
 import Testing
 @testable import SomethingAgents
+@testable import AgentCodex
 import SomethingCore
 
 @Suite struct CodexReplayTests {

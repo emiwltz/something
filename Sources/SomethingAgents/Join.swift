@@ -23,6 +23,7 @@ extension Engine {
             return true
         }, running: { [weak spawn] in spawn?.running == true }, quit: { [weak spawn] in spawn?.closeInput() },
            interrupt: { [weak agent] in DispatchQueue.main.async { _ = try? agent?.interrupt() } }, host: host, relaunch: relaunch)
+        spawn.kind = driving.kind
         try agent.driver.join(program)
         spawn.graceful = { agent.driver.graceful(program) }
         do { try startSpawn(launch, spawn, agent: agent, asked: asked, record: record) } catch {

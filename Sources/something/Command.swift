@@ -145,7 +145,7 @@ enum Command: Equatable {
         case .check(let check):
             return check.main(CheckRunner(places: places, share: share), say: say)
         case .hook(let words):
-            return SpoolHook.main(words)
+            return Registry.hook(words)
         case .trial(let words):
             return DeveloperTrial.main(words, registry: .app)
         case .wrong(let sentence):

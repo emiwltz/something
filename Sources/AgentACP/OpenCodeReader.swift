@@ -7,6 +7,7 @@
 // so `waiting` is null.
 import Darwin
 import Foundation
+import SomethingAgents
 import SomethingCore
 
 final class OpenCodeReader: Reader {
