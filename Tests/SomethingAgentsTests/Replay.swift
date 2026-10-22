@@ -33,7 +33,8 @@ final class Replay {
         start("claude", launch)
     }
 
-    init(_ kind: String, _ launch: Launch) { start(kind, launch) }
+    /// A launch of `kind`, driven as `driving` says when given (an invented agent over another's exchanges).
+    init(_ kind: String, _ launch: Launch, driving: Driving? = nil) { start(kind, launch, driving) }
 
     private init(unstarted: Void) {}
 
@@ -57,9 +58,11 @@ final class Replay {
         return replay
     }
 
-    /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given.
-    static func opencode(model: String? = nil, resume: String? = nil) -> Replay {
-        Replay("opencode", Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil))
+    /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given; with `driving`,
+    /// another agent over ACP in its place.
+    static func opencode(model: String? = nil, resume: String? = nil, driving: Driving? = nil) -> Replay {
+        Replay("opencode", Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil),
+               driving: driving)
     }
 
     /// A pi launched in /Users/example/shop as agent pi-1, continuing the conversation file `resume` when given.
@@ -67,8 +70,8 @@ final class Replay {
         Replay("pi", Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
     }
 
-    private func start(_ kind: String, _ launch: Launch) {
-        agent = Launched(try! Registry.described.driving(kind), launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
+    private func start(_ kind: String, _ launch: Launch, _ driving: Driving? = nil) {
+        agent = Launched(try! driving ?? Registry.described.driving(kind), launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
         if let codex = agent.driver as? CodexDriver {
             codex.schedule = { [unowned self] _, work in scheduled.append(work) }
             codex.quit = { [unowned self] in quit = true }
@@ -94,8 +97,9 @@ final class Replay {
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
     /// "resume" makes a Codex, OpenCode or pi launch that continues that thread, "model" an OpenCode or pi launch with
     /// that model, "effort" a pi launch with that thinking level, and "assistant" a Claude or Codex launched as the person's assistant.
-    /// `database` is the OpenCode database the driver reads at the end, as the engine sets it.
-    static func play(_ name: String, kind: String = "claude", database: String? = nil) throws -> Replay {
+    /// `database` is the OpenCode database the driver reads at the end, as the engine sets it; `driving` plays an
+    /// OpenCode exchange with another agent over ACP.
+    static func play(_ name: String, kind: String = "claude", database: String? = nil, driving: Driving? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Exchanges/\(kind)/\(name).jsonl")
         let rows = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { text in
@@ -109,9 +113,9 @@ final class Replay {
             guard let text = (result["contentItems"] as? [[String: Any]])?.first?["text"] as? String else { return nil }
             return Lent.Reply(ok: result["success"] as? Bool ?? false, text: text)
         }
-        let replay = kind == "codex" ? codex(resume: resume, assistant: assistant, reports: reports) : kind == "opencode" ? opencode(model: model, resume: resume)
+        let replay = kind == "codex" ? codex(resume: resume, assistant: assistant, reports: reports) : kind == "opencode" ? opencode(model: model, resume: resume, driving: driving)
             : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
-        (replay.agent.driver as? ACPDriver)?.database = database
+        (replay.agent.driver as? ACPDriver)?.environment = database.map { ["OPENCODE_DB": $0] } ?? [:]
         var read = 0
         for (number, row) in rows.enumerated() {
             let at = "\(name).jsonl:\(number + 1)"

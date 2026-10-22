@@ -397,7 +397,7 @@ import SomethingCore
         try await until("the reply") { engine.state.threads.first?.turns.first?.state == "done" }
         #expect(engine.state.threads.first?.turns.first?.items.map(\.text) == ["Hello.", "Invented reply."])
         #expect(try engine.deliver("Please wait.", to: id, when: "next") == "started")
-        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", ACPProfile.opencode.driving.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
         #expect(try String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8) == "acp\n")
         var stopped = false
         let begun = Date()

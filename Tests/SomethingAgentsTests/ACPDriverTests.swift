@@ -49,7 +49,7 @@ import SomethingCore
 
     @Test func aQuestionIsDismissedByOpenCode() throws {
         let replay = try Replay.play("question", kind: "opencode")
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.questionDismissed))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPProfile.opencode.questionDismissed))
         #expect(replay.fold.turns.map(\.state) == ["error"], "the turn OpenCode cancelled after it is no normal end")
         #expect(replay.items.first { $0.kind == "tool" }?.tool == Tool(name: "question", status: "failed"))
     }
@@ -118,7 +118,7 @@ import SomethingCore
         let session = "ses_eb42d0ee4ffeck9Fs9cn1jngw7"
         let replay = try Replay.play("killed", kind: "opencode", database: try ACPDriverTests.database(claimed: session, in: folder))
         #expect(replay.fold.agent.state == "error")
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + ACPDriver.claimLeft(session)))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + OpenCode.claimLeft(session)))
     }
 
     /// The ladder's first step cancels the running turn; the input is closed after its answer.
@@ -150,17 +150,17 @@ import SomethingCore
     }
 
     @Test func theCommandIsACP() {
-        #expect(ACPDriver.command(Launch(agent: "opencode-1", folder: "/Users/example/shop")) == Command(arguments: ["acp"]))
+        #expect(ACPProfile.opencode.driving.command(Launch(agent: "opencode-1", folder: "/Users/example/shop")) == Command(arguments: ["acp"]))
         #expect(Replay.opencode().fold.agent.thread == nil, "the session is unknown until OpenCode names it")
         #expect(Replay.opencode().fold.agent.can.steer == false)
-        #expect(Replay.opencode().fold.agent.because["steer"] == Driving.opencode.limits["steer"])
+        #expect(Replay.opencode().fold.agent.because["steer"] == ACPProfile.opencode.driving.limits["steer"])
     }
 
     @Test func aSteerIsRefused() throws {
         let replay = Self.opened()
         #expect(try replay.agent.send("Hello.", when: "next") == "started")
         let written = replay.written.count
-        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try replay.agent.send("Now.", when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", ACPProfile.opencode.driving.limits["steer"]!)) { try replay.agent.send("Now.", when: "now") }
         #expect(replay.written.count == written, "nothing reaches OpenCode, which would refuse a second prompt")
     }
 
@@ -217,7 +217,7 @@ import SomethingCore
         #expect(replay.fold.agent.error?.message == "OpenCode's model fake/fake-model needs a sign-in to fake, which OpenCode does not have. "
             + "Sign in to fake in OpenCode (`opencode auth login` in a terminal) and send the message again. Or use another model once in OpenCode "
             + "and start a new conversation: something takes the model you used last there.")
-        #expect(ACPDriver.failure(["code": -32000], "Authentication required", "Hello.", model: nil, picked: false)
+        #expect(ACPProfile.opencode.failure(["code": -32000], "Authentication required", "Hello.", model: nil, picked: false)
             == "OpenCode's model needs a sign-in to its provider, which OpenCode does not have. Sign in to its provider in OpenCode (`opencode auth login` in a terminal) and send the message again.",
             "a model a space named stays: choosing another in OpenCode would change nothing")
         _ = try replay.agent.send("Again.", when: "next")
@@ -236,10 +236,10 @@ import SomethingCore
     }
 
     @Test func theDatabaseFollowsTheEnvironment() {
-        #expect(ACPDriver.database(["HOME": "/Users/example"]) == "/Users/example/.local/share/opencode/opencode.db")
-        #expect(ACPDriver.database(["HOME": "/Users/example", "XDG_DATA_HOME": "/Users/example/data"]) == "/Users/example/data/opencode/opencode.db")
-        #expect(ACPDriver.database(["HOME": "/Users/example", "OPENCODE_DB": "/Users/example/other.db"]) == "/Users/example/other.db")
-        #expect(ACPDriver.database([:]) == nil)
+        #expect(OpenCode.database(["HOME": "/Users/example"]) == "/Users/example/.local/share/opencode/opencode.db")
+        #expect(OpenCode.database(["HOME": "/Users/example", "XDG_DATA_HOME": "/Users/example/data"]) == "/Users/example/data/opencode/opencode.db")
+        #expect(OpenCode.database(["HOME": "/Users/example", "OPENCODE_DB": "/Users/example/other.db"]) == "/Users/example/other.db")
+        #expect(OpenCode.database([:]) == nil)
     }
 
     /// OpenCode's model.json, as its terminal app writes it (invented models): the most recent first.
@@ -248,17 +248,17 @@ import SomethingCore
     @Test func theRecentModelIsReadFromOpenCodesStateFile() throws {
         let home = try Self.folder()
         defer { try? FileManager.default.removeItem(at: home) }
-        #expect(ACPDriver.recentModel(["HOME": home.path]) == nil, "no file")
+        #expect(OpenCode.recentModel(["HOME": home.path]) == nil, "no file")
         let state = home.appendingPathComponent(".local/state/opencode")
         try FileManager.default.createDirectory(at: state, withIntermediateDirectories: true)
         for garbage in ["not json", "[]", #"{"recent": []}"#, #"{"recent": [{"providerID": "fake"}]}"#, #"{"recent": [{"providerID": "", "modelID": "m"}]}"#] {
             try garbage.write(to: state.appendingPathComponent("model.json"), atomically: true, encoding: .utf8)
-            #expect(ACPDriver.recentModel(["HOME": home.path]) == nil, "\(garbage)")
+            #expect(OpenCode.recentModel(["HOME": home.path]) == nil, "\(garbage)")
         }
         try Self.modelFile.write(to: state.appendingPathComponent("model.json"), atomically: true, encoding: .utf8)
-        #expect(ACPDriver.recentModel(["HOME": home.path]) == "fake/other-model")
-        #expect(ACPDriver.recentModel(["HOME": "/Users/example", "XDG_STATE_HOME": home.appendingPathComponent(".local/state").path]) == "fake/other-model")
-        #expect(ACPDriver.recentModel([:]) == nil)
+        #expect(OpenCode.recentModel(["HOME": home.path]) == "fake/other-model")
+        #expect(OpenCode.recentModel(["HOME": "/Users/example", "XDG_STATE_HOME": home.appendingPathComponent(".local/state").path]) == "fake/other-model")
+        #expect(OpenCode.recentModel([:]) == nil)
     }
 
     /// A new conversation that names no model takes OpenCode's own last model before the first message, when OpenCode
@@ -314,10 +314,10 @@ import SomethingCore
         let folder = try Self.folder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let path = try Self.database(claimed: Self.session, in: folder)
-        #expect(ACPDriver.claimed(Self.session, in: path) == true)
-        #expect(ACPDriver.claimed("ses_released", in: path) == false)
-        #expect(ACPDriver.claimed("ses_unknown", in: path) == nil)
-        #expect(ACPDriver.claimed(Self.session, in: folder.appendingPathComponent("missing.db").path) == nil)
+        #expect(OpenCode.claimed(Self.session, in: path) == true)
+        #expect(OpenCode.claimed("ses_released", in: path) == false)
+        #expect(OpenCode.claimed("ses_unknown", in: path) == nil)
+        #expect(OpenCode.claimed(Self.session, in: folder.appendingPathComponent("missing.db").path) == nil)
         #expect(!FileManager.default.fileExists(atPath: folder.appendingPathComponent("missing.db").path), "never created")
     }
 
@@ -329,7 +329,7 @@ import SomethingCore
         let path = try Self.database(claimed: Self.session, in: folder)
         func replay(prompting: Bool) throws -> Replay {
             let replay = Self.opened()
-            try #require(replay.agent.driver as? ACPDriver).database = path
+            try #require(replay.agent.driver as? ACPDriver).environment = ["OPENCODE_DB": path]
             if prompting { _ = try replay.agent.send("Hello.", when: "next") }
             return replay
         }
@@ -343,10 +343,10 @@ import SomethingCore
 
         let stopped = try replay(prompting: true)
         stopped.agent.ended(code: 0, errors: "", asked: true)
-        #expect(stopped.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.claimLeft(Self.session)))
+        #expect(stopped.fold.agent.error == AgentError(code: "AGENT_ERROR", message: OpenCode.claimLeft(Self.session)))
         let killed = try replay(prompting: true)
         killed.agent.ended(code: 137, errors: "", asked: false)
-        #expect(killed.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + ACPDriver.claimLeft(Self.session)))
+        #expect(killed.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "OpenCode ended (code 137). " + OpenCode.claimLeft(Self.session)))
     }
 
     /// A complete list without an effort (a model without variants) leaves no effort in use, not the last one.
@@ -379,6 +379,6 @@ import SomethingCore
         let reply = try #require(replay.lines().last?["result"] as? [String: Any])
         #expect(reply["outcome"] as? [String: String] == ["outcome": "cancelled"], "never \"always\"")
         #expect(replay.items.first { $0.kind == "tool" }?.decision == Decision(by: "person", outcome: "denied"))
-        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPDriver.noAllowOnce))
+        #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: ACPProfile.opencode.noAllowOnce))
     }
 }

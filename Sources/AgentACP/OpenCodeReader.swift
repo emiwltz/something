@@ -47,7 +47,7 @@ final class OpenCodeReader: Reader {
     private var last = Reading()
     private var sessions: [Session] = []
 
-    init(environment: [String: String]) { database = ACPDriver.database(environment) }
+    init(environment: [String: String]) { database = OpenCode.database(environment) }
 
     func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
         guard let database else { return Reading() }

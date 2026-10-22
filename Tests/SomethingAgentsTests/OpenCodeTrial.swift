@@ -61,10 +61,10 @@ import SomethingCore
                            "XDG_CACHE_HOME": "cache"].mapValues { root.appendingPathComponent($0).path }
         environment.merge(["TMPDIR": root.path, "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin",
                            "OPENCODE_DISABLE_MODELS_FETCH": "true", "OPENCODE_DISABLE_AUTOUPDATE": "true"]) { _, new in new }
-        spawn = Spawn(path: program, arguments: ACPDriver.command(launch).arguments, folder: work.path, environment: environment)
+        spawn = Spawn(path: program, arguments: ACPProfile.opencode.driving.command(launch).arguments, folder: work.path, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
-        agent = try Engine.start(.opencode, launch, spawn, asked: { _ in stop.done }, record: { written, line in
+        agent = try Engine.start(ACPProfile.opencode.driving, launch, spawn, asked: { _ in stop.done }, record: { written, line in
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             exchange.rows.append([written ? "something" : "opencode": frame])
         })
@@ -75,7 +75,7 @@ import SomethingCore
     var items: [Item] { agent.queue.fold.turns.flatMap(\.items) }
     var turns: [String] { agent.queue.fold.turns.map(\.state) }
     var opencode: ACPDriver { agent.driver as! ACPDriver }
-    var claimed: Bool? { state.thread.flatMap { ACPDriver.claimed($0, in: database) } }
+    var claimed: Bool? { state.thread.flatMap { OpenCode.claimed($0, in: database) } }
 
     /// Adds `row`, runs `call`, then completes the row with what the call returned under `key`.
     private func row<T>(_ row: [String: Any], _ key: String, _ call: () throws -> T) rethrows -> T {
@@ -169,7 +169,7 @@ import SomethingCore
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway folders.
     func save() {
         guard let folder = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_RECORD"] else { return }
-        var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(Driving.opencode.tested), a fake model, invented text, paths made /Users/example)."]
+        var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(ACPProfile.opencode.tested), a fake model, invented text, paths made /Users/example)."]
         if let resume = resumed { note["resume"] = resume }
         if let model { note["model"] = model }
         var text = ([note] + rows).compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
@@ -243,7 +243,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         defer { run.cleanup() }
         _ = try run.send("Please ask-me something.")
         try await run.until("the end of the turn") { run.turns == ["error"] && run.state.state == "error" }
-        #expect(run.state.error?.message == ACPDriver.questionDismissed)
+        #expect(run.state.error?.message == ACPProfile.opencode.questionDismissed)
         #expect(!run.rows.contains { ($0["opencode"] as? [String: Any])?["method"] as? String == "session/request_permission" })
         try await run.finish()
     }
@@ -253,7 +253,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         defer { run.cleanup() }
         _ = try run.send("Please run-sleep for me.")
         try await run.until("the turn") { run.opencode.prompting && run.items.count == 2 }
-        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try run.agent.send("Steered: no.", when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", ACPProfile.opencode.driving.limits["steer"]!)) { try run.agent.send("Steered: no.", when: "now") }
         #expect(try run.send("Queued: then the docs.") == "queued")
         #expect(try run.send("Queued: and the tests.") == "queued")
         #expect(run.state.queue.map(\.text) == ["Queued: then the docs.", "Queued: and the tests."])
@@ -357,7 +357,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         try await Task.sleep(nanoseconds: 500_000_000)
         #expect(run.claimed == true, "a running turn holds the claim")
         run.kill()
-        try await run.until("the end") { run.state.alive == false && run.state.error?.message.hasSuffix(ACPDriver.claimLeft(run.state.thread ?? "")) == true }
+        try await run.until("the end") { run.state.alive == false && run.state.error?.message.hasSuffix(OpenCode.claimLeft(run.state.thread ?? "")) == true }
         run.ended(137)
         #expect(run.claimed == true)
         #expect(run.state.state == "error", "a killed program is a failure")
