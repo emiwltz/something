@@ -1,9 +1,11 @@
-// Conformance: every extension the app registers survives what a newer or broken agent may give it, and says so
-// rather than trapping, which would take the whole app down. Each driver is fed its recorded exchanges with one of
-// the program's lines at a time truncated, retyped or dropped; each reader is fed its invented home with one file at a
-// time turned to garbage, one field at a time removed, and every file garbage at once. A driver must not know a line it
-// cannot read (its kind's note then says so, Launched.foreign); a reader must give a reading the contract takes, through
-// the watch, and never a conversation made of garbage. A new extension joins by its exchanges and its home below.
+// Conformance: every extension the app registers survives what a newer or broken agent may give it, rather than
+// trapping, which would take the whole app down. Each driver is fed its recorded exchanges with one of the program's
+// lines at a time truncated, retyped or dropped; each reader is fed its invented home with one file at a time turned to
+// garbage, one field at a time removed, and every file garbage at once. A driver must not know a line cut in half (its
+// kind's note then says so, Launched.foreign), and a line retyped below its top-level words is an error, or read for
+// those words alone, or as nothing. A reader must return within 5 s and give a reading the contract takes, through the
+// watch; a fresh one makes no conversation of garbage. What a reader says of damaged files beyond that (which health,
+// which note) is its own tests' to prove: here it is survival. A new extension joins by its exchanges and its home below.
 import Foundation
 import SQLite3
 import Testing
@@ -14,7 +16,9 @@ import Testing
 @testable import AgentPi
 import SomethingCore
 
-@Suite(.leavesNothing("conformance-")) struct ConformanceTests {
+/// One case at a time: side by side, its thousands of replays and damages took about seven cores for two seconds,
+/// beside the suites bound by time (SpawnTests); one after another, about six seconds of one core.
+@Suite(.serialized, .leavesNothing("conformance-")) struct ConformanceTests {
     static let launchable = Registry.described.agents.filter { $0.driving != nil }.map(\.kind)
     static let read = Registry.described.agents.filter { $0.reader != nil }.map(\.kind)
 
@@ -33,20 +37,50 @@ import SomethingCore
                 try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
             }
             let lines = rows.indices.filter { rows[$0][kind] is [String: Any] }
+            let whole = try play(rows, kind: kind, damaged: -1, .dropped, at: "\(name) whole")
             for line in lines {
+                var outcomes: [Damage: Outcome] = [:]
                 for damage in Damage.allCases {
-                    try play(rows, kind: kind, damaged: line, damage, at: "\(name):\(line + 1) \(damage)")
+                    outcomes[damage] = try play(rows, kind: kind, damaged: line, damage, at: "\(name):\(line + 1) \(damage)")
                     runs += 1
+                }
+                // A line retyped below its top-level words that its driver takes as known says an error, or is read
+                // for those words alone (the conversation has the shape it has with the line whole), or as nothing
+                // (the shape without it): never as another conversation. A text it could not read may be shown raw.
+                if let retyped = outcomes[.retyped], retyped.known, let dropped = outcomes[.dropped] {
+                    #expect(retyped.erred || [dropped, whole].contains { retyped.fits($0) },
+                            "\(name):\(line + 1): a retyped line was taken as known, said no error, and made another conversation")
                 }
             }
         }
         #expect(runs > 0)
     }
 
+    /// What one damaged replay left: whether the driver knew the damaged line, whether it said an error for it, and
+    /// the conversation at the end.
+    struct Outcome {
+        var known = false, erred = false
+        var thread: AgentThread?
+
+        /// Whether its conversation has the shape of `other`'s: the same turns, states, items and tools, whatever the
+        /// items' texts (one it could not read may be shown raw), and a tool's outcome it left unknown fits any.
+        func fits(_ other: Outcome) -> Bool {
+            guard var mine = thread, var theirs = other.thread else { return thread == nil && other.thread == nil }
+            for (turn, theirTurn) in zip(mine.turns.indices, theirs.turns.indices) {
+                for (item, theirItem) in zip(mine.turns[turn].items.indices, theirs.turns[theirTurn].items.indices) {
+                    (mine.turns[turn].items[item].text, mine.turns[turn].items[item].truncated) = ("", false)
+                    (theirs.turns[theirTurn].items[theirItem].text, theirs.turns[theirTurn].items[theirItem].truncated) = ("", false)
+                    if mine.turns[turn].items[item].tool?.status == nil { theirs.turns[theirTurn].items[theirItem].tool?.status = nil }
+                }
+            }
+            return mine == theirs
+        }
+    }
+
     /// Plays `rows` as the replays do, but for the program's line `damaged`, and with every call of something allowed
     /// to fail: what is checked is that the driver lives, knows no line it cannot read, and leaves an agent the
     /// contract can encode.
-    func play(_ rows: [[String: Any]], kind: String, damaged: Int, _ damage: Damage, at: String) throws {
+    func play(_ rows: [[String: Any]], kind: String, damaged: Int, _ damage: Damage, at: String) throws -> Outcome {
         let first = rows.first ?? [:]
         let resume = first["resume"] as? String, model = first["model"] as? String, assistant = first["assistant"] as? Bool ?? false
         let replay: Replay
@@ -57,15 +91,18 @@ import SomethingCore
         case "pi": replay = .pi(model: model, effort: first["effort"] as? String, resume: resume)
         default:
             Issue.record("\(kind) has a driver but no replay here: add it to ConformanceTests.play")
-            return
+            return Outcome()
         }
+        var outcome = Outcome()
         for (index, row) in rows.enumerated() {
             if let frame = row[kind] as? [String: Any] {
                 if index != damaged {
                     replay.agent.receive(try JSONSerialization.data(withJSONObject: frame))
                 } else if let line = try ConformanceTests.damaged(frame, damage) {
-                    let known = replay.agent.driver.receive(line)
-                    if damage == .truncated { #expect(!known, "\(at): a line cut in half was taken as known") }
+                    let before = replay.agent.agent.error
+                    outcome.known = replay.agent.driver.receive(line)
+                    outcome.erred = replay.agent.agent.error != before
+                    if damage == .truncated { #expect(!outcome.known, "\(at): a line cut in half was taken as known") }
                 }
             }
             if let text = row["send"] as? String { _ = try? replay.agent.send(text, when: row["when"] as? String ?? "next") }
@@ -86,6 +123,8 @@ import SomethingCore
             _ = try State(at: "2026-10-17T09:00:00Z", kinds: [:], agents: [replay.agent.agent], threads: replay.agent.thread.map { [$0] } ?? [],
                           requests: replay.fold.requests).json()
         } catch { Issue.record("\(at): the state does not encode: \(error)") }
+        outcome.thread = replay.agent.thread
+        return outcome
     }
 
     /// The bytes of `frame` after `damage`; nil when it drops the line.
@@ -206,27 +245,34 @@ import SomethingCore
 
         for (name, damage) in damages {
             try restore()
-            // A reader that read the home whole before, with its cursors, and one that meets the damage first.
+            // A reader that read the home whole before, with its cursors, and one that meets the damage first. Each is
+            // given 5 s, so that a reader caught in a loop on garbage fails here instead of holding the whole run.
             let warm = home.reader()
             let watch = Watch(readers: [warm], snapshot: { home.snapshot }, name: Registry.described.name(of:))
-            _ = watch.tick(now: home.now)
+            _ = watch.tick(now: home.now, within: ConformanceTests.within)
             try damage()
-            let fresh = Watch(readers: [home.reader()], snapshot: { home.snapshot }).tick(now: home.now)
-            for seen in [watch.tick(now: home.now), fresh] {
+            let fresh = Watch(readers: [home.reader()], snapshot: { home.snapshot }).tick(now: home.now, within: ConformanceTests.within)
+            for seen in [watch.tick(now: home.now, within: ConformanceTests.within), fresh] {
                 let reading = seen.kinds[kind] ?? Reading()
                 #expect(["ok", "changed", "unreadable", "none"].contains(reading.health), "\(kind), \(name): health \(reading.health)")
+                #expect(!(reading.note ?? "").contains("reading them takes too long") && !(reading.note ?? "").contains("still reading"),
+                        "\(kind), \(name): the reader did not return within \(ConformanceTests.within) s")
                 let (agents, threads) = Watch.elsewhere(seen, registry: .described, groups: [], keys: [], now: home.now)
                 do { _ = try State(at: "2026-10-17T09:00:00Z", kinds: [:], agents: agents, threads: threads).json() } catch {
                     Issue.record("\(kind), \(name): the state does not encode: \(error)")
                 }
-                // A reader that read the files whole keeps what it knew of a file torn under it; one that never did
-                // finds no conversation in noise.
+                // A reader that never read the files finds no conversation in noise. One that read them whole may
+                // keep what it knew of a file rewritten in place under it (its cursor is past the new bytes): the
+                // suite does not ask more of it, nor that a fresh one say "changed" (Claude's says "ok", with nothing).
                 if name == "every file garbage", seen == fresh {
                     #expect(seen.sightings.allSatisfy { $0.processOnly }, "\(kind): a conversation was made of garbage: \(seen.sightings.map(\.key))")
                 }
             }
         }
     }
+
+    /// How long a damaged reader may take to read its home.
+    static let within: TimeInterval = 5
 
     /// `count` bytes (at least one) of noise, the same at every run, cut into lines that open an object and a string.
     static func garbage(_ count: Int) -> Data {

@@ -26,6 +26,14 @@ struct TryTests {
         }
     }
 
+    /// Plan B's spools, which the app and `something try` give the engine, are in the person's Application Support,
+    /// never in $TMPDIR, which a sandboxed agent may write.
+    @Test func theSpoolsAreNotInTheTemporaryFolder() {
+        let spools = Places(home: URL(fileURLWithPath: "/Users/example")).spools.path
+        #expect(spools == "/Users/example/Library/Application Support/something/spool")
+        #expect(!spools.hasPrefix(NSTemporaryDirectory()))
+    }
+
     @Test func noTestRunsSomethingTryWithWordsThatLaunch() throws {
         var seen = 0
         for file in TryTests.files() {

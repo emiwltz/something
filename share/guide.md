@@ -292,8 +292,8 @@ at most four times a second, only when it changed. A shortened example (the full
 name, or `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its
 database's last migration).
 `reader`: `ok`, `changed` (its files changed shape: its agents show as processes only), `unreadable` (its files
-cannot be read now: what was read last stays one look, then its agents show as processes only), or `none` (nothing
-of this kind here). `note`: one sentence for the person when something is off, or `null`.
+cannot be read now, or reading them takes too long: what was read last stays a moment, then its agents show as
+processes only), or `none` (nothing of this kind here). `note`: one sentence for the person when something is off, or `null`.
 
 ### Agent
 

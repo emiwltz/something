@@ -123,6 +123,8 @@ package final class Watch {
         return timer.cancel
     }
     private var ticks = 0
+    /// Whether a tick ran: only the first waits for every reader's patience.
+    private var warmed = false
     /// The last tick's result, kept for a tick whose snapshot is not whole.
     private var last = Seen()
     /// something's own pid: what descends from it is an agent it launched, or a helper of one. A test names another.
@@ -163,19 +165,23 @@ package final class Watch {
     /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings, and none whose
     /// process descends from something (its children, their descendants and reparented helpers). A
     /// snapshot that is not whole proves no process gone: the readers are not run, and the last result stands. The
-    /// readers run side by side; one that has not returned `within` seconds keeps its last reading (Lane).
+    /// readers run side by side; one that has not returned `within` seconds keeps its last reading for a while (Lane).
     func tick(now: Date, within deadline: TimeInterval = .infinity) -> Seen {
         let processes = snapshot()
         guard processes.whole else { return last }
         let discover = ticks % Watch.discoveryEvery == 0
         ticks += 1
         let done = DispatchGroup()
+        // The first tick's reads, the coldest, are given the readers' whole patience: until one returns, it has
+        // nothing to say. Later, one that never returned is said unreadable at once (Lane).
+        let wait = deadline * (warmed || lanes.allSatisfy(\.returned) ? 1 : Double(Lane.patience))
+        warmed = true
         for lane in lanes { lane.read(processes, discover: discover, now: now, done) }
-        _ = done.wait(timeout: deadline.isFinite ? .now() + deadline : .distantFuture)
+        _ = done.wait(timeout: wait.isFinite ? .now() + wait : .distantFuture)
         var seen = Seen()
         for lane in lanes {
             let reader = lane.reader
-            var reading = lane.reading
+            var reading = lane.reading()
             // A reader that knows its files changed shape, or cannot read them, and found nothing else to read (Codex
             // has its rollouts when its index changed) shows its program's processes.
             if reading.health == "changed" || reading.health == "unreadable", reading.sightings.isEmpty {
@@ -263,12 +269,16 @@ package final class Watch {
 }
 
 /// One reader on a queue of its own, with what it said last. A read still running when its tick ends is not waited
-/// for, and the reader is not asked again before it returns: its last reading stands, said to be late. A throw is
-/// said as "unreadable", with the last good sightings kept for one tick (a file replaced mid-read, a busy database).
-private final class Lane {
+/// for, and the reader is not asked again before it returns: its last reading stands, said to be late, for `patience`
+/// ticks; past them, or when it never returned, its files are said unreadable, since what it said last may no longer be
+/// true (an agent ended meanwhile). A throw is said as "unreadable", with the last good sightings kept for one tick (a
+/// file replaced mid-read, a busy database).
+final class Lane {
+    /// Ticks a late read's last reading stands (about 6 s at the 2 s cadence).
+    static let patience = 3
     let reader: Reader
     private let name: String, queue: DispatchQueue, lock = NSLock()
-    private var running = false, owed = false, failures = 0
+    private var running = false, owed = false, failures = 0, late = 0, said = false
     private var last = Reading(), good = Reading()
 
     init(_ reader: Reader, name: String) {
@@ -276,14 +286,23 @@ private final class Lane {
         queue = DispatchQueue(label: "something.watch.\(reader.kind)")
     }
 
-    /// What the reader said last; while it still reads, with a note that says so.
-    var reading: Reading {
+    /// Whether the reader returned once.
+    var returned: Bool { lock.withLock { said } }
+
+    /// What the reader said last, asked once a tick. While it still reads: that reading, said late when it was "ok"
+    /// (another health keeps its own sentence); unreadable when it never returned or is late past `patience` ticks.
+    func reading() -> Reading {
         lock.lock()
         defer { lock.unlock() }
         guard running else { return last }
-        var late = last
-        late.note = "something is still reading \(name)'s files; what they say may be late."
-        return late
+        late += 1
+        guard said, late <= Lane.patience else {
+            return Reading(health: "unreadable", note: "something could not read \(name)'s files: reading them takes too long.")
+        }
+        guard last.health == "ok" else { return last }
+        var stale = last
+        stale.note = "something is still reading \(name)'s files; what they say may be late."
+        return stale
     }
 
     /// Reads on the lane's queue, inside `done`, unless the last read has not returned; a walk asked meanwhile is
@@ -301,7 +320,7 @@ private final class Lane {
             failures = (try? result.get()) == nil ? failures + 1 : 0
             last = Watch.contained(name) { try result.get() }
             if failures == 0 { good = last } else if failures == 1 { (last.sightings, last.version) = (good.sightings, good.version) }
-            running = false
+            (running, said, late) = (false, true, 0)
             lock.unlock()
             done.leave()
         }

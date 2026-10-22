@@ -50,6 +50,7 @@ struct AssistantTrial {
                 engine.programs.systemFolders = []
                 engine.hookCommand = [tools + "/something", "hook", "permission"]
                 places = Places(home: home)
+                engine.spools = places.spools.path
                 engine.assistantFolder = places.spaces.path
                 try Library.prepare(places)
                 try AssistantModel.writeKnowledge(places, share: Home.share)

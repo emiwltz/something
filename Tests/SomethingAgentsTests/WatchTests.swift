@@ -180,33 +180,90 @@ import SomethingCore
         #expect(late.kinds["claude"]?.health == "ok" && late.sightings.count == 2, "the others are read on time")
         _ = watch.tick(now: home.now, within: 0.05)
         #expect(slow.walks.count == 15, "not asked again while it reads")
-        slow.holding = false
-        slow.hold.signal()
-        // The held read returns soon after: until then a tick finds it reading, and does not ask it again.
-        var next = watch.tick(now: home.now)
-        for _ in 0..<3000 where slow.walks.count < 16 {
-            Thread.sleep(forTimeInterval: 0.01)
-            next = watch.tick(now: home.now)
-        }
+        let next = slow.release(watch, now: home.now)
         #expect(next.kinds["scripted"] == Reading(version: "1.0.0", health: "ok"), "on time again, no note")
         #expect(slow.walks.count == 16 && slow.walks.last == true, "the walk of tick 16 is owed to the next read")
     }
 
+    /// A late reading stands only so long: past `Lane.patience` ticks, or when the reader never returned, what it said
+    /// may no longer be true (an agent ended meanwhile), so its files are said unreadable and its program's processes
+    /// stand in; never "none", which would say there is nothing of its kind here. A late reader whose last health was
+    /// not "ok" keeps its own sentence.
+    @Test func aReaderLatePastItsPatienceIsUnreadable() throws {
+        let now = Date(timeIntervalSince1970: 1_792_227_600)
+        let slow = Scripted(), process = Running(pid: 52000, parent: 1, group: 52000, started: now, name: "scripted")
+        let watch = Watch(readers: [slow], snapshot: { Snapshot([process]) }, name: { _ in "Scripted Agent" })
+        let tooLong = Reading(health: "unreadable", note: "something could not read Scripted Agent's files: reading them takes too long.")
+        let good = Reading(sightings: [Sighting(kind: "scripted", key: "invented-conversation", facts: StateMap.Facts(alive: true, evidence: "registry"))],
+                           version: "1.0.0", health: "ok")
+        slow.script = [.success(good)]
+        slow.holding = true
+        let cold = watch.tick(now: now, within: 0.01)
+        #expect(cold.kinds["scripted"] == tooLong, "a first read that never returned")
+        #expect(cold.sightings.map { "\($0.key) \($0.processOnly)" } == ["pid-52000 true"])
+        #expect(slow.release(watch, now: now).sightings.map(\.key) == ["invented-conversation"])
+
+        slow.holding = true
+        for tick in 1...Lane.patience {
+            let late = watch.tick(now: now, within: 0.01)
+            #expect(late.kinds["scripted"]?.note == "something is still reading Scripted Agent's files; what they say may be late.", "late tick \(tick)")
+            #expect(late.sightings.map(\.key) == ["invented-conversation"], "late tick \(tick)")
+        }
+        let past = watch.tick(now: now, within: 0.01)
+        #expect(past.kinds["scripted"] == tooLong)
+        #expect(past.sightings.map(\.key) == ["pid-52000"], "its processes, not what it said last")
+
+        slow.script = [.failure(Unreadable("its invented folder is gone.")), .success(good)]
+        _ = slow.release(watch, now: now)
+        slow.holding = true
+        let unread = watch.tick(now: now, within: 0.01)
+        #expect(unread.kinds["scripted"]?.note == "something could not read Scripted Agent's files: its invented folder is gone.")
+        _ = slow.release(watch, now: now)
+    }
+
     /// A reader that gives what it is told, in turn, and keeps the last; it can be held in its read until released.
-    final class Scripted: Reader {
+    /// Its fields are written on its lane's queue and read on the test's: behind a lock.
+    final class Scripted: Reader, @unchecked Sendable {
         let kind = "scripted", programs: Set<String> = ["scripted"]
-        var script: [Result<Reading, any Error>] = []
-        var walks: [Bool] = []
-        var holding = false
-        let started = DispatchSemaphore(value: 0), hold = DispatchSemaphore(value: 0)
+        let started = DispatchSemaphore(value: 0), hold = DispatchSemaphore(value: 0), returned = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var steps: [Result<Reading, any Error>] = [], asked: [Bool] = [], held = false
+        var script: [Result<Reading, any Error>] {
+            get { lock.withLock { steps } }
+            set { lock.withLock { steps = newValue } }
+        }
+        var holding: Bool {
+            get { lock.withLock { held } }
+            set { lock.withLock { held = newValue } }
+        }
+        var walks: [Bool] { lock.withLock { asked } }
+
         func read(_ snapshot: Snapshot, discover: Bool, now: Date) throws -> Reading {
-            walks.append(discover)
-            if holding {
+            let (holds, next) = lock.withLock { () -> (Bool, Result<Reading, any Error>) in
+                asked.append(discover)
+                return (held, steps.count > 1 ? steps.removeFirst() : steps.first ?? .success(Reading()))
+            }
+            defer { if holds { returned.signal() } }
+            if holds {
                 started.signal()
                 hold.wait()
             }
-            let next = script.count > 1 ? script.removeFirst() : script.first ?? .success(Reading())
             return try next.get()
+        }
+
+        /// Lets a held read return, then ticks `watch` until it reads again, the return taken: what that tick saw.
+        func release(_ watch: Watch, now: Date) -> Seen {
+            holding = false
+            hold.signal()
+            #expect(returned.wait(timeout: .now() + 30) == .success)
+            let before = walks.count
+            var seen = watch.tick(now: now)
+            // The lane records the return a moment after the read ends; until then a tick does not ask it again.
+            for _ in 0..<10_000 where walks.count == before {
+                Thread.sleep(forTimeInterval: 0.001)
+                seen = watch.tick(now: now)
+            }
+            return seen
         }
     }
 

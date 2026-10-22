@@ -465,7 +465,7 @@ import SomethingCore
     }
 
     /// A program whose first lines are all unknown to its driver is a version something does not understand: its kind's
-    /// note says so, to the person and to the spaces.
+    /// note says so, to the person and to the spaces, while it is the kind's newest launch.
     @Test func aProgramThatSpeaksOnlyUnknownLinesIsSaid() async throws {
         let place = try Place()
         defer { place.remove() }
@@ -482,6 +482,16 @@ import SomethingCore
         let tested = try #require(engine.registry.launchable["claude"]?.tested)
         try await until("the note") { engine.state.kinds["claude"]?.note != nil }
         #expect(engine.state.kinds["claude"]?.note == "something does not understand this version of Claude Code (tested \(tested)).")
+        // The person updates the program: its next launch is understood, and the first one, still listed, says nothing.
+        try """
+            #!/bin/sh
+            echo '{"type":"system","subtype":"invented"}'
+            cat > /dev/null
+            """.write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        _ = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        try await until("the note gone") { engine.state.kinds["claude"]?.note == nil }
+        #expect(engine.state.agents.count == 2)
         let done = Stopped()
         engine.stopAll(within: 3) { done.done = true }
         try await until("the stop") { done.done }
@@ -566,12 +576,6 @@ import SomethingCore
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         try await until("the stop") { stopped }
-    }
-
-    /// Plan B's spools are in the person's Application Support, never in $TMPDIR, which a sandboxed agent may write.
-    @Test func theSpoolsAreNotInTheTemporaryFolder() {
-        #expect(Spool.root.hasSuffix("/Library/Application Support/something/spool"))
-        #expect(!Spool.root.hasPrefix(NSTemporaryDirectory()))
     }
 
     @Test func whatALaunchRefuses() throws {

@@ -67,6 +67,7 @@ enum DeveloperTrial {
         let engine = Engine(environment: ProcessInfo.processInfo.environment, registry: registry)
         // The command that routes `try` here routes `hook permission` too.
         engine.hookCommand = Engine.ownHookCommand
+        engine.spools = Places.person.spools.path
         let printer = Printer()
         var id = ""
         engine.changed = { if let agent = engine.state.agents.first(where: { $0.id == id }) { printer.show(agent, engine.state) } }
@@ -76,8 +77,8 @@ enum DeveloperTrial {
                 Lent(tools: registry.agent(asked.kind)?.builder?.lent ?? [], run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment),
                      refused: { _, because in print("Not a builder: \(because)") })
             }
-            id = try engine.launch(asked.kind, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
-                                   planB: asked.planB, assistant: asked.assistant ? .building : nil, lent: lent) { written, line in
+            id = try engine.trial(asked.kind, folder: FileManager.default.currentDirectoryPath, planB: asked.planB, assistant: asked.assistant,
+                                  lent: lent) { written, line in
                 row([written ? "something" : asked.kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
             }
         } catch {

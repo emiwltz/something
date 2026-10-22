@@ -18,15 +18,18 @@ final class ClaudeDriver: Driver {
     static func command(_ launch: Launch) -> Command { command(launch, hook: nil) }
 
     /// Plan B's command: the host's hook command, with the launch's own spool folder. Throws LAUNCH_FAILED when the
-    /// host does not know its hook command.
+    /// host does not know its hook command or its spools.
     static func command(_ launch: Launch, host: HostFacts) throws -> Command {
         guard let hook = host.hookCommand else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
-        return command(launch, hook: hook + ["--spool", spool(launch, host)])
+        return command(launch, hook: hook + ["--spool", try spool(launch, host)])
     }
 
-    /// Plan B's spool folder for `launch`: <agent>-<conversation id> in the host's spools (PermissionSpool.swift).
-    static func spool(_ launch: Launch, _ host: HostFacts) -> String {
-        ((host.spools ?? Spool.root) as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")
+    /// Plan B's spool folder for `launch`: <agent>-<conversation id> in the host's spools (PermissionSpool.swift), since
+    /// two something running at once (the app and a `something try`) may both have a claude-1. Throws LAUNCH_FAILED
+    /// when the host has no spools.
+    static func spool(_ launch: Launch, _ host: HostFacts) throws -> String {
+        guard let spools = host.spools else { throw CodedError("LAUNCH_FAILED", "Plan B needs a folder of something's own for Claude Code's permission requests, and this launch has none; launch Claude Code from the something app.") }
+        return (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")
     }
 
     /// Plan B, when `hook` is the command something answers Claude's hook with (`<abs>/something hook permission
@@ -222,10 +225,10 @@ final class ClaudeDriver: Driver {
     /// Plan B starts its spool before the program, which then asks through it; plan A keeps the way to plan B.
     func join(_ program: ProcessHandle) throws {
         guard launch.planB else {
-            if program.host.hookCommand != nil { fallback = program.relaunch }
+            if program.host.hookCommand != nil, program.host.spools != nil { fallback = program.relaunch }
             return
         }
-        let spool = PermissionSpool(folder: ClaudeDriver.spool(launch, program.host))
+        let spool = PermissionSpool(folder: try ClaudeDriver.spool(launch, program.host))
         spool.asked = { [weak self] uuid, request in self?.hookAsked(uuid, request) }
         spool.withdrawn = { [weak self] uuid in self?.hookWithdrawn(uuid) }
         do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }

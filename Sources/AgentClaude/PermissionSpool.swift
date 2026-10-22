@@ -20,16 +20,10 @@ enum Spool {
     /// The hook answers a minute before Claude would kill it, so a request left alone ends as a deny it says.
     static let hookTimeout: TimeInterval = 3540
 
-    /// Where the spools are: ~/Library/Application Support/something/spool, never $TMPDIR, which a sandboxed agent
-    /// (Codex in workspace-write) may write, and could then answer Claude's requests. Each launch gets
-    /// <agent>-<conversation id> in it, since two something running at once (the app and a `something try`) may both
-    /// have a claude-1.
-    static let root = URL.applicationSupportDirectory.appendingPathComponent("something/spool").path
-
     /// Writes `data` to `path` with mode 0600 through a temporary name, so a reader never sees half of it. Returns
     /// false when the folder refused it.
     static func put(_ data: Data, _ path: String) -> Bool {
-        let temporary = path + ".\(getpid()).tmp"
+        let temporary = path + ".\(ProcessInfo.processInfo.processIdentifier).tmp"
         guard FileManager.default.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o600]) else { return false }
         guard rename(temporary, path) == 0 else {
             unlink(temporary)
@@ -108,7 +102,7 @@ package enum SpoolHook {
         let ask = (folder as NSString).appendingPathComponent(uuid + Spool.ask)
         let answer = (folder as NSString).appendingPathComponent(uuid + Spool.answer)
         // The pid lets something see that Claude ended this hook (an interrupt) and close the window.
-        guard let data = try? JSONSerialization.data(withJSONObject: ["pid": Int(getpid()), "request": asked]),
+        guard let data = try? JSONSerialization.data(withJSONObject: ["pid": Int(ProcessInfo.processInfo.processIdentifier), "request": asked]),
               Spool.put(data, ask) else { return deny("something could not hand this request to its window, so it was refused.") }
         defer { unlink(ask) }
         let end = Date().addingTimeInterval(timeout)
@@ -170,7 +164,7 @@ final class PermissionSpool {
         } catch {
             throw SpoolError.folder(folder, error.localizedDescription)
         }
-        guard Spool.put(Data("\(getpid())\n".utf8), path(Spool.heartbeat)) else {
+        guard Spool.put(Data("\(ProcessInfo.processInfo.processIdentifier)\n".utf8), path(Spool.heartbeat)) else {
             throw SpoolError.folder(folder, "its heartbeat file could not be written")
         }
         let timer = DispatchSource.makeTimerSource(queue: queue)

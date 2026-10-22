@@ -91,9 +91,11 @@ public final class Engine {
         changed()
     }
 
-    /// The state; a kind whose launch spoke only lines its driver does not know says so in its note, before its reader's.
+    /// The state; a kind whose newest launch spoke only lines its driver does not know says so in its note, before its
+    /// reader's (an older launch may have run a version the person has updated since).
     private func make() -> State {
-        let foreign = Set(launched.filter(\.agent.foreign).map(\.agent.driving.kind))
+        let newest = launched.reduce(into: [String: Launched]()) { $0[$1.agent.driving.kind] = $1.agent }
+        let foreign = Set(newest.values.filter(\.foreign).map(\.driving.kind))
         let kinds = registry.agents.map(\.kind).map { kind in
             let tested = registry.launchable[kind]?.tested ?? "none"
             let note = foreign.contains(kind) ? "something does not understand this version of \(registry.name(of: kind)) (tested \(tested))." : nil
@@ -204,9 +206,9 @@ public final class Engine {
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
     public static var ownHookCommand: [String]? { Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] } }
 
-    /// Where plan B's spool folders go: nil for its kind's own place, which for Claude is `Spool.root`, in the person's
-    /// real Application Support; a test or a trial that forces plan B sets its own folder.
-    var spools: String?
+    /// Where plan B's spool folders go: the app's and `something try`'s set the person's (Places.spools); a test or a
+    /// trial sets its own folder. Nil until set, and plan B is then not offered.
+    public var spools: String?
 
     /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
     public private(set) var assistants: Set<String> = []
@@ -224,12 +226,20 @@ public final class Engine {
                           assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
 
+    /// `something try`'s launch, from a terminal: in `folder`, with its kind's plan B forced when `planB`, as an
+    /// assistant building spaces and offered `lent` when `assistant`, and every line given to `record`. Throws as
+    /// `launch` below.
+    package func trial(_ kind: String, folder: String, planB: Bool, assistant: Bool, lent: Lent?,
+                       record: @escaping (_ written: Bool, _ line: Data) -> Void) throws -> String {
+        try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: planB, assistant: assistant ? .building : nil, lent: lent, record: record)
+    }
+
     /// `launch` above, with its kind's plan B forced (`something try --plan-b`) and every line given to `record`.
     /// Throws BAD_PARAMS for a forced plan B its kind does not have.
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
-    package func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
+    func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let driving = try registry.driving(kind)

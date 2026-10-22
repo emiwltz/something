@@ -49,6 +49,9 @@ struct Places {
     var journals: URL { support.appendingPathComponent("journal") }
     /// The window's own memory: the last space open.
     var window: URL { support.appendingPathComponent("window.json") }
+    /// Claude Code's plan-B spools (PermissionSpool.swift): never in $TMPDIR, which a sandboxed agent (Codex in
+    /// workspace-write) may write, and could then answer Claude's requests.
+    var spools: URL { support.appendingPathComponent("spool") }
 
     /// The person's places. $HOME first, so that `HOME=<folder> swift run something` never reaches their own folders.
     static var person: Places {

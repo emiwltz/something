@@ -58,6 +58,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand
+        engine.spools = places.spools.path
         assistant.confirmSwitch = { [weak self] from, to, switched in self?.sheet(Ask.switching(from: from, to: to), then: switched) }
         assistant.howTo = { [weak self] in
             guard let self else { return }

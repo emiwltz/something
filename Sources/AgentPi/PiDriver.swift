@@ -296,7 +296,9 @@ final class PiDriver: Driver {
         let name = event["toolName"] as? String ?? "tool"
         let args = event["args"] as? [String: Any]
         let text = tools[id]?.text ?? args?["command"] as? String ?? args?["path"] as? String ?? PiDriver.json(args) ?? ""
-        let status = done ? (event["isError"] as? Bool == true ? "failed" : "done") : "running"
+        // An end that does not say whether it failed in a way something reads leaves the outcome unknown.
+        let failed = event["isError"].map { $0 as? Bool } ?? false
+        let status = done ? failed.map { $0 ? "failed" : "done" } : "running"
         let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(), tool: Tool(name: name, status: status))
         emit(tools[id] == nil ? .itemAppended(shown) : .itemUpdated(shown))
         tools[id] = done ? nil : shown
