@@ -15,7 +15,7 @@ public enum DeveloperTrial {
 
     /// What the words ask for.
     struct Asked {
-        var kind: String, type: any Driver.Type, record: String?, planB = false, assistant = false
+        var kind: String, record: String?, planB = false, assistant = false
     }
 
     /// What `arguments` (every word after `something`, `try` first) ask for, or the sentence that says why they are
@@ -23,15 +23,15 @@ public enum DeveloperTrial {
     static func parse(_ arguments: [String]) -> Result<Asked, SpaceError> {
         guard arguments.first == "try" else { return .failure(SpaceError(usage)) }
         var words = arguments.dropFirst()
-        guard let kind = words.popFirst(), let type = Engine.drivers[kind] else { return .failure(SpaceError(usage)) }
-        var asked = Asked(kind: kind, type: type, record: nil)
+        guard let kind = words.popFirst(), Engine.drivers[kind] != nil else { return .failure(SpaceError(usage)) }
+        var asked = Asked(kind: kind, record: nil)
         while let word = words.popFirst() {
             switch word {
             case "--record":
                 guard let path = words.popFirst() else { return .failure(SpaceError(usage)) }
                 asked.record = path
             case "--plan-b":
-                guard type is ClaudeDriver.Type else { return .failure(SpaceError("something try: --plan-b is for claude only.")) }
+                guard kind == AgentDescriptor.claude.kind else { return .failure(SpaceError("something try: --plan-b is for claude only.")) }
                 asked.planB = true
             case "--assistant": asked.assistant = true
             default: return .failure(SpaceError(usage))
@@ -69,7 +69,7 @@ public enum DeveloperTrial {
             let lent = Engine.ownHookCommand.map { own in
                 Lent(run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment), refused: { _, because in print("Not a builder: \(because)") })
             }
-            id = try engine.launch(asked.type, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
+            id = try engine.launch(asked.kind, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
                                    planB: asked.planB, assistant: asked.assistant ? .building : nil, lent: lent) { written, line in
                 row([written ? "something" : asked.kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
             }

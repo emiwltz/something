@@ -7,14 +7,6 @@ import Foundation
 import SomethingCore
 
 public final class PiDriver: Driver {
-    public static let kind = "pi"
-    public static let tested = "1.0.0"
-    /// pi asks no permission and has no request to show: the sentence says so, for the consent window.
-    public static let limits = ["mode": "pi has no permission modes: it runs commands and edits files without asking first."]
-    public static let modes: [Option] = []
-    /// pi names its conversation file itself; something learns it from get_state.
-    public static let picksThread = false
-
     /// A resume continues the conversation file `launch.thread`, which the engine checked first (`resumable`): pi
     /// given a missing file starts an empty conversation at that path instead of refusing.
     public static func command(_ launch: Launch) -> Command {
@@ -140,7 +132,7 @@ public final class PiDriver: Driver {
     /// pi applies a model and a thinking level at once; the state shows them once get_state reads them back. Throws
     /// NOT_SUPPORTED for a mode (`limits`), VALUE_NOT_OFFERED for a model that is not "provider/id", AGENT_STOPPED.
     public func set(model: String?, mode: String?, effort: String?) throws -> String {
-        if mode != nil { throw CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!) }
+        if mode != nil { throw CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!) }
         if let model, model.split(separator: "/", maxSplits: 1).count != 2 {
             throw CodedError("VALUE_NOT_OFFERED", "pi names a model provider/id, such as one of the agent's options.model.")
         }

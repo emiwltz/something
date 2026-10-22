@@ -142,7 +142,7 @@ import SomethingCore
     /// Launches with plan B, sends the message that makes the fake ask, and waits for the request.
     func ask(_ place: Place, _ engine: Engine, _ openings: Openings = Openings()) async throws -> (agent: String, request: Request) {
         openings.watch(engine)
-        let id = try engine.launch(ClaudeDriver.self, folder: place.work.path, model: nil, mode: nil, effort: nil, planB: true)
+        let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil, planB: true)
         #expect(try engine.deliver("Please run-echo now.", to: id, when: "next") == "started")
         try await until("the request") { !engine.state.requests.isEmpty }
         return (id, engine.state.requests[0])
@@ -290,7 +290,7 @@ import SomethingCore
         let launch = Launch(agent: "claude-1", folder: place.work.path)
         let command = ClaudeDriver.command(launch, hook: [place.hook, "hook", "permission", "--spool", folder.path])
         let spawn = Spawn(path: place.bin.appendingPathComponent("claude").path, arguments: command.arguments, folder: launch.folder, environment: place.environment)
-        let agent = try Engine.start(ClaudeDriver.self, launch, spawn, asked: { _ in true })
+        let agent = try Engine.start("claude", launch, spawn, asked: { _ in true })
         _ = try agent.send("Please run-echo now.", when: "next")
         try await until("the tool to fail") { agent.queue.fold.turns.first?.items.first { $0.kind == "tool" }?.tool?.status == "failed" }
         #expect(agent.queue.fold.requests.isEmpty, "no window: nobody is there to answer")

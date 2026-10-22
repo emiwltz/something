@@ -8,19 +8,6 @@ import Foundation
 import SomethingCore
 
 public final class ACPDriver: Driver {
-    public static let kind = "opencode"
-    public static let tested = "2.0.20"
-    /// Over ACP a second session/prompt during a turn is refused ("Session already has an active ACP prompt"), and
-    /// OpenCode has no steer there: a message for later waits in something's own queue.
-    public static let limits = ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."]
-    /// OpenCode names the session when it starts it.
-    public static let picksThread = false
-    /// OpenCode offers an effort only for a model that has variants.
-    public static let effortOnlyWhenOffered = true
-    /// OpenCode's modes are its agents; these two come with it. Others the person wrote show in `options.mode` once
-    /// OpenCode lists them, and a space may choose them with `set`, after the person confirmed (Engine.lowersAsking).
-    public static let modes = [Option(value: "build", label: "Build"), Option(value: "plan", label: "Plan")]
-
     /// Nothing else on the line: model, mode and effort go through the channel, where OpenCode says what it took.
     public static func command(_ launch: Launch) -> Command { Command(arguments: ["acp"]) }
 
@@ -120,7 +107,7 @@ public final class ACPDriver: Driver {
     /// A message starts a turn; it goes out once the session and the settings asked before it are in place.
     /// Throws NOT_SUPPORTED for a steer, which OpenCode refuses (`limits`), and AGENT_STOPPED.
     public func deliver(_ text: String, steer: Bool) throws {
-        guard !steer else { throw CodedError("NOT_SUPPORTED", ACPDriver.limits["steer"]!) }
+        guard !steer else { throw CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!) }
         sent += 1
         emit(.turnStarted(id: nil))
         emit(.itemAppended(Item(id: "\(launch.agent)/sent\(sent)", kind: "message", author: "person", text: text, at: now())))

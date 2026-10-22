@@ -7,12 +7,12 @@ import SomethingCore
 extension Engine {
     /// Starts `spawn` for one launch and joins it to its driver: lines and the end come back on the main queue.
     /// `asked` says, on the main queue, whether something asked this agent to stop; `record` sees every line, in
-    /// (true) and out (false), for `something try --record`. Throws as Spawn.start does, and AGENT_STOPPED when the
-    /// program closed its input at once.
+    /// (true) and out (false), for `something try --record`. Throws NOT_SUPPORTED for a kind without a driver, then
+    /// as Spawn.start does, and AGENT_STOPPED when the program closed its input at once.
     /// With `spool`, Claude's plan B: the spool starts before the program and stops after its end.
-    static func start(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
+    static func start(_ kind: String, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
                       record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> Launched {
-        let agent = Launched(type, launch, write: { [weak spawn] line in
+        let agent = Launched(kind, try driving(kind), launch, write: { [weak spawn] line in
             guard let spawn else { throw CodedError("AGENT_STOPPED", "The agent has ended; launch or resume it to go on.") }
             try spawn.write(line)
             record?(true, line)
@@ -43,14 +43,14 @@ extension Engine {
             spool.asked = { [weak claude] uuid, request in claude?.hookAsked(uuid, request) }
             spool.withdrawn = { [weak claude] uuid in claude?.hookWithdrawn(uuid) }
         }
-        do { try startSpawn(type, launch, spawn, spool: spool, agent: agent, asked: asked, record: record) } catch {
+        do { try startSpawn(launch, spawn, spool: spool, agent: agent, asked: asked, record: record) } catch {
             spool?.stop()
             throw error
         }
         return agent
     }
 
-    private static func startSpawn(_ type: any Driver.Type, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool?, agent: Launched,
+    private static func startSpawn(_ launch: Launch, _ spawn: Spawn, spool: PermissionSpool?, agent: Launched,
                                    asked: @escaping (String) -> Bool, record: ((Bool, Data) -> Void)?) throws {
         try spawn.start(lines: { line in DispatchQueue.main.async { record?(false, line); agent.driver.receive(line) } },
                         ended: { [weak spawn] code in

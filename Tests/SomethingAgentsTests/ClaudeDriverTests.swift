@@ -141,7 +141,7 @@ import SomethingCore
                                       "--session-id", "5b2e0000-0000-4000-8000-000000000001", "--model=sonnet"])
         #expect(command.adding == ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"])
         #expect(command.removing == ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"])
-        #expect(!ClaudeDriver.modes.contains { $0.value == "bypassPermissions" })
+        #expect(!Driving.claude.modes.contains { $0.value == "bypassPermissions" })
     }
 
     /// The person's assistant (E-1): exactly six rules, its folder's files by their absolute path ("//", which trial

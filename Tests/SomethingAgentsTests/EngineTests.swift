@@ -132,7 +132,7 @@ import SomethingCore
         let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: "plan", effort: nil)
         #expect(engine.state.agents.map(\.id) == [id])
         #expect(engine.state.kinds["claude"]?.launch == true)
-        #expect(engine.state.kinds["claude"]?.tested == ClaudeDriver.tested)
+        #expect(engine.state.kinds["claude"]?.tested == Driving.claude.tested)
         #expect(engine.state.kinds["codex"]?.launch == true)
         #expect(engine.state.kinds["opencode"]?.launch == true)
         #expect(engine.state.kinds["pi"]?.launch == true)
@@ -394,7 +394,7 @@ import SomethingCore
         try await until("the reply") { engine.state.threads.first?.turns.first?.state == "done" }
         #expect(engine.state.threads.first?.turns.first?.items.map(\.text) == ["Hello.", "Invented reply."])
         #expect(try engine.deliver("Please wait.", to: id, when: "next") == "started")
-        #expect(throws: CodedError("NOT_SUPPORTED", ACPDriver.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
         #expect(try String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8) == "acp\n")
         var stopped = false
         let begun = Date()
@@ -547,7 +547,7 @@ import SomethingCore
         #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch omp yet.")) {
             try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil)
         }
-        #expect(throws: CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!)) {
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!)) {
             try engine.launch("pi", folder: place.work.path, model: nil, mode: "plan", effort: nil)
         }
         // pi given a missing file would start an empty conversation there: the file is checked before pi is looked for.
@@ -557,7 +557,7 @@ import SomethingCore
         try Data().write(to: empty)
         for missing in ["/Users/example/.pi/agent/sessions/--Users-example-shop--/missing.jsonl", "relative.jsonl", place.work.path, other.path, empty.path] {
             #expect(throws: CodedError("THREAD_NOT_FOUND", "pi has no saved conversation with this id on this Mac.")) {
-                try engine.launch(PiDriver.self, folder: place.work.path, model: nil, mode: nil, effort: nil, planB: false, resume: missing)
+                try engine.launch("pi", folder: place.work.path, model: nil, mode: nil, effort: nil, planB: false, resume: missing)
             }
         }
         #expect(throws: CodedError("VALUE_NOT_OFFERED", "auto is not a mode something offers for opencode; pick one of build, plan.")) {

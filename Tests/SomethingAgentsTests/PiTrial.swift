@@ -66,7 +66,7 @@ import SomethingCore
         spawn = Spawn(path: program, arguments: PiDriver.command(launch).arguments, folder: launch.folder, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
-        agent = try Engine.start(PiDriver.self, launch, spawn, asked: { _ in stop.done }, record: { written, line in
+        agent = try Engine.start("pi", launch, spawn, asked: { _ in stop.done }, record: { written, line in
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             guard written || !PiRun.unread(frame) else { return }
             exchange.rows.append([written ? "something" : "pi": frame])
@@ -186,7 +186,7 @@ import SomethingCore
     /// folders, the work folder in pi's dashed form (its sessions folder) included, and for this Mac's home.
     func save() {
         guard let folder = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_RECORD"] else { return }
-        let first = note.merging(["note": "Recorded in trial T-4 (pi \(PiDriver.tested), a fake model, invented text, paths made /Users/example)."]) { _, new in new }
+        let first = note.merging(["note": "Recorded in trial T-4 (pi \(Driving.pi.tested), a fake model, invented text, paths made /Users/example)."]) { _, new in new }
         var text = ([first] + rows).compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
             .map { String(decoding: $0, as: UTF8.self) }.joined(separator: "\n") + "\n"
         func dashed(_ path: String) -> String { path.dropFirst().replacingOccurrences(of: "/", with: "-") }
@@ -214,7 +214,7 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         #expect((run.state.model, run.state.mode) == ("fake/fake-1", nil))
         #expect(run.state.options.model?.map(\.value) == ["fake/fake-1", "fake/fake-2"])
         #expect(run.state.options.mode == [])
-        #expect(run.state.can.mode == false && run.state.because["mode"] == PiDriver.limits["mode"])
+        #expect(run.state.can.mode == false && run.state.because["mode"] == Driving.pi.limits["mode"])
         #expect(try run.send("Hello there.") == "started")
         try await run.until("a reply") { run.items.contains { $0.author == "agent" } && run.state.state == "idle" }
         #expect(run.items.map(\.author) == ["person", "agent"])
@@ -296,7 +296,7 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
         let run = try PiRun("set")
         defer { run.cleanup() }
         try await run.until("the state") { run.state.model != nil && run.state.options.effort != nil }
-        #expect(throws: CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!)) { try run.agent.driver.set(model: nil, mode: "plan", effort: nil) }
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!)) { try run.agent.driver.set(model: nil, mode: "plan", effort: nil) }
         #expect(try run.set(model: "fake/fake-2", effort: "low") == "now")
         try await run.until("the values") { run.state.model == "fake/fake-2" && run.state.effort == "low" }
         _ = try run.send("Hello there.")

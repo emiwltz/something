@@ -101,7 +101,7 @@ import SomethingCore
         Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil)
     }
 
-    static func pi() -> Replay { Replay(PiDriver.self, launch()) }
+    static func pi() -> Replay { Replay("pi", launch()) }
 
     @Test func theCommandLine() {
         #expect(PiDriver.command(Self.launch()).arguments == ["--mode", "rpc"])
@@ -115,7 +115,7 @@ import SomethingCore
         #expect(replay.fold.agent.can.mode == false)
         #expect(replay.fold.agent.because["mode"]?.contains("without asking") == true)
         #expect(replay.fold.agent.waiting == "none")
-        #expect(throws: CodedError("NOT_SUPPORTED", PiDriver.limits["mode"]!)) { try replay.agent.driver.set(model: nil, mode: "plan", effort: nil) }
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!)) { try replay.agent.driver.set(model: nil, mode: "plan", effort: nil) }
         #expect(try replay.agent.answer("pi-1:1", .once) == false)
     }
 

@@ -6,21 +6,9 @@ import Foundation
 import SomethingCore
 
 public final class ClaudeDriver: Driver {
-    public static let kind = "claude"
-    public static let tested = "2.1.296"
-    /// None: ClaudeTrial.swift showed that Claude takes an effort at launch (`--effort`) and during a session
-    /// (`apply_flag_settings` with `effortLevel`, from its next request to the model).
-    public static let limits: [String: String] = [:]
-    /// Claude refuses an effort its model does not list: `can.effort` follows `options.effort`.
-    public static let effortOnlyWhenOffered = true
     /// Removed from the environment Claude Code gets: a key left in a shell profile overrides the subscription the
     /// person signed in with, and a dead one makes every message fail.
     public static let credentials: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
-    /// The permission modes a space may choose. bypassPermissions is never offered: it cannot be entered unless the
-    /// launch allowed it, and something never allows it.
-    public static let modes = [Option(value: "default", label: "Ask before acting"), Option(value: "acceptEdits", label: "Accept edits"),
-                        Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
-                        Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")]
 
     /// `--permission-prompt-tool stdio` sends permission requests on this channel instead of refusing them (the SDKs
     /// pass it; the help does not list it). The mode is always explicit: without it a stranger's settings pick one,
@@ -495,7 +483,7 @@ public final class ClaudeDriver: Driver {
     /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
     private func options() -> Options {
         var options = Options()
-        options.mode = ClaudeDriver.modes
+        options.mode = Driving.claude.modes
         options.model = models?.compactMap { model in
             (model["value"] as? String).map { Option(value: $0, label: model["displayName"] as? String ?? $0) }
         }

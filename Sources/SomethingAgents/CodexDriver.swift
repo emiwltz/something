@@ -8,18 +8,6 @@ import Foundation
 import SomethingCore
 
 public final class CodexDriver: Driver {
-    public static let kind = "codex"
-    public static let tested = "0.163.0"
-    /// None: Codex takes a model, an effort and an approval policy with each turn it starts.
-    public static let limits: [String: String] = [:]
-    /// Codex names the thread when it starts it.
-    public static let picksThread = false
-    /// A model the catalog does not list (a custom provider's) offers no effort, and Codex would take any word.
-    public static let effortOnlyWhenOffered = true
-    /// The approval policies a space may choose (0.163 accepts these three; "on-failure" is gone).
-    public static let modes = [Option(value: "on-request", label: "Ask when needed"),
-                               Option(value: "untrusted", label: "Ask before most commands"),
-                               Option(value: "never", label: "Never ask (refuse what is not allowed)")]
     /// The policy a launch that names none puts on its first turn when the thread's own would never ask ("never",
     /// or a granular set of rules, which asks no more than this): a stricter one is left as the person set it.
     static let defaultMode = "on-request"
@@ -321,7 +309,7 @@ public final class CodexDriver: Driver {
         over = true
         emit(.stopped(AgentError(code: "AGENT_ERROR", message: because + lost)))
         quit()
-        launch.lent?.refused(CodexDriver.kind, because)
+        launch.lent?.refused(AgentDescriptor.codex.kind, because)
     }
 
     /// One of the tools something lends: it runs off the main queue, and its report goes back as the tool's result.
@@ -492,7 +480,7 @@ public final class CodexDriver: Driver {
     /// until known, and for a model the catalog does not list.
     private func options() -> Options {
         var options = Options()
-        options.mode = CodexDriver.modes
+        options.mode = Driving.codex.modes
         let shown = models?.filter { $0["hidden"] as? Bool != true }
         options.model = shown?.compactMap { entry in (entry["model"] as? String).map { Option(value: $0, label: entry["displayName"] as? String ?? $0) } }
         let entry = models?.first { $0["model"] as? String == model || $0["id"] as? String == model }

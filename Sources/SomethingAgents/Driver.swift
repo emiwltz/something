@@ -75,24 +75,8 @@ public struct Command: Equatable, Sendable {
     public var removing: Set<String> = []
 }
 
+/// One launch's driver, made by its kind's `Driving.driver`, which also says what it can do.
 public protocol Driver: AnyObject {
-    static var kind: String { get }
-    /// The newest version of the program this driver was proven on (`kinds.<kind>.tested`).
-    static var tested: String { get }
-    /// The `can` entries that are always false for this kind, each with its sentence (`because`, `granted.limits`).
-    static var limits: [String: String] { get }
-    /// The modes a launch or `set` may choose; empty when the kind has none.
-    static var modes: [Option] { get }
-    /// Whether an effort can be set only when `options.effort` lists levels; false by default.
-    static var effortOnlyWhenOffered: Bool { get }
-    /// Whether the launch picks the conversation id (`Launch.thread`) for the program; true by default. When false,
-    /// the thread is unknown until the program names it, unless the launch resumes one.
-    static var picksThread: Bool { get }
-    static func command(_ launch: Launch) -> Command
-
-    /// `write` hands one whole line (without its newline) to the program and throws AGENT_STOPPED once it no longer
-    /// reads; `emit` takes what happened; `now` is the time of each item and request (ISO 8601).
-    init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String)
     /// Writes what the program needs before the first message. Throws AGENT_STOPPED.
     func begin() throws
     /// Reads one line of the program's output; lines it does not know change nothing.
@@ -116,26 +100,6 @@ public protocol Driver: AnyObject {
     func ended(code: Int32, errors: String)
 }
 
-extension Driver {
-    public static var effortOnlyWhenOffered: Bool { false }
-    public static var picksThread: Bool { true }
-
-    /// A launched agent before its first event: everything it can do, but for its kind's limits.
-    static func fresh(_ launch: Launch) -> Agent {
-        var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
-        agent.folder = launch.folder
-        agent.name = (launch.folder as NSString).lastPathComponent
-        agent.thread = picksThread || launch.resume ? launch.thread : nil
-        var can = Can()
-        for key in ["send", "steer", "queue", "interrupt", "model", "mode", "effort"] { can[keyPath: canKeys[key]!] = true }
-        // A key outside `canKeys` is a typo in a driver: it must fail the tests, not be dropped.
-        for key in limits.keys { can[keyPath: canKeys[key]!] = false }
-        agent.can = can
-        agent.because = limits
-        return agent
-    }
-}
-
 /// Each `can` entry by its name in the contract. `resume` is false here: a launched agent is running.
 let canKeys: [String: WritableKeyPath<Can, Bool>] = ["send": \.send, "steer": \.steer, "queue": \.queue, "interrupt": \.interrupt,
                                                     "model": \.model, "mode": \.mode, "effort": \.effort, "resume": \.resume]
@@ -144,6 +108,8 @@ let canKeys: [String: WritableKeyPath<Can, Bool>] = ["send": \.send, "steer": \.
 /// the driver are folded here, and a held message goes out when a turn ends.
 final class Launched {
     let driver: Driver
+    /// What its kind's driver can do.
+    let driving: Driving
     private(set) var queue: HeldQueue
     /// Called after each event, so the engine can push the state.
     var changed: () -> Void = {}
@@ -153,13 +119,30 @@ final class Launched {
     /// The errors of a resume whose program never took the conversation.
     static let refusals: Set = ["HELD_ELSEWHERE", "THREAD_NOT_FOUND"]
 
-    init<D: Driver>(_ type: D.Type, _ launch: Launch, write: @escaping (Data) throws -> Void, now: @escaping () -> String) {
+    /// One launch of `kind`, whose driver `driving` makes.
+    init(_ kind: String, _ driving: Driving, _ launch: Launch, write: @escaping (Data) throws -> Void, now: @escaping () -> String) {
         self.now = now
+        self.driving = driving
         resumes = launch.resume
-        queue = HeldQueue(Fold(D.fresh(launch)))
+        queue = HeldQueue(Fold(Launched.fresh(kind, driving, launch)))
         var emit: (AgentEvent) -> Void = { _ in }
-        driver = D(launch, write: write, emit: { emit($0) }, now: now)
+        driver = driving.driver(launch, write, { emit($0) }, now)
         emit = { [weak self] event in self?.record(event) }
+    }
+
+    /// A launched agent before its first event: everything it can do, but for its kind's limits.
+    private static func fresh(_ kind: String, _ driving: Driving, _ launch: Launch) -> Agent {
+        var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
+        agent.folder = launch.folder
+        agent.name = (launch.folder as NSString).lastPathComponent
+        agent.thread = driving.picksThread || launch.resume ? launch.thread : nil
+        var can = Can()
+        for key in ["send", "steer", "queue", "interrupt", "model", "mode", "effort"] { can[keyPath: canKeys[key]!] = true }
+        // A key outside `canKeys` is a typo in a driver: it must fail the tests, not be dropped.
+        for key in driving.limits.keys { can[keyPath: canKeys[key]!] = false }
+        agent.can = can
+        agent.because = driving.limits
+        return agent
     }
 
     /// Whether its program refused to continue the conversation it was launched for: it never held it, so it does
@@ -174,7 +157,7 @@ final class Launched {
     var agent: Agent {
         var agent = queue.fold.agent
         if refused { agent.thread = nil }
-        if type(of: driver).effortOnlyWhenOffered, agent.can.effort, agent.options.effort == nil {
+        if driving.effortOnlyWhenOffered, agent.can.effort, agent.options.effort == nil {
             agent.can.effort = false
             agent.because["effort"] = "This model offers no effort level."
         }

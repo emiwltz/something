@@ -63,7 +63,7 @@ import SomethingCore
         spawn = Spawn(path: program, arguments: ACPDriver.command(launch).arguments, folder: work.path, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
-        agent = try Engine.start(ACPDriver.self, launch, spawn, asked: { _ in stop.done }, record: { written, line in
+        agent = try Engine.start("opencode", launch, spawn, asked: { _ in stop.done }, record: { written, line in
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             exchange.rows.append([written ? "something" : "opencode": frame])
         })
@@ -168,7 +168,7 @@ import SomethingCore
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway folders.
     func save() {
         guard let folder = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_RECORD"] else { return }
-        var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(ACPDriver.tested), a fake model, invented text, paths made /Users/example)."]
+        var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(Driving.opencode.tested), a fake model, invented text, paths made /Users/example)."]
         if let resume = resumed { note["resume"] = resume }
         if let model { note["model"] = model }
         var text = ([note] + rows).compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
@@ -252,7 +252,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         defer { run.cleanup() }
         _ = try run.send("Please run-sleep for me.")
         try await run.until("the turn") { run.opencode.prompting && run.items.count == 2 }
-        #expect(throws: CodedError("NOT_SUPPORTED", ACPDriver.limits["steer"]!)) { try run.agent.send("Steered: no.", when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try run.agent.send("Steered: no.", when: "now") }
         #expect(try run.send("Queued: then the docs.") == "queued")
         #expect(try run.send("Queued: and the tests.") == "queued")
         #expect(run.state.queue.map(\.text) == ["Queued: then the docs.", "Queued: and the tests."])

@@ -21,9 +21,15 @@ public final class Engine {
         programs = Programs(environment: environment)
     }
 
-    /// The kinds something can launch, by their driver.
-    static let drivers: [String: any Driver.Type] = ["claude": ClaudeDriver.self, "codex": CodexDriver.self, "opencode": ACPDriver.self,
-                                                        "pi": PiDriver.self]
+    /// The kinds something can launch, with what their driver can do.
+    static let drivers = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.driving.map { (agent.kind, $0) } })
+
+    /// What the driver of `kind` can do. Throws NOT_SUPPORTED for a kind without a driver.
+    static func driving(_ kind: String) throws -> Driving {
+        guard let driving = drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        return driving
+    }
+
     /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
     public static let kinds = Kinds(launchable: Set(drivers.keys), readOnly: Set(AgentDescriptor.all.map(\.kind)).subtracting(drivers.keys))
 
@@ -154,7 +160,7 @@ public final class Engine {
     /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
     /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
     public static func lowersAsking(mode: String, kind: String) throws -> Bool {
-        if let type = drivers[kind], !(type is ACPDriver.Type), !type.modes.isEmpty, !type.modes.contains(where: { $0.value == mode }) {
+        if let driving = drivers[kind], !driving.listsMoreModes, !driving.modes.isEmpty, !driving.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
         }
         return !(asksAsMuch[kind] ?? []).contains(mode)
@@ -166,9 +172,9 @@ public final class Engine {
     /// for a mode it does not offer (never one that skips every permission; OpenCode launches with build or plan).
     /// Static, so that `something check` answers as the app does.
     public static func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
-        guard let type = drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        let driving = try driving(kind)
         for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
-            if let because = type.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
+            if let because = driving.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
         }
         if let model, model.isEmpty || model.hasPrefix("-") {
             throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
@@ -176,8 +182,8 @@ public final class Engine {
         if let effort, effort.isEmpty || effort.hasPrefix("-") {
             throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
         }
-        if let mode, !type.modes.contains(where: { $0.value == mode }) {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(type.modes.map(\.value).joined(separator: ", ")).")
+        if let mode, !driving.modes.contains(where: { $0.value == mode }) {
+            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(driving.modes.map(\.value).joined(separator: ", ")).")
         }
     }
 
@@ -233,7 +239,7 @@ public final class Engine {
     /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED. Called after `lookFor(kind)`, it does not wait for the login shell.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
         try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
-        return try launch(Engine.drivers[kind]!, folder: folder, model: model, mode: mode, effort: effort, planB: false)
+        return try launch(kind, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
@@ -260,7 +266,7 @@ public final class Engine {
     /// this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
     public func launchAssistant(_ kind: String, folder: String, askEverything: Bool, lent: Lent? = nil) throws -> String {
         try Engine.checkLaunch(kind, model: nil, mode: nil, effort: nil)
-        return try launch(Engine.drivers[kind]!, folder: HeldFiles.real(folder), model: nil, mode: nil, effort: nil, planB: false,
+        return try launch(kind, folder: HeldFiles.real(folder), model: nil, mode: nil, effort: nil, planB: false,
                           assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
 
@@ -268,17 +274,18 @@ public final class Engine {
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
-    func launch(_ type: any Driver.Type, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
+    func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
+        let driving = try Engine.driving(kind)
         // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
-        let folder = try resume.map { type is PiDriver.Type ? try PiDriver.resumable($0) : folder } ?? folder
-        let program = try found[type.kind]?.get() ?? programs.find(type.kind)
+        let folder = try resume.map { kind == AgentDescriptor.pi.kind ? try PiDriver.resumable($0) : folder } ?? folder
+        let program = try found[kind]?.get() ?? programs.find(kind)
         count += 1
-        var launch = Launch(agent: "\(type.kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
+        var launch = Launch(agent: "\(kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
         (launch.assistant, launch.lent) = (assistant, assistant == nil ? nil : lent)
-        let started = try start(type, launch, program, planB: planB, record: record)
+        let started = try start(kind, driving, launch, program, planB: planB, record: record)
         // Marked before the state changes, so that no space ever sees the assistant as one it may write to.
         if assistant != nil { assistants.insert(launch.agent) }
         launched.append(started)
@@ -289,15 +296,15 @@ public final class Engine {
     /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude that
     /// refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same one
     /// for a resume).
-    private func start(_ type: any Driver.Type, _ launch: Launch, _ program: Program, planB: Bool,
+    private func start(_ kind: String, _ driving: Driving, _ launch: Launch, _ program: Program, planB: Bool,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
-        let spool = planB && type is ClaudeDriver.Type ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
+        let spool = planB && kind == AgentDescriptor.claude.kind ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
         guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
         let first = launch.assistant == nil ? nil : hookCommand?.first.map { ($0 as NSString).deletingLastPathComponent }
-        let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? type.command(launch)
+        let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? driving.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing, first: first))
-        let agent = try Engine.start(type, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
+        let agent = try Engine.start(kind, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
         agent.changed = { [weak self] in self?.update() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
             claude.fallback = { [weak self, weak spawn] in
@@ -305,7 +312,7 @@ public final class Engine {
                 var again = launch
                 // A resume continues the same conversation with plan B.
                 if !launch.resume { again.thread = UUID().uuidString.lowercased() }
-                guard let started = try? start(type, again, program, planB: true, record: record) else { return false }
+                guard let started = try? start(kind, driving, again, program, planB: true, record: record) else { return false }
                 // The first program's end now reaches a Launched no longer listed: it changes nothing.
                 spawn.stop()
                 launched[index] = started
@@ -325,10 +332,10 @@ public final class Engine {
         guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(Programs.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
         }
-        guard seen.can.resume, let type = Engine.drivers[kind] else {
+        guard seen.can.resume, Engine.drivers[kind] != nil else {
             throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", seen.because["resume"] ?? "This conversation cannot be continued here.")
         }
-        return try launch(type, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
+        return try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
     }
 
     /// Stops every agent something launched, or only `only`, all at once, within `seconds`, then calls `done` on the main queue.

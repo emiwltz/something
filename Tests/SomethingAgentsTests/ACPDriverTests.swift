@@ -152,14 +152,14 @@ import SomethingCore
         #expect(ACPDriver.command(Launch(agent: "opencode-1", folder: "/Users/example/shop")) == Command(arguments: ["acp"]))
         #expect(Replay.opencode().fold.agent.thread == nil, "the session is unknown until OpenCode names it")
         #expect(Replay.opencode().fold.agent.can.steer == false)
-        #expect(Replay.opencode().fold.agent.because["steer"] == ACPDriver.limits["steer"])
+        #expect(Replay.opencode().fold.agent.because["steer"] == Driving.opencode.limits["steer"])
     }
 
     @Test func aSteerIsRefused() throws {
         let replay = Self.opened()
         #expect(try replay.agent.send("Hello.", when: "next") == "started")
         let written = replay.written.count
-        #expect(throws: CodedError("NOT_SUPPORTED", ACPDriver.limits["steer"]!)) { try replay.agent.send("Now.", when: "now") }
+        #expect(throws: CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!)) { try replay.agent.send("Now.", when: "now") }
         #expect(replay.written.count == written, "nothing reaches OpenCode, which would refuse a second prompt")
     }
 

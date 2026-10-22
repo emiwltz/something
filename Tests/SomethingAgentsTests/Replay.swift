@@ -28,10 +28,10 @@ final class Replay {
         var launch = Launch(agent: "claude-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
                             thread: "5b2e0000-0000-4000-8000-000000000001")
         launch.assistant = assistant ? .building : nil
-        start(ClaudeDriver.self, launch)
+        start("claude", launch)
     }
 
-    init<D: Driver>(_ type: D.Type, _ launch: Launch) { start(type, launch) }
+    init(_ kind: String, _ launch: Launch) { start(kind, launch) }
 
     private init(unstarted: Void) {}
 
@@ -51,22 +51,22 @@ final class Replay {
                 return replay.reports.isEmpty ? Lent.Reply(ok: true, text: "") : replay.reports.removeFirst()
             }, refused: { [unowned replay] kind, because in replay.refusals.append("\(kind): \(because)") }, hop: { work, then in work(); then() })
         }
-        replay.start(CodexDriver.self, launch)
+        replay.start("codex", launch)
         return replay
     }
 
     /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given.
     static func opencode(model: String? = nil, resume: String? = nil) -> Replay {
-        Replay(ACPDriver.self, Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil))
+        Replay("opencode", Launch(agent: "opencode-1", folder: "/Users/example/shop", model: model, thread: resume ?? "", resume: resume != nil))
     }
 
     /// A pi launched in /Users/example/shop as agent pi-1, continuing the conversation file `resume` when given.
     static func pi(model: String? = nil, effort: String? = nil, resume: String? = nil) -> Replay {
-        Replay(PiDriver.self, Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
+        Replay("pi", Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
     }
 
-    private func start<D: Driver>(_ type: D.Type, _ launch: Launch) {
-        agent = Launched(type, launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
+    private func start(_ kind: String, _ launch: Launch) {
+        agent = Launched(kind, try! Engine.driving(kind), launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
         if let codex = agent.driver as? CodexDriver {
             codex.schedule = { [unowned self] _, work in scheduled.append(work) }
             codex.quit = { [unowned self] in quit = true }

@@ -136,7 +136,7 @@ import SomethingCore
         func start(_ assistant: Assistant?) -> [String: Any]? {
             var launch = Launch(agent: "codex-1", folder: "/Users/example/something/spaces")
             launch.assistant = assistant
-            let replay = Replay(CodexDriver.self, launch)
+            let replay = Replay("codex", launch)
             replay.feed(["id": 1, "result": ["codexHome": "/Users/example/.codex", "platformFamily": "unix", "platformOs": "macos", "userAgent": "something/0.163.0"]])
             return Self.params(replay, "thread/start")
         }
