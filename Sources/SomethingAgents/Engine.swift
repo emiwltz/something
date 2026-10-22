@@ -15,24 +15,15 @@ public final class Engine {
     private lazy var made = make()
 
     /// `environment` is the one agents are started in: the terminal's when something was started from one,
-    /// otherwise the app's own, and Programs then reads the login shell's PATH.
-    public init(environment: [String: String]) {
+    /// otherwise the app's own, and Programs then reads the login shell's PATH. `registry` is the agents it knows.
+    public init(environment: [String: String], registry: Registry) {
         self.environment = environment
+        self.registry = registry
         programs = Programs(environment: environment)
     }
 
-    /// What something can launch, by kind: what each driver can do, and how to make one.
-    static let launchable = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap(\.driving).map { ($0.kind, $0) })
-
-    /// What the driver of `kind` can do. Throws NOT_SUPPORTED for a kind without a driver.
-    static func driving(_ kind: String) throws -> Driving {
-        guard let driving = launchable[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
-        return driving
-    }
-
-    /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
-    public static let kinds = Kinds(launchable: Set(launchable.keys), readOnly: Set(AgentDescriptor.all.map(\.kind)).subtracting(launchable.keys))
-
+    /// The agents this engine knows: the app's list (Extensions.swift).
+    public let registry: Registry
     private let environment: [String: String]
     /// Where programs are found; a test empties its system folders (`Engine.throwaway`).
     let programs: Programs
@@ -82,7 +73,7 @@ public final class Engine {
     /// Looks for every kind's program again, off the main queue (the login shell can take 3 s); `installed` follows.
     public func lookAgain() {
         lookups.async { [self] in
-            let found = Dictionary(uniqueKeysWithValues: Programs.kinds.compactMap { kind in programs.installed(kind).map { (kind, $0) } })
+            let found = Dictionary(uniqueKeysWithValues: registry.agents.map(\.kind).compactMap { kind in programs.installed(kind).map { (kind, $0) } })
             DispatchQueue.main.async { [self] in installed = found; update() }
         }
     }
@@ -101,8 +92,8 @@ public final class Engine {
     }
 
     private func make() -> State {
-        let kinds = Programs.kinds.map { kind in
-            (kind, Kind(launch: Engine.launchable[kind] != nil, installed: installed[kind], tested: Engine.launchable[kind]?.tested ?? "none",
+        let kinds = registry.agents.map(\.kind).map { kind in
+            (kind, Kind(launch: registry.launchable[kind] != nil, installed: installed[kind], tested: registry.launchable[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
@@ -149,48 +140,6 @@ public final class Engine {
         return true
     }
 
-    /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
-    /// Static, so that `something check` gives the same without an engine.
-    public static var limits: [String: [String]] { launchable.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
-
-    /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
-    /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
-    /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)
-    /// is confirmed rather than guessed. Throws VALUE_NOT_OFFERED, before any window, for a mode the kind never
-    /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
-    /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
-    public static func lowersAsking(mode: String, kind: String) throws -> Bool {
-        if let driving = launchable[kind], !driving.listsMoreModes, !driving.modes.isEmpty, !driving.modes.contains(where: { $0.value == mode }) {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
-        }
-        return !(asksAsMuch[kind] ?? []).contains(mode)
-    }
-
-    /// Returns when a launch of `kind` with these values can be tried; throws the error `launch` would give for them,
-    /// before any program is looked for and before any window: NOT_SUPPORTED for a kind without a driver or a value
-    /// its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED
-    /// for a mode it does not offer (never one that skips every permission; OpenCode launches with build or plan).
-    /// Static, so that `something check` answers as the app does.
-    public static func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
-        let driving = try driving(kind)
-        for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {
-            if let because = driving.limits[key] { throw CodedError("NOT_SUPPORTED", because) }
-        }
-        if let model, model.isEmpty || model.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "model is a model's name, such as one of the agent's options.model.")
-        }
-        if let effort, effort.isEmpty || effort.hasPrefix("-") {
-            throw CodedError("BAD_PARAMS", "effort is a level's name, such as one of the agent's options.effort.")
-        }
-        if let mode, !driving.modes.contains(where: { $0.value == mode }) {
-            throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one of \(driving.modes.map(\.value).joined(separator: ", ")).")
-        }
-    }
-
-    /// Per kind, the modes known to ask no less than the default (`AgentDescriptor.asksAsMuch`); a kind without any is
-    /// left out, so any mode for it counts as lowering asking.
-    static let asksAsMuch = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) })
-
     /// The details of an open request, or nil once it closed (the app then closes its window).
     public func prompt(_ request: String) -> Prompt? { launched.lazy.compactMap { $0.agent.prompt(request) }.first }
 
@@ -199,7 +148,7 @@ public final class Engine {
     public func answer(_ request: String, _ answer: Answer) throws {
         guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return }
         do { _ = try agent.answer(request, answer) } catch let error as CodedError where error.code == "AGENT_STOPPED" {
-            throw CodedError("AGENT_STOPPED", "\(Programs.name(of: agent.agent.kind)) did not receive your answer: it stopped listening.")
+            throw CodedError("AGENT_STOPPED", "\(registry.name(of: agent.agent.kind)) did not receive your answer: it stopped listening.")
         }
     }
 
@@ -235,10 +184,10 @@ public final class Engine {
         }
     }
 
-    /// Starts an agent of `kind` in `folder` and returns its id. Throws as `checkLaunch` does, then NOT_INSTALLED,
+    /// Starts an agent of `kind` in `folder` and returns its id. Throws as `Registry.checkLaunch` does, then NOT_INSTALLED,
     /// INTERPRETER_NOT_FOUND, LAUNCH_FAILED. Called after `lookFor(kind)`, it does not wait for the login shell.
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
-        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+        try registry.checkLaunch(kind, model: model, mode: mode, effort: effort)
         return try launch(kind, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
@@ -266,7 +215,7 @@ public final class Engine {
     /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. Only the app calls
     /// this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
     public func launchAssistant(_ kind: String, folder: String, askEverything: Bool, lent: Lent? = nil) throws -> String {
-        try Engine.checkLaunch(kind, model: nil, mode: nil, effort: nil)
+        try registry.checkLaunch(kind, model: nil, mode: nil, effort: nil)
         return try launch(kind, folder: HeldFiles.real(folder), model: nil, mode: nil, effort: nil, planB: false,
                           assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
@@ -279,7 +228,7 @@ public final class Engine {
     func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
-        let driving = try Engine.driving(kind)
+        let driving = try registry.driving(kind)
         guard !planB || driving.planB != nil else { throw CodedError("BAD_PARAMS", "\(kind) has no plan B.") }
         // A resume runs in the folder its conversation names, when it names one (pi's), whatever folder it is
         // started in: the state shows that one.
@@ -333,9 +282,9 @@ public final class Engine {
     /// launch, as the agent's HELD_ELSEWHERE error.
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
         guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
-            throw CodedError("THREAD_NOT_FOUND", "No \(Programs.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
+            throw CodedError("THREAD_NOT_FOUND", "No \(registry.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
         }
-        guard seen.can.resume, Engine.launchable[kind] != nil else {
+        guard seen.can.resume, registry.launchable[kind] != nil else {
             throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", seen.because["resume"] ?? "This conversation cannot be continued here.")
         }
         return try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)

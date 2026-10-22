@@ -192,7 +192,7 @@ extension Home {
     }
 
     /// A launch the app refuses is refused by the check too: a mode something does not offer for Codex, and a model
-    /// that reads as a flag, which only Engine.checkLaunch refuses (the BridgeHost default both hosts share). Codex,
+    /// that reads as a flag, which only Registry.app.checkLaunch refuses (the BridgeHost default both hosts share). Codex,
     /// not OpenCode: the invented state has no OpenCode installed, which is refused first.
     @Test func aLaunchTheAppRefusesIsABridgeError() async throws {
         let home = Home(prefix: "something-check-")

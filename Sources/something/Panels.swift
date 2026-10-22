@@ -167,10 +167,14 @@ final class PromptPanel: NSPanel {
     /// What a tool does, as the panel's title says it: "run a command", "change a file", or "use <tool>".
     static func action(_ tool: String?) -> String {
         guard let tool else { return "do something that needs your permission" }
-        // Claude Code's tool names, Codex's request kinds, and the kinds of the Agent Client Protocol (OpenCode).
-        if ["Bash", "commandExecution", "execute"].contains(tool) { return "run a command" }
-        if ["Edit", "Write", "MultiEdit", "NotebookEdit", "fileChange", "edit", "delete", "move"].contains(tool) { return "change a file" }
-        return tool == "permissions" ? "change its permissions" : "use \(tool)"
+        // Each agent says what its tools do, by the names its driver gives them (Claude Code's tool names, Codex's
+        // request kinds, the kinds of the Agent Client Protocol).
+        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
+        case .command?: return "run a command"
+        case .file?: return "change a file"
+        case .permissions?: return "change its permissions"
+        case nil: return "use \(tool)"
+        }
     }
 
     /// The command or path, monospaced and selectable, on a tinted ground of its own.

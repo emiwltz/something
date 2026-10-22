@@ -439,7 +439,7 @@ import WebKit
         for file in cases {
             let fixture = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
             let limits = (fixture?["granted"] as? [String: Any])?["limits"] as? [String: [String]]
-            #expect(limits == Engine.limits, "\(file.lastPathComponent)")
+            #expect(limits == Registry.app.limits, "\(file.lastPathComponent)")
         }
     }
 

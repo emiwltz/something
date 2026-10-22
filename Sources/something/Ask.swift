@@ -340,7 +340,7 @@ enum Ask {
     /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button. The
     /// folder is shown from `home`.
     static func lowers(_ mode: String, kind: String, folder: String?, space: String, home: String = NSHomeDirectory()) -> NSAlert {
-        alert("Let “\(space)” put \(Programs.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
+        alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode, kind: kind)) (\(mode))?",
               "The agent works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"). In this mode it asks you less before it acts.",
               buttons: ["Allow", "Don't Allow"], escape: 1)
     }
@@ -404,7 +404,7 @@ enum Ask {
     /// What a right lets the space do, in plain words: the title of its box in the rights sheet.
     static func title(for right: String) -> String {
         let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        let kind = parts.count == 2 ? Programs.name(of: parts[1]) : nil
+        let kind = parts.count == 2 ? Registry.app.name(of: parts[1]) : nil
         switch parts[0] {
         case "state": return "See your agents and what they say"
         case "send": return "Write to your \(kind.map { $0 + " " } ?? "")agents, stop them, change their settings"
@@ -414,20 +414,21 @@ enum Ask {
         }
     }
 
-    /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach pi.
+    /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach an agent that
+    /// never asks (pi), which never waits for a click.
     static func warning(for right: String) -> String? {
-        // pi has no permission modes: a space that launches it gets an agent that never waits for a click.
-        switch right {
-        case "launch": return "One of them, pi, runs commands and edits files without asking you first"
-        case "launch:pi": return "pi runs commands and edits files without asking you first"
-        default: return nil
+        let never = Registry.app.agents.filter(\.neverAsks)
+        if right == "launch", !never.isEmpty {
+            let names = never.map(\.name)
+            return never.count == 1 ? "One of them, \(names[0]), runs commands and edits files without asking you first"
+                : "Some of them, \(names.joined(separator: " and ")), run commands and edit files without asking you first"
         }
+        guard let agent = never.first(where: { right == "launch:" + $0.kind }) else { return nil }
+        return "\(agent.name) runs commands and edits files without asking you first"
     }
 
-    /// What a mode that lowers asking lets the agent do, in plain words.
-    static func words(forMode mode: String) -> String {
-        ["acceptEdits": "edits files without asking you", "auto": "decides by itself what to ask you",
-         "dontAsk": "never asks you, and does only what your settings already allow",
-         "never": "never asks you before it runs a command"][mode] ?? "asks you less"
+    /// What a mode of `kind` that lowers asking lets the agent do, in plain words.
+    static func words(forMode mode: String, kind: String) -> String {
+        Registry.app.agent(kind)?.modeWords[mode] ?? "asks you less"
     }
 }

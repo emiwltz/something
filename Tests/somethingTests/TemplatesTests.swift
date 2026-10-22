@@ -135,7 +135,7 @@ import WebKit
         ask.folder = home.root.appendingPathComponent("code/my \"shop\" </script>")
         library.use(project)
         let space = try #require(Spaces(root: home.places.spaces).named("project"))
-        let declaration = try #require(Declaration.read(space, home: home.root, kinds: Engine.kinds).declaration)
+        let declaration = try #require(Declaration.read(space, home: home.root, kinds: Registry.app.kinds).declaration)
         let chosen = "~/code/my \"shop\" </script>"
         #expect(declaration.folder == chosen && declaration.agents == .folders([chosen]))
         #expect(library.selection == "project")
@@ -194,10 +194,10 @@ import WebKit
         try JSONSerialization.data(withJSONObject: kept).write(to: memory.file)
         var seen: [[String: Any]] = []
         for _ in 0..<2 {
-            let reading = Declaration.read(space, home: home.root, kinds: Engine.kinds), declaration = try #require(reading.declaration)
+            let reading = Declaration.read(space, home: home.root, kinds: Registry.app.kinds), declaration = try #require(reading.declaration)
             var grant = Grant(declared: Asked(declaration), at: "")
             grant.granted = declaration.rights
-            let granted = Rights.granted(reading, grant, limits: Engine.limits, home: CheckRunner.invented)
+            let granted = Rights.granted(reading, grant, limits: Registry.app.limits, home: CheckRunner.invented)
             let host = CheckHost(state: state, granted: granted, declared: declaration.rights, memory: memory)
             let page = try CheckPage(space: space, host: host, share: Home.share, rules: try await Lockdown.ruleList())
             try CheckTests.runner(home).created(page.web)

@@ -25,7 +25,7 @@ enum TestRunGuard {
         // resolvingSymlinksInPath drops the trailing slash NSTemporaryDirectory gives.
         let temporary = (NSTemporaryDirectory() as NSString).resolvingSymlinksInPath + "/"
         if [temporary, "/bin/", "/usr/bin/"].contains(where: real.hasPrefix) { return true }
-        let trials = Engine.launchable.keys.compactMap { environment["SOMETHING_TRIAL_\($0.uppercased())"] }
+        let trials = AgentDescriptor.all.compactMap(\.driving).compactMap { environment["SOMETHING_TRIAL_\($0.kind.uppercased())"] }
         return trials.contains { $0 == path || ($0 as NSString).resolvingSymlinksInPath == real }
     }
 }

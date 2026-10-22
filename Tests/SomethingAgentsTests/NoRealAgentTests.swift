@@ -16,10 +16,16 @@ extension Engine {
     /// install folders (/opt/homebrew/bin, /usr/local/bin) are not searched, so a kind without its fake on the PATH is
     /// NOT_INSTALLED, never the person's own program.
     static func throwaway(_ environment: [String: String]) -> Engine {
-        let engine = Engine(environment: environment)
+        let engine = Engine(environment: environment, registry: .described)
         engine.programs.systemFolders = []
         return engine
     }
+}
+
+extension Registry {
+    /// Every agent this host describes, as the app registers them (Extensions.swift; somethingTests checks the two
+    /// lists are one).
+    static let described = Registry(AgentDescriptor.all)
 }
 
 struct NoRealAgentTests {
@@ -53,7 +59,7 @@ struct NoRealAgentTests {
         for file in files where !file.text.contains(".enabled(if: trial") {
             for (number, line) in NoRealAgentTests.code(file.text).enumerated() where line.contains("Engine(environment:") {
                 // The one allowed: the app tests' own throwaway factory, which empties the system folders too.
-                let factory = file.name.hasSuffix("Support.swift") && line.contains("Engine(environment: environment)")
+                let factory = file.name.hasSuffix("Support.swift") && line.contains("Engine(environment: environment, registry: .app)")
                 #expect(factory, "\(file.name):\(number + 1) makes an Engine directly; use Engine.throwaway with a throwaway PATH.")
             }
         }
@@ -73,7 +79,7 @@ struct NoRealAgentTests {
                         continue
                     }
                     let words = NoRealAgentTests.matches(#""([^"]*)""#, in: call).map { $0[1] }
-                    if case .success = DeveloperTrial.parse(words) {
+                    if case .success = DeveloperTrial.parse(words, registry: .described) {
                         Issue.record("\(place) runs something try \(words.dropFirst().joined(separator: " ")), which launches a real agent.")
                     }
                 }
@@ -84,9 +90,9 @@ struct NoRealAgentTests {
 
     @Test func theRefusedWordsAreRefusedAndTheRightOnesAccepted() {
         for words in [["try"], ["try", "nope"], ["claude"], ["try", "claude", "--bogus"], ["try", "codex", "--plan-b"], ["try", "claude", "--record"]] {
-            if case .success = DeveloperTrial.parse(words) { Issue.record("\(words) were accepted") }
+            if case .success = DeveloperTrial.parse(words, registry: .described) { Issue.record("\(words) were accepted") }
         }
-        guard case .success(let asked) = DeveloperTrial.parse(["try", "claude", "--record", "out.jsonl", "--plan-b"]) else {
+        guard case .success(let asked) = DeveloperTrial.parse(["try", "claude", "--record", "out.jsonl", "--plan-b"], registry: .described) else {
             Issue.record("the right words were refused")
             return
         }

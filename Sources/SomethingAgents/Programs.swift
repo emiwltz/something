@@ -25,14 +25,14 @@ public struct Program: Equatable, Sendable {
 
 public final class Programs {
     /// The kinds something looks for (`AgentDescriptor.all`). Any other kind is unknown here (nil, never false).
-    public static let kinds = AgentDescriptor.all.map(\.kind)
+    static let kinds = AgentDescriptor.all.map(\.kind)
 
     /// What to type to install each kind something launches, in Terminal.
-    public static let install = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.install.map { (agent.kind, $0) } })
+    static let install = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.install.map { (agent.kind, $0) } })
     static let names = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.map { ($0.kind, $0.name) })
 
     /// The name a person knows the agent `kind` by, in every window and sentence; the kind itself when unknown.
-    public static func name(of kind: String) -> String { names[kind] ?? kind }
+    static func name(of kind: String) -> String { names[kind] ?? kind }
     /// Interpreters a program needs that its first line does not name.
     static let runsOn = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } })
     /// The folders under the home where installers put programs, which a shell's PATH may lack: the shared ones, and

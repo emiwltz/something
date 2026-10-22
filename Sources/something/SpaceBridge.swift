@@ -79,16 +79,16 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
         }
     }
 
-    /// A mode that makes the agent ask less waits for the person's click (Engine.lowersAsking says which).
+    /// A mode that makes the agent ask less waits for the person's click (Registry.lowersAsking says which).
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
-        try Engine.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
+        try Registry.app.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
     }
 }
 
 extension BridgeHost {
-    /// The engine's own check of a launch's values, for the app's window and the check alike: a launch the app
+    /// The registry's check of a launch's values, for the app's window and the check alike: a launch the app
     /// refuses is refused by `something check` too.
     func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
-        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+        try Registry.app.checkLaunch(kind, model: model, mode: mode, effort: effort)
     }
 }

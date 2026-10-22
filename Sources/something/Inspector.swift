@@ -50,7 +50,7 @@ import SwiftUI
         folder = nil
         problem = nil
         guard let space else { return }
-        let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
+        let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         title = reading.declaration?.title ?? space.name
         about = reading.declaration?.description
         asksNothing = reading.declaration?.rights.isEmpty ?? true
@@ -85,7 +85,7 @@ import SwiftUI
     /// Allows or refuses one declared right, as the person's answer, and tells the open space. A space never
     /// answered has no switch: its first answers are given in its rights sheet, with its scope and folder.
     func set(_ right: String, allowed: Bool) {
-        let declared = space.flatMap { Declaration.read($0, home: places.home, kinds: Engine.kinds).declaration?.rights } ?? []
+        let declared = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.rights } ?? []
         change { grant in
             guard var next = grant else { return }
             // A wider or a narrower word answered earlier would decide in place of this answer. A wider one also

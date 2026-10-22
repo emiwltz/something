@@ -341,6 +341,32 @@ import WebKit
         await finish(home, model)
     }
 
+    /// What the menu and the drawer say of each builder, what it is lent, and whether Ask Before Every Change means
+    /// anything for it: from its descriptor, in the words of 0.2.
+    @Test func eachBuilderIsSaidFromItsDescriptor() async throws {
+        let (home, model) = try assistant(["claude", "codex", "opencode", "pi"])
+        defer { home.remove() }
+        await look(model)
+        #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting"])
+        let folder = "works in ~/something/spaces."
+        let said: [(String, String, Bool, [String])] = [
+            ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, []),
+            ("codex", "Codex \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, ["something_check"]),
+            ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, []),
+            ("pi", "pi \(folder) pi never asks: it can run any command on your Mac.", false, []),
+        ]
+        for (kind, line, canAsk, lent) in said {
+            model.choose(kind)
+            #expect(model.kind == kind && model.command == kind)
+            #expect(model.firstLines == [line, "A new conversation starts each time something starts."], "\(kind)")
+            #expect(model.canAskEverything == canAsk && (model.lent?.tools.map(\.name) ?? []) == lent, "\(kind)")
+        }
+        model.choose("claude")
+        model.toggleAsking()
+        #expect(model.firstLines[0] == "Claude Code \(folder) It asks you before every change.")
+        await finish(home, model)
+    }
+
     /// Switching builders while a conversation runs asks first; the choice is kept in window.json.
     @Test func switchingAsksFirstAndIsKept() async throws {
         let (home, model) = try assistant(["claude", "pi"])

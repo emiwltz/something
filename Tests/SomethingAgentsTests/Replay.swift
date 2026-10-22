@@ -66,7 +66,7 @@ final class Replay {
     }
 
     private func start(_ kind: String, _ launch: Launch) {
-        agent = Launched(try! Engine.driving(kind), launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
+        agent = Launched(try! Registry.described.driving(kind), launch, write: { [unowned self] in written.append($0) }, now: { "2026-10-17T09:00:00Z" })
         if let codex = agent.driver as? CodexDriver {
             codex.schedule = { [unowned self] _, work in scheduled.append(work) }
             codex.quit = { [unowned self] in quit = true }

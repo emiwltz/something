@@ -147,7 +147,7 @@ enum Command: Equatable {
         case .hook(let words):
             return SpoolHook.main(words)
         case .trial(let words):
-            return DeveloperTrial.main(words)
+            return DeveloperTrial.main(words, registry: .app)
         case .wrong(let sentence):
             say(sentence + "\n\n" + Command.usage(share), true)
             return 2

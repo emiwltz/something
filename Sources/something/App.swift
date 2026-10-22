@@ -13,7 +13,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// The space named on the command line, or the path of an export; nil to open the last space open.
     let opening: String?
     let places = Places.person
-    let engine = Engine(environment: ProcessInfo.processInfo.environment)
+    let engine = Engine(environment: ProcessInfo.processInfo.environment, registry: .app)
     let ask = NativeAsk()
     let launches = Launches()
     lazy var library = Library(places: places, ask: ask, share: Resources.share)
@@ -227,12 +227,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     static func who(_ agent: Agent?, startedBy space: String?, home: String, assistant: Bool = false) -> Asker {
         guard let agent else { return Asker(program: "An agent", line: "") }
         if assistant {
-            return Asker(program: Programs.name(of: agent.kind), line: "Your assistant, working in " + Words.path(agent.folder ?? "", home: home))
+            return Asker(program: Registry.app.name(of: agent.kind), line: "Your assistant, working in " + Words.path(agent.folder ?? "", home: home))
         }
         let parts = [agent.name.map { "“\($0)”" }, space.map { "started by “\($0)”" },
                      agent.folder.map { "working in " + Words.path($0, home: home) }].compactMap { $0 }
         let line = parts.joined(separator: ", ")
-        return Asker(program: Programs.name(of: agent.kind), line: line.prefix(1).uppercased() + line.dropFirst())
+        return Asker(program: Registry.app.name(of: agent.kind), line: line.prefix(1).uppercased() + line.dropFirst())
     }
 
     /// The engine may change many times a second; the open space hears of it at most every quarter of a second.

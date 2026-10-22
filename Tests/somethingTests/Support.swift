@@ -44,7 +44,7 @@ struct Home {
     /// folders are not searched (NoRealAgentTests), so nothing a space asks reaches a real agent.
     func engine() -> Engine {
         let environment = ["HOME": root.path, "PATH": root.appendingPathComponent("bin").path + ":/usr/bin:/bin", "SHELL": "/bin/sh"]
-        let engine = Engine(environment: environment)
+        let engine = Engine(environment: environment, registry: .app)
         engine.programs.systemFolders = []
         return engine
     }

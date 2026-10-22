@@ -109,7 +109,7 @@ final class CheckRunner {
         let kept = Command.kept(space.location, places) != nil
         report.size = space.size()
         if check.journal { journal(of: space, kept: kept, into: &report) }
-        let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
+        let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         report.declaration = reading.declaration
         report.problems = reading.problems
         // The app does not display such a space, so there is nothing to render.
@@ -125,7 +125,7 @@ final class CheckRunner {
         grant.refused = refused
         let folder = declaration.folder.flatMap { Declaration.expand($0, home: CheckRunner.invented) }
         grant.folder = folder ?? CheckRunner.invented.appendingPathComponent("code").path
-        let granted = Rights.granted(reading, grant, limits: Engine.limits, home: CheckRunner.invented)
+        let granted = Rights.granted(reading, grant, limits: Registry.app.limits, home: CheckRunner.invented)
         report.rights.granted = granted.rights
         report.rights.refused = granted.refused
         report.rights.unavailable = reading.unavailable

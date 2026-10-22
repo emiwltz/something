@@ -158,7 +158,7 @@ struct AssistantView: View {
     /// The red row: what the agent said went wrong, and how to sign it in; only that when its sign-in was refused.
     private func failure(_ problem: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            let command = model.kind ?? "claude"
+            let command = model.command
             Text(model.signedOut ? "\(model.name) isn't signed in to its model." : "\(model.name) couldn't answer: \(problem)").fontWeight(.semibold)
             Text(model.signedOut ? "Open Terminal, type \(command) and sign in, then click Try Again."
                  : "If it isn't signed in, open Terminal, type \(command) and sign in. Then click Try Again.")
@@ -319,7 +319,7 @@ struct InstallList: View {
 
     /// The coding agents something builds with, each with its install command.
     static var builders: [(name: String, command: String)] {
-        AssistantModel.builders.compactMap { kind in Programs.install[kind].map { (Programs.name(of: kind), $0) } }
+        Registry.app.builders.compactMap { agent in agent.install.map { (agent.name, $0) } }
     }
 
     var body: some View {

@@ -212,6 +212,6 @@ final class EngineHost: BridgeHost {
     func open(_ url: URL) throws -> Bool { false }
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool { true }
     func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
-        try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort)
+        try Registry.described.checkLaunch(kind, model: model, mode: mode, effort: effort)
     }
 }

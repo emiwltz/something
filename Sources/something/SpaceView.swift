@@ -200,12 +200,12 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         frame = nil
         linksBlocked = false
         faults = []
-        let reading = Declaration.read(space, home: places.home, kinds: Engine.kinds)
+        let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         title = reading.declaration?.title ?? space.name
         if let declaration = reading.declaration {
-            granted = Rights.granted(reading, answer(declaration), limits: Engine.limits, home: places.home)
+            granted = Rights.granted(reading, answer(declaration), limits: Registry.app.limits, home: places.home)
             inject()
             web.load(URLRequest(url: Scheme.shell))
         } else {
@@ -243,7 +243,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
         let grant: Grant?
         do { grant = try Grants(places.grants).read().spaces[space.name] } catch { return ask.tell(error.sentence) }
-        granted = Rights.granted(reading, grant, limits: Engine.limits, home: places.home)
+        granted = Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home)
         inject()
         if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceView.json(granted)))", in: frame, in: .page) }
         push()

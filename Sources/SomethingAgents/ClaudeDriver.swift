@@ -463,7 +463,7 @@ public final class ClaudeDriver: Driver {
     /// Whether Claude's failure means the model's server refused its sign-in (a missing or rejected key), which signing
     /// in again in Terminal cures. `status` is the HTTP status when there was one (401 only: a 403 is a key without
     /// access, which signing in may not cure), `error` Claude's error kind otherwise.
-    public static func refusesSignIn(status: Int?, error: String?) -> Bool {
+    static func refusesSignIn(status: Int?, error: String?) -> Bool {
         if let status { return status == 401 }
         return error == "authentication_failed"
     }
@@ -588,5 +588,6 @@ extension Driving {
                                         Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
                                         Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
                                 effortOnlyWhenOffered: true, command: { ClaudeDriver.command($0) },
-                                planB: { try ClaudeDriver.command($0, host: $1) }, driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
+                                planB: { try ClaudeDriver.command($0, host: $1) }, refusesSignIn: ClaudeDriver.refusesSignIn,
+                                driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
 }

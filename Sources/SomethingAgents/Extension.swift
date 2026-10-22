@@ -1,19 +1,19 @@
-// Extension: what something knows of each agent, written once as data. The tables the engine, the programs and the
-// watch used to keep apart (kinds, names, install sentences, modes that ask as much, which conversations continue
-// here) are computed from these descriptors, so that knowing one more agent is one more descriptor. For a kind
-// something launches, its Driving says what its driver can do and makes one; each Driving, the driver's code and
-// the reader stay in their own files.
+// Extension: what something knows of each agent, written once as data. The tables the engine, the programs, the
+// watch and the app's windows used to keep apart (kinds, names, install sentences, modes that ask as much, which
+// conversations continue here, the builders, the words of tools and modes) are computed from these descriptors, so
+// that knowing one more agent is one more descriptor. For a kind something launches, its Driving says what its
+// driver can do and makes one; each Driving, the driver's code and the reader stay in their own files.
 import Foundation
 import SomethingCore
 
 /// What something knows of one agent, besides its driver and its reader. Pure data: building one does no I/O.
-struct AgentDescriptor: Sendable {
+public struct AgentDescriptor: Sendable {
     /// The contract's word for it, which is also the file name of its program: "claude".
-    var kind: String
+    public var kind: String
     /// The name a person knows it by, in every window and sentence: "Claude Code".
-    var name: String
+    public var name: String
     /// What to type in Terminal to install it; nil for a kind something does not launch.
-    var install: String?
+    public var install: String?
     /// An interpreter its program needs that the program's first line does not name.
     var runsOn: String?
     /// Folders under the home where its installer puts it, which a shell's PATH may lack. They are looked in for
@@ -31,6 +31,26 @@ struct AgentDescriptor: Sendable {
     var resume: Resume = .never
     /// How something launches and drives it; nil for a kind it only reads.
     var driving: Driving?
+    /// How it builds spaces as the person's assistant; nil for a kind that cannot.
+    public var builder: Builder?
+    /// Whether, launched, it acts without ever asking the person: the rights sheet and the assistant say so.
+    public var neverAsks = false
+    /// What its tools and requests do, by the name its driver gives them, for the permission panel's title.
+    public var tools: [String: Tool] = [:]
+    /// What each of its modes that lowers asking lets it do, in words that follow "a mode where it".
+    public var modeWords: [String: String] = [:]
+
+    /// What the person's assistant gets when it is this agent.
+    public struct Builder: Sendable {
+        /// Whether its driver pre-allows its building work (rule 2 of AGENTS.md), which Ask Before Every Change
+        /// turns off; without it, it asks as its own settings say.
+        public var preAllowed = false
+        /// The commands something lends it as tools, on its own channel (Lent.swift).
+        public var lent: [LentTool] = []
+    }
+
+    /// What a tool or a request does, as the permission panel says it.
+    public enum Tool: Sendable { case command, file, permissions }
 
     enum Resume: Equatable, Sendable {
         /// Never: something cannot continue its conversations started elsewhere.
@@ -40,10 +60,17 @@ struct AgentDescriptor: Sendable {
         /// Unless a process is known to hold it: the agent refuses a second writer itself and says so.
         case unlessKnownHeld
     }
+
+    /// Whether its failure means the model's server refused its sign-in, which signing in again in Terminal cures:
+    /// `status` is the HTTP status when there was one, `error` its error kind otherwise. False for a kind whose driver
+    /// does not tell.
+    public func refusesSignIn(status: Int?, error: String?) -> Bool { driving?.refusesSignIn?(status, error) ?? false }
 }
 
 extension AgentDescriptor {
-    /// The agents something knows, in the order of the state's kinds.
+    /// The agents described here, in the order of the state's kinds: what the programs, the watch and the test guard
+    /// look for until each agent moves into an extension of its own. The app registers the same list
+    /// (Extensions.swift), which a test checks.
     static let all = [claude, codex, opencode, pi, omp]
 
     /// The descriptor of `kind`; nil for a kind something does not know.
@@ -52,30 +79,40 @@ extension AgentDescriptor {
     /// The Claude desktop app's own copy of `claude` is the app's, updated by the app, and may differ from the
     /// Claude Code the person installed. Modes (2.1.296): acceptEdits, auto, dontAsk and bypassPermissions lower
     /// asking; "default" is the name its channel reports (its help's "manual" is never offered: Driving.claude.modes
-    /// leaves it out).
-    static let claude = AgentDescriptor(kind: "claude", name: "Claude Code", install: "brew install --cask claude-code",
-                                        refusedCopies: ["/Application Support/Claude/", "/Claude.app/"],
-                                        asksAsMuch: ["default", "plan"], resume: .whenNoneHolds, driving: .claude)
+    /// leaves it out). As a builder, its rules pre-allow edits in the spaces folder and something's own commands.
+    public static let claude = AgentDescriptor(
+        kind: "claude", name: "Claude Code", install: "brew install --cask claude-code",
+        refusedCopies: ["/Application Support/Claude/", "/Claude.app/"], asksAsMuch: ["default", "plan"], resume: .whenNoneHolds,
+        driving: .claude, builder: Builder(preAllowed: true),
+        tools: ["Bash": .command, "Edit": .file, "Write": .file, "MultiEdit": .file, "NotebookEdit": .file],
+        modeWords: ["acceptEdits": "edits files without asking you", "auto": "decides by itself what to ask you",
+                    "dontAsk": "never asks you, and does only what your settings already allow"])
 
     /// Codex refuses a second writer by itself, so a conversation whose holder is unknown is offered; Codex says so
     /// if its background service holds it. Modes (0.163): `--ask-for-approval` offers on-request and never;
-    /// untrusted, which older versions offered, asks more.
-    static let codex = AgentDescriptor(kind: "codex", name: "Codex", install: "brew install --cask codex",
-                                       asksAsMuch: ["on-request", "untrusted"], resume: .unlessKnownHeld, driving: .codex)
+    /// untrusted, which older versions offered, asks more. As a builder, its sandbox may write in the spaces folder,
+    /// and something lends it its check, which the sandbox cannot run.
+    public static let codex = AgentDescriptor(
+        kind: "codex", name: "Codex", install: "brew install --cask codex", asksAsMuch: ["on-request", "untrusted"],
+        resume: .unlessKnownHeld, driving: .codex, builder: Builder(preAllowed: true, lent: [.check]),
+        tools: ["commandExecution": .command, "fileChange": .file, "permissions": .permissions],
+        modeWords: ["never": "never asks you before it runs a command"])
 
     /// Modes (2.0.20): a mode is an agent; build and plan ask as the person's settings say, and only `--auto`, which
-    /// something never passes, asks less.
-    static let opencode = AgentDescriptor(kind: "opencode", name: "OpenCode", install: "brew install opencode",
-                                          homeFolders: [".opencode/bin"], asksAsMuch: ["build", "plan"], driving: .opencode)
+    /// something never passes, asks less. Its tools are the kinds of the Agent Client Protocol.
+    public static let opencode = AgentDescriptor(
+        kind: "opencode", name: "OpenCode", install: "brew install opencode", homeFolders: [".opencode/bin"],
+        asksAsMuch: ["build", "plan"], driving: .opencode, builder: Builder(),
+        tools: ["execute": .command, "edit": .file, "delete": .file, "move": .file])
 
     /// The install sentence is pi's README's (1.0.0), and `npm view` gives that package name. Its launcher is a
     /// shell script that starts a node script, and its installer may bring a node of its own. It takes no mode and
     /// never asks: none is listed, and the bridge refuses a mode pi does not take before any confirmation.
-    static let pi = AgentDescriptor(kind: "pi", name: "pi", install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
-                                    runsOn: "node", bundled: "pi-node/current/bin", driving: .pi)
+    public static let pi = AgentDescriptor(kind: "pi", name: "pi", install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+                                           runsOn: "node", bundled: "pi-node/current/bin", driving: .pi, builder: Builder(), neverAsks: true)
 
     /// Looked for, to say whether it is installed, and read; something does not launch it.
-    static let omp = AgentDescriptor(kind: "omp", name: "OMP")
+    public static let omp = AgentDescriptor(kind: "omp", name: "OMP")
 }
 
 /// What something knows of a kind it launches: what its driver can do, the program's arguments, and the driver itself.
@@ -90,7 +127,7 @@ struct Driving: Sendable {
     /// The modes a launch or `set` may choose; empty when the kind has none.
     var modes: [Option] = []
     /// Whether `set` may also choose modes the agent lists itself, beyond `modes`: the bridge then checks a `set`
-    /// against the agent's `options.mode`, after the person confirmed (Engine.lowersAsking).
+    /// against the agent's `options.mode`, after the person confirmed (Registry.lowersAsking).
     var listsMoreModes = false
     /// Whether an effort can be set only when `options.effort` lists levels.
     var effortOnlyWhenOffered = false
@@ -105,6 +142,9 @@ struct Driving: Sendable {
     /// The command of a launch that takes plan B (`Launch.planB`), for a kind that has one: Claude's permission
     /// hook. Throws LAUNCH_FAILED when the host lacks what it needs.
     var planB: (@Sendable (Launch, HostFacts) throws -> Command)?
+    /// Whether a failure its driver reported (`detail.apiRetry`: an HTTP status, else an error kind) means the
+    /// model's server refused the sign-in; nil when its driver reports none (AgentDescriptor.refusesSignIn).
+    var refusesSignIn: (@Sendable (_ status: Int?, _ error: String?) -> Bool)?
     /// Makes the driver of one launch. `write` hands one whole line (without its newline) to the program and throws
     /// AGENT_STOPPED once it no longer reads; `emit` takes what happened; `now` is the time of each item and request
     /// (ISO 8601).

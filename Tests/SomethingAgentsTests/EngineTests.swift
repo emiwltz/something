@@ -137,7 +137,7 @@ import SomethingCore
         #expect(engine.state.kinds["opencode"]?.launch == true)
         #expect(engine.state.kinds["pi"]?.launch == true)
         #expect(engine.state.kinds["omp"]?.launch == false)
-        #expect(Engine.limits == ["opencode": ["steer"], "pi": ["mode"]], "Claude and Codex have no limit left")
+        #expect(Registry.described.limits == ["opencode": ["steer"], "pi": ["mode"]], "Claude and Codex have no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -435,16 +435,16 @@ import SomethingCore
     /// The modes that make an agent ask less are confirmed by the person; an unknown OpenCode agent is too. A mode
     /// Claude or Codex is never given here is refused before any window.
     @Test func whichModesLowerAsking() throws {
-        for mode in ["acceptEdits", "auto", "dontAsk"] { #expect(try Engine.lowersAsking(mode: mode, kind: "claude")) }
-        for mode in ["default", "plan"] { #expect(try !Engine.lowersAsking(mode: mode, kind: "claude")) }
-        #expect(try Engine.lowersAsking(mode: "never", kind: "codex") && !Engine.lowersAsking(mode: "on-request", kind: "codex"))
-        #expect(try !Engine.lowersAsking(mode: "untrusted", kind: "codex"))
-        #expect(try Engine.lowersAsking(mode: "default", kind: "pi"), "pi takes no mode: one asked for is confirmed, never guessed")
-        #expect(try !Engine.lowersAsking(mode: "build", kind: "opencode") && !Engine.lowersAsking(mode: "plan", kind: "opencode"))
-        #expect(try Engine.lowersAsking(mode: "invented-agent", kind: "opencode"))
-        #expect(try Engine.lowersAsking(mode: "anything", kind: "other"))
+        for mode in ["acceptEdits", "auto", "dontAsk"] { #expect(try Registry.described.lowersAsking(mode: mode, kind: "claude")) }
+        for mode in ["default", "plan"] { #expect(try !Registry.described.lowersAsking(mode: mode, kind: "claude")) }
+        #expect(try Registry.described.lowersAsking(mode: "never", kind: "codex") && !Registry.described.lowersAsking(mode: "on-request", kind: "codex"))
+        #expect(try !Registry.described.lowersAsking(mode: "untrusted", kind: "codex"))
+        #expect(try Registry.described.lowersAsking(mode: "default", kind: "pi"), "pi takes no mode: one asked for is confirmed, never guessed")
+        #expect(try !Registry.described.lowersAsking(mode: "build", kind: "opencode") && !Registry.described.lowersAsking(mode: "plan", kind: "opencode"))
+        #expect(try Registry.described.lowersAsking(mode: "invented-agent", kind: "opencode"))
+        #expect(try Registry.described.lowersAsking(mode: "anything", kind: "other"))
         for (mode, kind) in [("bypassPermissions", "claude"), ("manual", "claude"), ("acceptedits", "claude"), ("granular", "codex")] {
-            #expect(throws: CodedError.self, "\(mode)") { try Engine.lowersAsking(mode: mode, kind: kind) }
+            #expect(throws: CodedError.self, "\(mode)") { try Registry.described.lowersAsking(mode: mode, kind: kind) }
         }
     }
 
@@ -452,7 +452,7 @@ import SomethingCore
     /// `set` once OpenCode lists it, never at launch, so no window asks about a launch that would then fail.
     @Test func aLaunchIsCheckedBeforeAnyWindow() throws {
         func code(_ kind: String, model: String? = nil, mode: String? = nil, effort: String? = nil) -> String? {
-            do { try Engine.checkLaunch(kind, model: model, mode: mode, effort: effort); return nil } catch { return (error as? CodedError)?.code }
+            do { try Registry.described.checkLaunch(kind, model: model, mode: mode, effort: effort); return nil } catch { return (error as? CodedError)?.code }
         }
         #expect(code("opencode", mode: "my-agent") == "VALUE_NOT_OFFERED")
         #expect(code("opencode", mode: "plan") == nil && code("claude", mode: "acceptEdits") == nil)

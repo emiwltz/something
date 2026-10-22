@@ -46,7 +46,7 @@ struct AssistantTrial {
                                               "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "TMPDIR": root.path,
                                               "SHELL": "/bin/sh", "ANTHROPIC_BASE_URL": api.url,
                                               "DISABLE_AUTOUPDATER": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
-                                              "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"])
+                                              "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"], registry: .app)
                 engine.programs.systemFolders = []
                 engine.hookCommand = [tools + "/something", "hook", "permission"]
                 places = Places(home: home)

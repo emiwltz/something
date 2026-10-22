@@ -18,12 +18,13 @@ public enum DeveloperTrial {
         var kind: String, record: String?, planB = false, assistant = false
     }
 
-    /// What `arguments` (every word after `something`, `try` first) ask for, or the sentence that says why they are
-    /// wrong. Launches nothing: the tests check with it that no test's words would start a real agent.
-    static func parse(_ arguments: [String]) -> Result<Asked, SpaceError> {
+    /// What `arguments` (every word after `something`, `try` first) ask for among the agents of `registry`, or the
+    /// sentence that says why they are wrong. Launches nothing: the tests check with it that no test's words would
+    /// start a real agent.
+    static func parse(_ arguments: [String], registry: Registry) -> Result<Asked, SpaceError> {
         guard arguments.first == "try" else { return .failure(SpaceError(usage)) }
         var words = arguments.dropFirst()
-        guard let kind = words.popFirst(), Engine.launchable[kind] != nil else { return .failure(SpaceError(usage)) }
+        guard let kind = words.popFirst(), registry.launchable[kind] != nil else { return .failure(SpaceError(usage)) }
         var asked = Asked(kind: kind, record: nil)
         while let word = words.popFirst() {
             switch word {
@@ -31,8 +32,8 @@ public enum DeveloperTrial {
                 guard let path = words.popFirst() else { return .failure(SpaceError(usage)) }
                 asked.record = path
             case "--plan-b":
-                guard Engine.launchable[kind]?.planB != nil else {
-                    let withPlanB = Engine.launchable.values.filter { $0.planB != nil }.map(\.kind).sorted().joined(separator: ", ")
+                guard registry.launchable[kind]?.planB != nil else {
+                    let withPlanB = registry.launchable.values.filter { $0.planB != nil }.map(\.kind).sorted().joined(separator: ", ")
                     return .failure(SpaceError("something try: --plan-b is for \(withPlanB) only."))
                 }
                 asked.planB = true
@@ -44,9 +45,9 @@ public enum DeveloperTrial {
     }
 
     /// Returns the exit status: 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
-    public static func main(_ arguments: [String]) -> Int32 {
+    public static func main(_ arguments: [String], registry: Registry) -> Int32 {
         let asked: Asked
-        switch parse(arguments) {
+        switch parse(arguments, registry: registry) {
         case .success(let words): asked = words
         case .failure(let wrong): return fail(wrong.message, 2)
         }
@@ -61,7 +62,7 @@ public enum DeveloperTrial {
             guard let output, let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]) else { return }
             output.write(data + Data("\n".utf8))
         }
-        let engine = Engine(environment: ProcessInfo.processInfo.environment)
+        let engine = Engine(environment: ProcessInfo.processInfo.environment, registry: registry)
         // The command that routes `try` here routes `hook permission` too.
         engine.hookCommand = Engine.ownHookCommand
         let printer = Printer()
@@ -70,7 +71,8 @@ public enum DeveloperTrial {
         row(["begin": true])
         do {
             let lent = Engine.ownHookCommand.map { own in
-                Lent(run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment), refused: { _, because in print("Not a builder: \(because)") })
+                Lent(tools: registry.agent(asked.kind)?.builder?.lent ?? [], run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment),
+                     refused: { _, because in print("Not a builder: \(because)") })
             }
             id = try engine.launch(asked.kind, folder: FileManager.default.currentDirectoryPath, model: nil, mode: nil, effort: nil,
                                    planB: asked.planB, assistant: asked.assistant ? .building : nil, lent: lent) { written, line in

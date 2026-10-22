@@ -24,7 +24,7 @@ struct Template: Identifiable {
         let folder = share.appendingPathComponent("templates")
         return present(share).compactMap { name in
             guard let space = Spaces(root: folder).named(name),
-                  let declared = Declaration.read(space, home: URL(fileURLWithPath: "/"), kinds: Engine.kinds).declaration else { return nil }
+                  let declared = Declaration.read(space, home: URL(fileURLWithPath: "/"), kinds: Registry.app.kinds).declaration else { return nil }
             return Template(id: name, title: declared.title, line: declared.description ?? "", rights: declared.rights,
                             follows: declared.folder == placeholder, preview: NSImage(contentsOf: folder.appendingPathComponent("\(name).png")))
         }

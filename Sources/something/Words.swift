@@ -35,7 +35,7 @@ enum Words {
     /// from `locale`, the 12 or 24 hours from `clock`: only the person's own locale carries their choice in System Settings.
     static func journal(_ line: JournalLine, names: [String: String], home: String, now: Date = Date(), calendar: Calendar = .current,
                         locale: Locale = Words.english, clock: Locale = .current) -> String {
-        let kind = line.kind.map(Programs.name(of:))
+        let kind = line.kind.map(Registry.app.name(of:))
         let name = line.agent.flatMap { names[$0] }
         let who = (kind ?? "an agent") + (name.map { " “\($0)”" } ?? "")
         let text = line.text.map(Words.oneLine)

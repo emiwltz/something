@@ -21,8 +21,6 @@ import SomethingCore
     /// One builder in the agent menu.
     struct Entry: Identifiable { let id: String, title: String, checked: Bool, enabled: Bool, note: String? }
 
-    /// The kinds that can build, in the order they are offered: by how much each asks before acting.
-    static let builders = ["claude", "codex", "opencode", "pi"]
     static let idleLimit: TimeInterval = 30 * 60
 
     @ObservationIgnored let engine: Engine
@@ -97,11 +95,6 @@ import SomethingCore
     /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
     @ObservationIgnored private var queued: [String] = []
     @ObservationIgnored private var launch = 0
-    /// What the building assistant is lent: something's own commands, run by this program outside the agent's sandbox.
-    @ObservationIgnored private(set) lazy var lent: Lent? = Bundle.main.executableURL.map { program in
-        Lent(run: Lent.program(program.resolvingSymlinksInPath().path, environment: ProcessInfo.processInfo.environment),
-             refused: { [weak self] kind, because in self?.cannotBuild(kind, because) })
-    }
     /// Where the assistant's pieces are drawn, in its hosting view: the window takes the clicks there only (Floater).
     @ObservationIgnored var drawn: [CGRect] = []
 
@@ -143,9 +136,9 @@ import SomethingCore
     /// assistant again only then.
     func refresh() {
         let state = engine.state
-        keep(\.installed, state.kinds.filter { AssistantModel.builders.contains($0.key) }.compactMapValues(\.installed))
+        keep(\.installed, state.kinds.filter { builders.contains($0.key) }.compactMapValues(\.installed))
         keep(\.notes, state.kinds.compactMapValues(\.note))
-        let offered = AssistantModel.builders.filter { installed[$0] == true && refused[$0] == nil }
+        let offered = builders.filter { installed[$0] == true && refused[$0] == nil }
         if !offered.contains(kind ?? "") { kind = offered.first { $0 == preferred } ?? offered.first }
         keep(\.agent, state.agents.first { $0.id == id })
         let thread = state.threads.first { $0.agent == id }
@@ -167,16 +160,31 @@ import SomethingCore
         if self[keyPath: property] != value { self[keyPath: property] = value }
     }
 
-    var name: String { Programs.name(of: kind ?? preferred ?? "claude") }
+    /// The kinds that can build, in the order they are offered (Extensions.swift).
+    var builders: [String] { engine.registry.builders.map(\.kind) }
+
+    var name: String { engine.registry.name(of: kind ?? preferred ?? builders.first ?? "") }
+
+    /// What to type in Terminal to sign the builder in: its program, whose name is its kind.
+    var command: String { kind ?? builders.first ?? "" }
+
+    /// What the chosen builder is lent: something's own commands its descriptor takes, run by this program outside
+    /// the agent's sandbox; nil when it takes none.
+    var lent: Lent? {
+        guard let tools = kind.flatMap(engine.registry.agent)?.builder?.lent, !tools.isEmpty,
+              let program = Bundle.main.executableURL else { return nil }
+        return Lent(tools: tools, run: Lent.program(program.resolvingSymlinksInPath().path, environment: ProcessInfo.processInfo.environment),
+                    refused: { [weak self] kind, because in self?.cannotBuild(kind, because) })
+    }
 
     /// Whether every builder was looked for and none can build.
     var noAgent: Bool { kind == nil && !installed.isEmpty }
 
     /// What the capsule says when no builder is offered.
     var notice: String {
-        let found = AssistantModel.builders.filter { installed[$0] == true }
+        let found = builders.filter { installed[$0] == true }
         if found.count == 1, let because = refused[found[0]] { return because }
-        return found.isEmpty ? "No coding agent found." : "\(found.map(Programs.name).joined(separator: ", ")) can't build spaces."
+        return found.isEmpty ? "No coding agent found." : "\(found.map(engine.registry.name).joined(separator: ", ")) can't build spaces."
     }
 
     /// Whether a space is being made from the blank page: the sidebar shows a "New Space" row meanwhile.
@@ -230,7 +238,7 @@ import SomethingCore
         var (status, error): (Int?, String?) = (nil, nil)
         if case .number(let number)? = apiRetry["errorStatus"] { status = Int(number) }
         if case .string(let kind)? = apiRetry["error"] { error = kind }
-        return ClaudeDriver.refusesSignIn(status: status, error: error)
+        return agent.flatMap { engine.registry.agent($0.kind) }?.refusesSignIn(status: status, error: error) ?? false
     }
 
     /// What went wrong with the last message, for the red row; nil when nothing did.
@@ -251,28 +259,26 @@ import SomethingCore
 
     /// The drawer's first lines: where the agent works and how it asks, then how long a conversation lasts.
     var firstLines: [String] {
-        let folder = Words.path(places.spaces.path, home: places.home.path)
-        let how = switch kind {
-        case "opencode": "OpenCode works in \(folder). It asks as your own OpenCode settings say."
-        case "pi": "pi works in \(folder). pi never asks: it can run any command on your Mac."
-        default: (id == nil ? askEverything : asking) ? "\(name) works in \(folder). It asks you before every change."
-            : "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you."
-        }
+        let folder = Words.path(places.spaces.path, home: places.home.path), agent = kind.flatMap(engine.registry.agent)
+        let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
+            else if agent?.builder?.preAllowed == false { "\(name) works in \(folder). It asks as your own \(name) settings say." }
+            else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
+            else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
         return [how, "A new conversation starts each time something starts."]
             + (idled ? ["\(name) was stopped to save memory. Your next message starts it again."] : [])
     }
 
     /// The builders found, as the agent menus list them.
     var entries: [Entry] {
-        AssistantModel.builders.filter { installed[$0] == true }.map { kind in
-            let because = refused[kind] != nil ? "can't build spaces" : kind == "pi" ? "never asks before acting" : nil
-            let title = [Programs.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
+        builders.filter { installed[$0] == true }.map { kind in
+            let because = refused[kind] != nil ? "can't build spaces" : engine.registry.agent(kind)?.neverAsks == true ? "never asks before acting" : nil
+            let title = [engine.registry.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
             return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind])
         }
     }
 
-    /// Whether Ask Before Every Change means anything for the chosen builder: only Claude Code and Codex are pre-allowed.
-    var canAskEverything: Bool { kind == "claude" || kind == "codex" }
+    /// Whether Ask Before Every Change means anything for the chosen builder: only one whose building is pre-allowed.
+    var canAskEverything: Bool { kind.flatMap(engine.registry.agent)?.builder?.preAllowed == true }
 
     // MARK: What the person does
 
@@ -323,7 +329,7 @@ import SomethingCore
     }
 
     /// Copies the command that signs the builder in, in Terminal.
-    func copyCommand() { copy(kind ?? "claude") }
+    func copyCommand() { copy(command) }
 
     /// Chooses the builder `kind`; a conversation running with another one ends, after the person said so.
     func choose(_ chosen: String) {
@@ -334,7 +340,7 @@ import SomethingCore
             Library.WindowFile.update(places) { $0.assistant = chosen }
         }
         if id != nil, agent?.alive != false, !stopped {
-            confirmSwitch(name, Programs.name(of: chosen), switched)
+            confirmSwitch(name, engine.registry.name(of: chosen), switched)
         } else {
             switched()
         }
