@@ -37,12 +37,6 @@ public struct Registry: Sendable {
     /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
     public var limits: [String: [String]] { launchable.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
-    /// Per kind, the modes known to ask no less than the default (`AgentDescriptor.asksAsMuch`); a kind without any is
-    /// left out, so any mode for it counts as lowering asking.
-    var asksAsMuch: [String: Set<String>] {
-        Dictionary(uniqueKeysWithValues: agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) })
-    }
-
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
     /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)

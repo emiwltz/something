@@ -588,6 +588,7 @@ extension Driving {
                                         Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
                                         Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
                                 effortOnlyWhenOffered: true, command: { ClaudeDriver.command($0) },
-                                planB: { try ClaudeDriver.command($0, host: $1) }, refusesSignIn: ClaudeDriver.refusesSignIn,
+                                planB: { try ClaudeDriver.command($0, host: $1) },
+                                refusesSignIn: { ClaudeDriver.refusesSignIn(status: $0, error: $1) },
                                 driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
 }

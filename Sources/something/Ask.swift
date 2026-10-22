@@ -340,7 +340,7 @@ enum Ask {
     /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button. The
     /// folder is shown from `home`.
     static func lowers(_ mode: String, kind: String, folder: String?, space: String, home: String = NSHomeDirectory()) -> NSAlert {
-        alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode, kind: kind)) (\(mode))?",
+        alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
               "The agent works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"). In this mode it asks you less before it acts.",
               buttons: ["Allow", "Don't Allow"], escape: 1)
     }
@@ -417,18 +417,15 @@ enum Ask {
     /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach an agent that
     /// never asks (pi), which never waits for a click.
     static func warning(for right: String) -> String? {
-        let never = Registry.app.agents.filter(\.neverAsks)
-        if right == "launch", !never.isEmpty {
-            let names = never.map(\.name)
-            return never.count == 1 ? "One of them, \(names[0]), runs commands and edits files without asking you first"
-                : "Some of them, \(names.joined(separator: " and ")), run commands and edit files without asking you first"
-        }
-        guard let agent = never.first(where: { right == "launch:" + $0.kind }) else { return nil }
-        return "\(agent.name) runs commands and edits files without asking you first"
+        // One agent never asks (pi); the sentence is written for one.
+        guard let agent = Registry.app.agents.first(where: \.neverAsks) else { return nil }
+        if right == "launch" { return "One of them, \(agent.name), runs commands and edits files without asking you first" }
+        return right == "launch:" + agent.kind ? "\(agent.name) runs commands and edits files without asking you first" : nil
     }
 
-    /// What a mode of `kind` that lowers asking lets the agent do, in plain words.
-    static func words(forMode mode: String, kind: String) -> String {
-        Registry.app.agent(kind)?.modeWords[mode] ?? "asks you less"
+    /// What a mode that lowers asking lets the agent do, in plain words: by the mode's name, whichever agent's
+    /// descriptor says it, as 0.2 did.
+    static func words(forMode mode: String) -> String {
+        Registry.app.agents.lazy.compactMap { $0.modeWords[mode] }.first ?? "asks you less"
     }
 }

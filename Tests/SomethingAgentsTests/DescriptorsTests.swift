@@ -18,7 +18,7 @@ import SomethingCore
         #expect(Programs.names == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"])
         #expect(Programs.runsOn == ["pi": "node"])
         #expect(Programs.homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
-        #expect(Registry.described.asksAsMuch == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"]])
+        #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"]])
         #expect(Watch.resumable == ["claude", "codex"])
         #expect(OtherReader.names == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
         // What the core received as its contract 1 list in 0.2: the kinds registered are exactly that floor today.

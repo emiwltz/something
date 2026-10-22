@@ -192,7 +192,7 @@ import WebKit
         #expect(!model.noAgent, "nothing is said before the programs were looked for")
         await look(model)
         #expect(model.kind == "codex" && model.entries.map(\.title) == ["Codex"] && model.entries.allSatisfy(\.enabled))
-        #expect(model.lent?.tools.map(\.name) == ["something_check"])
+        #expect(model.lent(for: "codex")?.tools.map(\.name) == ["something_check"])
         let old = "This Codex (0.150.2) is too old to build spaces: 0.163.0 or later is needed. Update Codex, then look for agents again."
         // The message that never reached it is back in the composer, without its context line.
         model.draft = "Make an invented board."
@@ -359,7 +359,7 @@ import WebKit
             model.choose(kind)
             #expect(model.kind == kind && model.command == kind)
             #expect(model.firstLines == [line, "A new conversation starts each time something starts."], "\(kind)")
-            #expect(model.canAskEverything == canAsk && (model.lent?.tools.map(\.name) ?? []) == lent, "\(kind)")
+            #expect(model.canAskEverything == canAsk && (model.lent(for: kind)?.tools.map(\.name) ?? []) == lent, "\(kind)")
         }
         model.choose("claude")
         model.toggleAsking()

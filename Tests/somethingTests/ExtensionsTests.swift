@@ -20,22 +20,26 @@ import Testing
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false])
     }
 
-    /// The sheet before a mode that lowers asking says what the mode lets the agent do, as 0.2 did for the modes it
-    /// knew; any other mode, or another kind's, "asks you less".
+    /// The sheet before a mode that lowers asking says what the mode lets the agent do, as 0.2 did: by the mode's
+    /// name, whatever the agent (an OpenCode agent named auto reads as Claude Code's auto); any other mode "asks you less".
     @Test func theModeWordsAreThoseOf0_2() {
-        let cases = [("acceptEdits", "claude", "edits files without asking you"), ("auto", "claude", "decides by itself what to ask you"),
-                     ("dontAsk", "claude", "never asks you, and does only what your settings already allow"),
-                     ("never", "codex", "never asks you before it runs a command"), ("invented-agent", "opencode", "asks you less"),
-                     ("default", "pi", "asks you less"), ("anything", "other", "asks you less")]
-        for (mode, kind, words) in cases { #expect(Ask.words(forMode: mode, kind: kind) == words, "\(kind) \(mode)") }
+        let cases = [("acceptEdits", "edits files without asking you"), ("auto", "decides by itself what to ask you"),
+                     ("dontAsk", "never asks you, and does only what your settings already allow"),
+                     ("never", "never asks you before it runs a command"), ("invented-agent", "asks you less"), ("default", "asks you less")]
+        for (mode, words) in cases { #expect(Ask.words(forMode: mode) == words, "\(mode)") }
+        #expect(Ask.warning(for: "launch") == "One of them, pi, runs commands and edits files without asking you first")
+        #expect(Ask.warning(for: "launch:pi") == "pi runs commands and edits files without asking you first")
         #expect(Ask.warning(for: "launch:claude") == nil && Ask.warning(for: "send:pi") == nil && Ask.warning(for: "state") == nil)
     }
 
-    /// No other file of the app names an agent: its kind as a word, a driver, or a descriptor. Comments may.
+    /// No other file of the app names an agent: its kind as a word, a driver, a descriptor, or its name in a sentence.
+    /// Comments may. A `.pi` after a type (CGFloat.pi) is the number.
     @Test func onlyExtensionsSwiftNamesAnAgent() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/something")
-        let named = #/"(claude|codex|opencode|pi|omp)"|(Claude|Codex|ACP|Pi)Driver|AgentDescriptor|\.(claude|codex|opencode|pi|omp)\b/#
+        let names = Registry.app.agents.map(\.name).joined(separator: "|")
+        let named = try Regex(#"(?:"(?:claude|codex|opencode|pi|omp)"|(?:Claude|Codex|ACP|Pi)Driver|AgentDescriptor|(?:^|[^\w.])\.(?:claude|codex|opencode|pi|omp)\b"#
+            + #"|"[^"]*\b(?:"# + names + #")\b[^"]*")"#)
         let files = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasSuffix(".swift") }
         #expect(files.count > 20, "the scan reads Sources/something")
         for name in files where name != "Extensions.swift" {

@@ -4,6 +4,7 @@ import SomethingAgents
 
 extension Registry {
     /// In the order of the state's kinds; the builders are offered in the same order, by how much each asks before
-    /// acting. Built once, at the first use; the engine gets the same value.
+    /// acting. Built once, at the first use. The app's windows read this value; the engine is given it too, for the
+    /// host's own checks.
     static let app = Registry([.claude, .codex, .opencode, .pi, .omp])
 }
