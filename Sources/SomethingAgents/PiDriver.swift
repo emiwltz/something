@@ -367,3 +367,12 @@ public final class PiDriver: Driver {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
 }
+
+extension Driving {
+    /// pi asks no permission and has no request to show: the sentence says so, for the consent window. It names its
+    /// conversation file itself; something learns it from get_state.
+    static let pi = Driving(kind: "pi", tested: "1.0.0",
+                            limits: ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
+                            picksThread: false,
+                            command: { PiDriver.command($0) }, driver: { PiDriver($0, write: $1, emit: $2, now: $3) })
+}

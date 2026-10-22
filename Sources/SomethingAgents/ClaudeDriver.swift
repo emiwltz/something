@@ -546,3 +546,16 @@ public final class ClaudeDriver: Driver {
         return String(decoding: data, as: UTF8.self)
     }
 }
+
+extension Driving {
+    /// None of `limits`: ClaudeTrial.swift showed that Claude takes an effort at launch (`--effort`) and during a session
+    /// (`apply_flag_settings` with `effortLevel`, from its next request to the model). Claude refuses an effort its
+    /// model does not list: `can.effort` follows `options.effort`. bypassPermissions is never among the modes: it
+    /// cannot be entered unless the launch allowed it, and something never allows it.
+    static let claude = Driving(kind: "claude", tested: "2.1.296",
+                                modes: [Option(value: "default", label: "Ask before acting"), Option(value: "acceptEdits", label: "Accept edits"),
+                                        Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
+                                        Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
+                                effortOnlyWhenOffered: true,
+                                command: { ClaudeDriver.command($0) }, driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
+}

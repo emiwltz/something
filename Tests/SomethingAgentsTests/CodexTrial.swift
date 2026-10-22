@@ -81,7 +81,7 @@ import SomethingCore
         }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
                       folder: folders[2].path, environment: environment)
-        agent = try Engine.start("codex", launch, spawn, asked: { _ in false }, record: { [exchange] written, line in
+        agent = try Engine.start(.codex, launch, spawn, asked: { _ in false }, record: { [exchange] written, line in
             // Both come on the main queue: written lines from the driver, read ones from the engine.
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             exchange.rows.append([written ? "something" : "codex": frame])

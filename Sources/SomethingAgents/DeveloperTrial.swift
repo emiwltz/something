@@ -23,7 +23,7 @@ public enum DeveloperTrial {
     static func parse(_ arguments: [String]) -> Result<Asked, SpaceError> {
         guard arguments.first == "try" else { return .failure(SpaceError(usage)) }
         var words = arguments.dropFirst()
-        guard let kind = words.popFirst(), Engine.drivers[kind] != nil else { return .failure(SpaceError(usage)) }
+        guard let kind = words.popFirst(), Engine.launchable[kind] != nil else { return .failure(SpaceError(usage)) }
         var asked = Asked(kind: kind, record: nil)
         while let word = words.popFirst() {
             switch word {

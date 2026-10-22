@@ -5,14 +5,14 @@ import Foundation
 import SomethingCore
 
 extension Engine {
-    /// Starts `spawn` for one launch and joins it to its driver: lines and the end come back on the main queue.
-    /// `asked` says, on the main queue, whether something asked this agent to stop; `record` sees every line, in
-    /// (true) and out (false), for `something try --record`. Throws NOT_SUPPORTED for a kind without a driver, then
-    /// as Spawn.start does, and AGENT_STOPPED when the program closed its input at once.
+    /// Starts `spawn` for one launch of `driving`'s kind and joins it to its driver: lines and the end come back on the
+    /// main queue. `asked` says, on the main queue, whether something asked this agent to stop; `record` sees every
+    /// line, in (true) and out (false), for `something try --record`. Throws as Spawn.start does, and AGENT_STOPPED
+    /// when the program closed its input at once.
     /// With `spool`, Claude's plan B: the spool starts before the program and stops after its end.
-    static func start(_ kind: String, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
+    static func start(_ driving: Driving, _ launch: Launch, _ spawn: Spawn, spool: PermissionSpool? = nil, asked: @escaping (String) -> Bool,
                       record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> Launched {
-        let agent = Launched(kind, try driving(kind), launch, write: { [weak spawn] line in
+        let agent = Launched(driving, launch, write: { [weak spawn] line in
             guard let spawn else { throw CodedError("AGENT_STOPPED", "The agent has ended; launch or resume it to go on.") }
             try spawn.write(line)
             record?(true, line)

@@ -536,3 +536,15 @@ public final class CodexDriver: Driver {
         return String(decoding: data, as: UTF8.self)
     }
 }
+
+extension Driving {
+    /// None of `limits`: Codex takes a model, an effort and an approval policy with each turn it starts. The modes are
+    /// the approval policies 0.163 accepts ("on-failure" is gone). A model the catalog does not list (a custom
+    /// provider's) offers no effort, and Codex would take any word. Codex names the thread when it starts it.
+    static let codex = Driving(kind: "codex", tested: "0.163.0",
+                               modes: [Option(value: "on-request", label: "Ask when needed"),
+                                       Option(value: "untrusted", label: "Ask before most commands"),
+                                       Option(value: "never", label: "Never ask (refuse what is not allowed)")],
+                               effortOnlyWhenOffered: true, picksThread: false,
+                               command: { CodexDriver.command($0) }, driver: { CodexDriver($0, write: $1, emit: $2, now: $3) })
+}

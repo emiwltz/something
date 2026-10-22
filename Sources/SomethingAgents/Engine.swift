@@ -21,17 +21,17 @@ public final class Engine {
         programs = Programs(environment: environment)
     }
 
-    /// The kinds something can launch, with what their driver can do.
-    static let drivers = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap { agent in agent.driving.map { (agent.kind, $0) } })
+    /// What something can launch, by kind: what each driver can do, and how to make one.
+    static let launchable = Dictionary(uniqueKeysWithValues: AgentDescriptor.all.compactMap(\.driving).map { ($0.kind, $0) })
 
     /// What the driver of `kind` can do. Throws NOT_SUPPORTED for a kind without a driver.
     static func driving(_ kind: String) throws -> Driving {
-        guard let driving = drivers[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        guard let driving = launchable[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
         return driving
     }
 
     /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
-    public static let kinds = Kinds(launchable: Set(drivers.keys), readOnly: Set(AgentDescriptor.all.map(\.kind)).subtracting(drivers.keys))
+    public static let kinds = Kinds(launchable: Set(launchable.keys), readOnly: Set(AgentDescriptor.all.map(\.kind)).subtracting(launchable.keys))
 
     private let environment: [String: String]
     /// Where programs are found; a test empties its system folders (`Engine.throwaway`).
@@ -102,7 +102,7 @@ public final class Engine {
 
     private func make() -> State {
         let kinds = Programs.kinds.map { kind in
-            (kind, Kind(launch: Engine.drivers[kind] != nil, installed: installed[kind], tested: Engine.drivers[kind]?.tested ?? "none",
+            (kind, Kind(launch: Engine.launchable[kind] != nil, installed: installed[kind], tested: Engine.launchable[kind]?.tested ?? "none",
                         seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
         }
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
@@ -151,7 +151,7 @@ public final class Engine {
 
     /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
     /// Static, so that `something check` gives the same without an engine.
-    public static var limits: [String: [String]] { drivers.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
+    public static var limits: [String: [String]] { launchable.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
@@ -160,7 +160,7 @@ public final class Engine {
     /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
     /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
     public static func lowersAsking(mode: String, kind: String) throws -> Bool {
-        if let driving = drivers[kind], !driving.listsMoreModes, !driving.modes.isEmpty, !driving.modes.contains(where: { $0.value == mode }) {
+        if let driving = launchable[kind], !driving.listsMoreModes, !driving.modes.isEmpty, !driving.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
         }
         return !(asksAsMuch[kind] ?? []).contains(mode)
@@ -285,7 +285,7 @@ public final class Engine {
         var launch = Launch(agent: "\(kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
         (launch.assistant, launch.lent) = (assistant, assistant == nil ? nil : lent)
-        let started = try start(kind, driving, launch, program, planB: planB, record: record)
+        let started = try start(driving, launch, program, planB: planB, record: record)
         // Marked before the state changes, so that no space ever sees the assistant as one it may write to.
         if assistant != nil { assistants.insert(launch.agent) }
         launched.append(started)
@@ -296,15 +296,15 @@ public final class Engine {
     /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude that
     /// refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same one
     /// for a resume).
-    private func start(_ kind: String, _ driving: Driving, _ launch: Launch, _ program: Program, planB: Bool,
+    private func start(_ driving: Driving, _ launch: Launch, _ program: Program, planB: Bool,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
-        let spool = planB && kind == AgentDescriptor.claude.kind ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
+        let spool = planB && driving.kind == AgentDescriptor.claude.kind ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
         guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
         let first = launch.assistant == nil ? nil : hookCommand?.first.map { ($0 as NSString).deletingLastPathComponent }
         let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? driving.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing, first: first))
-        let agent = try Engine.start(kind, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
+        let agent = try Engine.start(driving, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
         agent.changed = { [weak self] in self?.update() }
         if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
             claude.fallback = { [weak self, weak spawn] in
@@ -312,7 +312,7 @@ public final class Engine {
                 var again = launch
                 // A resume continues the same conversation with plan B.
                 if !launch.resume { again.thread = UUID().uuidString.lowercased() }
-                guard let started = try? start(kind, driving, again, program, planB: true, record: record) else { return false }
+                guard let started = try? start(driving, again, program, planB: true, record: record) else { return false }
                 // The first program's end now reaches a Launched no longer listed: it changes nothing.
                 spawn.stop()
                 launched[index] = started
@@ -332,7 +332,7 @@ public final class Engine {
         guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(Programs.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
         }
-        guard seen.can.resume, Engine.drivers[kind] != nil else {
+        guard seen.can.resume, Engine.launchable[kind] != nil else {
             throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", seen.because["resume"] ?? "This conversation cannot be continued here.")
         }
         return try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)

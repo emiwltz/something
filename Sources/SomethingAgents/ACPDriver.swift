@@ -432,3 +432,15 @@ public final class ACPDriver: Driver {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
 }
+
+extension Driving {
+    /// Over ACP a second session/prompt during a turn is refused ("Session already has an active ACP prompt"), and
+    /// OpenCode has no steer there: a message for later waits in something's own queue. OpenCode's modes are its
+    /// agents; build and plan come with it, and others the person wrote show in `options.mode` once OpenCode lists
+    /// them. It offers an effort only for a model that has variants, and names the session when it starts it.
+    static let opencode = Driving(kind: "opencode", tested: "2.0.20",
+                                  limits: ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
+                                  modes: [Option(value: "build", label: "Build"), Option(value: "plan", label: "Plan")],
+                                  listsMoreModes: true, effortOnlyWhenOffered: true, picksThread: false,
+                                  command: { ACPDriver.command($0) }, driver: { ACPDriver($0, write: $1, emit: $2, now: $3) })
+}

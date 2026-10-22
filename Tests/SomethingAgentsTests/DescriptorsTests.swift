@@ -39,27 +39,29 @@ import SomethingCore
     }
 
     @Test func whatEachDriverCanDoIsThatOf0_2() {
-        #expect(Engine.drivers.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0"])
-        #expect(Engine.drivers.mapValues(\.limits) == [
+        // Each Driving names the kind of the descriptor that holds it.
+        #expect(AgentDescriptor.all.allSatisfy { $0.driving == nil || $0.driving?.kind == $0.kind })
+        #expect(Engine.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0"])
+        #expect(Engine.launchable.mapValues(\.limits) == [
             "claude": [:], "codex": [:],
             "opencode": ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
             "pi": ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
         ])
-        #expect(Engine.drivers.mapValues { $0.modes.map(\.value) } == [
+        #expect(Engine.launchable.mapValues { $0.modes.map(\.value) } == [
             "claude": ["default", "acceptEdits", "plan", "auto", "dontAsk"], "codex": ["on-request", "untrusted", "never"],
             "opencode": ["build", "plan"], "pi": [],
         ])
-        #expect(Engine.drivers.mapValues { $0.modes.map(\.label) } == [
+        #expect(Engine.launchable.mapValues { $0.modes.map(\.label) } == [
             "claude": ["Ask before acting", "Accept edits", "Plan only", "Auto (Claude decides what is safe)", "Never ask (refuse what is not allowed)"],
             "codex": ["Ask when needed", "Ask before most commands", "Never ask (refuse what is not allowed)"],
             "opencode": ["Build", "Plan"], "pi": [],
         ])
         // In 0.2 only OpenCode's modes were not its driver's list alone (Engine.lowersAsking cast to ACPDriver).
-        #expect(Engine.drivers.filter(\.value.listsMoreModes).keys.sorted() == ["opencode"])
-        #expect(Engine.drivers.filter(\.value.effortOnlyWhenOffered).keys.sorted() == ["claude", "codex", "opencode"])
-        #expect(Engine.drivers.filter(\.value.picksThread).keys.sorted() == ["claude"])
+        #expect(Engine.launchable.filter(\.value.listsMoreModes).keys.sorted() == ["opencode"])
+        #expect(Engine.launchable.filter(\.value.effortOnlyWhenOffered).keys.sorted() == ["claude", "codex", "opencode"])
+        #expect(Engine.launchable.filter(\.value.picksThread).keys.sorted() == ["claude"])
         // Each kind's factory makes its own driver.
-        let made = Engine.drivers.mapValues { driving in
+        let made = Engine.launchable.mapValues { driving in
             String(describing: type(of: driving.driver(Launch(agent: "x-1", folder: "/Users/example/shop"), { _ in }, { _ in }, { "" })))
         }
         #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver"])

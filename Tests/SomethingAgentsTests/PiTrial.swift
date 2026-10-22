@@ -66,7 +66,7 @@ import SomethingCore
         spawn = Spawn(path: program, arguments: PiDriver.command(launch).arguments, folder: launch.folder, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
-        agent = try Engine.start("pi", launch, spawn, asked: { _ in stop.done }, record: { written, line in
+        agent = try Engine.start(.pi, launch, spawn, asked: { _ in stop.done }, record: { written, line in
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             guard written || !PiRun.unread(frame) else { return }
             exchange.rows.append([written ? "something" : "pi": frame])

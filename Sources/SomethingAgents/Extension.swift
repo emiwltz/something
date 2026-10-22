@@ -1,8 +1,8 @@
 // Extension: what something knows of each agent, written once as data. The tables the engine, the programs and the
 // watch used to keep apart (kinds, names, install sentences, modes that ask as much, which conversations continue
 // here) are computed from these descriptors, so that knowing one more agent is one more descriptor. For a kind
-// something launches, its Driving says what its driver can do and makes one; the driver's code and the reader stay
-// in their own files.
+// something launches, its Driving says what its driver can do and makes one; each Driving, the driver's code and
+// the reader stay in their own files.
 import Foundation
 import SomethingCore
 
@@ -81,6 +81,8 @@ extension AgentDescriptor {
 /// What something knows of a kind it launches: what its driver can do, the program's arguments, and the driver itself.
 /// The engine, Launched and `something check` read these; no driver is asked about itself.
 struct Driving: Sendable {
+    /// Its descriptor's kind, which DescriptorsTests checks: one value names the agent a launch makes.
+    var kind: String
     /// The newest version of the program its driver was proven on (`kinds.<kind>.tested`).
     var tested: String
     /// The `can` entries that are always false for this kind, each with its sentence (`because`, `granted.limits`).
@@ -102,44 +104,4 @@ struct Driving: Sendable {
     /// (ISO 8601).
     var driver: @Sendable (_ launch: Launch, _ write: @escaping (Data) throws -> Void, _ emit: @escaping (AgentEvent) -> Void,
                            _ now: @escaping () -> String) -> any Driver
-}
-
-extension Driving {
-    /// None of `limits`: ClaudeTrial.swift showed that Claude takes an effort at launch (`--effort`) and during a session
-    /// (`apply_flag_settings` with `effortLevel`, from its next request to the model). Claude refuses an effort its
-    /// model does not list: `can.effort` follows `options.effort`. bypassPermissions is never among the modes: it
-    /// cannot be entered unless the launch allowed it, and something never allows it.
-    static let claude = Driving(tested: "2.1.296",
-                                modes: [Option(value: "default", label: "Ask before acting"), Option(value: "acceptEdits", label: "Accept edits"),
-                                        Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
-                                        Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
-                                effortOnlyWhenOffered: true,
-                                command: { ClaudeDriver.command($0) }, driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
-
-    /// None of `limits`: Codex takes a model, an effort and an approval policy with each turn it starts. The modes are
-    /// the approval policies 0.163 accepts ("on-failure" is gone). A model the catalog does not list (a custom
-    /// provider's) offers no effort, and Codex would take any word. Codex names the thread when it starts it.
-    static let codex = Driving(tested: "0.163.0",
-                               modes: [Option(value: "on-request", label: "Ask when needed"),
-                                       Option(value: "untrusted", label: "Ask before most commands"),
-                                       Option(value: "never", label: "Never ask (refuse what is not allowed)")],
-                               effortOnlyWhenOffered: true, picksThread: false,
-                               command: { CodexDriver.command($0) }, driver: { CodexDriver($0, write: $1, emit: $2, now: $3) })
-
-    /// Over ACP a second session/prompt during a turn is refused ("Session already has an active ACP prompt"), and
-    /// OpenCode has no steer there: a message for later waits in something's own queue. OpenCode's modes are its
-    /// agents; build and plan come with it, and others the person wrote show in `options.mode` once OpenCode lists
-    /// them. It offers an effort only for a model that has variants, and names the session when it starts it.
-    static let opencode = Driving(tested: "2.0.20",
-                                  limits: ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
-                                  modes: [Option(value: "build", label: "Build"), Option(value: "plan", label: "Plan")],
-                                  listsMoreModes: true, effortOnlyWhenOffered: true, picksThread: false,
-                                  command: { ACPDriver.command($0) }, driver: { ACPDriver($0, write: $1, emit: $2, now: $3) })
-
-    /// pi asks no permission and has no request to show: the sentence says so, for the consent window. It names its
-    /// conversation file itself; something learns it from get_state.
-    static let pi = Driving(tested: "1.0.0",
-                            limits: ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
-                            picksThread: false,
-                            command: { PiDriver.command($0) }, driver: { PiDriver($0, write: $1, emit: $2, now: $3) })
 }

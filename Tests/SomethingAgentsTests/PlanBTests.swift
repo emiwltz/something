@@ -290,7 +290,7 @@ import SomethingCore
         let launch = Launch(agent: "claude-1", folder: place.work.path)
         let command = ClaudeDriver.command(launch, hook: [place.hook, "hook", "permission", "--spool", folder.path])
         let spawn = Spawn(path: place.bin.appendingPathComponent("claude").path, arguments: command.arguments, folder: launch.folder, environment: place.environment)
-        let agent = try Engine.start("claude", launch, spawn, asked: { _ in true })
+        let agent = try Engine.start(.claude, launch, spawn, asked: { _ in true })
         _ = try agent.send("Please run-echo now.", when: "next")
         try await until("the tool to fail") { agent.queue.fold.turns.first?.items.first { $0.kind == "tool" }?.tool?.status == "failed" }
         #expect(agent.queue.fold.requests.isEmpty, "no window: nobody is there to answer")

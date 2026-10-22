@@ -63,7 +63,7 @@ import SomethingCore
         spawn = Spawn(path: program, arguments: ACPDriver.command(launch).arguments, folder: work.path, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
-        agent = try Engine.start("opencode", launch, spawn, asked: { _ in stop.done }, record: { written, line in
+        agent = try Engine.start(.opencode, launch, spawn, asked: { _ in stop.done }, record: { written, line in
             let frame = (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)
             exchange.rows.append([written ? "something" : "opencode": frame])
         })

@@ -119,20 +119,20 @@ final class Launched {
     /// The errors of a resume whose program never took the conversation.
     static let refusals: Set = ["HELD_ELSEWHERE", "THREAD_NOT_FOUND"]
 
-    /// One launch of `kind`, whose driver `driving` makes.
-    init(_ kind: String, _ driving: Driving, _ launch: Launch, write: @escaping (Data) throws -> Void, now: @escaping () -> String) {
+    /// One launch of `driving`'s kind, whose driver it makes.
+    init(_ driving: Driving, _ launch: Launch, write: @escaping (Data) throws -> Void, now: @escaping () -> String) {
         self.now = now
         self.driving = driving
         resumes = launch.resume
-        queue = HeldQueue(Fold(Launched.fresh(kind, driving, launch)))
+        queue = HeldQueue(Fold(Launched.fresh(driving, launch)))
         var emit: (AgentEvent) -> Void = { _ in }
         driver = driving.driver(launch, write, { emit($0) }, now)
         emit = { [weak self] event in self?.record(event) }
     }
 
     /// A launched agent before its first event: everything it can do, but for its kind's limits.
-    private static func fresh(_ kind: String, _ driving: Driving, _ launch: Launch) -> Agent {
-        var agent = Agent(id: launch.agent, kind: kind, origin: "launched")
+    private static func fresh(_ driving: Driving, _ launch: Launch) -> Agent {
+        var agent = Agent(id: launch.agent, kind: driving.kind, origin: "launched")
         agent.folder = launch.folder
         agent.name = (launch.folder as NSString).lastPathComponent
         agent.thread = driving.picksThread || launch.resume ? launch.thread : nil

@@ -61,7 +61,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         let allowed = assistant == nil ? "Bash,Edit,Read,AskUserQuestion" : "Bash,Edit,Write,Read"
         spawn = Spawn(path: program, arguments: command.arguments + ["--tools", allowed], folder: work.path, environment: environment)
         var record: (Bool, Data) -> Void = { _, _ in }
-        agent = try Engine.start("claude", launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
+        agent = try Engine.start(.claude, launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
         record = { [weak self] written, line in
             DispatchQueue.main.async { self?.lines.append((written, String(decoding: line, as: UTF8.self))) }
         }
