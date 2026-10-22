@@ -41,15 +41,16 @@ final class Stopped: @unchecked Sendable { var done = false }
         var launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
         launch.assistant = assistant
         self.work = work
-        var spool: PermissionSpool?
+        var host = HostFacts()
         var command = ClaudeDriver.command(launch)
         if planB {
             let tools = root.appendingPathComponent("tools"), hook = tools.appendingPathComponent("something").path
             try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
             try await PlanBTests.buildHook(hook, in: tools)
             // The product's own path shape, space included, so the hook command's quoting meets the real shell.
-            spool = PermissionSpool(folder: root.appendingPathComponent("Application Support/spool/claude-trial-\(launch.thread)").path)
-            command = ClaudeDriver.command(launch, hook: [hook, "hook", "permission", "--spool", spool!.folder])
+            host = HostFacts(hookCommand: [hook, "hook", "permission"], spools: root.appendingPathComponent("Application Support/spool").path)
+            launch.planB = true
+            command = try ClaudeDriver.command(launch, host: host)
         }
         let tools = assistant == nil ? "" : try AssistantBuild.tools(in: root) + ":"
         var environment = ["HOME": home.path, "CLAUDE_CONFIG_DIR": home.appendingPathComponent(".claude").path,
@@ -61,7 +62,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         let allowed = assistant == nil ? "Bash,Edit,Read,AskUserQuestion" : "Bash,Edit,Write,Read"
         spawn = Spawn(path: program, arguments: command.arguments + ["--tools", allowed], folder: work.path, environment: environment)
         var record: (Bool, Data) -> Void = { _, _ in }
-        agent = try Engine.start(.claude, launch, spawn, spool: spool, asked: { _ in false }, record: { record($0, $1) })
+        agent = try Engine.start(.claude, launch, spawn, host: host, asked: { _ in false }, record: { record($0, $1) })
         record = { [weak self] written, line in
             DispatchQueue.main.async { self?.lines.append((written, String(decoding: line, as: UTF8.self))) }
         }

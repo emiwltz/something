@@ -102,9 +102,20 @@ struct Driving: Sendable {
     var resumeFolder: (@Sendable (_ thread: String) throws -> String)?
     /// The program's arguments for a launch, and what it changes in the person's environment.
     var command: @Sendable (Launch) -> Command
+    /// The command of a launch that takes plan B (`Launch.planB`), for a kind that has one: Claude's permission
+    /// hook. Throws LAUNCH_FAILED when the host lacks what it needs.
+    var planB: (@Sendable (Launch, HostFacts) throws -> Command)?
     /// Makes the driver of one launch. `write` hands one whole line (without its newline) to the program and throws
     /// AGENT_STOPPED once it no longer reads; `emit` takes what happened; `now` is the time of each item and request
     /// (ISO 8601).
     var driver: @Sendable (_ launch: Launch, _ write: @escaping (Data) throws -> Void, _ emit: @escaping (AgentEvent) -> Void,
                            _ now: @escaping () -> String) -> any Driver
+}
+
+/// What the host knows that a kind's command or driver may need, the same for every launch.
+public struct HostFacts: Sendable {
+    /// This program's words that answer an agent's hook (`<abs>/something hook permission`); nil when unknown.
+    public var hookCommand: [String]?
+    /// Where a launch may keep files as long as it runs (plan B's spools); nil: its kind's own place.
+    public var spools: String?
 }

@@ -243,7 +243,7 @@ public final class Engine {
     }
 
     /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
-    /// `hook permission` runs `SpoolHook.main`. Nil until its owner sets it (the app and `something try` set
+    /// `hook permission` answers that hook. Nil until its owner sets it (the app and `something try` set
     /// `ownHookCommand`), and plan B is then not offered. Its folder comes first in the assistant's PATH, so that the
     /// `something` the assistant runs is this one, the one its rules allow.
     public var hookCommand: [String]?
@@ -251,8 +251,9 @@ public final class Engine {
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
     public static var ownHookCommand: [String]? { Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] } }
 
-    /// Where plan B's spool folders go; a test's own folder in tests.
-    var spools = Spool.root
+    /// Where plan B's spool folders go: nil for its kind's own place (Claude's: the person's Application Support); a
+    /// test's own folder in tests.
+    var spools: String?
 
     /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
     public private(set) var assistants: Set<String> = []
@@ -270,7 +271,7 @@ public final class Engine {
                           assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
 
-    /// `launch` above, with plan B forced for Claude (`something try --plan-b`) and every line given to `record`.
+    /// `launch` above, with its kind's plan B forced (`something try --plan-b`) and every line given to `record`.
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
@@ -285,8 +286,8 @@ public final class Engine {
         count += 1
         var launch = Launch(agent: "\(kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)
         if let resume { (launch.thread, launch.resume) = (resume, true) }
-        (launch.assistant, launch.lent) = (assistant, assistant == nil ? nil : lent)
-        let started = try start(driving, launch, program, planB: planB, record: record)
+        (launch.assistant, launch.lent, launch.planB) = (assistant, assistant == nil ? nil : lent, planB)
+        let started = try start(driving, launch, program, record: record)
         // Marked before the state changes, so that no space ever sees the assistant as one it may write to.
         if assistant != nil { assistants.insert(launch.agent) }
         launched.append(started)
@@ -294,33 +295,31 @@ public final class Engine {
         return launch.agent
     }
 
-    /// Starts one launch of `program` and joins it to its driver and, for Claude's plan B, to its spool. A Claude that
-    /// refuses plan A is launched again with plan B, under the same agent id and a new conversation id (the same one
-    /// for a resume).
-    private func start(_ driving: Driving, _ launch: Launch, _ program: Program, planB: Bool,
+    /// Starts one launch of `program` and joins it to its driver. A launch whose kind has a plan B may ask, through
+    /// its driver, to be launched again with it (Claude, when its first way is refused): under the same agent id and
+    /// a new conversation id (the same one for a resume).
+    private func start(_ driving: Driving, _ launch: Launch, _ program: Program,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
-        let spool = planB && driving.kind == AgentDescriptor.claude.kind ? PermissionSpool(folder: (spools as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")) : nil
-        guard spool == nil || hookCommand != nil else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
+        let host = HostFacts(hookCommand: hookCommand, spools: spools)
         let first = launch.assistant == nil ? nil : hookCommand?.first.map { ($0 as NSString).deletingLastPathComponent }
-        let command = spool.map { ClaudeDriver.command(launch, hook: hookCommand! + ["--spool", $0.folder]) } ?? driving.command(launch)
+        let command = try launch.planB ? driving.planB?(launch, host) ?? driving.command(launch) : driving.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing, first: first))
-        let agent = try Engine.start(driving, launch, spawn, spool: spool, asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
-        agent.changed = { [weak self] in self?.update() }
-        if !planB, hookCommand != nil, let claude = agent.driver as? ClaudeDriver {
-            claude.fallback = { [weak self, weak spawn] in
-                guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
-                var again = launch
-                // A resume continues the same conversation with plan B.
-                if !launch.resume { again.thread = UUID().uuidString.lowercased() }
-                guard let started = try? start(driving, again, program, planB: true, record: record) else { return false }
-                // The first program's end now reaches a Launched no longer listed: it changes nothing.
-                spawn.stop()
-                launched[index] = started
-                update()
-                return true
-            }
+        let relaunch: (() -> Bool)? = launch.planB || driving.planB == nil ? nil : { [weak self, weak spawn] in
+            guard let self, let spawn, let index = launched.firstIndex(where: { $0.spawn === spawn }) else { return false }
+            var again = launch
+            again.planB = true
+            if !launch.resume { again.thread = UUID().uuidString.lowercased() }
+            guard let started = try? start(driving, again, program, record: record) else { return false }
+            // The first program's end now reaches a Launched no longer listed: it changes nothing.
+            spawn.stop()
+            launched[index] = started
+            update()
+            return true
         }
+        let agent = try Engine.start(driving, launch, spawn, host: host, relaunch: relaunch,
+                                     asked: { [weak self] id in self?.stopping.contains(id) == true }, record: record)
+        agent.changed = { [weak self] in self?.update() }
         return (agent, spawn)
     }
 

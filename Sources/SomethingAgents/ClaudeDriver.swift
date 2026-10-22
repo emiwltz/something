@@ -16,6 +16,18 @@ public final class ClaudeDriver: Driver {
     /// launch only.
     public static func command(_ launch: Launch) -> Command { command(launch, hook: nil) }
 
+    /// Plan B's command: the host's hook command, with the launch's own spool folder. Throws LAUNCH_FAILED when the
+    /// host does not know its hook command.
+    static func command(_ launch: Launch, host: HostFacts) throws -> Command {
+        guard let hook = host.hookCommand else { throw CodedError("LAUNCH_FAILED", "Plan B needs something's own program to answer Claude Code's permission requests, and this launch does not know it; launch Claude Code from the something app.") }
+        return command(launch, hook: hook + ["--spool", spool(launch, host)])
+    }
+
+    /// Plan B's spool folder for `launch`: <agent>-<conversation id> in the host's spools (PermissionSpool.swift).
+    static func spool(_ launch: Launch, _ host: HostFacts) -> String {
+        ((host.spools ?? Spool.root) as NSString).appendingPathComponent("\(launch.agent)-\(launch.thread)")
+    }
+
     /// Plan B, when `hook` is the command something answers Claude's hook with (`<abs>/something hook permission
     /// --spool <dir>`): no prompt tool, and a PermissionRequest hook, passed in `--settings` for this launch only,
     /// asks something through files instead (PermissionSpool.swift). Nothing is written in Claude's settings.
@@ -80,11 +92,12 @@ public final class ClaudeDriver: Driver {
     /// one is known, since the person's own settings may pick a model other than "default".
     private var models: [[String: Any]]?
     private var model: String?
-    /// Plan B's answer: writes a decision for a spool uuid. Set by the engine.
-    var hookReply: ((String, [String: Any]) -> PermissionSpool.Delivery)?
+    /// Plan B's spool, which this launch's hook asks through: started at `join`, stopped when the program is released.
+    private var spool: PermissionSpool?
     /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
     /// Called once at most, when Claude refused `initialize` or did not know the prompt tool, before any message.
-    /// Both triggers are guesses, not seen from a real Claude: no version without `stdio` was recorded.
+    /// Both triggers are guesses, not seen from a real Claude: no version without `stdio` was recorded. Offered only
+    /// when the host knows its hook command (`join`).
     var fallback: (() -> Bool)?
 
     public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
@@ -176,7 +189,7 @@ public final class ClaudeDriver: Driver {
         let reply: [String: Any] = allowed.map { ["behavior": "allow", "updatedInput": $0] }
             ?? ["behavior": "deny", "message": question ? "The person chose not to answer." : "The person refused this in something."]
         if ask.hook {
-            switch hookReply?(ask.claudeID, reply) ?? .gone {
+            switch spool?.answer(ask.claudeID, reply) ?? .gone {
             case .written: asks[request] = nil
             case .gone:
                 // The hook ended meanwhile: the request was withdrawn, and its window closes.
@@ -201,6 +214,22 @@ public final class ClaudeDriver: Driver {
         try? JSONSerialization.data(withJSONObject: ["type": "control_request", "request_id": "something-end",
                                                      "request": ["subtype": "end_session"]], options: [.sortedKeys])
     }
+
+    /// Plan B starts its spool before the program, which then asks through it; plan A keeps the way to plan B.
+    public func join(_ program: ProcessHandle) throws {
+        guard launch.planB else {
+            if program.host.hookCommand != nil { fallback = program.relaunch }
+            return
+        }
+        let spool = PermissionSpool(folder: ClaudeDriver.spool(launch, program.host))
+        spool.asked = { [weak self] uuid, request in self?.hookAsked(uuid, request) }
+        spool.withdrawn = { [weak self] uuid in self?.hookWithdrawn(uuid) }
+        do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
+        self.spool = spool
+    }
+
+    /// A hook still waiting then denies within a moment.
+    public func released() { spool?.stop() }
 
     public func ended(code: Int32, errors: String) {
         guard code != 0 else { return emit(.stopped(nil)) }
@@ -556,6 +585,6 @@ extension Driving {
                                 modes: [Option(value: "default", label: "Ask before acting"), Option(value: "acceptEdits", label: "Accept edits"),
                                         Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
                                         Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
-                                effortOnlyWhenOffered: true,
-                                command: { ClaudeDriver.command($0) }, driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
+                                effortOnlyWhenOffered: true, command: { ClaudeDriver.command($0) },
+                                planB: { try ClaudeDriver.command($0, host: $1) }, driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })
 }

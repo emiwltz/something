@@ -23,6 +23,9 @@ public struct Launch: Equatable, Sendable {
     public var assistant: Assistant?
     /// The commands something lends this launch as tools (Lent.swift): only the building assistant has them.
     public var lent: Lent?
+    /// Whether the launch takes its kind's plan B (`Driving.planB`): the second way to launch it, when the first one
+    /// was refused or a developer forced it (`something try --plan-b`).
+    public var planB = false
 
     public init(agent: String, folder: String, model: String? = nil, mode: String? = nil, effort: String? = nil,
                 thread: String = UUID().uuidString.lowercased(), resume: Bool = false) {
@@ -105,6 +108,10 @@ public protocol Driver: AnyObject {
     func graceful(_ program: ProcessHandle)
     /// After a stop something asked for, which is folded without `ended`. By default nothing more is said.
     func afterAskedStop()
+    /// Its program ended, or the launch failed after `join`: from the thread that saw it, before an end is folded.
+    /// It may come twice (a program that closed its input at once), and must do no harm then. By default there is
+    /// nothing to release.
+    func released()
 }
 
 extension Driver {
@@ -116,6 +123,8 @@ extension Driver {
     }
 
     public func afterAskedStop() {}
+
+    public func released() {}
 }
 
 /// One launch's program, as its driver may act on it. The engine joins each launch to its program (Join.swift);
@@ -131,6 +140,11 @@ public struct ProcessHandle {
     public var quit: () -> Void
     /// Stops the running turn as the bridge's interrupt does, held messages dropped, on the main queue.
     public var interrupt: () -> Void
+    /// What the host knows that a launch may need.
+    public var host: HostFacts
+    /// Launches the same agent again with its kind's plan B, in place of this launch, whose end then changes
+    /// nothing; true when it started. Nil for a launch that is plan B already, or of a kind without one.
+    public var relaunch: (() -> Bool)?
 }
 
 /// Each `can` entry by its name in the contract. `resume` is false here: a launched agent is running.
