@@ -3,19 +3,27 @@
 // changed; every 15th tick, readers also walk their folders for what a stat cannot find, and look again at the files
 // too old to list. The work runs on the watch's own queue and its result is handed to the main queue, where the
 // engine drops what it launched itself (dedupe) and folds the rest into agents through StateMap.
-import Darwin
+// One reader failing never takes the others down: each runs on a queue of its own within a deadline, and what it
+// throws becomes its kind's "unreadable" with a sentence (Lane).
 import Foundation
 import SomethingCore
 
-/// A harness's files read without its program's help. A reader keeps its own cursors, on the watch's queue only.
+/// A harness's files read without its program's help. A reader keeps its own cursors, on its own queue only.
 package protocol Reader: AnyObject {
     var kind: String { get }
     /// The process names of its program, whose arguments and folder the snapshot reads.
     var programs: Set<String> { get }
     /// Whether `process` runs its program; by default, when its name is one of `programs`.
     func owns(_ process: Running) -> Bool
-    /// What its files say now. `discover` asks for the walk of every 15th tick.
-    func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading
+    /// What its files say now. `discover` asks for the walk of every 15th tick. Throws when they cannot be read at
+    /// all (a folder refused, a database that does not open): `Unreadable`, whose words the watch says.
+    func read(_ snapshot: Snapshot, discover: Bool, now: Date) throws -> Reading
+}
+
+/// Why a reader cannot read its agent's files, in words that follow "something could not read <Name>'s files: ".
+package struct Unreadable: Error {
+    package var why: String
+    package init(_ why: String) { self.why = why }
 }
 
 extension Reader {
@@ -100,7 +108,7 @@ package final class Watch {
     package static let recent: TimeInterval = 24 * 3600
     static let discoveryEvery = 15
 
-    let readers: [Reader]
+    private let lanes: [Lane]
     private let snapshot: () -> Snapshot
     private let queue = DispatchQueue(label: "something.watch")
     private var cancel: (() -> Void)?
@@ -118,11 +126,11 @@ package final class Watch {
     /// The last tick's result, kept for a tick whose snapshot is not whole.
     private var last = Seen()
     /// something's own pid: what descends from it is an agent it launched, or a helper of one. A test names another.
-    var own = getpid()
+    var own = ProcessInfo.processInfo.processIdentifier
 
-    /// `snapshot` takes the processes of a tick; by default, this Mac's.
-    init(readers: [Reader], snapshot: (() -> Snapshot)? = nil) {
-        self.readers = readers
+    /// `snapshot` takes the processes of a tick; by default, this Mac's. `name` names a kind in the readers' notes.
+    init(readers: [Reader], snapshot: (() -> Snapshot)? = nil, name: @escaping (String) -> String = { $0 }) {
+        lanes = readers.map { Lane($0, name: name($0.kind)) }
         let processes = Processes(known: readers.reduce(into: Set<String>()) { $0.formUnion($1.programs) })
         self.snapshot = snapshot ?? processes.snapshot
     }
@@ -135,7 +143,7 @@ package final class Watch {
         cancel?()
         cancel = repeating(seconds, queue) { [weak self] in
             guard let self else { return }
-            let result = tick(now: Date())
+            let result = tick(now: Date(), within: seconds / 2)
             DispatchQueue.main.async { seen(result) }
         }
     }
@@ -154,18 +162,23 @@ package final class Watch {
 
     /// One tick, on the caller's queue: the watch's own, or a test's. Keeps only recent sightings, and none whose
     /// process descends from something (its children, their descendants and reparented helpers). A
-    /// snapshot that is not whole proves no process gone: the readers are not run, and the last result stands.
-    func tick(now: Date) -> Seen {
+    /// snapshot that is not whole proves no process gone: the readers are not run, and the last result stands. The
+    /// readers run side by side; one that has not returned `within` seconds keeps its last reading (Lane).
+    func tick(now: Date, within deadline: TimeInterval = .infinity) -> Seen {
         let processes = snapshot()
         guard processes.whole else { return last }
         let discover = ticks % Watch.discoveryEvery == 0
         ticks += 1
+        let done = DispatchGroup()
+        for lane in lanes { lane.read(processes, discover: discover, now: now, done) }
+        _ = done.wait(timeout: deadline.isFinite ? .now() + deadline : .distantFuture)
         var seen = Seen()
-        for reader in readers {
-            var reading = reader.read(processes, discover: discover, now: now)
-            // A reader that knows its files changed shape and found nothing else to read (Codex has its rollouts when
-            // its index changed) shows its program's processes.
-            if reading.health == "changed", reading.sightings.isEmpty {
+        for lane in lanes {
+            let reader = lane.reader
+            var reading = lane.reading
+            // A reader that knows its files changed shape, or cannot read them, and found nothing else to read (Codex
+            // has its rollouts when its index changed) shows its program's processes.
+            if reading.health == "changed" || reading.health == "unreadable", reading.sightings.isEmpty {
                 reading.sightings = processes.processes.values.filter(reader.owns).map { process in
                     Sighting(kind: reader.kind, key: "pid-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),
                              folder: process.folder, started: process.started, processOnly: true)
@@ -240,4 +253,57 @@ package final class Watch {
     }
 
     package static func iso(_ date: Date) -> String { iso8601.string(from: date) }
+
+    /// What `read` gives, or, when it throws, a reading that says `name`'s files are unreadable, and why.
+    package static func contained(_ name: String, _ read: () throws -> Reading) -> Reading {
+        do { return try read() } catch {
+            return Reading(health: "unreadable", note: "something could not read \(name)'s files: \((error as? Unreadable)?.why ?? error.localizedDescription)")
+        }
+    }
+}
+
+/// One reader on a queue of its own, with what it said last. A read still running when its tick ends is not waited
+/// for, and the reader is not asked again before it returns: its last reading stands, said to be late. A throw is
+/// said as "unreadable", with the last good sightings kept for one tick (a file replaced mid-read, a busy database).
+private final class Lane {
+    let reader: Reader
+    private let name: String, queue: DispatchQueue, lock = NSLock()
+    private var running = false, owed = false, failures = 0
+    private var last = Reading(), good = Reading()
+
+    init(_ reader: Reader, name: String) {
+        (self.reader, self.name) = (reader, name)
+        queue = DispatchQueue(label: "something.watch.\(reader.kind)")
+    }
+
+    /// What the reader said last; while it still reads, with a note that says so.
+    var reading: Reading {
+        lock.lock()
+        defer { lock.unlock() }
+        guard running else { return last }
+        var late = last
+        late.note = "something is still reading \(name)'s files; what they say may be late."
+        return late
+    }
+
+    /// Reads on the lane's queue, inside `done`, unless the last read has not returned; a walk asked meanwhile is
+    /// owed to the next read.
+    func read(_ snapshot: Snapshot, discover: Bool, now: Date, _ done: DispatchGroup) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !running else { return owed = owed || discover }
+        let walk = discover || owed
+        (running, owed) = (true, false)
+        done.enter()
+        queue.async { [self] in
+            let result = Result { try reader.read(snapshot, discover: walk, now: now) }
+            lock.lock()
+            failures = (try? result.get()) == nil ? failures + 1 : 0
+            last = Watch.contained(name) { try result.get() }
+            if failures == 0 { good = last } else if failures == 1 { (last.sightings, last.version) = (good.sightings, good.version) }
+            running = false
+            lock.unlock()
+            done.leave()
+        }
+    }
 }

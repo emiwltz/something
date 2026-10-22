@@ -57,9 +57,9 @@ final class ClaudeHome {
         return Snapshot(processes)
     }
 
-    /// What the reader gives at `now`, the home's own when nil.
+    /// What the reader gives at `now`, the home's own when nil, as the watch takes it: a throw is "unreadable".
     func read(_ snapshot: Snapshot = ClaudeHome.snapshot(), discover: Bool = false, now: Date? = nil) -> Reading {
-        reader.read(snapshot, discover: discover, now: now ?? self.now)
+        Watch.contained("Claude Code") { try reader.read(snapshot, discover: discover, now: now ?? self.now) }
     }
 
     func transcript(_ folder: String, _ id: String) -> URL { claude.appendingPathComponent("projects/\(folder)/\(id).jsonl") }
@@ -279,11 +279,11 @@ func stateWords(_ sightings: [Sighting], at now: Date) -> [String: String] {
     }
 
     @Test func theHealthOfTheReader() throws {
-        #expect(ClaudeReader(environment: [:]).read(ClaudeHome.snapshot(), discover: true, now: Date()) == Reading(), "no home: none")
-        #expect(ClaudeReader(environment: ["HOME": "/Users/example/nowhere"]).read(ClaudeHome.snapshot(), discover: true, now: Date()).health == "none")
+        #expect(try ClaudeReader(environment: [:]).read(ClaudeHome.snapshot(), discover: true, now: Date()) == Reading(), "no home: none")
+        #expect(try ClaudeReader(environment: ["HOME": "/Users/example/nowhere"]).read(ClaudeHome.snapshot(), discover: true, now: Date()).health == "none")
         let home = try ClaudeHome()
         defer { home.remove() }
-        #expect(ClaudeReader(environment: ["HOME": "/Users/example/nowhere", "CLAUDE_CONFIG_DIR": home.claude.path])
+        #expect(try ClaudeReader(environment: ["HOME": "/Users/example/nowhere", "CLAUDE_CONFIG_DIR": home.claude.path])
             .read(ClaudeHome.snapshot(), discover: true, now: Date()).sightings.count == 2, "CLAUDE_CONFIG_DIR moves everything")
 
         // A record without the keys the reader needs: Claude's files changed shape.

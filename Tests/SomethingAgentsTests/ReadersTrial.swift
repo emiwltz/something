@@ -74,7 +74,7 @@ import SomethingCore
         let processes = Processes(known: reader.programs)
         func seen(as own: Int32) -> Sighting? {
             reader.own = own
-            return reader.read(processes.snapshot(), discover: false, now: Date()).sightings.first { $0.key == run.state.thread }
+            return (try? reader.read(processes.snapshot(), discover: false, now: Date()))?.sightings.first { $0.key == run.state.thread }
         }
         _ = try run.send("Please run-sleep for me.")
         try await run.until("the turn") { run.opencode.prompting && run.items.count == 2 }

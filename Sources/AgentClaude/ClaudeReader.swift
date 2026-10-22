@@ -4,7 +4,6 @@
 // `projects/<folder>/<id>.jsonl`, gives its turns, from whitelisted fields only. The `.key` files beside the registry
 // hold secrets: only names matching `^\d+\.json$` are ever opened. `claude agents --json` is never run, since it can
 // delete records. A stale record (its process gone, or its pid reused) is ignored and never deleted.
-import Darwin
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -47,14 +46,14 @@ final class ClaudeReader: Reader {
         folder = environment["CLAUDE_CONFIG_DIR"] ?? environment["HOME"].map { ($0 as NSString).appendingPathComponent(".claude") }
     }
 
-    func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
+    func read(_ snapshot: Snapshot, discover: Bool, now: Date) throws -> Reading {
         guard let folder, ClaudeReader.isFolder(folder) else { return Reading() }
         var reading = Reading(health: "ok")
         let registry = (folder as NSString).appendingPathComponent("sessions")
         var names: [String] = []
         if ClaudeReader.isFolder(registry) {
             guard let listed = try? FileManager.default.contentsOfDirectory(atPath: registry) else {
-                return Reading(health: "unreadable", note: "something cannot read Claude Code's sessions folder; check its permissions.")
+                throw Unreadable("its sessions folder cannot be opened; check its permissions.")
             }
             names = listed.filter { $0.range(of: #"^\d+\.json$"#, options: .regularExpression) != nil }
         }
@@ -98,15 +97,15 @@ final class ClaudeReader: Reader {
         }
         for (id, session) in sessions where current[id] == nil && session.alive != false && !unread.contains("\(session.record.pid).json") {
             // A record left behind by a process that is gone is a crash; one removed or moved on is a normal end.
-            sessions[id]!.alive = false
-            sessions[id]!.ended = !stale.contains(session.record.pid)
+            sessions[id]?.alive = false
+            sessions[id]?.ended = !stale.contains(session.record.pid)
         }
         // A session whose record is there is kept, so that its transcript is not read again from its end; one that
         // ended is forgotten when Watch stops listing it.
         sessions = sessions.filter { current[$0.key] != nil || Watch.isRecent(alive: $0.value.alive, updated: ClaudeReader.updated($0.value), now: now) }
         for id in sessions.keys {
             follow(id, discover: discover)
-            reading.sightings.append(sighting(sessions[id]!))
+            if let session = sessions[id] { reading.sightings.append(sighting(session)) }
         }
         return reading
     }

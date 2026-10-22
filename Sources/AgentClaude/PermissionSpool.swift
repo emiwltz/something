@@ -4,7 +4,6 @@
 // <uuid>.answer.json, and prints the decision for Claude. The app's side (PermissionSpool) keeps a heartbeat file fresh,
 // hands each ask to the driver, and writes the person's answer. Files only: no listener, nothing installed.
 // This file uses Foundation alone, so the hook command can be built from it by itself (the tests do so).
-import Darwin
 import Foundation
 
 /// The names and delays both sides agree on.
@@ -25,8 +24,7 @@ enum Spool {
     /// (Codex in workspace-write) may write, and could then answer Claude's requests. Each launch gets
     /// <agent>-<conversation id> in it, since two something running at once (the app and a `something try`) may both
     /// have a claude-1.
-    static let root = ((FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.path
-        ?? NSHomeDirectory() + "/Library/Application Support") as NSString).appendingPathComponent("something/spool")
+    static let root = URL.applicationSupportDirectory.appendingPathComponent("something/spool").path
 
     /// Writes `data` to `path` with mode 0600 through a temporary name, so a reader never sees half of it. Returns
     /// false when the folder refused it.
@@ -85,7 +83,9 @@ package enum SpoolHook {
         while let word = words.popFirst() {
             switch (word, words.popFirst()) {
             case ("--spool", let value?): folder = value
-            case ("--timeout", let value?) where TimeInterval(value) != nil: timeout = TimeInterval(value)!
+            case ("--timeout", let value?):
+                guard let seconds = TimeInterval(value) else { return usage() }
+                timeout = seconds
             default: return usage()
             }
         }

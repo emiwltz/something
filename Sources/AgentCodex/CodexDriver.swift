@@ -83,16 +83,17 @@ final class CodexDriver: Driver {
         try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"], "capabilities": capabilities])
     }
 
-    func receive(_ line: Data) {
-        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
+    @discardableResult func receive(_ line: Data) -> Bool {
+        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return false }
         heard = true
         let params = message["params"] as? [String: Any] ?? [:]
         switch (message["method"] as? String, message["id"]) {
         case (let method?, let id?): request(method, id, params)
         case (let method?, nil): notification(method, params)
         case (nil, let id as Int): response(id, message)
-        default: break   // a newer Codex's lines must not break an older something
+        default: return false   // a newer Codex's lines must not break an older something
         }
+        return true
     }
 
     /// A new turn starts with turn/start, carrying what `set` asked for. A steer joins the running turn with

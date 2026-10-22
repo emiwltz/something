@@ -131,6 +131,85 @@ import SomethingCore
         #expect(ticks == 5, "then every 10 s with no space open")
     }
 
+    /// A reader that throws is said "unreadable", in a sentence with its name; the conversations it read last stay one
+    /// tick, then its program's processes stand in for them, and the next good read is shown again. Its neighbour, read
+    /// in the same ticks, is not touched.
+    @Test func aReaderThatThrowsIsUnreadable() throws {
+        let home = try ClaudeHome(prefix: "watch-claude-")
+        defer { home.remove() }
+        let flaky = Scripted(), process = Running(pid: 52000, parent: 1, group: 52000, started: home.now, name: "scripted")
+        let watch = Watch(readers: [flaky, home.reader], snapshot: { Snapshot(Array(ClaudeHome.snapshot().processes.values) + [process]) },
+                          name: { $0 == "scripted" ? "Scripted Agent" : Registry.described.name(of: $0) })
+        let good = Reading(sightings: [Sighting(kind: "scripted", key: "invented-conversation", facts: StateMap.Facts(alive: true, evidence: "registry"))],
+                           version: "1.0.0", health: "ok")
+        flaky.script = [.success(good), .failure(Unreadable("its invented folder is gone.")), .failure(CocoaError(.fileReadNoPermission)), .success(good)]
+        #expect(watch.tick(now: home.now).sightings.filter { $0.kind == "scripted" }.map(\.key) == ["invented-conversation"])
+
+        let first = watch.tick(now: home.now)
+        #expect(first.kinds["scripted"] == Reading(version: "1.0.0", health: "unreadable",
+                                                   note: "something could not read Scripted Agent's files: its invented folder is gone."))
+        #expect(first.sightings.filter { $0.kind == "scripted" }.map(\.key) == ["invented-conversation"], "the last good sightings stay one tick")
+        #expect(first.kinds["claude"]?.health == "ok" && first.sightings.filter { $0.kind == "claude" }.count == 2, "its neighbour is read")
+
+        let second = watch.tick(now: home.now)
+        #expect(second.kinds["scripted"]?.health == "unreadable" && second.kinds["scripted"]?.version == nil)
+        #expect(second.kinds["scripted"]?.note?.hasPrefix("something could not read Scripted Agent's files: ") == true, "any error is said")
+        #expect(second.sightings.filter { $0.kind == "scripted" }.map { "\($0.key) \($0.processOnly)" } == ["pid-52000 true"], "then its processes")
+
+        let again = watch.tick(now: home.now)
+        #expect(again.kinds["scripted"] == Reading(version: "1.0.0", health: "ok"))
+        #expect(again.sightings.filter { $0.kind == "scripted" }.map(\.key) == ["invented-conversation"])
+    }
+
+    /// A reader slower than its tick's deadline is not waited for: its last reading stands, said late, and it is not
+    /// asked again before it returns; a walk asked meanwhile comes with its next read. The others are read on time.
+    @Test func aLateReaderKeepsItsLastReading() throws {
+        let home = try ClaudeHome(prefix: "watch-claude-")
+        defer { home.remove() }
+        let slow = Scripted()
+        let watch = Watch(readers: [slow, home.reader], snapshot: { ClaudeHome.snapshot() }, name: { $0 == "scripted" ? "Scripted Agent" : $0 })
+        slow.script = [.success(Reading(version: "1.0.0", health: "ok"))]
+        // Ticks 1 to 14, the first of which walks; tick 15 is held, and tick 16, a walk, comes while it is.
+        for _ in 1...14 { _ = watch.tick(now: home.now) }
+        #expect(slow.walks.first == true && slow.walks.dropFirst().allSatisfy { !$0 } && slow.walks.count == 14)
+        slow.holding = true
+        let late = watch.tick(now: home.now, within: 0.05)
+        #expect(slow.started.wait(timeout: .now() + 30) == .success)
+        #expect(late.kinds["scripted"] == Reading(version: "1.0.0", health: "ok",
+                                                  note: "something is still reading Scripted Agent's files; what they say may be late."))
+        #expect(late.kinds["claude"]?.health == "ok" && late.sightings.count == 2, "the others are read on time")
+        _ = watch.tick(now: home.now, within: 0.05)
+        #expect(slow.walks.count == 15, "not asked again while it reads")
+        slow.holding = false
+        slow.hold.signal()
+        // The held read returns soon after: until then a tick finds it reading, and does not ask it again.
+        var next = watch.tick(now: home.now)
+        for _ in 0..<3000 where slow.walks.count < 16 {
+            Thread.sleep(forTimeInterval: 0.01)
+            next = watch.tick(now: home.now)
+        }
+        #expect(next.kinds["scripted"] == Reading(version: "1.0.0", health: "ok"), "on time again, no note")
+        #expect(slow.walks.count == 16 && slow.walks.last == true, "the walk of tick 16 is owed to the next read")
+    }
+
+    /// A reader that gives what it is told, in turn, and keeps the last; it can be held in its read until released.
+    final class Scripted: Reader {
+        let kind = "scripted", programs: Set<String> = ["scripted"]
+        var script: [Result<Reading, any Error>] = []
+        var walks: [Bool] = []
+        var holding = false
+        let started = DispatchSemaphore(value: 0), hold = DispatchSemaphore(value: 0)
+        func read(_ snapshot: Snapshot, discover: Bool, now: Date) throws -> Reading {
+            walks.append(discover)
+            if holding {
+                started.signal()
+                hold.wait()
+            }
+            let next = script.count > 1 ? script.removeFirst() : script.first ?? .success(Reading())
+            return try next.get()
+        }
+    }
+
     /// A reader that finds nothing and remembers, tick by tick, whether it was asked to walk.
     final class Walks: Reader {
         let kind = "walks", programs: Set<String> = []

@@ -82,16 +82,17 @@ final class ACPDriver: Driver {
         try invoke(.initialize, "initialize", ["protocolVersion": 1, "clientCapabilities": ["fs": ["readTextFile": false, "writeTextFile": false], "terminal": false]])
     }
 
-    func receive(_ line: Data) {
-        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
+    @discardableResult func receive(_ line: Data) -> Bool {
+        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return false }
         heard = true
         let params = message["params"] as? [String: Any] ?? [:]
         switch (message["method"] as? String, message["id"]) {
         case (let method?, let id?): request(method, id, params)
         case ("session/update"?, nil) where params["sessionId"] as? String == session: update(params["update"] as? [String: Any] ?? [:])
         case (nil, let id as Int): response(id, message)
-        default: break   // a newer agent's lines must not break an older something
+        default: return false   // a newer agent's lines must not break an older something
         }
+        return true
     }
 
     /// A message starts a turn; it goes out once the session and the settings asked before it are in place.
@@ -115,8 +116,8 @@ final class ACPDriver: Driver {
         }
         cancelAsked = true
         try send(["method": "session/cancel", "params": ["sessionId": session]])
-        for id in asks.keys.sorted() {
-            try? send(["id": asks[id]!.rpcID, "result": ["outcome": ["outcome": "cancelled"]]])
+        for (id, ask) in asks.sorted(by: { $0.key < $1.key }) {
+            try? send(["id": ask.rpcID, "result": ["outcome": ["outcome": "cancelled"]]])
             asks[id] = nil
             emit(.requestClosed(id: id))
         }
@@ -289,9 +290,9 @@ final class ACPDriver: Driver {
         case let kind? where kind == "agent_message_chunk" || kind == "agent_thought_chunk":
             guard let text = (update["content"] as? [String: Any])?["text"] as? String, !text.isEmpty else { return }
             let id = update["messageId"] as? String ?? "\(launch.agent)/message"
-            let known = texts[id] != nil
-            texts[id, default: ""] += text
-            let item = Item(id: id, kind: child ? "subagent" : kind == "agent_message_chunk" ? "message" : "thought", author: "agent", text: texts[id]!, at: now())
+            let known = texts[id] != nil, whole = (texts[id] ?? "") + text
+            texts[id] = whole
+            let item = Item(id: id, kind: child ? "subagent" : kind == "agent_message_chunk" ? "message" : "thought", author: "agent", text: whole, at: now())
             emit(known ? .itemUpdated(item) : .itemAppended(item))
         case "tool_call", "tool_call_update":
             guard let id = update["toolCallId"] as? String else { return }

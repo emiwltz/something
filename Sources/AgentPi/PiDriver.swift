@@ -95,8 +95,8 @@ final class PiDriver: Driver {
         try invoke(.levels, ["type": "get_available_thinking_levels"])
     }
 
-    func receive(_ line: Data) {
-        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any], let type = message["type"] as? String else { return }
+    @discardableResult func receive(_ line: Data) -> Bool {
+        guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any], let type = message["type"] as? String else { return false }
         heard = true
         switch type {
         case "response": response(message)
@@ -109,8 +109,9 @@ final class PiDriver: Driver {
             stopError = message["finalError"] as? String ?? stopError
         case "extension_error": emit(.error(AgentError(code: "AGENT_ERROR", message: "A pi extension failed: \(message["error"] as? String ?? "no reason given").")))
         case "extension_ui_request": dialog(message)
-        default: break   // a newer pi's lines must not break an older something
+        default: return false   // a newer pi's lines must not break an older something
         }
+        return true
     }
 
     /// A new turn is a plain prompt. A steer is a prompt with streamingBehavior "steer": pi delivers it after the
@@ -133,7 +134,7 @@ final class PiDriver: Driver {
     /// pi applies a model and a thinking level at once; the state shows them once get_state reads them back. Throws
     /// NOT_SUPPORTED for a mode (`limits`), VALUE_NOT_OFFERED for a model that is not "provider/id", AGENT_STOPPED.
     func set(model: String?, mode: String?, effort: String?) throws -> String {
-        if mode != nil { throw CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!) }
+        if mode != nil { throw CodedError("NOT_SUPPORTED", PiDriver.noModes) }
         if let model, model.split(separator: "/", maxSplits: 1).count != 2 {
             throw CodedError("VALUE_NOT_OFFERED", "pi names a model provider/id, such as one of the agent's options.model.")
         }
@@ -341,6 +342,7 @@ final class PiDriver: Driver {
     }
 
     static let levelLabels = Option.effortLabels.merging(["off": "Off", "minimal": "Minimal"]) { first, _ in first }
+    static let noModes = "pi has no permission modes: it runs commands and edits files without asking first."
 
     /// pi's words for a missing key point at a terminal command and a long path inside its install: a newcomer
     /// needs the gesture instead.
@@ -373,7 +375,7 @@ extension Driving {
     /// pi asks no permission and has no request to show: the sentence says so, for the consent window. It names its
     /// conversation file itself; something learns it from get_state.
     static let pi = Driving(kind: "pi", tested: "1.0.0",
-                            limits: ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
+                            limits: ["mode": PiDriver.noModes],
                             picksThread: false, resumeFolder: { try PiDriver.resumable($0) },
                             command: { PiDriver.command($0) }, driver: { PiDriver($0, write: $1, emit: $2, now: $3) })
 }

@@ -50,7 +50,7 @@ final class CodexHome {
             success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL);
         """
 
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("codex-home-\(UUID().uuidString)")
+    let root: URL
     var codex: URL { root.appendingPathComponent(".codex") }
     var locks: URL { codex.appendingPathComponent("thread-writer-locks") }
     let reader: CodexReader
@@ -61,8 +61,10 @@ final class CodexHome {
     func rollout(_ day: String, _ id: String) -> URL { self.day(day).appendingPathComponent("rollout-\(day.replacingOccurrences(of: "/", with: "-"))T10-55-00-\(id).jsonl") }
     func lock(_ id: String) -> String { locks.appendingPathComponent("\(id).lock").path }
 
-    /// `index` false leaves the index out; `shape` replaces its CREATE TABLE.
-    init(index: Bool = true, shape: String = CodexHome.threads, now: Date = Date()) throws {
+    /// `index` false leaves the index out; `shape` replaces its CREATE TABLE. `prefix` names the folder in $TMPDIR, as
+    /// ClaudeHome's does.
+    init(index: Bool = true, shape: String = CodexHome.threads, now: Date = Date(), prefix: String = "codex-home-") throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
         self.now = now
         reader = CodexReader(environment: ["HOME": root.path])
         for folder in ["2026/10/14", "2026/10/15", "2026/10/16", "2026/10/17"] {

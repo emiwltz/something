@@ -4,10 +4,12 @@
 // Tests/Exchanges (one JSON object per line), the raw material of a replay: run it only in a throwaway session whose
 // text is invented, since the file holds every line. --plan-b forces the kind's plan B (Claude's: PermissionSpool.swift).
 // --assistant launches the person's building assistant, lent something's own commands as the app lends them.
+// A front end over the engine, as the app's windows are; the command routes `try` here (Command.swift).
 import Foundation
+import SomethingAgents
 import SomethingCore
 
-public enum DeveloperTrial {
+enum DeveloperTrial {
     static let usage = """
         usage: something try <kind> [--record <file>] [--plan-b] [--assistant]
         Then type a message, or: /now <message> (steer), /interrupt, /allow, /deny, /answer <label>[; <label>…], /stop.
@@ -45,7 +47,7 @@ public enum DeveloperTrial {
     }
 
     /// Returns the exit status: 0 once the agent ended, 1 when it could not start or ended in an error, 2 for wrong words.
-    public static func main(_ arguments: [String], registry: Registry) -> Int32 {
+    static func main(_ arguments: [String], registry: Registry) -> Int32 {
         let asked: Asked
         switch parse(arguments, registry: registry) {
         case .success(let words): asked = words

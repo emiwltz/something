@@ -9,7 +9,7 @@ public struct Registry: Sendable {
     /// The agents, in the order of the state's kinds and of the builders offered.
     public let agents: [AgentDescriptor]
     /// What something can launch, by kind: what each driver can do, and how to make one.
-    let launchable: [String: Driving]
+    package let launchable: [String: Driving]
     /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
     public let kinds: Kinds
     /// The program names of coding agents something has no extension for, seen from their process only (OtherReader).

@@ -6,7 +6,6 @@
 // rollouts of the last three day folders are read instead. Codex compresses a rollout idle for some days (`.zst`):
 // such a conversation is old, and it is skipped. A conversation is held by the codex process that holds its writer
 // lock or its rollout open; the files Codex writes say nothing of what it waits on, so `waiting` is null.
-import Darwin
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -23,7 +22,7 @@ final class CodexReader: Reader {
     var opened: (String) -> Void = { _ in }
     /// something's own pid: its own codex processes hold only what it launched, so they prove no conversation seen
     /// elsewhere alive or ended. A test names another.
-    var own = getpid()
+    var own = ProcessInfo.processInfo.processIdentifier
 
     /// The index columns the reader may use; the guard asks for all of them.
     static let whitelist: [String: Set<String>] = ["threads": ["id", "rollout_path", "created_at", "updated_at", "archived", "source",

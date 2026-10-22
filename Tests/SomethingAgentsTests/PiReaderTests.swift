@@ -16,12 +16,14 @@ final class PiHome {
     static let blog = "01a14a3c-0000-7000-8000-00000000000c", notes = "01a14a3c-0000-7000-8000-00000000000d"
     static let ompShop = "01a14bbb-0000-7000-8000-000000000001", ompBlog = "01a14bbb-0000-7000-8000-000000000002"
 
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("pi-home-\(UUID().uuidString)")
+    let root: URL
     let now: Date
     let pi: PiReader, omp: OMPReader
     private(set) var opened: [String] = []
 
-    init(now: Date = Date()) throws {
+    /// `prefix` names the folder in $TMPDIR, as ClaudeHome's does.
+    init(now: Date = Date(), prefix: String = "pi-home-") throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
         self.now = now
         try FileManager.default.copyItem(at: PiHome.fixture, to: root)
         // The secrets pi and OMP keep beside their sessions, made here: the readers must never open them.

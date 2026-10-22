@@ -44,7 +44,7 @@ final class OpenCodeHome {
           `time_updated` integer NOT NULL, `data` text NOT NULL);
         """
 
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("opencode-home-\(UUID().uuidString)")
+    let root: URL
     var database: String { root.appendingPathComponent("data/opencode/opencode.db").path }
     let reader: OpenCodeReader
     private(set) var opened: [String] = []
@@ -52,7 +52,9 @@ final class OpenCodeHome {
     /// Unix milliseconds, `seconds` before now.
     func ago(_ seconds: Double) -> Int64 { Int64((now.timeIntervalSince1970 - seconds) * 1000) }
 
-    init(legacyOnly: Bool = false, now: Date = Date()) throws {
+    /// `prefix` names the folder in $TMPDIR, as ClaudeHome's does.
+    init(legacyOnly: Bool = false, now: Date = Date(), prefix: String = "opencode-home-") throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
         self.now = now
         try FileManager.default.createDirectory(at: root.appendingPathComponent("data/opencode"), withIntermediateDirectories: true)
         reader = OpenCodeReader(environment: ["HOME": root.path, "XDG_DATA_HOME": root.appendingPathComponent("data").path])
@@ -128,7 +130,10 @@ final class OpenCodeHome {
         return Snapshot(processes)
     }
 
-    func read(_ snapshot: Snapshot? = nil) -> Reading { reader.read(snapshot ?? self.snapshot(), discover: false, now: now) }
+    /// What the reader gives, as the watch takes it: a throw is "unreadable".
+    func read(_ snapshot: Snapshot? = nil) -> Reading {
+        Watch.contained("OpenCode") { try reader.read(snapshot ?? self.snapshot(), discover: false, now: now) }
+    }
 }
 
 @Suite(.leavesNothing("opencode-home-")) struct OpenCodeReaderTests {
@@ -276,8 +281,8 @@ final class OpenCodeHome {
     }
 
     @Test func aChangedShapeAMissingDatabaseAndNoHome() throws {
-        #expect(OpenCodeReader(environment: [:]).read(Snapshot([]), discover: true, now: Date()) == Reading())
-        #expect(OpenCodeReader(environment: ["HOME": "/Users/example/nowhere"]).read(Snapshot([]), discover: true, now: Date()) == Reading())
+        #expect(try OpenCodeReader(environment: [:]).read(Snapshot([]), discover: true, now: Date()) == Reading())
+        #expect(try OpenCodeReader(environment: ["HOME": "/Users/example/nowhere"]).read(Snapshot([]), discover: true, now: Date()) == Reading())
         let home = try OpenCodeHome(legacyOnly: true)
         defer { home.remove() }
         for suffix in ["", "-wal", "-shm"] { try FileManager.default.removeItem(atPath: home.database + suffix) }

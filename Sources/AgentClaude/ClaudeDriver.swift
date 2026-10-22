@@ -114,8 +114,8 @@ final class ClaudeDriver: Driver {
         try control("initialize", [:])
     }
 
-    func receive(_ line: Data) {
-        guard let frame = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
+    @discardableResult func receive(_ line: Data) -> Bool {
+        guard let frame = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return false }
         heard = true
         switch frame["type"] as? String {
         case "system": system(frame)
@@ -125,12 +125,13 @@ final class ClaudeDriver: Driver {
         case "control_request": request(frame)
         case "control_cancel_request":
             // Claude withdrew it (the turn was interrupted, a hook answered first): it must not be answered.
-            guard let raw = frame["request_id"] as? String, asks.removeValue(forKey: id(raw)) != nil else { return }
+            guard let raw = frame["request_id"] as? String, asks.removeValue(forKey: id(raw)) != nil else { return true }
             emit(.requestClosed(id: id(raw)))
         case "control_response": response(frame["response"] as? [String: Any] ?? [:])
         case "command_lifecycle": lifecycle(frame)
-        default: break   // a newer Claude's frames must not break an older something
+        default: return false   // a newer Claude's frames must not break an older something
         }
+        return true
     }
 
     /// Priority "next": Claude reads the message after the running tool calls, in the same turn, or starts a turn

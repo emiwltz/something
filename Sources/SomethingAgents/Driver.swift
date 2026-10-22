@@ -86,8 +86,8 @@ public struct Command: Equatable, Sendable {
 public protocol Driver: AnyObject {
     /// Writes what the program needs before the first message. Throws AGENT_STOPPED.
     func begin() throws
-    /// Reads one line of the program's output; lines it does not know change nothing.
-    func receive(_ line: Data)
+    /// Reads one line of the program's output. Returns whether it knew the line: one it does not know changes nothing.
+    @discardableResult func receive(_ line: Data) -> Bool
     /// Hands a message to the program: into the running turn when `steer`, else as a new turn. Throws AGENT_STOPPED.
     func deliver(_ text: String, steer: Bool) throws
     /// Stops the running turn and drops what the program itself holds. Throws AGENT_STOPPED.
@@ -176,6 +176,11 @@ package final class Launched {
     var changed: () -> Void = {}
     private let now: () -> String
     private let resumes: Bool
+    /// The program's lines its driver did not know, counted from the launch until one is known (nil from then on).
+    private var unknown: Int? = 0
+    /// Lines from the start of a launch, none known, after which the program is taken to be a version its driver
+    /// does not understand: the state then says so in its kind's note (Engine).
+    static let foreignAfter = 20
 
     /// The errors of a resume whose program never took the conversation.
     static let refusals: Set = ["HELD_ELSEWHERE", "THREAD_NOT_FOUND"]
@@ -229,6 +234,17 @@ package final class Launched {
     func begin(pid: Int?) throws {
         record(.started(pid: pid, thread: agent.thread))
         try driver.begin()
+    }
+
+    /// Whether the first `foreignAfter` lines of its program were all unknown to its driver.
+    var foreign: Bool { (unknown ?? 0) >= Launched.foreignAfter }
+
+    /// Gives one line of its program to its driver, and counts it while no line was known.
+    func receive(_ line: Data) {
+        let known = driver.receive(line)
+        guard let count = unknown else { return }
+        unknown = known ? nil : count + 1
+        if unknown == Launched.foreignAfter { changed() }
     }
 
     /// Folds one event; a message held for the next turn goes out when the turn it waited for ended.

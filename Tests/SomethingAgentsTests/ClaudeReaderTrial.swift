@@ -58,7 +58,7 @@ import SomethingCore
         var ticks = 0
         func sighting() -> Sighting? {
             ticks += 1
-            return reader.read(processes.snapshot(), discover: ticks % Watch.discoveryEvery == 0, now: Date()).sightings.first
+            return (try? reader.read(processes.snapshot(), discover: ticks % Watch.discoveryEvery == 0, now: Date()))?.sightings.first
         }
         func until(_ what: String, seconds: Double = 40, _ condition: (Sighting?) -> Bool) async throws -> Sighting? {
             let end = Date().addingTimeInterval(seconds)

@@ -3,7 +3,7 @@
 // the main run loop turned forever, stalls every test after it. The rule, for every file of Tests/:
 // - an Engine is made with `Engine.throwaway`, which finds programs on its environment's PATH only, never in the
 //   system's install folders (a test puts its fake programs on that PATH);
-// - `something try` (DeveloperTrial.main, the command's "try") is run only with words it refuses.
+// - `something try` (the app's DeveloperTrial) is run only with words it refuses: somethingTests' TryTests scans for it.
 // A live trial is a file whose suite is `.enabled(if: trial…)`; it starts the program its variable names.
 // Behind the scan, Spawn itself refuses under the tests any program that is not a fake (TestRunGuard).
 import Foundation
@@ -51,13 +51,6 @@ struct NoRealAgentTests {
         }
     }
 
-    static func matches(_ pattern: String, in line: String) -> [[String]] {
-        let regex = try! NSRegularExpression(pattern: pattern)
-        return regex.matches(in: line, range: NSRange(line.startIndex..., in: line)).map { match in
-            (0..<match.numberOfRanges).map { Range(match.range(at: $0), in: line).map { String(line[$0]) } ?? "" }
-        }
-    }
-
     @Test func noTestMakesAnEngineThatFindsThePersonsPrograms() {
         let files = NoRealAgentTests.files()
         #expect(files.contains { $0.name.hasSuffix("EngineTests.swift") }, "the scan reads Tests/")
@@ -68,40 +61,6 @@ struct NoRealAgentTests {
                 #expect(factory, "\(file.name):\(number + 1) makes an Engine directly; use Engine.throwaway with a throwaway PATH.")
             }
         }
-    }
-
-    @Test func noTestRunsSomethingTryWithWordsThatLaunch() {
-        var seen = 0
-        for file in NoRealAgentTests.files() where !file.text.contains(".enabled(if: trial") {
-            for (number, line) in NoRealAgentTests.code(file.text).enumerated() {
-                let calls = NoRealAgentTests.matches(#"(?:DeveloperTrial|Trial)\.main\(([^)]*)\)"#, in: line).map { $0[1] }
-                    + NoRealAgentTests.matches(#"Ran\((\[\s*"try"[^\]]*\])"#, in: line).map { $0[1] }
-                for call in calls {
-                    seen += 1
-                    let place = "\(file.name):\(number + 1)"
-                    guard call.hasPrefix("[") else {
-                        Issue.record("\(place) runs something try with words that are not written out: \(call)")
-                        continue
-                    }
-                    let words = NoRealAgentTests.matches(#""([^"]*)""#, in: call).map { $0[1] }
-                    if case .success = DeveloperTrial.parse(words, registry: .described) {
-                        Issue.record("\(place) runs something try \(words.dropFirst().joined(separator: " ")), which launches a real agent.")
-                    }
-                }
-            }
-        }
-        #expect(seen >= 3, "the scan finds the calls of PlanBTests and CommandTests")
-    }
-
-    @Test func theRefusedWordsAreRefusedAndTheRightOnesAccepted() {
-        for words in [["try"], ["try", "nope"], ["claude"], ["try", "claude", "--bogus"], ["try", "codex", "--plan-b"], ["try", "claude", "--record"]] {
-            if case .success = DeveloperTrial.parse(words, registry: .described) { Issue.record("\(words) were accepted") }
-        }
-        guard case .success(let asked) = DeveloperTrial.parse(["try", "claude", "--record", "out.jsonl", "--plan-b"], registry: .described) else {
-            Issue.record("the right words were refused")
-            return
-        }
-        #expect(asked.kind == "claude" && asked.record == "out.jsonl" && asked.planB)
     }
 
     /// Whatever a test does, Spawn starts no program outside the temporary folder and the system's tools, but the one

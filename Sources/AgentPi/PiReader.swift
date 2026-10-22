@@ -6,7 +6,6 @@
 // folder written last, if written since it started; two pi in one folder cannot be told apart, and neither claim is
 // made. pi writes a log at its first message: a pi with none is seen from its process only. PiLog, the fold of a log,
 // is OMP's too.
-import Darwin
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -73,10 +72,10 @@ final class PiReader: Reader {
         for (place, paths) in byFolder {
             for (path, holder) in PiReader.holders(paths, stamps, pi: here[place] ?? [])
             where holder.alive == true || Watch.isRecent(alive: nil, updated: stamps[path]?.modified, now: now) {
-                let header = headers[path]!.header!
+                guard let header = headers[path]?.header, let stamp = stamps[path] else { continue }
                 var file = files[path] ?? PiFile(path: path, header: header, log: PiLog(name: "pi"))
                 file.header = header
-                file.follow(stamps[path]!, skip: 0, opened: opened)
+                file.follow(stamp, skip: 0, opened: opened)
                 followed[path] = file
                 if holder.alive != false { shown.insert(place) }
                 var facts = StateMap.Facts(alive: holder.alive, evidence: holder.alive == true ? "cwd" : holder.alive == false ? "process" : nil,
@@ -114,10 +113,10 @@ final class PiReader: Reader {
     static func holders(_ paths: [String], _ stamps: [String: Stamp], pi: [Running]) -> [String: (alive: Bool?, pid: Int32?)] {
         // A second of slack: a time on disk and a process's start are not taken by the same clock read.
         let since = pi.map(\.started).min().map { $0.addingTimeInterval(-1) } ?? .distantFuture
-        let newest = paths.max { stamps[$0]!.modified < stamps[$1]!.modified }
+        let newest = paths.max { (stamps[$0]?.modified ?? .distantPast) < (stamps[$1]?.modified ?? .distantPast) }
         var holders: [String: (alive: Bool?, pid: Int32?)] = [:]
         for path in paths {
-            let written = stamps[path]!.modified >= since
+            let written = (stamps[path]?.modified ?? .distantPast) >= since
             if pi.count == 1, written, path == newest {
                 holders[path] = (true, pi[0].pid)
             } else if pi.count > 1, written {

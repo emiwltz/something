@@ -35,7 +35,7 @@ extension Engine {
 
     private static func startSpawn(_ launch: Launch, _ spawn: Spawn, agent: Launched,
                                    asked: @escaping (String) -> Bool, record: ((Bool, Data) -> Void)?) throws {
-        try spawn.start(lines: { line in DispatchQueue.main.async { record?(false, line); agent.driver.receive(line) } },
+        try spawn.start(lines: { line in DispatchQueue.main.async { record?(false, line); agent.receive(line) } },
                         ended: { [weak spawn] code in
                             let errors = spawn?.errorTail ?? ""
                             agent.driver.released()

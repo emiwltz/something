@@ -464,11 +464,41 @@ import SomethingCore
         #expect(code("pi", mode: "default") == "NOT_SUPPORTED" && code("omp") == "NOT_SUPPORTED")
     }
 
-    /// start(often:) again changes the cadence only: the programs are looked for once.
+    /// A program whose first lines are all unknown to its driver is a version something does not understand: its kind's
+    /// note says so, to the person and to the spaces.
+    @Test func aProgramThatSpeaksOnlyUnknownLinesIsSaid() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let program = place.bin.appendingPathComponent("claude")
+        try """
+            #!/bin/sh
+            i=0
+            while [ $i -lt 25 ]; do echo '{"type":"invented_frame_of_a_newer_claude"}'; i=$((i+1)); done
+            cat > /dev/null
+            """.write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        let engine = Engine.throwaway(place.environment)
+        _ = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        let tested = try #require(engine.registry.launchable["claude"]?.tested)
+        try await until("the note") { engine.state.kinds["claude"]?.note != nil }
+        #expect(engine.state.kinds["claude"]?.note == "something does not understand this version of Claude Code (tested \(tested)).")
+        let done = Stopped()
+        engine.stopAll(within: 3) { done.done = true }
+        try await until("the stop") { done.done }
+    }
+
+    /// start(often:) again changes the cadence only: the programs are looked for once. The watch reads this home on a
+    /// fake clock and sees no process, so that no tick of a real timer, seeing this Mac change, lands in the wait below.
     @Test func startIsCalledAgain() async throws {
         let place = try Place()
         defer { place.remove() }
-        let engine = Engine.throwaway(place.environment)
+        let engine = Engine.throwaway(place.environment), clock = FakeClock()
+        var cadences: [TimeInterval] = []
+        engine.watch = Watch(readers: engine.registry.readers(place.environment), snapshot: { Snapshot([]) })
+        engine.watch.repeating = { seconds, queue, fire in
+            cadences.append(seconds)
+            return clock.repeating(seconds, queue, fire)
+        }
         var changes = 0
         engine.changed = { changes += 1 }
         engine.start(often: false)
@@ -480,6 +510,7 @@ import SomethingCore
         #expect(!engine.often)
         try await Task.sleep(nanoseconds: 200_000_000)
         #expect(changes == 1)
+        #expect(cadences == [10, 2, 10], "the same cadence keeps its timer")
         #expect(engine.state.kinds["omp"]?.installed != nil, "omp's file is looked for")
     }
 

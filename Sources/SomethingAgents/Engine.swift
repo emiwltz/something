@@ -50,7 +50,7 @@ public final class Engine {
     var clock: () -> Date = Date.init
 
     /// The agents started elsewhere: the readers, on their timer once `start` was called.
-    lazy var watch = Watch(readers: registry.readers(environment))
+    lazy var watch = Watch(readers: registry.readers(environment), name: registry.name(of:))
     /// What the watch saw last, before the dedupe.
     private var seen = Seen()
     /// The agents seen elsewhere as the state last showed them.
@@ -91,10 +91,14 @@ public final class Engine {
         changed()
     }
 
+    /// The state; a kind whose launch spoke only lines its driver does not know says so in its note, before its reader's.
     private func make() -> State {
+        let foreign = Set(launched.filter(\.agent.foreign).map(\.agent.driving.kind))
         let kinds = registry.agents.map(\.kind).map { kind in
-            (kind, Kind(launch: registry.launchable[kind] != nil, installed: installed[kind], tested: registry.launchable[kind]?.tested ?? "none",
-                        seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: seen.kinds[kind]?.note))
+            let tested = registry.launchable[kind]?.tested ?? "none"
+            let note = foreign.contains(kind) ? "something does not understand this version of \(registry.name(of: kind)) (tested \(tested))." : nil
+            return (kind, Kind(launch: registry.launchable[kind] != nil, installed: installed[kind], tested: tested,
+                               seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: note ?? seen.kinds[kind]?.note))
         }
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
                      threads: launched.compactMap(\.agent.thread) + outside.threads, requests: launched.flatMap(\.agent.queue.fold.requests))
@@ -225,7 +229,7 @@ public final class Engine {
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
-    func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
+    package func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?, planB: Bool,
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let driving = try registry.driving(kind)

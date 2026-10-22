@@ -373,9 +373,6 @@ import SomethingCore
     @Test func wrongWords() {
         #expect(SpoolHook.main(["hook", "permission"]) == 2)
         #expect(SpoolHook.main(["hook", "permission", "--spool"]) == 2)
-        #expect(DeveloperTrial.main(["try", "nope"], registry: .described) == 2)
-        #expect(DeveloperTrial.main(["try", "claude", "--bogus"], registry: .described) == 2)
-        #expect(DeveloperTrial.main(["claude", "--record"], registry: .described) == 2, "the words begin with try")
         #expect(SpoolHook.main(["permission", "--spool", "/Users/example/spool"]) == 2, "the words begin with hook permission")
     }
 

@@ -5,7 +5,6 @@
 // session (`time_suspended`) and releases it at its end; a run cut by a crash or a shutdown leaves it set, so a claim
 // counts only when a live OpenCode process could hold it. The database says nothing of what a session waits on,
 // so `waiting` is null.
-import Darwin
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -17,7 +16,7 @@ final class OpenCodeReader: Reader {
     let database: String?
     /// something's own pid: the agents it launched run in groups whose leader is its child, and hold no claim of
     /// a conversation seen elsewhere. A test names another.
-    var own = getpid()
+    var own = ProcessInfo.processInfo.processIdentifier
     /// Sees every path the reader opens.
     var opened: (String) -> Void = { _ in }
 
@@ -49,14 +48,14 @@ final class OpenCodeReader: Reader {
 
     init(environment: [String: String]) { database = OpenCode.database(environment) }
 
-    func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
+    func read(_ snapshot: Snapshot, discover: Bool, now: Date) throws -> Reading {
         guard let database else { return Reading() }
         let current = [Stamp(database), Stamp(database + "-wal")]
         guard current[0] != nil else { return Reading() }
         if current != stamps {
-            (last, sessions) = query(database, now: now)
             // A refusal may pass (a checkpoint holding the file past the busy timeout): the next tick asks again.
-            if last.health != "unreadable" { stamps = current }
+            (last, sessions) = try query(database, now: now)
+            stamps = current
         }
         var reading = last
         reading.sightings = sessions.map { sighting($0, snapshot) }
@@ -65,11 +64,13 @@ final class OpenCodeReader: Reader {
 
     /// What the database says now: its version, its health and its recent sessions with their turns. OpenCode desktop
     /// 1.x still writes the 1.x tables, which OpenCode 2 left frozen when it moved its sessions: a write there in the
-    /// last 24 hours is a source something does not read, and the person is told.
-    private func query(_ path: String, now: Date) -> (Reading, [Session]) {
+    /// last 24 hours is a source something does not read, and the person is told. Throws `Unreadable`.
+    private func query(_ path: String, now: Date) throws -> (Reading, [Session]) {
         opened(path)
-        let unreadable = Reading(health: "unreadable", note: "something cannot read OpenCode's database; check its permissions.")
-        guard let db = try? SQLiteRO(path, whitelist: OpenCodeReader.whitelist), let tables = try? db.tables() else { return (unreadable, []) }
+        let busy = Unreadable("its database did not answer; something asks again at its next look.")
+        guard let db = try? SQLiteRO(path, whitelist: OpenCodeReader.whitelist), let tables = try? db.tables() else {
+            throw Unreadable("its database cannot be opened; check its permissions.")
+        }
         // The schema's last migration says which format the file has, not which OpenCode wrote it: it is the version
         // only when no session names its program's.
         let migrations = tables["migration"] == nil ? [] : (try? db.rows("SELECT max(id) AS version FROM migration")) ?? []
@@ -94,7 +95,7 @@ final class OpenCodeReader: Reader {
                        ifnull((SELECT max(m.time_updated) FROM session_message m WHERE m.session_id = s.id), 0)) AS last_write
             FROM session_v2 s WHERE s.parent_id IS NULL AND s.time_archived IS NULL AND (s.time_suspended IS NOT NULL OR last_write >= ?)
             ORDER BY last_write DESC LIMIT 100
-            """, [since]) else { return (unreadable, []) }
+            """, [since]) else { throw busy }
         var found: [Session] = []
         for row in rows {
             guard let id = row["id"] as? String else { continue }
@@ -108,7 +109,7 @@ final class OpenCodeReader: Reader {
             } else if let fold = turns(of: id, db) {
                 session.fold = fold
             } else {
-                return (unreadable, [])
+                throw busy
             }
             found.append(session)
         }
