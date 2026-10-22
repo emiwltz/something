@@ -51,7 +51,7 @@ public final class CodexDriver: Driver {
     private var rereadSettings = false
     /// Runs `work` on the driver's queue after a delay; tests run it by hand.
     var schedule: (TimeInterval, @escaping () -> Void) -> Void = { delay, work in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work) }
-    /// Closes the program's input, after which Codex exits: set by the engine, used when the launch cannot go on.
+    /// Closes the program's input, after which Codex exits: its program's (`join`), used when the launch cannot go on.
     var quit: () -> Void = {}
 
     private enum Call { case initialize, open, models, start(String, overrides: [String: String]), settings, steer(String), interrupt }
@@ -174,6 +174,8 @@ public final class CodexDriver: Driver {
 
     /// Closing its input is how Codex ends: it exits 0 (V).
     public var goodbye: Data? { nil }
+
+    public func join(_ program: ProcessHandle) { quit = program.quit }
 
     public func ended(code: Int32, errors: String) {
         guard !over else { return }

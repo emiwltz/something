@@ -17,25 +17,14 @@ extension Engine {
             try spawn.write(line)
             record?(true, line)
         }, now: Engine.now)
-        // A Codex or an OpenCode that cannot open its conversation is told to end.
-        (agent.driver as? CodexDriver)?.quit = { [weak spawn] in spawn?.closeInput() }
-        if let opencode = agent.driver as? ACPDriver {
-            opencode.quit = { [weak spawn] in spawn?.closeInput() }
-            opencode.take(spawn.environment)
-            // OpenCode's graceful step is an interrupt and its answer, within Spawn's 3 s; the input is closed after.
-            spawn.graceful = { [weak spawn, weak opencode] in
-                DispatchQueue.main.async { _ = try? agent.interrupt() }
-                while spawn?.running == true, opencode?.prompting == true { usleep(20_000) }
-            }
-        } else {
-            let goodbye = agent.driver.goodbye
-            spawn.graceful = { [weak spawn] in
-                guard let spawn, let goodbye, (try? spawn.write(goodbye)) != nil else { return }
-                record?(true, goodbye)
-                // Spawn gives this step 3 s at most: the program's own exit is waited for within them.
-                while spawn.running { usleep(20_000) }
-            }
-        }
+        let program = ProcessHandle(environment: spawn.environment, write: { [weak spawn] line in
+            guard let spawn, (try? spawn.write(line)) != nil else { return false }
+            record?(true, line)
+            return true
+        }, running: { [weak spawn] in spawn?.running == true }, quit: { [weak spawn] in spawn?.closeInput() },
+           interrupt: { [weak agent] in DispatchQueue.main.async { _ = try? agent?.interrupt() } })
+        try agent.driver.join(program)
+        spawn.graceful = { agent.driver.graceful(program) }
         if let spool {
             do { try spool.start() } catch { throw CodedError("LAUNCH_FAILED", "\(error)") }
             let claude = agent.driver as? ClaudeDriver

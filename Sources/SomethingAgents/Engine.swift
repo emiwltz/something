@@ -278,8 +278,9 @@ public final class Engine {
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let driving = try Engine.driving(kind)
-        // A resumed pi runs in its conversation's own folder, whatever folder it is started in: the state shows that one.
-        let folder = try resume.map { kind == AgentDescriptor.pi.kind ? try PiDriver.resumable($0) : folder } ?? folder
+        // A resume runs in the folder its conversation names, when it names one (pi's), whatever folder it is
+        // started in: the state shows that one.
+        let folder = try resume.map { try driving.resumeFolder?($0) ?? folder } ?? folder
         let program = try found[kind]?.get() ?? programs.find(kind)
         count += 1
         var launch = Launch(agent: "\(kind)-\(count)", folder: folder, model: model, mode: mode, effort: effort)

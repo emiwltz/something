@@ -97,6 +97,9 @@ struct Driving: Sendable {
     /// Whether the launch picks the conversation id (`Launch.thread`) for the program. When false, the thread is
     /// unknown until the program names it, unless the launch resumes one.
     var picksThread = true
+    /// The folder a resume of a conversation runs in, when the conversation names it (pi's file header); nil: the
+    /// folder asked. Throws THREAD_NOT_FOUND for a conversation that is not there.
+    var resumeFolder: (@Sendable (_ thread: String) throws -> String)?
     /// The program's arguments for a launch, and what it changes in the person's environment.
     var command: @Sendable (Launch) -> Command
     /// Makes the driver of one launch. `write` hands one whole line (without its newline) to the program and throws

@@ -373,6 +373,6 @@ extension Driving {
     /// conversation file itself; something learns it from get_state.
     static let pi = Driving(kind: "pi", tested: "1.0.0",
                             limits: ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
-                            picksThread: false,
+                            picksThread: false, resumeFolder: { try PiDriver.resumable($0) },
                             command: { PiDriver.command($0) }, driver: { PiDriver($0, write: $1, emit: $2, now: $3) })
 }

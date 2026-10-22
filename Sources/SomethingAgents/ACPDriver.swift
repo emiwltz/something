@@ -66,7 +66,7 @@ public final class ACPDriver: Driver {
     private var models: [String] = []
     /// Why OpenCode would end this turn "cancelled" by itself: a request refused, a question it could not show.
     private var halted: String?
-    /// Closes the program's input, after which OpenCode exits: set by the engine, used when the launch cannot go on.
+    /// Closes the program's input, after which OpenCode exits: its program's (`join`), used when the launch cannot go on.
     var quit: () -> Void = {}
     /// Whether a session/prompt waits for its answer. The stop ladder reads it from its own thread.
     public var prompting: Bool { lock.withLock { pending } }
@@ -164,9 +164,21 @@ public final class ACPDriver: Driver {
         return true
     }
 
-    /// The first step of the ladder is the engine's: an interrupt and its answer, then the input closed (OpenCode
-    /// exits 0 at its end); never a signal first, which leaves the conversation marked as running.
+    /// No line ends OpenCode: the first step of the ladder is `graceful`.
     public var goodbye: Data? { nil }
+
+    /// Takes what the launch's environment says (`take`), and the program's input to close (`quit`).
+    public func join(_ program: ProcessHandle) {
+        quit = program.quit
+        take(program.environment)
+    }
+
+    /// An interrupt and its answer, within Spawn's 3 s, then the input closed (OpenCode exits 0 at its end); never a
+    /// signal first, which leaves the conversation marked as running.
+    public func graceful(_ program: ProcessHandle) {
+        program.interrupt()
+        while program.running(), prompting { usleep(20_000) }
+    }
 
     /// An end nobody asked for. A claim left behind is said in the same error, after how OpenCode ended.
     public func ended(code: Int32, errors: String) {
@@ -183,7 +195,7 @@ public final class ACPDriver: Driver {
 
     /// After a stop something asked for, which is folded without `ended`: a claim left behind (the ladder ran out of
     /// time before the cancel was answered) becomes the agent's error.
-    func checkClaim() {
+    public func afterAskedStop() {
         guard !over, let claim = leftClaim() else { return }
         emit(.error(AgentError(code: "AGENT_ERROR", message: claim)))
     }

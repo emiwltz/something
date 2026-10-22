@@ -1,8 +1,8 @@
 // Driver: what every launched agent's driver is, with what the person's windows show of a request and their answer
-// (Prompt, Answer), and Launched, one agent something launched: its driver and its held queue, joined. A driver is a
-// pure function over lines: it reads the program's lines, writes lines through the closure it is given, and emits
-// events; it never touches an Agent, and no process is needed to replay it. Launched is where the engine and the
-// replays of Tests/Exchanges meet, so both run the same code.
+// (Prompt, Answer), the handle on its program (ProcessHandle), and Launched, one agent something launched: its driver
+// and its held queue, joined. A driver is a pure function over lines: it reads the program's lines, writes lines
+// through the closure it is given, and emits events; it never touches an Agent, and no process is needed to replay
+// it. Launched is where the engine and the replays of Tests/Exchanges meet, so both run the same code.
 import Foundation
 import SomethingCore
 
@@ -98,6 +98,39 @@ public protocol Driver: AnyObject {
     var goodbye: Data? { get }
     /// The program ended with `code`; `errors` is the end of its error output.
     func ended(code: Int32, errors: String)
+    /// Takes its program, just before it starts, on the main queue. By default it keeps nothing.
+    func join(_ program: ProcessHandle) throws
+    /// The first step of the stop ladder, on a thread of its own: Spawn gives it 3 s at most, then closes the input.
+    /// By default it writes `goodbye`, when there is one, and waits for the program's own exit.
+    func graceful(_ program: ProcessHandle)
+    /// After a stop something asked for, which is folded without `ended`. By default nothing more is said.
+    func afterAskedStop()
+}
+
+extension Driver {
+    public func join(_ program: ProcessHandle) throws {}
+
+    public func graceful(_ program: ProcessHandle) {
+        guard let goodbye, program.write(goodbye) else { return }
+        while program.running() { usleep(20_000) }
+    }
+
+    public func afterAskedStop() {}
+}
+
+/// One launch's program, as its driver may act on it. The engine joins each launch to its program (Join.swift);
+/// a replay has none.
+public struct ProcessHandle {
+    /// The program's whole environment: the person's, plus what the launch added.
+    public var environment: [String: String]
+    /// Writes one line to its input, recorded as any other; false when it no longer reads.
+    public var write: (Data) -> Bool
+    /// Whether it still runs. Read from any thread.
+    public var running: () -> Bool
+    /// Closes its input, after which it ends by itself: for a launch that cannot go on.
+    public var quit: () -> Void
+    /// Stops the running turn as the bridge's interrupt does, held messages dropped, on the main queue.
+    public var interrupt: () -> Void
 }
 
 /// Each `can` entry by its name in the contract. `resume` is false here: a launched agent is running.
@@ -209,12 +242,12 @@ final class Launched {
         return delivery.rawValue
     }
 
-    /// The program ended with `code`. When something asked it to stop, that is no failure, whatever the code; an
-    /// OpenCode that still marks its conversation as running is said even then.
+    /// The program ended with `code`. When something asked it to stop, that is no failure, whatever the code; what
+    /// the driver still has to say comes after (`afterAskedStop`).
     func ended(code: Int32, errors: String, asked: Bool) {
         guard asked else { return driver.ended(code: code, errors: errors) }
         record(.stopped(nil))
-        (driver as? ACPDriver)?.checkClaim()
+        driver.afterAskedStop()
     }
 
     /// Empties the queue and stops the running turn. Returns whether a turn was running. Throws AGENT_STOPPED.
