@@ -1,7 +1,8 @@
 // ACPProfile: an agent over the Agent Client Protocol is a profile and a descriptor, nothing more. An invented one,
 // written here as a new agent would be, is driven over OpenCode's recorded exchanges (Tests/Exchanges/opencode): the
 // protocol's lines go out byte for byte as they did for OpenCode, what is said names the invented agent, and what
-// OpenCode does its own way (its question tool, its sub-agents' key, its claim, its last model) does not follow.
+// OpenCode does its own way (its question tool, its sub-agents' key, its claim, its last model, its words for a
+// missing conversation) does not follow.
 import Foundation
 import Testing
 @testable import SomethingAgents
@@ -32,7 +33,7 @@ extension AgentDescriptor {
         #expect(driving.tested == "1.0.0")
         #expect(driving.limits == ["steer": "Invented Agent cannot take a message during a turn; send it with when: \"next\"."])
         #expect(!driving.picksThread && driving.effortOnlyWhenOffered && !driving.listsMoreModes)
-        #expect(String(describing: type(of: Replay.opencode(driving: driving).agent.driver)) == "ACPDriver")
+        #expect(Replay.opencode(driving: driving).agent.driver is ACPDriver)
     }
 
     /// The effort is read under the profile's own category: OpenCode's "thought_level" is not this agent's effort.
@@ -52,7 +53,35 @@ extension AgentDescriptor {
             == "Invented Agent stopped its turn because its request “touch invented.txt” was refused. Tell it what to do instead in a new message.")
         #expect(ACPProfile.invented.failure(["code": -32000], "Authentication required", "Hello.", model: "fake/fake-model", picked: false)
             == "Invented Agent's model fake/fake-model needs a sign-in to fake, which Invented Agent does not have. Sign in to fake in Invented Agent (`invented login` in a terminal) and send the message again.")
-        #expect(try Self.play("resume-missing").fold.agent.error?.code == "THREAD_NOT_FOUND", "the protocol's default words")
+    }
+
+    /// A missing conversation is known by ACP's code for it, or by the profile's own words: OpenCode's are not this agent's.
+    @Test func aMissingConversation() throws {
+        #expect(try Self.play("resume-missing").fold.agent.error?.code == "AGENT_ERROR", "OpenCode's words, with -32602")
+        let replay = Replay.opencode(resume: ACPDriverTests.session, driving: ACPProfile.invented.driving)
+        replay.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+        replay.feed(["jsonrpc": "2.0", "id": 2, "error": ["code": -32002, "message": "Resource not found"]])
+        #expect(replay.fold.agent.error?.code == "THREAD_NOT_FOUND")
+    }
+
+    /// Its effort is the entry of its own category, set by that entry's own id.
+    @Test func itsOwnEffort() throws {
+        let replay = Replay.opencode(driving: ACPProfile.invented.driving)
+        replay.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+        let effort: [String: Any] = ["id": "reasoning", "category": "reasoning_effort", "currentValue": "low", "type": "select",
+                                     "options": [["value": "low", "name": "Low"], ["value": "high", "name": "High"]]]
+        replay.feed(["jsonrpc": "2.0", "id": 2, "result": ["sessionId": ACPDriverTests.session, "configOptions": [effort]]])
+        #expect(replay.fold.agent.effort == "low")
+        #expect(replay.fold.agent.options.effort?.map(\.value) == ["low", "high"])
+        let start = replay.written.count
+        _ = try replay.agent.driver.set(model: nil, mode: nil, effort: "high")
+        let params = try #require(replay.lines(from: start).first?["params"] as? [String: Any])
+        #expect(params["configId"] as? String == "reasoning")
+        var taken = effort
+        taken["currentValue"] = "high"
+        replay.feed(["jsonrpc": "2.0", "id": 3, "result": ["configOptions": [taken]]])
+        #expect(replay.fold.agent.effort == "high")
+        #expect(replay.fold.agent.error == nil, "the value taken is read under its own id")
     }
 
     /// Without a question tool in its profile, a question that failed is a tool like any other: the turn the agent

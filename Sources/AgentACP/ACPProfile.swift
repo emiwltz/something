@@ -24,8 +24,9 @@ struct ACPProfile: Sendable {
     var childKey: String?
     /// The tool it asks the person a question with, which it cannot show when something launches it; nil: none.
     var questionTool: String?
-    /// Words of its error when a conversation to continue is not there (or not in that folder).
-    var notFoundWords = ["session not found"]
+    /// Words of its error when a conversation to continue is not there (or not in that folder), for an agent that does
+    /// not answer with ACP's code for a missing resource (-32002); the protocol defines no words.
+    var notFoundWords: [String] = []
     /// Quirk: the model a new conversation that names none should take, read from the launch's environment; nil when
     /// the agent's own choice stands.
     var lastModel: (@Sendable (_ environment: [String: String]) -> String?)?

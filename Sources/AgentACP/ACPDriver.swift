@@ -50,6 +50,9 @@ final class ACPDriver: Driver {
     /// The model in use and those offered, as the agent last listed them.
     private var model: String?
     private var models: [String] = []
+    /// The agent's own id for the entry of each of something's keys ("model", "mode", "effort"), found by its category:
+    /// set_config_option names the entry by that id.
+    private var ids: [String: String] = [:]
     /// Why the agent would end this turn "cancelled" by itself: a request refused, a question it could not show.
     private var halted: String?
     /// Closes the program's input, after which the agent exits: its program's (`join`), used when the launch cannot go on.
@@ -132,7 +135,7 @@ final class ACPDriver: Driver {
     func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
 
     /// Allow and deny pick the agent's own once-only options by their kind, never "always", which would write a lasting
-    /// rule into it; a request without them is answered "cancelled", which OpenCode takes as a refusal. The
+    /// rule into it; a request without them is answered "cancelled", which OpenCode, the first agent proven, takes as a refusal. The
     /// decision shown is the one sent: an allow that could not be sent is a refusal, and the agent's error says why.
     func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
@@ -163,7 +166,7 @@ final class ACPDriver: Driver {
     }
 
     /// An interrupt and its answer, within Spawn's 3 s, then the input closed (the agent exits at its end); never a
-    /// signal first, which may leave the conversation marked as running (OpenCode's claim).
+    /// signal first, which may leave the conversation marked as running (seen with OpenCode: `leftRunning`).
     func graceful(_ program: ProcessHandle) {
         program.interrupt()
         while program.running(), prompting { usleep(20_000) }
@@ -212,7 +215,8 @@ final class ACPDriver: Driver {
             try? invoke(.open, launch.resume ? "session/resume" : "session/new", params)
         case .open:
             if error != nil {
-                let missing = profile.notFoundWords.contains { words.contains($0) }
+                // ACP's code for a missing resource, else the words of an agent that answers with another code.
+                let missing = error?["code"] as? Int == -32002 || profile.notFoundWords.contains { words.contains($0) }
                 return refused(missing ? AgentError(code: "THREAD_NOT_FOUND", message: "\(profile.name) has no conversation \(launch.thread) in \(launch.folder) on this Mac.")
                     : AgentError(code: "AGENT_ERROR", message: "\(profile.name) refused to start the conversation: \(words). If it has no model yet, run `\(profile.signIn)` in a terminal."))
             }
@@ -230,7 +234,7 @@ final class ACPDriver: Driver {
                 emit(.error(AgentError(code: "VALUE_NOT_OFFERED", message: "\(profile.name) refused \(value) as its \(key): \(words)")))
             } else if let options = result["configOptions"] as? [[String: Any]] {
                 read(options)
-                let taken = options.first { $0["id"] as? String == key }?["currentValue"] as? String
+                let taken = options.first { $0["id"] as? String == ids[key] ?? key }?["currentValue"] as? String
                 if taken != value { emit(.error(AgentError(code: "VALUE_NOT_OFFERED", message: "\(profile.name) kept \(taken ?? "no value") as its \(key), not \(value)."))) }
             }
             try? flush()
@@ -244,8 +248,8 @@ final class ACPDriver: Driver {
             }
             switch result["stopReason"] as? String {
             case "cancelled" where cancelled: emit(.turnEnded(.interrupted))
-            // An agent may also end a turn "cancelled" by itself, as OpenCode does after a refused permission or a
-            // dismissed question (OpenCodeTrial.swift): its work stopped there, which is no normal end.
+            // An agent may also end a turn "cancelled" by itself: OpenCode, the first agent proven, does after a refused
+            // permission or a dismissed question (OpenCodeTrial.swift). Its work stopped there, which is no normal end.
             case "cancelled":
                 emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: halted ?? "\(profile.name) stopped its turn before the end without saying why."))))
             case "max_tokens": emit(.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "\(profile.name)'s model reached its output limit before the end of its answer."))))
@@ -338,7 +342,7 @@ final class ACPDriver: Driver {
         guard let session, !setting, !settings.isEmpty else { return }
         let (key, value) = settings.removeFirst()
         setting = true
-        try invoke(.set(key: key, value: value), "session/set_config_option", ["sessionId": session, "configId": key, "value": value])
+        try invoke(.set(key: key, value: value), "session/set_config_option", ["sessionId": session, "configId": ids[key] ?? key, "value": value])
     }
 
     /// The agent's options for the session: the values in use and those offered, by their category. Each list it
@@ -346,6 +350,9 @@ final class ACPDriver: Driver {
     private func read(_ list: Any?) {
         guard let list = list as? [[String: Any]] else { return }
         func entry(_ category: String) -> [String: Any]? { list.first { $0["category"] as? String == category } }
+        for (key, category) in [("model", "model"), ("mode", "mode"), ("effort", profile.effortCategory)] {
+            if let id = entry(category)?["id"] as? String { ids[key] = id }
+        }
         func choices(_ entry: [String: Any]?) -> [Option]? {
             (entry?["options"] as? [[String: Any]])?.compactMap { option in
                 (option["value"] as? String).map { Option(value: $0, label: option["name"] as? String ?? $0) }
