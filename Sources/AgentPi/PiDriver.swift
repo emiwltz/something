@@ -7,10 +7,10 @@ import Foundation
 import SomethingAgents
 import SomethingCore
 
-public final class PiDriver: Driver {
+final class PiDriver: Driver {
     /// A resume continues the conversation file `launch.thread`, which the engine checked first (`resumable`): pi
     /// given a missing file starts an empty conversation at that path instead of refusing.
-    public static func command(_ launch: Launch) -> Command {
+    static func command(_ launch: Launch) -> Command {
         var arguments = ["--mode", "rpc"]
         if let model = launch.model { arguments += ["--model", model] }
         if let effort = launch.effort { arguments += ["--thinking", effort] }
@@ -83,19 +83,19 @@ public final class PiDriver: Driver {
     /// True while a set_model or set_thinking_level waits for its answer.
     private var setting: Bool { calls.values.contains { if case .set = $0 { true } else { false } } }
 
-    public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
+    init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
     }
 
     /// pi writes nothing before a command (V): get_state names the conversation and the values in force.
-    public func begin() throws {
+    func begin() throws {
         emit(.options(options()))
         try invoke(.state, ["type": "get_state"])
         try invoke(.models, ["type": "get_available_models"])
         try invoke(.levels, ["type": "get_available_thinking_levels"])
     }
 
-    public func receive(_ line: Data) {
+    func receive(_ line: Data) {
         guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any], let type = message["type"] as? String else { return }
         heard = true
         switch type {
@@ -116,14 +116,14 @@ public final class PiDriver: Driver {
     /// A new turn is a plain prompt. A steer is a prompt with streamingBehavior "steer": pi delivers it after the
     /// running step's tool calls, before its next model call; on an idle pi it starts a run, where the steer command
     /// would only queue it (V).
-    public func deliver(_ text: String, steer: Bool) throws {
+    func deliver(_ text: String, steer: Bool) throws {
         if steer { return try invoke(.steer(text), ["type": "prompt", "message": text, "streamingBehavior": "steer"]) }
         try invoke(.prompt(text), ["type": "prompt", "message": text])
     }
 
     /// Queued messages survive pi's abort and would go with the next prompt (V): clear_queue goes first. An abort
     /// asked before the run started is sent when it starts.
-    public func interrupt() throws {
+    func interrupt() throws {
         try invoke(.clearQueue, ["type": "clear_queue"])
         guard running else { return abortAsked = true }
         aborting = true
@@ -132,7 +132,7 @@ public final class PiDriver: Driver {
 
     /// pi applies a model and a thinking level at once; the state shows them once get_state reads them back. Throws
     /// NOT_SUPPORTED for a mode (`limits`), VALUE_NOT_OFFERED for a model that is not "provider/id", AGENT_STOPPED.
-    public func set(model: String?, mode: String?, effort: String?) throws -> String {
+    func set(model: String?, mode: String?, effort: String?) throws -> String {
         if mode != nil { throw CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!) }
         if let model, model.split(separator: "/", maxSplits: 1).count != 2 {
             throw CodedError("VALUE_NOT_OFFERED", "pi names a model provider/id, such as one of the agent's options.model.")
@@ -142,15 +142,15 @@ public final class PiDriver: Driver {
         return "now"
     }
 
-    public func prompt(_ request: String) -> Prompt? { nil }
+    func prompt(_ request: String) -> Prompt? { nil }
 
     /// pi opens no request: nothing is ever open to answer.
-    public func answer(_ request: String, _ answer: Answer) throws -> Bool { false }
+    func answer(_ request: String, _ answer: Answer) throws -> Bool { false }
 
     /// Closing its input is how pi ends: it exits 0 at once, even mid-run (V).
-    public var goodbye: Data? { nil }
+    var goodbye: Data? { nil }
 
-    public func ended(code: Int32, errors: String) {
+    func ended(code: Int32, errors: String) {
         guard !over else { return }
         over = true
         guard code != 0 else { return emit(.stopped(nil)) }

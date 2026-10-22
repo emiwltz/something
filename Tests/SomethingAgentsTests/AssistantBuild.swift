@@ -23,21 +23,55 @@ enum AssistantBuild {
     /// This clone's own program, built by `swift build`: the one `swift test` runs beside.
     static let clonesProgram = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent(".build/debug/something")
-    /// Where a test runs the real program from (plan A.4): WebKit keeps a folder per program path that cannot be
-    /// deleted, so every clone uses this one path, and its folder is made once per machine.
+    /// Where a test runs the real program from (plan A.4), one path for every clone.
     static let fixedProgram = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-test-program/something")
+    /// The build identity (LC_UUID) every placed copy carries. WebKit names the folders it leaves in $TMPDIR, which
+    /// cannot be deleted, after the program's LC_UUID, not its path (com.apple.WebKit.GPU+something-55554944<uuid>):
+    /// with this one, they are made once per machine instead of once per build. Invented.
+    static let fixedUUID = UUID(uuidString: "00000000-0000-4000-8000-0000736F6D65")!
 
-    /// Copies this clone's program to `fixedProgram` and returns that path. Beside it, a link to this clone's share/
-    /// and an empty Package.swift, which is how the program finds its share/ outside the .app (Resources.share).
+    /// Copies this clone's program to `fixedProgram`, stamped with `fixedUUID`, and returns that path. Beside it, a
+    /// link to this clone's share/ and an empty Package.swift, which is how the program finds its share/ outside the
+    /// .app (Resources.share).
     static func placeProgram() throws -> String {
         removeProgram()
         let folder = fixedProgram.deletingLastPathComponent(), clone = clonesProgram.deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent()
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: clonesProgram, to: fixedProgram)
+        try stamp(fixedProgram)
         try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("share"), withDestinationURL: clone.appendingPathComponent("share"))
         try Data().write(to: folder.appendingPathComponent("Package.swift"))
         return fixedProgram.path
+    }
+
+    /// Writes `fixedUUID` into the LC_UUID of the thin 64-bit Mach-O program at `file`, then signs it again ad hoc,
+    /// since its signature covered the old bytes. Throws when the file has no LC_UUID or codesign fails.
+    static func stamp(_ file: URL) throws {
+        var data = try Data(contentsOf: file)
+        guard let range = uuidRange(in: data) else { throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: file.path]) }
+        withUnsafeBytes(of: fixedUUID.uuid) { data.replaceSubrange(range, with: $0) }
+        try data.write(to: file)
+        let sign = Process()
+        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["--force", "--sign", "-", file.path]
+        sign.standardError = FileHandle.nullDevice
+        try sign.run()
+        sign.waitUntilExit()
+        guard sign.terminationStatus == 0 else { throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: file.path]) }
+    }
+
+    /// Where the 16 bytes of LC_UUID are in a thin 64-bit Mach-O; nil when `data` is not one or has none.
+    static func uuidRange(in data: Data) -> Range<Int>? {
+        func word(_ offset: Int) -> UInt32 { data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: UInt32.self) } }
+        guard data.count >= 32, word(0) == 0xfeed_facf else { return nil }
+        var offset = 32  // after mach_header_64
+        for _ in 0..<word(16) {  // ncmds
+            guard offset + 24 <= data.count else { return nil }
+            if word(offset) == 0x1b { return offset + 8 ..< offset + 24 }  // LC_UUID: cmd, cmdsize, then the 16 bytes
+            offset += Int(word(offset + 4))
+        }
+        return nil
     }
 
     /// Removes the copy and the picture its `check` of the build left in the person's temporary folder.

@@ -8,9 +8,9 @@ import Foundation
 import SomethingAgents
 import SomethingCore
 
-public final class ACPDriver: Driver {
+final class ACPDriver: Driver {
     /// Nothing else on the line: model, mode and effort go through the channel, where OpenCode says what it took.
-    public static func command(_ launch: Launch) -> Command { Command(arguments: ["acp"]) }
+    static func command(_ launch: Launch) -> Command { Command(arguments: ["acp"]) }
 
     /// The sentence for a conversation OpenCode left marked as running.
     static func claimLeft(_ session: String) -> String {
@@ -70,7 +70,7 @@ public final class ACPDriver: Driver {
     /// Closes the program's input, after which OpenCode exits: its program's (`join`), used when the launch cannot go on.
     var quit: () -> Void = {}
     /// Whether a session/prompt waits for its answer. The stop ladder reads it from its own thread.
-    public var prompting: Bool { lock.withLock { pending } }
+    var prompting: Bool { lock.withLock { pending } }
     private let lock = NSLock()
     private var pending = false
 
@@ -78,7 +78,7 @@ public final class ACPDriver: Driver {
 
     private struct Ask { var rpcID: Any, options: [[String: Any]], tool: String?, prompt: Prompt }
 
-    public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
+    init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         self.launch = launch
         self.write = write
         self.emit = emit
@@ -89,11 +89,11 @@ public final class ACPDriver: Driver {
     }
 
     /// something reads no file and runs no terminal for OpenCode: it does both itself.
-    public func begin() throws {
+    func begin() throws {
         try invoke(.initialize, "initialize", ["protocolVersion": 1, "clientCapabilities": ["fs": ["readTextFile": false, "writeTextFile": false], "terminal": false]])
     }
 
-    public func receive(_ line: Data) {
+    func receive(_ line: Data) {
         guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
         heard = true
         let params = message["params"] as? [String: Any] ?? [:]
@@ -107,7 +107,7 @@ public final class ACPDriver: Driver {
 
     /// A message starts a turn; it goes out once the session and the settings asked before it are in place.
     /// Throws NOT_SUPPORTED for a steer, which OpenCode refuses (`limits`), and AGENT_STOPPED.
-    public func deliver(_ text: String, steer: Bool) throws {
+    func deliver(_ text: String, steer: Bool) throws {
         guard !steer else { throw CodedError("NOT_SUPPORTED", Driving.opencode.limits["steer"]!) }
         sent += 1
         emit(.turnStarted(id: nil))
@@ -118,7 +118,7 @@ public final class ACPDriver: Driver {
 
     /// session/cancel stops the running prompt, whose answer then says "cancelled"; a request still open is
     /// answered "cancelled", as ACP asks. A message not sent yet is dropped and its turn ends here.
-    public func interrupt() throws {
+    func interrupt() throws {
         guard prompting, let session else {
             guard !early.isEmpty else { return }
             early = []
@@ -136,19 +136,19 @@ public final class ACPDriver: Driver {
     /// Each value goes out with session/set_config_option, one at a time; OpenCode answers with all its options, and
     /// the state shows what it took (it may keep another model when its catalog was not ready). A turn
     /// that runs keeps the values it started with.
-    public func set(model: String?, mode: String?, effort: String?) throws -> String {
+    func set(model: String?, mode: String?, effort: String?) throws -> String {
         if model != nil { modelAsked = true }
         settings += [("mode", mode), ("model", model), ("effort", effort)].compactMap { key, value in value.map { (key, $0) } }
         try nextSetting()
         return prompting ? "next-turn" : "now"
     }
 
-    public func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
+    func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
 
     /// Allow and deny pick OpenCode's own once-only options by their kind, never "always", which would write a lasting
     /// rule into OpenCode; a request without them is answered "cancelled", which OpenCode takes as a refusal. The
     /// decision shown is the one sent: an allow that could not be sent is a refusal, and the agent's error says why.
-    public func answer(_ request: String, _ answer: Answer) throws -> Bool {
+    func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
         let kind = answer == .once ? "allow_once" : "reject_once"
         let option = ask.options.first { $0["kind"] as? String == kind }?["optionId"] as? String
@@ -166,23 +166,23 @@ public final class ACPDriver: Driver {
     }
 
     /// No line ends OpenCode: the first step of the ladder is `graceful`.
-    public var goodbye: Data? { nil }
+    var goodbye: Data? { nil }
 
     /// Takes what the launch's environment says (`take`), and the program's input to close (`quit`).
-    public func join(_ program: ProcessHandle) {
+    func join(_ program: ProcessHandle) {
         quit = program.quit
         take(program.environment)
     }
 
     /// An interrupt and its answer, within Spawn's 3 s, then the input closed (OpenCode exits 0 at its end); never a
     /// signal first, which leaves the conversation marked as running.
-    public func graceful(_ program: ProcessHandle) {
+    func graceful(_ program: ProcessHandle) {
         program.interrupt()
         while program.running(), prompting { usleep(20_000) }
     }
 
     /// An end nobody asked for. A claim left behind is said in the same error, after how OpenCode ended.
-    public func ended(code: Int32, errors: String) {
+    func ended(code: Int32, errors: String) {
         guard !over else { return }
         over = true
         let claim = leftClaim()
@@ -196,7 +196,7 @@ public final class ACPDriver: Driver {
 
     /// After a stop something asked for, which is folded without `ended`: a claim left behind (the ladder ran out of
     /// time before the cancel was answered) becomes the agent's error.
-    public func afterAskedStop() {
+    func afterAskedStop() {
         guard !over, let claim = leftClaim() else { return }
         emit(.error(AgentError(code: "AGENT_ERROR", message: claim)))
     }

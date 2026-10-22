@@ -32,13 +32,13 @@ import Testing
         #expect(Ask.warning(for: "launch:claude") == nil && Ask.warning(for: "send:pi") == nil && Ask.warning(for: "state") == nil)
     }
 
-    /// No other file of the app names an agent: its kind as a word, a driver, a descriptor, or its name in a sentence.
-    /// Comments may. A `.pi` after a type (CGFloat.pi) is the number.
+    /// No other file of the app names an agent: its kind as a word, a driver, a descriptor, a family's import, Claude's
+    /// hook (SpoolHook), or its name in a sentence. Comments may. A `.pi` after a type (CGFloat.pi) is the number.
     @Test func onlyExtensionsSwiftNamesAnAgent() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/something")
         let names = Registry.app.agents.map(\.name).joined(separator: "|")
-        let named = try Regex(#"(?:"(?:claude|codex|opencode|pi|omp)"|(?:Claude|Codex|ACP|Pi)Driver|AgentDescriptor|(?:^|[^\w.])\.(?:claude|codex|opencode|pi|omp)\b"#
+        let named = try Regex(#"(?:"(?:claude|codex|opencode|pi|omp)"|(?:Claude|Codex|ACP|Pi)Driver|AgentDescriptor|\bimport\s+Agent\w+|\bSpoolHook\b|(?:^|[^\w.])\.(?:claude|codex|opencode|pi|omp)\b"#
             + #"|"[^"]*\b(?:"# + names + #")\b[^"]*")"#)
         let files = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasSuffix(".swift") }
         #expect(files.count > 20, "the scan reads Sources/something")

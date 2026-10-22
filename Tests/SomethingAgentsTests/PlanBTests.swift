@@ -92,9 +92,10 @@ import SomethingCore
         }
     }
 
-    /// Builds the hook command from PermissionSpool.swift alone, at `path`, with what `something hook permission`
-    /// runs; `folder` holds its scraps. swiftc takes seconds on a slow Mac (5 s on a 3-core runner): it is waited for
-    /// on a thread of its own, never on the main actor, which the engine's tests and WebKit's share.
+    /// Builds the hook command from PermissionSpool.swift alone (its SpoolHook is `package`, hence the package name),
+    /// at `path`, with what `something hook permission` runs; `folder` holds its scraps. swiftc takes seconds on a slow
+    /// Mac (5 s on a 3-core runner): it is waited for on a thread of its own, never on the main actor, which the
+    /// engine's tests and WebKit's share.
     nonisolated static func buildHook(_ path: String, in folder: URL) async throws {
         let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources/AgentClaude/PermissionSpool.swift")
@@ -102,7 +103,7 @@ import SomethingCore
         try "import Foundation\nexit(SpoolHook.main(Array(CommandLine.arguments.dropFirst())))\n".write(to: main, atomically: true, encoding: .utf8)
         let swiftc = Process()
         swiftc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        swiftc.arguments = ["swiftc", "-module-cache-path", folder.appendingPathComponent("cache").path, "-o", path, source.path, main.path]
+        swiftc.arguments = ["swiftc", "-package-name", "something", "-module-cache-path", folder.appendingPathComponent("cache").path, "-o", path, source.path, main.path]
         try await PlanBTests.offMain {
             try swiftc.run()
             swiftc.waitUntilExit()

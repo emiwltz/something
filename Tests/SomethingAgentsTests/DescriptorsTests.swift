@@ -93,6 +93,25 @@ import SomethingCore
         }
     }
 
+    /// Each family imports the system, the core and the host, never another family (AGENTS.md, rule 7): SwiftPM
+    /// does not check by default that an import is a declared dependency, so a stray one could build.
+    @Test func aFamilyImportsNoOtherFamily() throws {
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources")
+        let allowed: Set<String> = ["Foundation", "Darwin", "SQLite3", "SomethingCore", "SomethingAgents"]
+        let imports = try Regex(#"^\s*(?:@\w+\s+)*(?:\w+\s+)?import\s+(?:(?:struct|class|enum|protocol|func|var|let|typealias)\s+)?(\w+)"#)
+        let families = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasPrefix("Agent") }
+        #expect(families.count == 4, "the scan reads Sources/Agent*")
+        for family in families {
+            let folder = sources.appendingPathComponent(family)
+            for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where name.hasSuffix(".swift") {
+                let text = try String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8)
+                let modules = text.split(separator: "\n").compactMap { try? imports.firstMatch(in: $0)?.output[1].substring }.map(String.init)
+                #expect(!modules.isEmpty && modules.allSatisfy(allowed.contains), "\(family)/\(name) imports \(modules)")
+            }
+        }
+    }
+
     /// A forced plan B is for a kind that has one: any other is refused before anything starts.
     @MainActor @Test func aPlanBItsKindDoesNotHaveIsRefused() {
         let engine = Engine.throwaway(["HOME": "/Users/example", "PATH": "/nowhere"])

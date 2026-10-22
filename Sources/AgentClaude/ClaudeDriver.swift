@@ -6,16 +6,16 @@ import Foundation
 import SomethingAgents
 import SomethingCore
 
-public final class ClaudeDriver: Driver {
+final class ClaudeDriver: Driver {
     /// Removed from the environment Claude Code gets: a key left in a shell profile overrides the subscription the
     /// person signed in with, and a dead one makes every message fail.
-    public static let credentials: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
+    static let credentials: Set<String> = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 
     /// `--permission-prompt-tool stdio` sends permission requests on this channel instead of refusing them (the SDKs
     /// pass it; the help does not list it). The mode is always explicit: without it a stranger's settings pick one,
     /// possibly `auto`. The environment variable makes Claude say when a turn starts and ends; it is set for this
     /// launch only.
-    public static func command(_ launch: Launch) -> Command { command(launch, hook: nil) }
+    static func command(_ launch: Launch) -> Command { command(launch, hook: nil) }
 
     /// Plan B's command: the host's hook command, with the launch's own spool folder. Throws LAUNCH_FAILED when the
     /// host does not know its hook command.
@@ -103,18 +103,18 @@ public final class ClaudeDriver: Driver {
     /// when the host knows its hook command (`join`).
     var fallback: (() -> Bool)?
 
-    public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
+    init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
         model = launch.model
     }
 
     /// `initialize` is optional, but its answer lists the models this account offers.
-    public func begin() throws {
+    func begin() throws {
         emit(.options(options()))
         try control("initialize", [:])
     }
 
-    public func receive(_ line: Data) {
+    func receive(_ line: Data) {
         guard let frame = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
         heard = true
         switch frame["type"] as? String {
@@ -137,7 +137,7 @@ public final class ClaudeDriver: Driver {
     /// with it. Never "now", which may interrupt the turn; never left out, since the default depends on a flag on
     /// Anthropic's side. `origin` human: an unattributed message fails Claude's own trust checks.
     /// The uuid lets Claude say what became of the message (`command_lifecycle`).
-    public func deliver(_ text: String, steer: Bool) throws {
+    func deliver(_ text: String, steer: Bool) throws {
         let uuid = UUID().uuidString.lowercased()
         try send(["type": "user", "message": ["role": "user", "content": text], "parent_tool_use_id": NSNull(),
                   "uuid": uuid, "priority": "next", "origin": ["kind": "human"]])
@@ -152,7 +152,7 @@ public final class ClaudeDriver: Driver {
     }
 
     /// `cancel_queued` drops the steered messages Claude still holds, as an interrupt empties something's own queue.
-    public func interrupt() throws {
+    func interrupt() throws {
         interrupting = true
         try control("interrupt", ["cancel_queued": true])
     }
@@ -160,18 +160,18 @@ public final class ClaudeDriver: Driver {
     /// A new mode applies at once; a new model or effort from Claude's next request to the model, which is the next
     /// turn when one runs. What is returned is what Claude was asked: only the state, once Claude reports the new
     /// value, says it applied, and a refusal comes as the agent's error.
-    public func set(model: String?, mode: String?, effort: String?) throws -> String {
+    func set(model: String?, mode: String?, effort: String?) throws -> String {
         if let mode { try control("set_permission_mode", ["mode": mode], value: mode) }
         if let model { try control("set_model", ["model": model], value: model) }
         if let effort { try control("apply_flag_settings", ["settings": ["effortLevel": effort]], value: effort) }
         return (model != nil || effort != nil) && turnOpen ? "next-turn" : "now"
     }
 
-    public func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
+    func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
 
     /// Allow passes the input back unchanged, and never one of Claude's suggestions for a lasting rule. A question
     /// is answered by allowing the tool with the answers added to its input, keyed by each question's text.
-    public func answer(_ request: String, _ answer: Answer) throws -> Bool {
+    func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
         let input = ask.request["input"] as? [String: Any] ?? [:]
         let question = ask.prompt.request.kind == "question"
@@ -213,13 +213,13 @@ public final class ClaudeDriver: Driver {
     }
 
     /// `end_session` aborts the turn, drops Claude's queue and exits 0: cleaner than a signal, which loses the turn.
-    public var goodbye: Data? {
+    var goodbye: Data? {
         try? JSONSerialization.data(withJSONObject: ["type": "control_request", "request_id": "something-end",
                                                      "request": ["subtype": "end_session"]], options: [.sortedKeys])
     }
 
     /// Plan B starts its spool before the program, which then asks through it; plan A keeps the way to plan B.
-    public func join(_ program: ProcessHandle) throws {
+    func join(_ program: ProcessHandle) throws {
         guard launch.planB else {
             if program.host.hookCommand != nil { fallback = program.relaunch }
             return
@@ -232,9 +232,9 @@ public final class ClaudeDriver: Driver {
     }
 
     /// A hook still waiting then denies within a moment.
-    public func released() { spool?.stop() }
+    func released() { spool?.stop() }
 
-    public func ended(code: Int32, errors: String) {
+    func ended(code: Int32, errors: String) {
         guard code != 0 else { return emit(.stopped(nil)) }
         let lines = errors.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         // An older Claude that does not know `stdio` as a prompt tool ends at once, naming the flag (a guess: see `fallback`).

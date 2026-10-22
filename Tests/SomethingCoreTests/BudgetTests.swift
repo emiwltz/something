@@ -38,12 +38,11 @@ enum Budget {
         if host.map(\.lines).reduce(0, +) > Budget.host {
             problems.append("SomethingAgents has \(host.map(\.lines).reduce(0, +)) lines; its budget is \(Budget.host).")
         }
-        for file in host {
-            let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
-            let (role, budget) = isDriver ? ("driver", driver) : ("shared file", agentsShared)
-            if file.lines > budget { problems.append("\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
+        // The host holds no driver: every file of it, Driver.swift (the contract) included, has a shared file's budget.
+        for file in host where file.lines > agentsShared {
+            problems.append("\(file.name) has \(file.lines) lines; a shared file has \(agentsShared).")
         }
-        // Each agent family's target (Agent*): the same budget per file, and none in all.
+        // Each agent family's target (Agent*): a driver's budget for its drivers, a file's for the others, none in all.
         for target in agentTargets(under: root) {
             for file in files(in: sources.appendingPathComponent(target)) {
                 let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
@@ -105,7 +104,7 @@ enum Budget {
     /// Invented sources, one line over each budget, in a temporary folder: each one is caught, and only it.
     @Test func eachBudgetFailsOneLineOver() throws {
         let cases: [(folder: String, name: String, lines: Int, problem: String)] = [
-            ("SomethingAgents", "ClaudeDriver.swift", 601, "ClaudeDriver.swift has 601 lines; a driver has 600."),
+            ("SomethingAgents", "Driver.swift", 401, "Driver.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_801, "SomethingCore has 1801 lines; its budget is 1800."),

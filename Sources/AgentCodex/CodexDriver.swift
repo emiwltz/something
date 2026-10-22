@@ -8,7 +8,7 @@ import Foundation
 import SomethingAgents
 import SomethingCore
 
-public final class CodexDriver: Driver {
+final class CodexDriver: Driver {
     /// The policy a launch that names none puts on its first turn when the thread's own would never ask ("never",
     /// or a granular set of rules, which asks no more than this): a stricter one is left as the person set it.
     static let defaultMode = "on-request"
@@ -17,7 +17,7 @@ public final class CodexDriver: Driver {
 
     /// The stdio app-server starts no background daemon, even with the `daemon_auto_start` feature on (seen on
     /// 0.163.0): no flag is needed.
-    public static func command(_ launch: Launch) -> Command { Command(arguments: ["app-server"]) }
+    static func command(_ launch: Launch) -> Command { Command(arguments: ["app-server"]) }
 
     private let launch: Launch
     private let write: (Data) throws -> Void
@@ -63,7 +63,7 @@ public final class CodexDriver: Driver {
         var codexID: Any, method: String, params: [String: Any], prompt: Prompt, questionIDs: [String] = []
     }
 
-    public init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
+    init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
         model = launch.model
         if let effort = launch.effort { overrides["effort"] = effort }
@@ -76,14 +76,14 @@ public final class CodexDriver: Driver {
     /// `clientInfo.name` becomes the thread's `originator` in Codex's files: it stays "something". The deltas are
     /// left out: items are read whole, when they complete. Dynamic tools are experimental: only a launch something
     /// lends tools to asks for that part of Codex's channel.
-    public func begin() throws {
+    func begin() throws {
         emit(.options(options()))
         var capabilities: [String: Any] = ["optOutNotificationMethods": CodexDriver.unread]
         if launch.lent != nil { capabilities["experimentalApi"] = true }
         try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"], "capabilities": capabilities])
     }
 
-    public func receive(_ line: Data) {
+    func receive(_ line: Data) {
         guard let message = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
         heard = true
         let params = message["params"] as? [String: Any] ?? [:]
@@ -97,7 +97,7 @@ public final class CodexDriver: Driver {
 
     /// A new turn starts with turn/start, carrying what `set` asked for. A steer joins the running turn with
     /// turn/steer, which names that turn: Codex refuses a steer meant for a turn that ended.
-    public func deliver(_ text: String, steer: Bool) throws {
+    func deliver(_ text: String, steer: Bool) throws {
         guard let thread else { return early.append((text, steer)) }
         if steer {
             guard let turn else { return steers.append(text) }
@@ -112,7 +112,7 @@ public final class CodexDriver: Driver {
 
     /// Sent only while Codex says a turn is active, and never awaited for more than 5 s; steers not sent yet are
     /// dropped, as the interrupt empties something's own queue.
-    public func interrupt() throws {
+    func interrupt() throws {
         steers = []
         guard let thread, let turn, active, interruptSent == nil else { return interruptAsked = true }
         interruptAsked = false
@@ -128,17 +128,17 @@ public final class CodexDriver: Driver {
 
     /// Codex takes a model, an effort and an approval policy with the next turn it starts, so nothing applies now; the
     /// state shows the new values once Codex, having taken that turn, reports them.
-    public func set(model: String?, mode: String?, effort: String?) throws -> String {
+    func set(model: String?, mode: String?, effort: String?) throws -> String {
         for (key, value) in [("model", model), ("approvalPolicy", mode), ("effort", effort)] { if let value { overrides[key] = value } }
         return "next-turn"
     }
 
-    public func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
+    func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
 
     /// A command or a file change is accepted once or declined (the turn goes on, and the model is told). A request
     /// for more permissions takes the permissions granted, not a decision: all of those asked, or none. A question
     /// takes each answer by its question's id; refused, it gets none.
-    public func answer(_ request: String, _ answer: Answer) throws -> Bool {
+    func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
         let questions = ask.prompt.questions
         if case .choice(let chosen) = answer, chosen.count != questions.count {
@@ -174,11 +174,11 @@ public final class CodexDriver: Driver {
     }
 
     /// Closing its input is how Codex ends: it exits 0 (V).
-    public var goodbye: Data? { nil }
+    var goodbye: Data? { nil }
 
-    public func join(_ program: ProcessHandle) { quit = program.quit }
+    func join(_ program: ProcessHandle) { quit = program.quit }
 
-    public func ended(code: Int32, errors: String) {
+    func ended(code: Int32, errors: String) {
         guard !over else { return }
         over = true
         guard code != 0 else { return emit(.stopped(nil)) }
