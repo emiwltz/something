@@ -31,7 +31,10 @@ public enum DeveloperTrial {
                 guard let path = words.popFirst() else { return .failure(SpaceError(usage)) }
                 asked.record = path
             case "--plan-b":
-                guard Engine.launchable[kind]?.planB != nil else { return .failure(SpaceError("something try: \(kind) has no plan B.")) }
+                guard Engine.launchable[kind]?.planB != nil else {
+                    let withPlanB = Engine.launchable.values.filter { $0.planB != nil }.map(\.kind).sorted().joined(separator: ", ")
+                    return .failure(SpaceError("something try: --plan-b is for \(withPlanB) only."))
+                }
                 asked.planB = true
             case "--assistant": asked.assistant = true
             default: return .failure(SpaceError(usage))

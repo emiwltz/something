@@ -87,6 +87,6 @@ import SomethingCore
             try engine.launch("codex", folder: "/Users/example/shop", model: nil, mode: nil, effort: nil, planB: true)
         }
         guard case .failure(let wrong) = DeveloperTrial.parse(["try", "codex", "--plan-b"]) else { Issue.record("codex --plan-b was taken"); return }
-        #expect(wrong.message == "something try: codex has no plan B.")
+        #expect(wrong.message == "something try: --plan-b is for claude only.", "the 0.2 wording stays")
     }
 }
