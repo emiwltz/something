@@ -491,6 +491,7 @@ import SomethingCore
             echo "$*" >> "$FAKE_OUT/shell-runs"
             touch "$FAKE_OUT/shell-sleeps"
             sleep 2
+            n=0; while [ ! -e "$FAKE_OUT/main-ticked" ] && [ $n -lt 100 ]; do sleep 0.1; n=$((n+1)); done
             rm -f "$FAKE_OUT/shell-sleeps"
             PATH='\(place.bin.path):/usr/bin:/bin'; export PATH
             for last; do :; done
@@ -499,12 +500,17 @@ import SomethingCore
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: shell.path)
         let engine = Engine.throwaway(place.environment.merging(["PATH": "/usr/bin:/bin", "SHELL": shell.path]) { _, finder in finder })
         // The main queue ticks while the shell sleeps; one held by the shell could never. Counting ticks instead would
-        // fail on a busy runner, where the other suites' main-actor tests hold the main queue too.
+        // fail on a busy runner, where the other suites' main-actor tests hold the main queue too. For the same reason
+        // the shell, after its 2 s, waits up to 10 s more for the first tick: a runner may hold the main queue that long.
         final class Ticks { var duringShell = 0 }
         let ticks = Ticks(), sleeping = place.out.appendingPathComponent("shell-sleeps").path
+        let ticked = place.out.appendingPathComponent("main-ticked").path
         let ticker = Task { @MainActor in
             while !Task.isCancelled {
-                if FileManager.default.fileExists(atPath: sleeping) { ticks.duringShell += 1 }
+                if FileManager.default.fileExists(atPath: sleeping) {
+                    ticks.duringShell += 1
+                    FileManager.default.createFile(atPath: ticked, contents: nil)
+                }
                 try? await Task.sleep(for: .milliseconds(50))
             }
         }
