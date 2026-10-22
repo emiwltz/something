@@ -251,8 +251,8 @@ public final class Engine {
     /// This program as `hookCommand`, for a program whose main routes `hook permission`; nil when its path is unknown.
     public static var ownHookCommand: [String]? { Bundle.main.executableURL.map { [$0.resolvingSymlinksInPath().path, "hook", "permission"] } }
 
-    /// Where plan B's spool folders go: nil for its kind's own place (Claude's: the person's Application Support); a
-    /// test's own folder in tests.
+    /// Where plan B's spool folders go: nil for its kind's own place, which for Claude is `Spool.root`, in the person's
+    /// real Application Support; a test or a trial that forces plan B sets its own folder.
     var spools: String?
 
     /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
@@ -272,6 +272,7 @@ public final class Engine {
     }
 
     /// `launch` above, with its kind's plan B forced (`something try --plan-b`) and every line given to `record`.
+    /// Throws BAD_PARAMS for a forced plan B its kind does not have.
     /// With `resume`, the program continues that conversation in `folder`; a pi conversation is its file, which must
     /// exist (THREAD_NOT_FOUND), and runs in the folder its header names.
     /// With `assistant`, the launch is the person's assistant, working that way, and offered `lent`.
@@ -279,6 +280,7 @@ public final class Engine {
                 resume: String? = nil, assistant: Assistant? = nil, lent: Lent? = nil,
                 record: ((_ written: Bool, _ line: Data) -> Void)? = nil) throws -> String {
         let driving = try Engine.driving(kind)
+        guard !planB || driving.planB != nil else { throw CodedError("BAD_PARAMS", "\(kind) has no plan B.") }
         // A resume runs in the folder its conversation names, when it names one (pi's), whatever folder it is
         // started in: the state shows that one.
         let folder = try resume.map { try driving.resumeFolder?($0) ?? folder } ?? folder
@@ -302,7 +304,8 @@ public final class Engine {
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
         let host = HostFacts(hookCommand: hookCommand, spools: spools)
         let first = launch.assistant == nil ? nil : hookCommand?.first.map { ($0 as NSString).deletingLastPathComponent }
-        let command = try launch.planB ? driving.planB?(launch, host) ?? driving.command(launch) : driving.command(launch)
+        // `launch` checked that a forced plan B exists; a relaunch is offered only to a kind that has one.
+        let command = try launch.planB ? driving.planB!(launch, host) : driving.command(launch)
         let spawn = Spawn(path: program.path, arguments: command.arguments, folder: launch.folder,
                           environment: program.environment(environment, adding: command.adding, removing: command.removing, first: first))
         let relaunch: (() -> Bool)? = launch.planB || driving.planB == nil ? nil : { [weak self, weak spawn] in

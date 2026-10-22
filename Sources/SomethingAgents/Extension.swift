@@ -116,6 +116,7 @@ struct Driving: Sendable {
 public struct HostFacts: Sendable {
     /// This program's words that answer an agent's hook (`<abs>/something hook permission`); nil when unknown.
     public var hookCommand: [String]?
-    /// Where a launch may keep files as long as it runs (plan B's spools); nil: its kind's own place.
+    /// Where a launch may keep files as long as it runs (plan B's spools); nil: its kind's own place, for Claude
+    /// `Spool.root` in the person's real Application Support.
     public var spools: String?
 }

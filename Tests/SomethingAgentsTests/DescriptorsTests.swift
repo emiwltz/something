@@ -66,4 +66,27 @@ import SomethingCore
         }
         #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver"])
     }
+
+    /// The engine acts on drivers through their hooks only: no file of it names a driver, Claude's spool or one kind.
+    @Test func theEngineNamesNoDriver() throws {
+        let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/SomethingAgents")
+        let named = #/(Claude|Codex|ACP|Pi)Driver|PermissionSpool|Spool\.|AgentDescriptor\.(claude|codex|opencode|pi)\b/#
+        for name in ["Engine.swift", "Join.swift", "Driver.swift"] {
+            let text = try String(contentsOf: sources.appendingPathComponent(name), encoding: .utf8)
+            // Comments may say which kind a hook serves; only code is checked.
+            let code = text.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            #expect(code.filter { $0.contains(named) }.isEmpty, "\(name) names a driver")
+        }
+    }
+
+    /// A forced plan B is for a kind that has one: any other is refused before anything starts.
+    @MainActor @Test func aPlanBItsKindDoesNotHaveIsRefused() {
+        let engine = Engine.throwaway(["HOME": "/Users/example", "PATH": "/nowhere"])
+        #expect(throws: CodedError("BAD_PARAMS", "codex has no plan B.")) {
+            try engine.launch("codex", folder: "/Users/example/shop", model: nil, mode: nil, effort: nil, planB: true)
+        }
+        guard case .failure(let wrong) = DeveloperTrial.parse(["try", "codex", "--plan-b"]) else { Issue.record("codex --plan-b was taken"); return }
+        #expect(wrong.message == "something try: codex has no plan B.")
+    }
 }

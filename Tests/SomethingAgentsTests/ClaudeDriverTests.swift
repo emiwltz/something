@@ -434,4 +434,20 @@ import SomethingCore
         #expect(replay.items.last?.decision == Decision(by: "rule", outcome: "allowed"))
         #expect(replay.items.last?.tool == Tool(name: "Bash", status: "done"))
     }
+
+    /// Plan B's spool lives as long as the program: `released` removes it, and a second call does no harm.
+    @Test func releasedRemovesPlanBsSpoolOnce() throws {
+        let spools = FileManager.default.temporaryDirectory.appendingPathComponent("plan-b-spools-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: spools) }
+        var launch = Launch(agent: "claude-1", folder: "/Users/example/shop", thread: "5b2e0000-0000-4000-8000-000000000001")
+        launch.planB = true
+        let driver = ClaudeDriver(launch, write: { _ in }, emit: { _ in }, now: { "" })
+        let host = HostFacts(hookCommand: ["/Users/example/something", "hook", "permission"], spools: spools.path)
+        try driver.join(ProcessHandle(environment: [:], write: { _ in true }, running: { true }, quit: {}, interrupt: {}, host: host))
+        let folder = ClaudeDriver.spool(launch, host)
+        #expect(FileManager.default.fileExists(atPath: folder))
+        driver.released()
+        driver.released()
+        #expect(!FileManager.default.fileExists(atPath: folder))
+    }
 }

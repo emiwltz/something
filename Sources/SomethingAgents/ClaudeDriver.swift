@@ -93,6 +93,8 @@ public final class ClaudeDriver: Driver {
     private var models: [[String: Any]]?
     private var model: String?
     /// Plan B's spool, which this launch's hook asks through: started at `join`, stopped when the program is released.
+    /// Set once in `join`, before the program starts, and never again: it is then read from any thread (the main
+    /// queue, the spool's queue, Spawn's wait), so it must never be replaced or cleared.
     private var spool: PermissionSpool?
     /// Asks the engine to launch again with plan B; true when it does, and this launch's failure is then no error.
     /// Called once at most, when Claude refused `initialize` or did not know the prompt tool, before any message.

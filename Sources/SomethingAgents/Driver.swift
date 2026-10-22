@@ -138,7 +138,8 @@ public struct ProcessHandle {
     public var running: () -> Bool
     /// Closes its input, after which it ends by itself: for a launch that cannot go on.
     public var quit: () -> Void
-    /// Stops the running turn as the bridge's interrupt does, held messages dropped, on the main queue.
+    /// Asks, without waiting, that the running turn be stopped as the bridge's interrupt does, held messages dropped:
+    /// the stop runs later on the main queue, and its answer comes as the driver's own lines.
     public var interrupt: () -> Void
     /// What the host knows that a launch may need.
     public var host: HostFacts

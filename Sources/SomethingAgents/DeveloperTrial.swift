@@ -2,7 +2,7 @@
 // driver against the real program, from a terminal, in the current folder. It launches through the engine, as the app does, prints what
 // the agent does, and reads commands on standard input. With --record it writes the exchange in the format of
 // Tests/Exchanges (one JSON object per line), the raw material of a replay: run it only in a throwaway session whose
-// text is invented, since the file holds every line. --plan-b forces Claude's plan B (PermissionSpool.swift).
+// text is invented, since the file holds every line. --plan-b forces the kind's plan B (Claude's: PermissionSpool.swift).
 // --assistant launches the person's building assistant, lent something's own commands as the app lends them.
 import Foundation
 import SomethingCore
@@ -31,7 +31,7 @@ public enum DeveloperTrial {
                 guard let path = words.popFirst() else { return .failure(SpaceError(usage)) }
                 asked.record = path
             case "--plan-b":
-                guard kind == AgentDescriptor.claude.kind else { return .failure(SpaceError("something try: --plan-b is for claude only.")) }
+                guard Engine.launchable[kind]?.planB != nil else { return .failure(SpaceError("something try: \(kind) has no plan B.")) }
                 asked.planB = true
             case "--assistant": asked.assistant = true
             default: return .failure(SpaceError(usage))
