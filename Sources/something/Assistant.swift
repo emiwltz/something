@@ -88,6 +88,8 @@ import SomethingCore
     /// The spaces made while the person waited for one: their rights sheet says the agent made them.
     private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
+    /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
+    @ObservationIgnored var program = Bundle.main.executableURL
     @ObservationIgnored private var active = Date()
     @ObservationIgnored private var told = false
     @ObservationIgnored private var timer: Timer?
@@ -171,10 +173,9 @@ import SomethingCore
     /// What the builder `kind` is lent: something's own commands its descriptor takes, run by this program outside
     /// the agent's sandbox; nil when it takes none.
     func lent(for kind: String) -> Lent? {
-        guard let tools = Registry.app.agent(kind)?.builder?.lent, !tools.isEmpty,
-              let program = Bundle.main.executableURL else { return nil }
-        return Lent(tools: tools, run: Lent.program(program.resolvingSymlinksInPath().path, environment: ProcessInfo.processInfo.environment),
-                    refused: { [weak self] kind, because in self?.cannotBuild(kind, because) })
+        guard let tools = Registry.app.agent(kind)?.builder?.lent, !tools.isEmpty, let program else { return nil }
+        return Lent.own(program.resolvingSymlinksInPath().path, tools: tools, environment: ProcessInfo.processInfo.environment,
+                        refused: { [weak self] kind, because in self?.cannotBuild(kind, because) })
     }
 
     /// Whether every builder was looked for and none can build.

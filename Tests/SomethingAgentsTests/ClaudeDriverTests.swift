@@ -88,8 +88,9 @@ import SomethingCore
         #expect(replay.fold.agent.options.mode?.map(\.value) == ["default", "acceptEdits", "plan", "auto", "dontAsk"])
     }
 
-    /// The person's assistant builds a space (ClaudeTrial, T-2): twelve steps, none of which asks the person; each
-    /// shows it was allowed by a rule (the launch's, or Claude's own for `ls` and the read).
+    /// The person's assistant builds a space (ClaudeTrial, T-2, recorded with 0.2's rules, which allowed something's
+    /// commands in the shell): twelve steps, none of which asks the person; each shows it was allowed by a rule (the
+    /// launch's, or Claude's own for `ls` and the read).
     @Test func assistantBuild() throws {
         let replay = try Replay.play("assistant-build")
         let tools = replay.items.filter { $0.kind == "tool" }
@@ -145,20 +146,47 @@ import SomethingCore
         #expect(!Driving.claude.modes.contains { $0.value == "bypassPermissions" })
     }
 
-    /// The person's assistant (E-1): exactly six rules, its folder's files by their absolute path ("//", which trial
-    /// T-2 showed Claude matches) and four of something's commands; none with Ask Before Every Change, nor for a
-    /// launch a space asks for, where `assistant` is always nil.
+    /// The person's assistant (E-1): its folder's files by their absolute path ("//", which trial T-2 showed Claude
+    /// matches) and, by name, each tool something lends it, from its MCP server given at launch for this conversation
+    /// only; no command (B9). None with Ask Before Every Change, nor for a launch a space asks for, where `assistant`
+    /// is always nil and nothing is lent (Engine.launch).
     @Test func theAssistantMayBuildSpacesWithoutAsking() {
         var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces", thread: "5b2e0000-0000-4000-8000-000000000001")
         let plain = ClaudeDriver.command(launch).arguments
         launch.assistant = .building
-        #expect(ClaudeDriver.command(launch).arguments == plain + [
-            "--allowedTools", "Edit(//Users/example/something/spaces/**)", "Write(//Users/example/something/spaces/**)",
-            "Bash(something new:*)", "Bash(something check:*)", "Bash(something open:*)", "Bash(something guide:*)"])
+        let files = ["Edit(//Users/example/something/spaces/**)", "Write(//Users/example/something/spaces/**)"]
+        #expect(ClaudeDriver.command(launch).arguments == plain + ["--allowedTools"] + files, "nothing lent: only the files")
+        launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: ["HOME": "/Users/example", "SOMETHING_HOME": "/Users/example/trial"],
+                               refused: { _, _ in })
+        let config = #"{"mcpServers":{"something":{"args":["mcp"],"command":"/Users/example/tools/something","env":{"SOMETHING_HOME":"/Users/example/trial"}}}}"#
+        #expect(ClaudeDriver.command(launch).arguments == plain + ["--mcp-config", config, "--allowedTools"] + files
+                + ["mcp__something__something_guide", "mcp__something__something_new", "mcp__something__something_check"])
+        #expect(ClaudeDriver.command(launch).arguments.allSatisfy { !$0.hasPrefix("Bash(") })
         #expect(ClaudeDriver.command(launch, hook: ["/Users/example/something", "hook", "permission"]).arguments.contains("--allowedTools"), "plan B too")
+        #expect(ClaudeDriver.command(launch, hook: ["/Users/example/something", "hook", "permission"]).arguments.contains("--mcp-config"))
         launch.assistant = .askingEverything
+        launch.lent = nil
         #expect(ClaudeDriver.command(launch).arguments == plain)
-        #expect(!plain.contains("--allowedTools"))
+        #expect(!plain.contains("--allowedTools") && !plain.contains("--mcp-config"))
+    }
+
+    /// A tool something lends, called through its MCP server, is shown as the command something runs for it; wrong
+    /// arguments keep Claude's own words. A launch lent nothing shows every tool as Claude names it.
+    @Test func aLentToolIsShownAsItsCommand() {
+        var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces")
+        launch.lent = Lent(tools: LentTool.all, run: { _ in Lent.Reply(ok: true, text: "") }, refused: { _, _ in })
+        func shown(_ launch: Launch) -> [String] {
+            let replay = Replay("claude", launch)
+            replay.feed(["type": "assistant", "uuid": "a1", "message": ["model": "claude-invented", "content": [
+                ["type": "tool_use", "id": "t1", "name": "mcp__something__something_check", "input": ["name": "board", "refuse": ["send"]]],
+                ["type": "tool_use", "id": "t2", "name": "mcp__something__something_new", "input": ["name": "../board"]],
+                ["type": "tool_use", "id": "t3", "name": "mcp__something__something_guide", "input": [String: Any]()]]]])
+            return replay.items.filter { $0.kind == "tool" }.map { "\($0.tool?.name ?? "?") \($0.text)" }
+        }
+        #expect(shown(launch) == ["something_check something check board --refuse send", "something_new {\n  \"name\" : \"../board\"\n}",
+                                  "something_guide something guide --print"])
+        launch.lent = nil
+        #expect(shown(launch).first == "mcp__something__something_check {\n  \"name\" : \"board\",\n  \"refuse\" : [\n    \"send\"\n  ]\n}")
     }
 
     @Test func aFreshAgentCanDoAll() {

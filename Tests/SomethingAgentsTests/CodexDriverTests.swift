@@ -147,16 +147,16 @@ import SomethingCore
         #expect(start(nil)?.keys.sorted() == ["cwd"])
     }
 
-    /// Only the building assistant is lent the check: Codex's experimental channel is asked for, and the thread offers
-    /// the tool. A launch a space asks for gets neither (Engine.launchAssistant lends nothing with Ask Before Every Change).
+    /// Only the building assistant is lent something's commands: Codex's experimental channel is asked for, and the
+    /// thread offers the tools. A launch a space asks for gets neither (Engine.launchAssistant lends nothing with Ask Before Every Change).
     @Test func onlyTheBuildingAssistantIsLentTheCheck() {
         func capabilities(_ replay: Replay) -> [String: Any]? { Self.params(replay, "initialize")?["capabilities"] as? [String: Any] }
         let lent = Replay.codex(assistant: true)
         #expect(capabilities(lent)?["experimentalApi"] as? Bool == true)
         lent.feed(["id": 1, "result": ["userAgent": "something/0.163.0 (Mac OS 27.0.0; arm64) unknown (something; 1.0)"]])
         let tools = Self.params(lent, "thread/start")?["dynamicTools"] as? [[String: Any]]
-        #expect(tools?.map { $0["name"] as? String } == ["something_check"])
-        #expect(tools?.first?["type"] as? String == "function" && tools?.first?["inputSchema"] is [String: Any])
+        #expect(tools?.map { $0["name"] as? String } == ["something_guide", "something_new", "something_check"])
+        #expect(tools?.allSatisfy { $0["type"] as? String == "function" && $0["inputSchema"] is [String: Any] } == true)
         let space = Self.opened()
         #expect(capabilities(space)?["experimentalApi"] == nil)
         #expect(Self.params(space, "thread/start")?["dynamicTools"] == nil)

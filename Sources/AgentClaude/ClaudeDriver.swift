@@ -51,15 +51,17 @@ final class ClaudeDriver: Driver {
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
         if let effort = launch.effort { arguments.append("--effort=\(effort)") }
-        if launch.assistant == .building { arguments += ["--allowedTools"] + building(launch.folder) }
+        if let config = launch.lent?.mcpConfig { arguments += ["--mcp-config", config] }
+        if launch.assistant == .building { arguments += ["--allowedTools"] + building(launch.folder, launch.lent) }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
     }
 
     /// What the person's assistant may do without asking (E-1, Emi's decision of 19 October 2026): change files in
-    /// `folder`, the spaces folder, and run four of something's own commands. The rules fail toward asking: any other
-    /// command or path still asks. In Claude's rules "//" starts an absolute path ("/" alone is the project's root).
-    static func building(_ folder: String) -> [String] {
-        ["Edit(/\(folder)/**)", "Write(/\(folder)/**)"] + ["new", "check", "open", "guide"].map { "Bash(something \($0):*)" }
+    /// `folder`, the spaces folder, and call the tools something lends it (`lent`), served by its MCP server
+    /// "something". The rules fail toward asking: any other command, tool or path still asks. In Claude's rules "//"
+    /// starts an absolute path ("/" alone is the project's root).
+    static func building(_ folder: String, _ lent: Lent?) -> [String] {
+        ["Edit(/\(folder)/**)", "Write(/\(folder)/**)"] + (lent?.tools ?? []).map { "mcp__something__\($0.name)" }
     }
 
     private let launch: Launch
@@ -322,8 +324,9 @@ final class ClaudeDriver: Driver {
                 emit(.itemAppended(Item(id: "\(frameID)/\(index)", kind: sub ? "subagent" : "thought", author: "agent", text: text, at: at)))
             case "tool_use":
                 let name = block["name"] as? String ?? "a tool", toolID = block["id"] as? String ?? "\(frameID)/\(index)"
-                let item = Item(id: toolID, kind: sub ? "subagent" : "tool", author: "agent", text: ClaudeDriver.summary(block["input"]),
-                                at: at, tool: Tool(name: name, status: "running"), decision: decisions[toolID])
+                let lent = launch.lent == nil ? nil : Lent.called(name, block["input"])
+                let item = Item(id: toolID, kind: sub ? "subagent" : "tool", author: "agent", text: lent?.command ?? ClaudeDriver.summary(block["input"]),
+                                at: at, tool: Tool(name: lent?.name ?? name, status: "running"), decision: decisions[toolID])
                 tools[toolID] = item
                 emit(.itemAppended(item))
             default: break

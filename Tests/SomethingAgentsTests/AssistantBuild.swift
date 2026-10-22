@@ -1,6 +1,7 @@
-// The standard build of a space by the person's assistant (plan A.2 #6), for the trials of Claude Code and Codex: the
-// tool sequence a real agent runs to make "Who is waiting for me" from a template, and an invented `something`
-// program that answers that sequence's commands in the real one's shape, with invented text.
+// The standard build of a space by the person's assistant (plan A.2 #6), for the trials of the builders: the tool
+// sequence a real agent runs to make "Who is waiting for me" from a template, in each builder's tools (its shell, the
+// dynamic tool Codex is lent, or the tools something serves over MCP), and an invented `something` program that
+// answers that sequence's commands in the real one's shape, with invented text.
 // Tests/somethingTests/AssistantBuild.swift is a link to this file, for the app's own trial (AssistantTrial).
 import Darwin
 import Foundation
@@ -23,26 +24,30 @@ enum AssistantBuild {
     /// This clone's own program, built by `swift build`: the one `swift test` runs beside.
     static let clonesProgram = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent(".build/debug/something")
-    /// Where a test runs the real program from (plan A.4), one path for every clone.
-    static let fixedProgram = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-test-program/something")
     /// The build identity (LC_UUID) every placed copy carries. WebKit names the folders it leaves in $TMPDIR, which
-    /// cannot be deleted, after the program's LC_UUID, not its path (com.apple.WebKit.GPU+something-55554944<uuid>):
+    /// cannot be deleted, after the program's name and LC_UUID, not its path (com.apple.WebKit.GPU+something-55554944<uuid>):
     /// with this one, they are made once per machine instead of once per build. Invented.
     static let fixedUUID = UUID(uuidString: "00000000-0000-4000-8000-0000736F6D65")!
 
-    /// Copies this clone's program to `fixedProgram`, stamped with `fixedUUID`, and returns that path. Beside it, a
-    /// link to this clone's share/ and an empty Package.swift, which is how the program finds its share/ outside the
-    /// .app (Resources.share).
-    static func placeProgram() throws -> String {
-        removeProgram()
-        let folder = fixedProgram.deletingLastPathComponent(), clone = clonesProgram.deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try FileManager.default.copyItem(at: clonesProgram, to: fixedProgram)
-        try stamp(fixedProgram)
-        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("share"), withDestinationURL: clone.appendingPathComponent("share"))
-        try Data().write(to: folder.appendingPathComponent("Package.swift"))
-        return fixedProgram.path
+    /// Copies this clone's program to a folder of its own in $TMPDIR, stamped with `fixedUUID`, and returns the copy:
+    /// trials that run at once each have theirs, and share WebKit's folders (plan A.4). Beside it, a link to this
+    /// clone's share/ and an empty Package.swift, which is how the program finds its share/ outside the .app
+    /// (Resources.share). `removeProgram` removes it.
+    static func placeProgram() throws -> URL {
+        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-test-program-\(UUID().uuidString)")
+        let program = folder.appendingPathComponent("something")
+        let clone = clonesProgram.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: clonesProgram, to: program)
+            try stamp(program)
+            try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("share"), withDestinationURL: clone.appendingPathComponent("share"))
+            try Data().write(to: folder.appendingPathComponent("Package.swift"))
+        } catch {
+            removeProgram(program)
+            throw error
+        }
+        return program
     }
 
     /// Writes `fixedUUID` into the LC_UUID of the thin 64-bit Mach-O program at `file`, then signs it again ad hoc,
@@ -74,9 +79,10 @@ enum AssistantBuild {
         return nil
     }
 
-    /// Removes the copy and the picture its `check` of the build left in the person's temporary folder.
-    static func removeProgram() {
-        try? FileManager.default.removeItem(at: fixedProgram.deletingLastPathComponent())
+    /// Removes the copy `placeProgram` made, and the picture a check of the build outside a spaces folder left in the
+    /// person's temporary folder.
+    static func removeProgram(_ program: URL) {
+        try? FileManager.default.removeItem(at: program.deletingLastPathComponent())
         try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-check/agents-board.png"))
     }
 
@@ -112,15 +118,37 @@ enum AssistantBuild {
     static func codexSteps(tools: String) -> [(name: String, arguments: [String: Any])] {
         let patches = edits.map { "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: agents-board.html\n@@\n-\($0.0)\n+\($0.1)\n*** End Patch\nPATCH" }
         let named = (commands + ["cat agents-board.html"] + patches).map { $0.hasPrefix("something ") ? tools + "/" + $0 : $0 }
-        let lent = checks.map { check -> [String: Any] in
+        return named.map { ("exec_command", ["cmd": $0]) } + checked.map { ("something_check", $0) }
+    }
+
+    /// The arguments of something_check for each of `checks`.
+    static var checked: [[String: Any]] {
+        checks.map { check in
             let refuse = check.components(separatedBy: " --refuse ").dropFirst().map { $0 }
             return refuse.isEmpty ? ["name": "agents-board"] : ["name": "agents-board", "refuse": refuse]
         }
-        return named.map { ("exec_command", ["cmd": $0]) } + lent.map { ("something_check", $0) }
     }
 
-    /// How many tools the build runs.
-    static var count: Int { steps("/").count }
+    /// The page the invented `new` writes, which the builds through the tools something serves over MCP write over
+    /// the real template's copy.
+    static let page = "<!doctype html>\n<script type=\"application/json\" id=\"something\">{\"contract\": 1, \"title\": \"Invented board\", \"rights\": [\"state\", \"send\"]}</script>\n<p>One</p>\n<p>Two</p>\n<p>Three</p>\n"
+
+    /// The build of an agent lent something's tools over MCP (Lent.swift, MCP.swift), which this clone's real program
+    /// runs: the guide, a look, `new` from the real template, a read of the copy, the invented page written over it, the
+    /// three edits, then the five checks. In Claude Code's tools, where a lent tool is mcp__something__<name>; or with
+    /// `opencode` in OpenCode's (2.0), where a tool of an MCP server is called from its code mode, `execute`.
+    static func lentSteps(_ folder: String, opencode: Bool = false) -> [(name: String, input: [String: Any])] {
+        let file = folder + "/agents-board.html"
+        let (path, old, new) = opencode ? ("path", "oldString", "newString") : ("file_path", "old_string", "new_string")
+        let names = opencode ? ["shell", "read", "write", "edit"] : ["Bash", "Read", "Write", "Edit"]
+        func lent(_ tool: String, _ input: [String: Any]) -> (name: String, input: [String: Any]) {
+            let object = String(decoding: (try? JSONSerialization.data(withJSONObject: input, options: .sortedKeys)) ?? Data("{}".utf8), as: UTF8.self)
+            return opencode ? ("execute", ["code": "return await tools.something.\(tool)(\(object))"]) : ("mcp__something__" + tool, input)
+        }
+        return [lent("something_guide", [:]), (names[0], ["command": "ls", "description": "Invented step"]),
+                lent("something_new", ["name": "agents-board", "from": "agents"]), (names[1], [path: file]), (names[2], [path: file, "content": page])]
+            + edits.map { (names[3], [path: file, old: $0.0, new: $0.1]) } + checked.map { lent("something_check", $0) }
+    }
 
     /// `url` with its links resolved, /private included (Foundation's own resolving drops it).
     static func real(_ url: URL) -> URL {

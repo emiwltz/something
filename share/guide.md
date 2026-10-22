@@ -62,9 +62,10 @@ also start from one in something's Templates (File › Templates).
 
 When something's own window started you, you work in `~/something/spaces` and each message starts with one line from
 something, `[something] …`, saying which space is open: "this space" means that one. The folder's `AGENTS.md`, which
-something writes there, says how to work in it: read it after this guide. With Claude Code, changing the files of
-that folder and running `something new`, `check`, `open` and `guide` does not ask the person, unless they chose Ask
-Before Every Change; anything else asks them. OpenCode asks as the person's own OpenCode settings say. pi never asks:
+something writes there, says how to work in it: read it after this guide. something may lend you `something new`,
+`check` and `guide` as tools (`something_new`, `something_check`, `something_guide`): use them when you have them. With
+Claude Code, changing the files of that folder and those tools do not ask the person, unless they chose Ask Before
+Every Change; anything else asks them. OpenCode asks as the person's own OpenCode settings say. pi never asks:
 say so before you run anything outside this folder. A space you make while the person is on the blank page opens by
 itself; otherwise something shows it as ready in the sidebar. Never run `something open` after `something new`. No
 space can write to you or read what the person tells you.

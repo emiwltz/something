@@ -74,8 +74,8 @@ enum DeveloperTrial {
         row(["begin": true])
         do {
             let lent = Engine.ownHookCommand.map { own in
-                Lent(tools: registry.agent(asked.kind)?.builder?.lent ?? [], run: Lent.program(own[0], environment: ProcessInfo.processInfo.environment),
-                     refused: { _, because in print("Not a builder: \(because)") })
+                Lent.own(own[0], tools: registry.agent(asked.kind)?.builder?.lent ?? [], environment: ProcessInfo.processInfo.environment,
+                         refused: { _, because in print("Not a builder: \(because)") })
             }
             id = try engine.trial(asked.kind, folder: FileManager.default.currentDirectoryPath, planB: asked.planB, assistant: asked.assistant,
                                   lent: lent) { written, line in

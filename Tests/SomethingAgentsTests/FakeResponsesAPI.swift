@@ -128,7 +128,7 @@ final class FakeResponsesAPI {
                 if let output { outputs.append(output) }
                 people.append(messages.filter { $0["role"] as? String == "user" }.count)
                 count += 1
-                return FakeResponsesAPI.reply(to: last, toolOutput: output, opencode: !pi, pi: pi)
+                return buildingChat(messages) ?? FakeResponsesAPI.reply(to: last, toolOutput: output, opencode: !pi, pi: pi)
             }
             guard streamChat(client, step, number: lock.withLock { count }) else { return }
         }
@@ -209,6 +209,13 @@ final class FakeResponsesAPI {
         let texts = input.flatMap { $0["content"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }
         guard !build.isEmpty, texts.contains(where: { $0.contains("run-build") }) else { return nil }
         let done = input.filter { $0["type"] as? String == "function_call_output" }.count
+        return done < build.count ? .call(name: build[done].name, arguments: build[done].arguments) : .message("Invented: the board is ready.", slow: false)
+    }
+
+    /// The same for Chat Completions (OpenCode's build), where each tool output is a message of the role "tool".
+    private func buildingChat(_ messages: [[String: Any]]) -> Step? {
+        guard !build.isEmpty, messages.contains(where: { $0["role"] as? String == "user" && FakeResponsesAPI.text($0["content"]).contains("run-build") }) else { return nil }
+        let done = messages.filter { $0["role"] as? String == "tool" }.count
         return done < build.count ? .call(name: build[done].name, arguments: build[done].arguments) : .message("Invented: the board is ready.", slow: false)
     }
 

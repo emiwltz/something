@@ -22,6 +22,12 @@ import Testing
         #expect(try reply("echo 'Invented: could not run.'; exit 2") == Lent.Reply(ok: false, text: "Invented: could not run.\n"))
         #expect(try reply("exec sleep 30") == Lent.Reply(ok: false, text: "something check board did not finish within 1 seconds."))
         #expect(try reply("kill -9 $$") == Lent.Reply(ok: false, text: "something check board stopped unexpectedly (signal 9)."))
+        // Only check's 1 is a report: any other command's 1 is a refusal.
+        let refusing = folder.appendingPathComponent("refusing")
+        try "#!/bin/sh\necho 'Invented: refused.'\nexit 1\n".write(to: refusing, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: refusing.path)
+        #expect(Lent.program(refusing.path, environment: [:])(["new", "board"]) == Lent.Reply(ok: false, text: "Invented: refused.\n"))
+        #expect(Lent.program(refusing.path, environment: [:])(["check", "board"]) == Lent.Reply(ok: true, text: "Invented: refused.\n"))
     }
 
     /// Calls made together run one after the other, in order, off the main queue; each reply comes back on it.

@@ -61,6 +61,8 @@ struct AssistantTrial {
             }
             library = Library(places: places, ask: ask, share: Home.share)
             model = AssistantModel(engine: engine, places: places)
+            // This process is the test runner, never something's program: nothing is lent unless a case places one.
+            model.program = nil
             let (engine, model) = (engine, model)
             engine.changed = { model.refresh() }
             engine.lookAgain()
@@ -100,8 +102,12 @@ struct AssistantTrial {
                 if let new = model.appeared(library.entries, open: library.selection) { library.select(new) }
             }
             library.watch()
+            // The tools are lent as the app lends them, by this clone's real program (plan A.4).
+            let program = try AssistantBuild.placeProgram()
+            trial.model.program = program
+            defer { AssistantBuild.removeProgram(program) }
 
-            api.build = AssistantBuild.steps(places.spaces.path)
+            api.build = AssistantBuild.lentSteps(places.spaces.path)
             model.draft = "Please run-build a board of my agents."
             model.send()
             var asked: [String] = []
@@ -119,7 +125,7 @@ struct AssistantTrial {
             #expect(library.selection == "agents-board")
             #expect(model.rows.first == .mine(caption: "on the blank page", text: "Please run-build a board of my agents."))
             #expect(model.rows.contains(.tool(symbol: "book", words: "Read guide", command: nil)))
-            #expect(model.rows.filter { $0 == .tool(symbol: "pencil", words: "Edited agents-board.html", command: nil) }.count == 3)
+            #expect(model.rows.filter { $0 == .tool(symbol: "pencil", words: "Edited agents-board.html", command: nil) }.count == 4, "a write, then three edits")
             #expect(model.rows.contains(.tool(symbol: "terminal", words: "", command: "something check agents-board")))
         }
     }

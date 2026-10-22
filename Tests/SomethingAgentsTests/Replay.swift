@@ -49,7 +49,7 @@ final class Replay {
         let replay = Replay(unstarted: ())
         replay.reports = reports
         if assistant {
-            launch.lent = Lent(run: { [unowned replay] words in
+            launch.lent = Lent(tools: LentTool.all, run: { [unowned replay] words in
                 replay.lentRuns.append(words)
                 return replay.reports.isEmpty ? Lent.Reply(ok: true, text: "") : replay.reports.removeFirst()
             }, refused: { [unowned replay] kind, because in replay.refusals.append("\(kind): \(because)") }, hop: { work, then in work(); then() })

@@ -29,7 +29,8 @@ extension Check {
             while outcome == nil { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
         }
         guard let outcome else { say("The check stopped before it had a report.", true); return 2 }
-        return printed(outcome, home: runner.places.home.path, say: say)
+        // `~` as the shell reads it: under SOMETHING_HOME, something's own folders are written in full.
+        return printed(outcome, home: ProcessInfo.processInfo.environment["HOME"] ?? runner.places.home.path, say: say)
     }
 
     /// Prints the report of `outcome` (--json or the human lines, with `home` written ~) and returns the exit status:

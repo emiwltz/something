@@ -237,17 +237,19 @@ func ready(_ window: SpaceView) async throws {
 let inventedRequest = #"{"hook_event_name":"PermissionRequest","tool_name":"Bash","tool_input":{"command":"ls"}}"#
 
 /// Runs a built `program` with `words` (as Claude's plan-B hook runs it, for `hook permission`), in `home` with the
-/// system's PATH only, `input` on its input; its status and outputs. Stopped after 30 s, so that a program that never
-/// answers fails the test.
-func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest) async throws -> (status: Int32, out: String, err: String) {
-    try await offMain { try runBuiltWaiting(program, words, home: home, input: text) }
+/// system's PATH only and `environment`, `input` on its input; its status and outputs. Stopped after 30 s, so that a
+/// program that never answers fails the test.
+func runBuilt(_ program: URL, _ words: [String], home: Home, input text: String = inventedRequest,
+              environment: [String: String] = [:]) async throws -> (status: Int32, out: String, err: String) {
+    try await offMain { try runBuiltWaiting(program, words, home: home, input: text, environment: environment) }
 }
 
-private func runBuiltWaiting(_ program: URL, _ words: [String], home: Home, input text: String) throws -> (status: Int32, out: String, err: String) {
+private func runBuiltWaiting(_ program: URL, _ words: [String], home: Home, input text: String,
+                             environment: [String: String]) throws -> (status: Int32, out: String, err: String) {
     let process = Process(), input = Pipe(), out = Pipe(), err = Pipe()
     process.executableURL = program
     process.arguments = words
-    process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"]
+    process.environment = ["HOME": home.root.path, "PATH": "/usr/bin:/bin"].merging(environment) { _, new in new }
     (process.standardInput, process.standardOutput, process.standardError) = (input, out, err)
     try process.run()
     input.fileHandleForWriting.write(Data(text.utf8))

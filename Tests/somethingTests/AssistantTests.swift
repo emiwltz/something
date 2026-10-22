@@ -192,7 +192,7 @@ import WebKit
         #expect(!model.noAgent, "nothing is said before the programs were looked for")
         await look(model)
         #expect(model.kind == "codex" && model.entries.map(\.title) == ["Codex"] && model.entries.allSatisfy(\.enabled))
-        #expect(model.lent(for: "codex")?.tools.map(\.name) == ["something_check"])
+        #expect(model.lent(for: "codex")?.tools.map(\.name) == ["something_guide", "something_new", "something_check"])
         let old = "This Codex (0.150.2) is too old to build spaces: 0.163.0 or later is needed. Update Codex, then look for agents again."
         // The message that never reached it is back in the composer, without its context line.
         model.draft = "Make an invented board."
@@ -348,11 +348,11 @@ import WebKit
         defer { home.remove() }
         await look(model)
         #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting"])
-        let folder = "works in ~/something/spaces."
+        let folder = "works in ~/something/spaces.", all = ["something_guide", "something_new", "something_check"]
         let said: [(String, String, Bool, [String])] = [
-            ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, []),
-            ("codex", "Codex \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, ["something_check"]),
-            ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, []),
+            ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
+            ("codex", "Codex \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
+            ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, all),
             ("pi", "pi \(folder) pi never asks: it can run any command on your Mac.", false, []),
         ]
         for (kind, line, canAsk, lent) in said {
@@ -360,6 +360,8 @@ import WebKit
             #expect(model.kind == kind && model.command == kind)
             #expect(model.firstLines == [line, "A new conversation starts each time something starts."], "\(kind)")
             #expect(model.canAskEverything == canAsk && (model.lent(for: kind)?.tools.map(\.name) ?? []) == lent, "\(kind)")
+            // Served by this program, `something mcp`, which the agent starts with its own environment.
+            #expect(model.lent(for: kind).map { $0.server?.words.last == "mcp" && $0.server?.words.count == 2 } ?? true, "\(kind)")
         }
         model.choose("claude")
         model.toggleAsking()

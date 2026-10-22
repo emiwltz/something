@@ -7,11 +7,11 @@ import SomethingCore
 
 extension AgentDescriptor {
     /// Modes (2.0.20): a mode is an agent; build and plan ask as the person's settings say, and only `--auto`, which
-    /// something never passes, asks less.
+    /// something never passes, asks less. As a builder, it is lent something's commands over MCP.
     package static let opencode = AgentDescriptor(
         kind: "opencode", name: "OpenCode", install: "brew install opencode", homeFolders: [".opencode/bin"],
         asksAsMuch: ["build", "plan"], driving: ACPProfile.opencode.driving, reader: { OpenCodeReader(environment: $0) },
-        builder: Builder(), tools: ACPProfile.tools)
+        builder: Builder(lent: LentTool.all), tools: ACPProfile.tools)
 }
 
 extension ACPProfile {

@@ -211,7 +211,12 @@ final class ACPDriver: Driver {
         switch call {
         case .initialize:
             if error != nil { return refused(AgentError(code: "LAUNCH_FAILED", message: "\(profile.name) refused to start: \(words)")) }
-            var params: [String: Any] = ["cwd": launch.folder, "mcpServers": [Any]()]
+            // The tools something lends go as its MCP server "something", run by the agent (every ACP agent takes stdio).
+            let servers = launch.lent?.server.map { server -> [[String: Any]] in
+                [["name": "something", "command": server.words[0], "args": Array(server.words.dropFirst()),
+                  "env": server.environment.sorted { $0.key < $1.key }.map { ["name": $0.key, "value": $0.value] }]]
+            }
+            var params: [String: Any] = ["cwd": launch.folder, "mcpServers": servers ?? []]
             if launch.resume { params["sessionId"] = launch.thread }
             try? invoke(.open, launch.resume ? "session/resume" : "session/new", params)
         case .open:
@@ -299,8 +304,14 @@ final class ACPDriver: Driver {
             if names[id] == nil, let title = update["title"] as? String { names[id] = title }
             let status = ["in_progress": "running", "completed": "done", "failed": "failed"][update["status"] as? String ?? ""]
             let old = tools[id]
-            let item = Item(id: id, kind: child ? "subagent" : "tool", author: "agent", text: update["title"] as? String ?? old?.text ?? "",
-                            at: old?.at ?? now(), tool: Tool(name: names[id] ?? update["kind"] as? String ?? "tool", status: status ?? old?.tool?.status),
+            // A tool something lends is shown as the command something runs for it, once its input is known; a tool
+            // that called others (OpenCode's code mode) by the lent tools it called, once it ended.
+            let inner = ((update["rawOutput"] as? [String: Any])?["metadata"] as? [String: Any])?["toolCalls"] as? [[String: Any]] ?? []
+            let lents = launch.lent == nil ? [] : inner.compactMap { Lent.called($0["tool"] as? String ?? "", $0["input"]) }
+            let lent = launch.lent == nil ? nil : Lent.called(names[id] ?? "", update["rawInput"])
+                ?? lents.first.map { ($0.name, lents.compactMap(\.command).joined(separator: "; ")) }
+            let item = Item(id: id, kind: child ? "subagent" : "tool", author: "agent", text: lent?.command ?? update["title"] as? String ?? old?.text ?? "",
+                            at: old?.at ?? now(), tool: Tool(name: lent?.name ?? names[id] ?? update["kind"] as? String ?? "tool", status: status ?? old?.tool?.status),
                             decision: decisions[id])
             emit(old == nil ? .itemAppended(item) : .itemUpdated(item))
             let done = status == "done" || status == "failed"

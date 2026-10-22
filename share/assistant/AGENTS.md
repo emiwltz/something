@@ -6,10 +6,12 @@ person's coding agents through `something.js`. You build and change those spaces
 folder only.
 
 ## Before anything
-- Read the guide once: `something guide --print`. It is the contract of a space; follow it.
+- something may lend you its own commands as tools: `something_guide`, `something_new` and `something_check` (your
+  tools may show them with a prefix, as in `mcp__something__something_check`). Use each one you have instead of
+  running its command in the shell: something runs it for you, outside your sandbox, without asking the person. The
+  steps below name the commands; their tools take the same name, template (`from`) and rights to refuse.
+- Read the guide once (`something_guide`, or `something guide --print`). It is the contract of a space; follow it.
 - Each message starts with a line from something saying which space is open. "This space" means that one.
-- When something lends you a tool named `something_check`, check with it instead of running `something check`:
-  something runs it for you, outside your sandbox, where the page can load.
 
 ## Make a space
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.

@@ -1,5 +1,5 @@
 // The command: what `something <words>` does in a terminal. It starts or fronts the app,
-// hands it a space, makes a space, says where the guide is, and routes check, hook and try. Every failure is one
+// hands it a space, makes a space, says where the guide is, and routes check, mcp, hook and try. Every failure is one
 // sentence that says what to type next (`Error.sentence`, which the app's windows say too). The status is 0 when it
 // worked, 1 when it was refused or failed, 2 when the words were wrong or nothing could run; check has its own.
 import AppKit
@@ -8,7 +8,7 @@ import SomethingCore
 
 enum Command: Equatable {
     case start, open(String), new(String, folder: Bool, from: String?), guide(print: Bool), version, help
-    case check(Check), hook([String]), trial([String])
+    case check(Check), mcp, hook([String]), trial([String])
     case wrong(String)
 
     /// The usage, with the templates `share` holds.
@@ -21,6 +21,7 @@ enum Command: Equatable {
           something new <name> --from <t> make a space from a template: \(Template.present(share).joined(separator: ", "))
           something guide [--print]       where the guide for the coding agent that writes your spaces is
           something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
+          something mcp                   serve new, check and guide to a coding agent over MCP (the agent starts it)
           something --version
         """
     }
@@ -61,6 +62,7 @@ enum Command: Equatable {
         case "--version" where rest.isEmpty: return .version
         case "--help", "-h", "help": return .help
         case "check": return Check.parse(rest)
+        case "mcp" where rest.isEmpty: return .mcp
         case "hook" where rest.first == "permission": return .hook(words)
         case "try": return .trial(words)
         default: return .wrong("something does not know \"\(words.joined(separator: " "))\". Type something --help to see what it does.")
@@ -144,6 +146,10 @@ enum Command: Equatable {
             return 0
         case .check(let check):
             return check.main(CheckRunner(places: places, share: share), say: say)
+        case .mcp:
+            Lent.serve(program: Engine.ownHookCommand?.first ?? CommandLine.arguments[0], environment: ProcessInfo.processInfo.environment,
+                       version: Resources.version)
+            return 0
         case .hook(let words):
             return Registry.hook(words)
         case .trial(let words):

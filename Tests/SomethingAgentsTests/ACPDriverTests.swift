@@ -156,6 +156,33 @@ import SomethingCore
         #expect(Replay.opencode().fold.agent.because["steer"] == ACPProfile.opencode.driving.limits["steer"])
     }
 
+    /// The person's assistant gets something's MCP server in session/new, with only the variables it needs beyond the
+    /// agent's own; a lent tool is shown as the command something runs for it, once OpenCode gives its input. A
+    /// launch lent nothing (every space's) gets none, as the recordings show.
+    @Test func theAssistantGetsTheMCPServer() throws {
+        var launch = Launch(agent: "opencode-1", folder: "/Users/example/something/spaces")
+        launch.assistant = .building
+        launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: ["HOME": "/Users/example", "SOMETHING_HOME": "/Users/example/trial"],
+                               refused: { _, _ in })
+        let replay = Replay("opencode", launch)
+        replay.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+        let open = try #require(replay.lines().last { $0["method"] as? String == "session/new" }?["params"] as? [String: Any])
+        let servers = try #require(open["mcpServers"] as? [[String: Any]])
+        #expect(servers.count == 1 && servers[0]["name"] as? String == "something" && servers[0]["command"] as? String == "/Users/example/tools/something")
+        #expect(servers[0]["args"] as? [String] == ["mcp"] && servers[0]["env"] as? [[String: String]] == [["name": "SOMETHING_HOME", "value": "/Users/example/trial"]])
+        replay.feed(["jsonrpc": "2.0", "id": 2, "result": ["sessionId": Self.session, "configOptions": []]])
+        replay.feed(Self.update(["sessionUpdate": "tool_call", "toolCallId": "call_1", "title": "something_something_check", "kind": "other",
+                                 "status": "pending", "rawInput": [String: Any]()]))
+        #expect(replay.items.last?.text == "something_something_check", "its input is not known yet")
+        replay.feed(Self.update(["sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed", "title": "",
+                                 "rawInput": ["name": "board"]]))
+        #expect(replay.items.last?.tool == Tool(name: "something_check", status: "done") && replay.items.last?.text == "something check board")
+        let plain = Replay.opencode()
+        plain.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+        #expect((plain.lines().last?["params"] as? [String: Any])?["mcpServers"] as? [Any] != nil)
+        #expect(((plain.lines().last?["params"] as? [String: Any])?["mcpServers"] as? [Any])?.isEmpty == true)
+    }
+
     @Test func aSteerIsRefused() throws {
         let replay = Self.opened()
         #expect(try replay.agent.send("Hello.", when: "next") == "started")

@@ -419,9 +419,7 @@ final class CodexDriver: Driver {
             guard let (name, words) = CodexDriver.tool(item) else { return }
             var text = words
             // A lent tool is shown as the command something ran for it.
-            if type == "dynamicToolCall", let tool = launch.lent?.tools.first(where: { $0.name == name }) {
-                text = tool.words(item["arguments"] as? [String: Any] ?? [:]).map { (["something"] + $0).joined(separator: " ") } ?? "\(name) (wrong arguments)"
-            }
+            if type == "dynamicToolCall", launch.lent != nil, let lent = Lent.called(name, item["arguments"]) { text = lent.command ?? "\(name) (wrong arguments)" }
             let status = ["inProgress": "running", "completed": "done", "failed": "failed", "declined": "failed"][item["status"] as? String ?? ""]
             let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(),
                              tool: Tool(name: name, status: done ? status ?? "done" : status), decision: decisions[id])

@@ -44,6 +44,7 @@ final class FakeDoor: Door {
              .check(Check(space: "board", json: true, journal: true, refuse: ["send", "launch:codex"], state: "state.json"))),
             (["hook", "permission", "--spool", "/Users/example/spool"], .hook(["hook", "permission", "--spool", "/Users/example/spool"])),
             (["try", "claude", "--record", "out.jsonl"], .trial(["try", "claude", "--record", "out.jsonl"])),
+            (["mcp"], .mcp),
         ]
         for (words, command) in cases { #expect(Command.parse(words) == command, "\(words)") }
     }
@@ -55,7 +56,7 @@ final class FakeDoor: Door {
             ["new", "a", "--from"], ["new", "a", "--from", "--folder"], ["new", "a", "--from", "agents", "--folder"], ["new", "--from", "agents"],
             ["guide", "--json"], ["--version", "now"], ["hook"], ["hook", "other"], ["start"], ["morning-review"],
             ["check"], ["check", "a", "b"], ["check", "a", "--refuse"], ["check", "a", "--state"],
-            ["check", "a", "--refuse", "--json"], ["check", "a", "--fast"],
+            ["check", "a", "--refuse", "--json"], ["check", "a", "--fast"], ["mcp", "--stdio"],
         ]
         #expect(Command.parse(["morning-review"]) == .wrong(
             "something does not know \"morning-review\". Type something --help to see what it does."))
@@ -113,6 +114,42 @@ final class FakeDoor: Door {
         // Under swift run, an export that is not there is said in the terminal, before any app starts.
         let gone = try await runBuilt(program, ["open", "/Users/example/nothing.something"], home: home, input: "")
         #expect(gone.status == 1 && gone.err.contains("There is no file at /Users/example/nothing.something"), "\(gone)")
+    }
+
+    /// The program swift test built serves the lent tools over MCP, as an agent starts it (`something mcp`): it runs
+    /// its own commands, in the folders SOMETHING_HOME names when set, and answers one line per request. No check
+    /// runs here: only one test runs a check as a program (plan A.4).
+    @Test func theBuiltProgramServesTheLentTools() async throws {
+        let home = Home(prefix: "something-command-")
+        defer { home.remove() }
+        let program = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
+        let requests: [[String: Any]] = [
+            ["jsonrpc": "2.0", "id": 1, "method": "initialize", "params": ["protocolVersion": "2025-06-18", "capabilities": [:], "clientInfo": ["name": "invented"]]],
+            ["jsonrpc": "2.0", "method": "notifications/initialized"],
+            ["jsonrpc": "2.0", "id": 2, "method": "tools/list"],
+            ["jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": ["name": "something_guide", "arguments": [:]]],
+            ["jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "board", "from": "agents"]]],
+            ["jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "board"]]],
+            ["jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": ["name": "something_new", "arguments": ["name": "../board"]]],
+        ]
+        let input = try requests.map { String(decoding: try JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }.joined(separator: "\n") + "\n"
+        let ran = try await runBuilt(program, ["mcp"], home: home, input: input,
+                                     environment: ["HOME": home.root.appendingPathComponent("elsewhere").path, "SOMETHING_HOME": home.root.path])
+        #expect(ran.status == 0 && ran.err.isEmpty, "\(ran)")
+        let answers = ran.out.split(separator: "\n").map { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] ?? [:] }
+        #expect(answers.map { $0["id"] as? Int } == [1, 2, 3, 4, 5, 6], "one answer per request, none to the notification")
+        func result(_ index: Int) -> (text: String, error: Bool?) {
+            let result = answers[index]["result"] as? [String: Any]
+            return (((result?["content"] as? [[String: Any]])?.first?["text"] as? String) ?? "", result?["isError"] as? Bool)
+        }
+        guard answers.count == 6 else { return }
+        #expect(((answers[1]["result"] as? [String: Any])?["tools"] as? [[String: Any]])?.count == 3)
+        #expect(result(2) == (try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8) + "\n", false))
+        #expect(result(3).error == false && result(3).text.hasPrefix("Made \(home.places.spaces.path)/board.html"), "\(result(3))")
+        #expect(Spaces(root: home.places.spaces).named("board") != nil, "in SOMETHING_HOME's folders, not HOME's")
+        #expect(result(4).error == true && result(4).text.contains("already exists"), "\(result(4))")
+        #expect(result(5).error == true && result(5).text.hasPrefix("Wrong arguments for something_new"), "\(result(5))")
+        #expect(!FileManager.default.fileExists(atPath: home.root.appendingPathComponent("elsewhere").path))
     }
 
     /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".

@@ -53,9 +53,10 @@ struct Places {
     /// workspace-write) may write, and could then answer Claude's requests.
     var spools: URL { support.appendingPathComponent("spool") }
 
-    /// The person's places. $HOME first, so that `HOME=<folder> swift run something` never reaches their own folders.
+    /// The person's places. $SOMETHING_HOME, then $HOME, so that a trial or `HOME=<folder> swift run something` never
+    /// reaches their own folders (README, "Building from the clone").
     static var person: Places {
-        Places(home: ProcessInfo.processInfo.environment["HOME"].map { URL(fileURLWithPath: $0) }
-            ?? FileManager.default.homeDirectoryForCurrentUser)
+        let environment = ProcessInfo.processInfo.environment
+        return Places(home: (environment["SOMETHING_HOME"] ?? environment["HOME"]).map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser)
     }
 }

@@ -27,8 +27,10 @@ final class Stopped: @unchecked Sendable { var done = false }
 
     /// With `planB`, Claude asks through the real hook command (built from PermissionSpool.swift) and a spool. With
     /// `assistant`, Claude is the person's assistant, working that way, working in ~/something/spaces with
-    /// an invented `something` program first in its PATH (AssistantBuild).
-    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Assistant? = nil) async throws {
+    /// an invented `something` program first in its PATH (AssistantBuild). With `lent`, it is also lent something's
+    /// tools over MCP, as the app lends them: served by this clone's real program (AssistantBuild.placeProgram, plan
+    /// A.4), with the person's own temporary folder, where the folders WebKit makes for that program already are.
+    init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Assistant? = nil, lent: Bool = false) async throws {
         self.name = name
         api = try FakeMessagesAPI()
         root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
@@ -41,6 +43,11 @@ final class Stopped: @unchecked Sendable { var done = false }
         let program = trialClaude!
         var launch = Launch(agent: "claude-trial", folder: work.path, mode: mode, effort: effort)
         launch.assistant = assistant
+        if lent {
+            let program = try AssistantBuild.placeProgram()
+            placed = program
+            launch.lent = Lent.own(program.path, tools: LentTool.all, environment: ["TMPDIR": NSTemporaryDirectory()], refused: { _, _ in })
+        }
         self.work = work
         var host = HostFacts()
         var command = ClaudeDriver.command(launch)
@@ -72,12 +79,14 @@ final class Stopped: @unchecked Sendable { var done = false }
     let name: String
     /// The folder Claude works in.
     let work: URL
+    /// The real program this run placed (AssistantBuild.placeProgram), which its cleanup removes.
+    private var placed: URL?
     var state: Agent { agent.agent }
 
     /// Plays the standard build (AssistantBuild.steps) to its end, allowing once each request on the way, and
     /// returns what was asked: each request's tool and what it named.
-    func build() async throws -> [String] {
-        api.build = AssistantBuild.steps(work.path)
+    func build(_ steps: [(name: String, input: [String: Any])]? = nil) async throws -> [String] {
+        api.build = steps ?? AssistantBuild.steps(work.path)
         _ = try agent.send("Please run-build a board of my agents.", when: "next")
         var asked: [String] = []
         try await until("the build", seconds: 120) {
@@ -132,6 +141,7 @@ final class Stopped: @unchecked Sendable { var done = false }
         spawn.stop(cap: 2) { stopped.signal() }
         _ = stopped.wait(timeout: .now() + 3)
         api.stop()
+        if let placed { AssistantBuild.removeProgram(placed) }
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -341,20 +351,26 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
         try await run.finish()
     }
 
-    /// T-2 (plan A.2 #6): the standard build of a space by the person's assistant asks the person at most once. Every
-    /// step ran, and the edits are in the page.
-    @Test func theAssistantsStandardBuildAsksAtMostOnce() async throws {
-        let run = try await ClaudeRun("assistant-build", assistant: .building)
+    /// T-2 (plan A.2 #6): the standard build of a space by the person's assistant, launched as the app launches it,
+    /// asks nothing (B9): something's commands are the tools it lends over MCP, the real `something mcp` started by
+    /// Claude Code, running the real guide, new and check (WebKit included); the edits are in the folder. Every step
+    /// ran, the edits are in the page, and each lent tool is shown as the command something ran.
+    @Test func theAssistantsStandardBuildAsksNothing() async throws {
+        let run = try await ClaudeRun("assistant-build", assistant: .building, lent: true)
         defer { run.cleanup() }
-        let asked = try await run.build()
-        #expect(asked.count <= 1, "asked: \(asked)")
-        #expect(run.items.filter { $0.kind == "tool" }.map(\.tool?.status) == Array(repeating: "done", count: AssistantBuild.count), "\(run.items.map(\.text))")
+        let asked = try await run.build(AssistantBuild.lentSteps(run.work.path))
+        #expect(asked.isEmpty, "asked: \(asked)")
+        let tools = run.items.filter { $0.kind == "tool" }
+        #expect(tools.map(\.tool?.status) == Array(repeating: "done", count: 13), "\(tools.map { "\($0.text) \($0.tool?.status ?? "-")" })")
+        #expect(tools.filter { $0.tool?.name == "something_check" }.map(\.text) == AssistantBuild.checks)
+        #expect(tools.first?.text == "something guide --print" && tools[2].text == "something new agents-board --from agents")
         #expect(try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8).contains("Invented three"))
+        #expect(FileManager.default.fileExists(atPath: run.work.appendingPathComponent(".check/agents-board.png").path), "the check loaded the page")
         try await run.finish()
     }
 
-    /// With Ask Before Every Change, the same build asks before each change and each of something's commands but
-    /// `ls`, which Claude Code itself takes as reading only.
+    /// With Ask Before Every Change, nothing is lent: the build runs something's commands in the shell, and asks
+    /// before each change and each of them but `ls`, which Claude Code itself takes as reading only.
     @Test func askingBeforeEveryChangeAsksForEachStep() async throws {
         let run = try await ClaudeRun("assistant-ask-everything", assistant: .askingEverything)
         defer { run.cleanup() }

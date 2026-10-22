@@ -30,33 +30,48 @@ import SomethingCore
     /// Whether the case asked the program to stop: its end is then no failure.
     private let stopAsked: Stopped
 
-    var work: URL { root.appendingPathComponent("work/shop") }
+    /// The folder OpenCode works in.
+    let work: URL
+    /// The real program this run placed (AssistantBuild.placeProgram), which its cleanup removes.
+    private var placed: URL?
     var database: String { root.appendingPathComponent("data/opencode/opencode.db").path }
 
-    /// With `after`, the case runs in that run's home and against its fake (to resume its conversation).
-    init(_ name: String, model: String? = nil, resume session: String? = nil, after: OpenCodeRun? = nil) throws {
+    /// With `after`, the case runs in that run's home and against its fake (to resume its conversation). With
+    /// `assistant`, OpenCode is the person's building assistant, in ~/something/spaces, with OpenCode's own default
+    /// permissions, lent something's tools over MCP as the app lends them: served by this clone's real program
+    /// (AssistantBuild.placeProgram, plan A.4), with the person's own temporary folder.
+    init(_ name: String, model: String? = nil, resume session: String? = nil, after: OpenCodeRun? = nil, assistant: Bool = false) throws {
         self.name = name
         owner = after == nil
         (resumed, self.model) = (session, model)
         api = try after?.api ?? FakeResponsesAPI()
         let root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("opencode-trial-\(UUID().uuidString)")
         self.root = root
-        for folder in ["home", "config/opencode", "data", "state", "cache", "work/shop"] {
+        let work = assistant ? AssistantBuild.real(root).appendingPathComponent("home/something/spaces") : root.appendingPathComponent("work/shop")
+        self.work = work
+        for folder in ["home", "config/opencode", "data", "state", "cache"] {
             try FileManager.default.createDirectory(at: root.appendingPathComponent(folder), withIntermediateDirectories: true)
         }
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         let fake: [String: Any] = ["name": "Fake Model", "tool_call": true, "limit": ["context": 100_000, "output": 10_000]]
         var other = fake
         other["name"] = "Other Model"
         other["variants"] = ["low": ["reasoningEffort": "low"], "high": ["reasoningEffort": "high"]]
-        let config: [String: Any] = ["autoupdate": false, "model": "fake/fake-model", "enabled_providers": ["fake"],
+        var config: [String: Any] = ["autoupdate": false, "model": "fake/fake-model", "enabled_providers": ["fake"],
                                      "permission": ["bash": "ask", "edit": "ask"],
                                      "provider": ["fake": ["name": "Fake", "npm": "@ai-sdk/openai-compatible",
                                                            "options": ["apiKey": "test-key", "baseURL": api.url],
                                                            "models": ["fake-model": fake, "other-model": other]]]]
+        if assistant { config["permission"] = nil }
         try JSONSerialization.data(withJSONObject: config).write(to: root.appendingPathComponent("config/opencode/opencode.json"))
         let program = trialOpenCode!
-        let work = root.appendingPathComponent("work/shop")
-        let launch = Launch(agent: "opencode-1", folder: work.path, model: model, thread: session ?? "", resume: session != nil)
+        var launch = Launch(agent: "opencode-1", folder: work.path, model: model, thread: session ?? "", resume: session != nil)
+        if assistant {
+            launch.assistant = .building
+            let program = try AssistantBuild.placeProgram()
+            placed = program
+            launch.lent = Lent.own(program.path, tools: LentTool.all, environment: ["TMPDIR": NSTemporaryDirectory()], refused: { _, _ in })
+        }
         var environment = ["HOME": "home", "XDG_CONFIG_HOME": "config", "XDG_DATA_HOME": "data", "XDG_STATE_HOME": "state",
                            "XDG_CACHE_HOME": "cache"].mapValues { root.appendingPathComponent($0).path }
         environment.merge(["TMPDIR": root.path, "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin",
@@ -151,9 +166,21 @@ import SomethingCore
         let stopped = DispatchSemaphore(value: 0)
         spawn.stop(cap: 2) { stopped.signal() }
         _ = stopped.wait(timeout: .now() + 3)
+        if let placed { AssistantBuild.removeProgram(placed) }
         guard owner else { return }
         api.stop()
         try? FileManager.default.removeItem(at: root)
+    }
+
+    /// Whether the program this run placed serves something's tools (`something mcp`), as OpenCode started it.
+    func serving() throws -> Bool {
+        let serving = Process()
+        serving.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        serving.arguments = ["-f", (placed?.path ?? "-") + " mcp"]
+        serving.standardOutput = FileHandle.nullDevice
+        try serving.run()
+        serving.waitUntilExit()
+        return serving.terminationStatus == 0
     }
 
     /// No process of the trial's home is left.
@@ -186,6 +213,34 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
 
 @Suite(.serialized, .enabled(if: trialOpenCode != nil, "T-3 needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
 @MainActor struct OpenCodeTrial {
+
+    /// B9: the standard build of a space by the person's assistant (plan A.2 #6), launched as the app launches it,
+    /// through the tools something lends OpenCode over MCP (the real `something mcp`, which OpenCode starts from
+    /// session/new, running the real guide, new and check), with OpenCode's own default permissions: nothing is asked.
+    @Test func theAssistantsStandardBuildAsksNothing() async throws {
+        let run = try OpenCodeRun("assistant-build", assistant: true)
+        defer { run.cleanup() }
+        run.api.build = AssistantBuild.lentSteps(run.work.path, opencode: true).map { ($0.name, $0.input) }
+        try await run.until("the session") { run.state.thread != nil }
+        // OpenCode connects a session's MCP servers in the background: a model that calls a tool at once (only this
+        // fake does) could find none. The server is waited for, then a second for OpenCode to list its tools.
+        try await run.until("something's MCP server") { (try? run.serving()) == true }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        #expect(try run.send("Please run-build a board of my agents.") == "started")
+        var asked: [String] = []
+        try await run.until("the build", seconds: 120) {
+            if let request = run.request, !asked.contains(request.id) { asked.append(request.id); _ = try? run.answer(.once) }
+            return run.state.state == "idle" && run.items.contains { $0.author == "agent" && $0.text.contains("the board is ready") }
+        }
+        #expect(asked.isEmpty, "asked: \(asked)")
+        let tools = run.items.filter { $0.kind == "tool" }
+        #expect(tools.map(\.tool?.status) == Array(repeating: "done", count: 13), "\(tools.map { "\($0.tool?.name ?? "-") \($0.text) \($0.tool?.status ?? "-")" })")
+        #expect(tools.filter { $0.tool?.name == "something_check" }.map(\.text) == AssistantBuild.checks)
+        #expect(tools.first?.text == "something guide --print" && tools[2].text == "something new agents-board --from agents", "\(tools.map(\.text))")
+        #expect(try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8).contains("Invented three"))
+        #expect(FileManager.default.fileExists(atPath: run.work.appendingPathComponent(".check/agents-board.png").path), "the check loaded the page")
+        try await run.finish()
+    }
 
     @Test func aTurnStartsAndEnds() async throws {
         let run = try OpenCodeRun("turn")

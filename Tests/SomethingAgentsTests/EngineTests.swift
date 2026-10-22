@@ -196,7 +196,7 @@ import SomethingCore
         // The fake writes its arguments, then its environment: both are waited for.
         try await until("the assistant's launch") { arguments().contains("--session-id") && path() != nil }
         #expect(path()?.hasPrefix("/Users/example/tools:\(place.bin.path):") == true, "\(path() ?? "no PATH")")
-        #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(HeldFiles.real(spaces.path)))
+        #expect(Array(arguments().drop { $0 != "--allowedTools" }) == ["--allowedTools"] + ClaudeDriver.building(HeldFiles.real(spaces.path), nil))
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         let host = EngineHost(engine, folder: place.work.path)

@@ -26,8 +26,8 @@ import SomethingCore
     var rows: [[String: Any]] { exchange.rows }
     private let exchange = Exchange()
     private let owner: Bool
-    /// Whether this run placed the real program at AssistantBuild.fixedProgram, which its cleanup removes.
-    private var placedProgram = false
+    /// The real program this run placed (AssistantBuild.placeProgram), which its cleanup removes.
+    private var placed: URL?
     /// The words of each command the lent tools ran, and why Codex could not take them.
     let lent = Lending()
 
@@ -37,8 +37,8 @@ import SomethingCore
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
     /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces with an invented
-    /// `something` first in its PATH, and lent the check, which this clone's real program runs, from the fixed path of
-    /// plan A.4 (AssistantBuild.fixedProgram), with the person's own temporary folder, as the app gives it.
+    /// `something` first in its PATH, and lent the check, which this clone's real program runs (plan A.4,
+    /// AssistantBuild.placeProgram), with the person's own temporary folder, as the app gives it.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
          assistant: Assistant? = nil) throws {
         self.name = name
@@ -72,10 +72,11 @@ import SomethingCore
             launch.assistant = assistant
             environment["PATH"] = try AssistantBuild.tools(in: root) + ":" + environment["PATH"]!
             environment["TMPDIR"] = NSTemporaryDirectory()
-            environment["SOMETHING_TRIAL_PROGRAM"] = try AssistantBuild.placeProgram()
-            placedProgram = true
-            let check = Lent.program(AssistantBuild.fixedProgram.path, environment: ["HOME": folders[1].path, "TMPDIR": NSTemporaryDirectory()])
-            launch.lent = Lent(run: { [lent] words in
+            let program = try AssistantBuild.placeProgram()
+            placed = program
+            environment["SOMETHING_TRIAL_PROGRAM"] = program.path
+            let check = Lent.program(program.path, environment: ["HOME": folders[1].path, "TMPDIR": NSTemporaryDirectory()])
+            launch.lent = Lent(tools: LentTool.all, run: { [lent] words in
                 lent.lock.withLock { lent.runs.append(words) }
                 return check(words)
             }, refused: { [lent] kind, because in lent.refusals.append("\(kind): \(because)") })
@@ -162,7 +163,7 @@ import SomethingCore
         guard owner else { return }
         api.stop()
         try? FileManager.default.removeItem(at: root)
-        if placedProgram { AssistantBuild.removeProgram() }
+        if let placed { AssistantBuild.removeProgram(placed) }
     }
 
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway folders.

@@ -56,16 +56,21 @@ minutes without a turn it is stopped to save memory; a new conversation starts e
 something never answers for you. Your assistant may change your spaces and run something's own commands without
 asking; everything else it does asks you, as your agent's own settings decide.
 
-For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and the commands
-`something new`, `check`, `open` and `guide`. For Codex it is its own sandbox, "workspace-write": it may change files
-and run commands in `~/something/spaces` (and its temporary folders), without the network; what the sandbox blocks
-asks you. Its sandbox cannot load a page, so something lends it one tool, `something_check`: something runs
-`something check` for it, outside the sandbox, one check at a time, and gives it the report (a Codex that does not
-take the tool, too old for instance, is not offered until you choose Look for Agents Again, and its menu entry says
-why). For OpenCode nothing is added: it asks as your own OpenCode settings say.
-pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask Before Every
-Change", in the bar's agent menu, turns the exception off from the next conversation. No space can see what you say
-to your assistant, or write to it.
+something lends your assistant its own commands as tools, `something_guide`, `something_new` and `something_check`:
+something runs them itself, outside any sandbox of the agent, one at a time, and gives it what they printed. Claude
+Code and OpenCode get them from `something mcp`, a small MCP server (Model Context Protocol, the standard way to give
+an agent tools) that the agent starts at launch; Codex gets them on its own channel (its dynamic tools); pi runs
+something's commands in its shell, which it does without asking anyway.
+
+For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and those three tools. Any
+other command asks you, `something open` included (something opens a new space by itself). For Codex it is its own
+sandbox, "workspace-write": it may change files and run commands in `~/something/spaces` (and its temporary folders),
+without the network; what the sandbox blocks asks you. Its sandbox cannot load a page, which is why it needs
+`something_check` (a Codex that does not take the tools, too old for instance, is not offered until you choose Look
+for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
+settings say. pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask
+Before Every Change", in the bar's agent menu, turns the exception off from the next conversation, the tools included.
+No space can see what you say to your assistant, or write to it.
 
 To tell it what something is, something writes `AGENTS.md` and `CLAUDE.md` into `~/something/spaces` at each start. A
 file whose first line you removed is yours: something leaves it alone.
@@ -79,8 +84,8 @@ or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), O
 shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
 
-something writes no hook, no MCP server, no skill and no setting into any agent's configuration. What it writes is its
-own: `~/something/` (your spaces, their memory, and your assistant's `AGENTS.md` and `CLAUDE.md`) and
+something writes no hook, no MCP server, no skill and no setting into any agent's configuration: the MCP server it
+gives your assistant is passed at launch, for that conversation only. What it writes is its own: `~/something/` (your spaces, their memory, and your assistant's `AGENTS.md` and `CLAUDE.md`) and
 `~/Library/Application Support/something/` (your answers to the rights sheets, the window's memory, the journals of
 what spaces asked agents to do, and plan B's spool, below).
 
@@ -93,13 +98,14 @@ agent's own official channel, with your own configuration:
   --permission-prompt-tool stdio`, the channel Anthropic's SDKs use, without `ANTHROPIC_API_KEY` or
   `ANTHROPIC_AUTH_TOKEN` from your environment, so that it uses the account you signed in with. A Claude Code that
   refuses that option is launched again with a permission hook given in `--settings` for that launch only, which waits
-  for the same window (plan B); nothing is written in your Claude settings. Your assistant also gets `--allowedTools`
-  with the rules above, unless Ask Before Every Change is on.
+  for the same window (plan B); nothing is written in your Claude settings. Your assistant also gets `--mcp-config`
+  with something's MCP server and `--allowedTools` with the rules above, unless Ask Before Every Change is on.
 - **Codex**: `codex app-server`, its official JSON-RPC channel, one private server per conversation. something never
   joins the server a Codex in your terminal may share.
 - **OpenCode**: `opencode acp`, the Agent Client Protocol. One conversation per program. Over that channel OpenCode
   picks a model of its own, so a new conversation starts with the model you used last in OpenCode, unless a space
-  asks for another; when OpenCode no longer offers it, OpenCode's own choice stays.
+  asks for another; when OpenCode no longer offers it, OpenCode's own choice stays. Your assistant gets something's
+  MCP server in `session/new`.
 - **pi**: `pi --mode rpc`, its official channel.
 - **OMP** is read, never launched.
 
@@ -171,6 +177,7 @@ something new <name> --from <t> make a space from a template: agents, project, b
 something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
 something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
                                 test a space as the app loads it, unseen, against an invented state
+something mcp                   serve new, check and guide to a coding agent over MCP (the agent starts it)
 something --version
 ```
 
@@ -241,6 +248,9 @@ tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app a
   attributes in `Sources/`. State lives in `@Observable` models.
 - **The look.** `swift run` draws the app in macOS's older style: `swift build` stamps the program with the oldest
   macOS it supports. `make-app.sh` stamps the SDK that built it, as Homebrew's install does.
+- **Somewhere else than your own folders.** With `SOMETHING_HOME=<folder>`, something (the app, its commands and its
+  MCP server) keeps its folders under `<folder>` instead of your home: `<folder>/something/spaces` and
+  `<folder>/Library/Application Support/something`. The agents it launches keep your real home, and their sign-in.
 - **Never run two copies together.** `swift run something` and an installed something are two programs to macOS: both
   would launch agents and write the same journals. Quit one before starting the other.
 
