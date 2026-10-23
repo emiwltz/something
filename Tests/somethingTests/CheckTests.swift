@@ -117,10 +117,10 @@ extension Home {
     }
 
     /// The fixtures and the three run in this process cover every code check gives; RIGHT_UNAVAILABLE comes from
-    /// antigravity, a kind this build only sees.
+    /// antigravity, a kind this build only sees (as cursor).
     @Test func everyCheckCodeHasItsFixture() {
         let check = Set(Codes.all.filter { $0.value.from == "check" }.keys)
-        #expect(Registry.app.kinds.readOnly == ["antigravity"])
+        #expect(Registry.app.kinds.readOnly == ["antigravity", "cursor"])
         #expect(Set(CheckTests.fixtures.map(\.code)).union(["NO_WINDOW_SERVER", "LOAD_TIMEOUT", "PAGE_CRASHED"]) == check)
     }
 

@@ -90,6 +90,9 @@ shown: the folder, the state, the last messages, what the agent waits for. Nothi
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
 Antigravity's CLI (`agy`) is seen by its process alone: that it runs, and in which folder. something reads none of its
 files and does not launch it yet: Antigravity's ACP server keeps a Google sign-in of its own, apart from the CLI's.
+Cursor's CLI (`cursor-agent`, also linked as `agent`) is seen the same way. something does not launch it yet: over its
+ACP channel it builds a space, but asks you before each of something's own tools, which only a settings file of
+Cursor's own could allow.
 
 something writes no hook, no MCP server, no skill and no setting into any agent's configuration: the MCP server it
 gives your assistant is passed at launch, for that conversation only. What it writes is its own: `~/something/` (your spaces, their memory, and your assistant's `AGENTS.md` and `CLAUDE.md`) and
@@ -222,7 +225,8 @@ something drives builds spaces too: one that cannot is not driven until it can.
 | OMP | yes | yes | yes |
 | Antigravity | by its process | no: Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now. | no |
 | Amp | by its process | yes | yes |
-| Auggie, Crush, Cursor, DeepSeek Harness, Factory Droid, Gemini CLI, GitHub Copilot CLI, Goose, Qwen Code, ZCode | by its process | no: something has no extension for them. | no |
+| Cursor | by its process | no: Cursor asks you before each of something's own tools, so something only sees cursor-agent for now. | no |
+| Auggie, Crush, DeepSeek Harness, Factory Droid, Gemini CLI, GitHub Copilot CLI, Goose, Qwen Code, ZCode | by its process | no: something has no extension for them. | no |
 
 | | send | steer | queue | interrupt | model | mode | effort |
 |---|---|---|---|---|---|---|---|

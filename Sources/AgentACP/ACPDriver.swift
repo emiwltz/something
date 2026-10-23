@@ -29,12 +29,18 @@ final class ACPDriver: Driver {
     private var cancelAsked = false
     /// Open requests by the id something shows.
     private var asks: [String: Ask] = [:]
-    /// Each tool call's name (the title of its first update), its item while it runs, and the person's decision on it.
+    /// Each tool call's name (the title of its first update, or the latest its profile gives), its latest input, its
+    /// item while it runs, and the person's decision on it.
     private var names: [String: String] = [:]
+    private var inputs: [String: Any] = [:]
     private var tools: [String: Item] = [:]
     private var decisions: [String: Decision] = [:]
-    /// The text so far of each message the agent streams, by its messageId.
+    /// The text so far of each message the agent streams, by its messageId; for an agent that gives none (Cursor), by
+    /// the number of the text it streams, which a tool call or a change between thought and reply ends: the kind of the
+    /// text being streamed, and how many there were.
     private var texts: [String: String] = [:]
+    private var streamed: String?
+    private var unnamed = 0
     /// Whether the agent wrote any line, which tells a failed start from a later end.
     private var heard = false
     /// Whether the end was already said.
@@ -278,8 +284,10 @@ final class ACPDriver: Driver {
             try? send(["id": rpcID, "error": ["code": -32601, "message": "something does not handle \(method)."]])
             return
         }
-        let call = params["toolCall"] as? [String: Any] ?? [:]
+        var call = params["toolCall"] as? [String: Any] ?? [:]
         let tool = call["toolCallId"] as? String
+        // An agent may ask without the call's input (Cursor): the one its updates gave is the call's.
+        if call["rawInput"] == nil, let known = tool.flatMap({ inputs[$0] }) { call["rawInput"] = known }
         let input = call["rawInput"] as? [String: Any]
         // A tool something lends is asked for as the command something would run for it, as its item shows it.
         let lent = launch.lent == nil ? nil : profile.named?(call).flatMap { Lent.called($0.name, $0.input) }
@@ -297,16 +305,22 @@ final class ACPDriver: Driver {
         switch update["sessionUpdate"] as? String {
         case let kind? where kind == "agent_message_chunk" || kind == "agent_thought_chunk":
             guard let text = (update["content"] as? [String: Any])?["text"] as? String, !text.isEmpty else { return }
-            let id = update["messageId"] as? String ?? "\(launch.agent)/message"
+            if streamed != kind { unnamed += 1 }
+            streamed = kind
+            let id = update["messageId"] as? String ?? "\(launch.agent)/text\(unnamed)"
             let known = texts[id] != nil, whole = (texts[id] ?? "") + text
             texts[id] = whole
             let item = Item(id: id, kind: child ? "subagent" : kind == "agent_message_chunk" ? "message" : "thought", author: "agent", text: whole, at: now())
             emit(known ? .itemUpdated(item) : .itemAppended(item))
         case "tool_call", "tool_call_update":
             guard let id = update["toolCallId"] as? String else { return }
+            streamed = nil
             let named = profile.named?(update), input = named == nil ? update["rawInput"] : named?.input
-            if names[id] == nil, let name = named?.name ?? update["title"] as? String { names[id] = name }
-            let status = ["in_progress": "running", "completed": "done", "failed": "failed"][update["status"] as? String ?? ""]
+            if let name = named?.name { names[id] = name } else if names[id] == nil, let title = update["title"] as? String { names[id] = title }
+            if let raw = update["rawInput"] as? [String: Any], !raw.isEmpty { inputs[id] = raw }
+            // A call the person refused did not run, whatever the agent then says of it (Cursor: "completed").
+            let refused = decisions[id]?.outcome == "denied" && update["status"] as? String == "completed"
+            let status = refused ? "failed" : ["in_progress": "running", "completed": "done", "failed": "failed"][update["status"] as? String ?? ""]
             let old = tools[id]
             // A tool something lends is shown as the command something runs for it, once its input is known (OpenCode
             // opens a call with an empty one, and may end it with none; an agent whose profile names its tools, OMP,
@@ -346,7 +360,9 @@ final class ACPDriver: Driver {
         tools = [:]
         decisions = [:]
         texts = [:]
+        streamed = nil
         names = [:]
+        inputs = [:]
     }
 
     /// Sends what waits, in order: the settings first, then the message, once the session exists.

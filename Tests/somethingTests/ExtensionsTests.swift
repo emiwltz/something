@@ -7,9 +7,9 @@ import Testing
 
 @Suite struct ExtensionsTests {
     @Test func theAppRegistersTheAgentsOf0_2() {
-        #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp"])
-        #expect(Registry.app.others.keys.sorted() == ["auggie", "copilot", "crush", "cursor-agent", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
-        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.app.kinds.readOnly == ["antigravity"])
+        #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "cursor"])
+        #expect(Registry.app.others.keys.sorted() == ["auggie", "copilot", "crush", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
+        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.app.kinds.readOnly == ["antigravity", "cursor"])
         #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "amp"], "0.2's builders, in 0.2's order, then OMP and Amp")
         #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
         #expect(InstallList.builders.map(\.command) == ["brew install --cask claude-code", "brew install --cask codex", "brew install opencode",
@@ -18,8 +18,8 @@ import Testing
         #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi", "amp"])
         #expect(Registry.app.agents.filter(\.asksNothingByDefault).map(\.kind) == ["omp"])
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
-        #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false, false])
-        #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false])
+        #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false, false, false])
+        #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false, false])
     }
 
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

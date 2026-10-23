@@ -8,7 +8,8 @@
     "pi":       { "launch": true,  "installed": true,  "tested": "1.0.0",   "seen": "1.0.0",   "reader": "ok",      "note": null },
     "omp":      { "launch": true,  "installed": true,  "tested": "18.8.6",  "seen": "18.9.0",  "reader": "changed", "note": "OMP's session files changed shape; its agents are shown as processes only." },
     "antigravity": { "launch": false, "installed": null, "tested": "none", "seen": null, "reader": "none", "note": "Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now." },
-    "amp": { "launch": true, "installed": false, "tested": "0.0.1792656060", "seen": null, "reader": "none", "note": null }
+    "amp": { "launch": true, "installed": false, "tested": "0.0.1792656060", "seen": null, "reader": "none", "note": null },
+    "cursor": { "launch": false, "installed": null, "tested": "none", "seen": null, "reader": "none", "note": "Cursor asks you before each of something's own tools, so something only sees cursor-agent for now." }
   },
   "agents": [
     {

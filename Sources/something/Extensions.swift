@@ -12,8 +12,8 @@ extension Registry {
     /// acting. Built once, at the first use. The app's windows read this value; the engine is given it too, for the
     /// host's own checks. The others are coding agents without an extension, seen from their process only: each
     /// program's name, then the agent's.
-    static let app = Registry([.claude, .codex, .opencode, .pi, .omp(reader: OMP.reader), .antigravity, .amp], others: [
-        "gemini": "Gemini CLI", "qwen": "Qwen Code", "goose": "Goose", "crush": "Crush", "cursor-agent": "Cursor", "droid": "Factory Droid",
+    static let app = Registry([.claude, .codex, .opencode, .pi, .omp(reader: OMP.reader), .antigravity, .amp, .cursor], others: [
+        "gemini": "Gemini CLI", "qwen": "Qwen Code", "goose": "Goose", "crush": "Crush", "droid": "Factory Droid",
         "copilot": "GitHub Copilot CLI", "auggie": "Auggie", "dsh": "DeepSeek Harness", "zcode": "ZCode",
     ])
 

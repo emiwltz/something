@@ -29,7 +29,8 @@
       "pi": ["Kind"],
       "omp": ["Kind"],
       "antigravity": ["Kind"],
-      "amp": ["Kind"]
+      "amp": ["Kind"],
+      "cursor": ["Kind"]
     },
     "Kind": {
       "launch": ["boolean"],
@@ -41,7 +42,7 @@
     },
     "Agent": {
       "id": ["string"],
-      "kind": ["=claude", "=codex", "=opencode", "=pi", "=omp", "=antigravity", "=amp", "=other"],
+      "kind": ["=claude", "=codex", "=opencode", "=pi", "=omp", "=antigravity", "=amp", "=cursor", "=other"],
       "name": ["string", "null"],
       "origin": ["=launched", "=elsewhere"],
       "folder": ["string", "null"],
