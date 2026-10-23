@@ -59,7 +59,7 @@ import SomethingCore
             "opencode": ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
             "pi": ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
             "omp": ["steer": "OMP cannot take a message during a turn; send it with when: \"next\"."],
-            "amp": ["interrupt": "Amp's channel has no way to stop a turn; stop the agent instead.",
+            "amp": ["interrupt": "Amp can't pause mid-task: stopping it ends Amp.",
                     "model": "Amp picks its model by its own agent mode, which something does not set.",
                     "mode": "Amp picks its model by its own agent mode, which something does not set.",
                     "effort": "Amp picks its model by its own agent mode, which something does not set."],

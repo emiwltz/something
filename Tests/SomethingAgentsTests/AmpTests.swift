@@ -1,6 +1,6 @@
 // Amp over its stream-json channel: its driver played over its own recorded exchanges (Tests/Exchanges/amp, trial C6
 // against the real amp 0.0.1792656060): every line something wrote goes out byte for byte as it did, and what Amp said
-// folds as it showed. Amp never asks, takes a message during a turn, and cannot stop a turn; something's tools reach it
+// folds as it showed. Amp never asks, takes a message during a turn, and cannot pause a turn; something's tools reach it
 // over MCP, through its code_exec tool.
 import Foundation
 import Testing
@@ -72,19 +72,61 @@ import SomethingCore
     }
 
     /// Amp's errors, from its own documentation's shapes (none was seen in a trial): one during a turn fails it, the
-    /// run's result repeats it and is said once, and a program that ends before any line could not start.
+    /// run's result repeats it and is said once; a failed result after a turn that went well is said; a program that
+    /// ends before any line could not start.
     @Test func errorsAreSaidOnce() throws {
-        let replay = Replay.amp()
-        _ = try replay.agent.send("Invented question.", when: "next")
-        replay.feed(["type": "system", "subtype": "error_during_execution", "error": "Invented failure.", "session_id": "T-invented"])
-        #expect(replay.fold.turns.last?.state == "error" && replay.fold.agent.error?.message == "Amp: Invented failure.")
-        replay.feed(["type": "result", "subtype": "error_during_execution", "is_error": true, "error": "Invented failure.", "duration_ms": 1,
-                     "num_turns": 1, "session_id": "T-invented"])
-        #expect(replay.fold.turns.count == 1)
+        var events: [AgentEvent] = []
+        let driver = AmpDriver(Launch(agent: "amp-1", folder: "/Users/example/shop"), write: { _ in }, emit: { events.append($0) }, now: { "" })
+        let error = AgentEvent.turnEnded(.failed(AgentError(code: "AGENT_ERROR", message: "Amp: Invented failure.")))
+        let result = Self.line(["type": "result", "subtype": "error_during_execution", "is_error": true, "error": "Invented failure.",
+                                "session_id": "T-invented"])
+        try driver.deliver("Invented question.", steer: false)
+        driver.receive(Self.line(["type": "system", "subtype": "error_during_execution", "error": "Invented failure.", "session_id": "T-invented"]))
+        driver.receive(result)
+        #expect(events.filter { $0 == error || $0 == .error(AgentError(code: "AGENT_ERROR", message: "Amp: Invented failure.")) } == [error])
+        events = []
+        try driver.deliver("Another invented question.", steer: false)
+        driver.receive(Self.line(["type": "assistant", "message": ["role": "assistant", "content": [["type": "text", "text": "Invented."]],
+                                                                   "stop_reason": "end_turn"], "parent_tool_use_id": NSNull()]))
+        driver.receive(result)
+        #expect(events.last == .error(AgentError(code: "AGENT_ERROR", message: "Amp: Invented failure.")) && events.contains(.turnEnded(.done)))
         let failed = Replay.amp()
         failed.agent.ended(code: 1, errors: "error: unknown option '--invented'\n", asked: false)
         #expect(failed.fold.agent.error == AgentError(code: "LAUNCH_FAILED", message: "Amp could not start: error: unknown option '--invented'"))
     }
+
+    /// A refusal or an answer cut at the length limit fails the turn; it is not shown as done.
+    @Test func aRefusalOrACutAnswerFails() throws {
+        for (stop, words) in [("refusal", "Amp's model refused to answer."), ("max_tokens", "Amp's answer was cut off at its length limit.")] {
+            let replay = Replay.amp()
+            _ = try replay.agent.send("Invented question.", when: "next")
+            replay.feed(["type": "assistant", "message": ["role": "assistant", "content": [["type": "text", "text": "Invented."]], "stop_reason": stop],
+                         "parent_tool_use_id": NSNull(), "session_id": "T-invented"])
+            #expect(replay.fold.turns.map(\.state) == ["error"] && replay.fold.agent.error?.message == words)
+        }
+    }
+
+    /// A subagent's prompt comes as a `user` line with its parent tool (Claude Code's shape, which Amp's stream follows):
+    /// it is the agent's words to its subagent, never the person's, and opens no turn.
+    @Test func aSubagentsPromptIsNotThePersons() throws {
+        let sent = Replay.amp()
+        _ = try sent.agent.send("Invented question.", when: "next")
+        sent.feed(["type": "user", "message": ["role": "user", "content": [["type": "text", "text": "Invented subagent prompt."]]],
+                   "parent_tool_use_id": "TU-invented", "session_id": "T-invented"])
+        #expect(sent.items.map(\.kind) == ["subagent"] && sent.items.allSatisfy { $0.author == "agent" } && sent.fold.turns.count == 1)
+    }
+
+    /// Amp's ask_user_choice waits for an answer the channel cannot carry (trial C6 review: no line comes after it, and a
+    /// later message is not taken): the turn stays running, and the person is told to stop Amp.
+    @Test func aChoiceAmpAsksIsSaid() throws {
+        let replay = Replay.amp()
+        _ = try replay.agent.send("Invented question.", when: "next")
+        replay.feed(["type": "assistant", "message": ["role": "assistant", "content": [["type": "tool_use", "id": "TU-invented", "name": "ask_user_choice",
+                     "input": ["question": "Invented?", "options": ["one", "two"]]]], "stop_reason": "tool_use"], "parent_tool_use_id": NSNull()])
+        #expect(replay.fold.agent.error?.message == AmpDriver.choice && replay.fold.turns.map(\.state) == ["working"])
+    }
+
+    static func line(_ object: [String: Any]) -> Data { try! JSONSerialization.data(withJSONObject: object) }
 
     /// The channel takes only messages: an interrupt, a model, a mode or an effort is refused in words.
     @Test func whatTheChannelCannotDoIsRefused() throws {

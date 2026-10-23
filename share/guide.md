@@ -380,7 +380,8 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   its own settings say, and by default it asks nothing: it runs commands and edits files without asking.
 - **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stopping the agent is the
   way. Amp never asks permission when something launches it, and picks its model by its own agent mode, which
-  something does not set: its `mode` says that agent mode (`medium`, for instance). Its threads live on Amp's servers:
+  something does not set: its `mode` says that agent mode (`medium`, for instance). When Amp asks the person to choose,
+  the channel cannot carry the answer: the turn stays `working`, the agent's `error` says so, and stopping it is the way. Its threads live on Amp's servers:
   an Amp started elsewhere is seen by its process only, like an `other` agent.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 0.2 only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`

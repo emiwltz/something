@@ -45,7 +45,7 @@ struct AssistantView: View {
         }
         Divider()
         Button("New Conversation") { model.newConversation() }
-        Button("Stop") { model.stop() }.disabled(!model.canStop)
+        Button("Stop") { model.stop() }.disabled(!model.working).help(model.stopHelp)
         if model.canAskEverything {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
@@ -253,8 +253,8 @@ struct Composer: View {
                 .background(working ? Color.primary : Color.accentColor.opacity(empty ? 0.45 : 1), in: Circle())
         }
         .buttonStyle(.plain)
-        .disabled(working ? !model.canStop : empty || model.kind == nil)
-        .help(working ? model.canStop ? "Stop (⌘.)" : model.agent?.because["interrupt"] ?? "" : "Send (Return)")
+        .disabled(!working && (empty || model.kind == nil))
+        .help(working ? model.stopHelp : "Send (Return)")
     }
 
     /// Gray not started, green ready, pulsing blue working, orange waiting for the person, red when it went wrong.

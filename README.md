@@ -224,9 +224,11 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
   first. The rights sheet says so when a space asks to launch pi.
 - **OMP cannot steer** either: the same channel as OpenCode's. It asks permission as your OMP settings say, and by
   default asks nothing.
-- **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stop the agent instead.
+- **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stop the agent instead
+  (the assistant's Stop ends Amp, and the next message starts it again).
   It never asks permission when something launches it, and picks its model by its own agent mode, which something
-  does not set. The rights sheet says so when a space asks to launch it.
+  does not set. The rights sheet says so when a space asks to launch it. When Amp asks you to choose, something
+  cannot show the choice and says so: Amp waits for the answer, so stop it and ask again without a choice.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did
   not open. A Claude Code or Codex conversation can be continued in something ("continue here") once no other process
   holds it; OpenCode, pi and OMP conversations cannot.

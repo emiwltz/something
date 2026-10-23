@@ -1,8 +1,9 @@
 // AmpDriver: Amp launched by something, through `amp --execute --stream-json --stream-json-input`, its official machine
 // channel: one JSON object per line each way, Claude Code's stream-json shapes. something writes only the person's
-// messages (`{"type":"user", "steer"?, "message"}`): the channel takes nothing else, so there is no way to stop a turn,
-// to answer a request or to change a value, and Amp never asks the person anything (a tool its own settings would ask
-// for is refused by Amp itself in this mode). Amp writes `system/init` (its thread) with the first message, then
+// messages (`{"type":"user", "steer"?, "message"}`): the channel takes nothing else, so there is no way to pause a turn,
+// to answer a request or to change a value, and Amp never asks permission (a tool its own settings would ask for is
+// refused by Amp itself in this mode). Its ask_user_choice tool is not refused: Amp then waits for an answer the
+// channel cannot carry, and takes no other message (V), so something says so and the person stops it. Amp writes `system/init` (its thread) with the first message, then
 // the person's messages as it takes them, the assistant's messages and the tools' results; a turn ends at the
 // assistant's last message (`stop_reason` end_turn). `result` comes only once its input is closed. What each choice
 // rests on (V: the real amp 0.0.1792656060, 22 October 2026) is said where it is made.
@@ -23,7 +24,7 @@ final class AmpDriver: Driver {
         return Command(arguments: arguments)
     }
 
-    static let noInterrupt = "Amp's channel has no way to stop a turn; stop the agent instead."
+    static let noInterrupt = "Amp can't pause mid-task: stopping it ends Amp."
     static let noSettings = "Amp picks its model by its own agent mode, which something does not set."
 
     private let launch: Launch
@@ -38,7 +39,7 @@ final class AmpDriver: Driver {
     private var count = 0
     /// True once Amp wrote a line: a launch that fails writes none.
     private var heard = false
-    /// True once Amp reported an error: the run's `result` repeats it.
+    /// True once Amp reported an error since the last turn started: the run's `result` repeats it.
     private var failed = false
 
     init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
@@ -109,12 +110,15 @@ final class AmpDriver: Driver {
         if let mode = frame["agent_mode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
     }
 
-    /// The person's words as Amp takes them (a steer shows where it went in), and the results of the tools.
+    /// The person's words as Amp takes them (a steer shows where it went in), and the results of the tools. A
+    /// subagent's prompt (with its `parent_tool_use_id`, as in Claude Code's stream) is the agent's words, not the person's.
     private func person(_ frame: [String: Any]) {
+        let sub = frame["parent_tool_use_id"].map { !($0 is NSNull) } ?? false
         for block in blocks(frame) {
             switch block["type"] as? String {
             case "text":
                 guard let text = block["text"] as? String, !text.isEmpty else { continue }
+                if sub { append("subagent", "agent", text); continue }
                 // A steer written as a turn ended starts the next one (V: Amp shows a held message when its turn starts).
                 open()
                 append("message", "person", text)
@@ -130,6 +134,7 @@ final class AmpDriver: Driver {
 
     /// One whole message of the model: its text, thoughts and tool calls; a subagent's go under its kind. The main
     /// agent's message that ends without calling a tool ends the turn (V: end_turn); `pause_turn` and `tool_use` go on.
+    /// A refusal or an answer cut at the length limit ends it failed.
     private func assistant(_ frame: [String: Any]) {
         let sub = frame["parent_tool_use_id"].map { !($0 is NSNull) } ?? false
         for block in blocks(frame) {
@@ -141,7 +146,13 @@ final class AmpDriver: Driver {
             }
         }
         let stop = (frame["message"] as? [String: Any])?["stop_reason"] as? String
-        if !sub, ["end_turn", "stop_sequence", "max_tokens", "refusal"].contains(stop) { close(.done) }
+        guard !sub else { return }
+        switch stop {
+        case "end_turn", "stop_sequence": close(.done)
+        case "refusal": close(.failed(AgentError(code: "AGENT_ERROR", message: "Amp's model refused to answer.")))
+        case "max_tokens": close(.failed(AgentError(code: "AGENT_ERROR", message: "Amp's answer was cut off at its length limit.")))
+        default: break
+        }
     }
 
     private func tool(_ block: [String: Any], sub: Bool) {
@@ -153,7 +164,10 @@ final class AmpDriver: Driver {
                         at: now(), tool: Tool(name: lent?.name ?? name, status: "running"))
         tools[id] = item
         emit(.itemAppended(item))
+        if !sub, name == "ask_user_choice" { emit(.error(AgentError(code: "AGENT_ERROR", message: AmpDriver.choice))) }
     }
+
+    static let choice = "Amp asked you to choose, which something cannot show, and waits for your answer: stop Amp, then ask again without a choice."
 
     /// What a tool acts on: its command, its code (code_exec, which also calls MCP servers' tools), the first file
     /// of a patch, else its input.
@@ -184,7 +198,7 @@ final class AmpDriver: Driver {
 
     private func open() {
         guard !turnOpen else { return }
-        turnOpen = true
+        (turnOpen, failed) = (true, false)
         emit(.turnStarted(id: nil))
     }
 

@@ -380,8 +380,8 @@ import WebKit
         await finish(home, model)
     }
 
-    /// Amp's channel cannot stop a turn: while Amp works, Stop is off (the menu's, the bar's), and says why.
-    @Test func stopIsOffWhileAmpWorks() async throws {
+    /// Amp cannot pause mid-task: Stop ends it, says so in its help, keeps the conversation, and the next message starts it again.
+    @Test func stopEndsAnAgentThatCannotPause() async throws {
         let (home, model) = try assistant([])
         defer { home.remove() }
         let amp = home.root.appendingPathComponent("bin/amp")
@@ -399,7 +399,14 @@ import WebKit
         model.draft = "Make an invented board."
         model.send()
         #expect(await wait(until: { model.agent?.state == "working" }))
-        #expect(model.working && !model.canStop && model.agent?.because["interrupt"] == "Amp's channel has no way to stop a turn; stop the agent instead.")
+        #expect(model.stopHelp == "Stop ends Amp, which can't pause mid-task; your next message starts it again.")
+        let first = model.id
+        model.stop()
+        #expect(await wait(until: { model.agent?.alive == false }), "Stop ends the fake Amp")
+        #expect(!model.working && model.light == .off && !model.rows.isEmpty, "the conversation stays shown")
+        model.draft = "Make another invented board."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" && model.id != first }), "the next message starts it again")
         await finish(home, model)
     }
 

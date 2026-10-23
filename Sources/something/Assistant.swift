@@ -193,8 +193,10 @@ import SomethingCore
 
     var working: Bool { light == .working || light == .waiting }
 
-    /// Whether Stop can stop what runs: a launch, or a turn of an agent that can be interrupted (Amp cannot).
-    var canStop: Bool { working && (launching || agent?.can.interrupt != false) }
+    /// What Stop does while the agent works: it pauses the turn, or ends an agent that cannot pause mid-task.
+    var stopHelp: String {
+        agent?.can.interrupt == false && !launching ? "Stop ends \(name), which can't pause mid-task; your next message starts it again." : "Stop (⌘.)"
+    }
 
     var light: Light {
         if failure != nil { return .error }
@@ -316,10 +318,13 @@ import SomethingCore
         focusing += 1
     }
 
-    /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch.
+    /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
+    /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
     func stop() {
         if launching { return endLaunch() }
-        if let id, working { _ = try? engine.interrupt(id) }
+        guard let id, working else { return }
+        if agent?.can.interrupt == false { return halt() }
+        _ = try? engine.interrupt(id)
     }
 
     /// Ends the conversation: its agent stops, and the next message starts a new one.
