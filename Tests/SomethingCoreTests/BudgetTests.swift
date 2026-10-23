@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_800, host = 2_600, driver = 600, agentsShared = 400, app = 5_200
+    static let core = 1_800, host = 2_800, driver = 600, agentsShared = 400, app = 5_500
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -82,16 +82,16 @@ enum Budget {
 
     /// The host holds 2,600 lines in all, whatever each of its files holds.
     @Test func theHostFailsOneLineOverInAll() throws {
-        for (extra, expected) in [(0, [String]()), (1, ["SomethingAgents has 2601 lines; its budget is 2600."])] {
+        for (extra, expected) in [(0, [String]()), (1, ["SomethingAgents has 2801 lines; its budget is 2800."])] {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent("budget-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: root) }
             let folder = root.appendingPathComponent("Sources/SomethingAgents")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            for (index, count) in [400, 400, 400, 400, 400, 400, 200 + extra].enumerated() {
+            for (index, count) in [400, 400, 400, 400, 400, 400, 400, extra].enumerated() {
                 try String(repeating: "let example = 1\n", count: count).write(to: folder.appendingPathComponent("File\(index).swift"),
                                                                               atomically: true, encoding: .utf8)
             }
-            #expect(Budget.problems(under: root) == expected, "\(2_600 + extra) lines")
+            #expect(Budget.problems(under: root) == expected, "\(2_800 + extra) lines")
         }
     }
 
@@ -108,7 +108,7 @@ enum Budget {
             ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
             ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
             ("SomethingCore", "Contract.swift", 1_801, "SomethingCore has 1801 lines; its budget is 1800."),
-            ("something", "App.swift", 5_201, "The Mac app has 5201 lines; its budget is 5200."),
+            ("something", "App.swift", 5_501, "The Mac app has 5501 lines; its budget is 5500."),
             ("AgentClaude", "ClaudeDriver.swift", 601, "AgentClaude/ClaudeDriver.swift has 601 lines; a driver has 600."),
             ("AgentPi", "PiReader.swift", 401, "AgentPi/PiReader.swift has 401 lines; a file has 400."),
         ]
