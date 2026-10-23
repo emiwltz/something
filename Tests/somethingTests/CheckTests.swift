@@ -7,6 +7,7 @@
 // runner's settings. The whole command, main.swift and Check.main, runs on CI through the assembled program.
 import AppKit
 import Foundation
+import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -80,7 +81,6 @@ extension Home {
         ("CONTRACT_MISSING", { try $0.space("x", page("{\"title\": \"Invented\"}", "<p>Invented.</p>")) }, []),
         ("SCOPE_INVALID", { try $0.space("x", declared("\"agents\": {\"see\": \"some\"}", "<p>Invented.</p>")) }, []),
         ("UNKNOWN_RIGHT", { try $0.space("x", declared("\"rights\": [\"sendd\"]", "<p>Invented.</p>")) }, []),
-        ("RIGHT_UNAVAILABLE", { try $0.space("x", declared("\"rights\": [\"launch:omp\"]", "<p>Invented.</p>")) }, []),
         ("RIGHT_NOT_DECLARED", { try $0.space("x", declared("<script>something.send(\"a1\", \"Hello.\").catch(() => {});</script>")) }, []),
         ("RIGHT_REFUSED", { try $0.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
                                                         "<script>something.send(\"a1\", \"Hello.\");</script>")) }, ["--refuse", "send"]),
@@ -115,10 +115,12 @@ extension Home {
         #expect(checked.status == (level == .fatal ? 2 : level == .error ? 1 : 0), "\(fixture.code) exits with \(checked.status)")
     }
 
-    /// The fixtures and the three run in this process cover every code check gives.
+    /// The fixtures and the three run in this process cover every code check gives, but RIGHT_UNAVAILABLE: every kind
+    /// this build knows is launchable since OMP is (DeclarationTests gives the code with a kind registered read-only).
     @Test func everyCheckCodeHasItsFixture() {
         let check = Set(Codes.all.filter { $0.value.from == "check" }.keys)
-        #expect(Set(CheckTests.fixtures.map(\.code)).union(["NO_WINDOW_SERVER", "LOAD_TIMEOUT", "PAGE_CRASHED"]) == check)
+        #expect(Registry.app.kinds.readOnly.isEmpty)
+        #expect(Set(CheckTests.fixtures.map(\.code)).union(["NO_WINDOW_SERVER", "LOAD_TIMEOUT", "PAGE_CRASHED", "RIGHT_UNAVAILABLE"]) == check)
     }
 
     /// The template the command starts a space from is a clean space: no problem, a snapshot, every call answered.

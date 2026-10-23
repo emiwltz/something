@@ -58,7 +58,7 @@
   "functions": ["contract", "granted", "state", "on", "send", "interrupt", "set", "launch", "resume", "store.get", "store.set", "open"],
   "events": ["change", "granted"],
   "rights": ["state", "send", "launch", "store"],
-  "rightKinds": ["claude", "codex", "opencode", "pi"],
+  "rightKinds": ["claude", "codex", "opencode", "pi", "omp"],
   "codes": [
     "BAD_PARAMS", "UNKNOWN_METHOD", "UNKNOWN_EVENT", "NO_HOST", "RIGHT_NOT_GRANTED", "AGENT_NOT_FOUND", "READ_ONLY_AGENT",
     "NOT_SUPPORTED", "VALUE_NOT_OFFERED", "AGENT_STOPPED", "FOLDER_NOT_GRANTED", "NOT_INSTALLED", "INTERPRETER_NOT_FOUND",

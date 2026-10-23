@@ -10,7 +10,6 @@
     "displays": true,
     "problems": [
       "CONTRACT_MISSING",
-      "RIGHT_UNAVAILABLE",
       "SCOPE_INVALID",
       "UNKNOWN_KEY",
       "UNKNOWN_RIGHT"
@@ -23,12 +22,11 @@
         "folders": []
       },
       "rights": [
-        "state"
+        "state",
+        "launch:omp"
       ],
       "folder": null
     },
-    "unavailable": [
-      "launch:omp"
-    ]
+    "unavailable": []
   }
 }

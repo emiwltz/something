@@ -136,9 +136,10 @@ agents this space launched are always in scope.
 | `launch` | `launch` and `resume` (which is "continue here"), in the granted folder; `launch:codex` limits it to one kind. |
 | `store` | The space's own memory. |
 
-Kinds for a right: `claude`, `codex`, `opencode`, `pi`. `open` needs no right: each link is confirmed by the person.
-A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows but
-cannot honour (`launch:omp`, `send:omp`) goes to `granted.unavailable` (warning `RIGHT_UNAVAILABLE`).
+Kinds for a right: `claude`, `codex`, `opencode`, `pi`, `omp`. `open` needs no right: each link is confirmed by the
+person. A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows
+but cannot honour (for a kind it only reads; none in this version) goes to `granted.unavailable` (warning
+`RIGHT_UNAVAILABLE`).
 
 At the first opening, a window of the Mac lists what you declared, in plain words; the person allows or refuses each
 line. Refusals are remembered, and rights can be revoked at any time. **So never assume a right: read
@@ -220,8 +221,8 @@ if (agent) {
 {
   "rights": ["state", "send:claude", "store"],
   "refused": ["launch:codex"],
-  "unavailable": ["launch:omp"],
-  "limits": { "opencode": ["steer"], "pi": ["mode"] },
+  "unavailable": [],
+  "limits": { "opencode": ["steer"], "pi": ["mode"], "omp": ["steer"] },
   "agents": { "see": "all" },
   "folder": "/Users/example/code/shop"
 }
@@ -244,7 +245,7 @@ at most four times a second, only when it changed. A shortened example (the full
   "at": "2026-10-17T09:00:04Z",
   "kinds": {
     "claude": { "launch": true, "installed": true, "tested": "2.1.299", "seen": "2.1.301", "reader": "ok", "note": null },
-    "omp": { "launch": false, "installed": true, "tested": "18.8.6", "seen": "18.9.0", "reader": "changed",
+    "omp": { "launch": true, "installed": true, "tested": "18.8.6", "seen": "18.9.0", "reader": "changed",
              "note": "OMP's session files changed shape; its agents are shown as processes only." }
   },
   "agents": [
@@ -364,6 +365,7 @@ hours after their last activity. There is no history beyond the current conversa
 | codex | yes | yes | yes | yes | yes (next turn) | yes (approval policy) | yes (next turn) |
 | opencode | yes | no | yes | yes | yes | yes (agents such as build, plan) | yes |
 | pi | yes | yes | yes | yes | yes | no | yes (thinking level) |
+| omp | yes | no | yes | yes | yes | yes (default, plan) | yes (thinking level) |
 
 Read `can` rather than this table: it is what holds now. Why the gaps:
 
@@ -371,7 +373,8 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   something cannot ask a question either: it dismisses its own, and the agent's `error` asks the person to have it
   write the question in its reply.
 - **pi has no mode**: pi never asks permission, by design; it runs commands and edits files without asking.
-- **OMP is not launched**: something only reads it (`launch:omp` and `send:omp` are unavailable).
+- **OMP cannot steer** either (the same channel as OpenCode's): send with `when: "next"`. OMP asks permission only as
+  its own settings say, and by default it asks nothing: it runs commands and edits files without asking.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 0.2 only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,

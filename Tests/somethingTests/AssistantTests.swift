@@ -96,7 +96,7 @@ import WebKit
     func look(_ model: AssistantModel) async {
         model.engine.lookAgain()
         let before = model.installed
-        #expect(await wait(until: { model.installed.count == 4 && model.installed != before }), "the builders were not looked for")
+        #expect(await wait(until: { model.installed.count == Registry.app.builders.count && model.installed != before }), "the builders were not looked for")
     }
 
     /// What the fake read: each line, as JSON.

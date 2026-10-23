@@ -332,7 +332,7 @@ final class PiHome {
         #expect(gemini.because == ["send": "something has no reader for this agent; it only sees its process."])
     }
 
-    @Test func ompIsSeenAndNeverLaunched() throws {
+    @Test func ompIsSeen() throws {
         let place = try EngineTests.Place(prefix: "pi-home-engine-")
         defer { place.remove() }
         let home = try PiHome()
@@ -341,11 +341,10 @@ final class PiHome {
         engine.watch = Watch(readers: [home.pi, home.omp], snapshot: { Snapshot([]) })
         engine.saw(engine.watch.tick(now: home.now))
         let state = engine.state
-        #expect(state.kinds["omp"]?.launch == false && state.kinds["omp"]?.reader == "ok" && state.kinds["pi"]?.reader == "ok")
+        #expect(state.kinds["omp"]?.launch == true && state.kinds["omp"]?.reader == "ok" && state.kinds["pi"]?.reader == "ok")
         #expect(state.agents.filter { $0.kind == "omp" }.count == 2 && state.agents.filter { $0.kind == "pi" }.count == 4)
         let omp = try #require(state.agents.first { $0.kind == "omp" })
         #expect(!omp.can.resume && omp.because["resume"] == "something cannot continue OMP conversations started elsewhere yet.")
-        #expect(throws: CodedError.self) { try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil) }
     }
 }
 

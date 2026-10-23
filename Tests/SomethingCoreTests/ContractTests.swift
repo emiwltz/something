@@ -286,7 +286,7 @@ enum Frozen {
             .replacingOccurrences(of: "| `store` |", with: "| `memory` |")
             .replacingOccurrences(of: "`\"granted\"`: `fn(granted)`", with: "`\"rights\"`: `fn(granted)`")
             .replacingOccurrences(of: "| `BUSY` |", with: "| `OCCUPIED` |")
-            .replacingOccurrences(of: "Kinds for a right: `claude`, `codex`, `opencode`, `pi`.", with: "Kinds for a right: `claude`, `codex`, `opencode`.")
+            .replacingOccurrences(of: "Kinds for a right: `claude`, `codex`, `opencode`, `pi`, `omp`.", with: "Kinds for a right: `claude`, `codex`, `opencode`, `omp`.")
         let missing = Frozen.missing(frozen: frozen, shape: shape, codes: fewerCodes, guide: guide)
         #expect(missing == [
             "key Agent.pid is not in shape.json",

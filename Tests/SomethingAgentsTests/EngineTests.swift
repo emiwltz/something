@@ -139,8 +139,8 @@ import SomethingCore
         #expect(engine.state.kinds["codex"]?.launch == true)
         #expect(engine.state.kinds["opencode"]?.launch == true)
         #expect(engine.state.kinds["pi"]?.launch == true)
-        #expect(engine.state.kinds["omp"]?.launch == false)
-        #expect(Registry.described.limits == ["opencode": ["steer"], "pi": ["mode"]], "Claude and Codex have no limit left")
+        #expect(engine.state.kinds["omp"]?.launch == true)
+        #expect(Registry.described.limits == ["opencode": ["steer"], "pi": ["mode"], "omp": ["steer"]], "Claude and Codex have no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
@@ -461,7 +461,7 @@ import SomethingCore
         #expect(code("opencode", mode: "plan") == nil && code("claude", mode: "acceptEdits") == nil)
         #expect(code("claude", mode: "bypassPermissions") == "VALUE_NOT_OFFERED")
         #expect(code("codex", model: "-c") == "BAD_PARAMS" && code("claude", effort: "") == "BAD_PARAMS")
-        #expect(code("pi", mode: "default") == "NOT_SUPPORTED" && code("omp") == "NOT_SUPPORTED")
+        #expect(code("pi", mode: "default") == "NOT_SUPPORTED" && code("other") == "NOT_SUPPORTED")
     }
 
     /// A program whose first lines are all unknown to its driver is a version something does not understand: its kind's
@@ -582,8 +582,8 @@ import SomethingCore
         let place = try Place()
         defer { place.remove() }
         let engine = Engine.throwaway(place.environment)
-        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch omp yet.")) {
-            try engine.launch("omp", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        #expect(throws: CodedError("NOT_SUPPORTED", "something cannot launch other yet.")) {
+            try engine.launch("other", folder: place.work.path, model: nil, mode: nil, effort: nil)
         }
         #expect(throws: CodedError("NOT_SUPPORTED", Driving.pi.limits["mode"]!)) {
             try engine.launch("pi", folder: place.work.path, model: nil, mode: "plan", effort: nil)

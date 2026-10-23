@@ -9,11 +9,12 @@ import Testing
     @Test func theAppRegistersTheAgentsOf0_2() {
         #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp"])
         #expect(Registry.app.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
-        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi"] && Registry.app.kinds.readOnly == ["omp"])
-        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi"], "0.2's builders, in 0.2's order")
-        #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi"])
+        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.app.kinds.readOnly.isEmpty)
+        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp"], "0.2's builders, in 0.2's order, then OMP")
+        #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP"])
         #expect(InstallList.builders.map(\.command) == ["brew install --cask claude-code", "brew install --cask codex", "brew install opencode",
-                                                         "npm install -g --ignore-scripts @earendil-works/pi-coding-agent"])
+                                                         "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+                                                         "curl -fsSL https://omp.sh/install | sh"])
         #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi"])
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false])

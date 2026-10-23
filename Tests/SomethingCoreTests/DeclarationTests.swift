@@ -96,21 +96,21 @@ import Testing
         #expect(message(#"{"contract": "1"}"#) == #"contract is "1", not the whole number 1; it is read as 1."#)
         #expect(codes(#"{"contract": 1, "rights": ["state:claude", "send:", "send:gemini", "send:codex", 3]}"#)
                 == ["UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT", "UNKNOWN_RIGHT"])
-        let reading = Declaration.read(html: nil, json: Data(#"{"contract": 1, "rights": ["send", "launch:pi", "send:omp"]}"#.utf8),
-                                       name: "x", page: "index.html", kinds: .contract1)
-        #expect(reading.declaration?.rights == ["send", "launch:pi"] && reading.unavailable == ["send:omp"])
+        let reading = Declaration.read(html: nil, json: Data(#"{"contract": 1, "rights": ["send", "launch:pi", "send:cursor"]}"#.utf8),
+                                       name: "x", page: "index.html", kinds: Kinds(launchable: [], readOnly: ["cursor"]))
+        #expect(reading.declaration?.rights == ["send", "launch:pi"] && reading.unavailable == ["send:cursor"])
     }
 
     @Test func theKindsAreGivenWithContract1sAsTheFloor() {
-        let rights = Data(#"{"contract": 1, "rights": ["launch:cursor", "send:omp", "launch:pi"]}"#.utf8)
+        let rights = Data(#"{"contract": 1, "rights": ["launch:cursor", "send:droid", "launch:omp"]}"#.utf8)
         let floor = Declaration.read(html: nil, json: rights, name: "x", page: "index.html", kinds: .contract1)
-        #expect(floor.declaration?.rights == ["launch:pi"] && floor.unavailable == ["send:omp"] && floor.unknown == ["launch:cursor"])
+        #expect(floor.declaration?.rights == ["launch:omp"] && floor.unavailable.isEmpty && floor.unknown == ["launch:cursor", "send:droid"])
         // A kind registered beyond contract 1's is an addition; one registered as launchable is no longer read-only;
         // registering fewer removes none of contract 1's.
-        let more = Kinds(launchable: ["cursor", "omp"], readOnly: ["pi"])
-        #expect(more.launchable == ["claude", "codex", "opencode", "pi", "cursor", "omp"] && more.readOnly.isEmpty)
+        let more = Kinds(launchable: ["cursor", "droid"], readOnly: ["pi", "droid", "gemini"])
+        #expect(more.launchable == ["claude", "codex", "opencode", "pi", "omp", "cursor", "droid"] && more.readOnly == ["gemini"])
         let added = Declaration.read(html: nil, json: rights, name: "x", page: "index.html", kinds: more)
-        #expect(added.declaration?.rights == ["launch:cursor", "send:omp", "launch:pi"] && added.problems.isEmpty)
+        #expect(added.declaration?.rights == ["launch:cursor", "send:droid", "launch:omp"] && added.problems.isEmpty)
         #expect(Kinds(launchable: [], readOnly: []) == .contract1)
     }
 

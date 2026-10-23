@@ -30,15 +30,15 @@ public struct Declaration: Equatable, Sendable, EveryKey {
 public struct Kinds: Equatable, Sendable {
     public let launchable: Set<String>, readOnly: Set<String>
 
-    /// The floor: contract 1's kinds (share/contract/frozen-v1.json's rightKinds), and omp, known but not launched.
-    static let floorLaunchable: Set<String> = ["claude", "codex", "opencode", "pi"], floorReadOnly: Set<String> = ["omp"]
+    /// The floor: contract 1's kinds (share/contract/frozen-v1.json's rightKinds).
+    static let floor: Set<String> = ["claude", "codex", "opencode", "pi", "omp"]
     /// The floor alone, with nothing registered.
     public static let contract1 = Kinds(launchable: [], readOnly: [])
 
     /// The registered kinds, always added to the floor: the result holds both. A kind launchable in either is launchable.
     public init(launchable: Set<String>, readOnly: Set<String>) {
-        self.launchable = launchable.union(Self.floorLaunchable)
-        self.readOnly = readOnly.union(Self.floorReadOnly).subtracting(self.launchable)
+        self.launchable = launchable.union(Self.floor)
+        self.readOnly = readOnly.subtracting(self.launchable)
     }
 }
 

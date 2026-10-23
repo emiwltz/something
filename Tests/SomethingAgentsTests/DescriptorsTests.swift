@@ -19,15 +19,16 @@ import SomethingCore
             "codex": "brew install --cask codex",
             "opencode": "brew install opencode",
             "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+            "omp": "curl -fsSL https://omp.sh/install | sh",
         ])
         #expect(Dictionary(uniqueKeysWithValues: agents.map { ($0.kind, $0.name) }) == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } }) == ["pi": "node"])
         #expect(Programs(environment: [:], registry: .described).homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
-        #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"]])
+        #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
         #expect(Registry.described.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
-        // What the core received as its contract 1 list in 0.2: the kinds registered are exactly that floor today.
-        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi"] && Registry.described.kinds.readOnly == ["omp"])
+        // The core's contract 1 list: the kinds registered are exactly that floor today, omp launchable since 0.3.
+        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.described.kinds.readOnly.isEmpty)
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {
@@ -49,30 +50,31 @@ import SomethingCore
     @Test func whatEachDriverCanDoIsThatOf0_2() {
         // Each Driving names the kind of the descriptor that holds it.
         #expect(Registry.described.agents.allSatisfy { $0.driving == nil || $0.driving?.kind == $0.kind })
-        #expect(Registry.described.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0"])
+        #expect(Registry.described.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0", "omp": "18.8.6"])
         #expect(Registry.described.launchable.mapValues(\.limits) == [
             "claude": [:], "codex": [:],
             "opencode": ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
             "pi": ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
+            "omp": ["steer": "OMP cannot take a message during a turn; send it with when: \"next\"."],
         ])
         #expect(Registry.described.launchable.mapValues { $0.modes.map(\.value) } == [
             "claude": ["default", "acceptEdits", "plan", "auto", "dontAsk"], "codex": ["on-request", "untrusted", "never"],
-            "opencode": ["build", "plan"], "pi": [],
+            "opencode": ["build", "plan"], "pi": [], "omp": ["default", "plan"],
         ])
         #expect(Registry.described.launchable.mapValues { $0.modes.map(\.label) } == [
             "claude": ["Ask before acting", "Accept edits", "Plan only", "Auto (Claude decides what is safe)", "Never ask (refuse what is not allowed)"],
             "codex": ["Ask when needed", "Ask before most commands", "Never ask (refuse what is not allowed)"],
-            "opencode": ["Build", "Plan"], "pi": [],
+            "opencode": ["Build", "Plan"], "pi": [], "omp": ["Default", "Plan"],
         ])
         // In 0.2 only OpenCode's modes were not its driver's list alone (Engine.lowersAsking cast to ACPDriver).
         #expect(Registry.described.launchable.filter(\.value.listsMoreModes).keys.sorted() == ["opencode"])
-        #expect(Registry.described.launchable.filter(\.value.effortOnlyWhenOffered).keys.sorted() == ["claude", "codex", "opencode"])
+        #expect(Registry.described.launchable.filter(\.value.effortOnlyWhenOffered).keys.sorted() == ["claude", "codex", "omp", "opencode"])
         #expect(Registry.described.launchable.filter(\.value.picksThread).keys.sorted() == ["claude"])
         // Each kind's factory makes its own driver.
         let made = Registry.described.launchable.mapValues { driving in
             String(describing: type(of: driving.driver(Launch(agent: "x-1", folder: "/Users/example/shop"), { _ in }, { _ in }, { "" })))
         }
-        #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver"])
+        #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver", "omp": "ACPDriver"])
     }
 
     /// The host knows the agents only through what it is given: no code line of Sources/SomethingAgents names one, by

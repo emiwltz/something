@@ -2,7 +2,7 @@
 
 something is a Mac app for **spaces**: pages you build with your own coding agent, such as a board of who is waiting
 for you, a morning paper of what your agents did or a small game for your breaks. something shows them safely, and
-lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP) and talk to the first four.
+lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP) and talk to them.
 
 *Version 0.2.0. `brew upgrade something` brings the next one; `brew install --HEAD emiwltz/tap/something` builds the
 latest `main` from source instead (a few minutes).*
@@ -48,7 +48,7 @@ first asks which folder it follows); from a terminal, `something new <name> --fr
 ## Your assistant
 
 The bar at the bottom of the window talks to your own coding agent, which builds and changes spaces with you: Claude
-Code, Codex, OpenCode or pi, the one you choose among those installed. It starts at your first message and works in
+Code, Codex, OpenCode, pi or OMP, the one you choose among those installed. It starts at your first message and works in
 `~/something/spaces`, with your account and settings. Each message starts with a line from something saying which
 space is open, so "make it blue" means that one. ⌘K types to it, ⌘J shows the conversation, ⌘. stops it. After 30
 minutes without a turn it is stopped to save memory; a new conversation starts each time something starts.
@@ -58,9 +58,9 @@ asking; everything else it does asks you, as your agent's own settings decide.
 
 something lends your assistant its own commands as tools, `something_guide`, `something_new` and `something_check`:
 something runs them itself, outside any sandbox of the agent, one at a time, and gives it what they printed. Claude
-Code, Codex and OpenCode get them from `something mcp`, a small MCP server (Model Context Protocol, the standard way to
-give an agent tools) that the agent starts for that conversation only; pi runs something's commands in its shell,
-which it does without asking anyway.
+Code, Codex, OpenCode and OMP get them from `something mcp`, a small MCP server (Model Context Protocol, the standard
+way to give an agent tools) that the agent starts for that conversation only; pi runs something's commands in its
+shell, which it does without asking anyway.
 
 For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and those three tools. Any
 other command asks you, `something open` included (something opens a new space by itself). For Codex it is its own
@@ -68,7 +68,9 @@ sandbox, "workspace-write": it may change files and run commands in `~/something
 without the network, and call those three tools, approved by name; what the sandbox blocks asks you. Its sandbox
 cannot load a page, which is why it needs `something_check` (a Codex that cannot start the tools is not offered until
 you choose Look for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
-settings say. pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask
+settings say. The same for OMP, whose own default (its setting `tools.approvalMode`, "yolo") asks nothing: it can
+run any command on your Mac unless your OMP settings say otherwise. pi never asks, by design: it can run any command
+on your Mac, and the tour and the bar say so. "Ask
 Before Every Change", in the bar's agent menu, turns the exception off from the next conversation, the tools included.
 No space can see what you say to your assistant, or write to it.
 
@@ -109,7 +111,9 @@ agent's own official channel, with your own configuration:
   tools may not be there yet, and your assistant then runs `something` in its shell, as its instructions say. A call
   from OpenCode's code mode is shown as something's command only when it called nothing but something's tools.
 - **pi**: `pi --mode rpc`, its official channel.
-- **OMP** is read, never launched.
+- **OMP**: `omp acp`, the Agent Client Protocol, as OpenCode. Its conversations are saved and read like the ones you
+  start in a terminal. Your assistant gets something's MCP server in `session/new`, and its calls to those tools are
+  shown as the commands something runs.
 
 Started from a terminal, something gives the agents that terminal's environment, so they find the programs your
 terminal finds (less the variables that only say where the terminal runs, such as `TMUX`); started from Finder or
@@ -202,12 +206,15 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
 | Codex | yes | yes | yes | yes | yes | yes | yes |
 | OpenCode | yes | no | yes | yes | yes | yes | yes |
 | pi | yes | yes | yes | yes | yes | no | yes |
+| OMP | yes | no | yes | yes | yes | yes | yes |
 
 - **OpenCode cannot steer** (take a message during a turn): its channel has no way to. A message waits for the next
   turn. OpenCode launched by something cannot ask a question either.
 - **pi has no mode, and never asks permission**, by design: it runs commands and edits files without asking you
   first. The rights sheet says so when a space asks to launch pi.
-- **OMP is only read, and an agent started elsewhere is read-only**: something has no channel into a terminal it did
+- **OMP cannot steer** either: the same channel as OpenCode's. It asks permission as your OMP settings say, and by
+  default asks nothing.
+- **An agent started elsewhere is read-only**: something has no channel into a terminal it did
   not open. A Claude Code or Codex conversation can be continued in something ("continue here") once no other process
   holds it; OpenCode, pi and OMP conversations cannot.
 
@@ -264,7 +271,7 @@ bottles), are in [packaging/homebrew/](packaging/homebrew); the rules for changi
 share/                     something.js, the empty template, the six templates and their previews, the skill, the guide, the assistant's AGENTS.md, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
 Sources/SomethingAgents/   the host: the engine, the watch, the programs, and what an agent extension provides; it names no agent
-Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP with a profile per agent: OpenCode, Pi for pi and OMP)
+Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP with a profile per agent: OpenCode and OMP, Pi for pi and OMP's reader)
 Sources/something/         the command and the Mac app: the window, its sidebar, Info, the assistant, the tour, the sheets and panels that ask you
 packaging/, tools/         the app's Info.plist and icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh (the templates' pictures)
 .github/workflows/         the suite and a Homebrew install, which GitHub runs at each push

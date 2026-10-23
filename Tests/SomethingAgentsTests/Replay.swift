@@ -58,6 +58,18 @@ final class Replay {
                driving: driving)
     }
 
+    /// An OMP launched in /Users/example/shop as agent omp-1; with `assistant`, the person's assistant, in
+    /// /Users/example/something/spaces, given something's MCP server as the recording's trial gave it.
+    static func omp(assistant: Bool = false) -> Replay {
+        var launch = Launch(agent: "omp-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop")
+        if assistant {
+            launch.assistant = .building
+            launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all,
+                                   environment: ["SOMETHING_HOME": "/Users/example", "TMPDIR": "/Users/example/tmp/"], refused: { _, _ in })
+        }
+        return Replay("omp", launch)
+    }
+
     /// A pi launched in /Users/example/shop as agent pi-1, continuing the conversation file `resume` when given.
     static func pi(model: String? = nil, effort: String? = nil, resume: String? = nil) -> Replay {
         Replay("pi", Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
@@ -91,7 +103,7 @@ final class Replay {
     /// "resume" makes a Codex, OpenCode or pi launch that continues that thread, "model" an OpenCode or pi launch with
     /// that model, "effort" a pi launch with that thinking level, and "assistant" a Claude or Codex launched as the person's assistant.
     /// `database` is the OpenCode database the driver reads at the end, as the engine sets it; `driving` plays an
-    /// OpenCode exchange with another agent over ACP.
+    /// OpenCode exchange with another agent over ACP. An OMP exchange plays OMP's own profile.
     static func play(_ name: String, kind: String = "claude", database: String? = nil, driving: Driving? = nil) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Exchanges/\(kind)/\(name).jsonl")
@@ -102,7 +114,7 @@ final class Replay {
         let model = rows.first?["model"] as? String
         let assistant = rows.first?["assistant"] as? Bool ?? false
         let replay = kind == "codex" ? codex(resume: resume, assistant: assistant) : kind == "opencode" ? opencode(model: model, resume: resume, driving: driving)
-            : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
+            : kind == "omp" ? omp(assistant: assistant) : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
         (replay.agent.driver as? ACPDriver)?.environment = database.map { ["OPENCODE_DB": $0] } ?? [:]
         var read = 0
         for (number, row) in rows.enumerated() {

@@ -208,7 +208,9 @@ struct BridgeTests {
         #expect(code("launch", ["kind": "claude", "folder": "web"], host) == "BAD_PARAMS")
         #expect(code("launch", ["kind": "codex"], host) == "RIGHT_NOT_GRANTED")
         #expect(code("launch", ["kind": "opencode"], host) == "NOT_INSTALLED")
-        #expect(code("launch", ["kind": "omp"], host) == "NOT_SUPPORTED")
+        #expect(code("launch", ["kind": "omp"], host) == "ok")
+        host.state.kinds["omp"]?.launch = false
+        #expect(code("launch", ["kind": "omp"], host) == "NOT_SUPPORTED", "a kind this engine cannot launch")
         #expect(code("launch", ["kind": 3], host) == "BAD_PARAMS")
         // What a kind can never do here is refused by the bridge, before the shell is asked.
         // An invented table: no kind something launches lacks a mode at launch but pi, whose right this host lacks.
@@ -216,7 +218,7 @@ struct BridgeTests {
         #expect(code("launch", ["kind": "claude", "mode": "plan"], host) == "NOT_SUPPORTED")
         host.granted.folder = nil
         #expect(code("launch", ["kind": "claude"], host) == "FOLDER_NOT_GRANTED")
-        #expect(host.calls == ["launch claude /Users/example/code/shop", "launch claude /Users/example/code/shop/web"])
+        #expect(host.calls == ["launch claude /Users/example/code/shop", "launch claude /Users/example/code/shop/web", "launch omp /Users/example/code/shop"])
     }
 
     @Test func resumeNeedsAThreadInScopeThatCanBeContinued() throws {

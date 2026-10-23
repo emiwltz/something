@@ -1,5 +1,6 @@
 // pi and OMP, which write the same log: what something knows of them. pi's driver (PiDriver), the log's reader
-// (PiReader, PiLog) and OMP's (OMPReader) are the other files of this target.
+// (PiReader, PiLog) and OMP's (OMPReader) are the other files of this target. OMP is driven over ACP: its descriptor
+// is AgentACP's, given the reader here (Extensions.swift).
 import SomethingAgents
 
 extension AgentDescriptor {
@@ -9,7 +10,10 @@ extension AgentDescriptor {
     package static let pi = AgentDescriptor(kind: "pi", name: "pi", install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
                                             runsOn: "node", bundled: "pi-node/current/bin", driving: .pi, reader: { PiReader(environment: $0) },
                                             builder: Builder(), neverAsks: true)
+}
 
-    /// Looked for, to say whether it is installed, and read; something does not launch it.
-    package static let omp = AgentDescriptor(kind: "omp", name: "OMP", reader: { OMPReader(environment: $0) })
+/// OMP's files, for its descriptor (AgentDescriptor.omp, in AgentACP).
+package enum OMP {
+    /// The reader of OMP's logs, for the environment something runs in.
+    @Sendable package static func reader(_ environment: [String: String]) -> any Reader { OMPReader(environment: environment) }
 }

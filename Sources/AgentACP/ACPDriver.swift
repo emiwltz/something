@@ -301,19 +301,21 @@ final class ACPDriver: Driver {
             emit(known ? .itemUpdated(item) : .itemAppended(item))
         case "tool_call", "tool_call_update":
             guard let id = update["toolCallId"] as? String else { return }
-            if names[id] == nil, let title = update["title"] as? String { names[id] = title }
+            let named = profile.named?(update), input = named == nil ? update["rawInput"] : named?.input
+            if names[id] == nil, let name = named?.name ?? update["title"] as? String { names[id] = name }
             let status = ["in_progress": "running", "completed": "done", "failed": "failed"][update["status"] as? String ?? ""]
             let old = tools[id]
             // A tool something lends is shown as the command something runs for it, once its input is known (OpenCode
-            // opens a call with an empty one, and may end it with none); a tool that called others (OpenCode's code
-            // mode), once it ended, by their commands when it called only lent tools. One that also called another
-            // keeps its own title: nothing it did is hidden behind a check.
+            // opens a call with an empty one, and may end it with none; an agent whose profile names its tools, OMP,
+            // gives the whole input at once); a tool that called others (OpenCode's code mode), once it ended, by their
+            // commands when it called only lent tools. One that also called another keeps its own title: nothing it
+            // did is hidden behind a check.
             let done = status == "done" || status == "failed"
             let shown = { (lent: (name: String, command: String?)) in lent.command ?? "\(lent.name) (wrong arguments)" }
             let inner = launch.lent == nil ? [] : profile.innerCalls?(update) ?? []
             let lents = inner.compactMap { Lent.called($0.name, $0.input) }
-            var lent = launch.lent == nil ? nil : Lent.called(names[id] ?? "", update["rawInput"])
-            if let called = lent, done, update["rawInput"] != nil { lent = (called.name, shown(called)) }
+            var lent = launch.lent == nil ? nil : Lent.called(names[id] ?? "", input)
+            if let called = lent, done || named != nil, input != nil { lent = (called.name, shown(called)) }
             if lent == nil, !lents.isEmpty, lents.count == inner.count { lent = (lents[0].name, lents.map(shown).joined(separator: "; ")) }
             let item = Item(id: id, kind: child ? "subagent" : "tool", author: "agent", text: lent?.command ?? update["title"] as? String ?? old?.text ?? "",
                             at: old?.at ?? now(), tool: Tool(name: lent?.name ?? names[id] ?? update["kind"] as? String ?? "tool", status: status ?? old?.tool?.status),

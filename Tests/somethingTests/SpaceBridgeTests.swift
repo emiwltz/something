@@ -29,7 +29,7 @@ import Testing
         #expect(SpaceView.lookup("launch", host: host) == nil, "not a request")
         let all = try self.host(["launch"])
         #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "opencode"]], host: all) == nil, "not installed")
-        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "omp"]], host: all) == nil, "not launched by something")
+        #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "omp"]], host: all) == "omp", "launched by something since 0.3")
         #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "other"]], host: all) == nil, "not a kind")
     }
 }

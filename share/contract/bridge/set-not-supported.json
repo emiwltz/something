@@ -15,6 +15,9 @@
       ],
       "pi": [
         "mode"
+      ],
+      "omp": [
+        "steer"
       ]
     },
     "agents": {

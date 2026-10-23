@@ -89,6 +89,7 @@ import SomethingCore
         case "codex": replay = .codex(resume: resume, assistant: assistant)
         case "opencode": replay = .opencode(model: model, resume: resume)
         case "pi": replay = .pi(model: model, effort: first["effort"] as? String, resume: resume)
+        case "omp": replay = .omp(assistant: assistant)
         default:
             Issue.record("\(kind) has a driver but no replay here: add it to ConformanceTests.play")
             return Outcome()

@@ -1,6 +1,6 @@
 // OMPReader: the OMP (oh-my-pi) conversations on this Mac, read from OMP's own files, never through its program.
-// something does not launch OMP in 1.0: every OMP agent is one seen elsewhere. OMP writes one
-// JSONL log per conversation under ~/.omp/agent/sessions/<folder>/<time>_<id>.jsonl (a profile's under
+// An OMP something launched (over ACP: AgentACP's OMP.swift) writes its log too, and is left out by its session's
+// id, as every launched agent is. OMP writes one JSONL log per conversation under ~/.omp/agent/sessions/<folder>/<time>_<id>.jsonl (a profile's under
 // ~/.omp/profiles/<name>/agent/sessions); the first 256 bytes are a title slot OMP rewrites in place, then comes the
 // `session` header. Its format is pi's (PiLog). While a conversation is open, its omp process holds the log open, and
 // takes a lease, ~/.omp/run/session-owners/<id>.lock, which stays on disk after its end: only a holder counts. What
