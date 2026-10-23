@@ -18,11 +18,15 @@ extension ACPProfile {
     /// `opencode acp`: each launch its own private server, holding one session in OpenCode's shared database. Its
     /// modes are its agents: build and plan come with it, and others the person wrote show in `options.mode` once
     /// OpenCode lists them. A sub-agent's updates carry a `_meta` key of its own, and its question tool cannot be
-    /// shown over ACP (OpenCodeTrial.swift).
+    /// shown over ACP (OpenCodeTrial.swift). From its code mode (`execute`) it calls other tools, MCP servers' among them.
     static let opencode = ACPProfile(
         kind: "opencode", name: "OpenCode", tested: "2.0.20", arguments: ["acp"], signIn: "opencode auth login",
         modes: [Option(value: "build", label: "Build"), Option(value: "plan", label: "Plan")], listsMoreModes: true,
         childKey: "opencode/child-session", questionTool: "question", notFoundWords: ["session not found", "does not belong to cwd"],
+        innerCalls: { update in
+            let calls = ((update["rawOutput"] as? [String: Any])?["metadata"] as? [String: Any])?["toolCalls"] as? [[String: Any]] ?? []
+            return calls.map { ($0["tool"] as? String ?? "", $0["input"]) }
+        },
         lastModel: { OpenCode.recentModel($0) },
         leftRunning: { session, environment in
             guard let database = OpenCode.database(environment), OpenCode.claimed(session, in: database) == true else { return nil }

@@ -1,8 +1,7 @@
 // MCP: `something mcp`, the tools something lends (Lent.swift) served over the Model Context Protocol, one JSON-RPC
 // message per line on standard input and output. An agent that takes MCP servers at launch starts it itself (Claude
 // Code through --mcp-config, an ACP agent through session/new), as a program of its own, outside the sandbox of its
-// commands. It serves only tools: initialize, ping, tools/list and tools/call, each call run as Lent runs it, with the
-// same argument checks, one at a time.
+// commands. It serves only tools (initialize, ping, tools/list, tools/call), each call run as Lent runs it, in turn.
 import Foundation
 
 extension Lent {
@@ -24,8 +23,9 @@ extension Lent {
         let params = message["params"] as? [String: Any] ?? [:]
         switch method {
         case "initialize":
-            // The client's version is answered as it gave it: what tools use is the same in every version so far.
-            return Lent.frame(["id": id, "result": ["protocolVersion": params["protocolVersion"] as? String ?? "2025-06-18",
+            // The client's version when something was tried with it, else the newest of those: the client then decides.
+            let asked = params["protocolVersion"] as? String ?? "", tried = ["2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]
+            return Lent.frame(["id": id, "result": ["protocolVersion": tried.contains(asked) ? asked : tried[tried.count - 1],
                                                     "capabilities": ["tools": [String: Any]()], "serverInfo": ["name": "something", "version": version]]])
         case "ping": return Lent.frame(["id": id, "result": [String: Any]()])
         case "tools/list":

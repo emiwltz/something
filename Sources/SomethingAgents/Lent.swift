@@ -90,11 +90,11 @@ public final class Lent: @unchecked Sendable, Equatable {
     }
 
     /// `tools`, run by something's own `program` in `environment`, and served by `<program> mcp`. The agent starts
-    /// that server with its own environment, plus the folders something's program takes from `environment` when set:
-    /// SOMETHING_HOME (README, "Building from the clone") and TMPDIR, where WebKit keeps what a check needs.
+    /// that server with its own environment, plus the folders something's program takes from `environment` when set (an
+    /// absolute path): SOMETHING_HOME (README, "Building from the clone") and TMPDIR, where WebKit keeps a check's files.
     public static func own(_ program: String, tools: [LentTool], environment: [String: String], refused: @escaping (_ kind: String, _ because: String) -> Void) -> Lent {
         Lent(tools: tools, run: Lent.program(program, environment: environment),
-             server: ([program, "mcp"], environment.filter { ["SOMETHING_HOME", "TMPDIR"].contains($0.key) }), refused: refused)
+             server: ([program, "mcp"], environment.filter { ["SOMETHING_HOME", "TMPDIR"].contains($0.key) && $0.value.hasPrefix("/") }), refused: refused)
     }
 
     /// Its MCP server in the configuration MCP clients take (Claude Code's --mcp-config): {"mcpServers": {"something":
@@ -106,7 +106,7 @@ public final class Lent: @unchecked Sendable, Equatable {
     /// The tool something lends that an agent calls `name`: by its own name, or as a tool of the MCP server something
     /// gives it, "something" (Claude Code's mcp__something__something_check, OpenCode's something_something_check, or
     /// something.something_check from its code mode); with the command something runs for `arguments`, nil when they
-    /// are wrong. Nil for any other tool.
+    /// are wrong (every driver then shows "<tool> (wrong arguments)"). Nil for any other tool.
     package static func called(_ name: String, _ arguments: Any?) -> (name: String, command: String?)? {
         guard let tool = LentTool.all.first(where: { tool in ["", "mcp__something__", "something_", "something."].contains { $0 + tool.name == name } }) else { return nil }
         return (tool.name, tool.words(arguments as? [String: Any] ?? [:]).map { (["something"] + $0).joined(separator: " ") })
@@ -138,15 +138,15 @@ public final class Lent: @unchecked Sendable, Equatable {
             process.environment = environment
             (process.standardOutput, process.standardError, process.standardInput) = (output, output, FileHandle.nullDevice)
             do { try process.run() } catch { return Reply(ok: false, text: "something could not run \(program): \(error.localizedDescription)") }
-            let started = Date(), timer = DispatchWorkItem { process.terminate() }
+            let timer = DispatchWorkItem { process.terminate() }
             DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: timer)
             let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             process.waitUntilExit()
             timer.cancel()
             let command = "something " + words.joined(separator: " ")
             guard process.terminationReason == .exit else {
-                // Only the time limit stops it that late.
-                return Reply(ok: false, text: Date().timeIntervalSince(started) >= seconds ? "\(command) did not finish within \(Int(seconds)) seconds."
+                // Only the time limit sends it SIGTERM (terminate()): nothing else does.
+                return Reply(ok: false, text: process.terminationStatus == SIGTERM ? "\(command) did not finish within \(Int(seconds)) seconds."
                                                                                             : "\(command) stopped unexpectedly (signal \(process.terminationStatus)).")
             }
             return Reply(ok: process.terminationStatus < (words.first == "check" ? 2 : 1), text: text)

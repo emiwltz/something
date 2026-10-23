@@ -26,7 +26,11 @@ import Testing
                                                       "params": ["protocolVersion": "2025-03-26", "capabilities": [:], "clientInfo": ["name": "invented"]]]))
         #expect(started["jsonrpc"] as? String == "2.0" && started["id"] as? Int == 1)
         let result = try #require(started["result"] as? [String: Any])
-        #expect(result["protocolVersion"] as? String == "2025-03-26", "the client's own version")
+        #expect(result["protocolVersion"] as? String == "2025-03-26", "the client's own version, one something was tried with")
+        for (asked, answered) in [("2025-11-25", "2025-11-25"), ("2031-01-01", "2025-11-25"), ("", "2025-11-25")] {
+            let other = Self.answer(lent, ["jsonrpc": "2.0", "id": 9, "method": "initialize", "params": ["protocolVersion": asked]])
+            #expect((other?["result"] as? [String: Any])?["protocolVersion"] as? String == answered, "an untried version gets the newest tried")
+        }
         #expect(result["serverInfo"] as? [String: String] == ["name": "something", "version": "9.9.9"])
         #expect((result["capabilities"] as? [String: Any])?.keys.sorted() == ["tools"])
         #expect(Self.answer(lent, ["jsonrpc": "2.0", "method": "notifications/initialized"]) == nil, "a notification gets no answer")

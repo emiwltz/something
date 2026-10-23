@@ -55,8 +55,12 @@ struct Places {
 
     /// The person's places. $SOMETHING_HOME, then $HOME, so that a trial or `HOME=<folder> swift run something` never
     /// reaches their own folders (README, "Building from the clone").
-    static var person: Places {
-        let environment = ProcessInfo.processInfo.environment
-        return Places(home: (environment["SOMETHING_HOME"] ?? environment["HOME"]).map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser)
+    static var person: Places { person(ProcessInfo.processInfo.environment) }
+
+    /// The places of `environment`. SOMETHING_HOME counts only as an absolute path: an empty or relative one would
+    /// name a different folder for the app, its MCP server and a command typed in a shell, each in its own folder.
+    static func person(_ environment: [String: String]) -> Places {
+        let home = environment["SOMETHING_HOME"].flatMap { $0.hasPrefix("/") ? $0 : nil } ?? environment["HOME"]
+        return Places(home: home.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser)
     }
 }

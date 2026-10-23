@@ -105,7 +105,9 @@ agent's own official channel, with your own configuration:
 - **OpenCode**: `opencode acp`, the Agent Client Protocol. One conversation per program. Over that channel OpenCode
   picks a model of its own, so a new conversation starts with the model you used last in OpenCode, unless a space
   asks for another; when OpenCode no longer offers it, OpenCode's own choice stays. Your assistant gets something's
-  MCP server in `session/new`.
+  MCP server in `session/new`. OpenCode connects it in the background: on a very first message sent at once, its
+  tools may not be there yet, and your assistant then runs `something` in its shell, as its instructions say. A call
+  from OpenCode's code mode is shown as something's command only when it called nothing but something's tools.
 - **pi**: `pi --mode rpc`, its official channel.
 - **OMP** is read, never launched.
 
@@ -248,9 +250,10 @@ tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app a
   attributes in `Sources/`. State lives in `@Observable` models.
 - **The look.** `swift run` draws the app in macOS's older style: `swift build` stamps the program with the oldest
   macOS it supports. `make-app.sh` stamps the SDK that built it, as Homebrew's install does.
-- **Somewhere else than your own folders.** With `SOMETHING_HOME=<folder>`, something (the app, its commands and its
-  MCP server) keeps its folders under `<folder>` instead of your home: `<folder>/something/spaces` and
-  `<folder>/Library/Application Support/something`. The agents it launches keep your real home, and their sign-in.
+- **Somewhere else than your own folders.** With `SOMETHING_HOME=<folder>`, an absolute path (another is ignored),
+  something (the app, its commands and its MCP server) keeps its folders under `<folder>` instead of your home:
+  `<folder>/something/spaces` and `<folder>/Library/Application Support/something`. The agents it launches keep your
+  real home, and their sign-in.
 - **Never run two copies together.** `swift run something` and an installed something are two programs to macOS: both
   would launch agents and write the same journals. Quit one before starting the other.
 

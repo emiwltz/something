@@ -325,7 +325,7 @@ final class ClaudeDriver: Driver {
             case "tool_use":
                 let name = block["name"] as? String ?? "a tool", toolID = block["id"] as? String ?? "\(frameID)/\(index)"
                 let lent = launch.lent == nil ? nil : Lent.called(name, block["input"])
-                let item = Item(id: toolID, kind: sub ? "subagent" : "tool", author: "agent", text: lent?.command ?? ClaudeDriver.summary(block["input"]),
+                let item = Item(id: toolID, kind: sub ? "subagent" : "tool", author: "agent", text: lent.map { $0.command ?? "\($0.name) (wrong arguments)" } ?? ClaudeDriver.summary(block["input"]),
                                 at: at, tool: Tool(name: lent?.name ?? name, status: "running"), decision: decisions[toolID])
                 tools[toolID] = item
                 emit(.itemAppended(item))

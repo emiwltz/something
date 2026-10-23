@@ -156,6 +156,9 @@ import SomethingCore
         launch.assistant = .building
         let files = ["Edit(//Users/example/something/spaces/**)", "Write(//Users/example/something/spaces/**)"]
         #expect(ClaudeDriver.command(launch).arguments == plain + ["--allowedTools"] + files, "nothing lent: only the files")
+        let relative = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: ["SOMETHING_HOME": "trial", "TMPDIR": ""], refused: { _, _ in })
+        #expect(relative.mcpConfig == #"{"mcpServers":{"something":{"args":["mcp"],"command":"/Users/example/tools/something","env":{}}}}"#,
+                "a folder that is not an absolute path is not passed on")
         launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: ["HOME": "/Users/example", "SOMETHING_HOME": "/Users/example/trial"],
                                refused: { _, _ in })
         let config = #"{"mcpServers":{"something":{"args":["mcp"],"command":"/Users/example/tools/something","env":{"SOMETHING_HOME":"/Users/example/trial"}}}}"#
@@ -171,7 +174,7 @@ import SomethingCore
     }
 
     /// A tool something lends, called through its MCP server, is shown as the command something runs for it; wrong
-    /// arguments keep Claude's own words. A launch lent nothing shows every tool as Claude names it.
+    /// arguments as the tool's name marked so, as in every driver. A launch lent nothing shows every tool as Claude names it.
     @Test func aLentToolIsShownAsItsCommand() {
         var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces")
         launch.lent = Lent(tools: LentTool.all, run: { _ in Lent.Reply(ok: true, text: "") }, refused: { _, _ in })
@@ -183,7 +186,7 @@ import SomethingCore
                 ["type": "tool_use", "id": "t3", "name": "mcp__something__something_guide", "input": [String: Any]()]]]])
             return replay.items.filter { $0.kind == "tool" }.map { "\($0.tool?.name ?? "?") \($0.text)" }
         }
-        #expect(shown(launch) == ["something_check something check board --refuse send", "something_new {\n  \"name\" : \"../board\"\n}",
+        #expect(shown(launch) == ["something_check something check board --refuse send", "something_new something_new (wrong arguments)",
                                   "something_guide something guide --print"])
         launch.lent = nil
         #expect(shown(launch).first == "mcp__something__something_check {\n  \"name\" : \"board\",\n  \"refuse\" : [\n    \"send\"\n  ]\n}")

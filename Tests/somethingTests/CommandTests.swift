@@ -152,6 +152,17 @@ final class FakeDoor: Door {
         #expect(!FileManager.default.fileExists(atPath: home.root.appendingPathComponent("elsewhere").path))
     }
 
+    /// SOMETHING_HOME names the person's folders only as an absolute path: an empty or a relative one would name a
+    /// different folder for the app, its MCP server and a shell, so HOME stands instead.
+    @Test func somethingHomeIsTakenOnlyAsAnAbsolutePath() {
+        let home = "/Users/example"
+        #expect(Places.person(["HOME": home, "SOMETHING_HOME": "/Users/example/trial"]).home.path == "/Users/example/trial")
+        for ignored in ["", "trial", "./trial", "~/trial"] {
+            #expect(Places.person(["HOME": home, "SOMETHING_HOME": ignored]).home.path == home, "\(ignored)")
+        }
+        #expect(Places.person(["HOME": home]).home.path == home)
+    }
+
     /// The version is the bundle's; a bundle without one, as under `swift run`, is "dev".
     @Test func theVersionIsTheBundles() throws {
         let home = Home(prefix: "something-command-")

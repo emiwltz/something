@@ -27,6 +27,9 @@ struct ACPProfile: Sendable {
     /// Words of its error when a conversation to continue is not there (or not in that folder), for an agent that does
     /// not answer with ACP's code for a missing resource (-32002); the protocol defines no words.
     var notFoundWords: [String] = []
+    /// Quirk: the tools a tool's update says it called in turn, by name with their input (OpenCode's code mode); nil
+    /// when its tools call none.
+    var innerCalls: (@Sendable (_ update: [String: Any]) -> [(name: String, input: Any?)])?
     /// Quirk: the model a new conversation that names none should take, read from the launch's environment; nil when
     /// the agent's own choice stands.
     var lastModel: (@Sendable (_ environment: [String: String]) -> String?)?

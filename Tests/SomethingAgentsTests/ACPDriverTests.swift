@@ -177,6 +177,24 @@ import SomethingCore
         replay.feed(Self.update(["sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed", "title": "",
                                  "rawInput": ["name": "board"]]))
         #expect(replay.items.last?.tool == Tool(name: "something_check", status: "done") && replay.items.last?.text == "something check board")
+        // From its code mode, as OpenCode 2.0.20 reports it once the call ended: shown as something's commands only
+        // when it called nothing else; wrong arguments as in every driver.
+        func codeMode(_ id: String, _ calls: [[String: Any]]) -> String {
+            replay.feed(Self.update(["sessionUpdate": "tool_call", "toolCallId": id, "title": "execute", "kind": "other", "status": "pending",
+                                     "rawInput": ["code": "invented"]]))
+            replay.feed(Self.update(["sessionUpdate": "tool_call_update", "toolCallId": id, "status": "completed", "title": "execute",
+                                     "rawOutput": ["output": "invented", "metadata": ["toolCalls": calls]]]))
+            return "\(replay.items.last?.tool?.name ?? "?") \(replay.items.last?.text ?? "")"
+        }
+        let check: [String: Any] = ["tool": "something.something_check", "input": ["name": "board"]]
+        #expect(codeMode("call_2", [check, ["tool": "something.something_new", "input": ["name": "../board"]]])
+                == "something_check something check board; something_new (wrong arguments)")
+        #expect(codeMode("call_3", [check, ["tool": "github.create_issue", "input": ["title": "Invented"]]]) == "execute execute",
+                "a call that also did something else keeps OpenCode's own words")
+        #expect(codeMode("call_4", []) == "execute execute")
+        replay.feed(Self.update(["sessionUpdate": "tool_call_update", "toolCallId": "call_5", "status": "failed", "title": "something_something_new",
+                                 "rawInput": ["name": "../board"]]))
+        #expect(replay.items.last?.tool?.name == "something_new" && replay.items.last?.text == "something_new (wrong arguments)")
         let plain = Replay.opencode()
         plain.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
         #expect((plain.lines().last?["params"] as? [String: Any])?["mcpServers"] as? [Any] != nil)
