@@ -32,7 +32,7 @@ Rules that hold everywhere:
   what cannot be done. A call made anyway fails with a named code; nothing falls back silently.
 - `detail` objects are specific to one harness and outside this promise. Your space must work without them.
 - **Show harnesses by their names**: Claude Code (`claude`), Codex (`codex`), OpenCode (`opencode`), pi (`pi`), OMP
-  (`omp`); a kind you do not know is "other agent".
+  (`omp`), Antigravity (`antigravity`); a kind you do not know is "other agent".
 
 The same contract as data, for tests: `share/contract/` (`state-example.json`, `shape.json`, `codes.json`).
 
@@ -138,7 +138,7 @@ agents this space launched are always in scope.
 
 Kinds for a right: `claude`, `codex`, `opencode`, `pi`, `omp`. `open` needs no right: each link is confirmed by the
 person. A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows
-but cannot honour (for a kind it only reads; none in this version) goes to `granted.unavailable` (warning
+but cannot honour (for a kind it only sees: `antigravity` in this version) goes to `granted.unavailable` (warning
 `RIGHT_UNAVAILABLE`).
 
 At the first opening, a window of the Mac lists what you declared, in plain words; the person allows or refuses each
@@ -289,8 +289,8 @@ at most four times a second, only when it changed. A shortened example (the full
 
 ### `kinds`: one entry per harness
 
-`claude`, `codex`, `opencode`, `pi`, `omp`. `launch`: something can launch it. `installed`: its program was found
-(or `null`). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac
+`claude`, `codex`, `opencode`, `pi`, `omp`, and `antigravity`, which something only sees by its process. `launch`:
+something can launch it. `installed`: its program was found (or `null`, always for a kind something does not launch). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac
 name, or `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its
 database's last migration).
 `reader`: `ok`, `changed` (its files changed shape: its agents show as processes only), `unreadable` (its files
@@ -302,7 +302,7 @@ processes only), or `none` (nothing of this kind here). `note`: one sentence for
 | Key | What it holds |
 |---|---|
 | `id` | Opaque, stable while the agent is listed. Do not parse it. |
-| `kind` | `claude`, `codex`, `opencode`, `pi`, `omp`, or `other` (a known program something cannot read: only its process is seen). Show a kind you do not know as "other agent". |
+| `kind` | `claude`, `codex`, `opencode`, `pi`, `omp`, `antigravity`, or `other` (a known program something cannot read: only its process is seen). Show a kind you do not know as "other agent". |
 | `name` | The conversation's title, else the folder's last part, else the program name; or `null`. |
 | `origin` | `launched` by something, or started `elsewhere` and only read. |
 | `folder`, `pid` | Where it works, its process; each may be `null`. |

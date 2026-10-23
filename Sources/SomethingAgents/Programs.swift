@@ -53,10 +53,11 @@ public final class Programs {
         home = environment["HOME"] ?? NSHomeDirectory()
     }
 
-    /// Whether the program's file was found; nil for a kind something does not look for, and when it was not found
-    /// but a shell's PATH, which was needed, could not be read. Never runs the program.
+    /// Whether the program's file was found; nil for a kind something does not look for (one it does not launch: its
+    /// program is not its kind's name), and when it was not found but a shell's PATH, which was needed, could not be
+    /// read. Never runs the program.
     public func installed(_ kind: String) -> Bool? {
-        guard registry.agent(kind) != nil else { return nil }
+        guard registry.agent(kind)?.install != nil else { return nil }
         let search = folders(interactive: false)
         if first(kind, in: search.list) != nil { return true }
         guard search.known else { return nil }

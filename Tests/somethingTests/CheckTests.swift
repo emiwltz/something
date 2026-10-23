@@ -80,6 +80,7 @@ extension Home {
         ("DECLARATION_TWICE", { try $0.folder("x", ["index.html": declared("<p>Invented.</p>"), "something.json": "{\"contract\": 1}"]) }, []),
         ("CONTRACT_MISSING", { try $0.space("x", page("{\"title\": \"Invented\"}", "<p>Invented.</p>")) }, []),
         ("SCOPE_INVALID", { try $0.space("x", declared("\"agents\": {\"see\": \"some\"}", "<p>Invented.</p>")) }, []),
+        ("RIGHT_UNAVAILABLE", { try $0.space("x", declared("\"rights\": [\"launch:antigravity\"]", "<p>Invented.</p>")) }, []),
         ("UNKNOWN_RIGHT", { try $0.space("x", declared("\"rights\": [\"sendd\"]", "<p>Invented.</p>")) }, []),
         ("RIGHT_NOT_DECLARED", { try $0.space("x", declared("<script>something.send(\"a1\", \"Hello.\").catch(() => {});</script>")) }, []),
         ("RIGHT_REFUSED", { try $0.space("x", declared("\"agents\": {\"see\": \"all\"}, \"rights\": [\"state\", \"send\"]",
@@ -115,12 +116,12 @@ extension Home {
         #expect(checked.status == (level == .fatal ? 2 : level == .error ? 1 : 0), "\(fixture.code) exits with \(checked.status)")
     }
 
-    /// The fixtures and the three run in this process cover every code check gives, but RIGHT_UNAVAILABLE: every kind
-    /// this build knows is launchable since OMP is (DeclarationTests gives the code with a kind registered read-only).
+    /// The fixtures and the three run in this process cover every code check gives; RIGHT_UNAVAILABLE comes from
+    /// antigravity, a kind this build only sees.
     @Test func everyCheckCodeHasItsFixture() {
         let check = Set(Codes.all.filter { $0.value.from == "check" }.keys)
-        #expect(Registry.app.kinds.readOnly.isEmpty)
-        #expect(Set(CheckTests.fixtures.map(\.code)).union(["NO_WINDOW_SERVER", "LOAD_TIMEOUT", "PAGE_CRASHED", "RIGHT_UNAVAILABLE"]) == check)
+        #expect(Registry.app.kinds.readOnly == ["antigravity"])
+        #expect(Set(CheckTests.fixtures.map(\.code)).union(["NO_WINDOW_SERVER", "LOAD_TIMEOUT", "PAGE_CRASHED"]) == check)
     }
 
     /// The template the command starts a space from is a clean space: no problem, a snapshot, every call answered.

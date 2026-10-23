@@ -86,6 +86,8 @@ or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), O
 `$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). It opens them read-only and takes only what a space is
 shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
+Antigravity's CLI (`agy`) is seen by its process alone: that it runs, and in which folder. something reads none of its
+files and does not launch it yet: Antigravity's ACP server keeps a Google sign-in of its own, apart from the CLI's.
 
 something writes no hook, no MCP server, no skill and no setting into any agent's configuration: the MCP server it
 gives your assistant is passed at launch, for that conversation only. What it writes is its own: `~/something/` (your spaces, their memory, and your assistant's `AGENTS.md` and `CLAUDE.md`) and

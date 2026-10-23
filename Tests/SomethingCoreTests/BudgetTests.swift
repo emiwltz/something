@@ -4,7 +4,9 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_800, host = 2_800, driver = 600, agentsShared = 400, app = 5_500
+    static let core = 1_800, host = 2_800, driver = 600, agentsShared = 400, app = 5_500, described = 40
+    /// The files of an agent described by data alone, without a driver or a reader of its own, by path under Sources.
+    static let describedOnly = ["AgentACP/Antigravity.swift"]
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -48,6 +50,9 @@ enum Budget {
                 let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
                 let (role, budget) = isDriver ? ("driver", driver) : ("file", agentsShared)
                 if file.lines > budget { problems.append("\(target)/\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
+                if describedOnly.contains("\(target)/\(file.name)"), file.lines > described {
+                    problems.append("\(target)/\(file.name) has \(file.lines) lines; an agent described by data has \(described).")
+                }
             }
         }
         let app = files(in: sources.appendingPathComponent("something")).map(\.lines).reduce(0, +)
@@ -64,6 +69,9 @@ enum Budget {
         #expect(Budget.agentTargets(under: root) == ["AgentACP", "AgentClaude", "AgentCodex", "AgentPi"])
         for target in ["SomethingCore", "SomethingAgents", "something"] + Budget.agentTargets(under: root) {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
+        }
+        for name in Budget.describedOnly {
+            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("Sources/\(name)").path), "Sources/\(name) is not there")
         }
         let problems = Budget.problems(under: root)
         #expect(problems.isEmpty, "\(problems)")
@@ -111,6 +119,7 @@ enum Budget {
             ("something", "App.swift", 5_501, "The Mac app has 5501 lines; its budget is 5500."),
             ("AgentClaude", "ClaudeDriver.swift", 601, "AgentClaude/ClaudeDriver.swift has 601 lines; a driver has 600."),
             ("AgentPi", "PiReader.swift", 401, "AgentPi/PiReader.swift has 401 lines; a file has 400."),
+            ("AgentACP", "Antigravity.swift", 41, "AgentACP/Antigravity.swift has 41 lines; an agent described by data has 40."),
         ]
         for item in cases {
             for (count, expected) in [(item.lines - 1, [String]()), (item.lines, [item.problem])] {

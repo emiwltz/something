@@ -20,7 +20,8 @@ import SomethingCore
 /// beside the suites bound by time (SpawnTests); one after another, about six seconds of one core.
 @Suite(.serialized, .leavesNothing("conformance-")) struct ConformanceTests {
     static let launchable = Registry.described.agents.filter { $0.driving != nil }.map(\.kind)
-    static let read = Registry.described.agents.filter { $0.reader != nil }.map(\.kind)
+    /// Those whose reader reads files: one that sees processes only (OtherReader) has none to damage.
+    static let read = Registry.described.agents.filter { $0.reader.map { !($0([:]) is OtherReader) } ?? false }.map(\.kind)
 
     // MARK: Drivers
 

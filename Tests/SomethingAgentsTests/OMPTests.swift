@@ -19,7 +19,7 @@ import SomethingCore
         #expect(omp.builder?.lent.map(\.name) == LentTool.all.map(\.name) && omp.builder?.preAllowed == false)
         #expect(!omp.neverAsks && omp.asksNothingByDefault, "its own default setting, yolo, asks nothing")
         #expect(omp.reader?(["HOME": "/Users/example"]) is OMPReader)
-        #expect(Registry.described.kinds.launchable.contains("omp") && Registry.described.kinds.readOnly.isEmpty)
+        #expect(Registry.described.kinds.launchable.contains("omp") && !Registry.described.kinds.readOnly.contains("omp"))
         #expect(try Registry.described.lowersAsking(mode: "plan", kind: "omp") == false)
     }
 

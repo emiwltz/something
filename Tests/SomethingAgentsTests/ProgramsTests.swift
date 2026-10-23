@@ -137,6 +137,8 @@ func code(_ body: () throws -> Void) -> CodedError? {
         #expect(programs.installed("opencode") == false)
         #expect(programs.installed("omp") == false)
         #expect(programs.installed("amp") == nil)
+        // A kind something only sees has no program to look for: whether it is installed is not known.
+        #expect(programs.installed("antigravity") == nil)
         #expect(code { _ = try programs.find("omp") }?.code == "NOT_INSTALLED")
     }
 

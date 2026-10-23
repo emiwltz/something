@@ -13,7 +13,7 @@ import SomethingCore
 @Suite struct DescriptorsTests {
     @Test func theTablesAreThoseOf0_2() {
         let agents = Registry.described.agents
-        #expect(agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp"])
+        #expect(agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.install.map { (agent.kind, $0) } }) == [
             "claude": "brew install --cask claude-code",
             "codex": "brew install --cask codex",
@@ -21,14 +21,15 @@ import SomethingCore
             "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
             "omp": "curl -fsSL https://omp.sh/install | sh",
         ])
-        #expect(Dictionary(uniqueKeysWithValues: agents.map { ($0.kind, $0.name) }) == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP"])
+        #expect(Dictionary(uniqueKeysWithValues: agents.map { ($0.kind, $0.name) }) == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP", "antigravity": "Antigravity"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } }) == ["pi": "node"])
         #expect(Programs(environment: [:], registry: .described).homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
         #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
         #expect(Registry.described.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
-        // The core's contract 1 list: the kinds registered are exactly that floor today, omp launchable since 0.3.
-        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.described.kinds.readOnly.isEmpty)
+        // The core's contract 1 list: the kinds launched are exactly that floor today, omp launchable since 0.3;
+        // antigravity, added in 0.3, is only seen.
+        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.described.kinds.readOnly == ["antigravity"])
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {
@@ -44,7 +45,7 @@ import SomethingCore
         // A process another agent's own reader claims is never also an `other` agent.
         #expect(Registry.described.others.isDisjoint(with: agents.map(\.kind)))
         // The readers, in 0.2's order: one per agent, then the one for the others.
-        #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "other"])
+        #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "other"])
     }
 
     @Test func whatEachDriverCanDoIsThatOf0_2() {
