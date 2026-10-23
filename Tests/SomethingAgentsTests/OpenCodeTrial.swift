@@ -199,6 +199,7 @@ import SomethingCore
         var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(ACPProfile.opencode.tested), a fake model, invented text, paths made /Users/example)."]
         if let resume = resumed { note["resume"] = resume }
         if let model { note["model"] = model }
+        if placed != nil { note["assistant"] = true }
         var text = ([note] + rows).compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
             .map { String(decoding: $0, as: UTF8.self) }.joined(separator: "\n") + "\n"
         for prefix in ["/private" + root.path, root.path] {

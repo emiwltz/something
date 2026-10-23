@@ -12,10 +12,11 @@ public struct Registry: Sendable {
     package let launchable: [String: Driving]
     /// The kinds a space's rights may name: those with a driver, and the other known ones, which something only reads.
     public let kinds: Kinds
-    /// The program names of coding agents something has no extension for, seen from their process only (OtherReader).
-    public let others: Set<String>
+    /// The coding agents something has no extension for, seen from their process only (OtherReader): each program's
+    /// name, with the name a person knows the agent by.
+    public let others: [String: String]
 
-    public init(_ agents: [AgentDescriptor], others: Set<String> = []) {
+    public init(_ agents: [AgentDescriptor], others: [String: String] = [:]) {
         self.agents = agents
         self.others = others
         launchable = Dictionary(uniqueKeysWithValues: agents.compactMap(\.driving).map { ($0.kind, $0) })
@@ -33,7 +34,7 @@ public struct Registry: Sendable {
 
     /// The readers of every agent's files, for the environment something runs in, then the one for `others`.
     func readers(_ environment: [String: String]) -> [Reader] {
-        agents.compactMap { $0.reader?(environment) } + [OtherReader(names: others)]
+        agents.compactMap { $0.reader?(environment) } + [OtherReader(names: Set(others.keys))]
     }
 
     /// The kinds whose conversations seen elsewhere can be continued here.

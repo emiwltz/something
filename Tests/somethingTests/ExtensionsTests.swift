@@ -8,7 +8,7 @@ import Testing
 @Suite struct ExtensionsTests {
     @Test func theAppRegistersTheAgentsOf0_2() {
         #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp"])
-        #expect(Registry.app.others == ["gemini", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+        #expect(Registry.app.others.keys.sorted() == ["auggie", "copilot", "crush", "cursor-agent", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
         #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.app.kinds.readOnly == ["antigravity"])
         #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "amp"], "0.2's builders, in 0.2's order, then OMP and Amp")
         #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
@@ -20,6 +20,34 @@ import Testing
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false, false])
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false])
+    }
+
+    static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+
+    /// Emi's rule for 0.3: every agent the app drives builds spaces too, with a build recorded as the person's
+    /// assistant, which SomethingAgentsTests' BuildersTests plays through its driver.
+    @Test func everyDrivenAgentIsABuilderWithARecordedBuild() {
+        for kind in Registry.app.kinds.launchable.sorted() {
+            #expect(Registry.app.agent(kind)?.builder != nil, "\(kind) is driven but not a builder")
+            let build = Self.root.appendingPathComponent("Tests/Exchanges/\(kind)/assistant-build.jsonl").path
+            #expect(FileManager.default.fileExists(atPath: build), "\(kind) is driven without a recorded build")
+        }
+    }
+
+    /// The README's table of agents is the registry's: each agent in its order, seen (by its files, or by its process
+    /// only), driven or why not, and a builder; then, in one row, the agents seen by their process only.
+    @Test func theReadmesAgentTableIsTheRegistrys() throws {
+        let readme = try String(contentsOf: Self.root.appendingPathComponent("README.md"), encoding: .utf8).components(separatedBy: "\n")
+        let rows = readme.drop { $0 != "| | seen | driven | builder |" }.dropFirst(2).prefix { $0.hasPrefix("|") }
+            .map { $0.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) } }
+        let described: [[String]] = Registry.app.agents.map { agent in
+            let seen = agent.reader.map { $0([:]) is OtherReader ? "by its process" : "yes" } ?? "no"
+            return [agent.name, seen, agent.driving == nil ? "no: " + (agent.unavailable ?? "") : "yes", agent.builder == nil ? "no" : "yes"]
+        }
+        #expect(Array(rows.dropLast()) == described)
+        let others = try #require(rows.last)
+        #expect(others.first?.components(separatedBy: ", ").sorted() == Registry.app.others.values.sorted())
+        #expect(others.dropFirst() == ["by its process", "no: something has no extension for them.", "no"])
     }
 
     /// Every kind the app registers is in the published shape (share/contract/shape.json), as a key of the state's

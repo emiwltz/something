@@ -321,11 +321,16 @@ final class PiHome {
             Running(pid: 54100, parent: 1, group: 54100, started: started, name: "goose", arguments: ["goose"], folder: "/Users/example/blog"),
             Running(pid: 54200, parent: 1, group: 54200, started: started, name: "node", arguments: ["node", "server.js"], folder: "/Users/example/shop"),
             Running(pid: 54300, parent: 1, group: 54300, started: started, name: "qwen", arguments: ["qwen"]),
+            // The paid agents something only knows by name (C7): DeepSeek Harness and ZCode are Node programs.
+            Running(pid: 54400, parent: 1, group: 54400, started: started, name: "node", arguments: ["node", "/opt/example/bin/dsh", "tui"], folder: "/Users/example/garden"),
+            Running(pid: 54500, parent: 1, group: 54500, started: started, name: "node", arguments: ["node", "/Users/example/.local/bin/zcode"], folder: "/Users/example/cart"),
+            Running(pid: 54600, parent: 1, group: 54600, started: started, name: "droid", arguments: ["droid"], folder: "/Users/example/docs"),
         ])
-        let watch = Watch(readers: [OtherReader(names: Registry.described.others)], snapshot: { snapshot })
+        let watch = Watch(readers: [OtherReader(names: Set(Registry.described.others.keys))], snapshot: { snapshot })
         let (agents, threads) = Watch.elsewhere(watch.tick(now: started), registry: .described, groups: [], keys: [], now: started)
         // Named by their folder, else by their program.
-        #expect(agents.map(\.name) == ["notes", "blog", "qwen"] && threads.isEmpty, "oldest first, then by key")
+        #expect(agents.map(\.name) == ["docs", "garden", "notes", "blog", "qwen", "cart"] && threads.isEmpty, "oldest first, then by key")
+        #expect(agents.map(\.id) == ["other-droid-54600", "other-dsh-54400", "other-gemini-54000", "other-goose-54100", "other-qwen-54300", "other-zcode-54500"])
         let gemini = try #require(agents.first { $0.id == "other-gemini-54000" })
         #expect(gemini.kind == "other" && gemini.alive == true && gemini.evidence == "process" && gemini.state == "unknown" && gemini.waiting == nil)
         #expect(gemini.folder == "/Users/example/notes" && gemini.pid == 54000 && gemini.thread == nil && gemini.can == Can())

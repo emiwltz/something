@@ -88,15 +88,17 @@ import SomethingCore
         #expect(replay.fold.agent.options.mode?.map(\.value) == ["default", "acceptEdits", "plan", "auto", "dontAsk"])
     }
 
-    /// The person's assistant builds a space (ClaudeTrial, T-2, recorded with 0.2's rules, which allowed something's
-    /// commands in the shell): twelve steps, none of which asks the person; each shows it was allowed by a rule (the
-    /// launch's, or Claude's own for `ls` and the read).
+    /// The person's assistant builds a space (ClaudeTrial, T-2, recorded again in C7 with the tools something lends it
+    /// over MCP): thirteen steps, none of which asks the person; each shows it was allowed by a rule (the launch's, or
+    /// Claude's own for `ls` and the read), and each lent tool as the command something ran.
     @Test func assistantBuild() throws {
         let replay = try Replay.play("assistant-build")
         let tools = replay.items.filter { $0.kind == "tool" }
-        #expect(tools.count == 12 && tools.allSatisfy { $0.tool?.status == "done" })
+        #expect(tools.count == 13 && tools.allSatisfy { $0.tool?.status == "done" })
         #expect(tools.allSatisfy { $0.decision == Decision(by: "rule", outcome: "allowed") }, "\(tools.map { [$0.text, $0.decision?.by ?? "-"] })")
-        #expect(tools.map(\.tool?.name) == ["Bash", "Bash", "Bash", "Read", "Edit", "Edit", "Edit", "Bash", "Bash", "Bash", "Bash", "Bash"])
+        #expect(tools.map(\.tool?.name) == ["something_guide", "Bash", "something_new", "Read", "Write", "Edit", "Edit", "Edit"]
+                + Array(repeating: "something_check", count: 5), "\(tools.map(\.tool?.name))")
+        #expect(tools.filter { $0.tool?.name == "something_check" }.map(\.text) == AssistantBuild.checks)
         #expect(replay.fold.turns.map(\.state) == ["done"])
     }
 

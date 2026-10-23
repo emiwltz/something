@@ -149,6 +149,15 @@ enum AssistantBuild {
             + edits.map { (names[3], [path: file, old: $0.0, new: $0.1]) } + checked.map { lent("something_check", $0) }
     }
 
+    /// The build in pi's tools, for an agent working in `folder`: something's commands in its shell (pi is lent
+    /// nothing: it runs commands without asking anyway), the page read, written, then edited three times.
+    static func piSteps(_ folder: String) -> [(name: String, arguments: [String: Any])] {
+        let file = folder + "/agents-board.html"
+        func bash(_ command: String) -> (name: String, arguments: [String: Any]) { ("bash", ["command": command]) }
+        return commands.map(bash) + [("read", ["path": file]), ("write", ["path": file, "content": page])]
+            + edits.map { ("edit", ["path": file, "edits": [["oldText": $0.0, "newText": $0.1]]]) } + checks.map(bash)
+    }
+
     /// `url` with its links resolved, /private included (Foundation's own resolving drops it).
     static func real(_ url: URL) -> URL {
         guard let path = realpath(url.path, nil) else { return url }

@@ -209,6 +209,21 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
 
 ## What each agent allows, and why
 
+Each agent something knows is **seen** (its files are read, or only its running program is seen), **driven** (launched
+and talked to through its own channel) and a **builder** (it can be your assistant), or says why not. Every agent
+something drives builds spaces too: one that cannot is not driven until it can.
+
+| | seen | driven | builder |
+|---|---|---|---|
+| Claude Code | yes | yes | yes |
+| Codex | yes | yes | yes |
+| OpenCode | yes | yes | yes |
+| pi | yes | yes | yes |
+| OMP | yes | yes | yes |
+| Antigravity | by its process | no: Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now. | no |
+| Amp | by its process | yes | yes |
+| Auggie, Crush, Cursor, DeepSeek Harness, Factory Droid, Gemini CLI, GitHub Copilot CLI, Goose, Qwen Code, ZCode | by its process | no: something has no extension for them. | no |
+
 | | send | steer | queue | interrupt | model | mode | effort |
 |---|---|---|---|---|---|---|---|
 | Claude Code | yes | yes | yes | yes | yes | yes | yes |

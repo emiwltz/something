@@ -28,7 +28,7 @@ import SomethingCore
         #expect(Programs(environment: [:], registry: .described).homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
         #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
-        #expect(Registry.described.others == ["gemini", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+        #expect(Registry.described.others.keys.sorted() == ["auggie", "copilot", "crush", "cursor-agent", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
         // The core's contract 1 list is the floor, omp launchable since 0.3; amp, added in 0.3, is launched beyond it,
         // and antigravity, added in 0.3, is only seen.
         #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.described.kinds.readOnly == ["antigravity"])
@@ -44,8 +44,9 @@ import SomethingCore
         #expect(Registry.described.continuable("codex", alive: nil, pid: nil).0)
         #expect(!Registry.described.continuable("claude", alive: nil, pid: nil).0)
         #expect(Registry.described.agent("other") == nil && Registry.described.name(of: "other") == "other")
-        // A process another agent's own reader claims is never also an `other` agent.
-        #expect(Registry.described.others.isDisjoint(with: agents.map(\.kind)))
+        // A process another agent's own reader claims, or a described agent's program, is never also an `other` agent.
+        let claimed = Set(agents.map(\.kind)).union(agents.compactMap { $0.reader?([:]).programs }.joined()).subtracting(Running.interpreters)
+        #expect(Set(Registry.described.others.keys).isDisjoint(with: claimed) && claimed.contains("agy"), "\(claimed)")
         // The readers, in 0.2's order: one per agent, then the one for the others.
         #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "other"])
     }
@@ -90,7 +91,7 @@ import SomethingCore
     @Test func theHostNamesNoAgent() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/SomethingAgents")
-        let words = (Registry.described.agents.flatMap { [$0.kind, $0.name] } + Registry.described.others).joined(separator: "|")
+        let words = (Registry.described.agents.flatMap { [$0.kind, $0.name] } + Registry.described.others.keys + Registry.described.others.values).joined(separator: "|")
         let named = try Regex(#"(?:Claude|Codex|ACP|OpenCode|Pi|OMP)(?:Driver|Reader)|Spool|(?:^|[^\w.])\.(?:claude|codex|opencode|pi|omp)\b"#
             + #"|"[^"]*\b(?:"# + words + #")\b[^"]*""#)
         let files = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasSuffix(".swift") }

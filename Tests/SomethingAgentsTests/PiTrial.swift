@@ -32,22 +32,28 @@ import SomethingCore
     private let stopAsked: Stopped
     /// The person's ~/.pi when the case began.
     private let realPi: [String: Date]
+    /// The folder pi works in.
+    let work: URL
+    /// The real program this run placed (AssistantBuild.placeProgram), which its cleanup removes.
+    private var placed: URL?
 
-    var work: URL { root.appendingPathComponent("work/shop") }
-
-    /// With `after`, the case runs in that run's home and against its fake (to resume its conversation).
-    init(_ name: String, model: String? = nil, effort: String? = nil, resume file: String? = nil, after: PiRun? = nil) throws {
+    /// With `after`, the case runs in that run's home and against its fake (to resume its conversation). With
+    /// `assistant`, pi is the person's building assistant, in ~/something/spaces, with this clone's real program
+    /// (AssistantBuild.placeProgram, plan A.4) first in its PATH, as the engine puts the app's own.
+    init(_ name: String, model: String? = nil, effort: String? = nil, resume file: String? = nil, after: PiRun? = nil, assistant: Bool = false) throws {
         self.name = name
         owner = after == nil
         realPi = PiRun.realPi()
-        note = ["model": model, "effort": effort, "resume": file].compactMapValues { $0 }
+        note = ["model": model, "effort": effort, "resume": file, "assistant": assistant ? true : nil].compactMapValues { $0 }
         api = try after?.api ?? FakeResponsesAPI()
         api.pi = true
         let root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("pi-trial-\(UUID().uuidString)")
         self.root = root
+        work = assistant ? AssistantBuild.real(root).appendingPathComponent("home/something/spaces") : root.appendingPathComponent("work/shop")
         for folder in ["home", "agent", "work/shop"] {
             try FileManager.default.createDirectory(at: root.appendingPathComponent(folder), withIntermediateDirectories: true)
         }
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         let fake: [String: Any] = ["id": "fake-1", "name": "Fake One", "reasoning": true, "input": ["text"], "contextWindow": 32_000, "maxTokens": 4_096]
         var other = fake
         (other["id"], other["name"]) = ("fake-2", "Fake Two")
@@ -57,13 +63,20 @@ import SomethingCore
         try JSONSerialization.data(withJSONObject: settings).write(to: root.appendingPathComponent("agent/settings.json"))
         let program = trialPi!
         // A resumed pi runs in its conversation's folder, as the engine launches it.
-        let folder = try file.map(PiDriver.resumable) ?? root.appendingPathComponent("work/shop").path
-        let launch = Launch(agent: "pi-1", folder: folder, model: model, effort: effort, thread: file ?? "", resume: file != nil)
+        let folder = try file.map(PiDriver.resumable) ?? work.path
+        var launch = Launch(agent: "pi-1", folder: folder, model: model, effort: effort, thread: file ?? "", resume: file != nil)
         // pi's launcher is a shell script that runs node from the PATH.
         let node = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init)
             .first { FileManager.default.isExecutableFile(atPath: "\($0)/node") } ?? "/usr/bin"
-        let environment = ["HOME": root.appendingPathComponent("home").path, "PI_CODING_AGENT_DIR": root.appendingPathComponent("agent").path,
+        var environment = ["HOME": root.appendingPathComponent("home").path, "PI_CODING_AGENT_DIR": root.appendingPathComponent("agent").path,
                            "PI_OFFLINE": "1", "TMPDIR": root.path, "TERM": "dumb", "PATH": "\(node):/usr/bin:/bin"]
+        if assistant {
+            launch.assistant = .building
+            let something = try AssistantBuild.placeProgram()
+            placed = something
+            environment["PATH"] = something.deletingLastPathComponent().path + ":" + environment["PATH", default: ""]
+            environment["SOMETHING_HOME"] = root.appendingPathComponent("home").path
+        }
         spawn = Spawn(path: program, arguments: PiDriver.command(launch).arguments, folder: launch.folder, environment: environment)
         let (stop, exchange) = (Stopped(), CodexRun.Exchange())
         (stopAsked, self.exchange) = (stop, exchange)
@@ -141,6 +154,7 @@ import SomethingCore
         let stopped = DispatchSemaphore(value: 0)
         spawn.stop(cap: 2) { stopped.signal() }
         _ = stopped.wait(timeout: .now() + 3)
+        if let placed { AssistantBuild.removeProgram(placed) }
         if PiRun.realPi() != realPi { Issue.record("\(name): the person's ~/.pi changed during the case") }
         guard owner else { return }
         api.stop()
@@ -193,7 +207,7 @@ import SomethingCore
         func dashed(_ path: String) -> String { path.dropFirst().replacingOccurrences(of: "/", with: "-") }
         for prefix in ["/private" + root.path, root.path] {
             text = text.replacingOccurrences(of: prefix + "/work/shop", with: "/Users/example/shop").replacingOccurrences(of: prefix, with: "/Users/example/trial")
-                .replacingOccurrences(of: dashed(prefix + "/work/shop"), with: "Users-example-shop")
+                .replacingOccurrences(of: dashed(prefix + "/work/shop"), with: "Users-example-shop").replacingOccurrences(of: dashed(prefix), with: "Users-example-trial")
         }
         text = text.replacingOccurrences(of: NSHomeDirectory(), with: "/Users/example")
         try? text.write(toFile: "\(folder)/\(name).jsonl", atomically: true, encoding: .utf8)
@@ -205,6 +219,25 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
 
 @Suite(.serialized, .enabled(if: trialPi != nil, "T-4 needs pi: set SOMETHING_TRIAL_PI to its program's path."))
 @MainActor struct PiTrial {
+
+    /// C7: the standard build of a space by the person's assistant (plan A.2 #6), launched as the app launches it: pi
+    /// runs something's real commands in its shell (guide, new, and check with WebKit), which it does without asking.
+    @Test func theAssistantsStandardBuildAsksNothing() async throws {
+        let run = try PiRun("assistant-build", assistant: true)
+        defer { run.cleanup() }
+        run.api.build = AssistantBuild.piSteps(run.work.path)
+        #expect(try run.send("Please run-build a board of my agents.") == "started")
+        try await run.until("the build", seconds: 120) {
+            run.state.state == "idle" && run.items.contains { $0.author == "agent" && $0.text.contains("the board is ready") }
+        }
+        let tools = run.items.filter { $0.kind == "tool" }
+        #expect(run.agent.queue.fold.requests.isEmpty && run.turns == ["done"])
+        #expect(tools.map(\.tool?.status) == Array(repeating: "done", count: 13), "\(tools.map { "\($0.tool?.name ?? "-") \($0.text) \($0.tool?.status ?? "-")" })")
+        #expect(tools.filter { $0.text.hasPrefix("something check") }.map(\.text) == AssistantBuild.checks)
+        #expect(try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8).contains("Invented three"))
+        #expect(FileManager.default.fileExists(atPath: run.work.appendingPathComponent(".check/agents-board.png").path), "the check loaded the page")
+        try await run.finish()
+    }
 
     @Test func aTurnStartsAndEnds() async throws {
         let run = try PiRun("turn")
