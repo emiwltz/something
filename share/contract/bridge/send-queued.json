@@ -10,6 +10,12 @@
     "refused": [],
     "unavailable": [],
     "limits": {
+      "amp": [
+        "effort",
+        "interrupt",
+        "mode",
+        "model"
+      ],
       "opencode": [
         "steer"
       ],

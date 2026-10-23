@@ -7,19 +7,19 @@ import Testing
 
 @Suite struct ExtensionsTests {
     @Test func theAppRegistersTheAgentsOf0_2() {
-        #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity"])
-        #expect(Registry.app.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
-        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.app.kinds.readOnly == ["antigravity"])
-        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp"], "0.2's builders, in 0.2's order, then OMP")
-        #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP"])
+        #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp"])
+        #expect(Registry.app.others == ["gemini", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+        #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.app.kinds.readOnly == ["antigravity"])
+        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "amp"], "0.2's builders, in 0.2's order, then OMP and Amp")
+        #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
         #expect(InstallList.builders.map(\.command) == ["brew install --cask claude-code", "brew install --cask codex", "brew install opencode",
                                                          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
-                                                         "curl -fsSL https://omp.sh/install | sh"])
-        #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi"])
+                                                         "curl -fsSL https://omp.sh/install | sh", "brew install ampcode/tap/ampcode"])
+        #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi", "amp"])
         #expect(Registry.app.agents.filter(\.asksNothingByDefault).map(\.kind) == ["omp"])
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
-        #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false])
-        #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false])
+        #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false, false])
+        #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false])
     }
 
     /// The sheet before a mode that lowers asking says what the mode lets the agent do, as 0.2 did: by the mode's
@@ -29,9 +29,10 @@ import Testing
                      ("dontAsk", "never asks you, and does only what your settings already allow"),
                      ("never", "never asks you before it runs a command"), ("invented-agent", "asks you less"), ("default", "asks you less")]
         for (mode, words) in cases { #expect(Ask.words(forMode: mode) == words, "\(mode)") }
-        // The rights sheet names every agent that may act without asking: pi never asks, OMP by its own default.
-        #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, and OMP by default")
+        // The rights sheet names every agent that may act without asking: pi and Amp never ask, OMP by its own default.
+        #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
         #expect(Ask.warning(for: "launch:pi") == "pi runs commands and edits files without asking you first")
+        #expect(Ask.warning(for: "launch:amp") == "Amp runs commands and edits files without asking you first")
         #expect(Ask.warning(for: "launch:omp") == "OMP, by default, runs commands and edits files without asking you first (its own setting)")
         #expect(Ask.warning(for: "launch:claude") == nil && Ask.warning(for: "send:pi") == nil && Ask.warning(for: "state") == nil)
     }

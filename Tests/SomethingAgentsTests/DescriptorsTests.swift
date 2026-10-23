@@ -5,6 +5,7 @@ import Foundation
 import Testing
 @testable import SomethingAgents
 @testable import AgentACP
+@testable import AgentAmp
 @testable import AgentClaude
 @testable import AgentCodex
 @testable import AgentPi
@@ -13,23 +14,24 @@ import SomethingCore
 @Suite struct DescriptorsTests {
     @Test func theTablesAreThoseOf0_2() {
         let agents = Registry.described.agents
-        #expect(agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity"])
+        #expect(agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.install.map { (agent.kind, $0) } }) == [
             "claude": "brew install --cask claude-code",
             "codex": "brew install --cask codex",
             "opencode": "brew install opencode",
             "pi": "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
             "omp": "curl -fsSL https://omp.sh/install | sh",
+            "amp": "brew install ampcode/tap/ampcode",
         ])
-        #expect(Dictionary(uniqueKeysWithValues: agents.map { ($0.kind, $0.name) }) == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP", "antigravity": "Antigravity"])
+        #expect(Dictionary(uniqueKeysWithValues: agents.map { ($0.kind, $0.name) }) == ["claude": "Claude Code", "codex": "Codex", "opencode": "OpenCode", "pi": "pi", "omp": "OMP", "antigravity": "Antigravity", "amp": "Amp"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.runsOn.map { (agent.kind, $0) } }) == ["pi": "node"])
         #expect(Programs(environment: [:], registry: .described).homeFolders == [".local/bin", ".bun/bin", ".opencode/bin", ".volta/bin"])
         #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
-        #expect(Registry.described.others == ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
-        // The core's contract 1 list: the kinds launched are exactly that floor today, omp launchable since 0.3;
-        // antigravity, added in 0.3, is only seen.
-        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp"] && Registry.described.kinds.readOnly == ["antigravity"])
+        #expect(Registry.described.others == ["gemini", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+        // The core's contract 1 list is the floor, omp launchable since 0.3; amp, added in 0.3, is launched beyond it,
+        // and antigravity, added in 0.3, is only seen.
+        #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.described.kinds.readOnly == ["antigravity"])
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {
@@ -45,27 +47,31 @@ import SomethingCore
         // A process another agent's own reader claims is never also an `other` agent.
         #expect(Registry.described.others.isDisjoint(with: agents.map(\.kind)))
         // The readers, in 0.2's order: one per agent, then the one for the others.
-        #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "other"])
+        #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "other"])
     }
 
     @Test func whatEachDriverCanDoIsThatOf0_2() {
         // Each Driving names the kind of the descriptor that holds it.
         #expect(Registry.described.agents.allSatisfy { $0.driving == nil || $0.driving?.kind == $0.kind })
-        #expect(Registry.described.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0", "omp": "18.8.6"])
+        #expect(Registry.described.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0", "omp": "18.8.6", "amp": "0.0.1792656060"])
         #expect(Registry.described.launchable.mapValues(\.limits) == [
             "claude": [:], "codex": [:],
             "opencode": ["steer": "OpenCode cannot take a message during a turn; send it with when: \"next\"."],
             "pi": ["mode": "pi has no permission modes: it runs commands and edits files without asking first."],
             "omp": ["steer": "OMP cannot take a message during a turn; send it with when: \"next\"."],
+            "amp": ["interrupt": "Amp's channel has no way to stop a turn; stop the agent instead.",
+                    "model": "Amp picks its model by its own agent mode, which something does not set.",
+                    "mode": "Amp picks its model by its own agent mode, which something does not set.",
+                    "effort": "Amp picks its model by its own agent mode, which something does not set."],
         ])
         #expect(Registry.described.launchable.mapValues { $0.modes.map(\.value) } == [
             "claude": ["default", "acceptEdits", "plan", "auto", "dontAsk"], "codex": ["on-request", "untrusted", "never"],
-            "opencode": ["build", "plan"], "pi": [], "omp": ["default", "plan"],
+            "opencode": ["build", "plan"], "pi": [], "omp": ["default", "plan"], "amp": [],
         ])
         #expect(Registry.described.launchable.mapValues { $0.modes.map(\.label) } == [
             "claude": ["Ask before acting", "Accept edits", "Plan only", "Auto (Claude decides what is safe)", "Never ask (refuse what is not allowed)"],
             "codex": ["Ask when needed", "Ask before most commands", "Never ask (refuse what is not allowed)"],
-            "opencode": ["Build", "Plan"], "pi": [], "omp": ["Default", "Plan"],
+            "opencode": ["Build", "Plan"], "pi": [], "omp": ["Default", "Plan"], "amp": [],
         ])
         // In 0.2 only OpenCode's modes were not its driver's list alone (Engine.lowersAsking cast to ACPDriver).
         #expect(Registry.described.launchable.filter(\.value.listsMoreModes).keys.sorted() == ["opencode"])
@@ -75,7 +81,7 @@ import SomethingCore
         let made = Registry.described.launchable.mapValues { driving in
             String(describing: type(of: driving.driver(Launch(agent: "x-1", folder: "/Users/example/shop"), { _ in }, { _ in }, { "" })))
         }
-        #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver", "omp": "ACPDriver"])
+        #expect(made == ["claude": "ClaudeDriver", "codex": "CodexDriver", "opencode": "ACPDriver", "pi": "PiDriver", "omp": "ACPDriver", "amp": "AmpDriver"])
     }
 
     /// The host knows the agents only through what it is given: no code line of Sources/SomethingAgents names one, by
@@ -104,7 +110,7 @@ import SomethingCore
         let allowed: Set<String> = ["Foundation", "Darwin", "SQLite3", "SomethingCore", "SomethingAgents"]
         let imports = try Regex(#"^\s*(?:@\w+\s+)*(?:\w+\s+)?import\s+(?:(?:struct|class|enum|protocol|func|var|let|typealias)\s+)?(\w+)"#)
         let families = try FileManager.default.contentsOfDirectory(atPath: sources.path).filter { $0.hasPrefix("Agent") }
-        #expect(families.count == 4, "the scan reads Sources/Agent*")
+        #expect(families.count == 5, "the scan reads Sources/Agent*")
         for family in families {
             let folder = sources.appendingPathComponent(family)
             for name in try FileManager.default.contentsOfDirectory(atPath: folder.path) where name.hasSuffix(".swift") {

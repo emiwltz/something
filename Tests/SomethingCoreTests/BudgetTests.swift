@@ -66,7 +66,7 @@ enum Budget {
 
     @Test func theSourcesHoldTheirBudgets() {
         // A renamed or misspelled folder would hold its budget with zero lines: each one must be there.
-        #expect(Budget.agentTargets(under: root) == ["AgentACP", "AgentClaude", "AgentCodex", "AgentPi"])
+        #expect(Budget.agentTargets(under: root) == ["AgentACP", "AgentAmp", "AgentClaude", "AgentCodex", "AgentPi"])
         for target in ["SomethingCore", "SomethingAgents", "something"] + Budget.agentTargets(under: root) {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
         }

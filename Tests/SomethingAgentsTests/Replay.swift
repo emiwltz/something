@@ -70,6 +70,17 @@ final class Replay {
         return Replay("omp", launch)
     }
 
+    /// An Amp launched in /Users/example/shop as agent amp-1; with `assistant`, the person's assistant, in
+    /// /Users/example/something/spaces, given something's MCP server as the recording's trial gave it.
+    static func amp(assistant: Bool = false) -> Replay {
+        var launch = Launch(agent: "amp-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop")
+        if assistant {
+            launch.assistant = .building
+            launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: ["SOMETHING_HOME": "/Users/example"], refused: { _, _ in })
+        }
+        return Replay("amp", launch)
+    }
+
     /// A pi launched in /Users/example/shop as agent pi-1, continuing the conversation file `resume` when given.
     static func pi(model: String? = nil, effort: String? = nil, resume: String? = nil) -> Replay {
         Replay("pi", Launch(agent: "pi-1", folder: "/Users/example/shop", model: model, effort: effort, thread: resume ?? "", resume: resume != nil))
@@ -114,7 +125,7 @@ final class Replay {
         let model = rows.first?["model"] as? String
         let assistant = rows.first?["assistant"] as? Bool ?? false
         let replay = kind == "codex" ? codex(resume: resume, assistant: assistant) : kind == "opencode" ? opencode(model: model, resume: resume, driving: driving)
-            : kind == "omp" ? omp(assistant: assistant) : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
+            : kind == "omp" ? omp(assistant: assistant) : kind == "amp" ? amp(assistant: assistant) : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
         (replay.agent.driver as? ACPDriver)?.environment = database.map { ["OPENCODE_DB": $0] } ?? [:]
         var read = 0
         for (number, row) in rows.enumerated() {

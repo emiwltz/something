@@ -2,7 +2,7 @@
 
 something is a Mac app for **spaces**: pages you build with your own coding agent, such as a board of who is waiting
 for you, a morning paper of what your agents did or a small game for your breaks. something shows them safely, and
-lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP) and talk to them.
+lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP, Amp) and talk to them.
 
 *Version 0.2.0. `brew upgrade something` brings the next one; `brew install --HEAD emiwltz/tap/something` builds the
 latest `main` from source instead (a few minutes).*
@@ -48,7 +48,7 @@ first asks which folder it follows); from a terminal, `something new <name> --fr
 ## Your assistant
 
 The bar at the bottom of the window talks to your own coding agent, which builds and changes spaces with you: Claude
-Code, Codex, OpenCode, pi or OMP, the one you choose among those installed. It starts at your first message and works in
+Code, Codex, OpenCode, pi, OMP or Amp, the one you choose among those installed. It starts at your first message and works in
 `~/something/spaces`, with your account and settings. Each message starts with a line from something saying which
 space is open, so "make it blue" means that one. ⌘K types to it, ⌘J shows the conversation, ⌘. stops it. After 30
 minutes without a turn it is stopped to save memory; a new conversation starts each time something starts.
@@ -58,7 +58,7 @@ asking; everything else it does asks you, as your agent's own settings decide.
 
 something lends your assistant its own commands as tools, `something_guide`, `something_new` and `something_check`:
 something runs them itself, outside any sandbox of the agent, one at a time, and gives it what they printed. Claude
-Code, Codex, OpenCode and OMP get them from `something mcp`, a small MCP server (Model Context Protocol, the standard
+Code, Codex, OpenCode, OMP and Amp get them from `something mcp`, a small MCP server (Model Context Protocol, the standard
 way to give an agent tools) that the agent starts for that conversation only; pi runs something's commands in its
 shell, which it does without asking anyway.
 
@@ -71,7 +71,8 @@ cannot load a page, which is why it needs `something_check` (a Codex that cannot
 you choose Look for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
 settings say. The same for OMP, whose own default (its setting `tools.approvalMode`, "yolo") asks nothing: it can
 run any command on your Mac unless your OMP settings say otherwise. pi never asks, by design: it can run any command
-on your Mac, and the tour and the bar say so. "Ask
+on your Mac, and the tour and the bar say so. Amp never asks either when something launches it (a tool your own Amp
+settings would ask for, Amp refuses by itself), and the tour and the bar say so too. "Ask
 Before Every Change", in the bar's agent menu, turns the exception off from the next conversation, the tools included.
 No space can see what you say to your assistant, or write to it.
 
@@ -83,7 +84,8 @@ file whose first line you removed is yours: something leaves it alone.
 something reads, and never writes, each agent's own files: `~/.claude` or `$CLAUDE_CONFIG_DIR` (Claude Code), `~/.codex`
 or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), OpenCode's database (in
 `~/.local/share/opencode`, or `$OPENCODE_DB`) and its last model (`model.json` in `~/.local/state/opencode`, or `$XDG_STATE_HOME/opencode`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
-`$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). It opens them read-only and takes only what a space is
+`$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). Amp keeps its threads on its own servers, so an Amp
+you started yourself is seen by its process only. It opens them read-only and takes only what a space is
 shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
 export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
 Antigravity's CLI (`agy`) is seen by its process alone: that it runs, and in which folder. something reads none of its
@@ -117,6 +119,10 @@ agent's own official channel, with your own configuration:
 - **OMP**: `omp acp`, the Agent Client Protocol, as OpenCode. Its conversations are saved and read like the ones you
   start in a terminal. Your assistant gets something's MCP server in `session/new`, and its calls to those tools are
   shown as the commands something runs.
+- **Amp**: `amp --execute --stream-json --stream-json-input`, its official machine channel, with `--no-ide`, so that
+  your editor's open file is not added to the messages. Your assistant gets something's MCP server in
+  `--mcp-config`, and calls those tools from Amp's code tool, shown with its code. Amp runs on your Amp account: its
+  own subscriptions or credits, as for an Amp you start yourself.
 
 Started from a terminal, something gives the agents that terminal's environment, so they find the programs your
 terminal finds (less the variables that only say where the terminal runs, such as `TMUX`); started from Finder or
@@ -210,6 +216,7 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
 | OpenCode | yes | no | yes | yes | yes | yes | yes |
 | pi | yes | yes | yes | yes | yes | no | yes |
 | OMP | yes | no | yes | yes | yes | yes | yes |
+| Amp | yes | yes | yes | no | no | no | no |
 
 - **OpenCode cannot steer** (take a message during a turn): its channel has no way to. A message waits for the next
   turn. OpenCode launched by something cannot ask a question either.
@@ -217,6 +224,9 @@ and Move to Trash… (its memory goes with it); File › Import Space… takes a
   first. The rights sheet says so when a space asks to launch pi.
 - **OMP cannot steer** either: the same channel as OpenCode's. It asks permission as your OMP settings say, and by
   default asks nothing.
+- **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stop the agent instead.
+  It never asks permission when something launches it, and picks its model by its own agent mode, which something
+  does not set. The rights sheet says so when a space asks to launch it.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did
   not open. A Claude Code or Codex conversation can be continued in something ("continue here") once no other process
   holds it; OpenCode, pi and OMP conversations cannot.
@@ -274,7 +284,7 @@ bottles), are in [packaging/homebrew/](packaging/homebrew); the rules for changi
 share/                     something.js, the empty template, the six templates and their previews, the skill, the guide, the assistant's AGENTS.md, the contract as data
 Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
 Sources/SomethingAgents/   the host: the engine, the watch, the programs, and what an agent extension provides; it names no agent
-Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP with a profile per agent: OpenCode and OMP, Pi for pi and OMP's reader)
+Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP with a profile per agent: OpenCode and OMP, Pi for pi and OMP's reader, Amp)
 Sources/something/         the command and the Mac app: the window, its sidebar, Info, the assistant, the tour, the sheets and panels that ask you
 packaging/, tools/         the app's Info.plist and icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh (the templates' pictures)
 .github/workflows/         the suite and a Homebrew install, which GitHub runs at each push

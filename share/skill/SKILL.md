@@ -19,7 +19,7 @@ the person's and yours; the contract is in the guide.
    the person asked for.
 3. **Declare only the rights the page uses**, in its `<script type="application/json" id="something">` block:
    `state` to see agents, `send` to write to them, `launch` to start them, `store` for a memory, each with
-   `:claude`, `:codex`, `:opencode`, `:pi` or `:omp` to limit it to one kind. The person allows or refuses each one.
+   `:claude`, `:codex`, `:opencode`, `:pi`, `:omp` or `:amp` to limit it to one kind. The person allows or refuses each one.
 4. **Run `something check <name>` until it says `0 errors, 0 warnings`**, then once with `--refuse <right>` for each
    right you declared. Look at the snapshot it writes after each run. Fix each problem with the sentence it gives.
    Check by name, not by a path elsewhere: a space outside `~/something/spaces` has no memory. The check clicks
@@ -36,8 +36,9 @@ the person's and yours; the contract is in the guide.
   sent meanwhile waits in the agent's `queue` until the person has answered there.
 - A `change` may arrive while the person types: keep the input outside what you redraw.
 - Catch every rejected call and show its `message`; an uncaught one is an error of `check`.
-- Show the harness names (Claude Code, Codex, OpenCode, pi, OMP), never the program names.
-- One space is open at a time. OpenCode and OMP cannot steer; pi has no modes; agents started elsewhere are read-only, and a
-  Claude Code or Codex one can be continued here with `resume` when its `can.resume` says so.
+- Show the harness names (Claude Code, Codex, OpenCode, pi, OMP, Amp), never the program names.
+- One space is open at a time. OpenCode and OMP cannot steer; pi has no modes; Amp cannot be interrupted and has no
+  modes; agents started elsewhere are read-only, and a Claude Code or Codex one can be continued here with `resume`
+  when its `can.resume` says so.
 - In a sandbox without a window server, `check` reports `NO_WINDOW_SERVER`: ask the person to run it, or run it
   outside the sandbox.

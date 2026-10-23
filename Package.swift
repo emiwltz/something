@@ -5,7 +5,7 @@
 // SomethingAgents is the host (Foundation and Darwin): the engine, the watch, the programs, and the contract an agent
 // meets (AgentDescriptor, Driving, Driver, Reader). It names no agent.
 // Each Agent* target is one family of agents, behind that contract: AgentClaude, AgentCodex, AgentACP (one driver for
-// the Agent Client Protocol, a profile per agent: OpenCode, OMP) and AgentPi (pi, and OMP's reader). One never
+// the Agent Client Protocol, a profile per agent: OpenCode, OMP), AgentPi (pi, and OMP's reader) and AgentAmp. One never
 // imports another. What they share with the host is `package` (seen by this package's targets only), or public where
 // the app needs it too.
 // The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time, and its
@@ -28,7 +28,7 @@ let plugins = commandLineTools + "/usr/lib/swift/host/plugins/testing"
 let testing: [SwiftSetting] = developer.hasPrefix(commandLineTools) && FileManager.default.fileExists(atPath: plugins)
     ? [.unsafeFlags(["-plugin-path", plugins])] : []
 
-let agents = ["AgentClaude", "AgentCodex", "AgentACP", "AgentPi"]
+let agents = ["AgentClaude", "AgentCodex", "AgentACP", "AgentPi", "AgentAmp"]
 
 let package = Package(
     name: "something",

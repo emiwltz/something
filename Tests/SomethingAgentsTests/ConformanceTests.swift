@@ -11,6 +11,7 @@ import SQLite3
 import Testing
 @testable import SomethingAgents
 @testable import AgentACP
+@testable import AgentAmp
 @testable import AgentClaude
 @testable import AgentCodex
 @testable import AgentPi
@@ -91,6 +92,7 @@ import SomethingCore
         case "opencode": replay = .opencode(model: model, resume: resume)
         case "pi": replay = .pi(model: model, effort: first["effort"] as? String, resume: resume)
         case "omp": replay = .omp(assistant: assistant)
+        case "amp": replay = .amp(assistant: assistant)
         default:
             Issue.record("\(kind) has a driver but no replay here: add it to ConformanceTests.play")
             return Outcome()

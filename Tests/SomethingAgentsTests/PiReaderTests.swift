@@ -318,14 +318,14 @@ final class PiHome {
             Running(pid: 54000, parent: 1, group: 54000, started: started, name: "node", arguments: ["node", "/opt/example/bin/gemini"], folder: "/Users/example/notes"),
             // Gemini CLI starts itself again with more memory: the same agent.
             Running(pid: 54001, parent: 54000, group: 54000, started: started, name: "node", arguments: ["node", "--max-old-space-size=8192", "/opt/example/bin/gemini"]),
-            Running(pid: 54100, parent: 1, group: 54100, started: started, name: "amp", arguments: ["amp"], folder: "/Users/example/blog"),
+            Running(pid: 54100, parent: 1, group: 54100, started: started, name: "goose", arguments: ["goose"], folder: "/Users/example/blog"),
             Running(pid: 54200, parent: 1, group: 54200, started: started, name: "node", arguments: ["node", "server.js"], folder: "/Users/example/shop"),
             Running(pid: 54300, parent: 1, group: 54300, started: started, name: "qwen", arguments: ["qwen"]),
         ])
         let watch = Watch(readers: [OtherReader(names: Registry.described.others)], snapshot: { snapshot })
         let (agents, threads) = Watch.elsewhere(watch.tick(now: started), registry: .described, groups: [], keys: [], now: started)
         // Named by their folder, else by their program.
-        #expect(agents.map(\.name) == ["blog", "notes", "qwen"] && threads.isEmpty, "oldest first, then by key")
+        #expect(agents.map(\.name) == ["notes", "blog", "qwen"] && threads.isEmpty, "oldest first, then by key")
         let gemini = try #require(agents.first { $0.id == "other-gemini-54000" })
         #expect(gemini.kind == "other" && gemini.alive == true && gemini.evidence == "process" && gemini.state == "unknown" && gemini.waiting == nil)
         #expect(gemini.folder == "/Users/example/notes" && gemini.pid == 54000 && gemini.thread == nil && gemini.can == Can())

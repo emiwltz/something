@@ -136,7 +136,7 @@ func code(_ body: () throws -> Void) -> CodedError? {
                 CodedError("NOT_INSTALLED", "OpenCode was not found on this Mac. To install it, type in Terminal: brew install opencode"))
         #expect(programs.installed("opencode") == false)
         #expect(programs.installed("omp") == false)
-        #expect(programs.installed("amp") == nil)
+        #expect(programs.installed("amp") == false && programs.installed("gemini") == nil, "a kind without an extension is not looked for")
         // A kind something only sees has no program to look for: whether it is installed is not known.
         #expect(programs.installed("antigravity") == nil)
         #expect(code { _ = try programs.find("omp") }?.code == "NOT_INSTALLED")

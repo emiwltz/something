@@ -32,7 +32,7 @@ Rules that hold everywhere:
   what cannot be done. A call made anyway fails with a named code; nothing falls back silently.
 - `detail` objects are specific to one harness and outside this promise. Your space must work without them.
 - **Show harnesses by their names**: Claude Code (`claude`), Codex (`codex`), OpenCode (`opencode`), pi (`pi`), OMP
-  (`omp`), Antigravity (`antigravity`); a kind you do not know is "other agent".
+  (`omp`), Amp (`amp`), Antigravity (`antigravity`); a kind you do not know is "other agent".
 
 The same contract as data, for tests: `share/contract/` (`state-example.json`, `shape.json`, `codes.json`).
 
@@ -136,8 +136,8 @@ agents this space launched are always in scope.
 | `launch` | `launch` and `resume` (which is "continue here"), in the granted folder; `launch:codex` limits it to one kind. |
 | `store` | The space's own memory. |
 
-Kinds for a right: `claude`, `codex`, `opencode`, `pi`, `omp`. `open` needs no right: each link is confirmed by the
-person. A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows
+Kinds for a right: `claude`, `codex`, `opencode`, `pi`, `omp`, `amp`. `open` needs no right: each link is confirmed by
+the person. A right asked twice counts once. An unknown word is ignored (warning `UNKNOWN_RIGHT`). A right something knows
 but cannot honour (for a kind it only sees: `antigravity` in this version) goes to `granted.unavailable` (warning
 `RIGHT_UNAVAILABLE`).
 
@@ -222,7 +222,7 @@ if (agent) {
   "rights": ["state", "send:claude", "store"],
   "refused": ["launch:codex"],
   "unavailable": [],
-  "limits": { "opencode": ["steer"], "pi": ["mode"], "omp": ["steer"] },
+  "limits": { "amp": ["effort", "interrupt", "mode", "model"], "opencode": ["steer"], "pi": ["mode"], "omp": ["steer"] },
   "agents": { "see": "all" },
   "folder": "/Users/example/code/shop"
 }
@@ -289,7 +289,7 @@ at most four times a second, only when it changed. A shortened example (the full
 
 ### `kinds`: one entry per harness
 
-`claude`, `codex`, `opencode`, `pi`, `omp`, and `antigravity`, which something only sees by its process. `launch`:
+`claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, and `antigravity`, which something only sees by its process. `launch`:
 something can launch it. `installed`: its program was found (or `null`, always for a kind something does not launch). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac
 name, or `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its
 database's last migration).
@@ -302,7 +302,7 @@ processes only), or `none` (nothing of this kind here). `note`: one sentence for
 | Key | What it holds |
 |---|---|
 | `id` | Opaque, stable while the agent is listed. Do not parse it. |
-| `kind` | `claude`, `codex`, `opencode`, `pi`, `omp`, `antigravity`, or `other` (a known program something cannot read: only its process is seen). Show a kind you do not know as "other agent". |
+| `kind` | `claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, `antigravity`, or `other` (a known program something cannot read: only its process is seen). Show a kind you do not know as "other agent". |
 | `name` | The conversation's title, else the folder's last part, else the program name; or `null`. |
 | `origin` | `launched` by something, or started `elsewhere` and only read. |
 | `folder`, `pid` | Where it works, its process; each may be `null`. |
@@ -366,6 +366,7 @@ hours after their last activity. There is no history beyond the current conversa
 | opencode | yes | no | yes | yes | yes | yes (agents such as build, plan) | yes |
 | pi | yes | yes | yes | yes | yes | no | yes (thinking level) |
 | omp | yes | no | yes | yes | yes | yes (default, plan) | yes (thinking level) |
+| amp | yes | yes | yes | no | no | no | no |
 
 Read `can` rather than this table: it is what holds now. Why the gaps:
 
@@ -375,6 +376,10 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
 - **pi has no mode**: pi never asks permission, by design; it runs commands and edits files without asking.
 - **OMP cannot steer** either (the same channel as OpenCode's): send with `when: "next"`. OMP asks permission only as
   its own settings say, and by default it asks nothing: it runs commands and edits files without asking.
+- **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stopping the agent is the
+  way. Amp never asks permission when something launches it, and picks its model by its own agent mode, which
+  something does not set: its `mode` says that agent mode (`medium`, for instance). Its threads live on Amp's servers:
+  an Amp started elsewhere is seen by its process only, like an `other` agent.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 0.2 only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,

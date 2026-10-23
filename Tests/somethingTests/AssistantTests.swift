@@ -147,6 +147,14 @@ import WebKit
             .tool(symbol: "terminal", words: " · failed", command: "something check agents --refuse send"),
             .reply("Done: the tiles are wider."),
         ])
+        // Amp's tools: its shell, its patches, and its code, which calls something's tools.
+        let amp = [tool("shell_command", "cat agents.html"), tool("apply_patch", "/Users/example/something/spaces/agents.html"),
+                   tool("code_exec", #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#)]
+        #expect(AssistantModel.rows(AgentThread(id: "T-1", agent: "amp-1", title: nil, started: nil,
+                                                turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: amp)])) == [
+            .tool(symbol: "terminal", words: "", command: "cat agents.html"), .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
+            .tool(symbol: "terminal", words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
+        ])
     }
 
     /// Quit with no agent something launched asks nothing and quits. (With agents running: AssistantTrial.)
@@ -344,10 +352,11 @@ import WebKit
     /// What the menu and the drawer say of each builder, what it is lent, and whether Ask Before Every Change means
     /// anything for it: from its descriptor, in the words of 0.2.
     @Test func eachBuilderIsSaidFromItsDescriptor() async throws {
-        let (home, model) = try assistant(["claude", "codex", "opencode", "pi", "omp"])
+        let (home, model) = try assistant(["claude", "codex", "opencode", "pi", "omp", "amp"])
         defer { home.remove() }
         await look(model)
-        #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting", "OMP · asks nothing by default"])
+        #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting", "OMP · asks nothing by default",
+                                                 "Amp · never asks before acting"])
         let folder = "works in ~/something/spaces.", all = ["something_guide", "something_new", "something_check"]
         let said: [(String, String, Bool, [String])] = [
             ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
@@ -355,6 +364,7 @@ import WebKit
             ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, all),
             ("pi", "pi \(folder) pi never asks: it can run any command on your Mac.", false, []),
             ("omp", "OMP \(folder) By default OMP asks nothing: it can run any command on your Mac, unless your own OMP settings say otherwise.", false, all),
+            ("amp", "Amp \(folder) Amp never asks: it can run any command on your Mac.", false, all),
         ]
         for (kind, line, canAsk, lent) in said {
             model.choose(kind)
@@ -367,6 +377,29 @@ import WebKit
         model.choose("claude")
         model.toggleAsking()
         #expect(model.firstLines[0] == "Claude Code \(folder) It asks you before every change.")
+        await finish(home, model)
+    }
+
+    /// Amp's channel cannot stop a turn: while Amp works, Stop is off (the menu's, the bar's), and says why.
+    @Test func stopIsOffWhileAmpWorks() async throws {
+        let (home, model) = try assistant([])
+        defer { home.remove() }
+        let amp = home.root.appendingPathComponent("bin/amp")
+        // Amp's first lines for a message (the shapes of Tests/Exchanges/amp), then a turn that does not end.
+        try """
+            #!/bin/sh
+            while IFS= read -r line; do
+              echo '{"type":"system","subtype":"init","cwd":"/Users/example/something/spaces","session_id":"T-invented","tools":[],"mcp_servers":[],"agent_mode":"medium"}'
+              echo '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Invented."}]},"parent_tool_use_id":null,"session_id":"T-invented"}'
+            done
+            """.write(to: amp, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: amp.path)
+        await look(model)
+        #expect(model.kind == "amp")
+        model.draft = "Make an invented board."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" }))
+        #expect(model.working && !model.canStop && model.agent?.because["interrupt"] == "Amp's channel has no way to stop a turn; stop the agent instead.")
         await finish(home, model)
     }
 

@@ -30,7 +30,7 @@ Edit its file. It reloads by itself. Run `something check <name>` after each cha
 
 ## Never
 - Write outside this folder. Scratch files go in `$TMPDIR`, never here: every `.html` here becomes a space.
-- Read or write other agents' folders (`~/.claude`, `~/.codex`, `~/.pi`, `~/.omp`, OpenCode's).
+- Read or write other agents' folders (`~/.claude`, `~/.codex`, `~/.pi`, `~/.omp`, OpenCode's, Amp's).
 - Start, message or stop other agents.
 - Put anything from the Internet in a space (spaces have no network: embed what you need).
 - Delete a space unless the person asks for exactly that one.

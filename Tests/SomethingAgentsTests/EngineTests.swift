@@ -140,7 +140,8 @@ import SomethingCore
         #expect(engine.state.kinds["opencode"]?.launch == true)
         #expect(engine.state.kinds["pi"]?.launch == true)
         #expect(engine.state.kinds["omp"]?.launch == true)
-        #expect(Registry.described.limits == ["opencode": ["steer"], "pi": ["mode"], "omp": ["steer"]], "Claude and Codex have no limit left")
+        #expect(Registry.described.limits == ["opencode": ["steer"], "pi": ["mode"], "omp": ["steer"], "amp": ["effort", "interrupt", "mode", "model"]],
+                "Claude and Codex have no limit left")
         try await until("the models") { engine.state.agents.first?.options.model != nil }
 
         #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")

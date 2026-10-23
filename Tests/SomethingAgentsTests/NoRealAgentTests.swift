@@ -11,6 +11,7 @@ import SomethingCore
 import Testing
 @testable import SomethingAgents
 @testable import AgentACP
+@testable import AgentAmp
 @testable import AgentClaude
 @testable import AgentCodex
 @testable import AgentPi
@@ -29,8 +30,8 @@ extension Engine {
 extension Registry {
     /// Every agent described by the Agent* targets, as the app registers them (Extensions.swift): DescriptorsTests and
     /// somethingTests' ExtensionsTests hold both lists to 0.2's.
-    static let described = Registry([.claude, .codex, .opencode, .pi, .omp(reader: OMP.reader), .antigravity],
-                                     others: ["gemini", "amp", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
+    static let described = Registry([.claude, .codex, .opencode, .pi, .omp(reader: OMP.reader), .antigravity, .amp],
+                                     others: ["gemini", "qwen", "goose", "crush", "cursor-agent", "droid", "copilot", "auggie"])
 }
 
 struct NoRealAgentTests {

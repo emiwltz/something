@@ -279,7 +279,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(stopAssistant) { return assistant.working }
+        if item.action == #selector(stopAssistant) { return assistant.canStop }
         if item.action == #selector(askAssistant) { return !assistant.noAgent }
         if [#selector(newSpace), #selector(showTemplates)].contains(item.action) { return shell.touring == nil }
         return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)

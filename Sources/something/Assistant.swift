@@ -193,6 +193,9 @@ import SomethingCore
 
     var working: Bool { light == .working || light == .waiting }
 
+    /// Whether Stop can stop what runs: a launch, or a turn of an agent that can be interrupted (Amp cannot).
+    var canStop: Bool { working && (launching || agent?.can.interrupt != false) }
+
     var light: Light {
         if failure != nil { return .error }
         guard let agent, !stopped else { return launching ? .working : .off }
@@ -483,12 +486,13 @@ import SomethingCore
         let name = item.tool?.name ?? "tool", file = (item.text as NSString).lastPathComponent
         let after = item.decision?.outcome == "denied" ? " · denied" : item.tool?.status == "failed" ? " · failed" : ""
         if item.text.hasPrefix("something guide") { return .tool(symbol: "book", words: "Read guide" + after, command: nil) }
-        // A command, or a tool something lent (something_check), for which the driver gives the command something ran.
-        if name.hasPrefix("something_") || ["bash", "commandexecution", "execute"].contains(name.lowercased()) {
+        // A command, code (Amp's, which calls something's tools), or a tool something lent (something_check), for which the
+        // driver gives the command something ran.
+        if name.hasPrefix("something_") || ["bash", "commandexecution", "execute", "shell_command", "code_exec"].contains(name.lowercased()) {
             return .tool(symbol: "terminal", words: after, command: item.text)
         }
         switch name.lowercased() {
-        case "edit", "write", "multiedit", "notebookedit", "filechange": return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
+        case "edit", "write", "multiedit", "notebookedit", "filechange", "apply_patch": return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
         case "read": return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)
         default: return .tool(symbol: "wrench.and.screwdriver", words: "Used \(name)" + after, command: nil)
         }
