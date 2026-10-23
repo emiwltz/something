@@ -2,8 +2,8 @@
 // per line on its input and output, with no "jsonrpc" key. Each launch is its own private server, which holds one
 // conversation (a "thread"); something never joins the background server a terminal Codex shares. It turns Codex's
 // raw words into neutral events: turn/started and turn/completed into turns, its approval requests into
-// permissions, requestUserInput into a question. What each choice rests on is said where it is
-// made.
+// permissions, requestUserInput into a question. The building assistant's thread is given something's MCP server.
+// What each choice rests on is said where it is made.
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -45,8 +45,6 @@ final class CodexDriver: Driver {
     private var started: [String: [String: Any]] = [:]
     private var models: [[String: Any]]?, model: String?
     private var heard = false, over = false
-    /// Whether Codex called a tool something lends it in this launch: then it took them.
-    private var tookLent = false
     /// Codex refused to read the settings back (a new thread's rollout is empty until its first turn ends): they are
     /// read again when that turn completes.
     private var rereadSettings = false
@@ -69,18 +67,12 @@ final class CodexDriver: Driver {
         if let effort = launch.effort { overrides["effort"] = effort }
     }
 
-    /// The oldest Codex seen taking the tools something lends (its experimental dynamic tools): an older one would
-    /// ignore them without a word, and its model would then ask to run each check outside the sandbox.
-    static let lentSince = "0.163.0"
-
     /// `clientInfo.name` becomes the thread's `originator` in Codex's files: it stays "something". The deltas are
-    /// left out: items are read whole, when they complete. Dynamic tools are experimental: only a launch something
-    /// lends tools to asks for that part of Codex's channel.
+    /// left out: items are read whole, when they complete.
     func begin() throws {
         emit(.options(options()))
-        var capabilities: [String: Any] = ["optOutNotificationMethods": CodexDriver.unread]
-        if launch.lent != nil { capabilities["experimentalApi"] = true }
-        try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"], "capabilities": capabilities])
+        try invoke(.initialize, "initialize", ["clientInfo": ["name": "something", "title": "something", "version": "1.0"],
+                                               "capabilities": ["optOutNotificationMethods": CodexDriver.unread]])
     }
 
     @discardableResult func receive(_ line: Data) -> Bool {
@@ -198,10 +190,6 @@ final class CodexDriver: Driver {
         if let error = message["error"] as? [String: Any] { return refused(call, error["message"] as? String ?? "") }
         switch call {
         case .initialize:
-            if launch.lent != nil, let version = CodexDriver.version(result["userAgent"]),
-               version.compare(CodexDriver.lentSince, options: .numeric) == .orderedAscending {
-                return notBuilder("This Codex (\(version)) is too old to build spaces: \(CodexDriver.lentSince) or later is needed. Update Codex, then look for agents again.")
-            }
             do {
                 try send(["method": "initialized"])
                 // A resume's settings persist into the thread: only what the person chose is sent.
@@ -210,9 +198,14 @@ final class CodexDriver: Driver {
                 if let model = launch.model { params["model"] = model }
                 // The person's assistant changes files in its folder without asking (E-1); what the sandbox blocks asks.
                 if launch.assistant == .building { params["sandbox"] = "workspace-write" }
-                // Its sandbox reaches no window server, where `something check` loads a page: something runs it instead.
-                if let lent = launch.lent, !launch.resume {
-                    params["dynamicTools"] = lent.tools.map { ["type": "function", "name": $0.name, "description": $0.description, "inputSchema": $0.schema] }
+                // Its sandbox reaches no window server, where `something check` loads a page: something's MCP server,
+                // which Codex starts outside the sandbox, runs it instead. Given in this thread's config, it reaches
+                // nothing of Codex's own configuration. Codex asks before each MCP tool call: the lent tools, named one
+                // by one, are the assistant's building work, which does not ask (AGENTS.md, rule 2).
+                if let lent = launch.lent, let server = lent.server {
+                    let approved = Dictionary(uniqueKeysWithValues: lent.tools.map { ($0.name, ["approval_mode": "approve"]) })
+                    params["config"] = ["mcp_servers": [CodexDriver.server: ["command": server.words[0], "args": Array(server.words.dropFirst()),
+                                                                             "env": server.environment, "tools": approved]]]
                 }
                 if launch.resume {
                     // Its history is left out: a long thread's answer can weigh megabytes.
@@ -255,11 +248,6 @@ final class CodexDriver: Driver {
     private func refused(_ call: Call, _ words: String) {
         switch call {
         case .initialize, .open:
-            // The tools went with this thread/start: whatever Codex says, they may be why (a later Codex may name
-            // them otherwise, and one that started without them would ask to run each check outside its sandbox).
-            if launch.lent != nil, !launch.resume {
-                return notBuilder("This Codex did not accept something's check tool, so it can't build spaces. It said: “\(words)”.")
-            }
             let held = words.contains("active writer"), missing = words.contains("no rollout found") || words.contains("invalid session id")
             // The messages held for the thread, steers answered "steered" among them, are said lost, never dropped unsaid.
             let lost = early.isEmpty ? "" : "; the \(early.count == 1 ? "message" : "\(early.count) messages") sent to it went nowhere"
@@ -283,6 +271,11 @@ final class CodexDriver: Driver {
     }
 
     private func notification(_ method: String, _ params: [String: Any]) {
+        // Codex starts the MCP servers of a thread after it answers thread/start: something's may fail to start.
+        if method == "mcpServer/startupStatus/updated", launch.lent != nil, params["name"] as? String == CodexDriver.server, params["status"] as? String == "failed" {
+            let words = params["error"] as? String
+            return notBuilder("Codex could not start something's tools, so it can't build spaces" + (words.map { ". It said: “\($0)”." } ?? "."))
+        }
         guard params["threadId"] == nil || params["threadId"] as? String == thread else { return }
         switch method {
         case "thread/status/changed":
@@ -316,30 +309,12 @@ final class CodexDriver: Driver {
         launch.lent?.refused(AgentDescriptor.codex.kind, because)
     }
 
-    /// One of the tools something lends: it runs off the main queue, and its report goes back as the tool's result.
-    private func lentCall(_ codexID: Any, _ params: [String: Any]) {
-        guard let lent = launch.lent else {
-            try? send(["id": codexID, "error": ["code": -32601, "message": "something lends no tool to this conversation."]])
-            return
-        }
-        tookLent = true
-        lent.call(params["tool"] as? String ?? "", params["arguments"]) { [weak self] reply in
-            try? self?.send(["id": codexID, "result": ["success": reply.ok, "contentItems": [["type": "inputText", "text": reply.text]]]])
-        }
-    }
-
     private func request(_ method: String, _ codexID: Any, _ params: [String: Any]) {
-        if method == "item/tool/call" { return lentCall(codexID, params) }
         let shownID = id(codexID)
         let kind: String
         var about: String?, input: String?, questions: [Question] = [], questionIDs: [String] = []
         switch method {
         case "item/commandExecution/requestApproval":
-            // Asked to run a check outside the sandbox before calling the one something lends: this Codex has not
-            // got the tool (its channel changed), and would ask at every check.
-            if launch.lent != nil, !tookLent, (params["command"] as? String)?.contains("something check") == true {
-                return notBuilder("This Codex did not use something's check tool, so it can't build spaces.")
-            }
             kind = "commandExecution"
             about = params["command"] as? String ?? params["reason"] as? String
             input = params["command"] as? String
@@ -367,6 +342,10 @@ final class CodexDriver: Driver {
         default:
             // Codex waits for every request it sends: one something does not handle gets a refusal, not silence.
             try? send(["id": codexID, "error": ["code": -32601, "message": "something does not handle \(method)."]])
+            // Asking before one of the lent tools, this Codex ignored their approval: it would ask at every check.
+            if method == "mcpServer/elicitation/request", launch.lent != nil, params["serverName"] as? String == CodexDriver.server {
+                notBuilder("This Codex asks before each of something's tools, so it can't build spaces.")
+            }
             return
         }
         let shown = Request(id: shownID, agent: launch.agent, kind: questions.isEmpty ? "permission" : "question", tool: kind, about: about, at: now())
@@ -416,10 +395,12 @@ final class CodexDriver: Driver {
             let text = summary.isEmpty ? (item["content"] as? [String] ?? []).joined(separator: "\n") : summary
             if done, !text.isEmpty { emit(.itemAppended(Item(id: id, kind: "thought", author: "agent", text: text, at: now()))) }
         default:
-            guard let (name, words) = CodexDriver.tool(item) else { return }
-            var text = words
+            guard var (name, text) = CodexDriver.tool(item) else { return }
             // A lent tool is shown as the command something ran for it.
-            if type == "dynamicToolCall", launch.lent != nil, let lent = Lent.called(name, item["arguments"]) { text = lent.command ?? "\(name) (wrong arguments)" }
+            if type == "mcpToolCall", launch.lent != nil, item["server"] as? String == CodexDriver.server,
+               let lent = Lent.called(item["tool"] as? String ?? "", item["arguments"]) {
+                (name, text) = (lent.name, lent.command ?? "\(lent.name) (wrong arguments)")
+            }
             let status = ["inProgress": "running", "completed": "done", "failed": "failed", "declined": "failed"][item["status"] as? String ?? ""]
             let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(),
                              tool: Tool(name: name, status: done ? status ?? "done" : status), decision: decisions[id])
@@ -516,19 +497,14 @@ final class CodexDriver: Driver {
         case "commandExecution": return ("commandExecution", item["command"] as? String ?? "")
         case "fileChange": return ("fileChange", (item["changes"] as? [[String: Any]] ?? []).compactMap { $0["path"] as? String }.joined(separator: ", "))
         case "mcpToolCall": return ("\(item["server"] as? String ?? "mcp")/\(item["tool"] as? String ?? "tool")", json(item["arguments"]) ?? "")
-        case "dynamicToolCall": return (item["tool"] as? String ?? "tool", json(item["arguments"]) ?? "")
         case "webSearch": return ("webSearch", item["query"] as? String ?? "")
         case "collabAgentToolCall": return (item["tool"] as? String ?? "agent", item["prompt"] as? String ?? "")
         default: return nil
         }
     }
 
-    /// Codex's version in its user agent ("<client>/0.163.0 (Mac OS …) …"); nil when it is not there.
-    static func version(_ agent: Any?) -> String? {
-        guard let agent = agent as? String, let slash = agent.firstIndex(of: "/") else { return nil }
-        let version = agent[agent.index(after: slash)...].prefix { $0.isNumber || $0 == "." }
-        return version.isEmpty ? nil : String(version)
-    }
+    /// The name something's MCP server has in a thread's config.
+    static let server = "something"
 }
 
 extension Driving {

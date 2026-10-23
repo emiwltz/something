@@ -58,16 +58,16 @@ asking; everything else it does asks you, as your agent's own settings decide.
 
 something lends your assistant its own commands as tools, `something_guide`, `something_new` and `something_check`:
 something runs them itself, outside any sandbox of the agent, one at a time, and gives it what they printed. Claude
-Code and OpenCode get them from `something mcp`, a small MCP server (Model Context Protocol, the standard way to give
-an agent tools) that the agent starts at launch; Codex gets them on its own channel (its dynamic tools); pi runs
-something's commands in its shell, which it does without asking anyway.
+Code, Codex and OpenCode get them from `something mcp`, a small MCP server (Model Context Protocol, the standard way to
+give an agent tools) that the agent starts for that conversation only; pi runs something's commands in its shell,
+which it does without asking anyway.
 
 For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and those three tools. Any
 other command asks you, `something open` included (something opens a new space by itself). For Codex it is its own
 sandbox, "workspace-write": it may change files and run commands in `~/something/spaces` (and its temporary folders),
-without the network; what the sandbox blocks asks you. Its sandbox cannot load a page, which is why it needs
-`something_check` (a Codex that does not take the tools, too old for instance, is not offered until you choose Look
-for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
+without the network, and call those three tools, approved by name; what the sandbox blocks asks you. Its sandbox
+cannot load a page, which is why it needs `something_check` (a Codex that cannot start the tools is not offered until
+you choose Look for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
 settings say. pi never asks, by design: it can run any command on your Mac, and the tour and the bar say so. "Ask
 Before Every Change", in the bar's agent menu, turns the exception off from the next conversation, the tools included.
 No space can see what you say to your assistant, or write to it.

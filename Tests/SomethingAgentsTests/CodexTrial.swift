@@ -28,7 +28,7 @@ import SomethingCore
     private let owner: Bool
     /// The real program this run placed (AssistantBuild.placeProgram), which its cleanup removes.
     private var placed: URL?
-    /// The words of each command the lent tools ran, and why Codex could not take them.
+    /// Why Codex could not take the tools something lends it.
     let lent = Lending()
 
     var home: URL { root.appendingPathComponent("codex") }
@@ -36,9 +36,9 @@ import SomethingCore
     let work: URL
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
-    /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces with an invented
-    /// `something` first in its PATH, and lent the check, which this clone's real program runs (plan A.4,
-    /// AssistantBuild.placeProgram), with the person's own temporary folder, as the app gives it.
+    /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces, and lent something's
+    /// tools, which this clone's real program serves over MCP (plan A.4, AssistantBuild.placeProgram), with the
+    /// person's own temporary folder, as the app gives it.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
          assistant: Assistant? = nil) throws {
         self.name = name
@@ -70,16 +70,11 @@ import SomethingCore
                            "PATH": "\((program as NSString).deletingLastPathComponent):/usr/bin:/bin", "SOMETHING_TRIAL_KEY": "test-key"]
         if let assistant {
             launch.assistant = assistant
-            environment["PATH"] = try AssistantBuild.tools(in: root) + ":" + environment["PATH"]!
             environment["TMPDIR"] = NSTemporaryDirectory()
             let program = try AssistantBuild.placeProgram()
             placed = program
-            environment["SOMETHING_TRIAL_PROGRAM"] = program.path
-            let check = Lent.program(program.path, environment: ["HOME": folders[1].path, "TMPDIR": NSTemporaryDirectory()])
-            launch.lent = Lent(tools: LentTool.all, run: { [lent] words in
-                lent.lock.withLock { lent.runs.append(words) }
-                return check(words)
-            }, refused: { [lent] kind, because in lent.refusals.append("\(kind): \(because)") })
+            launch.lent = Lent.own(program.path, tools: LentTool.all, environment: environment,
+                                   refused: { [lent] kind, because in lent.lock.withLock { lent.refusals.append("\(kind): \(because)") } })
         }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
                       folder: folders[2].path, environment: environment)
@@ -91,7 +86,7 @@ import SomethingCore
     }
 
     final class Exchange { var rows: [[String: Any]] = [["begin": true]] }
-    final class Lending: @unchecked Sendable { let lock = NSLock(); var runs: [[String]] = [], refusals: [String] = [] }
+    final class Lending: @unchecked Sendable { let lock = NSLock(); var refusals: [String] = [] }
 
     /// Adds `row`, runs `call`, then completes the row with what the call returned under `key`.
     private func row<T>(_ row: [String: Any], _ key: String, _ call: () throws -> T) rethrows -> T {
@@ -172,9 +167,12 @@ import SomethingCore
         var text = rows.compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
             .map { String(decoding: $0, as: UTF8.self) }.joined(separator: "\n") + "\n"
         for prefix in ["/private" + root.path, root.path] {
-            text = text.replacingOccurrences(of: prefix + "/work/shop", with: "/Users/example/shop")
+            text = text.replacingOccurrences(of: prefix + "/work/shop", with: "/Users/example/shop").replacingOccurrences(of: prefix + "/home/", with: "/Users/example/")
                 .replacingOccurrences(of: prefix + "/codex", with: "/Users/example/.codex").replacingOccurrences(of: prefix, with: "/Users/example/trial")
         }
+        // The program serving the tools, and the person's temporary folder it is given.
+        if let placed { text = text.replacingOccurrences(of: placed.deletingLastPathComponent().path, with: "/Users/example/bin") }
+        text = text.replacingOccurrences(of: NSTemporaryDirectory(), with: "/Users/example/tmp/")
         // Codex names the machine it runs on.
         text = text.replacingOccurrences(of: #""serverName":"[^"]*""#, with: #""serverName":"example-mac""#, options: .regularExpression)
         try? text.write(toFile: "\(folder)/\(name).jsonl", atomically: true, encoding: .utf8)
@@ -325,11 +323,12 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
 
     /// T-1 (plan A.2 #6): the standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
     /// The number to meet is two windows at most. `something check` cannot load a page in the sandbox (no window
-    /// server, the finding of slice S3), so each check goes through the tool something lends: something runs it.
+    /// server, the finding of slice S3), so each check goes through something's MCP server, which Codex starts outside
+    /// the sandbox, as guide and new do.
     @Test func theAssistantsStandardBuildInTheSandbox() async throws {
         let run = try CodexRun("assistant-build", assistant: .building)
         defer { run.cleanup() }
-        run.api.build = AssistantBuild.codexSteps(tools: run.root.appendingPathComponent("tools").path)
+        run.api.build = AssistantBuild.codexSteps()
         try await run.until("the thread") { run.state.thread != nil }
         _ = try run.send("Please run-build a board of my agents.")
         var asked: [String] = []
@@ -343,11 +342,13 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         let outputs = run.api.toolOutputs
         let loaded = outputs.suffix(AssistantBuild.checks.count).filter { $0.contains("snapshot") && !$0.contains("NO_WINDOW_SERVER") }
         print("T-1: \(asked.count) window(s) asked: \(asked); \(loaded.count) of \(AssistantBuild.checks.count) checks loaded the page.")
-        #expect(outputs.count == AssistantBuild.codexSteps(tools: "").count)
+        #expect(outputs.count == AssistantBuild.codexSteps().count)
         // Seen on 0.163.0: nothing asks, and every check, run by something outside the sandbox, loads the page.
         #expect(asked.isEmpty && loaded.count == AssistantBuild.checks.count, "T-1 changed: \(asked), \(outputs)")
-        #expect(run.lent.runs == AssistantBuild.checks.map { $0.split(separator: " ").dropFirst().map(String.init) })
-        #expect(run.lent.refusals.isEmpty)
+        let lent = run.items.filter { $0.tool?.name.hasPrefix("something_") == true }
+        #expect(lent.map(\.text) == ["something guide --print", "something new agents-board --from agents"] + AssistantBuild.checks, "shown as the commands something ran")
+        #expect(lent.allSatisfy { $0.tool?.status == "done" })
+        #expect(run.lent.lock.withLock { run.lent.refusals }.isEmpty)
         let page = try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8)
         #expect(page.contains("Invented three"), "the patches were applied in the sandbox")
         try await run.finish()

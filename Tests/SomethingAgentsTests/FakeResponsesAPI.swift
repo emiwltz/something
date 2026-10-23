@@ -154,8 +154,11 @@ final class FakeResponsesAPI {
                            "item": ["type": "message", "id": item, "role": "assistant", "content": [["type": "output_text", "text": text]]]])
         case .call(let name, let arguments):
             let arguments = String(decoding: try! JSONSerialization.data(withJSONObject: arguments, options: [.sortedKeys]), as: UTF8.self)
-            events.append(["type": "response.output_item.done", "output_index": 0,
-                           "item": ["type": "function_call", "id": "fc_fake\(number)", "call_id": "call_fake\(number)", "name": name, "arguments": arguments]])
+            // "<namespace>.<name>" calls a tool of a namespace, as Codex offers an MCP server's (mcp__something).
+            let parts = name.split(separator: ".", maxSplits: 1).map(String.init)
+            var item: [String: Any] = ["type": "function_call", "id": "fc_fake\(number)", "call_id": "call_fake\(number)", "name": parts.last ?? name, "arguments": arguments]
+            if parts.count == 2 { item["namespace"] = parts[0] }
+            events.append(["type": "response.output_item.done", "output_index": 0, "item": item])
         }
         events.append(["type": "response.completed", "response": ["id": id, "status": "completed", "output": [],
                                                                   "usage": ["input_tokens": 10, "input_tokens_details": ["cached_tokens": 0], "output_tokens": 5,

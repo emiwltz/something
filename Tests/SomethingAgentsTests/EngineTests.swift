@@ -365,7 +365,7 @@ import SomethingCore
         let place = try Place()
         defer { place.remove() }
         let engine = Engine.throwaway(place.environment)
-        let lent = Lent(run: { _ in Lent.Reply(ok: true, text: "") }, refused: { _, _ in })
+        let lent = Lent(run: { _ in Lent.Reply(ok: true, text: "") }, server: (["/Users/example/bin/something", "mcp"], [:]), refused: { _, _ in })
         _ = try engine.launchAssistant("codex", folder: place.work.path, askEverything: false, lent: lent)
         _ = try engine.launchAssistant("codex", folder: place.work.path, askEverything: true, lent: lent)
         _ = try engine.launch("codex", folder: place.work.path, model: nil, mode: nil, effort: nil)
@@ -375,8 +375,8 @@ import SomethingCore
                 .flatMap { $0.split(separator: "\n").filter { $0.contains("\"thread/start\"") }.map(String.init) }
         }
         try await until("three threads") { starts().count == 3 }
-        #expect(starts().filter { $0.contains("\"dynamicTools\"") }.count == 1)
-        #expect(starts().filter { $0.contains("\"dynamicTools\"") && $0.contains("workspace-write") }.count == 1, "the building assistant's")
+        #expect(starts().filter { $0.contains("\"mcp_servers\"") }.count == 1)
+        #expect(starts().filter { $0.contains("\"mcp_servers\"") && $0.contains("workspace-write") }.count == 1, "the building assistant's")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         try await until("the stop") { stopped }

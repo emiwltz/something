@@ -19,10 +19,8 @@ final class Replay {
     /// What a Codex driver scheduled (its interrupt timeout), run by a {"timeout": true} row; and whether it quit.
     var scheduled: [() -> Void] = []
     var quit = false
-    /// The words of each command a lent tool ran, and why the agent could not take the tools.
-    var lentRuns: [[String]] = [], refusals: [String] = []
-    /// What the lent commands give, in turn; an empty report once used up.
-    var reports: [Lent.Reply] = []
+    /// Why the agent could not take the tools something lends it.
+    var refusals: [String] = []
 
     /// A Claude launched in /Users/example/shop as agent claude-1; with `assistant`, the person's assistant, in
     /// /Users/example/something/spaces.
@@ -39,20 +37,15 @@ final class Replay {
     private init(unstarted: Void) {}
 
     /// A Codex launched in /Users/example/shop as agent codex-1, continuing `resume` when given; with `assistant`, the
-    /// person's assistant, in /Users/example/something/spaces, lent the check, whose commands give `reports` in turn
-    /// (an empty report once they are used up), at once.
-    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false,
-                      reports: [Lent.Reply] = []) -> Replay {
+    /// person's assistant, in /Users/example/something/spaces, lent something's tools, served by an invented program.
+    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false) -> Replay {
         var launch = Launch(agent: "codex-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
                             effort: effort, thread: resume ?? "", resume: resume != nil)
         launch.assistant = assistant ? .building : nil
         let replay = Replay(unstarted: ())
-        replay.reports = reports
         if assistant {
-            launch.lent = Lent(tools: LentTool.all, run: { [unowned replay] words in
-                replay.lentRuns.append(words)
-                return replay.reports.isEmpty ? Lent.Reply(ok: true, text: "") : replay.reports.removeFirst()
-            }, refused: { [unowned replay] kind, because in replay.refusals.append("\(kind): \(because)") }, hop: { work, then in work(); then() })
+            launch.lent = Lent(tools: LentTool.all, run: { _ in Lent.Reply(ok: false, text: "Invented: run by the server.") }, server: (["/Users/example/bin/something", "mcp"], ["TMPDIR": "/Users/example/tmp/"]),
+            refused: { [unowned replay] kind, because in replay.refusals.append("\(kind): \(because)") }, hop: { work, then in work(); then() })
         }
         replay.start("codex", launch)
         return replay
@@ -108,12 +101,7 @@ final class Replay {
         let resume = rows.first?["resume"] as? String
         let model = rows.first?["model"] as? String
         let assistant = rows.first?["assistant"] as? Bool ?? false
-        // A lent command gives what it gave in the recording: the text something sent back, in turn.
-        let reports = rows.compactMap { (($0["something"] as? [String: Any])?["result"] as? [String: Any]) }.compactMap { result -> Lent.Reply? in
-            guard let text = (result["contentItems"] as? [[String: Any]])?.first?["text"] as? String else { return nil }
-            return Lent.Reply(ok: result["success"] as? Bool ?? false, text: text)
-        }
-        let replay = kind == "codex" ? codex(resume: resume, assistant: assistant, reports: reports) : kind == "opencode" ? opencode(model: model, resume: resume, driving: driving)
+        let replay = kind == "codex" ? codex(resume: resume, assistant: assistant) : kind == "opencode" ? opencode(model: model, resume: resume, driving: driving)
             : kind == "pi" ? pi(model: model, effort: rows.first?["effort"] as? String, resume: resume) : Replay(assistant: assistant)
         (replay.agent.driver as? ACPDriver)?.environment = database.map { ["OPENCODE_DB": $0] } ?? [:]
         var read = 0

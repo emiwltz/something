@@ -1,21 +1,20 @@
 // The standard build of a space by the person's assistant (plan A.2 #6), for the trials of the builders: the tool
-// sequence a real agent runs to make "Who is waiting for me" from a template, in each builder's tools (its shell, the
-// dynamic tool Codex is lent, or the tools something serves over MCP), and an invented `something` program that
+// sequence a real agent runs to make "Who is waiting for me" from a template, in each builder's tools (its shell, or
+// the tools something serves over MCP), and an invented `something` program that
 // answers that sequence's commands in the real one's shape, with invented text.
 // Tests/somethingTests/AssistantBuild.swift is a link to this file, for the app's own trial (AssistantTrial).
 import Darwin
 import Foundation
 
 enum AssistantBuild {
-    /// An invented `something`: `new` writes a page with three lines to edit, the others answer in a word. `check`
-    /// runs the real program instead when SOMETHING_TRIAL_PROGRAM names it (Codex's trial, to see it in the sandbox).
+    /// An invented `something`: `new` writes a page with three lines to edit, the others answer in a word.
     static let program = #"""
     #!/bin/sh
     case "$1" in
       guide) echo "Invented guide: a space is one HTML file in this folder." ;;
       new) printf '%s\n' '<!doctype html>' '<script type="application/json" id="something">{"contract": 1, "title": "Invented board", "rights": ["state", "send"]}</script>' \
              '<p>One</p>' '<p>Two</p>' '<p>Three</p>' > "$2.html" && echo "Made $2.html from the template $4." ;;
-      check) if [ -n "$SOMETHING_TRIAL_PROGRAM" ]; then exec "$SOMETHING_TRIAL_PROGRAM" "$@"; fi; echo "$2: no problems." ;;
+      check) echo "$2: no problems." ;;
       open) echo "Opened $2." ;;
       *) echo "Invented: no command $1." >&2; exit 2 ;;
     esac
@@ -110,15 +109,15 @@ enum AssistantBuild {
             + edits.map { ("Edit", ["file_path": page, "old_string": $0.0, "new_string": $0.1]) } + checks.map(bash)
     }
 
-    /// The build in Codex's tools: exec_command, where the page is read with `cat` and changed with `apply_patch`, as
-    /// Codex's own models do when no patch tool is offered (the fake model is offered none); and the check something
-    /// lends it, something_check, since `something check` cannot load a page in Codex's sandbox. `something` is called
-    /// by its path in `tools`: Codex runs each command in a login shell, whose PATH puts the system's folders first,
-    /// where an installed something may be. Codex asks by sandbox, not by command, so the path changes nothing it decides.
-    static func codexSteps(tools: String) -> [(name: String, arguments: [String: Any])] {
+    /// The build in Codex's tools, lent something's over MCP (Codex calls them by their name in the namespace
+    /// mcp__something): exec_command, where the page is read with `cat`, written with a heredoc and changed with
+    /// `apply_patch`, as Codex's own models do when no patch tool is offered (the fake model is offered none).
+    static func codexSteps() -> [(name: String, arguments: [String: Any])] {
+        func shell(_ command: String) -> (name: String, arguments: [String: Any]) { ("exec_command", ["cmd": command]) }
+        func lent(_ tool: String, _ arguments: [String: Any]) -> (name: String, arguments: [String: Any]) { ("mcp__something." + tool, arguments) }
         let patches = edits.map { "apply_patch <<'PATCH'\n*** Begin Patch\n*** Update File: agents-board.html\n@@\n-\($0.0)\n+\($0.1)\n*** End Patch\nPATCH" }
-        let named = (commands + ["cat agents-board.html"] + patches).map { $0.hasPrefix("something ") ? tools + "/" + $0 : $0 }
-        return named.map { ("exec_command", ["cmd": $0]) } + checked.map { ("something_check", $0) }
+        return [lent("something_guide", [:]), shell("ls"), lent("something_new", ["name": "agents-board", "from": "agents"]), shell("cat agents-board.html"),
+                shell("cat > agents-board.html <<'PAGE'\n\(page)PAGE")] + patches.map(shell) + checked.map { lent("something_check", $0) }
     }
 
     /// The arguments of something_check for each of `checks`.

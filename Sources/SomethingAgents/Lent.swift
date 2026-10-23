@@ -2,9 +2,8 @@
 // outside the agent's sandbox, and hands back what it printed: an agent whose sandbox reaches no window server (Codex's)
 // can still check a space, without asking anyone. The host says what each tool is (its name, what it does, the JSON
 // schema of its arguments and the words of the command it runs); the app says how its own program runs, at
-// composition time. A driver offers the tools on its agent's own channel: Codex's dynamic tools, or the MCP server
-// `something mcp` (MCP.swift) for an agent that takes MCP servers at launch. Nothing is written into the agent's
-// configuration.
+// composition time. A driver offers them through the MCP server `something mcp` (MCP.swift), passed on its agent's
+// own channel for that launch. Nothing is written into the agent's configuration.
 import Foundation
 import SomethingCore
 
@@ -104,8 +103,9 @@ public final class Lent: @unchecked Sendable, Equatable {
     }
 
     /// The tool something lends that an agent calls `name`: by its own name, or as a tool of the MCP server something
-    /// gives it, "something" (Claude Code's mcp__something__something_check, OpenCode's something_something_check, or
-    /// something.something_check from its code mode); with the command something runs for `arguments`, nil when they
+    /// gives it, "something" (Codex's something_check of the server something, Claude Code's
+    /// mcp__something__something_check, OpenCode's something_something_check, or something.something_check from its
+    /// code mode); with the command something runs for `arguments`, nil when they
     /// are wrong (every driver then shows "<tool> (wrong arguments)"). Nil for any other tool.
     package static func called(_ name: String, _ arguments: Any?) -> (name: String, command: String?)? {
         guard let tool = LentTool.all.first(where: { tool in ["", "mcp__something__", "something_", "something."].contains { $0 + tool.name == name } }) else { return nil }
