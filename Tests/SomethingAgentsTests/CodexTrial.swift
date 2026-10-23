@@ -1,4 +1,4 @@
-// Trial T-2: CodexDriver against the REAL codex program, which talks to FakeResponsesAPI instead of a model. It runs
+// CodexTrial: CodexDriver against the REAL codex program, which talks to FakeResponsesAPI instead of a model. It runs
 // only when asked, since it needs Codex on this Mac:
 //
 //   SOMETHING_TRIAL_CODEX=/opt/homebrew/bin/codex swift test --filter CodexTrial
@@ -7,7 +7,7 @@
 // config.toml declares a model provider that points at the fake, with a made-up key given for the trial only; no
 // login is there, so nothing reaches a real model or the person's ~/.codex. Two features under development are
 // enabled for the trial only, so the fake model can ask a question and ask for more permissions; and the feature that
-// starts Codex's background daemon is on, the worst case a stranger may have, for K-X1.
+// starts Codex's background daemon is on, the worst case a stranger may have, for the background-daemon case.
 // SOMETHING_TRIAL_RECORD=<folder> also writes each case as an exchange in the format of Tests/Exchanges/codex, its
 // paths made /Users/example: the raw material of a replay.
 import Foundation
@@ -184,7 +184,7 @@ import SomethingCore
 /// The codex program the trial runs, when asked for and there.
 let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
-@Suite(.serialized, .enabled(if: trialCodex != nil, "T-2 needs Codex: set SOMETHING_TRIAL_CODEX to its program's path."))
+@Suite(.serialized, .enabled(if: trialCodex != nil, "CodexTrial needs Codex: set SOMETHING_TRIAL_CODEX to its program's path."))
 @MainActor struct CodexTrial {
 
     @Test func aTurnStartsAndEnds() async throws {
@@ -325,7 +325,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
 
     /// The standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
     /// The number to meet is two windows at most. `something check` cannot load a page in the sandbox (no window
-    /// server, the finding of slice S3), so each check goes through something's MCP server, which Codex starts outside
+    /// server, as seen with Codex 0.163.0), so each check goes through something's MCP server, which Codex starts outside
     /// the sandbox, as guide and new do.
     @Test func theAssistantsStandardBuildInTheSandbox() async throws {
         let run = try CodexRun("assistant-build", assistant: .building)
@@ -343,10 +343,10 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         }
         let outputs = run.api.toolOutputs
         let loaded = outputs.suffix(AssistantBuild.checks.count).filter { $0.contains("snapshot") && !$0.contains("NO_WINDOW_SERVER") }
-        print("T-1: \(asked.count) window(s) asked: \(asked); \(loaded.count) of \(AssistantBuild.checks.count) checks loaded the page.")
+        print("CodexTrial build: \(asked.count) window(s) asked: \(asked); \(loaded.count) of \(AssistantBuild.checks.count) checks loaded the page.")
         #expect(outputs.count == AssistantBuild.codexSteps().count)
         // Seen on 0.163.0: nothing asks, and every check, run by something outside the sandbox, loads the page.
-        #expect(asked.isEmpty && loaded.count == AssistantBuild.checks.count, "T-1 changed: \(asked), \(outputs)")
+        #expect(asked.isEmpty && loaded.count == AssistantBuild.checks.count, "the sandboxed build changed: \(asked), \(outputs)")
         let lent = run.items.filter { $0.tool?.name.hasPrefix("something_") == true }
         #expect(lent.map(\.text) == ["something guide --print", "something new agents-board --from agents"] + AssistantBuild.checks, "shown as the commands something ran")
         #expect(lent.allSatisfy { $0.tool?.status == "done" })
@@ -429,7 +429,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         try await first.finish()
     }
 
-    /// Closing its input ends Codex cleanly; and a stdio app-server leaves no background daemon (K-X1).
+    /// Closing its input ends Codex cleanly; and a stdio app-server leaves no background daemon.
     @Test func closingTheInputStopsCleanly() async throws {
         let run = try CodexRun("stop")
         defer { run.cleanup() }

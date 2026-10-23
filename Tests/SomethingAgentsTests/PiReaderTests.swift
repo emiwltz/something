@@ -321,7 +321,7 @@ final class PiHome {
             Running(pid: 54100, parent: 1, group: 54100, started: started, name: "goose", arguments: ["goose"], folder: "/Users/example/blog"),
             Running(pid: 54200, parent: 1, group: 54200, started: started, name: "node", arguments: ["node", "server.js"], folder: "/Users/example/shop"),
             Running(pid: 54300, parent: 1, group: 54300, started: started, name: "qwen", arguments: ["qwen"]),
-            // The paid agents something only knows by name (C7): DeepSeek Harness and ZCode are Node programs.
+            // The paid agents something only knows by name: DeepSeek Harness and ZCode are Node programs.
             Running(pid: 54400, parent: 1, group: 54400, started: started, name: "node", arguments: ["node", "/opt/example/bin/dsh", "tui"], folder: "/Users/example/garden"),
             Running(pid: 54500, parent: 1, group: 54500, started: started, name: "node", arguments: ["node", "/Users/example/.local/bin/zcode"], folder: "/Users/example/cart"),
             Running(pid: 54600, parent: 1, group: 54600, started: started, name: "droid", arguments: ["droid"], folder: "/Users/example/docs"),

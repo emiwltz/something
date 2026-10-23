@@ -31,11 +31,14 @@ Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, 
 Sources/SomethingAgents/   the host: the engine, the watch, the programs, the lent tools (Lent.swift), and what an agent
                            provides (AgentDescriptor, Driving, Driver, Reader in Extension.swift and Driver.swift)
 Sources/Agent*/            one target per agent family: AgentClaude, AgentCodex, AgentACP (one driver for the Agent
-                           Client Protocol, a profile per agent), AgentPi (pi, and OMP's reader), AgentAmp
+                           Client Protocol, a profile per agent: OpenCode, OMP, Cursor; and Antigravity's descriptor),
+                           AgentPi (pi, and OMP's reader), AgentAmp
 Sources/something/         the command and the Mac app; Extensions.swift is the only list of the agents
 share/                     what the app reads at run time: something.js, the templates, the guide, the skill, the
                            assistant's AGENTS.md, the contract as data (share/contract/)
-Tests/                     the Swift suites, recorded exchanges with invented text (Exchanges/), something.js's tests
+Tests/                     the Swift suites; Fixtures/ (invented agent homes the readers read); Exchanges/ (recorded
+                           exchanges, invented text); something.js's tests. somethingTests links three helpers from
+                           SomethingAgentsTests (AssistantBuild, FakeMessagesAPI, LeavesNothing): change them there
 packaging/, tools/         Info.plist, the icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh
 ```
 
@@ -51,8 +54,8 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
    README's table of agents and the guide (its kinds and limits); the tests hold the shape and the README's table to
    the registry.
 4. **A driven agent is a builder.** Add its kind to `Tests/Exchanges/driven.txt` with a recorded build
-   (`Tests/Exchanges/<kind>/assistant-build.jsonl`, from a test session with invented text) that makes and checks a
-   space without asking the person. An agent that cannot is only seen, with its reason.
+   (`Tests/Exchanges/<kind>/assistant-build.jsonl`, from a test session with invented text, see "Trials") that makes
+   and checks a space without asking the person. An agent that cannot is only seen, with its reason.
 
 ## What must stay true
 
@@ -103,7 +106,7 @@ What is committed here is public, and stays in the history even when a later com
 ## How to work
 
 - **Remove first.** Before writing code: delete, reuse, document. Code comes last.
-- **Small verified slices.** One commit per slice that is tested and works.
+- **Small verified steps.** One commit per step that is tested and works.
 - **A choice nothing covers:** if it is implementation, take the smallest reversible option, note it in the commit, go
   on. If it changes what the product is or what the README promises, ask Emi.
 - **Keep the paperwork small.** The documents are the README, this file and the guide. No progress logs, no plan files.
@@ -118,6 +121,9 @@ swift build
 swift test
 node --test Tests/something-js.test.mjs    # name the file: node 22 does not take a folder
 ```
+
+`perl -e 'alarm 900; exec @ARGV' swift test` stops a hung run after 15 minutes (CI stops it after 20). A hang usually
+means a test reached a real program, which `TestRunGuard` should have refused.
 
 - **The Command Line Tools alone.** A newcomer has no Xcode. On a Mac with Xcode, also run
   `DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build`. Some SwiftUI attributes are macros only Xcode ships
@@ -138,6 +144,20 @@ node --test Tests/something-js.test.mjs    # name the file: node 22 does not tak
   files; drivers against the real programs. Session content is private: never print it, log it, copy it off the
   machine, or paste it anywhere. Describe shapes, not content.
 
+**Trials**, with real agents, run only when asked, each in a throwaway home with a fake model and a made-up key; the
+header of each `*Trial.swift` says what it proves.
+
+- `SOMETHING_TRIAL_<KIND>=<program>` (CLAUDE, CODEX, OPENCODE, PI) runs that kind's trials, for example
+  `SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter ClaudeTrial` (also `ClaudeReaderTrial`,
+  `AssistantTrial`, `CodexTrial`, `OpenCodeTrial`, `PiTrial`, `ReadersTrial`).
+- `SOMETHING_TRIAL_RECORD=<folder>` also writes each case as an exchange, paths made `/Users/example`: the raw
+  material of `Tests/Exchanges`. `something try <kind> [--record <file>] [--plan-b] [--assistant]` drives one agent
+  by hand from a terminal; record only a throwaway session whose text is invented.
+- `SOMETHING_TRIAL_REAL_<KIND>=1` (CLAUDE, CODEX, OPENCODE, PI, OMP) and `SOMETHING_TRIAL_COST=1` read this Mac's
+  own sessions, read-only, and print counts only. `SOMETHING_TRIAL_REST=1` measures the app's timers at rest.
+- `SOMETHING_GALLERY=<folder> swift test --filter GalleryTests` draws every window to PNGs, to look at.
+  After changing a template, run `tools/previews.sh` and commit its pictures.
+
 **Tests leave nothing behind.**
 
 - Any `.app` is made under `$TMPDIR`, then unregistered (`lsregister -u`) and removed; `PackagingTests` checks that
@@ -149,6 +169,19 @@ node --test Tests/something-js.test.mjs    # name the file: node 22 does not tak
 - These counts are the same before and after one `swift test` and one clean-clone run:
   `ls -d $TMPDIR/com.apple.WebKit.*+something-* | wc -l`, `ls $TMPDIR | grep -c '^something'`,
   `lsregister -dump | grep -c 'something.app'`.
+
+## Releasing
+
+Emi's gesture, after the full trial on a fresh virtual machine (below).
+
+1. Tag `vX.Y.Z` on `main` and push the tag; `shasum -a 256` the tag's tarball from GitHub.
+2. Put that url and sha256 in both formulas, `packaging/homebrew/something.rb` and `packaging/homebrew/tap/Formula/`
+   (`PackagingTests` keeps them alike), and in the tap formula's `root_url` comment.
+3. Open a pull request on `emiwltz/homebrew-tap` with the tap formula; its `tests.yml` builds the bottles.
+4. Once it is green: `gh workflow run publish.yml -R emiwltz/homebrew-tap -f pull_request=<number>`.
+5. Then run the tap's `install.yml` by hand, and check `brew install emiwltz/tap/something` on a clean Mac.
+6. Update the README: "The version in Homebrew" and "Where it has run". The tap's workflows are copies of
+   `packaging/homebrew/tap/.github/workflows/`: change both together.
 
 ## Never without Emi
 

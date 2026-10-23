@@ -1,4 +1,4 @@
-// Trial T-4: PiDriver against the REAL pi program, which talks to FakeResponsesAPI's Chat Completions instead of a
+// PiTrial: PiDriver against the REAL pi program, which talks to FakeResponsesAPI's Chat Completions instead of a
 // model. It runs only when asked, since it needs pi on this Mac:
 //
 //   SOMETHING_TRIAL_PI=$HOME/.pi/agent/install/releases/<version>/node_modules/.bin/pi swift test --filter PiTrial
@@ -201,7 +201,7 @@ import SomethingCore
     /// folders, the work folder in pi's dashed form (its sessions folder) included, and for this Mac's home.
     func save() {
         guard let folder = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_RECORD"] else { return }
-        let first = note.merging(["note": "Recorded in trial T-4 (pi \(Driving.pi.tested), a fake model, invented text, paths made /Users/example)."]) { _, new in new }
+        let first = note.merging(["note": "Recorded with PiTrial (pi \(Driving.pi.tested), a fake model, invented text, paths made /Users/example)."]) { _, new in new }
         var text = ([first] + rows).compactMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
             .map { String(decoding: $0, as: UTF8.self) }.joined(separator: "\n") + "\n"
         func dashed(_ path: String) -> String { path.dropFirst().replacingOccurrences(of: "/", with: "-") }
@@ -217,7 +217,7 @@ import SomethingCore
 /// The pi program the trial runs, when asked for and there.
 let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
-@Suite(.serialized, .enabled(if: trialPi != nil, "T-4 needs pi: set SOMETHING_TRIAL_PI to its program's path."))
+@Suite(.serialized, .enabled(if: trialPi != nil, "PiTrial needs pi: set SOMETHING_TRIAL_PI to its program's path."))
 @MainActor struct PiTrial {
 
     /// The standard build of a space by the person's assistant, launched as the app launches it: pi

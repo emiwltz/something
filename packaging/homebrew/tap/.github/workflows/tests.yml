@@ -1,4 +1,4 @@
-# Goes into the tap emiwltz/homebrew-tap as .github/workflows/tests.yml (copied there on the first release day). It
+# Goes into the tap emiwltz/homebrew-tap as .github/workflows/tests.yml; change the tap's copy with it. It
 # is kept in this repository with the formula it serves, under packaging/homebrew/tap/, where GitHub does not run it.
 #
 # What `brew tap-new` generates (Homebrew 7.0.9, .github/workflows/tap-new-tests.yml), with three changes: the

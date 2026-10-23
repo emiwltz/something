@@ -66,7 +66,7 @@ import SomethingCore
         #expect(replay.items.first?.text == "Please run-sleep for me.")
     }
 
-    /// Recorded in T-1: the steer Claude still held is cancelled by the interrupt (`cancel_queued`) before it started.
+    /// Recorded with ClaudeTrial: the steer Claude still held is cancelled by the interrupt (`cancel_queued`) before it started.
     @Test func aSteerDroppedByAnInterrupt() throws {
         let replay = try Replay.play("steer-interrupt")
         #expect(replay.items.filter { $0.author == "person" }.map(\.text) == ["Please run-sleep for me."], "a steer never read is never shown")
@@ -88,7 +88,7 @@ import SomethingCore
         #expect(replay.fold.agent.options.mode?.map(\.value) == ["default", "acceptEdits", "plan", "auto", "dontAsk"])
     }
 
-    /// The person's assistant builds a space (ClaudeTrial, T-2, recorded again in C7 with the tools something lends it
+    /// The person's assistant builds a space (recorded with ClaudeTrial, with the tools something lends it
     /// over MCP): thirteen steps, none of which asks the person; each shows it was allowed by a rule (the launch's, or
     /// Claude's own for `ls` and the read), and each lent tool as the command something ran.
     @Test func assistantBuild() throws {
@@ -111,7 +111,7 @@ import SomethingCore
         #expect(tools.filter { $0.decision?.by == "rule" }.map(\.text) == ["ls", "/Users/example/something/spaces/agents-board.html"])
     }
 
-    /// S12: the model's server was busy twice (529); the assistant's detail says each retry, then nothing once the
+    /// The model's server was busy twice (529); the assistant's detail says each retry, then nothing once the
     /// model answered.
     @Test func assistantRetry() throws {
         let replay = try Replay.play("assistant-retry")
@@ -231,9 +231,9 @@ import SomethingCore
         #expect(replay.fold.agent.error == AgentError(code: "AGENT_ERROR", message: "Invented: too many turns."))
     }
 
-    /// The shape Claude Code 2.1.296 writes before each retry of a request the model's server refused (S11, a fake
+    /// The shape Claude Code 2.1.296 writes before each retry of a request the model's server refused (a fake
     /// server answering 401): the turn fails at the first one, not after ten retries over four minutes, for a space's
-    /// own Claude and for the assistant; only the assistant's detail keeps why (S12).
+    /// own Claude and for the assistant; only the assistant's detail keeps why.
     @Test(arguments: [false, true]) func aRefusedSignInFailsTheTurnAtTheFirstRetry(assistant: Bool) throws {
         let replay = Replay(assistant: assistant)
         _ = try replay.agent.send("Hello.", when: "next")
@@ -256,7 +256,7 @@ import SomethingCore
         #expect(replay.fold.agent.detail.isEmpty, "a new turn starts without it")
     }
 
-    /// Claude gives up after three 529s with a "<synthetic>" message (S12, measured): the turn fails with its words,
+    /// Claude gives up after three 529s with a "<synthetic>" message (measured on 2.1.296): the turn fails with its words,
     /// and the retries stay in the assistant's detail, since they say why.
     @Test func retriesGivenUpStayAfterTheFailure() throws {
         let replay = Replay(assistant: true)
@@ -276,7 +276,7 @@ import SomethingCore
     }
 
     /// A Claude Code never signed in fails before any request, with a "<synthetic>" message whose `error` says so (the
-    /// shape 2.1.296 writes, S12): the assistant's detail says it, with no attempt, so the window says the same as for
+    /// shape 2.1.296 writes): the assistant's detail says it, with no attempt, so the window says the same as for
     /// a refused key.
     @Test func aClaudeNeverSignedInSaysSo() throws {
         let replay = Replay(assistant: true)

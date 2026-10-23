@@ -232,7 +232,7 @@ import SomethingCore
     }
 
     /// The number of the agent's last retry in this turn, nil when it did not retry. Not "of how many": Claude Code
-    /// says 10, but gives up after three in a row from a busy server (529, measured in S12).
+    /// says 10, but gives up after three in a row from a busy server (529, measured on 2.1.296).
     var retry: Int? {
         guard case .number(let attempt)? = apiRetry["attempt"] else { return nil }
         return Int(attempt)

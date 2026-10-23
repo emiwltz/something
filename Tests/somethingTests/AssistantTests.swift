@@ -13,11 +13,11 @@ import WebKit
 @MainActor @Suite(.serialized, .leavesNothing("something-assistant-")) struct AssistantTests {
     /// A fake `claude`: it keeps each line it reads in $HOME/out/input and its arguments in $HOME/out/arguments, and
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a Claude Code never
-    /// signed in gives (the shape Claude Code 2.1.296 writes, S12). For the gallery, "clock in the corner" fails for
+    /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "counters bigger" retries its model twice and never ends its turn, and "darker header"
-    /// retries a refused sign-in once, then fails its turn (S12, the shapes Claude Code 2.1.296 writes).
+    /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes).
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -327,7 +327,7 @@ import WebKit
         await finish(home, model)
     }
 
-    /// S12: while Claude Code retries its model, the status line says so; a refused sign-in fails the turn at once,
+    /// While Claude Code retries its model, the status line says so; a refused sign-in fails the turn at once,
     /// and the red row says only that it isn't signed in, with Try Again and Copy Command.
     @Test func theStatusLineSaysWhyTheAssistantWaits() async throws {
         let (home, model) = try assistant()

@@ -130,9 +130,9 @@ struct AssistantTrial {
         }
     }
 
-    /// Plan S11: a Claude Code never signed in fails at the first message, and the drawer's red row says what it said;
+    /// A Claude Code never signed in fails at the first message, and the drawer's red row says what it said;
     /// signed in with a key the model's server refuses (401), it fails at once too, where Claude Code alone retries
-    /// for about four minutes; a busy model server (529) is said in the status line at each retry (S12), until
+    /// for about four minutes; a busy model server (529) is said in the status line at each retry, until
     /// Claude Code gives up and the red row says so; once the server is free, Try Again gets an answer; after 30
     /// idle minutes the agent is stopped, the drawer says so, and the next message starts a new one.
     @Test func signedOutThenRefusedThenTryAgainThenTheIdleStop() async throws {
@@ -157,7 +157,7 @@ struct AssistantTrial {
             #expect(model.light == .error && model.status == nil && model.signedOut)
             print("AssistantTrial: a refused key showed after \(Int(Date().timeIntervalSince(asked))) s.")
 
-            // S12: a busy model server (529) is retried by Claude Code, and the status line says each retry.
+            // A busy model server (529) is retried by Claude Code, and the status line says each retry.
             (api.refusing, api.overloading) = (false, 3)
             let busy = Date()
             model.tryAgain()
@@ -186,7 +186,7 @@ struct AssistantTrial {
         }
     }
 
-    /// Plan S11: Use Template makes a space and opens it; its rights are asked once, as a space the person chose; the
+    /// Use Template makes a space and opens it; its rights are asked once, as a space the person chose; the
     /// drawer offers to make it theirs; the agent edits it and the open space reloads with the edit; Info shows the
     /// rights as answered. Then Quit asks, says the assistant is running, and stops it.
     @Test func aTemplateIsMadeYoursThenQuitStopsTheAssistant() async throws {

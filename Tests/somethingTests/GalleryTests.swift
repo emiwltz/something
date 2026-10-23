@@ -3,7 +3,7 @@
 // permission of macOS (a screenshot would need Screen Recording). Each window is drawn in the light appearance, then
 // in the dark one (its file ends in -dark.png). A window never shown is drawn as an inactive one: default buttons
 // without the accent color, switches that are on in gray (making the windows report themselves key changes nothing,
-// S11 tried). It runs only when SOMETHING_GALLERY names a folder:
+// it was tried). It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
 import SwiftUI

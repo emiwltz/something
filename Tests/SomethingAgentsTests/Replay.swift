@@ -68,7 +68,7 @@ final class Replay {
         return Replay(kind, launch, driving: driving)
     }
 
-    /// The environment of something's MCP server in the recordings of `something try --assistant` (C1, C6).
+    /// The environment of something's MCP server in the recordings of `something try --assistant`.
     static let server = ["SOMETHING_HOME": "/Users/example", "TMPDIR": "/Users/example/tmp/"]
 
     /// An OpenCode launched in /Users/example/shop as agent opencode-1, continuing `resume` when given; with `driving`,

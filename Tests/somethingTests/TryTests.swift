@@ -75,9 +75,9 @@ struct TryTests {
         #expect(DeveloperTrial.main(["claude", "--record"], registry: .app) == 2, "the words begin with try")
     }
 
-    /// A forced plan B is for a kind that has one: any other is refused, in 0.2's words.
+    /// A forced plan B is for a kind that has one: any other is refused, in these words.
     @Test func aPlanBItsKindDoesNotHaveIsRefused() {
         guard case .failure(let wrong) = DeveloperTrial.parse(["try", "codex", "--plan-b"], registry: .app) else { Issue.record("codex --plan-b was taken"); return }
-        #expect(wrong.message == "something try: --plan-b is for claude only.", "the 0.2 wording stays")
+        #expect(wrong.message == "something try: --plan-b is for claude only.", "the wording stays")
     }
 }

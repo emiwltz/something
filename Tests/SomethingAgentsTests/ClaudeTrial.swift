@@ -1,4 +1,4 @@
-// Trial T-1: ClaudeDriver against the REAL claude program, which talks to FakeMessagesAPI instead of a model. It runs
+// ClaudeTrial: ClaudeDriver against the REAL claude program, which talks to FakeMessagesAPI instead of a model. It runs
 // only when asked, since it needs Claude Code on this Mac:
 //
 //   SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter ClaudeTrial
@@ -159,7 +159,7 @@ final class Stopped: @unchecked Sendable { var done = false }
 /// The claude program the trial runs, when asked for and there.
 let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
-@Suite(.serialized, .enabled(if: trialClaude != nil, "T-1 needs Claude Code: set SOMETHING_TRIAL_CLAUDE to its program's path."))
+@Suite(.serialized, .enabled(if: trialClaude != nil, "ClaudeTrial needs Claude Code: set SOMETHING_TRIAL_CLAUDE to its program's path."))
 @MainActor struct ClaudeTrial {
 
     @Test func aTurnStartsAndEnds() async throws {
@@ -380,7 +380,7 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
         try await run.finish()
     }
 
-    /// S12: while the model's server is busy (529), Claude retries, and the assistant shows each retry
+    /// While the model's server is busy (529), Claude retries, and the assistant shows each retry
     /// (`detail.apiRetry`) until the model answers.
     @Test func theAssistantShowsEachRetry() async throws {
         let run = try await ClaudeRun("assistant-retry", assistant: .building)

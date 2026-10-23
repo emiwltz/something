@@ -29,7 +29,7 @@ extension Engine {
 
 extension Registry {
     /// Every agent described by the Agent* targets, as the app registers them (Extensions.swift): DescriptorsTests and
-    /// somethingTests' ExtensionsTests hold both lists to 0.2's.
+    /// somethingTests' ExtensionsTests hold both lists to the same literal tables.
     static let described = Registry([.claude, .codex, .opencode, .pi, .omp(reader: OMP.reader), .antigravity, .amp, .cursor], others: [
         "gemini": "Gemini CLI", "qwen": "Qwen Code", "goose": "Goose", "crush": "Crush", "droid": "Factory Droid",
         "copilot": "GitHub Copilot CLI", "auggie": "Auggie", "dsh": "DeepSeek Harness", "zcode": "ZCode",

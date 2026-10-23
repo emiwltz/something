@@ -8,7 +8,7 @@ import Testing
 import SomethingCore
 
 @Suite struct CodexReplayTests {
-    /// The person's assistant builds a space in the sandbox (CodexTrial, T-1) with the tools something's MCP server
+    /// The person's assistant builds a space in the sandbox (recorded with CodexTrial) with the tools something's MCP server
     /// lends it: nothing asks, and each lent call is shown as the command something ran.
     @Test func assistantBuild() throws {
         let replay = try Replay.play("assistant-build", kind: "codex")

@@ -1,6 +1,5 @@
-// The tables computed from the agents' descriptors (one file per Agent* target) against the literal tables of 0.2, kept here
-// only: moving them into descriptors changed no value. The same for what each driver said of itself in 0.2, now its
-// kind's Driving.
+// The tables the agents' descriptors (one file per Agent* target) produce, written out literally so that a change to
+// one is deliberate. The same for what each driver says of itself, its kind's Driving.
 import Foundation
 import Testing
 @testable import SomethingAgents
@@ -12,7 +11,7 @@ import Testing
 import SomethingCore
 
 @Suite struct DescriptorsTests {
-    @Test func theTablesAreThoseOf0_2() {
+    @Test func theDescriptorsGiveTheseTables() {
         let agents = Registry.described.agents
         #expect(agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "cursor"])
         #expect(Dictionary(uniqueKeysWithValues: agents.compactMap { agent in agent.install.map { (agent.kind, $0) } }) == [
@@ -29,13 +28,12 @@ import SomethingCore
         #expect(Dictionary(uniqueKeysWithValues: Registry.described.agents.filter { !$0.asksAsMuch.isEmpty }.map { ($0.kind, $0.asksAsMuch) }) == ["claude": ["default", "plan"], "codex": ["on-request", "untrusted"], "opencode": ["build", "plan"], "omp": ["default", "plan"]])
         #expect(Registry.described.resumable == ["claude", "codex"])
         #expect(Registry.described.others.keys.sorted() == ["auggie", "copilot", "crush", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
-        // The core's contract 1 list is the floor, omp launchable since 0.3; amp, added in 0.3, is launched beyond it,
-        // and antigravity and cursor, added in 0.3, are only seen.
+        // The core's contract 1 list is the floor; amp is launched beyond it, and antigravity and cursor are only seen.
         #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.described.kinds.readOnly == ["antigravity", "cursor"])
         #expect(Registry.described.kinds.launchable == Set(BuildersTests.driven), "Tests/Exchanges/driven.txt lists the driven kinds")
     }
 
-    @Test func theSpecialCasesAreThoseOf0_2() {
+    @Test func theSpecialCases() {
         // Only Claude refuses another app's copy (ProgramsTests shows both copies refused), only pi has a bundled
         // folder, only Codex continues an unknown holder.
         let agents = Registry.described.agents
@@ -48,11 +46,11 @@ import SomethingCore
         // A process another agent's own reader claims, or a described agent's program, is never also an `other` agent.
         let claimed = Set(agents.map(\.kind)).union(agents.compactMap { $0.reader?([:]).programs }.joined()).subtracting(Running.interpreters)
         #expect(Set(Registry.described.others.keys).isDisjoint(with: claimed) && claimed.contains("agy"), "\(claimed)")
-        // The readers, in 0.2's order: one per agent, then the one for the others.
+        // The readers, in the registry's order: one per agent, then the one for the others.
         #expect(Registry.described.readers([:]).map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "cursor", "other"])
     }
 
-    @Test func whatEachDriverCanDoIsThatOf0_2() {
+    @Test func whatEachDriverCanDo() {
         // Each Driving names the kind of the descriptor that holds it.
         #expect(Registry.described.agents.allSatisfy { $0.driving == nil || $0.driving?.kind == $0.kind })
         #expect(Registry.described.launchable.mapValues(\.tested) == ["claude": "2.1.296", "codex": "0.163.0", "opencode": "2.0.20", "pi": "1.0.0", "omp": "18.8.6", "amp": "0.0.1792656060"])
@@ -75,7 +73,7 @@ import SomethingCore
             "codex": ["Ask when needed", "Ask before most commands", "Never ask (refuse what is not allowed)"],
             "opencode": ["Build", "Plan"], "pi": [], "omp": ["Default", "Plan"], "amp": [],
         ])
-        // In 0.2 only OpenCode's modes were not its driver's list alone (Engine.lowersAsking cast to ACPDriver).
+        // Only OpenCode lists more modes than its driver's own.
         #expect(Registry.described.launchable.filter(\.value.listsMoreModes).keys.sorted() == ["opencode"])
         #expect(Registry.described.launchable.filter(\.value.effortOnlyWhenOffered).keys.sorted() == ["claude", "codex", "omp", "opencode"])
         #expect(Registry.described.launchable.filter(\.value.picksThread).keys.sorted() == ["claude"])

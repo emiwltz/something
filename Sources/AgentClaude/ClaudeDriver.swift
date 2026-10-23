@@ -276,7 +276,7 @@ final class ClaudeDriver: Driver {
             if let tool = frame["tool_use_id"] as? String, let by, decisions[tool]?.by != "person" { decide(tool, Decision(by: by, outcome: "denied")) }
         case "api_retry":
             // Claude retries a refused sign-in or a server out of reach ten times over about four minutes, a busy
-            // server (529) three times, saying nothing else meanwhile (measured in S11 and S12). The assistant's window
+            // server (529) three times, saying nothing else meanwhile (measured on 2.1.296). The assistant's window
             // says each retry (`detail.apiRetry`, which no space sees: a space's own agents get no new fact). A refused
             // sign-in never passes by retrying: the turn fails at the first retry, and Claude is told to stop.
             guard turnOpen else { return }

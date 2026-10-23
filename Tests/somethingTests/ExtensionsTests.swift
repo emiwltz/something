@@ -6,11 +6,11 @@ import Testing
 @testable import something
 
 @Suite struct ExtensionsTests {
-    @Test func theAppRegistersTheAgentsOf0_2() {
+    @Test func theAppRegistersTheseAgents() {
         #expect(Registry.app.agents.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp", "cursor"])
         #expect(Registry.app.others.keys.sorted() == ["auggie", "copilot", "crush", "droid", "dsh", "gemini", "goose", "qwen", "zcode"])
         #expect(Registry.app.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.app.kinds.readOnly == ["antigravity", "cursor"])
-        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "amp"], "0.2's builders, in 0.2's order, then OMP and Amp")
+        #expect(Registry.app.builders.map(\.kind) == ["claude", "codex", "opencode", "pi", "omp", "amp"], "the builders, in the registry's order")
         #expect(InstallList.builders.map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
         #expect(InstallList.builders.map(\.command) == ["brew install --cask claude-code", "brew install --cask codex", "brew install opencode",
                                                          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
@@ -24,7 +24,7 @@ import Testing
 
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    /// Emi's rule for 0.3: every agent the app drives builds spaces too. SomethingAgentsTests' BuildersTests plays the
+    /// Every agent the app drives builds spaces too. SomethingAgentsTests' BuildersTests plays the
     /// build recorded for each kind of Tests/Exchanges/driven.txt through its driver; the app drives exactly those.
     @Test func everyDrivenAgentIsABuilderWithARecordedBuild() throws {
         let driven = try String(contentsOf: Self.root.appendingPathComponent("Tests/Exchanges/driven.txt"), encoding: .utf8).split(separator: "\n").map(String.init)
@@ -62,9 +62,9 @@ import Testing
         #expect(Set(kinds + ["other"]).isSubset(of: Set((types["Agent"]?["kind"] ?? []).map { String($0.dropFirst()) })))
     }
 
-    /// The sheet before a mode that lowers asking says what the mode lets the agent do, as 0.2 did: by the mode's
+    /// The sheet before a mode that lowers asking says what the mode lets the agent do: by the mode's
     /// name, whatever the agent (an OpenCode agent named auto reads as Claude Code's auto); any other mode "asks you less".
-    @Test func theModeWordsAreThoseOf0_2() {
+    @Test func theModeWords() {
         let cases = [("acceptEdits", "edits files without asking you"), ("auto", "decides by itself what to ask you"),
                      ("dontAsk", "never asks you, and does only what your settings already allow"),
                      ("never", "never asks you before it runs a command"), ("invented-agent", "asks you less"), ("default", "asks you less")]

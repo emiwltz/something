@@ -111,7 +111,7 @@ import SomethingCore
         #expect(replay.fold.agent.alive == false)
     }
 
-    /// Killed during a turn, OpenCode leaves its claim (T-3): the end and the claim are said in one error.
+    /// Killed during a turn, OpenCode leaves its claim (seen in OpenCodeTrial): the end and the claim are said in one error.
     @Test func killed() throws {
         let folder = try ACPDriverTests.folder()
         defer { try? FileManager.default.removeItem(at: folder) }

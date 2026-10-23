@@ -1,4 +1,4 @@
-# Goes into the tap emiwltz/homebrew-tap as .github/workflows/install.yml (copied there on the first release day). It
+# Goes into the tap emiwltz/homebrew-tap as .github/workflows/install.yml; change the tap's copy with it. It
 # is kept in this repository with the formula it serves, under packaging/homebrew/tap/, where GitHub does not run it.
 #
 # Installs something from this tap the way a person would, on GitHub's fresh Macs: tap, install (a bottle: no

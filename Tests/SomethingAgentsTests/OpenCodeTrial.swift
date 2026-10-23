@@ -1,4 +1,4 @@
-// Trial T-3: ACPDriver against the REAL opencode program, which talks to FakeResponsesAPI's Chat Completions instead of
+// OpenCodeTrial: ACPDriver against the REAL opencode program, which talks to FakeResponsesAPI's Chat Completions instead of
 // a model. It runs only when asked, since it needs OpenCode on this Mac:
 //
 //   SOMETHING_TRIAL_OPENCODE=/opt/homebrew/bin/opencode swift test --filter OpenCodeTrial
@@ -196,7 +196,7 @@ import SomethingCore
     /// With SOMETHING_TRIAL_RECORD, writes the rows to <folder>/<case>.jsonl, with /Users/example paths for the throwaway folders.
     func save() {
         guard let folder = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_RECORD"] else { return }
-        var note: [String: Any] = ["note": "Recorded in trial T-3 (opencode \(ACPProfile.opencode.tested), a fake model, invented text, paths made /Users/example)."]
+        var note: [String: Any] = ["note": "Recorded with OpenCodeTrial (opencode \(ACPProfile.opencode.tested), a fake model, invented text, paths made /Users/example)."]
         if let resume = resumed { note["resume"] = resume }
         if let model { note["model"] = model }
         if placed != nil { note["assistant"] = true }
@@ -212,7 +212,7 @@ import SomethingCore
 /// The opencode program the trial runs, when asked for and there.
 let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCODE"].flatMap { FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil }
 
-@Suite(.serialized, .enabled(if: trialOpenCode != nil, "T-3 needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
+@Suite(.serialized, .enabled(if: trialOpenCode != nil, "OpenCodeTrial needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
 @MainActor struct OpenCodeTrial {
 
     /// The standard build of a space by the person's assistant, launched as the app launches it,
@@ -404,7 +404,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
         #expect(missing.state.error?.code == "THREAD_NOT_FOUND")
     }
 
-    /// A kill mid-turn leaves OpenCode's claim on the conversation, and the agent's error says it (K-O2).
+    /// A kill mid-turn leaves OpenCode's claim on the conversation, and the agent's error says it.
     @Test func aKillLeavesTheClaimAndSaysSo() async throws {
         let run = try OpenCodeRun("killed")
         defer { run.cleanup() }

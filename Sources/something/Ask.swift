@@ -432,7 +432,7 @@ enum Ask {
     }
 
     /// What a mode that lowers asking lets the agent do, in plain words: by the mode's name, whichever agent's
-    /// descriptor says it, as 0.2 did.
+    /// descriptor says it.
     static func words(forMode mode: String) -> String {
         Registry.app.agents.lazy.compactMap { $0.modeWords[mode] }.first ?? "asks you less"
     }

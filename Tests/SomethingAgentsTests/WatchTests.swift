@@ -101,7 +101,7 @@ import SomethingCore
         watch.start(every: 3600) { _ in }
     }
 
-    /// Decision 3 of 0.3: while no window shows, the watch does not tick at all; the moment one shows, it ticks and
+    /// While no window shows, the watch does not tick at all; the moment one shows, it ticks and
     /// walks, then keeps the cadence of the moment. On a fake clock, which moves only when the test says.
     @Test func theWatchSleepsWhileNoWindowShows() async throws {
         let place = try EngineTests.Place(prefix: "watch-engine-")

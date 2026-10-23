@@ -1,4 +1,4 @@
-// Emi's rule for 0.3: every agent something drives is also a space builder. For each kind with a driver, its
+// Every agent something drives is also a space builder. For each kind with a driver, its
 // recorded build (Tests/Exchanges/<kind>/assistant-build.jsonl, a trial of the real program as the person's
 // assistant) is played through its driver, and must make and check a space, every tool done, nothing asked of the
 // person, no error. An agent without a passing build is not offered as driven: it stays seen, with the reason in its

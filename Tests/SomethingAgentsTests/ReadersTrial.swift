@@ -1,13 +1,13 @@
 // Trials of CodexReader and OpenCodeReader against the real programs and files. Each runs only when asked.
 //
-// T-2 and T-3, the reader's part: a REAL codex (`app-server`) and a REAL opencode (`acp`), each in the throwaway home
+// CodexTrial and OpenCodeTrial, the reader's part: a REAL codex (`app-server`) and a REAL opencode (`acp`), each in the throwaway home
 // of its driver's trial (CodexRun, OpenCodeRun: a fake model, deleted after), are read from their files and the
 // process table only, as agents started elsewhere, with the evidence of their liveness:
 //
 //   SOMETHING_TRIAL_CODEX=/opt/homebrew/bin/codex swift test --filter ReadersTrial
 //   SOMETHING_TRIAL_OPENCODE=/opt/homebrew/bin/opencode swift test --filter ReadersTrial
 //
-// T-10, each reader run once read-only on this Mac's own ~/.codex or OpenCode database. They print counts and
+// The own-sessions cases, each reader run once read-only on this Mac's own ~/.codex or OpenCode database. They print counts and
 // timings only, never a name, a path, a title or a text:
 //
 //   SOMETHING_TRIAL_REAL_CODEX=1 SOMETHING_TRIAL_REAL_OPENCODE=1 swift test --filter ReadersTrial
@@ -30,7 +30,7 @@ import SomethingCore
 @Suite(.serialized) @MainActor struct ReadersTrial {
     nonisolated static let environment = ProcessInfo.processInfo.environment
 
-    @Test(.enabled(if: trialCodex != nil, "T-2 needs Codex: set SOMETHING_TRIAL_CODEX to its program's path."))
+    @Test(.enabled(if: trialCodex != nil, "ReadersTrial needs Codex: set SOMETHING_TRIAL_CODEX to its program's path."))
     func aCodexIsReadWithItsLock() async throws {
         let run = try CodexRun("reader-elsewhere")
         defer { run.cleanup() }
@@ -44,7 +44,7 @@ import SomethingCore
         try await run.until("the turn") { run.state.state == "working" && run.items.count >= 1 }
         try await Task.sleep(nanoseconds: 1_000_000_000)
         let working = try #require(seen(), "the index or the day folders give the thread")
-        print("T-2 reader: working: alive \(String(describing: working.facts.alive)), evidence \(working.facts.evidence ?? "null"), turn open \(String(describing: working.facts.turnOpen))")
+        print("Codex reader: working: alive \(String(describing: working.facts.alive)), evidence \(working.facts.evidence ?? "null"), turn open \(String(describing: working.facts.turnOpen))")
         #expect(working.facts.alive == true && working.facts.evidence == "lock" && working.pid.map { processes.snapshot()[$0]?.group } == Int32(run.spawn.pid))
         #expect(StateMap.map(working.facts, now: Date()).state == "working" && working.facts.waiting == .unknown)
         try await run.until("the end of the turn", seconds: 30) { run.turns == ["done"] && run.state.state == "idle" }
@@ -57,16 +57,16 @@ import SomethingCore
         // The run's codex descends from this test, as something's own would: only another codex (the person's) leaves
         // the end unproven.
         let others = processes.snapshot().processes.values.filter { $0.name == "codex" && !processes.snapshot().descends($0.pid, from: getpid()) }
-        print("T-2 reader: ended: alive \(String(describing: ended.facts.alive)), evidence \(ended.facts.evidence ?? "null"), other codex processes on this Mac \(others.count)")
+        print("Codex reader: ended: alive \(String(describing: ended.facts.alive)), evidence \(ended.facts.evidence ?? "null"), other codex processes on this Mac \(others.count)")
         #expect(ended.facts.alive != true && ended.pid == nil)
         if others.isEmpty {
             #expect(ended.facts.alive == false && ended.facts.evidence == "process")
         } else {
-            print("T-2 reader: the check of \"no codex process, so ended\" is skipped: another codex runs on this Mac.")
+            print("Codex reader: the check of \"no codex process, so ended\" is skipped: another codex runs on this Mac.")
         }
     }
 
-    @Test(.enabled(if: trialOpenCode != nil, "T-3 needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
+    @Test(.enabled(if: trialOpenCode != nil, "ReadersTrial needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
     func anOpenCodeIsReadWithItsClaim() async throws {
         let run = try OpenCodeRun("reader-elsewhere")
         defer { run.cleanup() }
@@ -87,21 +87,21 @@ import SomethingCore
         }
         // Seen by another something (a pid no process has), this OpenCode is someone else's: it holds the claim it took.
         let held = try #require(seen(as: Int32.max))
-        print("T-3 reader: held: alive \(String(describing: held.facts.alive)), evidence \(held.facts.evidence ?? "null"), holder descends from the run \(held.pid.flatMap { snapshot[$0] }.map(descends) ?? false)")
+        print("OpenCode reader: held: alive \(String(describing: held.facts.alive)), evidence \(held.facts.evidence ?? "null"), holder descends from the run \(held.pid.flatMap { snapshot[$0] }.map(descends) ?? false)")
         #expect(held.facts.alive == true && held.facts.evidence == "claim" && StateMap.map(held.facts, now: Date()).state == "working")
         // Seen by the something that started it, its own server holds no claim of an agent seen elsewhere.
         let others = snapshot.processes.values.filter { $0.name == "opencode" && !descends($0) }
         let own = try #require(seen(as: getpid()))
-        print("T-3 reader: as its launcher: alive \(String(describing: own.facts.alive)), other OpenCode processes on this Mac \(others.count)")
+        print("OpenCode reader: as its launcher: alive \(String(describing: own.facts.alive)), other OpenCode processes on this Mac \(others.count)")
         if others.isEmpty { #expect(own.facts.alive == false && own.because["resume"] == OpenCodeReader.mayResume) }
         try await run.finish()
         let ended = try #require(seen(as: Int32.max))
-        print("T-3 reader: ended: alive \(String(describing: ended.facts.alive)), state \(StateMap.map(ended.facts, now: Date()).state)")
+        print("OpenCode reader: ended: alive \(String(describing: ended.facts.alive)), state \(StateMap.map(ended.facts, now: Date()).state)")
         #expect(ended.facts.alive != true && ended.facts.turnOpen == false && ended.because.isEmpty)
     }
 
-    /// T-10 for Codex: the reader once on this Mac's own ~/.codex, read-only. Counts and timings only.
-    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_CODEX"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_CODEX=1."))
+    /// The own-sessions case for Codex: the reader once on this Mac's own ~/.codex, read-only. Counts and timings only.
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_CODEX"] == "1", "The own-sessions case reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_CODEX=1."))
     func theCodexReaderOnThisMacsOwnSessions() {
         let reader = CodexReader(environment: ReadersTrial.environment)
         var opened = 0
@@ -109,8 +109,8 @@ import SomethingCore
         ReadersTrial.report("codex", reader) { opened }
     }
 
-    /// T-10 for OpenCode: the reader once on this Mac's own database, read-only. Counts and timings only.
-    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_OPENCODE"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_OPENCODE=1."))
+    /// The own-sessions case for OpenCode: the reader once on this Mac's own database, read-only. Counts and timings only.
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_OPENCODE"] == "1", "The own-sessions case reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_OPENCODE=1."))
     func theOpenCodeReaderOnThisMacsOwnSessions() {
         let reader = OpenCodeReader(environment: ReadersTrial.environment)
         var opened = 0
@@ -118,9 +118,9 @@ import SomethingCore
         ReadersTrial.report(reader.kind, reader) { opened }
     }
 
-    /// T-10 for pi and OMP: each reader once on this Mac's own ~/.pi or ~/.omp, read-only, then the fold of the five
+    /// The own-sessions case for pi and OMP: each reader once on this Mac's own ~/.pi or ~/.omp, read-only, then the fold of the five
     /// logs written last, however old, since a log idle for a day is not listed. Counts only.
-    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_PI"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_PI=1."))
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_PI"] == "1", "The own-sessions case reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_PI=1."))
     func thePiReaderOnThisMacsOwnSessions() throws {
         let reader = PiReader(environment: ReadersTrial.environment)
         var opened: [String] = []
@@ -132,7 +132,7 @@ import SomethingCore
         #expect(opened.allSatisfy { $0.hasSuffix(".jsonl") })
     }
 
-    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_OMP"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_OMP=1."))
+    @Test(.enabled(if: environment["SOMETHING_TRIAL_REAL_OMP"] == "1", "The own-sessions case reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_OMP=1."))
     func theOMPReaderOnThisMacsOwnSessions() throws {
         let reader = OMPReader(environment: ReadersTrial.environment)
         var opened: [String] = []
@@ -165,7 +165,7 @@ import SomethingCore
             for turn in file.log.turns { states[turn.state, default: 0] += 1 }
         }
         print("""
-        T-10 \(kind) files: \(paths.count) logs found, \(headers.compactMap { $0 }.count) with a readable header; the \(newest.count) newest: \(turns) turns, \(items) items, \
+        own sessions, \(kind) files: \(paths.count) logs found, \(headers.compactMap { $0 }.count) with a readable header; the \(newest.count) newest: \(turns) turns, \(items) items, \
         \(incomplete) incomplete, title \(titled), model \(models), effort \(efforts); turn states \(states.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }.joined(separator: ", ")); \
         ms per first read: \(ms.map { String(format: "%.1f", $0) }.joined(separator: ", "))
         """)
@@ -225,12 +225,12 @@ import SomethingCore
         let nulls = missing.map { key, isNull in "\(key) \(agents.filter(isNull).count)" }.joined(separator: ", ")
         let reading = seen.kinds[kind]
         print("""
-        T-10 \(kind): reader \(reading?.health ?? "none"), version found \(reading?.version != nil), note \(reading?.note != nil); \(agents.count) agents, \
+        own sessions, \(kind): reader \(reading?.health ?? "none"), version found \(reading?.version != nil), note \(reading?.note != nil); \(agents.count) agents, \
         \(threads.reduce(0) { $0 + $1.turns.count }) turns, \(threads.reduce(0) { $0 + $1.turns.reduce(0) { $0 + $1.items.count } }) items, \
         \(threads.filter { !$0.complete }.count) threads incomplete
-        T-10 \(kind): states \(count(agents.map(\.state))); evidence \(count(agents.map(\.evidence))); waiting \(count(agents.map(\.waiting)))
-        T-10 \(kind): alive \(count(agents.map { $0.alive.map(String.init) })); turn states \(count(threads.flatMap(\.turns).map(\.state))); null keys: \(nulls)
-        T-10 \(kind): files opened \(opened()); ms per tick: \(times.map { String(format: "%.1f", $0) }.joined(separator: ", "))
+        own sessions, \(kind): states \(count(agents.map(\.state))); evidence \(count(agents.map(\.evidence))); waiting \(count(agents.map(\.waiting)))
+        own sessions, \(kind): alive \(count(agents.map { $0.alive.map(String.init) })); turn states \(count(threads.flatMap(\.turns).map(\.state))); null keys: \(nulls)
+        own sessions, \(kind): files opened \(opened()); ms per tick: \(times.map { String(format: "%.1f", $0) }.joined(separator: ", "))
         """)
         #expect(reading?.health != "unreadable")
     }

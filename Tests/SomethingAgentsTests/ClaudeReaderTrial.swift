@@ -1,11 +1,11 @@
-// Trial T-6: a REAL claude started by hand, as a person does in a terminal (in a pseudo-terminal, through
+// ClaudeReaderTrial: a REAL claude started by hand, as a person does in a terminal (in a pseudo-terminal, through
 // /usr/bin/script), read by ClaudeReader as an agent started elsewhere. It talks to FakeMessagesAPI, in a throwaway
 // HOME and CLAUDE_CONFIG_DIR under $TMPDIR, deleted after. It runs only when asked, since it needs Claude Code:
 //
 //   SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter ClaudeReaderTrial
 //
 // The keys typed are the trial's own, into the claude it started: nothing reaches a claude the person runs.
-// T-10, the reader run once read-only on the person's own ~/.claude, is the second case. It prints counts only, never
+// The own-sessions case, the reader run once read-only on the person's own ~/.claude, is the second case. It prints counts only, never
 // a name, a path, a title or a text:
 //
 //   SOMETHING_TRIAL_REAL_CLAUDE=1 swift test --filter ClaudeReaderTrial
@@ -17,7 +17,7 @@ import Testing
 import SomethingCore
 
 @Suite(.serialized) struct ClaudeReaderTrial {
-    @Test(.enabled(if: trialClaude != nil, "T-6 needs Claude Code: set SOMETHING_TRIAL_CLAUDE to its program's path."))
+    @Test(.enabled(if: trialClaude != nil, "ClaudeReaderTrial needs Claude Code: set SOMETHING_TRIAL_CLAUDE to its program's path."))
     func aClaudeStartedByHandIsReadElsewhere() async throws {
         let api = try FakeMessagesAPI()
         // The real path, as Claude sees its folder: resolvingSymlinksInPath would drop /private, and the folder would not be trusted.
@@ -114,8 +114,8 @@ import SomethingCore
         #expect(ended.facts.ended && words(ended)?.state == "done", "screen: \(shown.tail)")
     }
 
-    /// T-10 for Claude: the reader once on this Mac's own ~/.claude, read-only. Counts only.
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["SOMETHING_TRIAL_REAL_CLAUDE"] == "1", "T-10 reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_CLAUDE=1."))
+    /// The own-sessions case for Claude: the reader once on this Mac's own ~/.claude, read-only. Counts only.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["SOMETHING_TRIAL_REAL_CLAUDE"] == "1", "The own-sessions case reads this Mac's own sessions: set SOMETHING_TRIAL_REAL_CLAUDE=1."))
     func theReaderOnThisMacsOwnSessions() {
         let reader = ClaudeReader(environment: ProcessInfo.processInfo.environment)
         var opened = 0, secrets = 0
@@ -139,11 +139,11 @@ import SomethingCore
                                                     ("error", { $0.error == nil })]
         let nulls = missing.map { key, isNull in "\(key) \(agents.filter(isNull).count)" }.joined(separator: ", ")
         print("""
-        T-10 claude: reader \(seen.kinds["claude"]?.health ?? "none"), \(agents.count) agents, \(threads.reduce(0) { $0 + $1.turns.count }) turns, \
+        own sessions, claude: reader \(seen.kinds["claude"]?.health ?? "none"), \(agents.count) agents, \(threads.reduce(0) { $0 + $1.turns.count }) turns, \
         \(threads.reduce(0) { $0 + $1.turns.reduce(0) { $0 + $1.items.count } }) items
-        T-10 claude: states \(count(agents.map(\.state))); evidence \(count(agents.map(\.evidence))); waiting \(count(agents.map(\.waiting)))
-        T-10 claude: alive \(count(agents.map { $0.alive.map(String.init) })); null keys: \(nulls)
-        T-10 claude: files opened \(opened), secrets opened \(secrets); ms per tick: \(times.map { String(format: "%.1f", $0) }.joined(separator: ", "))
+        own sessions, claude: states \(count(agents.map(\.state))); evidence \(count(agents.map(\.evidence))); waiting \(count(agents.map(\.waiting)))
+        own sessions, claude: alive \(count(agents.map { $0.alive.map(String.init) })); null keys: \(nulls)
+        own sessions, claude: files opened \(opened), secrets opened \(secrets); ms per tick: \(times.map { String(format: "%.1f", $0) }.joined(separator: ", "))
         """)
         #expect(secrets == 0)
     }

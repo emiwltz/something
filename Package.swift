@@ -4,10 +4,9 @@
 // may name.
 // SomethingAgents is the host (Foundation and Darwin): the engine, the watch, the programs, and the contract an agent
 // meets (AgentDescriptor, Driving, Driver, Reader). It names no agent.
-// Each Agent* target is one family of agents, behind that contract: AgentClaude, AgentCodex, AgentACP (one driver for
-// the Agent Client Protocol, a profile per agent: OpenCode, OMP), AgentPi (pi, and OMP's reader) and AgentAmp. One never
-// imports another. What they share with the host is `package` (seen by this package's targets only), or public where
-// the app needs it too.
+// Each Agent* target is one family of agents, behind that contract (AGENTS.md, "Layout", says which agents each
+// holds): AgentClaude, AgentCodex, AgentACP, AgentPi and AgentAmp. One never imports another. What they share with
+// the host is `package` (seen by this package's targets only), or public where the app needs it too.
 // The `something` executable is the Mac app around them (AppKit and WebKit); it reads share/ at run time, and its
 // Extensions.swift is the one file that names the agents.
 import Foundation
