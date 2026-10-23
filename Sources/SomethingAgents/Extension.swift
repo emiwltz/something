@@ -38,6 +38,9 @@ public struct AgentDescriptor: Sendable {
     public var builder: Builder?
     /// Whether, launched, it acts without ever asking the person: the rights sheet and the assistant say so.
     public var neverAsks: Bool
+    /// Whether, launched as the person's own settings leave it by default, it acts without asking: the rights sheet
+    /// and the assistant say so too, with "by default".
+    public var asksNothingByDefault: Bool
     /// What its tools and requests do, by the name its driver gives them, for the permission panel's title.
     public var tools: [String: Tool]
     /// What each of its modes that lowers asking lets it do, in words that follow "a mode where it".
@@ -46,10 +49,11 @@ public struct AgentDescriptor: Sendable {
     package init(kind: String, name: String, install: String? = nil, runsOn: String? = nil, homeFolders: [String] = [],
                  bundled: String? = nil, refusedCopies: [String] = [], asksAsMuch: Set<String> = [], resume: Resume = .never,
                  driving: Driving? = nil, reader: (@Sendable ([String: String]) -> any Reader)? = nil, builder: Builder? = nil,
-                 neverAsks: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:]) {
+                 neverAsks: Bool = false, asksNothingByDefault: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:]) {
         (self.kind, self.name, self.install, self.runsOn, self.homeFolders, self.bundled) = (kind, name, install, runsOn, homeFolders, bundled)
         (self.refusedCopies, self.asksAsMuch, self.resume, self.driving, self.reader) = (refusedCopies, asksAsMuch, resume, driving, reader)
-        (self.builder, self.neverAsks, self.tools, self.modeWords) = (builder, neverAsks, tools, modeWords)
+        (self.builder, self.neverAsks, self.asksNothingByDefault) = (builder, neverAsks, asksNothingByDefault)
+        (self.tools, self.modeWords) = (tools, modeWords)
     }
 
     /// What the person's assistant gets when it is this agent.

@@ -415,12 +415,20 @@ enum Ask {
     }
 
     /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach an agent that
-    /// never asks (pi), which never waits for a click.
+    /// acts without asking, never (pi) or by its own default setting (OMP), so never waits for a click.
     static func warning(for right: String) -> String? {
-        // One agent never asks (pi); the sentence is written for one.
-        guard let agent = Registry.app.agents.first(where: \.neverAsks) else { return nil }
-        if right == "launch" { return "One of them, \(agent.name), runs commands and edits files without asking you first" }
-        return right == "launch:" + agent.kind ? "\(agent.name) runs commands and edits files without asking you first" : nil
+        let loose = Registry.app.agents.filter { $0.neverAsks || $0.asksNothingByDefault }
+        if right == "launch", let first = loose.first {
+            if loose.count == 1 {
+                return "One of them, \(first.name), runs commands and edits files without asking you first" + (first.neverAsks ? "" : " by default")
+            }
+            let names = loose.map { $0.neverAsks ? $0.name : $0.name + " by default" }
+            return "Some of them run commands and edit files without asking you first: "
+                + names.dropLast().joined(separator: ", ") + ", and " + names[names.count - 1]
+        }
+        guard let agent = loose.first(where: { right == "launch:" + $0.kind }) else { return nil }
+        return agent.neverAsks ? "\(agent.name) runs commands and edits files without asking you first"
+            : "\(agent.name), by default, runs commands and edits files without asking you first (its own setting)"
     }
 
     /// What a mode that lowers asking lets the agent do, in plain words: by the mode's name, whichever agent's

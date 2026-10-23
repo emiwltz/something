@@ -6,12 +6,14 @@ import SomethingAgents
 import SomethingCore
 
 extension AgentDescriptor {
-    /// OMP, read by `reader`. The install sentence is OMP's README's (23 October 2026); it puts `omp` in ~/.local/bin.
+    /// OMP, read by `reader`. The install sentence is the first of OMP's README (github.com/can1357/oh-my-pi, read again
+    /// 23 October 2026, which also gives brew, bun and nix); it puts `omp` in ~/.local/bin.
     /// OMP asks as its own setting tools.approvalMode says, which something never passes: its default, "yolo", asks
     /// nothing (18.8.6). Its modes, default and plan, ask the same. As a builder, it is lent something's commands over MCP.
     package static func omp(reader: @escaping @Sendable ([String: String]) -> any Reader) -> AgentDescriptor {
         AgentDescriptor(kind: "omp", name: "OMP", install: "curl -fsSL https://omp.sh/install | sh", asksAsMuch: ["default", "plan"],
-                        driving: ACPProfile.omp.driving, reader: reader, builder: Builder(lent: LentTool.all), tools: ACPProfile.tools)
+                        driving: ACPProfile.omp.driving, reader: reader, builder: Builder(lent: LentTool.all),
+                        asksNothingByDefault: true, tools: ACPProfile.tools)
     }
 }
 

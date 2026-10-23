@@ -155,6 +155,9 @@ struct GalleryTests {
         let pi = RightsQuestion(space: "Morning review", description: nil, rights: ["launch:pi"], scope: nil, missing: [],
                                 folder: FolderQuestion(declared: "~/code/garden", found: nil))
         try draw(Ask.rights(pi, home: "/Users/example").alert, "rights-launch-pi" + suffix, fixture)
+        let any = RightsQuestion(space: "Morning review", description: nil, rights: ["launch", "launch:omp"], scope: nil, missing: [],
+                                 folder: FolderQuestion(declared: "~/code/garden", found: nil))
+        try draw(Ask.rights(any, home: "/Users/example").alert, "rights-launch-any-and-omp" + suffix, fixture)
         try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review", home: "/Users/example"), "lowering-mode" + suffix, fixture)
         try draw(Ask.link(try #require(URL(string: "https://example.com/notes/overnight")), space: "Morning review"), "link" + suffix, fixture)
         try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)

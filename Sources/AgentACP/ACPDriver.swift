@@ -281,10 +281,13 @@ final class ACPDriver: Driver {
         let call = params["toolCall"] as? [String: Any] ?? [:]
         let tool = call["toolCallId"] as? String
         let input = call["rawInput"] as? [String: Any]
+        // A tool something lends is asked for as the command something would run for it, as its item shows it.
+        let lent = launch.lent == nil ? nil : profile.named?(call).flatMap { Lent.called($0.name, $0.input) }
         let shown = Request(id: "\(launch.agent):\(rpcID)", agent: launch.agent, kind: "permission",
-                            tool: tool.flatMap { names[$0] } ?? call["kind"] as? String, about: call["title"] as? String, at: now())
+                            tool: lent?.name ?? tool.flatMap { names[$0] } ?? call["kind"] as? String, about: call["title"] as? String, at: now())
+        let words = lent.map { $0.command ?? "\($0.name) (wrong arguments)" } ?? input?["command"] as? String ?? ACPDriver.json(input)
         asks[shown.id] = Ask(rpcID: rpcID, options: params["options"] as? [[String: Any]] ?? [], tool: tool,
-                             prompt: Prompt(request: shown, input: input?["command"] as? String ?? ACPDriver.json(input)))
+                             prompt: Prompt(request: shown, input: words))
         emit(.requestOpened(shown))
     }
 
@@ -314,7 +317,7 @@ final class ACPDriver: Driver {
             let shown = { (lent: (name: String, command: String?)) in lent.command ?? "\(lent.name) (wrong arguments)" }
             let inner = launch.lent == nil ? [] : profile.innerCalls?(update) ?? []
             let lents = inner.compactMap { Lent.called($0.name, $0.input) }
-            var lent = launch.lent == nil ? nil : Lent.called(names[id] ?? "", input)
+            var lent = launch.lent == nil ? nil : Lent.called(named?.name ?? names[id] ?? "", input)
             if let called = lent, done || named != nil, input != nil { lent = (called.name, shown(called)) }
             if lent == nil, !lents.isEmpty, lents.count == inner.count { lent = (lents[0].name, lents.map(shown).joined(separator: "; ")) }
             let item = Item(id: id, kind: child ? "subagent" : "tool", author: "agent", text: lent?.command ?? update["title"] as? String ?? old?.text ?? "",

@@ -262,6 +262,9 @@ import SomethingCore
     var firstLines: [String] {
         let folder = Words.path(places.spaces.path, home: places.home.path), agent = kind.flatMap(Registry.app.agent)
         let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
+            else if agent?.asksNothingByDefault == true {
+                "\(name) works in \(folder). By default \(name) asks nothing: it can run any command on your Mac, unless your own \(name) settings say otherwise."
+            }
             else if agent?.builder?.preAllowed == false { "\(name) works in \(folder). It asks as your own \(name) settings say." }
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
             else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
@@ -272,7 +275,9 @@ import SomethingCore
     /// The builders found, as the agent menus list them.
     var entries: [Entry] {
         builders.filter { installed[$0] == true }.map { kind in
-            let because = refused[kind] != nil ? "can't build spaces" : Registry.app.agent(kind)?.neverAsks == true ? "never asks before acting" : nil
+            let agent = Registry.app.agent(kind)
+            let because = refused[kind] != nil ? "can't build spaces" : agent?.neverAsks == true ? "never asks before acting"
+                : agent?.asksNothingByDefault == true ? "asks nothing by default" : nil
             let title = [Registry.app.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
             return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind])
         }

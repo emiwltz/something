@@ -344,16 +344,17 @@ import WebKit
     /// What the menu and the drawer say of each builder, what it is lent, and whether Ask Before Every Change means
     /// anything for it: from its descriptor, in the words of 0.2.
     @Test func eachBuilderIsSaidFromItsDescriptor() async throws {
-        let (home, model) = try assistant(["claude", "codex", "opencode", "pi"])
+        let (home, model) = try assistant(["claude", "codex", "opencode", "pi", "omp"])
         defer { home.remove() }
         await look(model)
-        #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting"])
+        #expect(model.entries.map(\.title) == ["Claude Code", "Codex", "OpenCode", "pi · never asks before acting", "OMP · asks nothing by default"])
         let folder = "works in ~/something/spaces.", all = ["something_guide", "something_new", "something_check"]
         let said: [(String, String, Bool, [String])] = [
             ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
             ("codex", "Codex \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
             ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, all),
             ("pi", "pi \(folder) pi never asks: it can run any command on your Mac.", false, []),
+            ("omp", "OMP \(folder) By default OMP asks nothing: it can run any command on your Mac, unless your own OMP settings say otherwise.", false, all),
         ]
         for (kind, line, canAsk, lent) in said {
             model.choose(kind)

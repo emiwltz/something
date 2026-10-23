@@ -17,7 +17,7 @@ import SomethingCore
         #expect(driving.command(Launch(agent: "omp-1", folder: "/Users/example/shop")) == Command(arguments: ["acp"]))
         #expect(driving.tested == "18.8.6" && driving.modes.map(\.value) == ["default", "plan"] && !driving.listsMoreModes)
         #expect(omp.builder?.lent.map(\.name) == LentTool.all.map(\.name) && omp.builder?.preAllowed == false)
-        #expect(!omp.neverAsks, "it asks as its own settings say")
+        #expect(!omp.neverAsks && omp.asksNothingByDefault, "its own default setting, yolo, asks nothing")
         #expect(omp.reader?(["HOME": "/Users/example"]) is OMPReader)
         #expect(Registry.described.kinds.launchable.contains("omp") && Registry.described.kinds.readOnly.isEmpty)
         #expect(try Registry.described.lowersAsking(mode: "plan", kind: "omp") == false)
@@ -56,6 +56,8 @@ import SomethingCore
 
     /// The person's assistant gets something's MCP server in session/new; OMP calls a server's tool through the path
     /// xd://mcp__something_<tool>, shown as the command something runs. Reading a tool's docs is a read like any other.
+    /// Recorded before `something try --assistant` wrote the knowledge files, so OMP's read of AGENTS.md fails in it;
+    /// the same build, with them, ran again on omp 18.12.6 (C1's review fixes) with 0 permission requests.
     @Test func theAssistantBuildsWithSomethingsTools() throws {
         let replay = try Self.play("assistant-build")
         let lent = replay.items.filter { $0.tool?.name.hasPrefix("something_") == true }
@@ -63,6 +65,22 @@ import SomethingCore
         #expect(lent.allSatisfy { $0.tool?.status == "done" })
         #expect(replay.items.filter { $0.tool?.name == "read" }.count == 6, "three docs, the folder's instructions, the page, the snapshot")
         #expect(replay.fold.requests.isEmpty && replay.fold.agent.state == "done")
+    }
+
+    /// When OMP's own settings make it ask, a lent tool is asked for with the tool call of its update (the shape of
+    /// assistant-build.jsonl's xd://mcp__something_check call), and the panel shows the command something would run.
+    @Test func aPermissionForALentTool() throws {
+        let replay = Replay.omp(assistant: true)
+        replay.feed(["jsonrpc": "2.0", "id": 1, "result": ["protocolVersion": 1]])
+        replay.feed(["jsonrpc": "2.0", "id": 2, "result": ["sessionId": ACPDriverTests.session, "configOptions": []]])
+        let call: [String: Any] = ["kind": "execute", "rawInput": ["content": #"{"name": "hello"}"#, "path": "xd://mcp__something_check"],
+                                   "status": "pending", "title": "Checking the hello space", "toolCallId": "toolu_invented01"]
+        replay.feed(ACPDriverTests.update(call.merging(["sessionUpdate": "tool_call"]) { $1 }))
+        replay.feed(["jsonrpc": "2.0", "id": 0, "method": "session/request_permission",
+                     "params": ["sessionId": ACPDriverTests.session, "toolCall": call,
+                                "options": [["kind": "allow_once", "name": "Allow once", "optionId": "allow_once"]]]])
+        let prompt = try #require(replay.agent.prompt("omp-1:0"))
+        #expect(prompt.request.tool == "something_check" && prompt.input == "something check hello")
     }
 
     /// OMP's MCP call with arguments that are no JSON, or wrong, is shown as every driver shows wrong arguments.

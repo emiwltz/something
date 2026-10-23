@@ -3,7 +3,8 @@
 // the agent does, and reads commands on standard input. With --record it writes the exchange in the format of
 // Tests/Exchanges (one JSON object per line), the raw material of a replay: run it only in a throwaway session whose
 // text is invented, since the file holds every line. --plan-b forces the kind's plan B (Claude's: PermissionSpool.swift).
-// --assistant launches the person's building assistant, lent something's own commands as the app lends them.
+// --assistant launches the person's building assistant as the app does: in the spaces folder of $SOMETHING_HOME (else
+// the home), with the knowledge files written there, lent something's own commands.
 // A front end over the engine, as the app's windows are; the command routes `try` here (Command.swift).
 import Foundation
 import SomethingAgents
@@ -77,7 +78,13 @@ enum DeveloperTrial {
                 Lent.own(own[0], tools: registry.agent(asked.kind)?.builder?.lent ?? [], environment: ProcessInfo.processInfo.environment,
                          refused: { _, because in print("Not a builder: \(because)") })
             }
-            id = try engine.trial(asked.kind, folder: FileManager.default.currentDirectoryPath, planB: asked.planB, assistant: asked.assistant,
+            var folder = FileManager.default.currentDirectoryPath
+            if asked.assistant {
+                folder = Places.person.spaces.path
+                try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+                try AssistantModel.writeKnowledge(Places.person, share: Resources.share)
+            }
+            id = try engine.trial(asked.kind, folder: folder, planB: asked.planB, assistant: asked.assistant,
                                   lent: lent) { written, line in
                 row([written ? "something" : asked.kind: (try? JSONSerialization.jsonObject(with: line)) ?? String(decoding: line, as: UTF8.self)])
             }

@@ -16,6 +16,7 @@ import Testing
                                                          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
                                                          "curl -fsSL https://omp.sh/install | sh"])
         #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi"])
+        #expect(Registry.app.agents.filter(\.asksNothingByDefault).map(\.kind) == ["omp"])
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false])
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false])
@@ -28,8 +29,10 @@ import Testing
                      ("dontAsk", "never asks you, and does only what your settings already allow"),
                      ("never", "never asks you before it runs a command"), ("invented-agent", "asks you less"), ("default", "asks you less")]
         for (mode, words) in cases { #expect(Ask.words(forMode: mode) == words, "\(mode)") }
-        #expect(Ask.warning(for: "launch") == "One of them, pi, runs commands and edits files without asking you first")
+        // The rights sheet names every agent that may act without asking: pi never asks, OMP by its own default.
+        #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, and OMP by default")
         #expect(Ask.warning(for: "launch:pi") == "pi runs commands and edits files without asking you first")
+        #expect(Ask.warning(for: "launch:omp") == "OMP, by default, runs commands and edits files without asking you first (its own setting)")
         #expect(Ask.warning(for: "launch:claude") == nil && Ask.warning(for: "send:pi") == nil && Ask.warning(for: "state") == nil)
     }
 

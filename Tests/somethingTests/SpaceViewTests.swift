@@ -427,7 +427,7 @@ import WebKit
     /// The rights sheet says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
     @Test func theRightsSheetSaysThatPiNeverAsks() {
         #expect(Ask.words(for: "launch:pi") == "Start pi in a folder you choose. pi runs commands and edits files without asking you first")
-        #expect(Ask.words(for: "launch") == "Start agents in a folder you choose. One of them, pi, runs commands and edits files without asking you first")
+        #expect(Ask.words(for: "launch") == "Start agents in a folder you choose. Some of them run commands and edit files without asking you first: pi, and OMP by default")
         #expect(!Ask.words(for: "launch:claude").contains("without asking"))
     }
 
