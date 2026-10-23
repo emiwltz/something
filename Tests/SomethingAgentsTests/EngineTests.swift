@@ -375,8 +375,8 @@ import SomethingCore
                 .flatMap { $0.split(separator: "\n").filter { $0.contains("\"thread/start\"") }.map(String.init) }
         }
         try await until("three threads") { starts().count == 3 }
-        #expect(starts().filter { $0.contains("\"mcp_servers\"") }.count == 1)
-        #expect(starts().filter { $0.contains("\"mcp_servers\"") && $0.contains("workspace-write") }.count == 1, "the building assistant's")
+        #expect(starts().filter { $0.contains("\"mcp_servers.something\"") }.count == 1)
+        #expect(starts().filter { $0.contains("\"mcp_servers.something\"") && $0.contains("workspace-write") }.count == 1, "the building assistant's")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         try await until("the stop") { stopped }

@@ -323,7 +323,7 @@ struct GalleryTests {
         old.engine.changed = { old.refresh() }
         old.engine.lookAgain()
         #expect(await wait(until: { old.installed["codex"] == true }))
-        old.cannotBuild("codex", "Codex could not start something's tools, so it can't build spaces. It said: “MCP client for `something` failed to start: MCP startup failed: No such file or directory (os error 2)”.")
+        old.cannotBuild("codex", "Codex could not start something's tools, so it can't build spaces. Fix what it said, then look for agents again: “MCP client for `something` failed to start: MCP startup failed: No such file or directory (os error 2)”.")
         try await draw(old, "assistant-cannot-build" + suffix, fixture)
         try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
     }

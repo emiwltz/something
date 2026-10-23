@@ -45,6 +45,8 @@ final class CodexDriver: Driver {
     private var started: [String: [String: Any]] = [:]
     private var models: [[String: Any]]?, model: String?
     private var heard = false, over = false
+    /// Whether Codex said something's MCP server is ready, for a launch something lends its tools.
+    private var lentReady = false
     /// Codex refused to read the settings back (a new thread's rollout is empty until its first turn ends): they are
     /// read again when that turn completes.
     private var rereadSettings = false
@@ -200,12 +202,15 @@ final class CodexDriver: Driver {
                 if launch.assistant == .building { params["sandbox"] = "workspace-write" }
                 // Its sandbox reaches no window server, where `something check` loads a page: something's MCP server,
                 // which Codex starts outside the sandbox, runs it instead. Given in this thread's config, it reaches
-                // nothing of Codex's own configuration. Codex asks before each MCP tool call: the lent tools, named one
-                // by one, are the assistant's building work, which does not ask (AGENTS.md, rule 2).
-                if let lent = launch.lent, let server = lent.server {
+                // nothing of Codex's own configuration. The dotted key replaces only that one entry, as `-c` would: the
+                // person's other servers stay, and a [mcp_servers.something] of theirs (disabled, filtered) is set
+                // aside whole. Codex asks before each MCP tool call: the lent tools, named one by one, are the
+                // assistant's building work, which does not ask (AGENTS.md, rule 2). Only a new thread: the app never
+                // resumes its assistant, and what Codex does with a resumed thread's config was not tried.
+                if let lent = launch.lent, let server = lent.server, !launch.resume {
                     let approved = Dictionary(uniqueKeysWithValues: lent.tools.map { ($0.name, ["approval_mode": "approve"]) })
-                    params["config"] = ["mcp_servers": [CodexDriver.server: ["command": server.words[0], "args": Array(server.words.dropFirst()),
-                                                                             "env": server.environment, "tools": approved]]]
+                    params["config"] = ["mcp_servers.\(CodexDriver.server)": ["command": server.words[0], "args": Array(server.words.dropFirst()),
+                                                                              "env": server.environment, "tools": approved, "enabled": true]]
                 }
                 if launch.resume {
                     // Its history is left out: a long thread's answer can weigh megabytes.
@@ -272,9 +277,12 @@ final class CodexDriver: Driver {
 
     private func notification(_ method: String, _ params: [String: Any]) {
         // Codex starts the MCP servers of a thread after it answers thread/start: something's may fail to start.
-        if method == "mcpServer/startupStatus/updated", launch.lent != nil, params["name"] as? String == CodexDriver.server, params["status"] as? String == "failed" {
-            let words = params["error"] as? String
-            return notBuilder("Codex could not start something's tools, so it can't build spaces" + (words.map { ". It said: “\($0)”." } ?? "."))
+        if method == "mcpServer/startupStatus/updated", launch.lent != nil, params["name"] as? String == CodexDriver.server {
+            lentReady = params["status"] as? String == "ready"
+            guard params["status"] as? String == "failed" else { return }
+            let words = params["error"] as? String ?? params["failureReason"] as? String
+            return notBuilder("Codex could not start something's tools, so it can't build spaces"
+                + (words.map { ". Fix what it said, then look for agents again: “\($0)”." } ?? "." + CodexDriver.update))
         }
         guard params["threadId"] == nil || params["threadId"] as? String == thread else { return }
         switch method {
@@ -302,6 +310,7 @@ final class CodexDriver: Driver {
     /// Codex cannot take what something lends it, as the sentence `because` says: the launch ends, the app is told,
     /// and the messages held for the thread are said lost.
     private func notBuilder(_ because: String) {
+        guard !over else { return }
         let lost = early.isEmpty ? "" : " The \(early.count == 1 ? "message" : "\(early.count) messages") sent to it went nowhere."
         over = true
         emit(.stopped(AgentError(code: "AGENT_ERROR", message: because + lost)))
@@ -315,6 +324,12 @@ final class CodexDriver: Driver {
         var about: String?, input: String?, questions: [Question] = [], questionIDs: [String] = []
         switch method {
         case "item/commandExecution/requestApproval":
+            // A check run in its shell while something's server is not ready: Codex did not take the lent tools (it
+            // may have left them out without a word), and the sandbox would make the person answer every check.
+            if launch.lent != nil, !lentReady, (params["command"] as? String)?.contains("something check") == true {
+                try? send(["id": codexID, "result": ["decision": "decline"]])
+                return notBuilder("Codex did not start something's tools, so it can't build spaces." + CodexDriver.update)
+            }
             kind = "commandExecution"
             about = params["command"] as? String ?? params["reason"] as? String
             input = params["command"] as? String
@@ -344,7 +359,7 @@ final class CodexDriver: Driver {
             try? send(["id": codexID, "error": ["code": -32601, "message": "something does not handle \(method)."]])
             // Asking before one of the lent tools, this Codex ignored their approval: it would ask at every check.
             if method == "mcpServer/elicitation/request", launch.lent != nil, params["serverName"] as? String == CodexDriver.server {
-                notBuilder("This Codex asks before each of something's tools, so it can't build spaces.")
+                notBuilder("This Codex asks before each of something's tools, so it can't build spaces." + CodexDriver.update)
             }
             return
         }
@@ -505,6 +520,8 @@ final class CodexDriver: Driver {
 
     /// The name something's MCP server has in a thread's config.
     static let server = "something"
+    /// What a person does when this Codex cannot build: a newer one may.
+    static let update = " Update Codex, then look for agents again."
 }
 
 extension Driving {

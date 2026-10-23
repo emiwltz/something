@@ -21,6 +21,14 @@ import SomethingCore
         #expect(replay.fold.turns.map(\.state) == ["done"] && replay.fold.requests.isEmpty)
     }
 
+    /// Something's program is not there: Codex's own words say why, and this Codex is said unable to build.
+    @Test func toolsMissing() throws {
+        let replay = try Replay.play("tools-missing", kind: "codex")
+        let said = "Codex could not start something's tools, so it can't build spaces. Fix what it said, then look for agents again: “MCP client for `something` failed to start: MCP startup failed: No such file or directory (os error 2)”."
+        #expect(replay.refusals == ["codex: " + said])
+        #expect(replay.quit && replay.fold.agent.error?.message == said)
+    }
+
     @Test func permissionOnce() throws {
         let replay = try Replay.play("permission-once", kind: "codex")
         let tool = try #require(replay.items.first { $0.kind == "tool" })
@@ -146,27 +154,33 @@ import SomethingCore
         #expect(start(nil)?.keys.sorted() == ["cwd"])
     }
 
-    /// Only the building assistant is lent something's commands: its thread's config gives Codex something's MCP
-    /// server, with the variables it needs, and approves its tools one by one (Codex asks before an MCP tool call). A launch a space asks for gets none (Engine.launchAssistant lends nothing
-    /// with Ask Before Every Change), and nothing asks for Codex's experimental channel.
+    /// Only the building assistant is lent something's commands: its new thread's config gives Codex something's MCP
+    /// server under the dotted key that replaces that one entry, with the variables it needs, enabled, and its tools
+    /// approved one by one (Codex asks before an MCP tool call). A launch a space asks for gets none
+    /// (Engine.launchAssistant lends nothing with Ask Before Every Change), nor does a resumed thread, and nothing asks
+    /// for Codex's experimental channel.
     @Test func onlyTheBuildingAssistantIsLentTheTools() {
         func capabilities(_ replay: Replay) -> [String: Any]? { Self.params(replay, "initialize")?["capabilities"] as? [String: Any] }
         let lent = Replay.codex(assistant: true)
         lent.feed(["id": 1, "result": ["userAgent": "something/0.163.0 (Mac OS 27.0.0; arm64) unknown (something; 1.0)"]])
         let config = Self.params(lent, "thread/start")?["config"] as? NSDictionary
         let approved = ["something_guide": ["approval_mode": "approve"], "something_new": ["approval_mode": "approve"], "something_check": ["approval_mode": "approve"]]
-        #expect(config == ["mcp_servers": ["something": ["command": "/Users/example/bin/something", "args": ["mcp"],
-                                                         "env": ["TMPDIR": "/Users/example/tmp/"], "tools": approved]]])
+        #expect(config == ["mcp_servers.something": ["command": "/Users/example/bin/something", "args": ["mcp"], "enabled": true,
+                                                     "env": ["TMPDIR": "/Users/example/tmp/"], "tools": approved]])
         #expect(capabilities(lent)?.keys.sorted() == ["optOutNotificationMethods"])
         let space = Self.opened()
         #expect(capabilities(space)?.keys.sorted() == ["optOutNotificationMethods"])
         #expect(Self.params(space, "thread/start")?["config"] == nil)
+        let resumed = Replay.codex(resume: Self.thread, assistant: true)
+        resumed.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        #expect(Self.params(resumed, "thread/resume") != nil && Self.params(resumed, "thread/resume")?["config"] == nil)
     }
 
     /// Codex starts the thread's MCP servers after it answers thread/start. If something's fails, the launch ends
     /// with Codex's words and the app is told this Codex cannot build; another server's failure, or something's
-    /// server starting or ready, changes nothing. So does a Codex that asks before one of the lent tools. A refusal
-    /// of the thread is said as for any launch.
+    /// server starting or ready, changes nothing. So does a Codex that asks before one of the lent tools, or one that
+    /// runs a check in its shell while something's server is not ready. Each sentence says what to do next, and the
+    /// lines still in the pipe after the end change nothing. A refusal of the thread is said as for any launch.
     @Test func aCodexWhoseToolsCannotStartIsNoBuilder() throws {
         func status(_ replay: Replay, _ name: String, _ status: String, error: Any = NSNull()) {
             replay.feed(["method": "mcpServer/startupStatus/updated", "params": ["threadId": Self.thread, "name": name, "status": status,
@@ -179,10 +193,16 @@ import SomethingCore
         status(failed, "invented", "failed", error: "Invented: no such program")
         #expect(!failed.quit && failed.refusals.isEmpty)
         status(failed, "something", "failed", error: "Invented: no such file")
-        let said = "Codex could not start something's tools, so it can't build spaces. It said: “Invented: no such file”."
+        let said = "Codex could not start something's tools, so it can't build spaces. Fix what it said, then look for agents again: “Invented: no such file”."
         #expect(failed.quit && failed.fold.agent.alive == false)
         #expect(failed.fold.agent.error?.message == said + " The message sent to it went nowhere.")
-        #expect(failed.refusals == ["codex: " + said])
+        status(failed, "something", "failed", error: "Invented: again")
+        #expect(failed.refusals == ["codex: " + said], "said once")
+        // The reason may come in failureReason alone.
+        let reason = Replay.codex(assistant: true)
+        reason.feed(["method": "mcpServer/startupStatus/updated", "params": ["threadId": Self.thread, "name": "something", "status": "failed",
+                                                                              "error": NSNull(), "failureReason": "Invented: a reason"]])
+        #expect(reason.refusals.first?.hasSuffix("then look for agents again: “Invented: a reason”.") == true)
 
         // A Codex that ignored the approval of the lent tools would ask at every check.
         let asking = Replay.codex(assistant: true)
@@ -196,8 +216,29 @@ import SomethingCore
         elicit(asking, 0, server: "invented")
         #expect(!asking.quit && asking.refusals.isEmpty, "another server's question is refused, as before")
         elicit(asking, 1, server: "something")
-        #expect(asking.quit && asking.refusals == ["codex: This Codex asks before each of something's tools, so it can't build spaces."])
-        #expect(asking.lines().filter { $0["error"] != nil }.count == 2, "each request is answered")
+        elicit(asking, 2, server: "something")
+        #expect(asking.quit && asking.refusals == ["codex: This Codex asks before each of something's tools, so it can't build spaces. Update Codex, then look for agents again."])
+        #expect(asking.lines().filter { $0["error"] != nil }.count == 3, "each request is answered")
+
+        // A check in its shell, something's server never ready: Codex did not take the lent tools. Once ready, a check in
+        // the shell is the model's choice, and asks as any command.
+        func check(_ replay: Replay, _ id: Int) {
+            replay.feed(["id": id, "method": "item/commandExecution/requestApproval", "params": ["threadId": Self.thread, "turnId": Self.turn,
+                "itemId": "call_\(id)", "command": "/bin/zsh -lc 'something check board'"]])
+        }
+        let unready = Replay.codex(assistant: true)
+        unready.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        unready.feed(["id": 2, "result": ["thread": ["id": Self.thread], "model": "fake-model", "approvalPolicy": "on-request", "reasoningEffort": NSNull()]])
+        status(unready, "something", "starting")
+        check(unready, 0)
+        #expect(unready.quit && unready.refusals == ["codex: Codex did not start something's tools, so it can't build spaces. Update Codex, then look for agents again."])
+        #expect(unready.lines().last?["result"] as? [String: String] == ["decision": "decline"])
+        let started = Replay.codex(assistant: true)
+        started.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
+        started.feed(["id": 2, "result": ["thread": ["id": Self.thread], "model": "fake-model", "approvalPolicy": "on-request", "reasoningEffort": NSNull()]])
+        status(started, "something", "ready")
+        check(started, 0)
+        #expect(!started.quit && started.refusals.isEmpty && started.fold.requests.count == 1)
 
         let ready = Self.opened()
         status(ready, "something", "failed", error: "Invented: not lent")

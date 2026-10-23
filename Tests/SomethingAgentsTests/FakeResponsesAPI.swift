@@ -11,6 +11,7 @@ final class FakeResponsesAPI {
     private let socket: Int32
     private let lock = NSLock()
     private var texts: [String] = [], models: [String?] = [], efforts: [String?] = [], outputs: [String] = [], people: [Int] = []
+    private var tools = ""
     private var count = 0
     /// Whether the chat completions call pi's tool (`bash`) rather than OpenCode's.
     var pi = false
@@ -52,6 +53,8 @@ final class FakeResponsesAPI {
     var messagesSent: [Int] { lock.withLock { people } }
     /// The tool outputs the program sent back to the model.
     var toolOutputs: [String] { lock.withLock { outputs } }
+    /// The tools the last Responses request offered, as JSON.
+    var toolsOffered: String { lock.withLock { tools } }
 
     /// Shut down first: on Darwin a close alone does not wake the accept() blocked in the other thread.
     func stop() {
@@ -103,6 +106,7 @@ final class FakeResponsesAPI {
                 let (last, output) = FakeResponsesAPI.lastWords(json)
                 let step = lock.withLock { () -> Step in
                     texts.append(last)
+                    tools = (try? JSONSerialization.data(withJSONObject: json["tools"] ?? [])).map { String(decoding: $0, as: UTF8.self) } ?? ""
                     models.append(json["model"] as? String)
                     efforts.append((json["reasoning"] as? [String: Any])?["effort"] as? String)
                     if let output { outputs.append(output) }

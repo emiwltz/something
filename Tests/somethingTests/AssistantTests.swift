@@ -193,7 +193,7 @@ import WebKit
         await look(model)
         #expect(model.kind == "codex" && model.entries.map(\.title) == ["Codex"] && model.entries.allSatisfy(\.enabled))
         #expect(model.lent(for: "codex")?.tools.map(\.name) == ["something_guide", "something_new", "something_check"])
-        let old = "Codex could not start something's tools, so it can't build spaces. It said: “MCP client for `something` failed to start: MCP startup failed: No such file or directory (os error 2)”."
+        let old = "Codex could not start something's tools, so it can't build spaces. Fix what it said, then look for agents again: “MCP client for `something` failed to start: MCP startup failed: No such file or directory (os error 2)”."
         // The message that never reached it is back in the composer, without its context line.
         model.draft = "Make an invented board."
         model.send()
@@ -209,7 +209,7 @@ import WebKit
         #expect(model.kind == nil)
         model.lookAgain()
         #expect(model.kind == "codex", "looked for again, it is offered again")
-        model.cannotBuild("codex", "Codex could not start something's tools, so it can't build spaces.")
+        model.cannotBuild("codex", "This Codex asks before each of something's tools, so it can't build spaces. Update Codex, then look for agents again.")
         try install("claude", in: home.root.appendingPathComponent("bin"))
         await look(model)
         #expect(model.kind == "claude" && !model.noAgent && model.name == "Claude Code")

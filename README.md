@@ -65,7 +65,8 @@ shell, which it does without asking anyway.
 For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and those three tools. Any
 other command asks you, `something open` included (something opens a new space by itself). For Codex it is its own
 sandbox, "workspace-write": it may change files and run commands in `~/something/spaces` (and its temporary folders),
-without the network, and call those three tools, approved by name; what the sandbox blocks asks you. Its sandbox
+without the network, and call those three tools, approved by name (an MCP server of your own named `something` is
+set aside for that conversation; your others stay); what the sandbox blocks asks you. Its sandbox
 cannot load a page, which is why it needs `something_check` (a Codex that cannot start the tools is not offered until
 you choose Look for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
 settings say. The same for OMP, whose own default (its setting `tools.approvalMode`, "yolo") asks nothing: it can

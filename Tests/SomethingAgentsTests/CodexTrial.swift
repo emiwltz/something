@@ -38,9 +38,10 @@ import SomethingCore
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
     /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces, and lent something's
     /// tools, which this clone's real program serves over MCP (plan A.4, AssistantBuild.placeProgram), with the
-    /// person's own temporary folder, as the app gives it.
+    /// person's own temporary folder, as the app gives it; with `serving`, that program serves them instead. `config`
+    /// ends the throwaway config.toml.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
-         assistant: Assistant? = nil) throws {
+         assistant: Assistant? = nil, serving: String? = nil, config: String = "") throws {
         self.name = name
         owner = after == nil
         api = try after?.api ?? FakeResponsesAPI()
@@ -62,7 +63,7 @@ import SomethingCore
             supports_websockets = false
             [features]
             daemon_auto_start = true
-
+            \(config)
             """.write(to: folders[0].appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
         let program = trialCodex!
         var launch = Launch(agent: "codex-1", folder: folders[2].path, mode: mode, effort: effort, thread: thread ?? "", resume: thread != nil)
@@ -71,9 +72,9 @@ import SomethingCore
         if let assistant {
             launch.assistant = assistant
             environment["TMPDIR"] = NSTemporaryDirectory()
-            let program = try AssistantBuild.placeProgram()
-            placed = program
-            launch.lent = Lent.own(program.path, tools: LentTool.all, environment: environment,
+            let program = try serving ?? AssistantBuild.placeProgram().path
+            placed = serving == nil ? URL(fileURLWithPath: program) : nil
+            launch.lent = Lent.own(program, tools: LentTool.all, environment: environment,
                                    refused: { [lent] kind, because in lent.lock.withLock { lent.refusals.append("\(kind): \(because)") } })
         }
         spawn = Spawn(path: program, arguments: CodexDriver.command(launch).arguments + ["--enable", "default_mode_request_user_input", "--enable", "request_permissions_tool"],
@@ -173,8 +174,9 @@ import SomethingCore
         // The program serving the tools, and the person's temporary folder it is given.
         if let placed { text = text.replacingOccurrences(of: placed.deletingLastPathComponent().path, with: "/Users/example/bin") }
         text = text.replacingOccurrences(of: NSTemporaryDirectory(), with: "/Users/example/tmp/")
-        // Codex names the machine it runs on.
-        text = text.replacingOccurrences(of: #""serverName":"[^"]*""#, with: #""serverName":"example-mac""#, options: .regularExpression)
+        // Codex names the machine it runs on, in remote control's status: only there, as an MCP server's name is no secret.
+        text = text.replacingOccurrences(of: #"("method":"remoteControl/status/changed","params":\{[^}]*"serverName":")[^"]*""#,
+                                         with: "$1example-mac\"", options: .regularExpression)
         try? text.write(toFile: "\(folder)/\(name).jsonl", atomically: true, encoding: .utf8)
     }
 }
@@ -352,6 +354,45 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         let page = try String(contentsOf: run.work.appendingPathComponent("agents-board.html"), encoding: .utf8)
         #expect(page.contains("Invented three"), "the patches were applied in the sandbox")
         try await run.finish()
+    }
+
+    /// The person's own Codex settings: another MCP server, and an entry of theirs named something, disabled and
+    /// filtered. The thread's entry replaces theirs whole, and leaves the other server as it is.
+    @Test func thePersonsServersStayAndTheirSomethingIsSetAside() async throws {
+        let theirs = """
+            [mcp_servers.other]
+            command = "\(AssistantBuild.clonesProgram.path)"
+            args = ["mcp"]
+            [mcp_servers.something]
+            command = "/Users/example/nowhere"
+            enabled = false
+            enabled_tools = ["something_guide"]
+            """
+        let run = try CodexRun("persons-servers", assistant: .building, config: theirs)
+        defer { run.cleanup() }
+        func ready(_ name: String) -> Bool {
+            run.rows.contains { row in
+                let line = row["codex"] as? [String: Any], params = line?["params"] as? [String: Any]
+                return line?["method"] as? String == "mcpServer/startupStatus/updated" && params?["name"] as? String == name && params?["status"] as? String == "ready"
+            }
+        }
+        try await run.until("both servers") { ready("other") && ready("something") }
+        _ = try run.send("Hello there.")
+        try await run.until("a reply") { run.turns == ["done"] && run.state.state == "idle" }
+        let offered = run.api.toolsOffered
+        #expect(["mcp__something", "mcp__other", "something_guide", "something_new", "something_check"].allSatisfy(offered.contains), "\(offered.prefix(600))")
+        #expect(run.lent.lock.withLock { run.lent.refusals }.isEmpty)
+        try await run.finish()
+    }
+
+    /// A program that cannot start: Codex says something's server failed, with its words (recorded as tools-missing).
+    @Test func toolsThatCannotStartSayWhy() async throws {
+        let run = try CodexRun("tools-missing", assistant: .building, serving: FileManager.default.temporaryDirectory.appendingPathComponent("codex-trial-missing/something").path)
+        defer { run.cleanup() }
+        try await run.until("the refusal") { run.state.alive == false }
+        let refusals = run.lent.lock.withLock { run.lent.refusals }
+        #expect(refusals.count == 1 && refusals[0].hasPrefix("codex: Codex could not start something's tools, so it can't build spaces. Fix what it said, then look for agents again: “"), "\(refusals)")
+        run.save()
     }
 
     @Test func aConversationIsResumed() async throws {
