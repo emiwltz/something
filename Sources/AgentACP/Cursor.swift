@@ -1,7 +1,7 @@
 // Cursor: what something knows of its CLI, cursor-agent. It is seen by its process: its conversations are in files
 // whose shape Cursor documents nowhere (~/.cursor), so no reader of them. It is not launched yet: driven over the Agent
 // Client Protocol with the profile here, it works and builds a space, but it asks the person before each of
-// something's own tools, which only a settings file of its own could allow (trial C3, 23 Oct 2026); an agent that
+// something's own tools, which only a settings file of its own could allow (2026.10.19); an agent that
 // cannot build without such asks is not offered.
 import SomethingAgents
 import SomethingCore

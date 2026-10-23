@@ -1,221 +1,40 @@
 # something
 
 something is a Mac app for **spaces**: pages you build with your own coding agent, such as a board of who is waiting
-for you, a morning paper of what your agents did or a small game for your breaks. something shows them safely, and
-lets them see the coding agents on your Mac (Claude Code, Codex, OpenCode, pi, OMP, Amp) and talk to them.
+for you, a morning paper of what your agents did, or a small game for your breaks. something shows them safely, and
+lets them see the coding agents on your Mac and talk to them.
 
-*Version 0.2.0. `brew upgrade something` brings the next one; `brew install --HEAD emiwltz/tap/something` builds the
-latest `main` from source instead (a few minutes).*
+*This page describes `main`. The version in Homebrew is 0.2.0, which drives fewer agents (Claude Code, Codex,
+OpenCode, pi); `brew install --HEAD emiwltz/tap/something` builds `main` from source instead (a few minutes).*
 
-## The first five minutes
+## Install
 
-You need a Mac with macOS 15 or later and [Homebrew](https://brew.sh), and no Xcode: Homebrew pours a version built
-in advance for your Mac (a "bottle"), or where none fits, builds one with Apple's Command Line Tools alone.
+You need a Mac with macOS 15 or later and [Homebrew](https://brew.sh). No Xcode: Homebrew pours a version built in
+advance for your Mac, or where none fits, builds one with Apple's Command Line Tools.
 
 ```sh
 brew install emiwltz/tap/something
 something
 ```
 
-`something` opens its window. The first time, a short tour says what something is, then asks which of your installed
-coding agents builds your spaces with you (it starts none of them). It also offers a small launcher in `~/Applications`
-so that Spotlight, which does not look where Homebrew installs apps, finds something.
+## The first minutes
 
-The tour ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe the space, or click a
-suggestion such as "Who is waiting for me", and your agent builds it. It opens by itself when ready, and a sheet asks
-you what it may do. Ask for changes in the bar at the bottom of the window: the space reloads as your agent saves it.
+`something` opens its window. A short tour says what something is and asks which of your installed coding agents
+builds your spaces with you (it starts none of them). It also offers a small launcher in `~/Applications`, so that
+Spotlight finds something.
 
-Your agent must be installed and signed in as you use it in Terminal (`claude`, `opencode`, `pi`): something uses
-your own account and settings. While Claude Code cannot reach its model, the line above the bar says so as it
-retries. With none, the bar's How to Get One lists the commands that install one; the templates work without an
-agent.
+The tour ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a suggestion,
+and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Ask for changes in the bar
+at the bottom of the window: the space reloads as your agent saves it. ⌘K types to the agent, ⌘J shows the
+conversation, ⌘. stops it. Templates (⇧⌘T) are six finished spaces to start from, and need no agent.
 
-## Six templates
+Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
 
-Templates (⇧⌘T) are finished spaces to start from. Use Template makes a copy that is yours to change (Project watch
-first asks which folder it follows); from a terminal, `something new <name> --from <template>` does the same.
+## Agents
 
-<table><tr>
-<td width="33%"><img src="share/templates/agents.png" alt="My agents: counters of waiting and working agents, a tile per agent"><br><b>My agents</b>: who works, who waits for you, and a word to each.</td>
-<td width="33%"><img src="share/templates/project.png" alt="Project watch: a blueprint of one folder's progress"><br><b>Project watch</b>: one folder's progress, and the agents working in it.</td>
-<td width="33%"><img src="share/templates/brief.png" alt="Daily brief: a newspaper page of the agents' day"><br><b>Daily brief</b>: what your agents did, like a morning paper.</td>
-</tr><tr>
-<td><img src="share/templates/logbook.png" alt="Logbook: a field notebook of notes and agent events"><br><b>Logbook</b>: your notes and your agents' days, day by day.</td>
-<td><img src="share/templates/stack.png" alt="Stack: a block-stacking game"><br><b>Stack</b>: a one-key game for your breaks.</td>
-<td><img src="share/templates/pet.png" alt="Pebble: a small creature in an egg-shaped device"><br><b>Pebble</b>: a little creature that lives to the rhythm of your agents.</td>
-</tr></table>
-
-## Your assistant
-
-The bar at the bottom of the window talks to your own coding agent, which builds and changes spaces with you: Claude
-Code, Codex, OpenCode, pi, OMP or Amp, the one you choose among those installed. It starts at your first message and works in
-`~/something/spaces`, with your account and settings. Each message starts with a line from something saying which
-space is open, so "make it blue" means that one. ⌘K types to it, ⌘J shows the conversation, ⌘. stops it. After 30
-minutes without a turn it is stopped to save memory; a new conversation starts each time something starts.
-
-something never answers for you. Your assistant may change your spaces and run something's own commands without
-asking; everything else it does asks you, as your agent's own settings decide.
-
-something lends your assistant its own commands as tools, `something_guide`, `something_new` and `something_check`:
-something runs them itself, outside any sandbox of the agent, one at a time, and gives it what they printed. Claude
-Code, Codex, OpenCode, OMP and Amp get them from `something mcp`, a small MCP server (Model Context Protocol, the standard
-way to give an agent tools) that the agent starts for that conversation only; pi runs something's commands in its
-shell, which it does without asking anyway.
-
-For Claude Code, "without asking" is exactly: edits and writes in `~/something/spaces`, and those three tools. Any
-other command asks you, `something open` included (something opens a new space by itself). For Codex it is its own
-sandbox, "workspace-write": it may change files and run commands in `~/something/spaces` (and its temporary folders),
-without the network, and call those three tools, approved by name (an MCP server of your own named `something` is
-set aside for that conversation; your others stay); what the sandbox blocks asks you. Its sandbox
-cannot load a page, which is why it needs `something_check` (a Codex that cannot start the tools is not offered until
-you choose Look for Agents Again, and its menu entry says why). For OpenCode nothing is pre-allowed: it asks as your own OpenCode
-settings say. The same for OMP, whose own default (its setting `tools.approvalMode`, "yolo") asks nothing: it can
-run any command on your Mac unless your OMP settings say otherwise. pi never asks, by design: it can run any command
-on your Mac, and the tour and the bar say so. Amp never asks either when something launches it (a tool your own Amp
-settings would ask for, Amp refuses by itself), and the tour and the bar say so too. "Ask
-Before Every Change", in the bar's agent menu, turns the exception off from the next conversation, the tools included.
-No space can see what you say to your assistant, or write to it.
-
-To tell it what something is, something writes `AGENTS.md` and `CLAUDE.md` into `~/something/spaces` at each start. A
-file whose first line you removed is yours: something leaves it alone.
-
-## What it reads, and never writes
-
-something reads, and never writes, each agent's own files: `~/.claude` or `$CLAUDE_CONFIG_DIR` (Claude Code), `~/.codex`
-or `$CODEX_HOME`, with its databases in `$CODEX_SQLITE_HOME` when set (Codex), OpenCode's database (in
-`~/.local/share/opencode`, or `$OPENCODE_DB`) and its last model (`model.json` in `~/.local/state/opencode`, or `$XDG_STATE_HOME/opencode`), `~/.pi` and the folders `$PI_CODING_AGENT_DIR` and
-`$PI_CODING_AGENT_SESSION_DIR` name (pi), and `~/.omp` (OMP). Amp keeps its threads on its own servers, so an Amp
-you started yourself is seen by its process only. It opens them read-only and takes only what a space is
-shown: the folder, the state, the last messages, what the agent waits for. Nothing it reads from an agent goes into an
-export. It also looks at the list of running processes, to tell an agent that runs from one that ended.
-Antigravity's CLI (`agy`) is seen by its process alone: that it runs, and in which folder. something reads none of its
-files and does not launch it yet: Antigravity's ACP server keeps a Google sign-in of its own, apart from the CLI's.
-Cursor's CLI (`cursor-agent`, also linked as `agent`) is seen the same way. something does not launch it yet: over its
-ACP channel it builds a space, but asks you before each of something's own tools, which only a settings file of
-Cursor's own could allow.
-
-something writes no hook, no MCP server, no skill and no setting into any agent's configuration: the MCP server it
-gives your assistant is passed at launch, for that conversation only. What it writes is its own: `~/something/` (your spaces, their memory, and your assistant's `AGENTS.md` and `CLAUDE.md`) and
-`~/Library/Application Support/something/` (your answers to the rights sheets, the window's memory, the journals of
-what spaces asked agents to do, and plan B's spool, below).
-
-## What it launches, and how
-
-Your assistant, and the agents a space with the right to launch starts in the folder you chose, run through each
-agent's own official channel, with your own configuration:
-
-- **Claude Code**: `claude -p --input-format stream-json --output-format stream-json --verbose
-  --permission-prompt-tool stdio`, the channel Anthropic's SDKs use, without `ANTHROPIC_API_KEY` or
-  `ANTHROPIC_AUTH_TOKEN` from your environment, so that it uses the account you signed in with. A Claude Code that
-  refuses that option is launched again with a permission hook given in `--settings` for that launch only, which waits
-  for the same window (plan B); nothing is written in your Claude settings. Your assistant also gets `--mcp-config`
-  with something's MCP server and `--allowedTools` with the rules above, unless Ask Before Every Change is on.
-- **Codex**: `codex app-server`, its official JSON-RPC channel, one private server per conversation. something never
-  joins the server a Codex in your terminal may share.
-- **OpenCode**: `opencode acp`, the Agent Client Protocol. One conversation per program. Over that channel OpenCode
-  picks a model of its own, so a new conversation starts with the model you used last in OpenCode, unless a space
-  asks for another; when OpenCode no longer offers it, OpenCode's own choice stays. Your assistant gets something's
-  MCP server in `session/new`. OpenCode connects it in the background: on a very first message sent at once, its
-  tools may not be there yet, and your assistant then runs `something` in its shell, as its instructions say. A call
-  from OpenCode's code mode is shown as something's command only when it called nothing but something's tools.
-- **pi**: `pi --mode rpc`, its official channel.
-- **OMP**: `omp acp`, the Agent Client Protocol, as OpenCode. Its conversations are saved and read like the ones you
-  start in a terminal. Your assistant gets something's MCP server in `session/new`, and its calls to those tools are
-  shown as the commands something runs.
-- **Amp**: `amp --execute --stream-json --stream-json-input`, its official machine channel, with `--no-ide`, so that
-  your editor's open file is not added to the messages. Your assistant gets something's MCP server in
-  `--mcp-config`, and calls those tools from Amp's code tool, shown with its code. Amp runs on your Amp account: its
-  own subscriptions or credits, as for an Amp you start yourself.
-
-Started from a terminal, something gives the agents that terminal's environment, so they find the programs your
-terminal finds (less the variables that only say where the terminal runs, such as `TMUX`); started from Finder or
-Spotlight, it asks your login shell for its `PATH`. Closing the window keeps something running, with its agents: its
-Dock icon or `something` shows the window again. Quitting stops the agents it launched, after asking you.
-
-## Permissions and the windows of the Mac
-
-Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
-
-- **Rights.** At the first opening of a space, a sheet lists what it declares (see your agents, write to them, start
-  them, remember things), each to allow or not, and the folder its agents will work in. Your answers are kept, and
-  something asks again only for what the space adds. Info (⌥⌘I) shows each right of the open space with a switch to
-  revoke it, Ask Again under a refused one, and the space's activity: each time it wrote to, started or changed an
-  agent, or opened a link.
-- **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny"
-  (Escape denies). There is no "always". A question from an agent opens a panel with its choices. A space sees that the
-  agent waits, and can never answer for you. A hook you installed in an agent yourself stays, and may decide a
-  permission before the panel opens; the state says so when the agent's own stream tells it.
-- **Modes.** A mode that makes an agent ask less (accepting edits by itself) always asks you again, with the agent's
-  folder. A mode that never asks (Claude's `bypassPermissions`) and a mode something does not know are refused.
-- **Links.** A link you click in a space, or one it opens, shows "Open", "Cancel" or "Block Links Until Reload", one
-  at a time.
-- **Export.** Exporting a space carries its memory only if you choose "With Its Data", after seeing its keys and size.
-
-## No network for spaces
-
-A space loads only its own files, served at `something://space/`, inline code, `data:` and `blob:`. Every other address
-is blocked, four times: a sandboxed frame, a content security policy on every file, a content rule list, and a
-navigation policy that cancels every page change outside the space. `window.open` opens nothing. The app itself opens
-no port, listens on nothing and sends no telemetry.
-
-One gap is known. When you click with the mouse on a link that opens a new window (`target="_blank"`) inside a
-closed shadow root written in HTML (a part of a page hidden from scripts outside it; one a script makes with
-`attachShadow` is opened by something), WebKit may look up the link's server name and open one connection to it before
-it refuses the window. No request is sent, but the page chooses the name, so it could put a few words in it. Every
-other link you click, and every link a page's own script activates, is stopped before any connection.
-
-## The contract for spaces
-
-What a space can rely on is contract 1, written for the agent that builds spaces in the guide,
-[share/guide.md](share/guide.md), which is installed with the app (`something guide` prints its path, `something
-guide --print` prints it; Help › Guide for Coding Agents shows it in Finder). It holds:
-
-- **the declaration**: a `<script type="application/json" id="something">` block in the page (or `something.json` in a
-  folder space), with `contract`, `title`, `description`, `agents`, `rights`, `folder`;
-- **the rights**: `state`, `send`, `launch`, `store`, each limited to one kind with `:claude`, `:codex`, `:opencode`
-  or `:pi`;
-- **the bridge**, `something.js`, injected into every space: `contract`, `granted`, `state`, `on`, `send`,
-  `interrupt`, `set`, `launch`, `resume`, `store.get`, `store.set`, `open`;
-- **the state**: `contract`, `at`, `kinds`, `agents`, `threads`, `requests`, where what is not known is `null`;
-- **the codes** of every refusal and of `something check`, each with a sentence that says what to do, and **the export
-  format**, a `.something` file.
-
-The same contract as data, read by the tests: [share/contract/](share/contract/). Within contract 1, keys, functions,
-rights, words and codes are only added, never renamed or removed. To build spaces with an agent outside something,
-give it the guide; the skill next to it ([share/skill/SKILL.md](share/skill/SKILL.md)) is yours to add to your agent:
-something never adds anything to your agents.
-
-## The command
-
-```text
-something                       start something, or bring it to the front
-something open <name>           open a space of ~/something/spaces; or import an export (a .something file)
-something new <name> [--folder] make a space from the empty template (with --folder, <name>/index.html)
-something new <name> --from <t> make a space from a template: agents, project, brief, logbook, stack, pet
-something guide [--print]       where the guide for the coding agent that writes your spaces is; --print prints it
-something check <name|path> [--json] [--refuse <right>]... [--state <file>] [--journal]
-                                test a space as the app loads it, unseen, against an invented state
-something mcp                   serve new, check and guide to a coding agent over MCP (the agent starts it)
-something --version
-```
-
-Every failure is one sentence that says what to type next. The status is 0 when it worked, 1 when it was refused or
-failed, 2 when the words were wrong; `check` has its own: 0 no error, 1 errors, 2 it could not run. `check` loads the
-space with the app's own lock and bridge, in a window nobody sees, against the invented state of
-`share/contract/state-example.json`, never your agents, and writes a snapshot of the page to `.check/<name>.png` in
-`~/something/spaces` (a hidden folder, never listed as a space), or to `$TMPDIR/something-check/` for a page elsewhere.
-
-something opens spaces by name, from `~/something/spaces` only, where each has its memory and its journal: copy a
-page from elsewhere there first. A page of that folder without a declaration is listed as "not a space yet". One space
-is open at a time, and it reloads when one of its files changes. A space's context menu has Show in Finder, Export…
-and Move to Trash… (its memory goes with it); File › Import Space… takes an export.
-
-## What each agent allows, and why
-
-Each agent something knows is **seen** (its files are read, or only its running program is seen), **driven** (launched
-and talked to through its own channel) and a **builder** (it can be your assistant), or says why not. Every agent
-something drives builds spaces too: one that cannot is not driven until it can. The agents of the last row show as "other agent",
-named by their folder, else by their program (in brackets).
+Each agent something knows is **seen** (its files are read, or only its running program), **driven** (launched and
+talked to through its own official channel) and a **builder** (it can build your spaces with you), or says why not.
+Every agent something drives is also a builder.
 
 | | seen | driven | builder |
 |---|---|---|---|
@@ -229,36 +48,68 @@ named by their folder, else by their program (in brackets).
 | Cursor | by its process | no: Cursor asks you before each of something's own tools, so something only sees cursor-agent for now. | no |
 | Auggie (`auggie`), Crush (`crush`), DeepSeek Harness (`dsh`), Factory Droid (`droid`), Gemini CLI (`gemini`), GitHub Copilot CLI (`copilot`), Goose (`goose`), Qwen Code (`qwen`), ZCode (`zcode`) | by its process | no: something has no extension for them. | no |
 
-| | send | steer | queue | interrupt | model | mode | effort |
-|---|---|---|---|---|---|---|---|
-| Claude Code | yes | yes | yes | yes | yes | yes | yes |
-| Codex | yes | yes | yes | yes | yes | yes | yes |
-| OpenCode | yes | no | yes | yes | yes | yes | yes |
-| pi | yes | yes | yes | yes | yes | no | yes |
-| OMP | yes | no | yes | yes | yes | yes | yes |
-| Amp | yes | yes | yes | no | no | no | no |
+Amp keeps its conversations on its own servers, so an Amp you started yourself is seen by its process only. An agent
+started elsewhere is read-only; a Claude Code or Codex conversation can be continued in something once no other
+process holds it. What each driven agent cannot do (OpenCode and OMP cannot take a message during a turn, pi has no
+mode, Amp cannot be interrupted) is in [the guide](share/guide.md#what-each-kind-can-do-and-what-it-cannot).
 
-- **OpenCode cannot steer** (take a message during a turn): its channel has no way to. A message waits for the next
-  turn. OpenCode launched by something cannot ask a question either.
-- **pi has no mode, and never asks permission**, by design: it runs commands and edits files without asking you
-  first. The rights sheet says so when a space asks to launch pi.
-- **OMP cannot steer** either: the same channel as OpenCode's. It asks permission as your OMP settings say, and by
-  default asks nothing.
-- **Amp cannot be interrupted**: its channel takes only messages, so a turn runs to its end; stop the agent instead
-  (the assistant's Stop ends Amp, and the next message starts it again).
-  It never asks permission when something launches it, and picks its model by its own agent mode, which something
-  does not set. The rights sheet says so when a space asks to launch it. When Amp asks you to choose, something
-  cannot show the choice and says so: Amp waits for the answer, so stop it and ask again without a choice.
-- **An agent started elsewhere is read-only**: something has no channel into a terminal it did
-  not open. A Claude Code or Codex conversation can be continued in something ("continue here") once no other process
-  holds it; OpenCode, pi and OMP conversations cannot.
+## The promise
 
-## Where it has run
+something never answers for you. Your assistant may change your spaces and run something's own commands without
+asking; everything else it does asks you, as your agent's own settings decide.
 
-something requires macOS 15 or later. The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4, no
-Xcode); at each push GitHub runs it on macOS 15.7 (Swift 6.1) and 26.6 (Swift 6.3) and installs the formula there with
-Homebrew. The bottles of v0.2.0 are built and installed on GitHub's macOS 26 and 15 (Apple silicon) and macOS 15 on
-Intel, where `brew test` and `something check` pass; the suite itself has not run on an Intel Mac.
+Your assistant is the agent you chose, working in `~/something/spaces`. something lends it three of its own commands
+as tools (`something_guide`, `something_new`, `something_check`) through `something mcp`, an MCP server (Model Context
+Protocol, the standard way to give an agent tools) that the agent starts for that conversation only; pi runs them in
+its shell instead. What "without asking" means for each:
+
+- **Claude Code**: edits and writes in `~/something/spaces`, and those three tools. Anything else asks you.
+- **Codex**: its own sandbox, "workspace-write": files and commands in `~/something/spaces`, without the network, and
+  those three tools. What the sandbox blocks asks you.
+- **OpenCode** asks as your OpenCode settings say. **OMP** too, and its own default asks nothing.
+- **pi** and **Amp** never ask when something launches them, by design (a tool your Amp settings would ask for, Amp
+  refuses by itself): they can run any command on your Mac. The tour and the bar say so.
+
+"Ask Before Every Change", in the bar's agent menu, turns the exception off from the next conversation. No space can
+see what you say to your assistant, or write to it. something writes `AGENTS.md` and `CLAUDE.md` in
+`~/something/spaces` to tell your assistant what something is; a copy whose first line you removed is yours and left
+alone.
+
+## Permissions
+
+Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
+
+- **Rights.** At the first opening of a space, a sheet lists what it declares (see your agents, write to them, start
+  them, remember things), each to allow or not. Info (⌥⌘I) shows each right with a switch to revoke it, and what the
+  space did.
+- **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There
+  is no "always". A space sees that the agent waits, and can never answer.
+- **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
+  `bypassPermissions`) is refused.
+- **Links.** Each link a space opens asks you first.
+- **Export.** An exported space carries its memory only if you choose so.
+
+something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
+agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
+or the agent's channel, for that launch only. It writes only in `~/something/` and
+`~/Library/Application Support/something/`.
+
+## No network for spaces
+
+A space loads only its own files, inline code, `data:` and `blob:`. Every other address is blocked four times: a
+sandboxed frame, a content security policy, a content rule list, and a navigation policy. The app opens no port,
+listens on nothing and sends no telemetry.
+
+One gap is known. When you click with the mouse on a link that opens a new window (`target="_blank"`) inside a closed
+shadow root written in HTML, WebKit may look up the link's server name and open one connection to it before it refuses
+the window. No request is sent, but the page chooses the name, so it could put a few words in it. Every other link is
+stopped before any connection.
+
+## Building spaces
+
+The contract a space can rely on is [share/guide.md](share/guide.md), written for the coding agent that builds spaces
+(`something guide --print` prints it; `something --help` lists the commands). To build spaces with an agent outside
+something, give it the guide, or add [share/skill/SKILL.md](share/skill/SKILL.md) to your agent yourself.
 
 ## Uninstall
 
@@ -273,54 +124,39 @@ rm -rf ~/something                                   # your spaces and their mem
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
 ```
 
-macOS and WebKit may also have made folders named after the app's identifier, which this lists:
-`find ~/Library -maxdepth 2 -name 'io.github.emiwltz.something*'`. something wrote nothing in your agents' folders.
+macOS and WebKit may also have made folders named after the app's identifier:
+`find ~/Library -maxdepth 2 -name 'io.github.emiwltz.something*'` lists them.
 
 ## Building from the clone
 
+The Command Line Tools are enough; Xcode is not needed.
+
 ```sh
 git clone https://github.com/emiwltz/something && cd something
-swift build                                 # the Command Line Tools alone are enough
+swift build
 swift test                                  # the Swift suite
 node --test Tests/something-js.test.mjs     # something.js against the contract's cases
-swift run something                         # runs the app in the terminal's own process (no .app)
-tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app and signs it ad hoc, as the formula does
+swift run something                         # the app, in the terminal's own process
+tools/make-app.sh <prefix> <version>        # assembles <prefix>/something.app, signed ad hoc, as the formula does
 ```
 
-- **The Command Line Tools alone build everything**, and must keep doing so: a newcomer has no Xcode. Some SwiftUI
-  attributes are macros whose plugin only Xcode ships (`@State`, `@Entry`), so `ToolchainTests` allows only a list of
-  attributes in `Sources/`. State lives in `@Observable` models.
-- **The look.** `swift run` draws the app in macOS's older style: `swift build` stamps the program with the oldest
-  macOS it supports. `make-app.sh` stamps the SDK that built it, as Homebrew's install does.
-- **Somewhere else than your own folders.** With `SOMETHING_HOME=<folder>`, an absolute path (another is ignored),
-  something (the app, its commands and its MCP server) keeps its folders under `<folder>` instead of your home:
-  `<folder>/something/spaces` and `<folder>/Library/Application Support/something`. The agents it launches keep your
-  real home, and their sign-in.
-- **Never run two copies together.** `swift run something` and an installed something are two programs to macOS: both
-  would launch agents and write the same journals. Quit one before starting the other.
+With `SOMETHING_HOME=<absolute folder>`, something (the app, its commands and its MCP server) keeps its folders there
+instead of your home: `<folder>/something/spaces` and `<folder>/Library/Application Support/something`. The agents it
+launches keep your real home and their sign-in. Never run `swift run something` and an installed something together:
+both would launch agents and write the same journals. The rules for changing the code are in [AGENTS.md](AGENTS.md);
+the Homebrew formula and the tap's files are in [packaging/homebrew/](packaging/homebrew).
 
-The Homebrew formula, and what goes into the tap on release day (its formula and the workflows that make the
-bottles), are in [packaging/homebrew/](packaging/homebrew); the rules for changing the code in [AGENTS.md](AGENTS.md).
+## Where it has run
 
-```text
-share/                     something.js, the empty template, the six templates and their previews, the skill, the guide, the assistant's AGENTS.md, the contract as data
-Sources/SomethingCore/     contract 1: the state, spaces, declarations, rights, the bridge, memory, journal, export, codes
-Sources/SomethingAgents/   the host: the engine, the watch, the programs, and what an agent extension provides; it names no agent
-Sources/Agent*/            one target per agent family: its descriptor, driver and reader (Claude, Codex, ACP with a profile per agent: OpenCode and OMP, Pi for pi and OMP's reader, Amp)
-Sources/something/         the command and the Mac app: the window, its sidebar, Info, the assistant, the tour, the sheets and panels that ask you
-packaging/, tools/         the app's Info.plist and icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh (the templates' pictures)
-.github/workflows/         the suite and a Homebrew install, which GitHub runs at each push
-Tests/                     the Swift suites, recorded exchanges with invented text, and the node tests of something.js
-```
+The suite has run on macOS 27 with the Command Line Tools 27 alone (Swift 6.4); at each push GitHub runs it on macOS
+15 and on its latest macOS runner, and installs the formula there with Homebrew. The bottles of 0.2.0 are built and
+installed on macOS 26 and 15 (Apple silicon) and macOS 15 on Intel; the suite itself has not run on an Intel Mac.
 
 ## Security
 
-something opens no port and listens on nothing; a space cannot reach the Internet (except the gap described in
-[No network for spaces](#no-network-for-spaces)), nor draw the windows that ask you. The agents run as you, with your
-own settings, in the folder you chose: give something the trust you give them. A space is code your agent wrote: read
-what you open.
-
-To report a weakness without making it public, use "Report a vulnerability" in the Security tab of the repository.
+The agents run as you, with your own settings, in the folder you chose: give something the trust you give them. A
+space is code your agent wrote: read what you open. To report a weakness privately, use "Report a vulnerability" in
+the Security tab of the repository.
 
 ## License
 

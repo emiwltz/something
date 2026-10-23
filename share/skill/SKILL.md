@@ -1,6 +1,6 @@
 ---
 name: something-space
-description: Build or change a space for something, the Mac app that shows HTML pages wired to the coding agents on this Mac. Use when the person asks for a space, a page, a board or a dashboard "in something", or for a page that shows, talks to or launches their agents (Claude Code, Codex, OpenCode, pi, OMP).
+description: Build or change a space for something, the Mac app that shows HTML pages wired to the coding agents on this Mac. Use when the person asks for a space, a page, a board or a dashboard "in something", or for a page that shows, talks to or launches their agents (Claude Code, Codex, OpenCode, pi, OMP, Amp).
 ---
 
 # Building a space for something

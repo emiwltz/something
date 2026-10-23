@@ -2,13 +2,10 @@
 
 *For the coding agent a person asks to build them a space. Read this file whole before writing.*
 
-something is a Mac app (macOS 15 or later) that sees the coding agents on this Mac (Claude Code, Codex, OpenCode, pi),
-launches them, and shows **spaces**: HTML pages that you write for the person. A board of who is waiting, a chat, a
-summary of the day, a small game: what they ask for. something gives you an empty page and this contract, version 1. The
-look and the content are yours and theirs; the contract only says what a space can rely on.
-
-*This guide is for something 0.2. The state lists the agents something launched and those started elsewhere, and
-`resume` continues here a Claude Code or Codex conversation started elsewhere.*
+something is a Mac app (macOS 15 or later) that sees the coding agents on this Mac, launches some of them (Claude
+Code, Codex, OpenCode, pi, OMP, Amp), and shows **spaces**: HTML pages that you write for the person. A board of who
+is waiting, a chat, a summary of the day, a small game: what they ask for. something gives you an empty page and this
+contract, version 1. The look and the content are yours and theirs; the contract only says what a space can rely on.
 
 ## The five steps
 
@@ -63,10 +60,11 @@ also start from one in something's Templates (File › Templates).
 When something's own window started you, you work in `~/something/spaces` and each message starts with one line from
 something, `[something] …`, saying which space is open: "this space" means that one. The folder's `AGENTS.md`, which
 something writes there, says how to work in it: read it after this guide. something may lend you `something new`,
-`check` and `guide` as tools (`something_new`, `something_check`, `something_guide`): use them when you have them. With
+`check` and `guide` as tools (`something_new`, `something_check`, `something_guide`): use them when you have them. As
 Claude Code, changing the files of that folder and those tools do not ask the person, unless they chose Ask Before
-Every Change; anything else asks them. OpenCode asks as the person's own OpenCode settings say. pi never asks:
-say so before you run anything outside this folder. A space you make while the person is on the blank page opens by
+Every Change; anything else asks them. As Codex, your sandbox lets you write in that folder, and those tools are
+allowed. OpenCode and OMP ask as the person's own settings say (OMP's default asks nothing). pi and Amp never ask: say
+so before you run anything outside this folder. A space you make while the person is on the blank page opens by
 itself; otherwise something shows it as ready in the sidebar. Never run `something open` after `something new`. No
 space can write to you or read what the person tells you.
 
@@ -194,7 +192,7 @@ What each `delivery` means today:
   `AGENT_STOPPED`): such a call never answers `"steered"`.
 - `"queued"`: a turn was running and `when` was `"next"`; the message is in the agent's `queue`.
 - `"unconfirmed"`: kept in contract 1 for a message the agent took without confirming it within 10 seconds.
-  something 0.2 never gives it, since it answers as soon as the message is written; treat it as `"steered"`.
+  something never gives it today, since it answers as soon as the message is written; treat it as `"steered"`.
 
 A mode that makes an agent ask less (accepting edits by itself, never asking for approval) always opens a confirmation
 window of the Mac, whatever the space was granted. A refusal there gives `REFUSED`. A mode that never asks (Claude's
@@ -289,7 +287,8 @@ at most four times a second, only when it changed. A shortened example (the full
 
 ### `kinds`: one entry per harness
 
-`claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, `antigravity` and `cursor`; something sees the last two by their process only.
+`claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, `antigravity` and `cursor`. something launches the first six; it sees
+`antigravity` and `cursor` by their process only, and an `amp` started elsewhere too.
 `launch`: something can launch it. `installed`: its program was found (or `null`, always for a kind something does not
 launch). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac name, or
 `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its database's last
@@ -383,7 +382,7 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   something does not set: its `mode` says that agent mode (`medium`, for instance). When Amp asks the person to choose,
   the channel cannot carry the answer: the turn stays `working`, the agent's `error` says so, and stopping it is the way. Its threads live on Amp's servers:
   an Amp started elsewhere is seen by its process only, like an `other` agent.
-- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. In 0.2 only a
+- **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. Only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,
   with the `launch` right for that kind. For `opencode`, `pi` and `omp`, `can.resume` is false and `because.resume`
@@ -528,17 +527,15 @@ The same list as data: `share/contract/codes.json`.
 
 ## Traps
 
-- A `<script src="https://…">`, a web font or a `fetch` to the Internet is blocked: embed what you need.
-- A library that needs `eval` or `new Function` does not run.
+What the sections above say once, here as a checklist:
+
+- No network, no `eval`: embed every library at an exact version.
 - `hidden` does not hide an element your CSS gives a `display`: add `[hidden] { display: none !important; }`.
-- A right in the declaration is not a right granted: read `something.granted`, and listen to `"granted"`.
-- `null` is not zero: show "unknown". A state word or kind you do not know is not an error: show it as unknown, or as
-  "other agent".
-- A permission or a question is answered in something's window, never in your page.
-- A rejected promise left uncaught is an error of `check`: catch each call and show its `message`.
-- An `id` from an old state may be gone: take ids from the latest state.
+- A declared right is not a granted one: read `something.granted`, and listen to `"granted"`.
+- `null` is not zero: show "unknown". A state word or kind you do not know is "unknown" or "other agent", not an error.
+- Catch each call and show its `message`: an uncaught rejection is an error of `check`.
+- Take ids from the latest state: an old one may be gone.
 - A `change` may arrive while the person types: keep the input outside what you redraw, or its text and focus are lost.
-- Calling `something.open` from the click handler of an `<a href>` asks the person twice.
 - The memory is one JSON document: keep it small, and write whole values.
 - A space stays open all day: animate only `opacity` and `transform`, never a shadow, a filter or a size, which are
   painted again at every frame; honor `prefers-reduced-motion`.
