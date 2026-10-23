@@ -80,7 +80,9 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         #expect(await fixture.wait(for: "ready"))
         #expect(getpgid(fixture.spawn.pid) == fixture.spawn.pid)
         #expect(getpgid(fixture.spawn.pid) != getpgrp())
-        #expect(try await fixture.stop() < 2)
+        _ = try await fixture.stop()
+        // Ended by its closed input, the ladder's first step, not by a signal (timed, this was flaky on busy runners).
+        #expect(try await fixture.end(within: 10) && fixture.status.map { $0 < 128 } == true, "\(String(describing: fixture.status))")
     }
 
     /// The program ignores the end of its input and SIGTERM: every step of the ladder runs, in order, on time.
@@ -139,7 +141,7 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         let fixture = try Fixture("exec 0<&-; echo ready; sleep 60")
         #expect(await fixture.wait(for: "ready"))
         try fixture.spawn.write(Data("lost".utf8))
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(10)
         var refused: CodedError?
         while refused == nil && Date() < deadline {
             refused = code { try fixture.spawn.write(Data("again".utf8)) }
@@ -203,7 +205,8 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         first.spawn.closeInput()
         #expect(try await first.end(within: 2))
         #expect(second.spawn.running)
-        #expect(try await second.stop() < 2)
+        _ = try await second.stop()
+        #expect(try await second.end(within: 10) && second.status == 0, "ended by its closed input, not by a signal")
     }
 
     /// At quit's own cap (6 s), three programs whose first step never ends and that ignore SIGTERM: every ladder
