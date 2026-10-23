@@ -32,6 +32,7 @@ import SomethingCore
         // The core's contract 1 list is the floor, omp launchable since 0.3; amp, added in 0.3, is launched beyond it,
         // and antigravity and cursor, added in 0.3, are only seen.
         #expect(Registry.described.kinds.launchable == ["claude", "codex", "opencode", "pi", "omp", "amp"] && Registry.described.kinds.readOnly == ["antigravity", "cursor"])
+        #expect(Registry.described.kinds.launchable == Set(BuildersTests.driven), "Tests/Exchanges/driven.txt lists the driven kinds")
     }
 
     @Test func theSpecialCasesAreThoseOf0_2() {

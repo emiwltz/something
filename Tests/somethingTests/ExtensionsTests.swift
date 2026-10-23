@@ -24,18 +24,18 @@ import Testing
 
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 
-    /// Emi's rule for 0.3: every agent the app drives builds spaces too, with a build recorded as the person's
-    /// assistant, which SomethingAgentsTests' BuildersTests plays through its driver.
-    @Test func everyDrivenAgentIsABuilderWithARecordedBuild() {
+    /// Emi's rule for 0.3: every agent the app drives builds spaces too. SomethingAgentsTests' BuildersTests plays the
+    /// build recorded for each kind of Tests/Exchanges/driven.txt through its driver; the app drives exactly those.
+    @Test func everyDrivenAgentIsABuilderWithARecordedBuild() throws {
+        let driven = try String(contentsOf: Self.root.appendingPathComponent("Tests/Exchanges/driven.txt"), encoding: .utf8).split(separator: "\n").map(String.init)
+        #expect(Registry.app.kinds.launchable == Set(driven), "Tests/Exchanges/driven.txt lists the kinds the app drives, whose builds are played")
         for kind in Registry.app.kinds.launchable.sorted() {
             #expect(Registry.app.agent(kind)?.builder != nil, "\(kind) is driven but not a builder")
-            let build = Self.root.appendingPathComponent("Tests/Exchanges/\(kind)/assistant-build.jsonl").path
-            #expect(FileManager.default.fileExists(atPath: build), "\(kind) is driven without a recorded build")
         }
     }
 
     /// The README's table of agents is the registry's: each agent in its order, seen (by its files, or by its process
-    /// only), driven or why not, and a builder; then, in one row, the agents seen by their process only.
+    /// only), driven or why not, and a builder; then, in one row, the agents seen by their process only, with their programs.
     @Test func theReadmesAgentTableIsTheRegistrys() throws {
         let readme = try String(contentsOf: Self.root.appendingPathComponent("README.md"), encoding: .utf8).components(separatedBy: "\n")
         let rows = readme.drop { $0 != "| | seen | driven | builder |" }.dropFirst(2).prefix { $0.hasPrefix("|") }
@@ -46,7 +46,8 @@ import Testing
         }
         #expect(Array(rows.dropLast()) == described)
         let others = try #require(rows.last)
-        #expect(others.first?.components(separatedBy: ", ").sorted() == Registry.app.others.values.sorted())
+        // Each by the name a person knows it by, then its program's, which the app shows when no folder names it.
+        #expect(others.first?.components(separatedBy: ", ") == Registry.app.others.map { "\($1) (`\($0)`)" }.sorted())
         #expect(others.dropFirst() == ["by its process", "no: something has no extension for them.", "no"])
     }
 
