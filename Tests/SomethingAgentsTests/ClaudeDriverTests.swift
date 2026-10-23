@@ -480,7 +480,7 @@ import SomethingCore
 
     /// Plan B's spool lives as long as the program: `released` removes it, and a second call does no harm.
     @Test func releasedRemovesPlanBsSpoolOnce() throws {
-        let spools = FileManager.default.temporaryDirectory.appendingPathComponent("plan-b-spools-\(UUID().uuidString)")
+        let spools = FileManager.default.temporaryDirectory.appendingPathComponent("spools-of-claude-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: spools) }
         var launch = Launch(agent: "claude-1", folder: "/Users/example/shop", thread: "5b2e0000-0000-4000-8000-000000000001")
         launch.planB = true
