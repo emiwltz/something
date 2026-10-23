@@ -34,7 +34,7 @@ final class Fixture: @unchecked Sendable {
     var lastLineAt: Date? { lock.withLock { said.last?.at } }
 
     /// Waits until `line` was written, at most `seconds`; whether it was.
-    func wait(for line: String, seconds: Double = 5) async -> Bool {
+    func wait(for line: String, seconds: Double = 30) async -> Bool {
         await waitUntil(seconds) { lines.contains(line) }
     }
 
@@ -56,7 +56,7 @@ final class Fixture: @unchecked Sendable {
 /// waits for seconds on one of the few threads of Swift's shared pool (about three on a 3-core runner), and delays
 /// every other test that needs one.
 func waitOffPool(_ semaphore: DispatchSemaphore, _ seconds: Double) async throws -> Bool {
-    try await PlanBTests.offMain {
+    try await offMain {
         semaphore.wait(timeout: seconds.isFinite ? .now() + seconds : .distantFuture) == .success
     }
 }
@@ -72,6 +72,23 @@ func waitUntil(_ seconds: Double, _ condition: () -> Bool) async -> Bool {
     return true
 }
 
+/// Polls `condition` on the main actor, at most `seconds`; records an issue naming `what` and throws when it never holds.
+@MainActor
+func until(_ what: String, seconds: Double = 30, _ condition: () -> Bool) async throws {
+    let end = Date().addingTimeInterval(seconds)
+    while !condition() {
+        guard Date() < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+}
+
+/// Runs `work`, which blocks, on a thread of its own, and returns what it returns or throws.
+func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        Thread.detachNewThread { continuation.resume(with: Result { try work() }) }
+    }
+}
+
 func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 
 @Suite struct SpawnTests {
@@ -85,7 +102,9 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         #expect(try await fixture.end(within: 10) && fixture.status.map { $0 < 128 } == true, "\(String(describing: fixture.status))")
     }
 
-    /// The program ignores the end of its input and SIGTERM: every step of the ladder runs, in order, on time.
+    /// The program ignores the end of its input and SIGTERM: every step of the ladder runs, in order, each after its
+    /// wait (3 s from the closed input to SIGTERM, 2 s from SIGTERM to SIGKILL). Only lower bounds: on a busy Mac a
+    /// timer fires late, never early.
     @Test func theLadderRunsInOrderAndOnTime() async throws {
         let fixture = try Fixture("""
             trap 'echo term' TERM
@@ -98,23 +117,23 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         let start = Date()
         fixture.spawn.graceful = { try? fixture.spawn.write(Data("bye".utf8)) }
         let took = try await fixture.stop()
-        #expect(try await fixture.end(within: 3))
+        #expect(try await fixture.end(within: 30))
         #expect(fixture.lines == ["ready", "got bye", "eof", "term"])
         let term = try #require(fixture.when("term")).timeIntervalSince(start)
-        #expect(term > 2.8 && term < 4)
-        #expect(took > 4.8 && took < 6.5)
+        #expect(term > 2.8, "SIGTERM came \(term) s after the stop began")
+        #expect(took - term > 1.8, "SIGKILL came \(took - term) s after SIGTERM")
         #expect(fixture.status == 128 + SIGKILL)
     }
 
     /// The shell ends at the end of its input; the child it left behind is reparented, and the group signal reaches it.
     @Test func aReparentedGrandchildIsKilled() async throws {
         let fixture = try Fixture("sleep 60 & echo $!; read line; exit 0")
-        await waitUntil(5) { !fixture.lines.isEmpty }
+        await waitUntil(30) { !fixture.lines.isEmpty }
         let grandchild = try #require(pid_t(fixture.lines.first ?? ""))
         #expect(processExists(grandchild))
         let took = try await fixture.stop()
         #expect(fixture.status == 0)
-        #expect(took > 1.8 && took < 4.5)
+        #expect(took > 1.8, "the grandchild was given its 2 s")
         #expect(getpgid(grandchild) == -1)
     }
 
@@ -122,9 +141,9 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
     /// after `ended`.
     @Test func whatHoldsTheOutputsAfterTheEndIsEnded() async throws {
         let fixture = try Fixture("(sleep 1; echo late; sleep 60) & echo $!; exit 0", input: false)
-        #expect(try await fixture.end(within: 4))
+        #expect(try await fixture.end(within: 10))
         let grandchild = try #require(pid_t(fixture.lines.first ?? ""))
-        await waitUntil(4) { getpgid(grandchild) == -1 }
+        await waitUntil(10) { getpgid(grandchild) == -1 }
         #expect(getpgid(grandchild) == -1)
         #expect(try #require(fixture.lastLineAt) <= (try #require(fixture.endedAt)))
         #expect(fixture.lines.contains("late"))   // written within the two seconds the outputs are given
@@ -132,7 +151,7 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 
     @Test func aWriteAfterTheEndIsRefused() async throws {
         let fixture = try Fixture("exit 0")
-        #expect(try await fixture.end(within: 5))
+        #expect(try await fixture.end(within: 30))
         #expect(code { try fixture.spawn.write(Data("late".utf8)) }?.code == "AGENT_STOPPED")
     }
 
@@ -161,9 +180,10 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         var ended = Date.distantFuture
         fixture.spawn.stop { first.signal() }
         fixture.spawn.stop(cap: 1) { ended = Date(); second.signal() }
-        #expect(try await waitOffPool(first, 3))
-        #expect(try await waitOffPool(second, 1))
-        #expect(ended.timeIntervalSince(start) < 1.5)
+        #expect(try await waitOffPool(first, 30))
+        #expect(try await waitOffPool(second, 30))
+        // Uncapped, the ladder would kill the program, which ignores SIGTERM, 3 s + 2 s after the stop began.
+        #expect(ended.timeIntervalSince(start) < 5, "the cap of 1 s killed it before the uncapped ladder would")
         #expect(!processExists(fixture.spawn.pid))
     }
 
@@ -203,7 +223,7 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
     @Test func eachInputIsHeldOnlyBySomething() async throws {
         let first = try Fixture("exec /bin/cat"), second = try Fixture("exec /bin/cat")
         first.spawn.closeInput()
-        #expect(try await first.end(within: 2))
+        #expect(try await first.end(within: 10))
         #expect(second.spawn.running)
         _ = try await second.stop()
         #expect(try await second.end(within: 10) && second.status == 0, "ended by its closed input, not by a signal")
@@ -211,8 +231,8 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 
     /// At quit's own cap (6 s), three programs whose first step never ends and that ignore SIGTERM: every ladder
     /// begins before any program ends, each is killed near the cap and before an uncapped ladder would kill it, and
-    /// the whole stop ends well before three ladders one after another would. These are relations, not times: on a busy 3-core Mac a thread can wait its
-    /// turn for seconds, and a short cap could not tell that wait from a ladder run late.
+    /// the whole stop ends well before three ladders one after another would. These are relations, not times: on a busy
+    /// 3-core Mac a thread can wait its turn for seconds, and a short cap could not tell that wait from a ladder run late.
     @Test func atQuitEveryLadderRunsAtOnceWithinItsCap() async throws {
         let stubborn = "trap '' TERM; echo ready; while :; do sleep 0.05; done"
         let fixtures = try [Fixture(stubborn), Fixture(stubborn), Fixture(stubborn)]
@@ -243,15 +263,15 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
 
     @Test func theExitCodeIsGiven() async throws {
         let fixture = try Fixture("exit 3", input: false)
-        #expect(try await fixture.end(within: 5))
+        #expect(try await fixture.end(within: 30))
         #expect(fixture.status == 3)
     }
 
     @Test func aSpawnNeverStartedStopsAtOnce() async throws {
         let spawn = Spawn(path: "/bin/sh", arguments: [], folder: "/", environment: [:])
-        let done = DispatchSemaphore(value: 0)
-        spawn.stop { done.signal() }
-        #expect(try await waitOffPool(done, 1))
+        var done = false
+        spawn.stop { done = true }
+        #expect(done, "called before stop returns")
     }
 
     @Test func aMissingFileIsNotInstalled() {

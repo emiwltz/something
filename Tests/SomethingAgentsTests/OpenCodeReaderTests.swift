@@ -54,7 +54,7 @@ final class OpenCodeHome {
 
     /// `prefix` names the folder in $TMPDIR, as ClaudeHome's does.
     init(legacyOnly: Bool = false, now: Date = Date(), prefix: String = "opencode-home-") throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
+        root = FileManager.default.scratch(prefix)
         self.now = now
         try FileManager.default.createDirectory(at: root.appendingPathComponent("data/opencode"), withIntermediateDirectories: true)
         reader = OpenCodeReader(environment: ["HOME": root.path, "XDG_DATA_HOME": root.appendingPathComponent("data").path])

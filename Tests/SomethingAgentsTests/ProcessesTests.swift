@@ -7,7 +7,7 @@ import Testing
 
 @Suite struct ProcessesTests {
     @Test func aSnapshotGivesParentsGroupsStartsAndForKnownNamesArgumentsAndFolders() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("processes-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("processes-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let sleeper = Process()

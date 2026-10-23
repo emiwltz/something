@@ -17,7 +17,7 @@ package final class OtherReader: Reader {
 
     package func read(_ snapshot: Snapshot, discover: Bool, now: Date) -> Reading {
         let matched = snapshot.processes.values.compactMap { process in process.runs(names).map { (process, $0) } }
-        // A helper the agent started (Gemini CLI starts itself again with more memory) is the same agent.
+        // A helper the agent started (an agent may start itself again, with more memory) is the same agent.
         let pids = Set(matched.map(\.0.pid))
         return Reading(sightings: matched.filter { !pids.contains($0.0.parent) }.map { process, name in
             Sighting(kind: kind, key: "\(name)-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),

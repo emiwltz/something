@@ -56,7 +56,7 @@ final class ClaudeDriver: Driver {
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
     }
 
-    /// What the person's assistant may do without asking (E-1, Emi's decision of 19 October 2026): change files in
+    /// What the person's assistant may do without asking (AGENTS.md, rule 2): change files in
     /// `folder`, the spaces folder, and call the tools something lends it (`lent`), served by its MCP server
     /// "something". The rules fail toward asking: any other command, tool or path still asks. In Claude's rules "//"
     /// starts an absolute path ("/" alone is the project's root).

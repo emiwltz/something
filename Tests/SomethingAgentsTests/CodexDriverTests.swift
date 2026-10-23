@@ -1,4 +1,4 @@
-// CodexDriver, replayed over Tests/Exchanges/codex (Replay.swift): each file was recorded in trial T-2 against the real
+// CodexDriver, replayed over Tests/Exchanges/codex (Replay.swift): each file was recorded in a trial against the real
 // codex app-server 0.163.0 and FakeResponsesAPI, with invented text. Then the cases no recording holds, built from the
 // recorded shapes: Codex's answers arriving late, an interrupt never answered, requests something does not handle.
 import Foundation
@@ -138,7 +138,7 @@ import SomethingCore
         replay.feed(["method": "turn/started", "params": ["threadId": thread, "turn": ["id": turn, "status": "inProgress"]]])
     }
 
-    /// The person's assistant (E-1): its thread starts in Codex's workspace-write sandbox, in its folder; with Ask
+    /// The person's assistant: its thread starts in Codex's workspace-write sandbox, in its folder; with Ask
     /// Before Every Change, and for any launch a space asks for, as Codex's own settings say.
     @Test func theAssistantWorksInTheSandbox() {
         func start(_ assistant: Assistant?) -> [String: Any]? {

@@ -39,7 +39,7 @@ import SomethingCore
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its conversation). With
     /// `assistant`, pi is the person's building assistant, in ~/something/spaces, with this clone's real program
-    /// (AssistantBuild.placeProgram, plan A.4) first in its PATH, as the engine puts the app's own.
+    /// (AssistantBuild.placeProgram) first in its PATH, as the engine puts the app's own.
     init(_ name: String, model: String? = nil, effort: String? = nil, resume file: String? = nil, after: PiRun? = nil, assistant: Bool = false) throws {
         self.name = name
         owner = after == nil
@@ -47,7 +47,7 @@ import SomethingCore
         note = ["model": model, "effort": effort, "resume": file, "assistant": assistant ? true : nil].compactMapValues { $0 }
         api = try after?.api ?? FakeResponsesAPI()
         api.pi = true
-        let root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("pi-trial-\(UUID().uuidString)")
+        let root = after?.root ?? FileManager.default.scratch("pi-trial-")
         self.root = root
         work = assistant ? AssistantBuild.real(root).appendingPathComponent("home/something/spaces") : root.appendingPathComponent("work/shop")
         for folder in ["home", "agent", "work/shop"] {
@@ -220,7 +220,7 @@ let trialPi = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_PI"].flatMap 
 @Suite(.serialized, .enabled(if: trialPi != nil, "T-4 needs pi: set SOMETHING_TRIAL_PI to its program's path."))
 @MainActor struct PiTrial {
 
-    /// C7: the standard build of a space by the person's assistant (plan A.2 #6), launched as the app launches it: pi
+    /// The standard build of a space by the person's assistant, launched as the app launches it: pi
     /// runs something's real commands in its shell (guide, new, and check with WebKit), which it does without asking.
     @Test func theAssistantsStandardBuildAsksNothing() async throws {
         let run = try PiRun("assistant-build", assistant: true)

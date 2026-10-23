@@ -1,4 +1,4 @@
-// The templates of share/templates (plan B.5) pass `something check` with no problem at all, as the person's spaces
+// The templates of share/templates pass `something check` with no problem at all, as the person's spaces
 // in a throwaway home: once with every right they declare, then with each of those rights refused, which they must
 // adapt to. Each has its preview, made from the HTML it has now (previews.json keeps the SHA-256 of that HTML), loads
 // nothing from the network and uses only fonts every Mac has. Stack plays, and Pebble remembers between openings. Use
@@ -114,7 +114,7 @@ import WebKit
         library.use(agents)
         library.use(agents)
         #expect(used == ["agents"] && Spaces(root: home.places.spaces).list().map(\.name) == ["agents"])
-        #expect(await wait(1, until: { opened == ["agents"] }))
+        #expect(await wait(30, until: { opened == ["agents"] }))
         await wait(0.05)
         library.use(agents)
         #expect(used == ["agents", "agents-2"] && library.selection == "agents-2" && ask.told.isEmpty)

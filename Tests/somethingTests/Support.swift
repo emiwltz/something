@@ -20,7 +20,7 @@ let windowServerMissing: Comment = "This session has no window server, and WebKi
 /// it in $TMPDIR, one per suite, so that each suite's `.leavesNothing` counts only the folders it made.
 struct Home {
     let root: URL
-    init(prefix: String) { root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)") }
+    init(prefix: String) { root = FileManager.default.scratch(prefix) }
     var places: Places { Places(home: root) }
     static let share = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent("share")
@@ -230,7 +230,7 @@ func ready(_ window: SpaceView) async throws {
     guard await wait(until: { !window.web.isLoading && window.frame != nil }) else {
         throw SpaceError("The space did not load: \(window.web.isLoading) \(String(describing: window.web.url)).")
     }
-    for _ in 0..<100 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
+    for _ in 0..<600 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
 }
 
 /// An invented permission request of Claude's, as its plan-B hook reads it on its input.

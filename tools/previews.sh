@@ -5,8 +5,7 @@
 # compares. The pictures themselves are never compared: the hash says which HTML a picture was made from, not that it
 # looks right, which is for whoever runs this to look at. Run it from anywhere in the clone after changing a template.
 # Needs a window server: run it on a Mac where someone is logged in. Nothing is shown on the screen.
-# The pictures committed in 0.3 were also recompressed once, losslessly, at zlib's best level: a picture drawn again
-# is a fifth to a half larger, about 190 KB more in the app in all, which is not worth a tool of its own.
+# The committed pictures were recompressed losslessly at zlib's best level, so one drawn again is larger.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"

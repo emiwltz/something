@@ -1,12 +1,12 @@
 // AssistantBuild's placed program: a copy of this clone's build that carries the fixed LC_UUID and a valid signature,
-// so that the folders WebKit names after it are made once per machine (plan A.4).
+// so that the folders WebKit names after it are made once per machine.
 import Foundation
 import Testing
 
 @Suite struct AssistantBuildTests {
     @Test func aStampedCopyCarriesTheFixedUUIDAndStillVerifies() throws {
         try #require(FileManager.default.isExecutableFile(atPath: AssistantBuild.clonesProgram.path), "swift build made no program")
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("assistant-build-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("assistant-build-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let copy = folder.appendingPathComponent("something")

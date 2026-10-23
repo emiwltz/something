@@ -64,7 +64,7 @@ final class CodexHome {
     /// `index` false leaves the index out; `shape` replaces its CREATE TABLE. `prefix` names the folder in $TMPDIR, as
     /// ClaudeHome's does.
     init(index: Bool = true, shape: String = CodexHome.threads, now: Date = Date(), prefix: String = "codex-home-") throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
+        root = FileManager.default.scratch(prefix)
         self.now = now
         reader = CodexReader(environment: ["HOME": root.path])
         for folder in ["2026/10/14", "2026/10/15", "2026/10/16", "2026/10/17"] {
@@ -370,7 +370,7 @@ final class CodexHome {
 
 @Suite struct SQLiteROTests {
     @Test func readOnlyRowsAndTheWhitelist() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sqlite-ro-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("sqlite-ro-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let path = folder.appendingPathComponent("odd ?#% name.db").path

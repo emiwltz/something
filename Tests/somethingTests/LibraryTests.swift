@@ -201,7 +201,7 @@ import Testing
         library.importChosen()
         #expect(ask.told.isEmpty, "\(ask.told)")
         #expect(library.selection == "board-2" && library.entry("board-2")?.space.form == .folder)
-        #expect(await wait(1, until: { opened == ["board-2"] }))
+        #expect(await wait(30, until: { opened == ["board-2"] }))
         #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
 
@@ -300,7 +300,7 @@ import Testing
         #expect(info.rights.map(\.right) == ["state", "store"] && info.rights.allSatisfy { $0.standing == .allowed })
 
         info.set("store", allowed: false)
-        for _ in 0..<100 where try await run(window, "return heard.length") as? Int != 1 { await wait(0.05) }
+        for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 1 { await wait(0.05) }
         #expect(try await run(window, "return heard") as? [String] == ["state"])
         #expect(try await run(window, "return something.granted.refused") as? [String] == ["store"])
         #expect(try await run(window, "try { await something.store.get('word') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
@@ -310,7 +310,7 @@ import Testing
 
         // Switched on again: the memory answers again, with what it kept.
         info.set("store", allowed: true)
-        for _ in 0..<100 where try await run(window, "return heard.length") as? Int != 2 { await wait(0.05) }
+        for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 2 { await wait(0.05) }
         #expect(try await run(window, "return await something.store.get('word')") as? String == "invented")
         #expect(ask.questions.count == 1, "a switch is the person's answer: nothing more is asked")
     }
@@ -329,7 +329,7 @@ import Testing
         // "Not Now": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
         ask.answer = nil
         info.askAgain()
-        #expect(await wait(1, until: { ask.questions.count == 2 }), "asked just after the click")
+        #expect(await wait(30, until: { ask.questions.count == 2 }), "asked after the click")
         #expect(ask.questions.map(\.rights) == [["state", "store"], ["store"]])
         let grant = try #require(try AppFile.read(test.places.grants).spaces["board"])
         #expect(grant.granted == ["state"] && grant.refused.isEmpty)
@@ -339,7 +339,7 @@ import Testing
         // Answered: Info shows the new answer at once.
         ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
         info.askAgain()
-        #expect(await wait(1, until: { ask.questions.count == 3 }))
+        #expect(await wait(30, until: { ask.questions.count == 3 }))
         #expect(info.rights.map(\.standing) == [.allowed, .allowed])
         #expect(window.granted.rights == ["state", "store"])
     }

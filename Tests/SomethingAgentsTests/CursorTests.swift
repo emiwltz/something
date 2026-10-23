@@ -1,5 +1,5 @@
 // Cursor: seen by its process, not launched yet; its ACP profile is proven over its own recorded exchanges
-// (Tests/Exchanges/cursor, trial C3 against the real cursor-agent 2026.10.19-6bbf2c4): every line something wrote goes
+// (Tests/Exchanges/cursor, a trial against the real cursor-agent 2026.10.19-6bbf2c4): every line something wrote goes
 // out byte for byte as it did, and what Cursor said folds as it showed. Cursor streams texts without ids, asks without
 // the call's input, and names an MCP server's tool only in a later update.
 import Foundation

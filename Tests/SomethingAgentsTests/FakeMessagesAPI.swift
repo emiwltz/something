@@ -1,4 +1,4 @@
-// A fake of Anthropic's Messages API, for trial T-1: the real `claude` program talks to it instead of a model. It
+// A fake of Anthropic's Messages API, for the trials of Claude Code: the real `claude` program talks to it instead of a model. It
 // listens on 127.0.0.1 on a port the system picks, answers POST /v1/messages as the API streams (server-sent events),
 // and plays a tiny invented script chosen by keywords in the person's last message. It never reads, keeps or logs
 // a request's headers (they carry the key): only the JSON body is read, and only the person's texts are kept.

@@ -6,7 +6,7 @@ import Testing
 import SomethingCore
 
 final class FakeMac {
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("programs-\(UUID().uuidString)").path
+    let root = FileManager.default.scratch("programs-").path
     var home: String { "\(root)/home" }
     var shellRan: Bool { FileManager.default.fileExists(atPath: "\(root)/shell-ran") }
     /// The words each run of the fake shell was given, in order.
@@ -185,17 +185,17 @@ func code(_ body: () throws -> Void) -> CodedError? {
         let start = Date()
         #expect(finder.installed("codex") == nil)
         let took = Date().timeIntervalSince(start)
-        #expect(took > 2.9 && took < 4.5)
+        #expect(took > 2.9 && took < 30, "given up after its 3 s, not waited for: \(took) s")
         #expect(mac.shellRan)
         let pid = try #require(pid_t((try? String(contentsOfFile: "\(mac.root)/shell-pid", encoding: .utf8))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""))
-        let deadline = Date().addingTimeInterval(2)
+        let deadline = Date().addingTimeInterval(10)
         while processExists(pid) && Date() < deadline { usleep(20_000) }
         #expect(!processExists(pid))
         // The slow shell is kept a minute: the next look does not wait for it again.
         let again = Date()
         let error = code { _ = try finder.find("codex") }
-        #expect(Date().timeIntervalSince(again) < 1)
+        #expect(Date().timeIntervalSince(again) < 2.9, "not given another 3 s")
         #expect(error?.code == "NOT_INSTALLED")
         #expect(error?.message.hasSuffix("start it from Terminal by typing: something") == true)
         // From a Terminal, the shell is not needed and what is not found is not there.

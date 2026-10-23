@@ -42,7 +42,7 @@ public struct Registry: Sendable {
 
     /// Whether a conversation seen elsewhere can be continued here, and why not, as its kind's `resume` says: only one
     /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
-    /// itself (Codex), also one whose holder is unknown.
+    /// itself, also one whose holder is unknown.
     func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
         let name = name(of: kind), resume = agent(kind)?.resume ?? .never
         guard resume != .never else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
@@ -67,10 +67,10 @@ public struct Registry: Sendable {
 
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
-    /// as much or more: a mode something does not know (an OpenCode agent the person wrote, a kind without a driver)
+    /// as much or more: a mode something does not know (one the person wrote, a kind without a driver)
     /// is confirmed rather than guessed. Throws VALUE_NOT_OFFERED, before any window, for a mode the kind never
-    /// offers here: Claude's and Codex's modes are their drivers' lists (never `bypassPermissions`), while OpenCode's
-    /// are its agents, which only the agent lists (the bridge checks a `set` against its options).
+    /// offers here: its driver's list, unless the driver says the agent lists more modes of its own (the bridge
+    /// then checks a `set` against its options).
     public func lowersAsking(mode: String, kind: String) throws -> Bool {
         if let driving = launchable[kind], !driving.listsMoreModes, !driving.modes.isEmpty, !driving.modes.contains(where: { $0.value == mode }) {
             throw CodedError("VALUE_NOT_OFFERED", "\(mode) is not a mode something offers for \(kind); pick one from options.mode in the state.")
@@ -81,7 +81,7 @@ public struct Registry: Sendable {
     /// Returns when a launch of `kind` with these values can be tried; throws the error `launch` would give for them,
     /// before any program is looked for and before any window: NOT_SUPPORTED for a kind without a driver or a value
     /// its kind never takes, BAD_PARAMS for an empty model or effort or one that starts with "-", VALUE_NOT_OFFERED
-    /// for a mode it does not offer (never one that skips every permission; OpenCode launches with build or plan).
+    /// for a mode it does not offer (never one that skips every permission).
     public func checkLaunch(_ kind: String, model: String?, mode: String?, effort: String?) throws {
         let driving = try driving(kind)
         for (key, value) in [("model", model), ("mode", mode), ("effort", effort)] where value != nil {

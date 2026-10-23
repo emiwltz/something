@@ -35,7 +35,7 @@ import Testing
         // The something program swift test built, next to this suite's bundle.
         let program = Bundle(for: FakeDoor.self).bundleURL.deletingLastPathComponent().appendingPathComponent("something")
         try #require(FileManager.default.isExecutableFile(atPath: program.path), "swift test built no something program at \(program.path)")
-        let prefix = FileManager.default.temporaryDirectory.appendingPathComponent("something-prefix-\(UUID().uuidString)")
+        let prefix = FileManager.default.scratch("something-prefix-")
         let app = prefix.appendingPathComponent("something.app")
         // Running a program inside a bundle may register the bundle with LaunchServices: forget it before deleting it.
         func forget() {

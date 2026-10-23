@@ -1,7 +1,6 @@
 // MCP: `something mcp`, the tools something lends (Lent.swift) served over the Model Context Protocol, one JSON-RPC
-// message per line on standard input and output. An agent that takes MCP servers at launch starts it itself (Claude
-// Code through --mcp-config, Codex through its thread's config, an ACP agent through session/new), as a program of its
-// own, outside the sandbox of its commands. It serves only tools (initialize, ping, tools/list, tools/call), each call run as Lent runs it, in turn.
+// message per line on standard input and output. An agent that takes MCP servers at launch starts it itself (its
+// driver says how: a command-line option, the conversation's config, ACP's session/new), as a program of its own, outside the sandbox of its commands. It serves only tools (initialize, ping, tools/list, tools/call), each call run as Lent runs it, in turn.
 import Foundation
 
 extension Lent {

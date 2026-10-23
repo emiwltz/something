@@ -13,7 +13,7 @@ public struct Launch: Equatable, Sendable {
     public var agent: String
     public var folder: String
     public var model: String?, mode: String?, effort: String?
-    /// The conversation id the program starts with, when the driver picks it before the launch (Claude's --session-id),
+    /// The conversation id the program starts with, when the driver picks it before the launch,
     /// or the one it continues when `resume` is true.
     public var thread: String
     /// Whether the launch continues the conversation `thread` instead of starting one.
@@ -40,7 +40,7 @@ public struct Launch: Equatable, Sendable {
 }
 
 /// How the person's assistant works. `building`: it may change its folder's files and run something's own commands
-/// without asking (E-1). `askingEverything` (Ask Before Every Change): it asks as any agent does.
+/// without asking (AGENTS.md, rule 2). `askingEverything` (Ask Before Every Change): it asks as any agent does.
 public enum Assistant: Sendable { case building, askingEverything }
 
 /// What a native window shows for one request. Richer than the contract's `Request`, which a space sees: a space
@@ -259,7 +259,7 @@ package final class Launched {
     }
 
     /// What a native window shows for `request`, while the state still lists it: a request the fold closed (the
-    /// agent stopped, Claude withdrew it) is closed, whatever the driver still holds.
+    /// agent stopped, or withdrew it) is closed, whatever the driver still holds.
     func prompt(_ request: String) -> Prompt? {
         guard queue.fold.requests.contains(where: { $0.id == request }) else { return nil }
         return driver.prompt(request)
@@ -304,7 +304,6 @@ package final class Launched {
 }
 
 extension Option {
-    /// Words for the effort levels Claude Code names, which Codex and pi also show; a level not here is shown as the
-    /// agent names it.
+    /// Words for the effort levels agents name; a level not here is shown as the agent names it.
     package static let effortLabels = ["low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high", "max": "Max"]
 }

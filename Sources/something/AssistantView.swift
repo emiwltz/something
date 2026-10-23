@@ -1,4 +1,4 @@
-// The assistant in the window (plan B.3), floating at the bottom of the center: the capsule with the agent menu, the
+// The assistant in the window, floating at the bottom of the center: the capsule with the agent menu, the
 // input and the send or stop button (Composer, which the blank page shows bigger); the status line above it; the
 // drawer with the conversation; the open space's error banner; and, when no coding agent is found, a notice in the
 // capsule's place. Its state is AssistantModel's; the views keep only the input's focus.

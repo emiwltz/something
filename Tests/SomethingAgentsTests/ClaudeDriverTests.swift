@@ -1,4 +1,4 @@
-// ClaudeDriver, replayed over Tests/Exchanges/claude (Replay.swift): each file is an exchange recorded in trial T-1
+// ClaudeDriver, replayed over Tests/Exchanges/claude (Replay.swift): each file is an exchange recorded in a trial
 // against the real claude program and a fake model (invented text, paths made /Users/example), with the calls
 // something made in between.
 import Foundation
@@ -148,9 +148,9 @@ import SomethingCore
         #expect(!Driving.claude.modes.contains { $0.value == "bypassPermissions" })
     }
 
-    /// The person's assistant (E-1): its folder's files by their absolute path ("//", which trial T-2 showed Claude
+    /// The person's assistant: its folder's files by their absolute path ("//", which a trial showed Claude
     /// matches) and, by name, each tool something lends it, from its MCP server given at launch for this conversation
-    /// only; no command (B9). None with Ask Before Every Change, nor for a launch a space asks for, where `assistant`
+    /// only; no command. None with Ask Before Every Change, nor for a launch a space asks for, where `assistant`
     /// is always nil and nothing is lent (Engine.launch).
     @Test func theAssistantMayBuildSpacesWithoutAsking() {
         var launch = Launch(agent: "claude-1", folder: "/Users/example/something/spaces", thread: "5b2e0000-0000-4000-8000-000000000001")
@@ -482,7 +482,7 @@ import SomethingCore
 
     /// Plan B's spool lives as long as the program: `released` removes it, and a second call does no harm.
     @Test func releasedRemovesPlanBsSpoolOnce() throws {
-        let spools = FileManager.default.temporaryDirectory.appendingPathComponent("spools-of-claude-\(UUID().uuidString)")
+        let spools = FileManager.default.scratch("spools-of-claude-")
         defer { try? FileManager.default.removeItem(at: spools) }
         var launch = Launch(agent: "claude-1", folder: "/Users/example/shop", thread: "5b2e0000-0000-4000-8000-000000000001")
         launch.planB = true

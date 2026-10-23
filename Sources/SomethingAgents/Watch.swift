@@ -35,7 +35,7 @@ extension Reader {
         return FileManager.default.fileExists(atPath: path, isDirectory: &folder) && folder.boolValue
     }
 
-    /// A time as Codex and pi write it: ISO 8601 in UTC, with milliseconds or without.
+    /// A time as agents write it: ISO 8601 in UTC, with milliseconds or without.
     package static func date(_ text: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -50,7 +50,7 @@ package struct Reading: Equatable {
     /// `kinds.<kind>.reader`: "ok", "changed", "unreadable" or "none".
     package var health = "none"
     /// One sentence for the person when the health is not "ok" or "none", or when a source beside the files read
-    /// cannot be read (OpenCode desktop 1.x's tables).
+    /// cannot be read.
     package var note: String?
 
     package init(sightings: [Sighting] = [], version: String? = nil, health: String = "none", note: String? = nil) {
@@ -182,8 +182,8 @@ package final class Watch {
         for lane in lanes {
             let reader = lane.reader
             var reading = lane.reading()
-            // A reader that knows its files changed shape, or cannot read them, and found nothing else to read (Codex
-            // has its rollouts when its index changed) shows its program's processes.
+            // A reader that knows its files changed shape, or cannot read them, and found nothing else to read shows its
+            // program's processes.
             if reading.health == "changed" || reading.health == "unreadable", reading.sightings.isEmpty {
                 reading.sightings = processes.processes.values.filter(reader.owns).map { process in
                     Sighting(kind: reader.kind, key: "pid-\(process.pid)", pid: process.pid, facts: StateMap.Facts(alive: true, evidence: "process"),
@@ -242,7 +242,7 @@ package final class Watch {
                 (agent.can.resume, agent.because["resume"]) = registry.continuable(sighting.kind, alive: sighting.facts.alive, pid: agent.pid)
                 if agent.can.resume { agent.because["send"]! += " Continue it here to write to it." }
             }
-            // A reader names the holder better (Codex's background service), so its reason wins; but for a kind
+            // A reader names the holder better, so its reason wins; but for a kind
             // something cannot continue, that comes first and the reader's note follows, so it never hides why.
             var notes = sighting.because
             if !registry.resumable.contains(sighting.kind), let reason = agent.because["resume"], let note = notes.removeValue(forKey: "resume") {

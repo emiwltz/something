@@ -1,4 +1,4 @@
-// The person's assistant as the window shows it (plan B.3): the coding agent that builds spaces with them in
+// The person's assistant as the window shows it: the coding agent that builds spaces with them in
 // ~/something/spaces. The builder chosen among the installed ones, kept in window.json with Ask Before Every Change;
 // the knowledge files written into the spaces folder; the agent launched at the first message, never before, and told
 // at each message which space is open; Stop, New Conversation, the stop after 30 idle minutes, the switch to another
@@ -456,7 +456,7 @@ import SomethingCore
 
     static func clean(_ title: String) -> String { String(title.filter { !$0.isNewline && $0 != "[" && $0 != "]" }) }
 
-    /// Ask to Fix's words (plan A.1).
+    /// Ask to Fix's words.
     static func fixing(_ fault: Fault) -> String {
         "The space “\(clean(fault.title))” (\(fault.name)) has problems: \(fault.codes.joined(separator: ", ")). Run something check \(fault.name) and fix what it reports."
     }

@@ -1,4 +1,4 @@
-// A fake of OpenAI's Responses API, for trial T-2, and of its Chat Completions API, for trials T-3 and T-4: the real
+// A fake of OpenAI's Responses API, for Codex's trials, and of its Chat Completions API, for OpenCode's and pi's: the real
 // `codex`, `opencode` and `pi` programs talk to it instead of a model, through a model provider declared in a throwaway home. It listens
 // on 127.0.0.1 on a port the system picks, answers POST /v1/responses and POST /v1/chat/completions as the APIs stream
 // (server-sent events, chunked), and plays a tiny invented script chosen by keywords in the person's last message. It never reads, keeps or logs a request's headers (they carry the key): only

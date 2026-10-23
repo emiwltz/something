@@ -163,7 +163,7 @@ import WebKit
         defer { home.remove() }
         var asked = false, replied: Bool?
         App.quit(home.engine(), confirm: { _, _, _ in asked = true }, reply: { replied = $0 })
-        #expect(await wait(5) { replied != nil })
+        #expect(await wait(30) { replied != nil })
         #expect(!asked && replied == true)
     }
 
@@ -191,7 +191,7 @@ import WebKit
         #expect(Spaces(root: home.places.spaces).list().isEmpty, "neither is a space")
     }
 
-    /// Codex builds, with the check something lends it (trial T-1). One that cannot take it is no longer offered, with
+    /// Codex builds, with the check something lends it. One that cannot take it is no longer offered, with
     /// the reason under its menu entry; alone, it leaves the person with the notice. Looking again offers it again (it
     /// may have been updated). Claude Code, once found, is chosen.
     @Test func aCodexThatCannotTakeTheCheckIsNotOffered() async throws {

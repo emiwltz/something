@@ -1,4 +1,4 @@
-// The blank page (plan B.4), the center when no space is open: New Space (⌘N), and where the tour ends. "What do you
+// The blank page, the center when no space is open: New Space (⌘N), and where the tour ends. "What do you
 // want to make?", the assistant's input made big, three suggestions that each send a whole sentence, the templates,
 // each used by a click, and "Skip for now", which shows them all. Without a coding agent, the notice takes the input's
 // place.

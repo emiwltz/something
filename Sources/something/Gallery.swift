@@ -1,4 +1,4 @@
-// Templates (plan B.5): the starting points of share/templates, each one HTML file with its preview, the picture
+// Templates: the starting points of share/templates, each one HTML file with its preview, the picture
 // `something check` took of it (tools/previews.sh). The gallery shows a card per template: its preview, its title and
 // description, what it may do in plain words, and Use Template, which makes it one of the person's spaces (Library.use).
 // The blank page and the welcome show the same previews smaller.

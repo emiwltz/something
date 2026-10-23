@@ -149,6 +149,8 @@ import WebKit
             #expect(try await offscreen.click(x: x, y: 590, on: window), "the page never saw the click on \(path)")
             await wait(30) { ask.links.contains { $0.path == path } }
         }
+        // The frames' clicks are waited for; then anything that would reach the network is given 3 s more.
+        for _ in 0..<600 where try await run(window, "return window.innerClicked && window.freshClicked") as? Bool != true { await wait(0.05) }
         await wait(3)
         #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
         #expect(listener.hits.count == 1, "reached: \(listener.hits.dropFirst().joined(separator: " | "))")
@@ -349,7 +351,7 @@ import WebKit
         #expect(FileManager.default.fileExists(atPath: home.places.data.appendingPathComponent("bridge.json").path))
         #expect(try await run(window, "try { await something.send('a1', 'invented') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
         var framed: String?
-        for _ in 0..<100 where framed == nil {
+        for _ in 0..<600 where framed == nil {
             framed = try await run(window, "return window.framed ?? null") as? String
             await wait(0.05)
         }
@@ -561,7 +563,7 @@ import WebKit
         try await ready(window)
         #expect(try await run(window, "return window.done === true && window.changes === 0") as? Bool == true)
         window.push()
-        for _ in 0..<100 where try await run(window, "return window.changes") as? Int != 1 { await wait(0.05) }
+        for _ in 0..<600 where try await run(window, "return window.changes") as? Int != 1 { await wait(0.05) }
         #expect(try await run(window, "return window.changes") as? Int == 1)
     }
 

@@ -1,4 +1,4 @@
-// SQLiteRO: a harness's SQLite database, opened read-only. Codex and OpenCode keep their sessions in
+// SQLiteRO: a harness's SQLite database, opened read-only. Some agents keep their sessions in
 // SQLite files that their programs write while something reads, so the file is opened with `mode=ro` and never
 // `immutable`, which would ignore what a live writer left in its write-ahead log. Each database comes with a whitelist
 // of the tables and columns its reader may use: the schema guard checks they are all there, and a query that would

@@ -198,7 +198,7 @@ final class CodexDriver: Driver {
                 var params: [String: Any] = ["cwd": launch.folder]
                 if let mode = launch.mode { params["approvalPolicy"] = mode }
                 if let model = launch.model { params["model"] = model }
-                // The person's assistant changes files in its folder without asking (E-1); what the sandbox blocks asks.
+                // The person's assistant changes files in its folder without asking (AGENTS.md, rule 2); what the sandbox blocks asks.
                 if launch.assistant == .building { params["sandbox"] = "workspace-write" }
                 // Its sandbox reaches no window server, where `something check` loads a page: something's MCP server,
                 // which Codex starts outside the sandbox, runs it instead. Given in this thread's config, it reaches

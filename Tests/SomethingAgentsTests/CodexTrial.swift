@@ -37,7 +37,7 @@ import SomethingCore
 
     /// With `after`, the case runs in that run's home and against its fake (to resume its thread, or to find it held).
     /// With `assistant`, Codex is the person's assistant, working that way in ~/something/spaces, and lent something's
-    /// tools, which this clone's real program serves over MCP (plan A.4, AssistantBuild.placeProgram), with the
+    /// tools, which this clone's real program serves over MCP (AssistantBuild.placeProgram), with the
     /// person's own temporary folder, as the app gives it; with `serving`, that program serves them instead. `config`
     /// ends the throwaway config.toml.
     init(_ name: String, mode: String? = nil, effort: String? = nil, resume thread: String? = nil, after: CodexRun? = nil,
@@ -45,7 +45,7 @@ import SomethingCore
         self.name = name
         owner = after == nil
         api = try after?.api ?? FakeResponsesAPI()
-        root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("codex-trial-\(UUID().uuidString)")
+        root = after?.root ?? FileManager.default.scratch("codex-trial-")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         work = assistant == nil ? root.appendingPathComponent("work/shop") : AssistantBuild.real(root).appendingPathComponent("home/something/spaces")
         let folders = [root.appendingPathComponent("codex"), root.appendingPathComponent("home"), work]
@@ -323,7 +323,7 @@ let trialCodex = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CODEX"].fl
         try await run.finish()
     }
 
-    /// T-1 (plan A.2 #6): the standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
+    /// The standard build of a space by the person's assistant, in Codex's workspace-write sandbox.
     /// The number to meet is two windows at most. `something check` cannot load a page in the sandbox (no window
     /// server, the finding of slice S3), so each check goes through something's MCP server, which Codex starts outside
     /// the sandbox, as guide and new do.

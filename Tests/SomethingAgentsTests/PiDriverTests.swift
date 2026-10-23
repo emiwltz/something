@@ -1,4 +1,4 @@
-// PiDriver, replayed over Tests/Exchanges/pi (Replay.swift): each file was recorded in trial T-4 against the real
+// PiDriver, replayed over Tests/Exchanges/pi (Replay.swift): each file was recorded in a trial against the real
 // pi --mode rpc 1.0.0 and FakeResponsesAPI's Chat Completions, with invented text. Then the cases no recording holds,
 // built from the shapes pi writes: the command line, a refused prompt, a failed retry, an extension's
 // dialog, an interrupt before the run starts, a launch that fails, and the placeholder model of a pi with no login.
@@ -213,7 +213,7 @@ import SomethingCore
 
     /// A resume runs in the folder the conversation's header names; a file that is no pi conversation is refused.
     @Test func whereAResumeRuns() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("pi-header-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("pi-header-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = folder.appendingPathComponent("a.jsonl")

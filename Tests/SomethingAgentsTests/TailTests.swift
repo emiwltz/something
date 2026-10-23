@@ -6,7 +6,7 @@ import Testing
 @testable import SomethingAgents
 
 @Suite(.serialized) struct TailTests {
-    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tail-\(UUID().uuidString)")
+    let folder = FileManager.default.scratch("tail-")
     static let wanted = [Data(#""type":"message""#.utf8)]
 
     init() throws { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }

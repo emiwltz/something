@@ -27,7 +27,7 @@ final class ClaudeHome {
     /// long before `now` as its last line is before the shop's moment (17 October 2026, 09:00:10): the shop's 8
     /// seconds, the blog's 80 minutes, the notes' eleven days.
     init(prefix: String = "claude-home-", now: Date = Date()) throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
+        root = FileManager.default.scratch(prefix)
         reader = ClaudeReader(environment: ["HOME": root.path])
         self.now = now
         try FileManager.default.copyItem(at: ClaudeHome.fixture, to: root)

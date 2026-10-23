@@ -1,4 +1,4 @@
-// The tour (plan B.4), shown in the window at the first start and again from Help › Welcome Tour: Welcome, then who
+// The tour, shown in the window at the first start and again from Help › Welcome Tour: Welcome, then who
 // builds with you, then the blank page itself, where it ends. It never starts an agent: choosing a builder only says
 // which one the first message will start. Its end is kept in window.json, with whether it offered the launcher.
 import SwiftUI

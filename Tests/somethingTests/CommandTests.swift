@@ -118,7 +118,7 @@ final class FakeDoor: Door {
 
     /// The program swift test built serves the lent tools over MCP, as an agent starts it (`something mcp`): it runs
     /// its own commands, in the folders SOMETHING_HOME names when set, and answers one line per request. No check
-    /// runs here: only one test runs a check as a program (plan A.4).
+    /// runs here: only one test runs a check as a program.
     @Test func theBuiltProgramServesTheLentTools() async throws {
         let home = Home(prefix: "something-command-")
         defer { home.remove() }

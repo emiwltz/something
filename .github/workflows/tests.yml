@@ -1,21 +1,10 @@
-# The tests on GitHub's Macs, at each push, on macOS 15, the floor the package, the app and the formula
-# declare, and on macos-latest.
-#
-# Job "tests": something builds, the whole Swift suite passes, something.js answers the contract's cases,
-# make-app.sh assembles a signed something.app from a release build, whose something check of the template is clean
-# (also as the app runs it for its assistant, in a space of the spaces folder), and something and its tests build
-# again with the runner's Command Line Tools alone, as on a Mac without Xcode. The runner has a logged-in window
-# server, so the window tests run too (the lockdown test, isolation, the bridge, links, rights, reload) in a real
-# WKWebView that is never shown. On a Mac with no window server those suites say so and are
-# skipped; on CI (CI is set) they always run, so a runner without one turns the run red instead of skipping the
-# lockdown test.
-#
-# Job "brew": a person's install on that fresh Mac. The formula of packaging/homebrew/ goes into a local tap, pointed
-# at this commit instead of GitHub, then brew install --HEAD, brew test and the command as a person types it. It logs
-# how long brew install alone took, and fails above five minutes: a newcomer's brew install and first start must take
-# less than that together, and the first start cannot be timed on a runner. The installed program must carry the
-# runner's SDK stamp, the one that gives it the current look of macOS.
-#
+# At each push, on macOS 15 (the floor the package, the app and the formula declare) and on macos-latest.
+# Job "tests": the build, the whole Swift suite (the window tests included: the runner has a window server, and with CI
+# set a missing one fails the run instead of skipping them), something.js against the contract's cases, make-app.sh's
+# signed something.app, `something check` through that app as a person and as the assistant run it, and a build with
+# the Command Line Tools alone, as on a Mac without Xcode.
+# Job "brew": a person's install on that fresh Mac, from the formula of packaging/homebrew/ pointed at this commit:
+# brew install (under five minutes), brew test, the command, the SDK stamp, brew style and audit.
 # No secret is used; the token can only read the repository.
 name: tests
 
@@ -54,24 +43,19 @@ jobs:
           printf '#!/bin/bash\nexec "%s" "$@"\n' "$prefix/something.app/Contents/MacOS/something" > "$prefix/bin/something"
           chmod +x "$prefix/bin/something"
           test "$("$prefix/bin/something" --version)" = "something 0.0.0-ci"
-      - name: something check, the whole command, through the assembled program
-        # The suite runs every check in its own process; this is main.swift and Check.main as a person runs them,
-        # in an empty home. The runner is thrown away, so the folders WebKit leaves in $TMPDIR do not matter here.
+      - name: something check through the assembled app
+        # main.swift and Check.main as a person runs them, in an empty home; then what Lent.program runs for the
+        # assistant's something_check: the app's executable, `check <name>`, in an environment like launchd's (a short
+        # PATH, no terminal), whose snapshot lands in the spaces folder's .check. The runner is thrown away, so the
+        # folders WebKit leaves in $TMPDIR do not matter here.
         run: |
-          prefix="$RUNNER_TEMP/prefix"
-          mkdir "$RUNNER_TEMP/home"
-          HOME="$RUNNER_TEMP/home" "$prefix/bin/something" check "$prefix/something.app/Contents/Resources/share/template.html" --json \
-            > "$RUNNER_TEMP/check.json" 2> "$RUNNER_TEMP/check.err"
+          prefix="$RUNNER_TEMP/prefix" home="$RUNNER_TEMP/home"
+          mkdir "$home"
+          template="$prefix/something.app/Contents/Resources/share/template.html"
+          HOME="$home" "$prefix/bin/something" check "$template" --json > "$RUNNER_TEMP/check.json" 2> "$RUNNER_TEMP/check.err"
           test ! -s "$RUNNER_TEMP/check.err"
           python3 -c 'import json, sys; r = json.load(open(sys.argv[1])); assert r["problems"] == [] and open(r["snapshot"], "rb").read(4) == b"\x89PNG", r' "$RUNNER_TEMP/check.json"
-      - name: The check the app lends its assistant, through the app's own executable
-        # What Lent.program runs for something_check: the .app's executable, `check <name>`, in an environment like
-        # the one launchd gives the app (a short PATH, no terminal). A space of the spaces folder has its snapshot in
-        # .check there, where the agent reads it without asking.
-        run: |
-          prefix="$RUNNER_TEMP/prefix" home="$RUNNER_TEMP/lent-home"
-          mkdir -p "$home/something/spaces"
-          cp "$prefix/something.app/Contents/Resources/share/template.html" "$home/something/spaces/board.html"
+          mkdir -p "$home/something/spaces" && cp "$template" "$home/something/spaces/board.html"
           env -i HOME="$home" PATH=/usr/bin:/bin:/usr/sbin:/sbin TMPDIR="$TMPDIR" \
             "$prefix/something.app/Contents/MacOS/something" check board > "$RUNNER_TEMP/lent.out" 2>&1 || { cat "$RUNNER_TEMP/lent.out"; exit 1; }
           cat "$RUNNER_TEMP/lent.out"

@@ -88,7 +88,7 @@ struct NoRealAgentTests {
 
     /// The throwaway engine finds no program its PATH lacks, even one installed on this Mac.
     @Test func aThrowawayEngineFindsOnlyItsPath() throws {
-        let empty = FileManager.default.temporaryDirectory.appendingPathComponent("no-agents-\(UUID().uuidString)")
+        let empty = FileManager.default.scratch("no-agents-")
         try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: empty) }
         let engine = Engine.throwaway(["HOME": empty.path, "PATH": "\(empty.path):/usr/bin:/bin", "SHELL": "/bin/sh"])

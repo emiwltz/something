@@ -1,4 +1,4 @@
-// The live trial of the assistant (plan S5): the app's own model, library and engine, with the REAL claude program
+// The live trial of the assistant: the app's own model, library and engine, with the REAL claude program
 // talking to FakeMessagesAPI instead of a model. It runs only when asked, since it needs Claude Code on this Mac:
 //
 //   SOMETHING_TRIAL_CLAUDE=/opt/homebrew/bin/claude swift test --filter AssistantTrial
@@ -27,7 +27,7 @@ struct AssistantTrial {
 
         /// `signedIn` false: Claude Code has no key until `signIn()`, as on a Mac where it was never signed in.
         init(_ api: FakeMessagesAPI, signedIn: Bool = true) async throws {
-            root = FileManager.default.temporaryDirectory.appendingPathComponent("something-trial-\(UUID().uuidString)")
+            root = FileManager.default.scratch("something-trial-")
             // The home by its real path, as ~/something/spaces is: $TMPDIR itself is behind a link.
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
             do {
@@ -102,7 +102,7 @@ struct AssistantTrial {
                 if let new = model.appeared(library.entries, open: library.selection) { library.select(new) }
             }
             library.watch()
-            // The tools are lent as the app lends them, by this clone's real program (plan A.4).
+            // The tools are lent as the app lends them, by this clone's real program (AssistantBuild.placeProgram).
             let program = try AssistantBuild.placeProgram()
             trial.model.program = program
             defer { AssistantBuild.removeProgram(program) }

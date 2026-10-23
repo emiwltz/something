@@ -1,4 +1,4 @@
-// The standard build of a space by the person's assistant (plan A.2 #6), for the trials of the builders: the tool
+// The standard build of a space by the person's assistant, for the trials of the builders: the tool
 // sequence a real agent runs to make "Who is waiting for me" from a template, in each builder's tools (its shell, or
 // the tools something serves over MCP), and an invented `something` program that
 // answers that sequence's commands in the real one's shape, with invented text.
@@ -29,11 +29,11 @@ enum AssistantBuild {
     static let fixedUUID = UUID(uuidString: "00000000-0000-4000-8000-0000736F6D65")!
 
     /// Copies this clone's program to a folder of its own in $TMPDIR, stamped with `fixedUUID`, and returns the copy:
-    /// trials that run at once each have theirs, and share WebKit's folders (plan A.4). Beside it, a link to this
+    /// trials that run at once each have theirs, and share WebKit's folders. Beside it, a link to this
     /// clone's share/ and an empty Package.swift, which is how the program finds its share/ outside the .app
     /// (Resources.share). `removeProgram` removes it.
     static func placeProgram() throws -> URL {
-        let folder = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("something-test-program-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("something-test-program-")
         let program = folder.appendingPathComponent("something")
         let clone = clonesProgram.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         do {

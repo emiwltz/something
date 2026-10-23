@@ -1,6 +1,6 @@
 // Programs: finds the agent programs something can launch, and what they need to run, whether something was started
 // from a Terminal or from the Finder. It only looks for files and never runs an agent's
-// program: codex and opencode write into their homes when they start, so `installed` must not depend on running them.
+// program: some write into their homes when they start, so `installed` must not depend on running them.
 // The one thing it runs is the person's login shell, to learn the PATH their Terminal has, which a Finder launch lacks.
 import Foundation
 import SomethingCore
@@ -25,7 +25,7 @@ public struct Program: Equatable, Sendable {
 
 public final class Programs {
     /// The folders under the home where installers put programs, which a shell's PATH may lack: the shared ones, and
-    /// each agent's own where 0.2 put OpenCode's, so that the search order is unchanged.
+    /// each agent's own (its descriptor's homeFolders), between them.
     let homeFolders: [String]
     /// The PATH launchd gives an app opened from the Finder: no folder where agents are installed.
     static let launchdFolders: Set<String> = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
@@ -140,8 +140,7 @@ public final class Programs {
             + "whether \(what) is on this Mac. Quit something, then start it from Terminal by typing: something"
     }
 
-    /// The first executable file named `kind` in `folders`, but another app's own copy (`refusedCopies`: the Claude
-    /// desktop app's).
+    /// The first executable file named `kind` in `folders`, but another app's own copy (`refusedCopies`).
     func first(_ kind: String, in folders: [String]) -> String? {
         folders.lazy.map { "\($0)/\(kind)" }.first { path in
             var folder: ObjCBool = false

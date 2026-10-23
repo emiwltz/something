@@ -33,7 +33,7 @@ final class Stopped: @unchecked Sendable { var done = false }
     init(_ name: String, mode: String = "default", effort: String? = nil, planB: Bool = false, assistant: Assistant? = nil, lent: Bool = false) async throws {
         self.name = name
         api = try FakeMessagesAPI()
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-trial-\(UUID().uuidString)")
+        root = FileManager.default.scratch("claude-trial-")
         let home = root.appendingPathComponent("home")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         // The assistant's folder by its real path, as ~/something/spaces is: $TMPDIR itself is behind a link.
@@ -351,8 +351,8 @@ let trialClaude = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_CLAUDE"].
         try await run.finish()
     }
 
-    /// T-2 (plan A.2 #6): the standard build of a space by the person's assistant, launched as the app launches it,
-    /// asks nothing (B9): something's commands are the tools it lends over MCP, the real `something mcp` started by
+    /// The standard build of a space by the person's assistant, launched as the app launches it,
+    /// asks nothing: something's commands are the tools it lends over MCP, the real `something mcp` started by
     /// Claude Code, running the real guide, new and check (WebKit included); the edits are in the folder. Every step
     /// ran, the edits are in the page, and each lent tool is shown as the command something ran.
     @Test func theAssistantsStandardBuildAsksNothing() async throws {

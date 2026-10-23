@@ -23,7 +23,7 @@ final class PiHome {
 
     /// `prefix` names the folder in $TMPDIR, as ClaudeHome's does.
     init(now: Date = Date(), prefix: String = "pi-home-") throws {
-        root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
+        root = FileManager.default.scratch(prefix)
         self.now = now
         try FileManager.default.copyItem(at: PiHome.fixture, to: root)
         // The secrets pi and OMP keep beside their sessions, made here: the readers must never open them.

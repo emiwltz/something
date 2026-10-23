@@ -1,4 +1,4 @@
-// OMP over ACP: its profile driven over its own recorded exchanges (Tests/Exchanges/omp, trial C1 against the real
+// OMP over ACP: its profile driven over its own recorded exchanges (Tests/Exchanges/omp, a trial against the real
 // omp 18.8.6): every line something wrote goes out byte for byte as it did, and what OMP said folds as it showed.
 // OMP titles its tool calls with sentences, so a tool goes by its kind, and something's tools reach it over MCP.
 import Foundation
@@ -57,7 +57,7 @@ import SomethingCore
     /// The person's assistant gets something's MCP server in session/new; OMP calls a server's tool through the path
     /// xd://mcp__something_<tool>, shown as the command something runs. Reading a tool's docs is a read like any other.
     /// Recorded before `something try --assistant` wrote the knowledge files, so OMP's read of AGENTS.md fails in it;
-    /// the same build, with them, ran again on omp 18.12.6 (C1's review fixes) with 0 permission requests.
+    /// the same build, with them, ran again on omp 18.12.6 with 0 permission requests.
     @Test func theAssistantBuildsWithSomethingsTools() throws {
         let replay = try Self.play("assistant-build")
         let lent = replay.items.filter { $0.tool?.name.hasPrefix("something_") == true }

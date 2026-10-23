@@ -39,13 +39,13 @@ import SomethingCore
     /// With `after`, the case runs in that run's home and against its fake (to resume its conversation). With
     /// `assistant`, OpenCode is the person's building assistant, in ~/something/spaces, with OpenCode's own default
     /// permissions, lent something's tools over MCP as the app lends them: served by this clone's real program
-    /// (AssistantBuild.placeProgram, plan A.4), with the person's own temporary folder.
+    /// (AssistantBuild.placeProgram), with the person's own temporary folder.
     init(_ name: String, model: String? = nil, resume session: String? = nil, after: OpenCodeRun? = nil, assistant: Bool = false) throws {
         self.name = name
         owner = after == nil
         (resumed, self.model) = (session, model)
         api = try after?.api ?? FakeResponsesAPI()
-        let root = after?.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("opencode-trial-\(UUID().uuidString)")
+        let root = after?.root ?? FileManager.default.scratch("opencode-trial-")
         self.root = root
         let work = assistant ? AssistantBuild.real(root).appendingPathComponent("home/something/spaces") : root.appendingPathComponent("work/shop")
         self.work = work
@@ -215,7 +215,7 @@ let trialOpenCode = ProcessInfo.processInfo.environment["SOMETHING_TRIAL_OPENCOD
 @Suite(.serialized, .enabled(if: trialOpenCode != nil, "T-3 needs OpenCode: set SOMETHING_TRIAL_OPENCODE to its program's path."))
 @MainActor struct OpenCodeTrial {
 
-    /// B9: the standard build of a space by the person's assistant (plan A.2 #6), launched as the app launches it,
+    /// The standard build of a space by the person's assistant, launched as the app launches it,
     /// through the tools something lends OpenCode over MCP (the real `something mcp`, which OpenCode starts from
     /// session/new, running the real guide, new and check), with OpenCode's own default permissions: nothing is asked.
     @Test func theAssistantsStandardBuildAsksNothing() async throws {

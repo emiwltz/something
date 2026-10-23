@@ -1,4 +1,4 @@
-// Amp over its stream-json channel: its driver played over its own recorded exchanges (Tests/Exchanges/amp, trial C6
+// Amp over its stream-json channel: its driver played over its own recorded exchanges (Tests/Exchanges/amp, a trial
 // against the real amp 0.0.1792656060): every line something wrote goes out byte for byte as it did, and what Amp said
 // folds as it showed. Amp never asks, takes a message during a turn, and cannot pause a turn; something's tools reach it
 // over MCP, through its code_exec tool.
@@ -116,7 +116,7 @@ import SomethingCore
         #expect(sent.items.map(\.kind) == ["subagent"] && sent.items.allSatisfy { $0.author == "agent" } && sent.fold.turns.count == 1)
     }
 
-    /// Amp's ask_user_choice waits for an answer the channel cannot carry (trial C6 review: no line comes after it, and a
+    /// Amp's ask_user_choice waits for an answer the channel cannot carry (seen in a trial: no line comes after it, and a
     /// later message is not taken): the turn stays running, and the person is told to stop Amp.
     @Test func aChoiceAmpAsksIsSaid() throws {
         let replay = Replay.amp()

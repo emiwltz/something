@@ -8,7 +8,7 @@ import Testing
     /// A report, problems included, is what the program printed; a status of 2 could not run; a program stopped by a
     /// signal, or by the time limit, gave no report, and the reply says which.
     @Test func eachEndIsSaidAsItWas() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("lent-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("lent-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         func reply(_ script: String) throws -> Lent.Reply {

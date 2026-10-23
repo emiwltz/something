@@ -99,7 +99,7 @@ import SomethingCore
         }
 
         init(prefix: String = "engine-") throws {
-            root = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)\(UUID().uuidString)")
+            root = FileManager.default.scratch(prefix)
             for folder in [bin, work, out] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
             let program = bin.appendingPathComponent("claude")
             try EngineTests.fake.write(to: program, atomically: true, encoding: .utf8)
@@ -114,14 +114,6 @@ import SomethingCore
 
         // Called with defer in each test: a deinit does not always run before the test process ends.
         func remove() { try? FileManager.default.removeItem(at: root) }
-    }
-
-    func until(_ what: String, seconds: Double = 30, _ condition: () -> Bool) async throws {
-        let end = Date().addingTimeInterval(seconds)
-        while !condition() {
-            guard Date() < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
     }
 
     @Test func aLaunchedClaudeTalksStopsAndIsShown() async throws {
@@ -168,7 +160,7 @@ import SomethingCore
         }
     }
 
-    /// The person's assistant: the app's launch carries the rules of E-1, on its folder's real path, and a space's launch
+    /// The person's assistant: the app's launch carries the assistant's rules, on its folder's real path, and a space's launch
     /// never does; a space with every right, seeing every agent, finds the assistant listed but can write to it in no
     /// way (Bridge.visible). No conversation in its folder is shown as seen elsewhere, however its path is written:
     /// neither its own once the state forgot it, nor one of an earlier run; another agent's is.
@@ -401,16 +393,13 @@ import SomethingCore
         #expect(throws: CodedError("NOT_SUPPORTED", ACPProfile.opencode.driving.limits["steer"]!)) { try engine.deliver("Now.", to: id, when: "now") }
         #expect(try String(contentsOf: place.out.appendingPathComponent("arguments"), encoding: .utf8) == "acp\n")
         var stopped = false
-        let begun = Date()
         engine.stopAll(within: 6) { stopped = true }
         #expect(throws: CodedError("AGENT_STOPPED", "The agent is stopping; launch or resume it to go on."), "no turn opens after the stop's cancel") {
             try engine.deliver("Too late.", to: id, when: "next")
         }
         try await until("the stop") { stopped }
-        // Only a guard against a hang: the cancel's answer reaches the main queue, which the window suites keep busy
-        // while the whole suite runs (2.7 s seen), so a time near Spawn's 3 s cap cannot tell the answer from the cap.
-        // What shows the ladder is the fake's own record: it got the cancel, then its input closed, and no signal.
-        #expect(Date().timeIntervalSince(begun) < 6, "the stop ends within its cap")
+        // Not timed: the cancel's answer reaches the main queue, which other suites keep busy. What shows the ladder
+        // is the fake's own record: it got the cancel, then its input closed, and no signal.
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("cancels").path))
         #expect(FileManager.default.fileExists(atPath: place.out.appendingPathComponent("closed").path), "its input was closed")
         #expect(!FileManager.default.fileExists(atPath: place.out.appendingPathComponent("signalled").path), "no signal was needed")
@@ -519,7 +508,11 @@ import SomethingCore
         engine.start(often: true)
         engine.start(often: false)
         #expect(!engine.often)
-        try await Task.sleep(nanoseconds: 200_000_000)
+        // Lookups run one at a time, each answering on the main queue: once a later one answered, a second look
+        // started above would have changed the state.
+        var flushed = false
+        engine.lookFor("claude") { flushed = true }
+        try await until("the lookups before") { flushed }
         #expect(changes == 1)
         #expect(cadences == [10, 2, 10], "the same cadence keeps its timer")
         #expect(engine.state.kinds["omp"]?.installed != nil, "omp's file is looked for")

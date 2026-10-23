@@ -1,4 +1,4 @@
-// ACPDriver, replayed over Tests/Exchanges/opencode (Replay.swift): each file was recorded in trial T-3 against the real
+// ACPDriver, replayed over Tests/Exchanges/opencode (Replay.swift): each file was recorded in a trial against the real
 // opencode acp 2.0.20 and FakeResponsesAPI's Chat Completions, with invented text. Then the cases no recording holds,
 // built from the recorded shapes: a steer, an interrupt before the session exists, requests something does not handle,
 // a sub-agent's text, errors in words, and OpenCode's claim read from a database made here.
@@ -336,7 +336,7 @@ import SomethingCore
     }
 
     static func folder() throws -> URL {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("acp-claim-\(UUID().uuidString)")
+        let folder = FileManager.default.scratch("acp-claim-")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
     }

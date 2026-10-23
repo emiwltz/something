@@ -1,7 +1,7 @@
 // The engine: every agent on this Mac in one contract 1 State, and the hands on the ones something launched.
 // The Mac app holds one Engine and talks to agents only through it. This file is the seam between the app and the
-// agents: its public API is what the app may use. It drives the agents something launched (Claude Code, Codex,
-// OpenCode and pi), on the main queue: each one's program through Spawn, its lines through its driver, its events folded by Launched.
+// agents: its public API is what the app may use. It drives the agents something launched, on the main queue: each
+// one's program through Spawn, its lines through its driver, its events folded by Launched.
 // Agents started elsewhere come from the readers, through the watch; a conversation of one can be continued here.
 import Foundation
 import SomethingCore
@@ -198,7 +198,7 @@ public final class Engine {
         return try launch(kind, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
-    /// The words Claude Code's plan-B hook runs, before `--spool <dir>`: a program, by its absolute path, whose
+    /// The words a plan-B permission hook runs, before `--spool <dir>`: a program, by its absolute path, whose
     /// `hook permission` answers that hook. Nil until its owner sets it (the app and `something try` set
     /// `ownHookCommand`), and plan B is then not offered. Its folder comes first in the assistant's PATH, so that the
     /// `something` the assistant runs is this one, the one its rules allow.
@@ -218,7 +218,7 @@ public final class Engine {
     public var assistantFolder: String?
 
     /// Starts the person's assistant, an agent of `kind` working in `folder` (the spaces folder, its links resolved,
-    /// since Claude matches its rules against real paths), and returns its id, which `assistants` holds from then on.
+    /// since an agent may match its rules against real paths), and returns its id, which `assistants` holds from then on.
     /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. Only the app calls
     /// this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
     public func launchAssistant(_ kind: String, folder: String, askEverything: Bool, lent: Lent? = nil) throws -> String {
@@ -262,7 +262,7 @@ public final class Engine {
     }
 
     /// Starts one launch of `program` and joins it to its driver. A launch whose kind has a plan B may ask, through
-    /// its driver, to be launched again with it (Claude, when its first way is refused): under the same agent id and
+    /// its driver, to be launched again with it (when its first way is refused): under the same agent id and
     /// a new conversation id (the same one for a resume).
     private func start(_ driving: Driving, _ launch: Launch, _ program: Program,
                        record: ((Bool, Data) -> Void)?) throws -> (agent: Launched, spawn: Spawn) {
@@ -293,8 +293,8 @@ public final class Engine {
     /// Continues here the conversation `thread` of `agent`, an agent seen elsewhere, in the conversation's own folder,
     /// and returns the id of the agent launched for it, which lists it from then on. Throws THREAD_NOT_FOUND when no
     /// agent seen now holds that conversation, STILL_RUNNING while its process runs, NOT_SUPPORTED when it cannot be
-    /// continued here, then as `launch` does. Codex's background service holding the conversation comes after the
-    /// launch, as the agent's HELD_ELSEWHERE error.
+    /// continued here, then as `launch` does. A holder only the agent itself sees comes after the launch, as the
+    /// agent's HELD_ELSEWHERE error.
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
         guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(registry.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")

@@ -71,7 +71,7 @@ import SomethingCore
     func stop(_ engine: Engine) async throws {
         var done = false
         engine.stopAll(within: 3) { done = true }
-        try await EngineTests().until("the stop") { done }
+        try await until("the stop") { done }
     }
 
     @Test func aClaudeConversationIsContinuedOnceItsProcessEnded() async throws {
@@ -92,7 +92,7 @@ import SomethingCore
         #expect(ended.alive == false && ended.can.resume && ended.because["resume"] == nil)
         #expect(throws: CodedError.self) { try engine.resume("claude", thread: "c1a0de00-0000-4000-8000-00000000ffff", of: id) }
         let launched = try engine.resume("claude", thread: ResumeTests.claude, of: id)
-        try await EngineTests().until("the fake's arguments") { home.arguments().contains("--resume") }
+        try await until("the fake's arguments") { home.arguments().contains("--resume") }
         let arguments = home.arguments()
         #expect(arguments.firstIndex(of: "--resume").map { arguments[$0 + 1] } == ResumeTests.claude && !arguments.contains("--session-id"))
         // From now on the conversation is listed once, as the agent something launched, in the conversation's folder.
@@ -113,7 +113,7 @@ import SomethingCore
         #expect(seen.alive == nil && seen.can.resume)
         let launched = try engine.resume("codex", thread: ResumeTests.codex, of: seen.id)
         func lines() -> String { (try? String(contentsOf: home.place.out.appendingPathComponent("lines"), encoding: .utf8)) ?? "" }
-        try await EngineTests().until("the resumed thread") { lines().contains("model/list") && engine.state.agents.first { $0.id == launched }?.model == "fake-model" }
+        try await until("the resumed thread") { lines().contains("model/list") && engine.state.agents.first { $0.id == launched }?.model == "fake-model" }
         let lines = lines()
         #expect(lines.contains(#""method":"thread/resume""#) && lines.contains(ResumeTests.codex) && lines.contains(home.place.work.path))
         #expect(engine.state.agents.filter { $0.thread == ResumeTests.codex }.map(\.origin) == ["launched"])
@@ -122,7 +122,7 @@ import SomethingCore
         // seen elsewhere, once, as the one to continue.
         let other = try #require(engine.state.agents.first { $0.thread == ResumeTests.held })
         let refused = try engine.resume("codex", thread: ResumeTests.held, of: other.id)
-        try await EngineTests().until("the refusal") { engine.state.agents.first { $0.id == refused }?.error != nil }
+        try await until("the refusal") { engine.state.agents.first { $0.id == refused }?.error != nil }
         let error = try #require(engine.state.agents.first { $0.id == refused }?.error)
         #expect(error == AgentError(code: "HELD_ELSEWHERE", message: "Codex's background service holds this conversation; run `codex app-server daemon stop` in a terminal, then try again."))
         #expect(engine.state.agents.filter { $0.thread == ResumeTests.held }.map(\.origin) == ["elsewhere"])
@@ -133,7 +133,7 @@ import SomethingCore
         let host = EngineHost(engine, folder: home.place.root.path)
         let answer = Bridge.answer(["contract": 1, "id": 1, "method": "resume", "params": ["kind": "codex", "thread": ResumeTests.held]], host: host)
         let again = try #require(answer["result"] as? String, "\(answer)")
-        try await EngineTests().until("the second resume") { engine.state.agents.first { $0.id == again }?.model == "fake-model" }
+        try await until("the second resume") { engine.state.agents.first { $0.id == again }?.model == "fake-model" }
         #expect(engine.state.agents.filter { $0.thread == ResumeTests.held }.map(\.id) == [again])
         try await stop(engine)
     }
@@ -175,7 +175,7 @@ import SomethingCore
             let text = (try? String(contentsOf: home.place.out.appendingPathComponent("runs"), encoding: .utf8)) ?? ""
             return text.components(separatedBy: "run\n").dropFirst().map { $0.split(separator: "\n").map(String.init) }
         }
-        try await EngineTests().until("plan B") { runs().count == 2 && engine.state.agents.first { $0.id == launched }?.alive == true }
+        try await until("plan B") { runs().count == 2 && engine.state.agents.first { $0.id == launched }?.alive == true }
         for run in runs() { #expect(run.firstIndex(of: "--resume").map { run[$0 + 1] } == ResumeTests.claude && !run.contains("--session-id")) }
         #expect(runs()[1].contains("--settings") && !runs()[1].contains("--permission-prompt-tool"))
         #expect(engine.state.agents.filter { $0.thread == ResumeTests.claude }.map(\.id) == [launched])

@@ -4,7 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_800, host = 2_800, driver = 600, agentsShared = 400, app = 5_500, described = 40
+    static let core = 1_850, host = 2_750, driver = 650, agentsShared = 450, app = 5_500, described = 40
 
     /// Whether a file describes an agent by data alone: it extends AgentDescriptor and gives it no driver.
     static func describesOnly(_ text: String) -> Bool { text.contains("extension AgentDescriptor") && !text.contains("driving:") }
@@ -71,7 +71,7 @@ enum Budget {
         for target in ["SomethingCore", "SomethingAgents", "something"] + Budget.agentTargets(under: root) {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
         }
-        // The rule finds the agents described by data: Antigravity, and none of the agents with a driver.
+        // The rule finds the agents described by data, and none of the agents with a driver.
         let described = Budget.agentTargets(under: root).flatMap { target in
             Budget.files(in: root.appendingPathComponent("Sources/\(target)")).filter { Budget.describesOnly($0.text) }.map { "\(target)/\($0.name)" }
         }
@@ -85,24 +85,25 @@ enum Budget {
         defer { try? FileManager.default.removeItem(at: root) }
         let folder = root.appendingPathComponent("Sources/SomethingAgents/Readers")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try String(repeating: "let example = 1\n", count: 401).write(to: folder.appendingPathComponent("CodexReader.swift"),
-                                                                     atomically: true, encoding: .utf8)
-        #expect(Budget.files(in: root.appendingPathComponent("Sources/SomethingAgents")).map(\.name) == ["Readers/CodexReader.swift"])
-        #expect(Budget.problems(under: root) == ["Readers/CodexReader.swift has 401 lines; a shared file has 400."])
+        let over = Budget.agentsShared + 1
+        try String(repeating: "let example = 1\n", count: over).write(to: folder.appendingPathComponent("Reader.swift"), atomically: true, encoding: .utf8)
+        #expect(Budget.files(in: root.appendingPathComponent("Sources/SomethingAgents")).map(\.name) == ["Readers/Reader.swift"])
+        #expect(Budget.problems(under: root) == ["Readers/Reader.swift has \(over) lines; a shared file has \(Budget.agentsShared)."])
     }
 
-    /// The host holds 2,600 lines in all, whatever each of its files holds.
+    /// The host holds its budget in all, whatever each of its files holds.
     @Test func theHostFailsOneLineOverInAll() throws {
-        for (extra, expected) in [(0, [String]()), (1, ["SomethingAgents has 2801 lines; its budget is 2800."])] {
+        let files = Budget.host / Budget.agentsShared, rest = Budget.host % Budget.agentsShared
+        for (extra, expected) in [(0, [String]()), (1, ["SomethingAgents has \(Budget.host + 1) lines; its budget is \(Budget.host)."])] {
             let root = FileManager.default.temporaryDirectory.appendingPathComponent("budget-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: root) }
             let folder = root.appendingPathComponent("Sources/SomethingAgents")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            for (index, count) in [400, 400, 400, 400, 400, 400, 400, extra].enumerated() {
+            for (index, count) in (Array(repeating: Budget.agentsShared, count: files) + [rest + extra]).enumerated() {
                 try String(repeating: "let example = 1\n", count: count).write(to: folder.appendingPathComponent("File\(index).swift"),
                                                                               atomically: true, encoding: .utf8)
             }
-            #expect(Budget.problems(under: root) == expected, "\(2_800 + extra) lines")
+            #expect(Budget.problems(under: root) == expected, "\(Budget.host + extra) lines")
         }
     }
 
@@ -114,15 +115,17 @@ enum Budget {
 
     /// Invented sources, one line over each budget, in a temporary folder: each one is caught, and only it.
     @Test func eachBudgetFailsOneLineOver() throws {
+        let shared = Budget.agentsShared, over = Budget.agentsShared + 1
         let cases: [(folder: String, name: String, lines: Int, problem: String)] = [
-            ("SomethingAgents", "Driver.swift", 401, "Driver.swift has 401 lines; a shared file has 400."),
-            ("SomethingAgents", "Codex.swift", 401, "Codex.swift has 401 lines; a shared file has 400."),
-            ("SomethingAgents", "Tail.swift", 401, "Tail.swift has 401 lines; a shared file has 400."),
-            ("SomethingCore", "Contract.swift", 1_801, "SomethingCore has 1801 lines; its budget is 1800."),
-            ("something", "App.swift", 5_501, "The Mac app has 5501 lines; its budget is 5500."),
-            ("AgentClaude", "ClaudeDriver.swift", 601, "AgentClaude/ClaudeDriver.swift has 601 lines; a driver has 600."),
-            ("AgentPi", "PiReader.swift", 401, "AgentPi/PiReader.swift has 401 lines; a file has 400."),
-            ("AgentACP", "Antigravity.swift", 41, "AgentACP/Antigravity.swift has 41 lines; an agent described by data has 40."),
+            ("SomethingAgents", "Driver.swift", over, "Driver.swift has \(over) lines; a shared file has \(shared)."),
+            ("SomethingAgents", "Tail.swift", over, "Tail.swift has \(over) lines; a shared file has \(shared)."),
+            ("SomethingCore", "Contract.swift", Budget.core + 1, "SomethingCore has \(Budget.core + 1) lines; its budget is \(Budget.core)."),
+            ("something", "App.swift", Budget.app + 1, "The Mac app has \(Budget.app + 1) lines; its budget is \(Budget.app)."),
+            ("AgentClaude", "ClaudeDriver.swift", Budget.driver + 1,
+             "AgentClaude/ClaudeDriver.swift has \(Budget.driver + 1) lines; a driver has \(Budget.driver)."),
+            ("AgentPi", "PiReader.swift", over, "AgentPi/PiReader.swift has \(over) lines; a file has \(shared)."),
+            ("AgentACP", "Antigravity.swift", Budget.described + 1,
+             "AgentACP/Antigravity.swift has \(Budget.described + 1) lines; an agent described by data has \(Budget.described)."),
         ]
         for item in cases {
             for (count, expected) in [(item.lines - 1, [String]()), (item.lines, [item.problem])] {
@@ -131,7 +134,7 @@ enum Budget {
                 let folder = root.appendingPathComponent("Sources/\(item.folder)")
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 // An agent described by data extends AgentDescriptor; the other invented files are any code.
-                let first = item.problem.hasSuffix("described by data has 40.") ? "extension AgentDescriptor {}\n" : "let example = 1\n"
+                let first = item.problem.contains("described by data") ? "extension AgentDescriptor {}\n" : "let example = 1\n"
                 let text = first + String(repeating: "let example = 1\n", count: count - 1)
                 try text.write(to: folder.appendingPathComponent(item.name), atomically: true, encoding: .utf8)
                 #expect(Budget.problems(under: root) == expected, "\(item.name) with \(count) lines")

@@ -1,6 +1,6 @@
 // Spawn: one program something launches, and the held queue of its agent.
 // The program runs in its own process group, so a stop reaches the children it started, even reparented ones. It is
-// spoken to in whole lines on one serial queue: a line written in two pieces kills Claude. Only something holds the
+// spoken to in whole lines on one serial queue: a line written in two pieces can kill an agent. Only something holds the
 // write end of its input, so if something crashes the program reads end of file and stops.
 // HeldQueue is pure: a driver keeps one next to its Spawn and replays it in tests without any process.
 import Darwin

@@ -1,7 +1,6 @@
-// Extension: what something knows of each agent, written once as data. The tables the engine, the programs, the
-// watch and the app's windows used to keep apart (kinds, names, install sentences, modes that ask as much, which
-// conversations continue here, the builders, the words of tools and modes) are computed from these descriptors, so
-// that knowing one more agent is one more descriptor. For a kind something launches, its Driving says what its
+// Extension: what something knows of each agent, written once as data. What the engine, the programs, the watch and
+// the app's windows need of each agent (kinds, names, install sentences, modes that ask as much, which conversations
+// continue here, the builders, the words of tools and modes) is computed from these descriptors, so that knowing one more agent is one more descriptor. For a kind something launches, its Driving says what its
 // driver can do and makes one. Each agent's descriptor, Driving, driver and reader live in its own target (Agent*);
 // this host names none of them.
 import Foundation
@@ -9,9 +8,9 @@ import SomethingCore
 
 /// What something knows of one agent, besides its driver and its reader. Pure data: building one does no I/O.
 public struct AgentDescriptor: Sendable {
-    /// The contract's word for it, which is also the file name of its program: "claude".
+    /// The contract's word for it, which is also the file name of its program.
     public var kind: String
-    /// The name a person knows it by, in every window and sentence: "Claude Code".
+    /// The name a person knows it by, in every window and sentence.
     public var name: String
     /// What to type in Terminal to install it; nil for a kind something does not launch.
     public var install: String?
@@ -113,8 +112,8 @@ package struct Driving: Sendable {
     package var resumeFolder: (@Sendable (_ thread: String) throws -> String)?
     /// The program's arguments for a launch, and what it changes in the person's environment.
     package var command: @Sendable (Launch) -> Command
-    /// The command of a launch that takes plan B (`Launch.planB`), for a kind that has one: Claude's permission
-    /// hook. Throws LAUNCH_FAILED when the host lacks what it needs.
+    /// The command of a launch that takes plan B (`Launch.planB`), for a kind that has one: a permission hook
+    /// that asks through a spool. Throws LAUNCH_FAILED when the host lacks what it needs.
     package var planB: (@Sendable (Launch, HostFacts) throws -> Command)?
     /// Whether a failure its driver reported (`detail.apiRetry`: an HTTP status, else an error kind) means the
     /// model's server refused the sign-in; nil when its driver reports none (AgentDescriptor.refusesSignIn).

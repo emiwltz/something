@@ -56,7 +56,7 @@ import SomethingCore
     """#
 
     final class Place {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("plan-b-\(UUID().uuidString)")
+        let root = FileManager.default.scratch("plan-b-")
         var bin: URL { root.appendingPathComponent("bin") }
         var work: URL { root.appendingPathComponent("work/shop") }
         var out: URL { root.appendingPathComponent("out") }
@@ -104,27 +104,11 @@ import SomethingCore
         let swiftc = Process()
         swiftc.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         swiftc.arguments = ["swiftc", "-package-name", "something", "-module-cache-path", folder.appendingPathComponent("cache").path, "-o", path, source.path, main.path]
-        try await PlanBTests.offMain {
+        try await offMain {
             try swiftc.run()
             swiftc.waitUntilExit()
         }
         #expect(swiftc.terminationStatus == 0, "the hook command did not build")
-    }
-
-    /// Runs `work`, which waits for a child process, on a thread of its own, and returns what it returns or throws:
-    /// the main actor is never held (Support.swift says why, for the app's tests).
-    nonisolated static func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
-        try await withCheckedThrowingContinuation { continuation in
-            Thread.detachNewThread { continuation.resume(with: Result { try work() }) }
-        }
-    }
-
-    func until(_ what: String, seconds: Double = 30, _ condition: () -> Bool) async throws {
-        let end = Date().addingTimeInterval(seconds)
-        while !condition() {
-            guard Date() < end else { Issue.record("timed out waiting for \(what)"); throw CancellationError() }
-            try await Task.sleep(nanoseconds: 20_000_000)
-        }
     }
 
     var tool: (Engine) -> Item? = { $0.state.threads.first?.turns.first?.items.first { $0.kind == "tool" } }
@@ -348,8 +332,9 @@ import SomethingCore
         try await until("the ask") { asked != nil }
         spool.stop()
         let begun = Date()
-        try await PlanBTests.offMain { hook.waitUntilExit() }
-        #expect(Date().timeIntervalSince(begun) < 2)
+        try await offMain { hook.waitUntilExit() }
+        // The pid in the heartbeat tells it at once, long before the stale heartbeat would.
+        #expect(Date().timeIntervalSince(begun) < Spool.stale / 2)
         let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         #expect(printed.contains(#""behavior":"deny""#) && printed.contains("something is not running"))
     }
