@@ -99,7 +99,8 @@ enum Budget {
             defer { try? FileManager.default.removeItem(at: root) }
             let folder = root.appendingPathComponent("Sources/SomethingAgents")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            for (index, count) in (Array(repeating: Budget.agentsShared, count: files) + [rest + extra]).enumerated() {
+            let counts: [Int] = Array(repeating: Budget.agentsShared, count: files) + [rest + extra]
+            for (index, count) in counts.enumerated() {
                 try String(repeating: "let example = 1\n", count: count).write(to: folder.appendingPathComponent("File\(index).swift"),
                                                                               atomically: true, encoding: .utf8)
             }
