@@ -193,7 +193,7 @@ enum Frozen {
         let turn = Turn(id: "t1", state: "unknown", started: nil, ended: nil, items: [item])
         let thread = AgentThread(id: "th1", agent: "a1", title: nil, started: nil, turns: [turn])
         let request = Request(id: "r1", agent: "a1", kind: "question", tool: nil, about: nil, at: "2026-10-17T09:00:00Z")
-        let kinds = Dictionary(uniqueKeysWithValues: ["claude", "codex", "opencode", "pi", "omp"].map { ($0, kind) })
+        let kinds = Dictionary(uniqueKeysWithValues: ["claude", "codex", "opencode", "pi", "omp", "antigravity", "amp"].map { ($0, kind) })
         let state = State(at: "2026-10-17T09:00:00Z", kinds: kinds, agents: [agent], threads: [thread], requests: [request])
 
         let json = try #require(try JSONSerialization.jsonObject(with: state.json()) as? [String: Any])

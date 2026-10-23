@@ -45,15 +45,19 @@ public struct AgentDescriptor: Sendable {
     public var tools: [String: Tool]
     /// What each of its modes that lowers asking lets it do, in words that follow "a mode where it".
     public var modeWords: [String: String]
+    /// Why something does not launch it, in one sentence for the person: its kind's note in the state, and the error
+    /// of a launch; nil for a kind it launches.
+    public var unavailable: String?
 
     package init(kind: String, name: String, install: String? = nil, runsOn: String? = nil, homeFolders: [String] = [],
                  bundled: String? = nil, refusedCopies: [String] = [], asksAsMuch: Set<String> = [], resume: Resume = .never,
                  driving: Driving? = nil, reader: (@Sendable ([String: String]) -> any Reader)? = nil, builder: Builder? = nil,
-                 neverAsks: Bool = false, asksNothingByDefault: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:]) {
+                 neverAsks: Bool = false, asksNothingByDefault: Bool = false, tools: [String: Tool] = [:], modeWords: [String: String] = [:],
+                 unavailable: String? = nil) {
         (self.kind, self.name, self.install, self.runsOn, self.homeFolders, self.bundled) = (kind, name, install, runsOn, homeFolders, bundled)
         (self.refusedCopies, self.asksAsMuch, self.resume, self.driving, self.reader) = (refusedCopies, asksAsMuch, resume, driving, reader)
         (self.builder, self.neverAsks, self.asksNothingByDefault) = (builder, neverAsks, asksNothingByDefault)
-        (self.tools, self.modeWords) = (tools, modeWords)
+        (self.tools, self.modeWords, self.unavailable) = (tools, modeWords, unavailable)
     }
 
     /// What the person's assistant gets when it is this agent.

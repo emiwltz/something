@@ -289,13 +289,15 @@ at most four times a second, only when it changed. A shortened example (the full
 
 ### `kinds`: one entry per harness
 
-`claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, and `antigravity`, which something only sees by its process. `launch`:
-something can launch it. `installed`: its program was found (or `null`, always for a kind something does not launch). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac
-name, or `null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its
-database's last migration).
+`claude`, `codex`, `opencode`, `pi`, `omp`, `amp`, and `antigravity`, which something only sees by its process.
+`launch`: something can launch it. `installed`: its program was found (or `null`, always for a kind something does not
+launch). `tested`: the newest version something was proven on; `seen`: the newest version its files on this Mac name, or
+`null` (OpenCode's: the version that wrote its newest conversation, or, when none says, the name of its database's last
+migration).
 `reader`: `ok`, `changed` (its files changed shape: its agents show as processes only), `unreadable` (its files
 cannot be read now, or reading them takes too long: what was read last stays a moment, then its agents show as
-processes only), or `none` (nothing of this kind here). `note`: one sentence for the person when something is off, or `null`.
+processes only), or `none` (nothing of this kind here, or something reads none of its files: `amp`, `antigravity`). `note`: one
+sentence for the person when something is off (for a kind something does not launch, why), or `null`.
 
 ### Agent
 

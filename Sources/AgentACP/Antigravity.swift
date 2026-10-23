@@ -7,5 +7,6 @@ extension AgentDescriptor {
     /// Seen while `agy` runs, in its folder. Its conversations are in no file something reads: the CLI 1.4.5 keeps
     /// them under ~/.gemini/antigravity-cli in a shape Google documents nowhere.
     package static let antigravity = AgentDescriptor(kind: "antigravity", name: "Antigravity",
-                                                     reader: { _ in OtherReader(kind: "antigravity", names: ["agy"]) })
+                                                     reader: { _ in OtherReader(kind: "antigravity", names: ["agy"]) },
+                                                     unavailable: "Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now.")
 }

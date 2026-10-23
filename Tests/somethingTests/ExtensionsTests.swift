@@ -22,6 +22,17 @@ import Testing
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false])
     }
 
+    /// Every kind the app registers is in the published shape (share/contract/shape.json), as a key of the state's
+    /// kinds and a word of an agent's kind: a kind added to the list fails here until the shape grows too.
+    @Test func everyKindIsInTheShape() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let shape = try JSONSerialization.jsonObject(with: Data(contentsOf: root.appendingPathComponent("share/contract/shape.json"))) as? [String: Any]
+        let types = try #require(shape?["types"] as? [String: [String: [String]]])
+        let kinds = Registry.app.agents.map(\.kind)
+        #expect(Set(types["Kinds"]?.keys.map { $0 } ?? []) == Set(kinds))
+        #expect(Set(kinds + ["other"]).isSubset(of: Set((types["Agent"]?["kind"] ?? []).map { String($0.dropFirst()) })))
+    }
+
     /// The sheet before a mode that lowers asking says what the mode lets the agent do, as 0.2 did: by the mode's
     /// name, whatever the agent (an OpenCode agent named auto reads as Claude Code's auto); any other mode "asks you less".
     @Test func theModeWordsAreThoseOf0_2() {

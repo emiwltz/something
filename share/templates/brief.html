@@ -105,7 +105,7 @@
   // something.js is injected before this script. Each call returns a promise; a rejection carries .code and .message,
   // one sentence for the person: this page prints it in #problem.
   const $ = (id) => document.getElementById(id);
-  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", antigravity: "Antigravity", amp: "Amp" };
   const label = (kind) => NAMES[kind] || "other agent";
   const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));
   const make = (tag, className, text) => Object.assign(document.createElement(tag), { className: className || "", textContent: text ?? "" });
@@ -121,6 +121,8 @@
   const ORDER = ["claude", "codex", "opencode", "pi", "omp"];       // the desk lists the programs in a fixed order
   const word = (state) => ["waiting", "working", "idle", "done", "error", "interrupted"].includes(state) ? state : "unknown";
   const rank = (kind) => ORDER.includes(kind) ? ORDER.indexOf(kind) : ORDER.length;
+  // A kind something does not launch (it only sees its process) is on the desk only while one of its agents is listed.
+  const inView = (kind, k) => k.launch || state.agents.some((a) => a.kind === kind);
   function problem(error) { $("problem").hidden = !error; $("problem").textContent = error ? error.message : ""; }
 
   let skew = 0;                                    // the state's clock ("at") minus this Mac's
@@ -254,7 +256,7 @@
     const n = state.agents.length, folders = new Set(state.agents.map((a) => a.folder).filter(Boolean)).size;
     nodes.push(make("h4", "label", "In view"), make("p", "weather", n
       ? `${n} agent${n === 1 ? "" : "s"}${folders ? `, in ${folders} folder${folders === 1 ? "" : "s"}` : ""}.` : "No agent."));
-    const notes = Object.entries(state.kinds).filter(([, k]) => k.note);
+    const notes = Object.entries(state.kinds).filter(([kind, k]) => k.note && inView(kind, k));
     if (notes.length) {
       nodes.push(make("h4", "label", "Notices"));
       notes.forEach(([kind, k]) => nodes.push(make("p", "notice", `${label(kind)}: ${k.note}`)));
@@ -303,7 +305,7 @@
     const day = dayKey(today());
     if (showing === "today") print(printed !== null && printed !== day);   // a new day: a new edition
     printed = day;
-    const kinds = Object.entries(state.kinds).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
+    const kinds = Object.entries(state.kinds).filter(([kind, k]) => inView(kind, k)).sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b));
     $("desk").replaceChildren(make("b", "", "The desk"), ...kinds.map(([kind, k]) =>
       make("span", "", `${label(kind)}, ${k.installed === null ? "unknown" : k.installed ? "found" : "not found"}${k.reader === "changed" ? " (reads changed)" : ""}`)));
     keepEdition();

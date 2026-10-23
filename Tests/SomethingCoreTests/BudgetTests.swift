@@ -5,8 +5,9 @@ import Testing
 
 enum Budget {
     static let core = 1_800, host = 2_800, driver = 600, agentsShared = 400, app = 5_500, described = 40
-    /// The files of an agent described by data alone, without a driver or a reader of its own, by path under Sources.
-    static let describedOnly = ["AgentACP/Antigravity.swift"]
+
+    /// Whether a file describes an agent by data alone: it extends AgentDescriptor and gives it no driver.
+    static func describesOnly(_ text: String) -> Bool { text.contains("extension AgentDescriptor") && !text.contains("driving:") }
 
     /// The lines of a text, counted as `wc -l` counts them, plus a last line without its newline.
     static func lines(_ text: String) -> Int {
@@ -16,11 +17,11 @@ enum Budget {
 
     /// The Swift files under a folder, subfolders included, by path relative to it, with their line counts;
     /// empty when the folder does not exist (`theSourcesHoldTheirBudgets` checks that each one does).
-    static func files(in folder: URL) -> [(name: String, lines: Int)] {
+    static func files(in folder: URL) -> [(name: String, lines: Int, text: String)] {
         let names = (FileManager.default.enumerator(atPath: folder.path)?.allObjects as? [String]) ?? []
         return names.filter { $0.hasSuffix(".swift") }.sorted().compactMap { name in
             guard let text = try? String(contentsOf: folder.appendingPathComponent(name), encoding: .utf8) else { return nil }
-            return (name, lines(text))
+            return (name, lines(text), text)
         }
     }
 
@@ -50,7 +51,7 @@ enum Budget {
                 let isDriver = (file.name as NSString).lastPathComponent.hasSuffix("Driver.swift")
                 let (role, budget) = isDriver ? ("driver", driver) : ("file", agentsShared)
                 if file.lines > budget { problems.append("\(target)/\(file.name) has \(file.lines) lines; a \(role) has \(budget).") }
-                if describedOnly.contains("\(target)/\(file.name)"), file.lines > described {
+                if describesOnly(file.text), file.lines > described {
                     problems.append("\(target)/\(file.name) has \(file.lines) lines; an agent described by data has \(described).")
                 }
             }
@@ -70,9 +71,11 @@ enum Budget {
         for target in ["SomethingCore", "SomethingAgents", "something"] + Budget.agentTargets(under: root) {
             #expect(!Budget.files(in: root.appendingPathComponent("Sources/\(target)")).isEmpty, "Sources/\(target) has no Swift file")
         }
-        for name in Budget.describedOnly {
-            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("Sources/\(name)").path), "Sources/\(name) is not there")
+        // The rule finds the agents described by data: Antigravity, and none of the agents with a driver.
+        let described = Budget.agentTargets(under: root).flatMap { target in
+            Budget.files(in: root.appendingPathComponent("Sources/\(target)")).filter { Budget.describesOnly($0.text) }.map { "\(target)/\($0.name)" }
         }
+        #expect(described.contains("AgentACP/Antigravity.swift") && !described.contains("AgentACP/OMP.swift"), "\(described)")
         let problems = Budget.problems(under: root)
         #expect(problems.isEmpty, "\(problems)")
     }
@@ -127,7 +130,9 @@ enum Budget {
                 defer { try? FileManager.default.removeItem(at: root) }
                 let folder = root.appendingPathComponent("Sources/\(item.folder)")
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                let text = String(repeating: "let example = 1\n", count: count)
+                // An agent described by data extends AgentDescriptor; the other invented files are any code.
+                let first = item.problem.hasSuffix("described by data has 40.") ? "extension AgentDescriptor {}\n" : "let example = 1\n"
+                let text = first + String(repeating: "let example = 1\n", count: count - 1)
                 try text.write(to: folder.appendingPathComponent(item.name), atomically: true, encoding: .utf8)
                 #expect(Budget.problems(under: root) == expected, "\(item.name) with \(count) lines")
             }

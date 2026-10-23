@@ -189,7 +189,7 @@
   // something.js is injected before this script. Each call returns a promise; a rejection carries .code and .message,
   // one sentence for the person: this page prints it in #problem.
   const $ = (id) => document.getElementById(id);
-  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", antigravity: "Antigravity", amp: "Amp" };
   const label = (kind) => NAMES[kind] || "other agent";
   // A right counts when granted plainly ("store") or for a kind ("send:claude"). Read it from something.granted.
   const has = (right) => something.granted.rights.some((r) => r === right || r.startsWith(right + ":"));

@@ -92,7 +92,8 @@ public final class Engine {
     }
 
     /// The state; a kind whose newest launch spoke only lines its driver does not know says so in its note, before its
-    /// reader's (an older launch may have run a version the person has updated since).
+    /// reader's (an older launch may have run a version the person has updated since); a kind something does not launch
+    /// says why.
     private func make() -> State {
         let newest = launched.reduce(into: [String: Launched]()) { $0[$1.agent.driving.kind] = $1.agent }
         let foreign = Set(newest.values.filter(\.foreign).map(\.driving.kind))
@@ -100,7 +101,7 @@ public final class Engine {
             let tested = registry.launchable[kind]?.tested ?? "none"
             let note = foreign.contains(kind) ? "something does not understand this version of \(registry.name(of: kind)) (tested \(tested))." : nil
             return (kind, Kind(launch: registry.launchable[kind] != nil, installed: installed[kind], tested: tested,
-                               seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: note ?? seen.kinds[kind]?.note))
+                               seen: seen.kinds[kind]?.version, reader: seen.kinds[kind]?.health ?? "none", note: note ?? seen.kinds[kind]?.note ?? registry.agent(kind)?.unavailable))
         }
         return State(at: Engine.now(), kinds: Dictionary(uniqueKeysWithValues: kinds), agents: launched.map(\.agent.agent) + outside.agents,
                      threads: launched.compactMap(\.agent.thread) + outside.threads, requests: launched.flatMap(\.agent.queue.fold.requests))

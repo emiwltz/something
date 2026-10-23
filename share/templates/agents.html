@@ -170,7 +170,7 @@
   // something.js is injected before this script: window.something is here. Every call returns a promise; a rejection
   // carries .code and .message, one sentence for the person. This page shows it in #problem and never swallows it.
   const $ = (id) => document.getElementById(id);
-  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP" };
+  const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", antigravity: "Antigravity", amp: "Amp" };
   const label = (kind) => NAMES[kind] || "other agent";        // a kind this page does not know is "other agent"
   const WORDS = ["waiting", "working", "idle", "done", "error", "interrupted", "unknown"];
   const word = (state) => WORDS.includes(state) ? state : "unknown";
@@ -338,12 +338,14 @@
     if (!lines.length) $("log").append(make("li", "quiet", "Nothing said yet in the conversations this space sees."));
 
     painted = true;
-    // Each program something knows: found or not, and its note when its files changed shape.
-    $("kinds").replaceChildren(...Object.entries(state.kinds).map(([kind, k]) => {
+    // Each program something knows: found or not, and its note when its files changed shape. One it does not launch (it
+    // only sees its process) is here only while one of its agents is listed.
+    const kinds = Object.entries(state.kinds).filter(([kind, k]) => k.launch || state.agents.some((a) => a.kind === kind));
+    $("kinds").replaceChildren(...kinds.map(([kind, k]) => {
       const node = make("span", "label kind", label(kind) + "  ");
       node.append(make("b", "", k.installed === null ? "unknown" : k.installed ? (k.reader === "changed" ? "⚠ found" : "found") : "not found"));
       return node;
-    }), ...Object.values(state.kinds).filter((k) => k.note).map((k) => make("span", "note", "⚠ " + k.note)));
+    }), ...kinds.filter(([, k]) => k.note).map(([, k]) => make("span", "note", "⚠ " + k.note)));
   }
 
   // "SAT 17 OCT · 09:00:04", or the time alone; in this Mac's time zone.

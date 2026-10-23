@@ -55,7 +55,9 @@ public struct Registry: Sendable {
 
     /// What the driver of `kind` can do. Throws NOT_SUPPORTED for a kind without a driver.
     func driving(_ kind: String) throws -> Driving {
-        guard let driving = launchable[kind] else { throw CodedError("NOT_SUPPORTED", "something cannot launch \(kind) yet.") }
+        guard let driving = launchable[kind] else {
+            throw CodedError("NOT_SUPPORTED", agent(kind)?.unavailable ?? "something cannot launch \(name(of: kind)) yet.")
+        }
         return driving
     }
 
