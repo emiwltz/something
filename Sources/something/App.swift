@@ -248,15 +248,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func who(_ request: Request) -> Asker {
         let space = panels.queue.space(request).map { library.entry($0)?.title ?? $0 }
         return App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
-                       assistant: engine.assistants.contains(request.agent))
+                       assistant: engine.assistants.contains(request.agent), building: assistant.id == request.agent && !assistant.asking)
     }
 
-    /// `agent` in the panel's words: its program, `space`, its own name unless it is the person's assistant, and its
-    /// folder with ~ for `home`; "An agent" when the state no longer holds it.
-    static func who(_ agent: Agent?, space: String?, home: String, assistant: Bool = false) -> Asker {
+    /// `agent` in the panel's words, "An agent" when the state no longer holds it: pre-allowed only as an assistant launched
+    /// without Ask Before Every Change (`building`) whose builder is; named unless the assistant; its folder with ~.
+    static func who(_ agent: Agent?, space: String?, home: String, assistant: Bool = false, building: Bool = false) -> Asker {
         guard let agent else { return Asker(program: "An agent", space: space) }
-        return Asker(program: Registry.app.name(of: agent.kind), space: space, assistant: assistant, name: assistant ? nil : agent.name,
-                     folder: agent.folder.map { Words.path($0, home: home) })
+        return Asker(program: Registry.app.name(of: agent.kind), space: space, assistant: assistant,
+                     preAllowed: assistant && building && Registry.app.agent(agent.kind)?.builder?.preAllowed == true,
+                     name: assistant ? nil : agent.name, folder: agent.folder.map { Words.path($0, home: home) })
     }
 
     /// The engine may change many times a second; the open space hears of it at most every quarter of a second.

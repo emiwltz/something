@@ -300,10 +300,11 @@ final class FakePrompts: PromptSource {
         EOF
         """
 
-    func commandPanel(_ input: String = long) throws -> (RequestPanel, CommandBox) {
+    func commandPanel(_ input: String = long, who: Asker = Asker(program: "Codex", space: "My agents", assistant: true, preAllowed: true))
+        throws -> (RequestPanel, CommandBox) {
         let panel = RequestPanel { _ in }
         panel.show(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-23T18:00:00Z"),
-                          input: input), who: Asker(program: "Codex", space: "My agents", assistant: true), age: nil)
+                          input: input), who: who, age: nil)
         return (panel, try #require(panel.code))
     }
 
@@ -346,6 +347,14 @@ final class FakePrompts: PromptSource {
         #expect(panel.frame.height > height && buttons[1].isAccessibilityExpanded())
         buttons[1].performClick(nil)
         #expect(panel.frame.height == height && !buttons[1].isAccessibilityExpanded())
+        // Without the exception (a builder not pre-allowed, or Ask Before Every Change), and for any other agent.
+        let others = [(Asker(program: "OpenCode", space: "My agents", assistant: true), "OpenCode asks you when its own settings decide; its request waits here"),
+                      (Asker(program: "Claude Code", space: "Project watch"), "Claude Code asks you when its own settings decide; its request waits here")]
+        for (who, words) in others {
+            let (other, _) = try commandPanel(who: who)
+            links(try #require(other.contentView)).first { $0.title == "Why am I asked?" }?.performClick(nil)
+            #expect(Self.texts(other.contentView).last?.hasPrefix(words) == true, "\(who.program)")
+        }
         // A trailing newline ends the one line; it does not make two.
         let one = CommandBox("ls\n", target: panel, action: #selector(RequestPanel.expand))
         #expect(Self.texts(one).contains("The exact command") && one.text.string == "ls\n")
@@ -418,6 +427,12 @@ final class FakePrompts: PromptSource {
         agent.folder = "/Users/example/something/spaces"
         let assistant = App.who(agent, space: "Daily brief", home: "/Users/example", assistant: true)
         #expect(assistant == Asker(program: "Claude Code", space: "Daily brief", assistant: true, folder: "~/something/spaces"))
+        // Pre-allowed only while launched without Ask Before Every Change, and only for a pre-allowed builder.
+        #expect(App.who(agent, space: nil, home: "/Users/example", assistant: true, building: true).preAllowed)
+        #expect(!App.who(agent, space: nil, home: "/Users/example", assistant: false, building: true).preAllowed)
+        agent.kind = "opencode"
+        #expect(!App.who(agent, space: nil, home: "/Users/example", assistant: true, building: true).preAllowed)
+        agent.kind = "claude"
         let panel = RequestPanel { _ in }
         panel.show(FakePrompts().permission("r1", about: "npm test"), who: assistant, age: "asked 3 min ago")
         #expect(panel.title == "Claude Code wants to run a command")

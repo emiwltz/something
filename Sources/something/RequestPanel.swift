@@ -9,10 +9,10 @@ import AppKit
 import SomethingAgents
 import SomethingCore
 
-/// Who asks, in the panel's words: the program, the space the request belongs to, whether it is that space's
-/// assistant, the agent's own name, and its folder with ~. What is not known is left out.
+/// Who asks, in the panel's words: the program, its space, whether it is that space's assistant and its building is
+/// pre-allowed now (rule 2's exception), the agent's own name, and its folder with ~. What is not known is left out.
 struct Asker: Equatable {
-    var program: String, space: String? = nil, assistant = false, name: String? = nil, folder: String? = nil
+    var program: String, space: String? = nil, assistant = false, preAllowed = false, name: String? = nil, folder: String? = nil
 }
 
 class RequestPanel: NSPanel {
@@ -225,8 +225,8 @@ class RequestPanel: NSPanel {
             shown.removeFromSuperview()
             whyBox = nil
         } else if let who {
-            let words = who.assistant ? "\(who.program) is this space's assistant: it may change your spaces and run something's own commands "
-                + "without asking; everything else it does asks you, as its own settings decide, and"
+            let words = who.preAllowed ? "\(who.program) is this space's assistant: it may change your spaces and run something's own "
+                + "commands without asking; everything else it does asks you, as its own settings decide, and"
                 : "\(who.program) asks you when its own settings decide; its request"
             let field = Self.text(words + " waits here, in a window of the Mac that no page can draw or click. Allow Once covers this one "
                                   + "request, this one time.", Look.small, .ink2)

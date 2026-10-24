@@ -55,7 +55,7 @@ struct AcceptanceTrust {
             let (kind, space, folder, assistant) = agents[(Int(request.agent.dropFirst()) ?? 1) - 1]
             var agent = Agent(id: request.agent, kind: kind, origin: "launched")
             (agent.name, agent.folder) = (assistant ? nil : "watcher", folder)
-            return App.who(agent, space: space, home: "/Users/example", assistant: assistant)
+            return App.who(agent, space: space, home: "/Users/example", assistant: assistant, building: assistant)
         }
         return panels
     }
