@@ -5,6 +5,7 @@
 // atomically, over the keys this version knows: a key it does not know is kept as it was.
 import Foundation
 import Observation
+import SomethingCore
 
 @dynamicMemberLookup @Observable final class Preferences {
     enum Appearance: String, Codable { case system, light, dark }
@@ -24,6 +25,8 @@ import Observation
         /// The kind of the default agent; nil for the first builder found. The model and effort are nil for the
         /// agent's own.
         var assistant: String?, model: String?, effort: String?
+        /// The models and efforts each kind's agent last listed, by kind: the model chip offers them before it runs.
+        var listed: [String: Options] = [:]
         var askEverything = false, resume = true, toured = false, launcherOffered = false, addToApplications = true
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
         /// "last", "new", or the name of a space.
@@ -39,7 +42,7 @@ import Observation
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, askEverything, resume, toured, launcherOffered, addToApplications, groups,
+            case lastOpen, assistant, model, effort, listed, askEverything, resume, toured, launcherOffered, addToApplications, groups,
                  folded, names, recents, openAtStart, appearance, motion, assistantAtOpening, sidebarEyes, rememberSticker,
                  holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
         }
@@ -52,6 +55,7 @@ import Observation
             func read<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? keys.decodeIfPresent(T.self, forKey: key)) ?? fallback }
             let base = Values()
             (lastOpen, assistant, model, effort) = (read(.lastOpen, nil), read(.assistant, nil), read(.model, nil), read(.effort, nil))
+            listed = read(.listed, base.listed)
             (askEverything, resume, toured) = (read(.askEverything, base.askEverything), read(.resume, base.resume), read(.toured, base.toured))
             (launcherOffered, addToApplications) = (read(.launcherOffered, base.launcherOffered), read(.addToApplications, base.addToApplications))
             (groups, folded, names, recents) = (read(.groups, base.groups), read(.folded, base.folded), read(.names, base.names), read(.recents, base.recents))

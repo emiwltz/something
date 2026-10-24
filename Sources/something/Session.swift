@@ -11,8 +11,9 @@ import SomethingCore
 @Observable final class Session {
     /// The builder; nil while none is found.
     var kind: String?
-    /// What the agent is launched with; nil leaves its own default.
-    let model: String?, effort: String?
+    /// What the agent is launched with, chosen for this conversation alone (the model chip); nil leaves its own default.
+    var model: String?
+    var effort: String?
     /// The space this conversation is about; nil for New Space's, which the blank page and the templates share. A build
     /// from New Space becomes the new space's own conversation (AssistantModel.appeared).
     var space: String?

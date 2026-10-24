@@ -249,17 +249,8 @@ struct AssistantCard: View {
     private var composer: some View {
         VStack(spacing: 0) {
             HStack(spacing: 1) {
-                MenuChip(label: "Agent: \(model.name)") {
-                    Circle().fill(model.dot.ui).frame(width: 7, height: 7)
-                    Text(model.name)
-                } items: { AgentMenu(model: model) }
-                let words = model.modelWords
-                MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
-                    Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-                } items: {
-                    Text(words.model)
-                    if let effort = words.effort { Text("Effort: \(effort)") }
-                }
+                AgentChip(model: model)
+                ModelChip(model: model)
                 PointChip()
                 Spacer(minLength: 0)
                 Button { model.threadShown.toggle() } label: {
@@ -269,6 +260,7 @@ struct AssistantCard: View {
                         Image(systemName: "chevron.up").font(.system(size: 8, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 180 : 0))
                     }
                     .chip(pressed: model.threadShown)
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
                 .help(Keys.tooltip("convo", "Conversation")).accessibilityLabel("Conversation")
@@ -420,6 +412,42 @@ struct MenuChip<Shown: View, Items: View>: View {
     }
 }
 
+/// The agent chip: a dot of its state's colour and the builder's name, opening the agent menu. New Space shows it too.
+struct AgentChip: View {
+    let model: AssistantModel
+
+    var body: some View {
+        MenuChip(label: "Agent: \(model.name)") {
+            Circle().fill(model.dot.ui).frame(width: 7, height: 7)
+            Text(model.name)
+        } items: { AgentMenu(model: model) }
+    }
+}
+
+/// The model chip: the model and, lighter, the effort, opening their menu for this conversation alone. New Space
+/// shows it too.
+struct ModelChip: View {
+    let model: AssistantModel
+
+    var body: some View {
+        let words = model.modelWords
+        MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
+            Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
+        } items: {
+            ForEach(model.modelMenu, id: \.header) { part in
+                Section(part.header) {
+                    ForEach(part.choices, id: \.value) { choice in
+                        Toggle(choice.title, isOn: Binding(get: { choice.checked }, set: { _ in
+                            choice.effort ? model.choose(effort: choice.value) : model.choose(model: choice.value)
+                        }))
+                    }
+                    if let note = part.note { Button(note) {}.disabled(true) }
+                }
+            }
+        }
+    }
+}
+
 /// Point's place in the composer row: greyed, as in the toolbar, until its slice (T14) gives it an action.
 struct PointChip: View {
     var body: some View {
@@ -429,6 +457,8 @@ struct PointChip: View {
             Text("Point")
         }
         .chip()
+        // Whole beside a long model name: the row's spacer gives way first.
+        .fixedSize()
         .opacity(enabled ? 1 : 0.32)
         .help(Keys.tooltip("pointpart", "Point"))
         .accessibilityLabel("Point")
@@ -493,6 +523,9 @@ struct AgentMenu: View {
                 Button("\(seen.name) · Can't build yet") {}.disabled(true).help(seen.why)
             }
         }
+        Divider()
+        let settings = Keys.command("settings")?.action
+        Button(AssistantModel.defaultsTitle) { settings.map { _ = NSApp.sendAction($0, to: nil, from: nil) } }.disabled(settings == nil)
     }
 }
 
@@ -512,13 +545,49 @@ extension AssistantModel {
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 
-    /// One menu item per builder in `entries`, each choosing its builder: Build With ▸ and Use Another Agent alike.
-    static func builderItems(_ entries: [Entry]) -> [NSMenuItem] {
+    /// One menu item per builder in `entries`, each sending `action` with its kind: Use Another Agent chooses this
+    /// conversation's builder, Build With ▸ New Space's (checking `checked` rather than this conversation's).
+    static func builderItems(_ entries: [Entry], action: Selector = #selector(App.chooseBuilder(_:)), checked: String?? = .none) -> [NSMenuItem] {
         entries.map { entry in
-            let item = NSMenuItem(title: entry.title, action: entry.enabled ? #selector(App.chooseBuilder(_:)) : nil, keyEquivalent: "")
-            (item.representedObject, item.state, item.toolTip) = (entry.id, entry.checked ? .on : .off, entry.note)
+            let item = NSMenuItem(title: entry.title, action: entry.enabled ? action : nil, keyEquivalent: "")
+            let on = checked.map { $0 == entry.id } ?? entry.checked
+            (item.representedObject, item.state, item.toolTip) = (entry.id, on ? .on : .off, entry.note)
             return item
         }
+    }
+
+    /// The last item of the agent menu and of Build With ▸: Settings › Assistant, once Settings has it (G5).
+    static let defaultsTitle = "Defaults for New Spaces…"
+
+    /// One part of the model chip's menu: its header, the values to choose, checked when they are this
+    /// conversation's, and a sentence when there is nothing to choose.
+    struct ModelPart: Equatable {
+        struct Choice: Equatable { let title: String, value: String, effort: Bool, checked: Bool }
+        let header: String
+        var choices: [Choice] = []
+        var note: String?
+    }
+
+    /// The model chip's menu: the models, then the efforts, that the running agent lists, else those its kind last
+    /// listed; before any, a sentence. A builder that picks its own model says so, and offers none.
+    var modelMenu: [ModelPart] {
+        let offered = offered, chosen = (model: session.model ?? agent?.model, effort: session.effort ?? agent?.effort)
+        var model = ModelPart(header: "Model · this space")
+        if ownModel {
+            model.note = "\(name) picks its own model. Change it in \(name)'s settings."
+        } else if let models = offered.model, !models.isEmpty {
+            model.choices = models.map { .init(title: $0.label, value: $0.value, effort: false, checked: $0.value == chosen.model) }
+        } else {
+            model.note = "Default model · \(name) lists its models once it runs."
+        }
+        guard let efforts = offered.effort, !efforts.isEmpty, Registry.app.limits[kind ?? ""]?.contains("effort") != true else { return [model] }
+        return [model, ModelPart(header: "Effort", choices: efforts.map { .init(title: $0.label, value: $0.value, effort: true, checked: $0.value == chosen.effort) })]
+    }
+
+    /// What the running agent lists, else what its kind last listed (Preferences.listed).
+    var offered: Options {
+        if let live = agent?.options, agent?.alive != false, live.model?.isEmpty == false { return live }
+        return kind.flatMap { Preferences.at(places).listed[$0] } ?? Options()
     }
 
     /// The agents something sees but does not launch, each with why.
@@ -562,11 +631,13 @@ extension AssistantModel {
         }
     }
 
-    /// The model as the agent last reported it, by the name its options give, then the one asked for; and its effort.
+    /// The model chosen for this conversation, else the one its agent reported, by the name its options give; and its
+    /// effort likewise. The choice comes first: an agent reports a new model only with its next turn.
     var modelWords: (model: String, effort: String?) {
-        let options = agent?.options
-        let model = agent?.model.map { m in options?.model?.first { $0.value == m }?.label ?? m } ?? session.model ?? "Default model"
-        let effort = (agent?.effort ?? session.effort).map { e in options?.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
+        let offered = offered
+        if ownModel { return ("Its own model", nil) }
+        let model = (session.model ?? agent?.model).map { m in offered.model?.first { $0.value == m }?.label ?? m } ?? "Default model"
+        let effort = (session.effort ?? agent?.effort).map { e in offered.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
         return (model, effort)
     }
 

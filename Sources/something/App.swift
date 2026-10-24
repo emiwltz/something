@@ -319,10 +319,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Never sent: Build With only holds its submenu, and this selector lets validateMenuItem grey it.
     @objc func buildWith(_ sender: Any?) {}
 
-    /// Build With ▸, made again each time it opens: the builders found (the agent menu of the capsule has the rest).
+    /// Build With ▸'s choice: the builder of new spaces, said in a toast.
+    @objc func buildNewWith(_ sender: NSMenuItem) {
+        guard let kind = sender.representedObject as? String, let words = assistant.buildNew(with: kind) else { return }
+        _ = shell.toast(words, quiet: true)
+    }
+
+    /// Build With ▸, made again each time it opens: the builders found, New Space's checked (the agent menu of the
+    /// capsule has the rest), then the defaults in Settings.
     func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.items = AssistantModel.builderItems(assistant.entries)
+        menu.items = AssistantModel.builderItems(assistant.entries, action: #selector(buildNewWith(_:)), checked: assistant.newKind)
         if menu.items.isEmpty { menu.addItem(NSMenuItem(title: "No coding agent found", action: nil, keyEquivalent: "")) }
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: AssistantModel.defaultsTitle, action: Keys.command("settings")?.action, keyEquivalent: ""))
     }
 
     /// Greyed, never hidden: Keys says when each command can act.

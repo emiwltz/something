@@ -2,6 +2,7 @@
 // does not read is left as it is until the first change; keys a later version wrote survive; every value comes back
 // as it was written; and a space gone from the spaces folder leaves its group, the recent ones and its name.
 import Foundation
+import SomethingCore
 import Testing
 @testable import something
 
@@ -78,6 +79,7 @@ import Testing
         defer { home.remove() }
         var values = Preferences.Values()
         (values.lastOpen, values.assistant, values.model, values.effort) = ("garden", "pi", "invented-model", "high")
+        values.listed = ["pi": Options()]
         (values.askEverything, values.resume, values.toured, values.launcherOffered, values.addToApplications) = (true, false, true, true, false)
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])

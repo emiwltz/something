@@ -172,9 +172,17 @@ import SomethingCore
             // missing rather than another agent taking the conversation over unasked. Only one refused passes on.
             let kind = each.kind ?? ""
             if !offered.contains(kind), !each.hasHistory || each.kind == nil || installed[kind] == true {
-                each.kind = offered.first { $0 == preferred } ?? offered.first
+                let chosen = offered.first { $0 == preferred } ?? offered.first
+                // Another builder's model means nothing to this one; a conversation kept before the agents were looked
+                // for keeps what it chose.
+                if chosen != nil, each.kind != nil || (each.model, each.effort) == (nil, nil) { (each.model, each.effort) = defaults(chosen) }
+                each.kind = chosen
             }
             if each.read(state) { save(each) }
+            // What its agent lists is what the chip offers for its kind, the next time too.
+            if let kind = each.kind, let options = each.agent?.options, options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options {
+                Preferences.at(places).listed[kind] = options
+            }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
         rest()
@@ -425,7 +433,8 @@ import SomethingCore
     /// new one with the builder chosen now.
     func session(for place: Place) -> Session {
         if let kept = sessions[place.key] { return kept }
-        let made = place.space.flatMap { Session.restored($0, in: places.assistants) } ?? Session(kind: kind, space: place.space)
+        let made = place.space.flatMap { Session.restored($0, in: places.assistants) }
+            ?? Session(kind: kind, model: defaults(kind).model, effort: defaults(kind).effort, space: place.space)
         made.active = clock()
         sessions[place.key] = made
         return made
@@ -481,8 +490,8 @@ import SomethingCore
         guard chosen != kind, refused[chosen] == nil else { return }
         let switched = { [self] in
             newConversation()
-            (session.kind, preferred) = (chosen, chosen)
-            Preferences.at(places).assistant = chosen
+            keepDefault(chosen)
+            (session.kind, session.model, session.effort) = (chosen, defaults(chosen).model, defaults(chosen).effort)
         }
         if id != nil, agent?.alive != false, !session.stopped {
             confirmSwitch(name, Registry.app.name(of: chosen), switched)
@@ -490,6 +499,50 @@ import SomethingCore
             switched()
         }
     }
+
+    /// Chooses the model or the effort of this place's conversation alone, nil leaving each as it is: an awake agent
+    /// takes them from its next turn (Engine.set), and they are kept for every later launch, the wake's included.
+    func choose(model: String? = nil, effort: String? = nil) {
+        guard model != nil || effort != nil, model == nil || !ownModel else { return }
+        if let model { session.model = model }
+        if let effort { session.effort = effort }
+        save(session)
+        // A launch under way reads them when it starts.
+        guard let id, awake(session), !launching else { return }
+        do { _ = try engine.set(id, model: model, mode: nil, effort: effort) } catch { session.failure = error.sentence }
+    }
+
+    /// Whether the builder chooses its model alone, which something cannot set (its kind's limits).
+    var ownModel: Bool { Registry.app.limits[kind ?? ""]?.contains("model") == true }
+
+    /// The model and effort a new conversation of `kind` starts with: the defaults for new spaces when `kind` is their
+    /// agent, else the agent's own.
+    func defaults(_ kind: String?) -> (model: String?, effort: String?) {
+        let kept = Preferences.at(places)
+        guard let kind, kind == kept.assistant ?? kind else { return (nil, nil) }
+        return (kept.model, kept.effort)
+    }
+
+    /// `kind` becomes the default builder; the default model and effort, another builder's, are its own again.
+    private func keepDefault(_ kind: String) {
+        preferred = kind
+        Preferences.at(places).change { if $0.assistant != kind { ($0.assistant, $0.model, $0.effort) = (kind, nil, nil) } }
+    }
+
+    /// Build With ▸: the builder of new spaces from now on, kept as the default. New Space's conversation takes it
+    /// now when it has not begun, else from its next one. Returns what the toast says; nil for a builder not offered.
+    func buildNew(with chosen: String) -> String? {
+        guard installed[chosen] == true, refused[chosen] == nil else { return nil }
+        keepDefault(chosen)
+        let new = session(for: .blank), name = Registry.app.name(of: chosen)
+        guard new.kind != chosen else { return "New spaces build with \(name)" }
+        if new.id != nil || new.launching || new.hasHistory { return "New spaces build with \(name) from the next conversation" }
+        (new.kind, new.model, new.effort) = (chosen, defaults(chosen).model, defaults(chosen).effort)
+        return "New spaces build with \(name)"
+    }
+
+    /// The builder Build With ▸ checks: the default when it is offered, else New Space's.
+    var newKind: String? { entries.contains { $0.id == preferred } ? preferred : sessions[.new]?.kind }
 
     /// Looks for the builders again; one that refused what something lends it is tried again (it may have been updated).
     func lookAgain() {
@@ -592,14 +645,17 @@ import SomethingCore
     }
 
     /// The build's conversation becomes the space `name`'s own, its agent going on there rather than another being
-    /// launched; New Space begins a new one with the same builder, model and effort.
+    /// launched; New Space begins a new one with the same builder, model and effort, or with the builder Build With
+    /// chose meanwhile.
     private func hand(_ built: Session, to name: String) {
         guard sessions[.new] === built else { return }
         if let old = sessions[.space(name)] { halt(old) }
         built.space = name
         sessions[.space(name)] = built
         save(built)
-        let fresh = Session(kind: built.kind, model: built.model, effort: built.effort)
+        let next = installed[preferred ?? ""] == true ? preferred : built.kind
+        let fresh = next == built.kind ? Session(kind: next, model: built.model, effort: built.effort)
+            : Session(kind: next, model: defaults(next).model, effort: defaults(next).effort)
         fresh.active = clock()
         sessions[.new] = fresh
         session = session(for: place)

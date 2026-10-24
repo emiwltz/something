@@ -91,10 +91,7 @@ struct AcceptanceAssistant {
     /// $HOME/out/finish appears; the clock stays at the moment the line is drawn, so it never says "Still working". The
     /// caller closes the space.
     static func atWork(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
-        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
-        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        try AcceptanceAssistant.fake(in: stage)
         let (shell, library, _) = stage.window()
         let model = shell.assistant, engine = model.engine
         engine.changed = { model.refresh() }
@@ -121,10 +118,7 @@ struct AcceptanceAssistant {
     @Test("c3: a thread kept after sleep") func c3() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
-        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
-        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        try AcceptanceAssistant.fake(in: stage)
         // What Logbook's assistant kept when it fell asleep on Monday.
         let monday = { (minute: Int) in iso8601.string(from: Date(timeIntervalSince1970: 1_792_404_000 + Double(minute * 60))) }
         let kept = Session(kind: "claude", model: "haiku", effort: "low", space: "logbook")
@@ -198,7 +192,70 @@ struct AcceptanceAssistant {
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
-    @Test("c5: model and effort", .disabled("not built yet: AB11")) func c5() async throws {}
+    /// Project watch open with its card: its assistant answered a first message and listens. The model chip's menu
+    /// offers the models and efforts Claude Code listed; Sonnet 5.5 at Medium is chosen for this space alone, which the
+    /// chip then says. An open menu is drawn by the window server, which no picture here reaches (cannot_native): its
+    /// structure is checked by value, and written beside the picture as c5-menu.txt.
+    @Test("c5: model and effort") func c5() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let project = try await stage.open("project", in: shell, library)
+        defer { project.close() }
+        #expect(model.modelWords == ("Default model", nil), "before Claude Code ever ran")
+        model.draft = "Mark the evaluation page done."
+        model.send()
+        #expect(await wait(until: { model.light == .ready && model.agent?.state == "idle" && model.messageCount == 2 }), "rows: \(model.rows)")
+        // A minute later, by the card's clock: no longer "Just finished".
+        let later = Date().addingTimeInterval(60)
+        model.clock = { later }
+        model.tick()
+        model.focus()
+        model.choose(model: "sonnet")
+        model.choose(effort: "medium")
+        #expect(await wait(until: { model.agent?.effort == "medium" && model.modelMenu.last?.choices.count == 4 }))
+        typealias Choice = AssistantModel.ModelPart.Choice
+        #expect(model.modelMenu == [
+            .init(header: "Model · this space", choices: [Choice(title: "Opus 5.5", value: "opus", effort: false, checked: false),
+                                                         Choice(title: "Sonnet 5.5", value: "sonnet", effort: false, checked: true),
+                                                         Choice(title: "Haiku 5.5", value: "haiku", effort: false, checked: false)]),
+            .init(header: "Effort", choices: [Choice(title: "Low", value: "low", effort: true, checked: false),
+                                              Choice(title: "Medium", value: "medium", effort: true, checked: true),
+                                              Choice(title: "High", value: "high", effort: true, checked: false),
+                                              Choice(title: "Max", value: "max", effort: true, checked: false)]),
+        ])
+        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code" && model.dot == .ok)
+        #expect(model.title == "Project watch" && model.presence.header == "Listening" && !model.threadShown)
+        #expect(model.placeholder == "Ask Project watch's assistant for a change…")
+        // This space's alone: the defaults for new spaces are unchanged.
+        #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
+        shell.waiting(1, mine: 0)
+        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: project.web, "c5" + suffix, root: stage.home.root)
+        }
+        if let gallery {
+            let lines = model.modelMenu.flatMap { part in [part.header.uppercased()] + part.choices.map { "  \($0.title)\($0.checked ? "  ✓" : "")" } }
+            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("c5-menu.txt"), atomically: true, encoding: .utf8)
+        }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
+
+    /// Puts the fake claude of AssistantTests in the PATH of `stage`'s home; returns its file.
+    @discardableResult static func fake(in stage: Stage) throws -> URL {
+        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        return claude
+    }
     /// Each space has its own assistant and conversation. Daily brief's works on the weather corner, its card open
     /// with the conversation; Logbook's sleeps, never written to; My agents' answered, then waits for a permission. The
     /// card stays open and in place from one to the other, fading to each one's own rows; the sidebar shows each one's
@@ -309,10 +366,7 @@ struct AcceptanceAssistant {
     @Test("c8: the notice slot") func c8() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
-        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
-        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
-        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        let claude = try AcceptanceAssistant.fake(in: stage)
         let (shell, library, _) = stage.window()
         let model = shell.assistant, engine = model.engine, glass = shell.glass
         glass.motion = { .reduced }

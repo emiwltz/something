@@ -23,7 +23,8 @@ import WebKit
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
     /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt ends the
-    /// running turn as Claude Code does.
+    /// running turn as Claude Code does. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
+    /// effort is taken.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -100,7 +101,10 @@ import WebKit
           echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
           later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
         *'"subtype":"initialize"'*)
-          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
+          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"sonnet","displayName":"Sonnet 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
+        *'"subtype":"set_model"'*|*'"subtype":"apply_flag_settings"'*)
+          id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
+          echo "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"$id\"}}" ;;
         *'sign-in-please'*'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_0","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Invalid API key · Please run /login"}]},"parent_tool_use_id":null,"error":"authentication_failed","is_api_error_message":true,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"Invalid API key · Please run /login","session_id":"s1","uuid":"u3"}' ;;
@@ -931,6 +935,92 @@ import WebKit
         #expect(seen.map(\.name) == ["Antigravity", "Cursor"])
         #expect(seen.allSatisfy { !$0.why.isEmpty } && seen[1].why.hasPrefix("Cursor asks you before each of something's own tools"))
         await finish(home, model)
+    }
+
+    /// The model chip: "Default model" before Claude Code ever ran; then the models its `initialize` listed, kept for
+    /// its kind, so a space never launched offers them too. Awake, a model and an effort go to the agent (set_model,
+    /// apply_flag_settings) and stay this space's alone; asleep, they are kept and the wake launches with them.
+    @Test func theModelChipOffersWhatItsKindListed() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let agents = AssistantModel.Place.space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        model.place = agents
+        #expect(model.modelWords.model == "Default model" && model.modelWords.effort == nil)
+        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Default model · Claude Code lists its models once it runs.")])
+        model.draft = "Make the tiles wider."
+        model.send()
+        #expect(await wait(until: { model.rows.contains(.reply("Invented reply.")) && model.light == .ready }))
+        #expect(Preferences(home.places).listed["claude"]?.model?.map(\.label) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"], "kept for the kind")
+        // The reply was Haiku's: it is checked, with the efforts Haiku offers.
+        #expect(model.modelMenu.map(\.header) == ["Model · this space", "Effort"])
+        #expect(model.modelMenu[0].choices.map(\.title) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && model.modelMenu[0].choices.map(\.checked) == [false, false, true])
+        #expect(model.modelMenu[1].choices.map(\.title) == ["Low", "Medium", "High"] && !model.modelMenu[1].choices.contains { $0.checked })
+        model.choose(model: "sonnet")
+        #expect(model.modelWords.model == "Sonnet 5.5" && model.session.model == "sonnet")
+        #expect(await wait(until: { model.modelMenu.last?.choices.map(\.title) == ["Low", "Medium", "High", "Max"] }), "Sonnet's efforts")
+        model.choose(effort: "medium")
+        #expect(await wait(until: { model.agent?.effort == "medium" }))
+        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.modelMenu[1].choices.map(\.checked) == [false, true, false, false])
+        #expect(input(home).contains { $0.contains(#""model":"sonnet""#) && $0.contains("set_model") })
+        #expect(input(home).contains { $0.contains(#""effortLevel":"medium""#) })
+        // Another space, never launched, offers what Claude Code listed, its own choice still the default.
+        model.place = .space(title: "Logbook", name: "logbook", page: home.places.spaces.appendingPathComponent("logbook.html").path)
+        #expect(model.id == nil && model.modelWords.model == "Default model" && model.modelMenu[0].choices.count == 3)
+        #expect(!model.modelMenu[0].choices.contains { $0.checked })
+        // Asleep, a choice is kept for the wake, which launches with it.
+        model.place = agents
+        model.putToSleep()
+        #expect(await wait(until: { model.asleep && model.engine.state.agents.allSatisfy { $0.alive == false } }))
+        model.choose(model: "opus")
+        #expect(!input(home).contains { $0.contains(#""model":"opus""#) }, "nothing runs to take it")
+        let saved = try JSONDecoder().decode(Session.Saved.self, from: Data(contentsOf: Session.file("agents", in: home.places.assistants)))
+        #expect(saved.model == "opus" && saved.effort == "medium")
+        model.draft = "And wider still."
+        model.send()
+        func arguments() -> [Substring] {
+            ((try? String(contentsOf: home.root.appendingPathComponent("out/arguments"), encoding: .utf8)) ?? "").split(separator: "\n")
+        }
+        #expect(await wait(until: { arguments().contains("--model=opus") && arguments().contains("--effort=medium") && model.light == .ready }), "\(arguments())")
+        #expect(model.modelWords == ("Opus 5.5", "Medium"))
+        await finish(home, model)
+    }
+
+    /// A builder that picks its own model (Amp) says so, and nothing sets one.
+    @Test func aBuilderThatPicksItsOwnModelSaysSo() async throws {
+        let (home, model) = try assistant(["amp"])
+        defer { home.remove() }
+        await look(model)
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        #expect(model.kind == "amp" && model.ownModel && model.modelWords == ("Its own model", nil))
+        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Amp picks its own model. Change it in Amp's settings.")])
+        model.choose(model: "anything")
+        #expect(model.session.model == nil)
+        home.remove()
+    }
+
+    /// Build With ▸ chooses New Space's builder, kept as the default, and says so; the open space keeps its own. A
+    /// New Space conversation already begun keeps its builder: the next one takes the new one. The defaults for new
+    /// spaces give a new conversation of their agent its model and effort.
+    @Test func buildWithChoosesNewSpacesBuilder() async throws {
+        let (home, model) = try assistant(["claude", "pi"])
+        defer { home.remove() }
+        await look(model)
+        Preferences.at(home.places).change { ($0.model, $0.effort) = ("haiku", "low") }
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        #expect(model.kind == "claude" && model.newKind == "claude")
+        #expect(model.session.model == "haiku" && model.session.effort == "low", "the defaults for new spaces")
+        #expect(model.buildNew(with: "cursor") == nil, "not on this Mac")
+        #expect(model.buildNew(with: "pi") == "New spaces build with pi")
+        #expect(model.session(for: .blank).kind == "pi" && model.session(for: .blank).model == nil && model.newKind == "pi")
+        #expect(model.kind == "claude" && Preferences(home.places).assistant == "pi")
+        let items = AssistantModel.builderItems(model.entries, action: #selector(App.buildNewWith(_:)), checked: model.newKind)
+        #expect(items.map(\.title) == ["Claude Code", "pi · never asks before acting"] && items.map(\.state) == [.off, .on])
+        #expect(items.allSatisfy { $0.action == #selector(App.buildNewWith(_:)) })
+        model.session(for: .blank).last = "[something] No space is open: the person is on the blank page.\nA board."
+        #expect(model.buildNew(with: "claude") == "New spaces build with Claude Code from the next conversation")
+        #expect(model.session(for: .blank).kind == "pi" && model.newKind == "claude")
+        home.remove()
     }
 
     /// A page that throws an error written to steer the assistant: the strip's Ask to Fix sends the space's title,
