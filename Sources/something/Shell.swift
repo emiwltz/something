@@ -354,16 +354,17 @@ final class TitleLine: NSView {
 final class WaitingChip: NSButton {
     var count = 0 {
         didSet {
-            setAccessibilityLabel(words)
+            setAccessibilityLabel("\(count) \(said)")
             invalidateIntrinsicContentSize()
             needsDisplay = true
         }
     }
-    private var words: String { "\(count) \(count == 1 ? "waits" : "wait") for you" }
-    private var parts: (NSAttributedString, NSAttributedString) {
-        (NSAttributedString(string: "\(count)", attributes: [.font: Look.font(.ui, size: 12, weight: .semibold), .foregroundColor: Look.Token.ink.color]),
-         NSAttributedString(string: count == 1 ? "waits for you" : "wait for you",
-                            attributes: [.font: Look.font(.ui, size: 12, weight: .medium), .foregroundColor: Look.Token.ink.color]))
+    private var said: String { count == 1 ? "waits for you" : "wait for you" }
+    /// The count, then the words, as drawn.
+    private var parts: [NSAttributedString] {
+        [("\(count)", NSFont.Weight.semibold), (said, .medium)].map { words, weight in
+            NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 12, weight: weight), .foregroundColor: Look.Token.ink.color])
+        }
     }
 
     init() {
@@ -375,8 +376,7 @@ final class WaitingChip: NSButton {
 
     // The mockup's .wn-chip: 26 high, 8 before the eyes, 6 between the pieces, 10 after the words.
     override var intrinsicContentSize: NSSize {
-        let (number, said) = parts
-        return NSSize(width: 8 + 16 + 6 + ceil(number.size().width) + 6 + ceil(said.size().width) + 10, height: 26)
+        NSSize(width: 8 + 16 + parts.reduce(0) { $0 + 6 + ceil($1.size().width) } + 10, height: 26)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -387,12 +387,11 @@ final class WaitingChip: NSButton {
         path.lineWidth = 1
         path.stroke()
         Sign.miniEyes(.wait, template: false).draw(in: NSRect(x: 8, y: bounds.midY - 5, width: 16, height: 10))
-        let (number, said) = parts
-        var x: CGFloat = 8 + 16 + 6
-        for piece in [number, said] {
+        var x: CGFloat = 8 + 16
+        for piece in parts {
             let size = piece.size()
-            piece.draw(at: NSPoint(x: x, y: bounds.midY - size.height / 2))
-            x += ceil(size.width) + 6
+            piece.draw(at: NSPoint(x: x + 6, y: bounds.midY - size.height / 2))
+            x += 6 + ceil(size.width)
         }
     }
 }

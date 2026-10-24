@@ -114,9 +114,7 @@ enum Look {
 
     /// The CSS weight of `weight` (400 regular, 600 semibold…), the value of a variable font's wght axis.
     static func css(_ weight: NSFont.Weight) -> CGFloat {
-        let steps: [(NSFont.Weight, CGFloat)] = [(.ultraLight, 200), (.thin, 100), (.light, 300), (.regular, 400),
-                                                 (.medium, 500), (.semibold, 600), (.bold, 700), (.heavy, 800), (.black, 900)]
-        return steps.first { $0.0 == weight }?.1 ?? 400
+        [.thin: 100, .ultraLight: 200, .light: 300, .medium: 500, .semibold: 600, .bold: 700, .heavy: 800, .black: 900][weight] ?? 400
     }
 
     /// The font of `face` at `size` and `weight`. The bundled families are variable: the weight is set on their wght
