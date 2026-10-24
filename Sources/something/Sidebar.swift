@@ -1,10 +1,11 @@
 // The sidebar: New Space first, selected on the blank page; the spaces in the library's order (one click opens one),
 // with an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
 // declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
-// the person was elsewhere has a dot, a space that just arrived a ring of ink fading out, and each space the eyes of its own assistant, which `eyes` gives (W3 adds the
-// ring, the folded groups and the preference). Each space has Show in Finder, Export… and Move to Trash… in its context
-// menu. Its rows are drawn here, not by a List: the mockup's 25-point rows and the identity's quiet selection, by day
-// and by night, which a sidebar List's own highlight would cover; ↑ and ↓ move through them.
+// the person was elsewhere has a dot, a space that just arrived a ring of ink fading out, and each space the eyes of
+// its own assistant, which `eyes` gives (W3 adds the ring of a change of state, the folded groups and the preference).
+// Each space has Show in Finder, Export… and Move to Trash… in its context menu. Its rows are drawn here, not by a
+// List: the mockup's 25-point rows and the identity's quiet selection, by day and by night, which a sidebar List's own
+// highlight would cover; ↑ and ↓ move through them.
 import SwiftUI
 
 struct SidebarView: View {

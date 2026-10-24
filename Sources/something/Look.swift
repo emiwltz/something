@@ -166,6 +166,28 @@ enum Look {
     struct Curve: Equatable {
         let x1: Float, y1: Float, x2: Float, y2: Float
         var timing: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: x1, y1, x2, y2) }
+
+        /// The curve as SwiftUI's keyframes take it.
+        var unit: UnitCurve {
+            .bezier(startControlPoint: UnitPoint(x: CGFloat(x1), y: CGFloat(y1)), endControlPoint: UnitPoint(x: CGFloat(x2), y: CGFloat(y2)))
+        }
+
+        /// The curve's height where it is `x` across, both from 0 to 1: its parameter found by bisection, which this
+        /// monotonic curve allows.
+        func value(at x: Double) -> Double {
+            func bezier(_ t: Double, _ a: Float, _ b: Float) -> Double {
+                let u = 1 - t
+                return 3 * u * u * t * Double(a) + 3 * u * t * t * Double(b) + t * t * t
+            }
+            guard x > 0 else { return 0 }
+            guard x < 1 else { return 1 }
+            var (low, high) = (0.0, 1.0)
+            for _ in 0..<40 {
+                let mid = (low + high) / 2
+                if bezier(mid, x1, x2) < x { low = mid } else { high = mid }
+            }
+            return bezier((low + high) / 2, y1, y2)
+        }
     }
 
     /// "Douce", for what moves in place, and "out", for what arrives: calm, no bounce.

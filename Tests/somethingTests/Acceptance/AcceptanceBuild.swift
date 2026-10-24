@@ -330,8 +330,9 @@ struct AcceptanceBuild {
     }
     /// The arrival after a build from New Space: the page written and the turn ended, the space appears and opens, and
     /// the sign's frame grows from New Space's sign to the center's edges over a still of the page left; drawn at 0.6
-    /// of its time. Then it plays to its end: nothing left on the glass, the space selected and its row ringed, and only
-    /// then may its rights be asked.
+    /// of its time. Then it plays to its end through `Arrival.open`, as App.open calls it: the page is not loaded and
+    /// no rights are asked while it plays; once it is gone the page loads and asks its rights. A space no longer shown
+    /// when its arrival ends is not opened, and a new opening ends an arrival still playing.
     @Test("d3: the arrival") func d3() async throws {
         let (stage, shell, library, _) = try await Self.building("fail")
         defer { stage.remove() }
@@ -347,9 +348,9 @@ struct AcceptanceBuild {
         try "".write(to: stage.home.root.appendingPathComponent("out/finish"), atomically: true, encoding: .utf8)
         #expect(await wait(until: { made != nil }))
         let name = try #require(made)
-        #expect(name == "waiting-room")
-        library.select(.space(name))
-        let room = try await stage.home.window(try #require(library.entry(name)?.space))
+        #expect(name == "waiting-room" && library.fresh == nil)
+        let ask = FakeAsk()
+        let room = try await stage.home.window(try #require(library.entry(name)?.space), ask)
         defer { room.close() }
         room.made = true
         // The still is taken once, in the appearance of the moment: the day's, for the picture.
@@ -358,6 +359,7 @@ struct AcceptanceBuild {
         let arrival = try #require(Arrival.made(name, in: shell))
         shell.show(room)
         #expect(shell.window.title == "Waiting room")
+        // What App.open does around it: the conversation follows the space shown.
         model.place = AssistantModel.place(room)
         // It starts on the sign of 76 points, its arm and stroke the sign's, its eyes on.
         #expect(arrival.start.face && abs(arrival.start.arm - 76 * 0.31) < 0.01 && arrival.start.stroke == 35)
@@ -365,19 +367,42 @@ struct AcceptanceBuild {
         arrival.progress = 0.6
         let shape = arrival.shape
         #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)
+        library.select(.space(name))
         try await stage.appearances { suffix in
             // One picture: the still keeps the day it was taken in (the mockup has no night of this screen).
             if suffix.isEmpty { try await Picture.window(shell, library: library, web: room.web, "d3", root: stage.home.root) }
         }
-        var arrived = false
-        arrival.play(name, library: library, motion: .calm) { arrived = true }
-        #expect(arrival.playing)
-        #expect(await wait(until: { arrived }))
-        #expect(arrival.progress == 1 && arrival.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
-        #expect(library.selection == .space(name) && library.fresh == name && model.place.space == name)
+        var current = true
+        Arrival.open(room, after: arrival, library: library, motion: .calm) { current }
+        #expect(arrival.playing && library.fresh == name)
+        // While it plays: nothing loads, nothing is asked.
+        await wait(0.3)
+        #expect(arrival.playing && room.web.url == nil && ask.questions.isEmpty && shell.window.attachedSheet == nil)
+        #expect(await wait(until: { arrival.superview == nil }))
+        #expect(arrival.progress == 1 && !shell.glass.subviews.contains { $0 is Arrival })
+        // Once it is gone: the page loads and asks for its rights.
+        #expect(await wait(until: { room.web.url != nil && !ask.questions.isEmpty }), "\(String(describing: room.web.url))")
+        #expect(ask.questions.first?.rights == ["state", "store"])
+
         // Back on New Space, a new page: opening the space again arrives from nowhere.
         shell.show(nil)
         #expect(Arrival.made(name, in: shell) == nil)
+        // A space no longer shown when its arrival ends does not open; a new opening ends an arrival still playing.
+        let gone = FakeAsk()
+        let other = try await stage.home.window(try #require(library.entry(name)?.space), gone)
+        defer { other.close() }
+        let late = Arrival(start: arrival.start, still: nil, stillRect: .zero)
+        shell.glass.hold(late)
+        current = false
+        Arrival.open(other, after: late, library: library, motion: .reduced) { current }
+        #expect(await wait(until: { late.superview == nil }))
+        await wait(0.3)
+        #expect(other.web.url == nil && gone.questions.isEmpty)
+        let ended = Arrival(start: arrival.start, still: nil, stillRect: .zero)
+        shell.glass.hold(ended)
+        Arrival.open(other, after: ended, library: library, motion: .calm) { current }
+        Arrival.end(in: shell)
+        #expect(ended.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
         await Self.finish(model)
     }
     /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right

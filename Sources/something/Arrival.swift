@@ -2,7 +2,8 @@
 // and the eyes stand on New Space's sign (or a frame on the template card Use pressed), then grow to the center's
 // edges, 14 points in, in 820 ms on the douce curve, their stroke thinning and the eyes going to the corner as they
 // fade; then it all fades and the space is there, its row ringed a moment in the sidebar, and only then its rights
-// sheet. Reduced motion skips the growth: the still fades. It is drawn in draw(_:), so cacheDisplay pictures it.
+// sheet. Reduced motion skips the growth: the still fades. A new opening ends an arrival still playing. It is drawn in
+// draw(_:), so cacheDisplay pictures it.
 import AppKit
 import SwiftUI
 
@@ -85,6 +86,21 @@ final class Arrival: NSView {
         return arrival
     }
 
+    /// Opens `view` after `arrival` played, and then only if `isCurrent` still says it is the space shown, so the
+    /// rights sheet comes once the space is there; without an arrival, at once.
+    static func open(_ view: SpaceView, after arrival: Arrival?, library: Library, motion: Look.Motion,
+                     isCurrent: @escaping () -> Bool) {
+        guard let arrival else { return view.open() }
+        arrival.play(view.space.name, library: library, motion: motion) { [weak view] in
+            if let view, isCurrent() { view.open() }
+        }
+    }
+
+    /// Ends any arrival on `shell`'s glass: the person went elsewhere while it played.
+    static func end(in shell: Shell) {
+        shell.glass.subviews.filter { $0 is Arrival }.forEach { $0.removeFromSuperview() }
+    }
+
     /// The sign of the page in `view`: New Space's, the only one that lands there.
     private static func sign(in view: NSView) -> SignView? {
         for sub in view.subviews {
@@ -144,9 +160,13 @@ final class Arrival: NSView {
     }
 
     /// Grows the frame, then fades it and the still, and calls `arrived` once it is gone; under Reduced `motion`, only
-    /// the still fades. The row of `name` in `library` is ringed meanwhile.
+    /// the still fades. The row of `name` in `library` is ringed meanwhile, for 1.6 s, then let go so the next
+    /// arrival of the same name rings it again.
     func play(_ name: String, library: Library, motion: Look.Motion, arrived: @escaping () -> Void) {
         library.fresh = name
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak library] in
+            if library?.fresh == name { library?.fresh = nil }
+        }
         guard Look.motion(motion) == .calm, start.rect.width > 0 else {
             progress = 1
             return fade(0.25, arrived)
@@ -181,27 +201,5 @@ final class Arrival: NSView {
     override func removeFromSuperview() {
         timer?.invalidate()
         super.removeFromSuperview()
-    }
-}
-
-extension Look.Curve {
-    /// The curve as SwiftUI's keyframes take it.
-    var unit: UnitCurve { .bezier(startControlPoint: UnitPoint(x: CGFloat(x1), y: CGFloat(y1)), endControlPoint: UnitPoint(x: CGFloat(x2), y: CGFloat(y2))) }
-
-    /// The curve's height where it is `x` across, both from 0 to 1: its parameter found by bisection, which this
-    /// monotonic curve allows.
-    func value(at x: Double) -> Double {
-        func bezier(_ t: Double, _ a: Float, _ b: Float) -> Double {
-            let u = 1 - t
-            return 3 * u * u * t * Double(a) + 3 * u * t * t * Double(b) + t * t * t
-        }
-        guard x > 0 else { return 0 }
-        guard x < 1 else { return 1 }
-        var (low, high) = (0.0, 1.0)
-        for _ in 0..<40 {
-            let mid = (low + high) / 2
-            if bezier(mid, x1, x2) < x { low = mid } else { high = mid }
-        }
-        return bezier((low + high) / 2, y1, y2)
     }
 }

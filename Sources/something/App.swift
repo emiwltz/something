@@ -209,6 +209,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func open(_ destination: Library.Destination?) {
         let name = destination?.space
         if let name, current?.space.name == name { return }
+        Arrival.end(in: shell)
         let closing = current != nil
         current?.close()
         current = nil
@@ -253,9 +254,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             // arrives first, from what made it, and asks for its rights after.
             let arrival = Arrival.made(name, in: shell)
             shell.show(view)
-            guard let arrival else { return view.open() }
-            arrival.play(name, library: library, motion: library.preferences.motion) { [weak self, weak view] in
-                if let view, self?.current === view { view.open() }
+            Arrival.open(view, after: arrival, library: library, motion: library.preferences.motion) { [weak self, weak view] in
+                view != nil && self?.current === view
             }
         } catch {
             shell.show(nil)
