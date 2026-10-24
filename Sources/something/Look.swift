@@ -151,7 +151,7 @@ enum Look {
     static let out = Curve(x1: 0.16, y1: 1, x2: 0.3, y2: 1)
 
     /// Calm (the default) or Reduced, as the person chooses in Settings.
-    enum Motion: String, CaseIterable {
+    enum Motion: String, CaseIterable, Codable {
         case calm, reduced
     }
 

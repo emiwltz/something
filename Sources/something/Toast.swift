@@ -13,23 +13,25 @@ final class Toast: NSView {
     private static let pad: CGFloat = 9
     private var action: Action?
     private var timer: Timer?
-    private var bottom: NSLayoutConstraint?
+    /// Its distance from the center's bottom edge, -22 once in place.
+    private(set) var bottom: NSLayoutConstraint?
+    private var motion = Look.Motion.calm
     private let button: NSButton?
     /// Whether it is in place or arriving, false once it starts to leave.
     private(set) var shown = false
 
     /// Shows `words` in `layer`, centred at the bottom of `center`, in place of any toast there, and returns it. It
-    /// leaves after `seconds`, or when its action is clicked, which acts once.
+    /// leaves after `seconds`, or when its action is clicked, which acts once; it slides only under Calm `motion`.
     @discardableResult
     static func show(_ words: String, action: Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2,
-                     in layer: WindowLayer, under center: NSView) -> Toast {
+                     motion: Look.Motion = .calm, in layer: WindowLayer, under center: NSView) -> Toast {
         layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         let toast = Toast(words, action: action, quiet: quiet)
         layer.hold(toast)
         // It starts below the center's edge (170% of its height, as the mockup's) and rises 22 points above it.
         let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: 68 - 22)
         NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor)])
-        toast.bottom = bottom
+        (toast.bottom, toast.motion) = (bottom, motion)
         layer.layoutSubtreeIfNeeded()
         toast.move(to: -22)
         toast.shown = true
@@ -98,8 +100,15 @@ final class Toast: NSView {
     }
 
     private func move(to constant: CGFloat, then done: (() -> Void)? = nil) {
+        // Reduced, it is in place at once: an animation of no duration would still land on a later turn.
+        let duration = Look.duration(0.45, Look.motion(motion))
+        guard duration > 0 else {
+            bottom?.constant = constant
+            done?()
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = Look.duration(0.45, Look.motion(.calm))
+            context.duration = duration
             context.timingFunction = Look.out.timing
             bottom?.animator().constant = constant
         }, completionHandler: done)

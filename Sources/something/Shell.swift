@@ -20,12 +20,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private var shown: NSView?
     private(set) var floating: NSView?
     /// What covers the whole window: the toast, and later the palette and the sheets of keys.
-    private(set) var layer: WindowLayer!
+    let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
-               chip = NSToolbarItem.Identifier("chip"), point = NSToolbarItem.Identifier("point"), reload = NSToolbarItem.Identifier("reload"),
-               info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
+               chip = NSToolbarItem.Identifier("chip"), tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
+               reload = NSToolbarItem.Identifier("reload"), info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
     /// The items that act on the open space, greyed (never hidden) while none is open.
     static let onSpace = [point, reload, info]
+    /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
+    private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// The title and the file, on one line: the system's title would put the file under it.
     private let titleLine = TitleLine()
     /// Called when the person closes the window: the app closes the open space, whose page stops.
@@ -48,6 +50,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        layer = WindowLayer(over: split.view)
         super.init()
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
@@ -59,7 +62,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.contentMinSize = NSSize(width: 640, height: 480)
         // The toolbar lies over the columns' own backgrounds, with the window's under the center.
         (window.backgroundColor, window.titlebarAppearsTransparent, window.titleVisibility) = (Look.Token.bg.color, true, .hidden)
-        layer = WindowLayer(over: split.view)
+        NotificationCenter.default.addObserver(self, selector: #selector(columnsMoved), name: NSSplitView.didResizeSubviewsNotification, object: split.splitView)
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior.insert(.fullScreenPrimary)
@@ -116,6 +119,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         closed()
     }
 
+    /// The window or the sidebar changed width: the title measures the room it has again.
+    @objc private func columnsMoved() { titleLine.invalidateIntrinsicContentSize() }
+
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
     /// Out of full screen, an assistant ⌘J hid comes back: a window offers no other way to find it.
@@ -123,7 +129,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace,
-         Shell.chip, Shell.point, Shell.reload, Shell.info, Shell.full]
+         Shell.chip, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -131,43 +137,68 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The mockup's toolbar items: plain icons in `ink2`, with the words of its tooltips and the keys of the command
     /// table. Point waits for its slice (T14), greyed as its menu item is; the chip's slot stays hidden while empty.
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        let item = NSToolbarItem(itemIdentifier: id)
-        item.autovalidates = false
-        func button(_ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSButton {
+        func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
+            let item = NSToolbarItem(itemIdentifier: id)
             let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage(), target: nil, action: action)
-            if let words { (button.title, button.imagePosition, button.font) = (words, .imageLeading, Look.font(.ui, size: 12, weight: .medium)) }
             (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, tip)
             button.symbolConfiguration = .init(pointSize: 13, weight: .medium)
-            button.heightAnchor.constraint(equalToConstant: 28).isActive = true
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
-            (item.view, item.label, item.isBordered) = (button, label, false)
-            return button
+            // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
+            var width: CGFloat = 28
+            if let words {
+                let font = Look.font(.ui, size: 12, weight: .medium)
+                // The space before the words makes the mockup's 6 points with the button's own gap after the icon.
+                (button.title, button.imagePosition, button.imageHugsTitle, button.font) = (" " + words, .imageLeading, true, font)
+                width = 9 + 13 + 6 + ceil(words.size(withAttributes: [.font: font]).width) + 9
+            }
+            NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28), button.widthAnchor.constraint(equalToConstant: width)])
+            (item.view, item.label, item.isBordered, item.autovalidates) = (button, label, false, false)
+            return item
         }
         switch id {
-        case Shell.title: (item.view, item.isBordered) = (titleLine, false)
-        case Shell.chip: (item.view, item.isBordered, item.isHidden) = (NSView(), false, true)
+        case Shell.title:
+            let item = NSToolbarItem(itemIdentifier: id)
+            (item.view, item.isBordered) = (titleLine, false)
+            return item
+        case Shell.chip:
+            let item = NSToolbarItem(itemIdentifier: id)
+            (item.view, item.isBordered, item.isHidden) = (NSView(), false, true)
+            return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
-        case Shell.sidebar: button("Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Sidebar"), Keys.command("sidebar")?.action).target = split
-        case Shell.point:
-            let point = button("Point", "scope", Keys.tooltip("pointpart", "Point"), Keys.command("pointpart")?.action, words: " Point")
-            // Point closes the group of what reads the space; a thin line parts it from Reload.
+        case Shell.sidebar:
+            let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Sidebar"), Keys.command("sidebar")?.action)
+            (sidebar.view as? NSButton)?.target = split
+            return sidebar
+        case Shell.tools:
+            // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart, and a
+            // thin line parts Point, which closes the group of what reads the space, from Reload.
+            let tools = [item(Shell.point, "Point", "scope", Keys.tooltip("pointpart", "Point"), Keys.command("pointpart")?.action, words: "Point"),
+                         item(Shell.reload, "Reload", "arrow.clockwise", Keys.tooltip("reload", "Reload"), #selector(App.reloadSpace(_:))),
+                         item(Shell.info, "Info", "info.circle", Keys.tooltip("insp", "Info"), #selector(App.toggleInfo(_:))),
+                         item(Shell.full, "Full Screen", "viewfinder", Keys.tooltip("full", "Full Screen"), #selector(NSWindow.toggleFullScreen(_:)))]
             let line = NSBox()
             (line.boxType, line.borderWidth, line.fillColor) = (.custom, 0, Look.Token.line2.color)
             NSLayoutConstraint.activate([line.widthAnchor.constraint(equalToConstant: 1), line.heightAnchor.constraint(equalToConstant: 18)])
-            let group = NSStackView(views: [point, line])
-            group.spacing = 8
-            item.view = group
-        case Shell.reload: _ = button("Reload", "arrow.clockwise", Keys.tooltip("reload", "Reload"), #selector(App.reloadSpace(_:)))
-        case Shell.info: _ = button("Info", "info.circle", Keys.tooltip("insp", "Info"), #selector(App.toggleInfo(_:)))
-        case Shell.full: _ = button("Full Screen", "viewfinder", Keys.tooltip("full", "Full Screen"), #selector(NSWindow.toggleFullScreen(_:)))
-        default: break
+            let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: [buttons[0], line] + buttons.dropFirst().map { $0 as NSView })
+            tools.forEach { $0.view = nil }
+            self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
+            row.spacing = 4
+            // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
+            row.edgeInsets.right = 2
+            [buttons[0], line].forEach { row.setCustomSpacing(8, after: $0) }
+            titleLine.reserve = row.fittingSize.width + 24
+            let group = NSToolbarItemGroup(itemIdentifier: id)
+            (group.subitems, group.view, group.isBordered, group.autovalidates) = (tools, row, false, false)
+            return group
+        default: return nil
         }
-        return item
     }
+
+    /// The toolbar's items, those of the group of tools one by one.
+    var toolbarItems: [NSToolbarItem] { (window.toolbar?.items ?? []).flatMap { ($0 as? NSToolbarItemGroup)?.subitems ?? [$0] } }
 
     /// Writes the title and the file in the toolbar, for the window menu and VoiceOver too, and greys what acts on a
     /// space when none is open.
-    private func heading(_ title: String, _ file: String, space: Bool) {
+    func heading(_ title: String, _ file: String, space: Bool) {
         (window.title, window.subtitle) = (title, file)
         let line = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
                                                                          .foregroundColor: Look.Token.ink.color, .kern: -0.135])
@@ -178,8 +209,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         titleLine.line = line
         titleLine.setAccessibilityLabel(file.isEmpty ? title : "\(title), \(file)")
         // Point stays greyed until its slice gives it an action.
-        window.toolbar?.items.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
-            let control = ($0.view as? NSControl) ?? $0.view?.subviews.first as? NSControl
+        toolbarItems.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
+            let control = controls[$0.itemIdentifier]
             $0.isEnabled = space && control?.action != nil
             control?.isEnabled = $0.isEnabled
         }
@@ -188,7 +219,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Shows `words` at the bottom of the center for a moment; see Toast.
     @discardableResult
     func toast(_ words: String, action: Toast.Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2) -> Toast {
-        Toast.show(words, action: action, quiet: quiet, seconds: seconds, in: layer, under: center)
+        Toast.show(words, action: action, quiet: quiet, seconds: seconds, motion: library.preferences.motion, in: layer, under: center)
     }
 
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file
@@ -260,7 +291,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 }
 
-/// The toolbar's title: drawn here, since a text field in a toolbar is greyed while its window is not the key one.
+/// The toolbar's title: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It
+/// gives way first when the window narrows, the file cut with an ellipsis, so that the tools never leave the toolbar.
 final class TitleLine: NSView {
     /// 18 points from the sidebar's edge, as the mockup's toolbar starts; the toolbar gives the other 8.
     static let indent: CGFloat = 10
@@ -268,8 +300,23 @@ final class TitleLine: NSView {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: ceil(line.size().width) + TitleLine.indent, height: ceil(line.size().height)) }
-    override func draw(_ dirtyRect: NSRect) { line.draw(at: NSPoint(x: TitleLine.indent, y: 0)) }
+    /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
+    /// menu than narrow a view that asks for more.
+    var reserve: CGFloat = 0 {
+        didSet { invalidateIntrinsicContentSize() }
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let whole = ceil(line.size().width) + TitleLine.indent
+        let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
+        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(line.size().height))
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        let cut = NSMutableAttributedString(attributedString: line), style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        cut.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cut.length))
+        cut.draw(in: NSRect(x: TitleLine.indent, y: 0, width: bounds.width - TitleLine.indent, height: bounds.height))
+    }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
 }

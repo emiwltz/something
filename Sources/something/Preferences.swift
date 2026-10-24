@@ -8,7 +8,7 @@ import Observation
 
 @dynamicMemberLookup @Observable final class Preferences {
     enum Appearance: String, Codable { case system, light, dark }
-    enum Motion: String, Codable { case calm, reduced }
+    typealias Motion = Look.Motion
     /// How a space's assistant shows when the space opens: the sticker in a corner, or the open composer.
     enum Opening: String, Codable { case reduced, open }
     /// A group of the sidebar: its name and the names of its spaces, in order. The files never move.

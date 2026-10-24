@@ -25,17 +25,18 @@ import Testing
             #expect(shell.window.contentMinSize == NSSize(width: 640, height: 480))
             #expect(shell.inspector.minimumThickness == 320 && shell.inspector.maximumThickness == 320 && shell.inspector.isCollapsed)
             #expect(shell.split.splitView.arrangedSubviews[0].frame.width == 236)
-            let items = try #require(shell.window.toolbar?.items)
-            #expect(items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace,
-                                                    Shell.chip, Shell.point, Shell.reload, Shell.info, Shell.full])
+            #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title,
+                                                                           .flexibleSpace, Shell.chip, Shell.tools])
+            let items = shell.toolbarItems
+            #expect(items.suffix(4).map(\.itemIdentifier) == [Shell.point, Shell.reload, Shell.info, Shell.full])
             @MainActor func item(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? { items.first { $0.itemIdentifier == id } }
             // Without a space, what acts on one is greyed, never hidden; the chip's slot is hidden while empty.
             for id in Shell.onSpace {
-                let control = (item(id)?.view as? NSControl) ?? item(id)?.view?.subviews.first as? NSControl
+                let control = shell.controls[id]
                 #expect(item(id)?.isHidden == false && item(id)?.isEnabled == false && control?.isEnabled == false, "\(id)")
             }
             #expect(item(Shell.chip)?.isHidden == true && item(Shell.full)?.isEnabled == true)
-            #expect(item(Shell.reload)?.view?.toolTip == "Reload (⌘R)" && item(Shell.full)?.view?.toolTip == "Full Screen (⌃⌘F)")
+            #expect(shell.controls[Shell.reload]?.toolTip == "Reload (⌘R)" && shell.controls[Shell.full]?.toolTip == "Full Screen (⌃⌘F)")
             #expect(shell.window.title == "New Space" && shell.window.titleVisibility == .hidden)
             // Window › Zoom acts on this window.
             let zoom = NSMenuItem(title: "Zoom", action: Keys.command("zoom")?.action, keyEquivalent: "")
@@ -45,7 +46,7 @@ import Testing
 
     @Test func theLayerTakesOnlyWhatItHolds() throws {
         try window { shell in
-            let layer = shell.layer!, root = try #require(shell.window.contentView?.superview)
+            let layer = shell.layer, root = try #require(shell.window.contentView?.superview)
             #expect(layer.isHidden && layer.frame.size == NSSize(width: 1200, height: 760))
             let held = NSView(frame: NSRect(x: 500, y: 300, width: 200, height: 100))
             layer.hold(held)
@@ -75,6 +76,44 @@ import Testing
             undo.performClick(nil)
             #expect(undone == 1 && !third.shown)
             #expect(shell.window.firstResponder === focus)
+        }
+    }
+
+    /// The mockup's right-hand cluster: 28-point buttons 4 points apart, the line 8 points from Point and from Reload,
+    /// Full Screen 10 points from the window's edge (the mockup's centres: 1176, 1144, 1112; the line at 1089).
+    @Test func theToolsSitAsTheMockupsDo() throws {
+        try window { shell in
+            shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+            @MainActor func frame(_ id: NSToolbarItem.Identifier) throws -> NSRect {
+                let view = try #require(shell.controls[id])
+                return view.superview?.convert(view.alignmentRect(forFrame: view.frame), to: nil) ?? .zero
+            }
+            let (point, reload, info, full) = (try frame(Shell.point), try frame(Shell.reload), try frame(Shell.info), try frame(Shell.full))
+            #expect([reload, info, full].allSatisfy { $0.size == NSSize(width: 28, height: 28) }, "\(point) \(reload) \(info) \(full)")
+            #expect(abs(full.midX - 1176) <= 2 && abs(info.midX - full.midX + 32) <= 0.5 && abs(reload.midX - info.midX + 32) <= 0.5, "\(reload) \(info) \(full)")
+            #expect(abs(reload.minX - point.maxX - 17) <= 0.5, "\(point) \(reload)")
+        }
+    }
+
+    /// A long title at the narrowest window gives way: the tools stay in the toolbar, none in its overflow menu.
+    @Test func aLongTitleNeverPushesTheToolsOut() throws {
+        try window { shell in
+            shell.window.setContentSize(shell.window.contentMinSize)
+            shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
+            // The toolbar lays its items out again on a later turn of the run loop.
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+            shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+            let full = try #require(shell.controls[Shell.full])
+            #expect(full.window === shell.window && !full.isHiddenOrHasHiddenAncestor)
+            #expect(full.convert(full.bounds, to: nil).maxX <= shell.window.frame.width, "\(full.convert(full.bounds, to: nil)) \(shell.window.frame)")
+        }
+    }
+
+    @Test func underReducedMotionTheToastIsInPlaceAtOnce() throws {
+        try window { shell in
+            shell.library.preferences.motion = .reduced
+            shell.layer.announce = { _ in }
+            #expect(shell.toast("Pebble is back").bottom?.constant == -22)
         }
     }
 }
