@@ -57,6 +57,8 @@ import Testing
             (of(Presence.Facts(name: "Claude Code", waking: true), nil), .sleep, nil),
             (of(Presence.Facts(name: "Codex", installed: false), agent("idle")), .limit, .missing),
             (of(Presence.Facts(name: "Claude Code", failure: "Claude Code failed: the program stopped at once."), nil), .limit, .crashed),
+            (of(Presence.Facts(name: "Claude Code", failure: "The message could not be delivered."), agent("idle", alive: false)), .limit, .crashed),
+            (of(Presence.Facts(name: "Claude Code", failure: "The message could not be delivered."), agent("idle", alive: nil)), .unknown, .undelivered),
         ]
         for (presence, state, stuck) in table {
             #expect((presence.state, presence.stuck) == (state, stuck), "\(presence.word)")
@@ -72,6 +74,7 @@ import Testing
             (tool("mcp__something__something_check", "something check brief", "running"), "Checking the page…"),
             (tool("Bash", "something guide --print", "running"), "Reading the guide…"),
             (tool("Bash", "ls", "running"), "Running a command…"),
+            (tool("Bash", "something check brief; sed -i '' s/a/b/ brief.html", "running"), "Running a command…"),
             (tool("WebSearch", "weather", "running"), "Working…"),
             (tool("Edit", "/Users/example/something/spaces/brief.html", "done"), "Working…"),
             (nil, "Working…"),
@@ -101,6 +104,9 @@ import Testing
         let done = of(agent("idle"), turn("done", started: 20, ended: 3, edits))
         #expect((done.state, done.now, done.header) == (.done, .changed("brief.html"), "Done"))
         #expect(done.word == "Just finished · changed brief.html")
+        var refused = tool("Edit", "/Users/example/something/spaces/agents.html")
+        refused.decision = Decision(by: "person", outcome: "denied")
+        #expect(of(agent("idle"), turn("done", started: 20, ended: 3, [refused])).now == nil, "a refused edit wrote nothing")
         let quiet = of(agent("idle"), turn("done", started: 20, ended: 1, [tool("Read", "brief.html")]))
         #expect((quiet.state, quiet.now, quiet.header) == (.done, nil, "Just finished"))
         let later = of(agent("idle"), turn("done", started: 20, ended: 4, edits))
@@ -130,7 +136,10 @@ import Testing
         #expect(of(agent("error"), turn("error", [tool("Edit", "brief.html")])).notice?.text == "Opus 4.7 did not answer. Your last message is kept.",
                 "a turn that changed a file does not say nothing changed")
         let unsure: [(Turn?, String)] = [(turn("error", [tool("apply_patch", "brief.html\nagents.html")]), "a patch of several files"),
-                                         (turn("error", [tool("Bash", "sed -i '' s/a/b/ brief.html")]), "a command"), (nil, "no turn")]
+                                         (turn("error", [tool("Bash", "sed -i '' s/a/b/ brief.html")]), "a command"),
+                                         (turn("error", [tool("Bash", "cat > brief.html <<EOF\nx\nEOF", "failed")]), "a failed command"),
+                                         (turn("error", [tool("Bash", "something check brief; sed -i '' s/a/b/ brief.html")]), "a check chained to a command"),
+                                         (nil, "no turn")]
         for (turn, why) in unsure {
             #expect(of(agent("error"), turn).notice?.text == "Opus 4.7 did not answer. Your last message is kept.", "\(why) may have changed the space")
         }

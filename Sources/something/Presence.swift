@@ -27,13 +27,15 @@ struct Presence: Equatable {
     enum Now: Equatable { case working(String, late: Bool), waking, changed(String) }
 
     /// What a tool item did, by its tool's name or something's own command: the thread's rows and the line share it.
+    /// A command line counts as something's own only when it is that command alone: one chained to another, piped or
+    /// redirected may do anything, so it is a command.
     enum Step {
         case read, edit, command, check, guide, other
 
         static func of(_ item: Item) -> Step {
-            let name = item.tool?.name.lowercased() ?? ""
-            if item.text.hasPrefix("something guide") || name.hasSuffix("something_guide") { return .guide }
-            if item.text.hasPrefix("something check") || name.hasSuffix("something_check") { return .check }
+            let name = item.tool?.name.lowercased() ?? "", alone = !item.text.contains { $0.isNewline || ";&|>".contains($0) } && !item.text.contains("$(")
+            if alone && item.text.hasPrefix("something guide") || name.hasSuffix("something_guide") { return .guide }
+            if alone && item.text.hasPrefix("something check") || name.hasSuffix("something_check") { return .check }
             if name.hasPrefix("something_") || ["bash", "commandexecution", "execute", "shell_command", "code_exec"].contains(name) { return .command }
             if ["edit", "write", "multiedit", "notebookedit", "filechange", "apply_patch"].contains(name) { return .edit }
             return name == "read" ? .read : .other
@@ -58,12 +60,15 @@ struct Presence: Equatable {
         var ended: TimeInterval?
         if turn?.state == "done", let at = turn?.ended.flatMap(iso8601.date) { ended = date.timeIntervalSince(at) }
         let (shown, why) = Presence.state(facts, agent, justDone: ended.map { $0 >= 0 && $0 < Presence.changedFor } == true)
-        // A failure beside a live agent is a message that did not get through, not a crash: the agent keeps its state.
-        (state, stuck) = (shown, why ?? (facts.failure == nil ? nil : .undelivered))
-        // Only a turn whose every step read, checked, failed or was refused leaves the space as it was; no turn, a
-        // command or a patch of several files may have changed it, so nothing is claimed then.
+        // A failure beside an agent nothing proved dead is a message that did not get through, not a crash: the eyes
+        // keep the agent's state, and the notice says the failure, which is known, rather than a state nobody gives.
+        (state, stuck) = (shown, facts.failure != nil && [nil, .unknown].contains(why) ? .undelivered : why)
+        // Only a turn whose every step read, checked, was refused or was a failed edit of one file leaves the space as
+        // it was; no turn, a command (even a failed one, which may have written before its exit code) or a patch of
+        // several files (which may apply in part) may have changed it, so nothing is claimed then.
         let untouched = turn.map { $0.items.allSatisfy { item in
-            ["message", "thought"].contains(item.kind) || item.tool?.status == "failed" || item.decision?.outcome == "denied"
+            ["message", "thought"].contains(item.kind) || item.decision?.outcome == "denied"
+                || item.tool?.status == "failed" && Step.of(item) == .edit && !item.text.contains(where: \.isNewline)
                 || [.read, .guide, .check].contains(Step.of(item))
         } } ?? false
         now = switch state {
@@ -115,11 +120,11 @@ struct Presence: Equatable {
     /// What VoiceOver reads on the sticker of the space titled `title`.
     func label(_ title: String) -> String { "Assistant of \(title), \(word). Open with \(Keys.shown("ask"))" }
 
-    /// The state from the facts first (a missing program, a failure with no live agent, a start under way, a stop), then from the
+    /// The state from the facts first (a missing program, a failure with no agent or a dead one, a start under way, a stop), then from the
     /// agent. What no source gives is `unknown`, never `listen`: an agent whose life nothing proves is never idle.
     private static func state(_ facts: Facts, _ agent: Agent?, justDone: Bool) -> (Sign.State, Stuck?) {
         if facts.installed == false { return (.limit, .missing) }
-        if facts.failure != nil, agent?.alive != true { return (.limit, .crashed) }
+        if facts.failure != nil, agent == nil || agent?.alive == false { return (.limit, .crashed) }
         guard !facts.waking, !facts.stopped, let agent else { return (.sleep, nil) }
         if agent.alive == false { return agent.error != nil || agent.state == "interrupted" ? (.limit, .crashed) : (.sleep, nil) }
         switch agent.state {
@@ -149,7 +154,7 @@ struct Presence: Equatable {
 
     /// The files the turn changed, by name, in order, each once.
     private static func edited(_ turn: Turn) -> [String] {
-        turn.items.filter { Step.of($0) == .edit && $0.tool?.status != "failed" && !$0.text.contains(where: \.isNewline) }
+        turn.items.filter { Step.of($0) == .edit && $0.tool?.status != "failed" && $0.decision?.outcome != "denied" && !$0.text.contains(where: \.isNewline) }
             .map { ($0.text as NSString).lastPathComponent }.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
     }
 
