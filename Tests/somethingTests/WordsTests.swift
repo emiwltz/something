@@ -92,6 +92,33 @@ import Testing
         #expect(shown.filter { $0.hasPrefix("~/code/project-") }.count == 6 && shown.contains("and 2 more"))
     }
 
+    /// A request in words: its effect by the tool's kind and the folder, how long ago it was asked by an injected
+    /// clock, its place in the queue, and who asks.
+    @Test func aRequestSaysItsEffectAgeAndWho() {
+        let folder = "/Users/example/something/spaces"
+        #expect(Words.effect("Bash", folder: folder, home: home) == "It will run one command in ~/something/spaces.")
+        #expect(Words.effect("commandExecution", folder: nil, home: home) == "It will run one command.")
+        #expect(Words.effect("Edit", folder: folder + "/oracle", home: home) == "It will change files in ~/something/spaces/oracle.")
+        #expect(Words.effect("permissions", folder: folder, home: home) == "It will change what it may do without asking you.")
+        #expect(Words.effect("WebFetch", folder: folder, home: home) == "It will use WebFetch in ~/something/spaces.")
+        #expect(Words.effect(nil, folder: folder, home: home) == "It needs your permission to go on.")
+
+        let now = ISO8601DateFormatter().date(from: "2026-10-23T18:20:00Z")!
+        #expect(Words.age("2026-10-23T18:19:30Z", now: now) == "just now")
+        #expect(Words.age("2026-10-23T18:21:00Z", now: now) == "just now", "a clock a little ahead is not a negative age")
+        #expect(Words.age("2026-10-23T18:17:00Z", now: now) == "asked 3 min ago")
+        #expect(Words.age("2026-10-23T17:20:00Z", now: now) == "asked 1 hour ago")
+        #expect(Words.age("2026-10-23T15:05:00Z", now: now) == "asked 3 hours ago")
+        #expect(Words.age("not a date", now: now) == nil, "an unknown age is left out, never guessed")
+
+        #expect(Words.position(0, of: 3) == "1 of 3" && Words.position(2, of: 3) == "3 of 3" && Words.position(0, of: 1) == nil)
+
+        #expect(Words.who(space: "My agents", assistant: true, name: nil, age: "asked 3 min ago") == "My agents · its assistant · asked 3 min ago")
+        #expect(Words.who(space: nil, assistant: true, name: nil, age: "just now") == "your assistant · just now")
+        #expect(Words.who(space: "Project watch", assistant: false, name: "watcher", age: nil) == "Project watch · “watcher”")
+        #expect(Words.who(space: nil, assistant: false, name: nil, age: nil) == "")
+    }
+
     func labels(in view: NSView) -> [NSTextField] {
         ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(labels(in:))
     }

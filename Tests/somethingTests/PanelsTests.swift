@@ -1,7 +1,8 @@
 // The permission and question panels against a fake prompt source shaped like the Engine's: one panel at a time in
 // the order the requests came, Allow Once and Deny, Escape denies, never modal, closed when the agent withdraws its
-// request, and a question answered with the chosen and typed answers. The sheets the app waits for mean what their
-// buttons say, one at a time. No panel is shown.
+// request, and a question answered with the chosen and typed answers. The queue behind them: arrival order, steps that
+// wrap, and each space's own count. The sheets the app waits for mean what their buttons say, one at a time. No panel
+// is shown.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -36,7 +37,7 @@ final class FakePrompts: PromptSource {
         panels.who = { _ in Asker(program: "Claude Code", line: "“shop”, working in ~/code/shop") }
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "rm -rf build")]
         panels.refresh()
-        #expect(panels.waiting == ["r1", "r2"] && panels.panel?.request.id == "r1")
+        #expect(panels.queue.waiting.map(\.id) == ["r1", "r2"] && panels.panel?.request.id == "r1")
         panels.refresh()
         #expect(panels.panel?.request.id == "r1", "a refresh with nothing new changes nothing")
 
@@ -47,7 +48,7 @@ final class FakePrompts: PromptSource {
         #expect(panels.panel?.request.id == "r2", "the next request has its panel")
         // The agent has not taken the answer yet: r1 stays in the state, and is not shown again.
         panels.refresh()
-        #expect(panels.panel?.request.id == "r2" && panels.waiting == ["r2"])
+        #expect(panels.panel?.request.id == "r2" && panels.queue.waiting.map(\.id) == ["r2"])
 
         // Escape denies.
         try #require(panels.panel).cancelOperation(nil)
@@ -95,7 +96,7 @@ final class FakePrompts: PromptSource {
         #expect(panels.panel?.request.id == "r3")
         source.prompts = []
         panels.refresh()
-        #expect(panels.panel == nil && panels.waiting.isEmpty)
+        #expect(panels.panel == nil && panels.queue.waiting.isEmpty)
     }
 
     @Test func aQuestionIsAnsweredWithTheChoices() throws {
@@ -141,7 +142,7 @@ final class FakePrompts: PromptSource {
         let cases: [(String?, String)] = [("Bash", "run a command"), ("commandExecution", "run a command"), ("execute", "run a command"),
                                           ("Edit", "change a file"), ("fileChange", "change a file"), ("permissions", "change its permissions"),
                                           ("WebFetch", "use WebFetch"), (nil, "do something that needs your permission")]
-        for (tool, words) in cases { #expect(PromptPanel.action(tool) == words, "\(tool ?? "nil")") }
+        for (tool, words) in cases { #expect(Words.wants(tool) == words, "\(tool ?? "nil")") }
         var agent = Agent(id: "a1", kind: "claude", origin: "launched")
         (agent.name, agent.folder) = ("shop", "/Users/example/code/shop")
         #expect(App.who(agent, startedBy: "My agents", home: "/Users/example")
@@ -155,6 +156,59 @@ final class FakePrompts: PromptSource {
         let question = PromptPanel(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil,
                                                            at: "2026-10-17T09:00:01Z")), who: Asker(program: "Codex", line: "")) { _ in }
         #expect((question.contentView?.subviews.first as? NSTextField)?.stringValue == "Codex asks you")
+    }
+
+    func request(_ id: String, agent: String = "a1", at: String = "2026-10-23T18:00:00Z") -> Request {
+        Request(id: id, agent: agent, kind: "permission", tool: "Bash", about: nil, at: at)
+    }
+
+    /// One queue: in the order the requests came, steps that wrap, a withdrawn request leaves, an answered one never
+    /// comes back, and the one on screen stays on screen while the others come and go.
+    @Test func theQueueKeepsArrivalOrderAndWraps() {
+        let queue = RequestQueue()
+        #expect(queue.shown == nil && queue.position == nil)
+        queue.follow([request("r2", at: "2026-10-23T18:05:00Z")])
+        queue.follow([request("r2", at: "2026-10-23T18:05:00Z"), request("r1"), request("r3")])
+        #expect(queue.waiting.map(\.id) == ["r2", "r1", "r3"], "the order they came, not their dates")
+        #expect(queue.shown?.id == "r2" && queue.position == "1 of 3")
+        queue.step(-1)
+        #expect(queue.shown?.id == "r3" && queue.position == "3 of 3", "back from the first wraps to the last")
+        queue.step(1)
+        #expect(queue.shown?.id == "r2", "on from the last wraps to the first")
+        queue.step(2)
+        queue.follow([request("r1"), request("r3")])
+        #expect(queue.shown?.id == "r3" && queue.position == "2 of 2", "a request withdrawn before it keeps the one on screen")
+        queue.follow([request("r1")])
+        #expect(queue.shown?.id == "r1" && queue.position == nil, "the one on screen withdrawn: the next takes its place")
+        queue.answer("r1")
+        #expect(queue.waiting.isEmpty && queue.shown == nil)
+        queue.follow([request("r1"), request("r4")])
+        #expect(queue.waiting.map(\.id) == ["r4"], "an answered request still in the state never comes back")
+        queue.follow([request("r4")])
+        queue.follow([request("r1"), request("r4")])
+        #expect(queue.waiting.map(\.id) == ["r4", "r1"], "once the agent took the answer, the same id is a new request")
+        queue.step(1)
+        queue.follow([])
+        #expect(queue.shown == nil && queue.waiting.isEmpty)
+    }
+
+    /// The counts: all requests for the Dock and the chip; a space's own for its sticker, by the space that launched
+    /// the agent, and for the assistant by the space it works on.
+    @Test func eachSpaceCountsItsOwnRequests() {
+        var place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/index.html")
+        let launches = ["agents": Set(["a1"]), "project": ["a2"]]
+        let queue = RequestQueue()
+        queue.space = { RequestQueue.space(of: $0.agent, assistant: $0.agent == "assistant", place: place, launches: launches) }
+        queue.follow([request("r1"), request("r2", agent: "a2"), request("r3", agent: "a1"), request("r4", agent: "assistant"),
+                      request("r5", agent: "a9")])
+        #expect(queue.waiting.count == 5, "an agent started by hand is counted in all")
+        #expect(queue.count(in: "agents") == 2 && queue.count(in: "project") == 1 && queue.count(in: "brief") == 1)
+        place = .blank
+        #expect(queue.count(in: "brief") == 0, "the assistant on the blank page belongs to no space")
+        place = .space(title: "Logbook", name: "logbook", page: "/Users/example/something/spaces/logbook/index.html")
+        #expect(queue.count(in: "logbook") == 1, "the assistant's request follows where it works")
+        queue.answer("r3")
+        #expect(queue.count(in: "agents") == 1 && queue.waiting.count == 4)
     }
 
     /// The quit sheet says how many agents stop, in the singular and the plural, the person's assistant first.

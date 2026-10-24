@@ -64,6 +64,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             current?.watching(visible)
         }
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent", line: "") }
+        panels.queue.space = { [weak self] request in
+            guard let self else { return nil }
+            return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), place: assistant.place,
+                                      launches: launches.ids)
+        }
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand

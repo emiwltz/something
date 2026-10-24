@@ -27,11 +27,9 @@ final class Panels {
     /// Who asks: the agent's program ("Claude Code"), and a line with its name, the space that started it when one
     /// did, and its folder.
     var who: (Request) -> Asker = { _ in Asker(program: "An agent", line: "") }
-    /// The requests waiting for a panel, the shown one first.
-    private(set) var waiting: [String] = []
+    /// The requests waiting; the panel shows the one on screen.
+    let queue = RequestQueue()
     private(set) var panel: PromptPanel?
-    /// Answered requests stay in the state until the agent takes the answer: they are not shown again.
-    private var answered: Set<String> = []
 
     init(source: PromptSource, shows: Bool = true) {
         self.source = source
@@ -41,14 +39,12 @@ final class Panels {
     /// Follows the source: a new request joins the queue, a request that left it is dropped, and its panel closes.
     /// Called at each change of the state.
     func refresh() {
-        let open = source.requests.map(\.id)
-        answered.formIntersection(open)
-        waiting.removeAll { !open.contains($0) }
-        waiting += open.filter { !waiting.contains($0) && !answered.contains($0) }
-        if let panel, !panel.told, !waiting.contains(panel.request.id) { dismiss() }
-        while panel == nil, let first = waiting.first {
+        queue.follow(source.requests)
+        if let panel, !panel.told, !queue.waiting.contains(where: { $0.id == panel.request.id }) { dismiss() }
+        while panel == nil, let first = queue.shown?.id {
+            // Its details are gone: it closed, and cannot be shown.
             guard let prompt = source.prompt(first) else {
-                waiting.removeFirst()
+                queue.answer(first)
                 continue
             }
             let shown = PromptPanel(prompt, who: who(prompt.request)) { [weak self] answer in self?.decide(first, answer) }
@@ -67,8 +63,7 @@ final class Panels {
     /// says so only goes away.
     private func decide(_ request: String, _ answer: Answer) {
         defer { refresh() }
-        answered.insert(request)
-        waiting.removeAll { $0 == request }
+        queue.answer(request)
         if panel?.told == false {
             do { try source.answer(request, answer) } catch {
                 panel?.tell((error as? CodedError)?.message ?? error.localizedDescription)
@@ -127,7 +122,7 @@ final class PromptPanel: NSPanel {
         lines.edgeInsets = NSEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
         lines.widthAnchor.constraint(equalToConstant: PromptPanel.width).isActive = true
         let question = prompt.request.kind == "question"
-        let headline = PromptPanel.line(question ? "\(who.program) asks you" : "\(who.program) wants to \(PromptPanel.action(prompt.request.tool))")
+        let headline = PromptPanel.line(question ? "\(who.program) asks you" : "\(who.program) wants to \(Words.wants(prompt.request.tool))")
         headline.font = .boldSystemFont(ofSize: NSFont.systemFontSize + 1)
         lines.addArrangedSubview(headline)
         if !who.line.isEmpty {
@@ -162,19 +157,6 @@ final class PromptPanel: NSPanel {
         row.setViews(buttons, in: .trailing)
         row.widthAnchor.constraint(equalToConstant: width - 32).isActive = true
         return row
-    }
-
-    /// What a tool does, as the panel's title says it: "run a command", "change a file", or "use <tool>".
-    static func action(_ tool: String?) -> String {
-        guard let tool else { return "do something that needs your permission" }
-        // Each agent says what its tools do, by the names its driver gives them (Claude Code's tool names, Codex's
-        // request kinds, the kinds of the Agent Client Protocol).
-        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
-        case .command?: return "run a command"
-        case .file?: return "change a file"
-        case .permissions?: return "change its permissions"
-        case nil: return "use \(tool)"
-        }
     }
 
     /// The command or path, monospaced and selectable, on a tinted ground of its own.

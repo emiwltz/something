@@ -1,6 +1,7 @@
 // What the app's windows say about a path and a journal line, as a newcomer reads them: a path with ~ for the home
 // folder, cut between two names when it is too long, never inside one; a journal line as one short sentence in local
-// time. The words are made apart from the views, so that tests read exactly what Info and the rights sheet show.
+// time; a request's title, effect, age, place in the queue and who asks. The words are made apart from the views, so
+// that tests read exactly what Info, the rights sheet and the request panel show.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -106,6 +107,56 @@ enum Words {
             "STORE_FULL": "failed: the space's memory is full",
             "AGENT_ERROR": "failed: the agent said no or did not answer",
         ][code] ?? "failed (\(code))"
+    }
+
+    // MARK: Requests
+
+    /// What a tool does, as a request's title says it: "run a command", "change a file", or "use <tool>". Each agent
+    /// says what its tools do, by the names its driver gives them (Claude Code's tool names, Codex's request kinds,
+    /// the kinds of the Agent Client Protocol).
+    static func wants(_ tool: String?) -> String {
+        guard let tool else { return "do something that needs your permission" }
+        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
+        case .command?: return "run a command"
+        case .file?: return "change a file"
+        case .permissions?: return "change its permissions"
+        case nil: return "use \(tool)"
+        }
+    }
+
+    /// The effect of a request, said before its exact text: by its tool's kind, in `folder` from `home` when known.
+    static func effect(_ tool: String?, folder: String?, home: String) -> String {
+        let place = folder.map { " in " + Words.path($0, home: home) } ?? ""
+        guard let tool else { return "It needs your permission to go on." }
+        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
+        case .command?: return "It will run one command\(place)."
+        case .file?: return "It will change files\(place)."
+        case .permissions?: return "It will change what it may do without asking you."
+        case nil: return "It will use \(tool)\(place)."
+        }
+    }
+
+    /// How long ago `at`, an ISO 8601 date, was asked: "just now" in its first minute, then "asked 3 min ago", "asked
+    /// 2 hours ago"; nil when the date does not read.
+    static func age(_ at: String, now: Date) -> String? {
+        guard let date = iso8601.date(from: at) else { return nil }
+        let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
+        if minutes < 1 { return "just now" }
+        if minutes < 60 { return "asked \(minutes) min ago" }
+        let hours = minutes / 60
+        return "asked \(hours) hour\(hours == 1 ? "" : "s") ago"
+    }
+
+    /// "2 of 3" for the second of three; nil for a lone request, which needs no steps.
+    static func position(_ index: Int, of count: Int) -> String? {
+        count > 1 ? "\(index + 1) of \(count)" : nil
+    }
+
+    /// The line under a request's title, as the mockup's "My agents · its assistant · asked 3 min ago": the space's
+    /// title, who asks (the space's assistant, or the agent by its name), and the age; what is not known is left out.
+    static func who(space: String?, assistant: Bool, name: String?, age: String?) -> String {
+        let asker = assistant ? (space == nil ? "your assistant" : "its assistant") : name.map { "“\($0)”" }
+        return [space, asker, age].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// `text` on one line, its spaces and line breaks made one space, cut with "…" past `quoted` characters.
