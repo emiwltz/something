@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- An invented space for the acceptance stage: "Oracle", a page with a glowing orb that answers one question a day.
+     It needs no agent and keeps only its last answer, so it shows a space with a world of its own (night colours,
+     a serif voice) next to the templates. Nothing in it reaches the network. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oracle</title>
+<script type="application/json" id="something">
+{
+  "contract": 1,
+  "title": "Oracle",
+  "description": "One question a day. It answers with what your agents did.",
+  "rights": ["store"]
+}
+</script>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid; place-items: center; text-align: center;
+    background: radial-gradient(80% 70% at 50% 40%, #2B2340, #141019); color: #EDE6FA;
+    font-family: "Young Serif", Georgia, serif;
+  }
+  .orb {
+    width: 120px; height: 120px; border-radius: 50%; margin: 0 auto 26px;
+    background: radial-gradient(circle at 35% 30%, #fff, #B9A2FF 30%, #4B3A8F 70%);
+    box-shadow: 0 0 60px rgba(185, 162, 255, .45);
+  }
+  h1 { font: 400 40px/1.1 "Young Serif", Georgia, serif; margin: 0 0 10px; }
+  p { font: 14px -apple-system, "Helvetica Neue", sans-serif; color: #B8ADD0; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="orb" aria-hidden="true"></div>
+  <h1>Ask the oracle</h1>
+  <p id="answer">One question a day. It answers with what your agents did.</p>
+</main>
+<script>
+  // The last answer, kept by something's store when the page may use it; the page works the same without it.
+  const shown = document.getElementById("answer");
+  if (window.something && something.store) {
+    something.store.get("last").then((last) => { if (typeof last === "string" && last) shown.textContent = last; }).catch(() => {});
+  }
+</script>
+</body>
+</html>

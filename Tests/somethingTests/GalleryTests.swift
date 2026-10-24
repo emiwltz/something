@@ -3,7 +3,8 @@
 // permission of macOS (a screenshot would need Screen Recording). Each window is drawn in the light appearance, then
 // in the dark one (its file ends in -dark.png). A window never shown is drawn as an inactive one: default buttons
 // without the accent color, switches that are on in gray (making the windows report themselves key changes nothing,
-// it was tried). It runs only when SOMETHING_GALLERY names a folder:
+// it was tried). The drawing itself is Stage.swift's (Picture). Only pictures with no screen id of the mockup stay
+// here; a screen's picture is its acceptance scenario's. It runs only when SOMETHING_GALLERY names a folder:
 //   SOMETHING_GALLERY=/path/to/folder swift test --filter GalleryTests
 import AppKit
 import SwiftUI
@@ -13,7 +14,6 @@ import Testing
 import WebKit
 @testable import something
 
-let gallery = ProcessInfo.processInfo.environment["SOMETHING_GALLERY"].map { URL(fileURLWithPath: $0) }
 
 @MainActor @Suite(.serialized, .enabled(if: gallery != nil, "SOMETHING_GALLERY does not name a folder, so the gallery of windows is not drawn."),
                   .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-gallery-"))
@@ -212,54 +212,9 @@ struct GalleryTests {
         return (shell, library, info)
     }
 
-    /// Draws the whole window, title bar and toolbar included, into `name`.png at 2x, with the page of `web` composed
-    /// in its place: WebKit draws in another process, which a view's own drawing does not reach. The sidebar's and
-    /// Info's contents are vibrant, blended by the window server, which a view's drawing does not reach either: the
-    /// same views are drawn apart, on a plain background, and composed in their columns.
+    /// Draws the whole window into `name`.png at 2x (Stage.swift's Picture), the page of `web` composed in its place.
     func draw(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, _ fixture: Home) async throws {
-        // Below the title bar, as the columns' own contents start.
-        let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
-        let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
-        let columns: [(item: NSSplitViewItem, view: NSView)] = [
-            (shell.split.splitViewItems[0], NSHostingView(rootView: SidebarView(library: library, assistant: shell.assistant))),
-            (shell.inspector, NSHostingView(rootView: inspector.rootView)),
-        ].filter { !$0.0.isCollapsed }
-        let offscreens = columns.map { column in
-            let offscreen = Offscreen(column.view), bounds = column.item.viewController.view.bounds
-            offscreen.window.setContentSize(NSSize(width: max(bounds.width, 232), height: max(bounds.height - top, 100)))
-            return offscreen
-        }
-        // SwiftUI and WebKit draw on the run loop.
-        await wait(1.5)
-        let frame = try #require(shell.window.contentView?.superview)
-        disguise(frame, fixture.root.path)
-        frame.layoutSubtreeIfNeeded()
-        let rep = try bitmap(frame.bounds.size)
-        frame.cacheDisplay(in: frame.bounds, to: rep)
-        let apart = try columns.map { column in
-            disguise(column.view, fixture.root.path)
-            let drawn = try bitmap(column.view.bounds.size)
-            selected(column.view) { column.view.cacheDisplay(in: column.view.bounds, to: drawn) }
-            var place = column.item.viewController.view.convert(column.item.viewController.view.bounds, to: frame)
-            place.size.height -= top
-            return (drawn, place)
-        }
-        let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
-        try png(of: frame.bounds.size, name) {
-            rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            for (drawn, place) in apart {
-                NSColor.windowBackgroundColor.setFill()
-                place.fill()
-                drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            }
-            if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
-            // The assistant floats over the page, which was drawn over it.
-            if web != nil, let floating = shell.floating, let over = try? bitmap(floating.bounds.size) {
-                floating.cacheDisplay(in: floating.bounds, to: over)
-                over.draw(in: floating.convert(floating.bounds, to: frame), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            }
-        }
-        withExtendedLifetime(offscreens) {}
+        try await Picture.window(shell, library: library, web: web, name, root: fixture.root)
     }
 
     /// The assistant in each of its states, driven by AssistantTests' fake `claude` (invented text): not started,
@@ -412,13 +367,7 @@ struct GalleryTests {
         try draw(Ask.doesAndDoesnt(), "does-and-doesnt" + suffix, fixture)
     }
 
-    /// Ends the page's animations that end, as its first second on the screen would: a window never shown has no
-    /// animation clock, and a tile that arrives from transparent would stay transparent in the picture.
-    func settle(_ view: SpaceView) async {
-        guard let frame = view.frame else { return }
-        _ = try? await view.web.evaluateJavaScript("document.getAnimations().forEach((one) => { try { one.finish(); } catch (error) {} }); 0",
-                                                   in: frame, contentWorld: .page)
-    }
+    func settle(_ view: SpaceView) async { await Picture.settle(view) }
 
     /// Puts AssistantTests' fake `claude` in the PATH of `fixture`'s engines.
     func installFakeClaude(_ fixture: Home) throws {
@@ -484,73 +433,7 @@ struct GalleryTests {
         withExtendedLifetime(offscreen) {}
     }
 
-    /// Draws an alert's window as it would be shown.
-    func draw(_ alert: NSAlert, _ name: String, _ fixture: Home) throws {
-        // The app's icon, as the .app shows it: this test program's own is a generic one.
-        alert.icon = NSApp.applicationIconImage
-        alert.layout()
-        try draw(try #require(alert.window.contentView), name, fixture)
-    }
-
-    /// Draws `view`, laid out at its size (its fitting size when it has none), into `name`.png at 2x, on the window's
-    /// background: an alert's content draws nothing behind its text when it is not on the screen.
-    func draw(_ view: NSView, _ name: String, _ fixture: Home) throws {
-        disguise(view, fixture.root.path)
-        if view.frame.isEmpty { view.frame.size = view.fittingSize }
-        view.layoutSubtreeIfNeeded()
-        let rep = try bitmap(view.bounds.size)
-        selected(view) { view.cacheDisplay(in: view.bounds, to: rep) }
-        // Over the background: a bitmap's plain draw copies its transparent pixels over it.
-        try png(of: view.bounds.size, name) {
-            rep.draw(in: NSRect(origin: .zero, size: view.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        }
-    }
-
-    /// Runs `draw` with the selected rows of `view`'s lists in the color of a selection: a row's highlight is a view of
-    /// the selection material, its layer black, and the window server colors it on the screen with a filter
-    /// (vibrantColorMatrixSourceOver) that no drawing in this process applies: cacheDisplay, CALayer.render and
-    /// CARenderer all give black. Meanwhile it is the gray of a selection whose list does not have the focus, as the
-    /// sidebar's when the person works in the open space: a reconstruction, not the window server's own pixels.
-    func selected(_ view: NSView, _ draw: () -> Void) {
-        func highlights(_ view: NSView) -> [CALayer] {
-            let own = (view as? NSVisualEffectView)?.material == .selection ? view.layer?.sublayers ?? [] : []
-            return own + view.subviews.flatMap(highlights)
-        }
-        let layers = highlights(view), before = layers.map(\.backgroundColor)
-        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance {
-            layers.forEach { $0.backgroundColor = NSColor.unemphasizedSelectedContentBackgroundColor.cgColor }
-        }
-        draw()
-        zip(layers, before).forEach { $0.backgroundColor = $1 }
-    }
-
-    func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {
-        let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
-                                                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
-        rep.size = size
-        return rep
-    }
-
-    /// Writes `name`.png, `size` points at 2x: the window's background, then what `content` draws.
-    func png(of size: NSSize, _ name: String, _ content: () -> Void) throws {
-        let rep = try bitmap(size)
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
-        // NSApp.effectiveAppearance follows a change of NSApp.appearance only later, on the run loop.
-        (NSApp.appearance ?? NSApp.effectiveAppearance).performAsCurrentDrawingAppearance {
-            NSColor.windowBackgroundColor.setFill()
-            NSRect(origin: .zero, size: size).fill()
-            content()
-        }
-        NSGraphicsContext.restoreGraphicsState()
-        try #require(rep.representation(using: .png, properties: [:])).write(to: try #require(gallery).appendingPathComponent("\(name).png"))
-    }
-
-    /// Shows the temporary home as /Users/example: the pictures say what a person would read.
-    func disguise(_ view: NSView, _ root: String) {
-        if let field = view as? NSTextField { field.stringValue = field.stringValue.replacingOccurrences(of: root, with: "/Users/example") }
-        if let text = view as? NSTextView { text.string = text.string.replacingOccurrences(of: root, with: "/Users/example") }
-        view.subviews.forEach { disguise($0, root) }
-    }
+    func draw(_ alert: NSAlert, _ name: String, _ fixture: Home) throws { try Picture.alert(alert, name, root: fixture.root) }
+    func draw(_ view: NSView, _ name: String, _ fixture: Home) throws { try Picture.view(view, name, root: fixture.root) }
+    func png(of size: NSSize, _ name: String, _ content: () -> Void) throws { try Picture.png(of: size, name, content) }
 }
