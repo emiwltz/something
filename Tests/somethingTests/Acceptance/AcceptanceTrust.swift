@@ -46,12 +46,15 @@ struct AcceptanceTrust {
         EOF
         """#
 
-    /// Panels on the Stage's clock, their requests asked by the agents `request` names, counted in `shell`'s chip.
-    static func panels(_ source: FakePrompts, _ shell: Shell) -> Panels {
+    /// Panels on the Stage's clock, their requests asked by the agents `request` names, counted in `shell`'s chip, and
+    /// on the sticker those of the space `open`, as the app counts them: each request belongs to its agent's space. The
+    /// assistant of My agents is `assistant`'s kind.
+    static func panels(_ source: FakePrompts, _ shell: Shell, open: String? = nil, assistant: String = "codex") -> Panels {
         let panels = Panels(source: source, shows: false)
         panels.now = { Stage.now }
-        panels.counted = { shell.waiting($0, mine: 0) }
-        let agents = [("codex", "My agents", "/Users/example/something/spaces", true), ("claude", "Project watch", "/Users/example/code/watch", false),
+        if open != nil { panels.queue.space = { ["a1": "agents", "a2": "project", "a3": "logbook"][$0.agent] } }
+        panels.counted = { [unowned panels] in shell.waiting($0, mine: open.map { panels.queue.count(in: $0) } ?? 0) }
+        let agents = [(assistant, "My agents", "/Users/example/something/spaces", true), ("claude", "Project watch", "/Users/example/code/watch", false),
                       ("pi", "Logbook", "/Users/example/notes", false)]
         panels.who = { request in
             let (kind, space, folder, assistant) = agents[(Int(request.agent.dropFirst()) ?? 1) - 1]
@@ -60,6 +63,18 @@ struct AcceptanceTrust {
             return App.who(agent, space: space, home: "/Users/example", assistant: assistant, building: assistant)
         }
         return panels
+    }
+
+    /// My agents' assistant, Codex, waiting for the answer its request asks: the sticker's eyes look up, as the app
+    /// draws them from its presence; its badge counts the space's own requests.
+    static func waiting(_ shell: Shell, mine: Int) async {
+        let glass = shell.glass, sticker = glass.sticker
+        glass.motion = { .reduced }
+        #expect(await wait(5) { glass.grown == false && glass.stickerShown })
+        var agent = Agent(id: "a1", kind: "codex", origin: "launched")
+        (agent.state, agent.alive) = ("waiting", true)
+        sticker.show(Presence(Presence.Facts(name: "Codex", installed: true), agent: agent, turn: nil, now: Stage.now), title: "My agents")
+        #expect(sticker.sign.state == .wait && glass.mine == mine && sticker.badge.isHidden == (mine == 0) && sticker.badge.count == mine)
     }
 
     @Test("e1: the request panel") func e1() async throws {
@@ -72,9 +87,10 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [0], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source, shell)
+        let panels = Self.panels(source, shell, open: "agents")
         panels.clock = { time }
         panels.refresh()
+        await Self.waiting(shell, mine: 1)
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Codex wants to run a command" && panel.position == nil)
@@ -113,7 +129,7 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e1" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && chip.isHidden, "answered: the chip goes")
+        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && chip.isHidden && shell.glass.sticker.badge.isHidden, "answered: the chip and the badge go")
     }
     /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
     /// corner below the toolbar, its footer in sight.
@@ -165,9 +181,10 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [34, 12, 2], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source, shell)
+        let panels = Self.panels(source, shell, open: "agents")
         panels.clock = { time }
         panels.refresh()
+        await Self.waiting(shell, mine: 1)
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.position == "1 of 3" && panel.header.of.stringValue == "1 of 3" && shell.chip.accessibilityLabel() == "3 wait for you")
@@ -188,25 +205,44 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e3" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2" && shell.chip.count == 2)
+        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2" && shell.chip.count == 2 && shell.glass.mine == 0)
     }
-    /// ⌥⌘P while My agents' assistant waits: the same panel in the same place, now holding the keys, ringed in ink2
-    /// after one pulse, the main window's lights gray. Escape denies. That the keys really move to the panel and back
-    /// is a hand trial: a window never shown never becomes key.
+    /// Show Request (⌥⌘P, or the card's notice) while My agents' assistant waits, its card open and saying so: the same
+    /// panel in the same place, now holding the keys, ringed in ink2 after one pulse, the main window's lights gray.
+    /// Escape denies. That the keys really move to the panel and back is a hand trial: a window never shown never
+    /// becomes key. The mockup's assistant is Codex; the fake builder here is Claude Code, so the words name it.
     @Test("e4: Show Request") func e4() async throws {
         let stage = try Stage("trust")
         defer { stage.remove() }
+        // My agents' assistant, AssistantTests' fake claude, asks before running a command: its card says it waits.
+        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         let (shell, library, _) = stage.window()
         shell.window.setFrameOrigin(Self.large)
+        let model = shell.assistant, engine = model.engine, glass = shell.glass
+        glass.motion = { .reduced }
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
         let agents = try await stage.open("agents", in: shell, library)
         defer { agents.close() }
+        model.draft = "ask-first"
+        model.send()
+        #expect(await wait(until: { model.presence.state == .wait }))
         let source = FakePrompts()
         Self.request("r", [0], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source, shell)
+        let panels = Self.panels(source, shell, open: "agents", assistant: "claude")
         panels.clock = { time }
-        panels.queue.space = { _ in "agents" }
+        model.showRequest = { _ = panels.present(in: "agents") }
         panels.refresh()
+        #expect(glass.mine == 1)
+        model.focus()
+        #expect(await wait(5) { glass.grown == true && !glass.morphing })
+        let notice = try #require(model.notice)
+        #expect(notice.title == "Claude Code is waiting for your answer" && notice.actions.map(\.title) == ["Show Request \(Keys.shown("showreq"))"])
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
         let arrived = panel.frame
@@ -214,7 +250,8 @@ struct AcceptanceTrust {
         let item = try #require(MenuBar(builders: nil).menu.items.compactMap(\.submenu).flatMap(\.items).first { $0.identifier?.rawValue == "showreq" })
         #expect(item.title == "Show Request" && item.keyEquivalent == "p" && item.keyEquivalentModifierMask == [.command, .option])
         #expect(item.action == #selector(App.showRequest(_:)) && Keys.tooltip("showreq") == "Show Request (⌥⌘P)")
-        #expect(panels.present(in: agents.space.name))
+        // Show Request, from the card's notice as from ⌥⌘P.
+        notice.actions[0].run()
         #expect(panel.held && panel.ring.lit && panel.request?.id == "r1" && panel.frame == arrived, "in front where it was, with the keys")
         #expect(panel.ring.pulse != nil || Look.motion(.calm) == .reduced, "one pulse")
         time += 1
@@ -225,6 +262,9 @@ struct AcceptanceTrust {
         #expect(panel.denyButton.keyEquivalent == "\u{1b}")
         panel.cancelOperation(nil)
         #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil && !panels.present(in: agents.space.name))
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
     }
     /// something in the background while the Daily brief is open; My agents' assistant asks. The Dock's badge counts
     /// it and the icon bounces once; "Notify me" is on, so a notification says who waits and in which space, never the

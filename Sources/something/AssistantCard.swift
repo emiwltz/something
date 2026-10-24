@@ -275,6 +275,11 @@ struct AssistantCard: View {
     }
 }
 
+/// A button drawn only by its label, never dimmed by the system when disabled: the label says it.
+private struct Bare: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label.opacity(configuration.isPressed ? 0.86 : 1) }
+}
+
 /// The flat field and its Send button, which turns into Stop while the agent works and nothing is written. Return
 /// sends, ⇧Return adds a line, and Return that confirms what an input method composes sends nothing.
 struct Field: View {
@@ -317,10 +322,10 @@ struct Field: View {
                 }
                 .foregroundStyle(Look.Token.actfg.ui)
                 .frame(width: 30, height: 30)
-                .background(Look.Token.act.ui, in: Circle())
-                .opacity(model.canSend || stop ? 1 : 0.3)
+                // Only the disc fades when nothing can be sent, as the mockup's: the plain style would fade it twice.
+                .background(Look.Token.act.ui.opacity(model.canSend || stop ? 1 : 0.3), in: Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(Bare())
             .disabled(!model.canSend && !stop)
             .help(stop ? model.presence.stopHelp : model.working ? "Send when it finishes (Return)" : "Send (Return)")
             .accessibilityLabel(stop ? "Stop" : model.working ? "Send when it finishes" : "Send")
@@ -580,7 +585,8 @@ extension AssistantModel {
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
     var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    var stops: Bool { working && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// Not while its model does not answer: the card says Stopped, and Try Again is the way on.
+    var stops: Bool { working && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The notice above the composer, the most pressing first; nil when nothing blocks or waits.
     var notice: Notice? {

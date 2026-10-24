@@ -29,7 +29,7 @@ import WebKit
     printf '%s\n' "$@" > "$HOME/out/arguments"
     page=/Users/example/something/spaces/agents.html
     tool() {
-      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"claude-example\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_$1\",\"name\":\"$2\",\"input\":$3}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
+      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"haiku\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_$1\",\"name\":\"$2\",\"input\":$3}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
       echo "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"toolu_$1\",\"type\":\"tool_result\",\"content\":\"Invented.\",\"is_error\":false}]},\"parent_tool_use_id\":null,\"uuid\":\"r$1\",\"session_id\":\"s1\"}"
     }
     # Writes its arguments, each a line, once $HOME/out/finish appears, while this fake runs; it reads on meanwhile.
@@ -80,7 +80,7 @@ import WebKit
           tool 2 Read "{\"file_path\":\"$page\"}"
           tool 3 Edit "{\"file_path\":\"$page\"}"
           tool 4 Bash '{"command":"something check agents"}'
-          echo '{"type":"assistant","message":{"id":"msg_5","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Done. Waiting tiles now span the whole width, and a soft chime plays once when an agent starts waiting. The tone is made in the page with `AudioContext`, so it needs no file and no network."}]},"parent_tool_use_id":null,"uuid":"u5","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_5","model":"haiku","role":"assistant","content":[{"type":"text","text":"Done. Waiting tiles now span the whole width, and a soft chime plays once when an agent starts waiting. The tone is made in the page with `AudioContext`, so it needs no file and no network."}]},"parent_tool_use_id":null,"uuid":"u5","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u6"}' ;;
         *'wait for me first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"init","model":"opus","effort":"high","permissionMode":"default","uuid":"i1","session_id":"s1"}'
@@ -95,14 +95,14 @@ import WebKit
           echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
           later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
         *'"subtype":"initialize"'*)
-          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
+          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
         *'sign-in-please'*'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_0","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Invalid API key · Please run /login"}]},"parent_tool_use_id":null,"error":"authentication_failed","is_api_error_message":true,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"Invalid API key · Please run /login","session_id":"s1","uuid":"u3"}' ;;
         *'clock in the corner'*'"type":"user"'*)
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' ;;
         *'"type":"user"'*)
-          echo '{"type":"assistant","message":{"id":"msg_1","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Invented reply."}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_1","model":"haiku","role":"assistant","content":[{"type":"text","text":"Invented reply."}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Invented reply.","session_id":"s1","uuid":"u3"}'
           echo "$idle" ;;
         *'"subtype":"end_session"'*)

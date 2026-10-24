@@ -269,6 +269,7 @@ import SomethingCore
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _):
             if !held.isEmpty { return "Write another request…" }
+            if presence.stuck == .cannotReachModel { return "Write your next request · it waits until the model answers" }
             if working { return "Write your next request · it waits for this one" }
             return presence.state == .sleep ? "Ask for a change · it wakes up" : "Ask \(AssistantModel.clean(title))'s assistant for a change…"
         case .blank: return "Describe the space you want…"

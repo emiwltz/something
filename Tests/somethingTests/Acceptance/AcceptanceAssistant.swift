@@ -109,6 +109,8 @@ struct AcceptanceAssistant {
         #expect(await wait(until: { model.presence.now == .working("Editing brief.html…", late: false) }), "said: \(model.presence.word)")
         let at = Date()
         model.clock = { at }
+        // My agents' request waits in the toolbar's chip, as in the mockup's pictures.
+        shell.waiting(1, mine: 0)
         return (shell, library, brief)
     }
 
@@ -221,6 +223,7 @@ struct AcceptanceAssistant {
         let (shell, library, _) = stage.window()
         let model = shell.assistant, engine = model.engine, glass = shell.glass
         glass.motion = { .reduced }
+        shell.waiting(1, mine: 0)
         var asked = 0
         model.showRequest = { asked += 1 }
         engine.changed = { model.refresh() }
@@ -279,6 +282,7 @@ struct AcceptanceAssistant {
         #expect(limit.title == "Stopped · can't reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
         #expect(limit.text == "Its model did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
         #expect(!model.blocked && model.presence.header == "Stopped · can't reach its model")
+        #expect(!model.stops && model.placeholder == "Write your next request · it waits until the model answers", "the send arrow, not Stop")
         shell.toggleConversation(nil)
         try await draw(project, ["c8-model"])
         shell.toggleConversation(nil)

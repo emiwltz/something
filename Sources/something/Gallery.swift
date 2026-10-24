@@ -204,7 +204,9 @@ struct GalleryView: View {
                 Text(template.title).font(Font(Look.font(.ui, size: 13.5, weight: .semibold))).foregroundStyle(Look.Token.ink.swiftUI)
                 HStack(spacing: 5) {
                     Image(systemName: "checkmark.shield").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.swiftUI)
+                    // One line, so every card of a row keeps the mockup's height.
                     Text(template.needs).font(Font(Look.font(.ui, size: 11.5))).foregroundStyle(Look.Token.ink2.swiftUI)
+                        .lineLimit(1).truncationMode(.tail)
                 }
                 .accessibilityElement(children: .combine)
                 Text(template.line).font(Font(Look.font(.ui, size: 12))).lineSpacing(3.5).foregroundStyle(Look.Token.ink3.swiftUI)

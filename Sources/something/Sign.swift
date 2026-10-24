@@ -166,14 +166,21 @@ enum Sign {
     static func drawEye(_ state: State, _ r: CGRect, e: CGFloat, stroke: CGFloat, in c: CGContext) {
         switch state {
         case .done:
-            // The joy eye: the top half of a ring, its centre 30% of its height below the eye's.
-            let thick = max(2, stroke * e), radius = max(r.width / 2 - thick / 2, 0.01)
+            // The joy eye, as the mockup's .x-joy: the top and right borders of its box, turned 45° into a ^, the box
+            // moved down 30% of its height; the border at least 2 points, so it reads at the sticker's size.
+            let side = r.width, thick = min(max(2, stroke * e), side / 2), edge = side / 2 - thick / 2
+            c.saveGState()
+            c.translateBy(x: r.midX, y: r.midY + 0.3 * side)
+            c.rotate(by: -CGFloat.pi / 4)
             c.setStrokeColor(color(.eyes))
             c.setLineWidth(thick)
             c.setLineCap(.butt)
-            let centre = CGPoint(x: r.midX, y: r.midY + 0.3 * r.height)
-            c.addArc(center: centre, radius: radius, startAngle: CGFloat.pi, endAngle: 2 * CGFloat.pi, clockwise: false)
+            c.setLineJoin(.miter)
+            c.move(to: CGPoint(x: -side / 2, y: -edge))
+            c.addLine(to: CGPoint(x: edge, y: -edge))
+            c.addLine(to: CGPoint(x: edge, y: side / 2))
             c.strokePath()
+            c.restoreGState()
         case .unknown:
             let line = min(1.5, r.width * 0.3)
             c.setStrokeColor(color(.eyes))
