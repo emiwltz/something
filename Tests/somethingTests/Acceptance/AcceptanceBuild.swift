@@ -14,7 +14,37 @@ import WebKit
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-build-"))
 struct AcceptanceBuild {
-    @Test("a1: the film on the glass", .disabled("not built yet: AB18")) func a1() async throws {}
+    /// The first-launch film at its hold point, on a first start: the sign's frame grown to the window's edges, 12
+    /// points in, its eyes gone, the paper faded onto New Space, whose own sign landed; an empty sidebar.
+    @Test("a1: the film on the glass") func a1() async throws {
+        let stage = try Stage("build")
+        defer { stage.remove() }
+        for file in try FileManager.default.contentsOfDirectory(at: stage.home.places.spaces, includingPropertiesForKeys: nil) {
+            try FileManager.default.removeItem(at: file)
+        }
+        let (shell, library, host) = try await Self.newSpace(stage, builder: true)
+        shell.waiting(0, mine: 0)
+        library.relist()
+        #expect(App.welcomes(library) && library.entries.allSatisfy { !$0.isSpace })
+        #expect(await wait(until: { Arrival.sign(in: shell.center) != nil }), "New Space's sign, under the film")
+        let film = Film(center: shell.center, motion: .calm)
+        shell.layer.hold(film)
+        film.frame = shell.layer.bounds
+        film.layoutSubtreeIfNeeded()
+        film.hold()
+        let frame = try #require(film.grown), shape = frame.shape
+        #expect(shape.rect == film.bounds.insetBy(dx: 12, dy: 12) && shape.eyes == 0 && shape.stroke == Arrival.thin, "\(shape)")
+        #expect(abs(shape.arm - 84 * 0.31) < 0.01 && film.paper.alphaValue == 0 && film.sign.isHidden)
+        #expect(Arrival.sign(in: shell.center)?.isHidden == false)
+        try await stage.appearances { suffix in
+            // The mockup has no night of this screen.
+            if suffix.isEmpty { try await Picture.window(shell, library: library, web: nil, "a1", root: stage.home.root) }
+            let words = await Self.read(host)
+            #expect(words == Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], "\(words)")
+        }
+        film.leave()
+        #expect(shell.layer.isHidden)
+    }
     /// The welcome's first step over the main window of a first start, dimmed: the sign, "something", the one sentence,
     /// 1 of 5, Skip Tour and Continue; Return goes on to the builders (Escape is TourTests').
     @Test("a2: welcome, step 1") func a2() async throws {

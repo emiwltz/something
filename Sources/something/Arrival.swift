@@ -3,7 +3,7 @@
 // edges, 14 points in, in 820 ms on the douce curve, their stroke thinning and the eyes going to the corner as they
 // fade; then it all fades and the space is there, its row ringed a moment in the sidebar, and only then its rights
 // sheet. Reduced motion skips the growth: the still fades. A new opening ends an arrival still playing. It is drawn in
-// draw(_:), so cacheDisplay pictures it.
+// draw(_:), so cacheDisplay pictures it. The first-launch film (Film.swift) grows the same frame to the window's edges.
 import AppKit
 import SwiftUI
 
@@ -31,12 +31,14 @@ final class Arrival: NSView {
     /// How far it grew, from 0 to 1, in time: the curve is applied in `shape`.
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
     private(set) var playing = false
+    /// Whether the frame stays drawn once grown, until it fades: the film's frame holds at the window's edges.
+    var holds = false { didSet { needsDisplay = true } }
     private var timer: Timer?
     /// The clock in seconds; a seam for tests.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
 
     /// The frame's shape `progress` of the way (in time) from `start` to `room` inset by `inset`.
-    static func shape(_ start: Start, to room: CGRect, progress: CGFloat) -> Shape {
+    static func shape(_ start: Start, to room: CGRect, inset: CGFloat = Arrival.inset, progress: CGFloat) -> Shape {
         let p = min(max(progress, 0), 1), e = CGFloat(Look.douce.value(at: Double(p)))
         func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * e }
         let end = room.insetBy(dx: inset, dy: inset), from = start.rect
@@ -100,7 +102,7 @@ final class Arrival: NSView {
     }
 
     /// The sign of the page in `view`: New Space's, the only one that lands there.
-    private static func sign(in view: NSView) -> SignView? {
+    static func sign(in view: NSView) -> SignView? {
         for sub in view.subviews {
             if let sign = sub as? SignView, sign.name == "something" { return sign }
             if let sign = Arrival.sign(in: sub) { return sign }
@@ -122,17 +124,20 @@ final class Arrival: NSView {
     /// It never takes a click: what is under it answers, as on the rest of the glass.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    /// Where the frame grows to: the center under the toolbar.
+    /// Where the frame grows to, and how far in: the center under the toolbar, or `reach` when it is set (the film's
+    /// whole window).
+    var reach: (room: CGRect, inset: CGFloat)?
     var room: CGRect {
+        if let reach { return reach.room }
         let top = superview?.superview?.safeAreaInsets.top ?? 0
         return CGRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
     }
 
-    var shape: Shape { Arrival.shape(start, to: room, progress: progress) }
+    var shape: Shape { Arrival.shape(start, to: room, inset: reach?.inset ?? Arrival.inset, progress: progress) }
 
     override func draw(_ dirtyRect: NSRect) {
         still?.draw(in: stillRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        guard progress < 1 || playing, let c = NSGraphicsContext.current?.cgContext else { return }
+        guard progress < 1 || playing || holds, let c = NSGraphicsContext.current?.cgContext else { return }
         let shape = shape, r = shape.rect, a = shape.arm
         c.setStrokeColor(Sign.color(.ink))
         c.setLineWidth(shape.stroke)
@@ -169,6 +174,11 @@ final class Arrival: NSView {
             progress = 1
             return fade(0.25, arrived)
         }
+        grow { [weak self] in self?.fade(Arrival.fades, arrived) }
+    }
+
+    /// Grows the frame in `grows` seconds, and calls `grown` once it is at its end.
+    func grow(_ grown: @escaping () -> Void) {
         playing = true
         let began = clock()
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
@@ -178,15 +188,15 @@ final class Arrival: NSView {
                 guard self.progress >= 1 else { return }
                 timer.invalidate()
                 self.playing = false
-                self.fade(Arrival.fades, arrived)
+                grown()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
 
-    /// Fades it out in `duration`, then takes it off the glass and calls `arrived`.
-    private func fade(_ duration: TimeInterval, _ arrived: @escaping () -> Void) {
+    /// Fades it out in `duration`, then takes it off its layer and calls `arrived`.
+    func fade(_ duration: TimeInterval, _ arrived: @escaping () -> Void) {
         NSAnimationContext.runAnimationGroup({ context in
             (context.duration, context.timingFunction) = (duration, Look.douce.timing)
             animator().alphaValue = 0

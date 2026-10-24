@@ -160,10 +160,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Whether the welcome opens at the start: it was never ended, and there is no space yet.
     static func welcomes(_ library: Library) -> Bool { !library.preferences.toured && !library.entries.contains(where: \.isSpace) }
 
-    /// Help › Welcome Tour, and the first start: the welcome over the window, which steps back until it ends
-    /// (Shell.welcomed(skipped:)), saying what went wrong when the launcher could not be made.
+    /// Help › Welcome Tour, and the first start: the film (Film.swift), then the welcome over the window, which steps
+    /// back until it ends (Shell.welcomed(skipped:)), saying what went wrong when the launcher could not be made.
     @objc func showTour(_ sender: Any?) {
         shell.front()
+        Film.play(in: shell, library: library) { [weak self] in self?.welcome() }
+    }
+
+    private func welcome() {
         let tour = Tour(places: places)
         tour.finished = { [weak self] problem, skipped in
             guard let self else { return }

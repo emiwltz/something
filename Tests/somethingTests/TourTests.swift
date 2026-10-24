@@ -1,4 +1,4 @@
-// The welcome tour, the blank page and the launcher: the welcome's keys, its steps with and without a builder and Look
+// The welcome tour, the blank page and the launcher: the first-launch film that opens the welcome, the welcome's keys, its steps with and without a builder and Look
 // Again, its end with no agent started, the welcome over the window that steps back and its menus greyed, the suggestions' whole sentences, the space the assistant
 // made opened or said ready, the rights sheet's first line, and the launcher, made in the test home's Applications only
 // under a Homebrew prefix and its switch on, never twice, never registered, removed only when something made it.
@@ -335,6 +335,41 @@ import Testing
         #expect(ended == true && shell.welcoming == nil && library.selection == .newSpace && model.wantsFocus)
         #expect(toast?.words == "Skipped · everything is in Settings when you want it")
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
+    }
+
+    /// The first-launch film: over the whole window, on New Space, the sign and its two lines; then the frame grows to
+    /// the window's edges, New Space's sign waiting hidden, and the film ends by opening the welcome, the sign shown
+    /// again and nothing left in the window layer. Under Reduced motion there is no film: the welcome opens at once.
+    /// Once the tour ended is kept, a new start opens neither.
+    @Test func theFilmEndsByOpeningTheWelcome() async throws {
+        let (home, model) = try assistants.assistant([], prefix: "something-tour-")
+        defer { home.remove() }
+        let (shell, library, _) = window(home, model)
+        defer { shell.window.close() }
+        library.select(.templates)
+        shell.show(nil)
+        var opened = 0
+        // The system's Reduce Motion, when on, leaves only the film's absence to check.
+        if Look.motion(.calm) == .calm {
+            let film = try #require(Film.play(in: shell, library: library, pace: 0.2) { opened += 1 })
+            #expect(library.selection == .newSpace && film.superview === shell.layer && !shell.layer.isHidden && film.frame == shell.layer.bounds)
+            #expect(shell.layer.hitTest(NSPoint(x: 300, y: 300)) === film, "nothing under the film is pressed while it plays")
+            #expect(film.sentence.stringValue == "A blank page. Your world." && film.word.stringValue == "something" && film.grown == nil)
+            #expect(await wait(until: { film.grown != nil }))
+            let hero = try #require(Arrival.sign(in: shell.center))
+            #expect(hero.isHidden && film.sign.isHidden && film.grown?.reach?.inset == 12)
+            #expect(await wait(until: { opened == 1 }))
+            #expect(await wait(until: { film.superview == nil }))
+            #expect(!hero.isHidden && shell.layer.isHidden && opened == 1)
+        } else {
+            opened = 1
+        }
+        library.preferences.motion = .reduced
+        #expect(Film.play(in: shell, library: library) { opened += 1 } == nil)
+        #expect(opened == 2 && !shell.layer.subviews.contains { $0 is Film })
+        #expect(App.welcomes(library))
+        library.preferences.toured = true
+        #expect(!App.welcomes(library), "the film and the welcome never show once the tour ended is kept")
     }
 
     /// The window of `home`, never shown, with `model` as its assistant.
