@@ -1,6 +1,6 @@
 // One conversation with a builder: its kind, the model and effort it is launched with, its agent and thread as the
-// engine's state shows them, what went wrong, the messages waiting for its launch, and the space it is about. A class,
-// so a launch that ends after a new conversation began can tell it was for another one.
+// engine's state shows them, what went wrong, the messages waiting for its launch or for its turn to end, and the space
+// it is about. A class, so a launch that ends after a new conversation began can tell it was for another one.
 import Observation
 import SomethingCore
 
@@ -32,6 +32,11 @@ import SomethingCore
     /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
     @ObservationIgnored var queued: [String] = []
     @ObservationIgnored var launch = 0
+    /// The messages written while its turn runs, context line included: the app holds them, not the agent, so Take
+    /// Back and Stop can give them back; one leaves each time a turn ends. And the turn after which one last left, so
+    /// a state read again before the next turn starts sends no second one.
+    var held: [String] = []
+    @ObservationIgnored var releasedAfter: String??
 
     init(kind: String?, model: String? = nil, effort: String? = nil, space: String? = nil) {
         (self.kind, self.model, self.effort, self.space) = (kind, model, effort, space)

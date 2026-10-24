@@ -15,11 +15,12 @@ import WebKit
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a Claude Code never
     /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
-    /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, "ask-first"
+    /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "counters bigger" retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
-    /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, and "weather corner" starts
-    /// editing it and never ends its turn.
+    /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" starts
+    /// editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then checks it
+    /// and never ends its turn. An interrupt ends the running turn as Claude Code does.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -29,11 +30,26 @@ import WebKit
       echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"claude-example\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_$1\",\"name\":\"$2\",\"input\":$3}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
       echo "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"toolu_$1\",\"type\":\"tool_result\",\"content\":\"Invented.\",\"is_error\":false}]},\"parent_tool_use_id\":null,\"uuid\":\"r$1\",\"session_id\":\"s1\"}"
     }
+    # Writes its arguments, each a line, once $HOME/out/finish appears, while this fake runs; it reads on meanwhile.
+    later() {
+      ( while kill -0 $$ 2>/dev/null && [ ! -f "$HOME/out/finish" ]; do sleep 0.1; done
+        if [ -f "$HOME/out/finish" ]; then rm -f "$HOME/out/finish"; printf '%s\n' "$@"; fi ) &
+    }
+    done='{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u9"}'
+    idle='{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u10","session_id":"s1"}'
     while IFS= read -r line; do
       printf '%s\n' "$line" >> "$HOME/out/input"
       case "$line" in
         *'go-slow'*'"type":"user"'*)
-          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}' ;;
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          later "$done" "$idle" ;;
+        *'masthead smaller'*'"type":"user"'*)
+          tool m1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          tool m2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          echo '{"type":"assistant","message":{"id":"msg_m3","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_m3","name":"Bash","input":{"command":"something check brief"}}]},"parent_tool_use_id":null,"uuid":"am3","session_id":"s1"}' ;;
+        *'"subtype":"interrupt"'*)
+          echo '{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_tools","session_id":"s1","uuid":"u8"}'
+          echo '{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u7","session_id":"s1"}' ;;
         *'small game'*'"type":"user"'*)
           tool 1 Bash '{"command":"something guide --print"}'
           tool 2 Bash '{"command":"something new stack"}'
@@ -65,7 +81,8 @@ import WebKit
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"ub3"}' ;;
         *'weather corner'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
-          echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}' ;;
+          echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
+          later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
         *'"subtype":"initialize"'*)
           echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
         *'sign-in-please'*'"type":"user"'*)
@@ -75,7 +92,8 @@ import WebKit
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' ;;
         *'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_1","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Invented reply."}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'
-          echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Invented reply.","session_id":"s1","uuid":"u3"}' ;;
+          echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Invented reply.","session_id":"s1","uuid":"u3"}'
+          echo "$idle" ;;
         *'"subtype":"end_session"'*)
           echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-end"}}'
           exit 0 ;;
@@ -376,6 +394,49 @@ import WebKit
         #expect(!model.launching && model.light == .off)
         try await Task.sleep(for: .seconds(1))
         #expect(model.engine.assistants.count == 1 && model.id == nil, "a stopped launch started an agent")
+        await finish(home, model)
+    }
+
+    /// A message written while a turn runs is held by the app, not sent: it leaves once, when the turn ends. Take Back
+    /// and Stop give the held text back to the field, and nothing of it reaches the agent.
+    @Test func aMessageWaitsForTheTurnToEnd() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        let sent = { (text: String) in self.input(home).filter { $0.contains(#""type":"user""#) && $0.contains(text) }.count }
+        let end = home.root.appendingPathComponent("out/finish")
+        model.draft = "go-slow, first."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" }))
+        model.draft = "Second message."
+        model.send()
+        #expect(model.draft.isEmpty && model.held == ["Second message."] && model.placeholder == "Write another request…")
+        #expect(model.messageCount == 1, "a held message is not yet in the conversation")
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(sent("Second message.") == 0, "held while the turn runs")
+        // The turn ends: the held message leaves, once, with the context line of where it was written.
+        try Data().write(to: end)
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "about My agents", text: "Second message.")) && model.light == .ready }), "\(model.rows) \(model.light) \(String(describing: model.agent?.state))")
+        #expect(model.held.isEmpty && sent(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nSecond message."#) == 1)
+        // Take Back: the text returns to the field, after what it holds.
+        model.draft = "go-slow, second."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" }))
+        model.draft = "Taken back."
+        model.send()
+        model.draft = "Still here"
+        model.takeBack()
+        #expect(model.held.isEmpty && model.draft == "Still here\nTaken back.")
+        // Stop: the turn ends and the held text is back in the field; nothing leaves when the turn has ended.
+        model.draft = "Stopped back."
+        model.send()
+        #expect(model.held == ["Stopped back."] && model.stops)
+        model.stop()
+        #expect(model.held.isEmpty && model.draft == "Stopped back.")
+        #expect(await wait(until: { model.agent?.state == "interrupted" && !model.working }))
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(sent("Taken back.") == 0 && sent("Stopped back.") == 0 && sent("Second message.") == 1)
         await finish(home, model)
     }
 

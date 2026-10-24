@@ -87,8 +87,9 @@ struct AcceptanceAssistant {
         _ = await wait(until: { stopped })
     }
     /// Daily brief open in a window of `stage`, its assistant the fake claude: it answered "Put the agents that wait for
-    /// me first." with Opus 5.5 at high effort, then started the weather corner, an edit that never ends; the clock
-    /// stays at the moment the line is drawn, so it never says "Still working". The caller closes the space.
+    /// me first." with Opus 5.5 at high effort, then started the weather corner, an edit that ends only once
+    /// $HOME/out/finish appears; the clock stays at the moment the line is drawn, so it never says "Still working". The
+    /// caller closes the space.
     static func atWork(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
         let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
@@ -116,7 +117,43 @@ struct AcceptanceAssistant {
         view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? fields(in: $0) }
     }
     @Test("c3: a thread kept after sleep", .disabled("not built yet: AB10")) func c3() async throws {}
-    @Test("c4: still working, Stop", .disabled("not built yet: AB07")) func c4() async throws {}
+    /// Daily brief open with its card and conversation: "Make the masthead smaller and calmer." was written while the
+    /// weather corner ran, held by the app, and left when that turn ended; the fake claude read and edited brief.html
+    /// and now checks the page, a turn that never ends. 11 s into it the line says "Still working" and offers Stop ⌘.;
+    /// the empty field's Send is Stop.
+    @Test("c4: still working, Stop") func c4() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.atWork(stage)
+        defer { brief.close() }
+        let model = shell.assistant, engine = model.engine
+        model.focus()
+        shell.toggleConversation(nil)
+        model.draft = "Make the masthead smaller and calmer."
+        model.send()
+        #expect(model.held == ["Make the masthead smaller and calmer."])
+        try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { model.presence.now == .working("Checking the page…", late: false) }), "said: \(model.presence.word)")
+        #expect(model.held.isEmpty && model.rows.contains(.mine(caption: "about Daily brief", text: "Make the masthead smaller and calmer.")))
+        #expect(model.rows.suffix(2) == [.tool(failed: false, words: "Read brief.html", command: nil), .tool(failed: false, words: "Edited brief.html", command: nil)])
+        // 11 s later, by the card's clock: the time alone changes the line.
+        let later = Date().addingTimeInterval(11)
+        model.clock = { later }
+        model.tick()
+        #expect(model.presence.now == .working("Checking the page…", late: true) && model.presence.header == "Working")
+        #expect(model.messageCount == 4 && model.placeholder == "Write your next request · it waits for this one")
+        #expect(model.stops && !model.canSend && model.presence.stopHelp == Keys.tooltip("stop"))
+        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "c4" + suffix, root: stage.home.root)
+        }
+        // Stop pauses the turn; the agent stays for the next message.
+        model.stop()
+        #expect(await wait(until: { model.agent?.state == "interrupted" && !model.working && model.agent?.alive == true }))
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     @Test("c5: model and effort", .disabled("not built yet: AB11")) func c5() async throws {}
     @Test("c6: one assistant per space", .disabled("not built yet: AB09b")) func c6() async throws {}
     /// Project watch open, its assistant reduced to the sticker with the label shown, in each of the seven states its
@@ -215,5 +252,39 @@ struct AcceptanceAssistant {
             try await Picture.window(shell, library: library, web: logbook.web, "c9" + suffix, root: stage.home.root)
         }
     }
-    @Test("c10: a message held by the app", .disabled("not built yet: AB07")) func c10() async throws {}
+    /// Daily brief open with its card and conversation while the weather corner runs: "Also make the date bigger." is
+    /// held by the app, outlined after the conversation with "Sends when it finishes · Take Back"; folded, the
+    /// conversation leaves a strip above the field (c10-folded). Take Back gives the text back to the field.
+    @Test("c10: a message held by the app") func c10() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.atWork(stage)
+        defer { brief.close() }
+        let model = shell.assistant, engine = model.engine
+        model.focus()
+        shell.toggleConversation(nil)
+        model.draft = "Also make the date bigger."
+        model.send()
+        #expect(model.held == ["Also make the date bigger."] && model.draft.isEmpty)
+        #expect(model.placeholder == "Write another request…" && model.messageCount == 3)
+        #expect(model.stops && model.presence.now == .working("Editing brief.html…", late: false))
+        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "c10" + suffix, root: stage.home.root)
+        }
+        shell.toggleConversation(nil)
+        #expect(!model.threadShown && model.held.count == 1)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "c10-folded" + suffix, root: stage.home.root)
+        }
+        // Nothing of it reached the agent; Take Back puts it back in the field.
+        let input = (try? String(contentsOf: stage.home.root.appendingPathComponent("out/input"), encoding: .utf8)) ?? ""
+        #expect(!input.contains("Also make the date bigger."))
+        model.takeBack()
+        #expect(model.held.isEmpty && model.draft == "Also make the date bigger.")
+        #expect(model.placeholder == "Write your next request · it waits for this one")
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
 }

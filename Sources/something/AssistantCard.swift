@@ -1,8 +1,9 @@
 // The assistant's card, 412 points at the bottom right of the center, over the space: its header (the eyes of its
 // state, the space's title as the conversation menu, the state word, Reduce and the grip), the conversation (⌘J: your
-// bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days), one notice when it is
-// stuck or waits for you, the present-tense line while it works, and the composer: the agent and model chips (views
-// New Space reuses), Point's slot, the conversation toggle and a flat field whose Send turns into Stop. Its words are
+// bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days, the messages held for the
+// turn's end outlined with Take Back), one notice when it is stuck or waits for you, the present-tense line while it
+// works, and the composer: the agent and model chips (views New Space reuses), Point's slot, the conversation toggle,
+// the held messages' strip while the conversation is folded, and a flat field whose Send turns into Stop. Its words are
 // the model's and Presence's; the card keeps only the field's focus. A request is never answered here: the notice
 // leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it reach the space.
 import AppKit
@@ -101,6 +102,25 @@ struct AssistantCard: View {
                 }
                 .padding(.bottom, 4)
                 ForEach(Array(model.rows.enumerated()), id: \.offset) { _, row in line(row) }
+                ForEach(Array(model.held.enumerated()), id: \.offset) { _, text in
+                    Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).foregroundStyle(Look.Token.ink2.ui)
+                        .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
+                        .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18)
+                            .strokeBorder(Look.Token.line2.ui))
+                        .padding(.leading, 50)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                if !model.held.isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "clock").font(.system(size: 9.5))
+                        Text("Sends when it finishes")
+                        Button("Take Back") { model.takeBack() }.buttonStyle(.plain)
+                            .font(Look.font(.ui, size: 10.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
+                            .padding(.horizontal, 5).padding(.leading, 4)
+                    }
+                    .font(Look.font(.ui, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui)
+                    .frame(maxWidth: .infinity, alignment: .trailing).padding(.top, -4)
+                }
             }
             .padding(EdgeInsets(top: 2, leading: 14, bottom: 14, trailing: 14))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,6 +217,26 @@ struct AssistantCard: View {
 
     // MARK: The composer
 
+    /// What waits for the turn's end while the conversation is folded, and Take Back.
+    private var heldStrip: some View {
+        let count = model.held.count
+        return HStack(spacing: 7) {
+            Image(systemName: "clock").font(.system(size: 10.5))
+            (Text("\(count) message\(count > 1 ? "s" : "") wait\(count > 1 ? "" : "s")").fontWeight(.semibold).foregroundColor(Look.Token.ink.ui)
+                + Text(" · sends when it finishes"))
+                .lineLimit(1).truncationMode(.tail)
+            Spacer(minLength: 0)
+            Button { model.takeBack() } label: {
+                Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 22).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink3.ui).help("Take Back").accessibilityLabel("Take back the waiting message")
+        }
+        .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
+        .padding(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 3))
+        .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: Look.control + 2, style: .continuous))
+        .padding(.bottom, 6)
+    }
+
     private var composer: some View {
         VStack(spacing: 0) {
             HStack(spacing: 1) {
@@ -221,6 +261,7 @@ struct AssistantCard: View {
                 .accessibilityAddTraits(model.threadShown ? .isSelected : [])
             }
             .padding(.bottom, 4)
+            if !model.threadShown, !model.held.isEmpty { heldStrip }
             Field(model: model)
         }
         .padding(EdgeInsets(top: 2, leading: 8, bottom: 8, trailing: 8))
@@ -273,8 +314,8 @@ struct Field: View {
             }
             .buttonStyle(.plain)
             .disabled(!model.canSend && !stop)
-            .help(stop ? model.presence.stopHelp : "Send (Return)")
-            .accessibilityLabel(stop ? "Stop" : "Send")
+            .help(stop ? model.presence.stopHelp : model.working ? "Send when it finishes (Return)" : "Send (Return)")
+            .accessibilityLabel(stop ? "Stop" : model.working ? "Send when it finishes" : "Send")
         }
         .padding(EdgeInsets(top: 5, leading: 4, bottom: 5, trailing: 5))
         .background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: Look.control + 5, style: .continuous))
@@ -462,7 +503,8 @@ extension AssistantModel {
 
     /// The presence of this conversation's agent now.
     var presence: Presence {
-        Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped),
+        _ = beat
+        return Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped),
                  agent: agent, turn: session.turn, now: clock())
     }
 

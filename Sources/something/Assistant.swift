@@ -1,8 +1,8 @@
 // The person's assistant as the window shows it: the coding agent that builds spaces with them in
 // ~/something/spaces. The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change;
 // the knowledge files written into the spaces folder; the agent launched at the first message, never before, and told
-// at each message which space is open; Stop, New Conversation, the stop after 30 idle minutes, the switch to another
-// builder, and what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words
+// at each message which space is open; a message written while a turn runs held until it ends, and Take Back; Stop, New
+// Conversation, the stop after 30 idle minutes, the switch to another builder, and what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words
 // something writes to it on its own are its context line and Ask to Fix, never a page's text.
 import AppKit
 import Observation
@@ -91,6 +91,12 @@ import SomethingCore
     @ObservationIgnored var program = Bundle.main.executableURL
     @ObservationIgnored private var active = Date()
     @ObservationIgnored private var timer: Timer?
+    /// The presence changes with time alone twice: Stop is offered 10 s into a turn, and "Changed …" leaves 3.6 s after
+    /// it. A one-shot timer moves `beat` then, which the presence reads, so the card and the sticker ask again; no timer
+    /// runs at rest. `beatAt` is the moment it was set for.
+    private(set) var beat = 0
+    @ObservationIgnored private var beatTimer: Timer?
+    @ObservationIgnored private var beatAt: Date?
 
     init(engine: Engine, places: Places) {
         self.engine = engine
@@ -136,6 +142,13 @@ import SomethingCore
         if !offered.contains(kind ?? "") { session.kind = offered.first { $0 == preferred } ?? offered.first }
         session.read(state)
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
+        keepTime()
+        // A turn ended: the oldest held message leaves, one per turn, as the mockup sends them.
+        if let next = session.held.first, light == .ready, !launching, session.releasedAfter != .some(session.turn?.id) {
+            session.held.removeFirst()
+            session.releasedAfter = .some(session.turn?.id)
+            return deliver(next)
+        }
         guard let before, !launching else { return }
         let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
         if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
@@ -143,6 +156,21 @@ import SomethingCore
             self.before = nil
         }
     }
+
+    /// Sets the one-shot timer for the next moment the presence changes by itself, if there is one.
+    private func keepTime() {
+        let turn = session.turn
+        let at = working ? turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
+            : turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor }
+        guard at != beatAt else { return }
+        beatTimer?.invalidate()
+        (beatTimer, beatAt) = (nil, at)
+        guard let wait = at?.timeIntervalSince(clock()), wait > 0 else { return }
+        beatTimer = Timer.scheduledTimer(withTimeInterval: wait + 0.05, repeats: false) { [weak self] _ in self?.tick() }
+    }
+
+    /// The presence is asked again: the time alone changed it.
+    func tick() { beat += 1 }
 
     private func keep<Value: Equatable>(_ property: ReferenceWritableKeyPath<AssistantModel, Value>, _ value: Value) {
         if self[keyPath: property] != value { self[keyPath: property] = value }
@@ -217,6 +245,7 @@ import SomethingCore
         switch place {
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _):
+            if !held.isEmpty { return "Write another request…" }
             if working { return "Write your next request · it waits for this one" }
             return presence.state == .sleep ? "Ask for a change · it wakes up" : "Ask \(AssistantModel.clean(title))'s assistant for a change…"
         case .blank: return "Describe the space you want…"
@@ -261,6 +290,10 @@ import SomethingCore
         guard !text.isEmpty, kind != nil else { return }
         if sentence == nil { draft = "" }
         fromTemplate = nil
+        // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
+        if session.id != nil, !launching, working {
+            return session.held.append(AssistantModel.context(place, home: places.home.path) + "\n" + text)
+        }
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
             (before, threadShown) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session.turn?.id), true)
@@ -287,18 +320,33 @@ import SomethingCore
 
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
+    /// The held messages go back into the field: nothing is sent behind the person's back.
     func stop() {
+        takeBack()
         if launching { return endLaunch() }
         guard let id, working else { return }
         if agent?.can.interrupt == false { return halt() }
         _ = try? engine.interrupt(id)
     }
 
-    /// Ends the conversation: its agent stops, and the next message starts a new one.
+    /// Ends the conversation: its agent stops, the held messages go back into the field, and the next message starts a
+    /// new one.
     func newConversation() {
+        takeBack()
         halt()
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         (before, ready) = (nil, nil)
+    }
+
+    /// The messages held for the end of the turn, as the person wrote them.
+    var held: [String] { session.held.map { AssistantModel.shown($0).text } }
+
+    /// Take Back: the held messages go back into the field, after what it holds, and are never sent.
+    func takeBack() {
+        guard !session.held.isEmpty else { return }
+        draft = ([draft.trimmingCharacters(in: .whitespacesAndNewlines)] + held).filter { !$0.isEmpty }.joined(separator: "\n")
+        session.held = []
+        wantsFocus = true
     }
 
     /// Relaunches, then sends the last message again.
