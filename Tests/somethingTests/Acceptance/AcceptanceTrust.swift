@@ -396,16 +396,21 @@ struct AcceptanceTrust {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let entry = try #require(library.entry("brief"))
-        let sheet = Ask.trash(entry, remembers: library.remembers("brief"), messages: 3)
+        let sheet = Ask.trash(entry, remembers: library.remembers("brief"))
         #expect(sheet.title == "Move Daily brief and its memory to the Trash?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
         #expect(PanelsTests.texts(sheet.contentView) == ["Move Daily brief and its memory to the Trash?", "These go with it:",
                                                          "Its page", "brief.html", "What it remembers", "12 entries",
-                                                         "Its assistant's conversation", "3 messages",
                                                          "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Move to Trash"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
-        let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"), messages: 1)
-        #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant's conversation", "1 message"])
+        let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"))
+        #expect(Array(PanelsTests.texts(empty.contentView)[3...5]) == ["pet.html", "What it remembers", "nothing yet"])
+        // The balanced title keeps the two lines it has at the full column, as the field itself draws them.
+        let title = try #require(Self.fields(sheet.contentView).first { $0.stringValue == sheet.title })
+        let full = try #require(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: Sheet.column(), height: 10_000)).height)
+        let line = try #require(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: 10_000, height: 10_000)).height)
+        #expect(title.fittingSize.height.rounded(.up) == full.rounded(.up) && full > line * 1.5 && full < line * 2.5)
+        #expect(title.preferredMaxLayoutWidth < Sheet.column())
         try await stage.appearances { suffix in
             try await Picture.sheet(sheet, over: shell, library: library, web: brief.web, "e8" + suffix, root: stage.home.root)
         }
@@ -416,8 +421,11 @@ struct AcceptanceTrust {
         let trash = stage.home.root.appendingPathComponent("Trash")
         library.recycle = { try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
             try FileManager.default.moveItem(at: $0, to: trash.appendingPathComponent($0.lastPathComponent)) }
-        sheet.ended = { [weak window = shell.window, unowned sheet] in window?.endSheet(sheet) }
-        shell.window.beginSheet(sheet) { _ in if sheet.chosen == .destructive { library.trash("brief") } }
+        let kept = Ask.trash(entry, remembers: 12)
+        kept.hang(on: shell.window) { if $0 == .destructive { library.trash("brief") } }
+        kept.buttons[0].performClick(nil)
+        #expect(await wait(until: { shell.window.attachedSheet == nil }) && library.entry("brief") != nil, "Cancel keeps the space")
+        sheet.hang(on: shell.window) { if $0 == .destructive { library.trash("brief") } }
         sheet.buttons[1].performClick(nil)
         #expect(await wait(until: { library.entry("brief") == nil }) && shell.window.attachedSheet == nil)
         #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["brief.html", "brief.json"])

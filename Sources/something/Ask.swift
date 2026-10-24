@@ -88,10 +88,7 @@ final class NativeAsk: Asking {
 
     /// The role of the action the person pressed in `sheet`; nil when it was not shown.
     private func wait(_ sheet: Sheet) -> Sheet.Role? {
-        _ = wait(sheet) { window, done in
-            sheet.ended = { [weak window, unowned sheet] in window?.endSheet(sheet) }
-            window.beginSheet(sheet, completionHandler: done)
-        }
+        _ = wait(sheet) { window, done in sheet.hang(on: window) { _ in done(.stop) } }
         return sheet.chosen
     }
 
@@ -399,14 +396,14 @@ enum Ask {
         return alert
     }
 
-    /// The sheet before Move to Trash: what goes with the space, its page, how many entries its memory holds (nil when
-    /// it does not read) and how many messages its assistant's conversation has; then Cancel and Move to Trash.
-    static func trash(_ entry: Library.Entry, remembers: Int?, messages: Int) -> Sheet {
+    /// The sheet before Move to Trash: what goes with the space, its page and how many entries its memory holds (nil
+    /// when it does not read); then Cancel and Move to Trash. The assistant's conversation joins the rows only when it
+    /// belongs to the space and goes with it (AB09b): until then every space shares it, and the Trash leaves it.
+    static func trash(_ entry: Library.Entry, remembers: Int?) -> Sheet {
         let page = entry.space.location.lastPathComponent + (entry.space.form == .folder ? "/" : "")
         let memory = remembers.map { $0 == 0 ? "nothing yet" : "\($0) entr\($0 == 1 ? "y" : "ies")" } ?? "does not read"
         return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
-                     rows: [("doc", "Its page", page), ("square.3.layers.3d", "What it remembers", memory),
-                            ("bubble.left", "Its assistant's conversation", messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")],
+                     rows: [("doc", "Its page", page), ("square.3.layers.3d", "What it remembers", memory)],
                      fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
     }

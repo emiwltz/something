@@ -30,7 +30,7 @@ final class Sheet: NSPanel {
         let tiled = icon.map { Self.tile($0, alert: alert) }
         let text = Self.column(width: width, alert: alert, tiled: tiled != nil)
         let heading = Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)
-        heading.preferredMaxLayoutWidth = Self.balanced(heading.attributedStringValue, width: text)
+        heading.preferredMaxLayoutWidth = Self.balanced(heading, width: text)
         var parts: [NSView] = [heading]
         if !body.isEmpty { parts.append(Self.label(body, Look.body, color: .ink2, width: text, centred: alert)) }
         if !rows.isEmpty { parts.append(Self.list(rows, width: text)) }
@@ -66,6 +66,14 @@ final class Sheet: NSPanel {
 
     override var canBecomeKey: Bool { true }
 
+    /// Hangs the sheet from `window`; once an action was pressed it is taken away, and `then` gets that action's role,
+    /// or nil when the sheet was ended otherwise (Quit ends an open question as its Cancel would).
+    func hang(on window: NSWindow, then: @escaping (Role?) -> Void) {
+        ended = { [weak window, unowned self] in window?.endSheet(self) }
+        // The handler holds the sheet until it ran: nothing else may keep it once it is off the window.
+        window.beginSheet(self) { _ in then(self.chosen) }
+    }
+
     @objc private func press(_ sender: SheetButton) {
         guard chosen == nil else { return }
         chosen = sender.role
@@ -89,9 +97,10 @@ final class Sheet: NSPanel {
 
     /// The narrowest width up to `width` that keeps `text` on as many lines as `width` does: the mockup balances the
     /// lines of a title (text-wrap: balance) rather than leave one word alone on the last.
-    static func balanced(_ text: NSAttributedString, width: CGFloat) -> CGFloat {
+    /// The field's own cell measures, so the width chosen wraps as the field draws.
+    static func balanced(_ field: NSTextField, width: CGFloat) -> CGFloat {
         func height(_ wide: CGFloat) -> CGFloat {
-            text.boundingRect(with: NSSize(width: wide, height: 10_000), options: .usesLineFragmentOrigin).height.rounded(.up)
+            field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: wide, height: 10_000)).height.rounded(.up) ?? 0
         }
         let lines = height(width)
         var (low, high) = (width / 2, width)
