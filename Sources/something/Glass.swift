@@ -1,9 +1,10 @@
 // The glass: a pass-through layer over the center that holds the open space's assistant, either the 44-point sticker
-// in the bottom right corner or the card grown from it. The sticker is the sign on a surface with the hard offset
-// shadow (it is grabbed): its eyes say the assistant's state, a badge counts only this space's requests (the Dock and
-// the toolbar's chip count every one), and a label beside it says in words what it does, on hover or focus. A click,
-// Return or ⌘K grows the card from the sticker's corner; ⌘\, Esc or Reduce shrinks it back, and the focus returns to
-// the page. The sticker is only over a space: on the blank page and the templates the card stands alone, as the window
+// or the card grown from it. The sticker is the sign on a surface with the hard offset shadow (it is grabbed): its
+// eyes say the assistant's state, a badge counts only this space's requests (the Dock and the toolbar's chip count
+// every one), and a label beside it says in words what it does, on hover or focus. It drags, its eyes leaning with the
+// motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for every space,
+// kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the sticker's corner;
+// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. The sticker is only over a space: on the blank page and the templates the card stands alone, as the window
 // shows it, and over the tour there is neither.
 import AppKit
 import Observation
@@ -11,6 +12,10 @@ import Observation
 final class Glass: WindowLayer {
     /// The sticker's side and its distance from the center's edges.
     static let side: CGFloat = 44, margin: CGFloat = 16
+    /// How near the top or the bottom a sticker let go clings there; how far its eyes lean while it moves.
+    static let magnet: CGFloat = 44, lean: CGFloat = 3
+    /// The sticker's first place, and its place off a space, where the card stands alone: the bottom trailing corner.
+    static let first = Preferences.StickerPlace(trailing: true, bottom: true, offset: Double(margin))
     let model: AssistantModel
     let sticker = Sticker(), label = Tag()
     let card: CardHost
@@ -31,6 +36,15 @@ final class Glass: WindowLayer {
     private(set) var morphing = false
     /// The count of moves begun: a move cut short by the next one ends, and only the last one's end counts.
     private var moves = 0
+    /// Where the sticker rests over every space; nil at its first place. Its edges hold it when the center resizes.
+    var spot: Preferences.StickerPlace? { didSet { if spot != oldValue { place() } } }
+    /// Called with the sticker's new place when a drag lets it go: the shell keeps it in Preferences.
+    var moved: (Preferences.StickerPlace) -> Void = { _ in }
+    /// The surface's origin while a drag holds it, and where it was when the drag began.
+    private(set) var held: NSPoint?
+    private var grabbed: NSPoint?
+    /// Whether the sticker, let go, is on its way to its side: its frame is the animation's meanwhile.
+    private(set) var snapping = false
 
     init(over center: NSView, model: AssistantModel) {
         self.model = model
@@ -41,6 +55,8 @@ final class Glass: WindowLayer {
         (card.isHidden, label.isHidden) = (true, true)
         sticker.opened = { [weak self] in self?.model.focus() }
         sticker.hovered = { [weak self] _ in self?.say() }
+        sticker.dragged = { [weak self] total, step in self?.drag(total, step) }
+        sticker.dropped = { [weak self] in self?.drop() }
         (sticker.badge.target, sticker.badge.action) = (self, #selector(showRequest))
         card.resized = { [weak self] in self?.place() }
         watch()
@@ -48,9 +64,66 @@ final class Glass: WindowLayer {
 
     required init?(coder: NSCoder) { nil }
 
-    /// The sticker's surface: `side` square, `margin` from the right and bottom edges.
+    /// The sticker's surface: `side` square, where a drag holds it, else at its place (over a space) or its first.
     var corner: NSRect {
-        NSRect(x: bounds.width - Glass.margin - Glass.side, y: Glass.margin, width: Glass.side, height: Glass.side)
+        let origin = held ?? Glass.origin(of: onSpace ? spot ?? Glass.first : Glass.first, in: room)
+        return NSRect(origin: origin, size: NSSize(width: Glass.side, height: Glass.side))
+    }
+
+    /// Where the sticker moves: the center under the toolbar.
+    private var room: NSSize { NSSize(width: bounds.width, height: max(0, bounds.height - (superview?.safeAreaInsets.top ?? 0))) }
+
+    /// The surface's origin at `place` in a room of `size` (origin at the bottom left), kept `margin` inside it.
+    static func origin(of place: Preferences.StickerPlace, in size: NSSize) -> NSPoint {
+        let maxX = max(margin, size.width - side - margin), maxY = max(margin, size.height - side - margin)
+        let y = place.bottom ? CGFloat(place.offset) : size.height - side - CGFloat(place.offset)
+        return NSPoint(x: place.trailing ? maxX : margin, y: min(max(y, margin), maxY))
+    }
+
+    /// The place of a sticker let go with its surface at `origin` in a room of `size`: against the nearest side,
+    /// `margin` in, against the top or the bottom when within `magnet` of it, and held by the nearer of those two edges.
+    static func magnet(_ origin: NSPoint, in size: NSSize) -> Preferences.StickerPlace {
+        let maxY = max(margin, size.height - side - margin)
+        var y = min(max(origin.y, margin), maxY)
+        if y - margin < magnet { y = margin } else if maxY - y < magnet { y = maxY }
+        let bottom = y + side / 2 <= size.height / 2
+        return Preferences.StickerPlace(trailing: origin.x + side / 2 >= size.width / 2, bottom: bottom,
+                                        offset: Double(bottom ? y : size.height - side - y))
+    }
+
+    /// The sticker follows the pointer `total` from where it was grabbed, kept 6 points inside the room, its eyes
+    /// leaning half the last `step`, at most `lean` points.
+    private func drag(_ total: CGSize, _ step: CGSize) {
+        let start = grabbed ?? corner.origin, size = room
+        grabbed = start
+        held = NSPoint(x: min(max(start.x + total.width, 6), max(6, size.width - Glass.side - 6)),
+                       y: min(max(start.y + total.height, 6), max(6, size.height - Glass.side - 6)))
+        func lean(_ v: CGFloat) -> CGFloat { min(max(v * 0.5, -Glass.lean), Glass.lean) }
+        // The sign is drawn flipped: up on the screen is down in it.
+        sticker.sign.lean = CGSize(width: lean(step.width), height: lean(-step.height))
+        say()
+        place()
+    }
+
+    /// Lets the sticker go: it goes to its place by the magnet, kept for every space, calmly or at once.
+    private func drop() {
+        guard let origin = held else { return }
+        let spot = Glass.magnet(origin, in: room), from = sticker.frame
+        (held, grabbed, sticker.sign.lean) = (nil, nil, .zero)
+        self.spot = spot
+        moved(spot)
+        let to = corner.insetBy(dx: -Sticker.room, dy: -Sticker.room), duration = Look.duration(0.42, Look.motion(motion()))
+        guard duration > 0, from != to else { return say() }
+        (sticker.frame, snapping) = (from, true)
+        NSAnimationContext.runAnimationGroup({ context in
+            (context.duration, context.timingFunction, context.allowsImplicitAnimation) = (duration, Look.out.timing, true)
+            sticker.animator().frame = to
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            snapping = false
+            place()
+            say()
+        })
     }
 
     /// Whether the sticker is shown: over a space, the card closed.
@@ -86,7 +159,7 @@ final class Glass: WindowLayer {
 
     /// The label beside the sticker, shown while the pointer is over it or it has the focus, the card closed.
     private func say() {
-        let on = sticker.hovering && stickerShown && grown != true && !morphing
+        let on = sticker.hovering && stickerShown && grown != true && !morphing && held == nil && !snapping
         label.isHidden = !on
         guard on, let presence = sticker.presence else { return }
         label.say(title: sticker.title, words: Glass.words(presence, mine: mine))
@@ -146,21 +219,25 @@ final class Glass: WindowLayer {
     private var shrunk: NSRect { corner.insetBy(dx: -AssistantCard.margin, dy: -AssistantCard.margin) }
 
     /// The card's frame grown: as wide as it is drawn (narrower in a narrow center), as high as it asks under the
-    /// toolbar, its bottom right corner the sticker's (with its margin).
+    /// toolbar, its corner nearest the sticker's middle the sticker's (with its margin), kept inside the room.
     private var grownFrame: NSRect {
-        let size = card.intrinsicContentSize, top = superview?.safeAreaInsets.top ?? 0
-        let width = min(AssistantCard.width + 2 * AssistantCard.margin, bounds.width)
-        let height = max(0, min(size.height, bounds.height - top))
-        return NSRect(x: corner.maxX + AssistantCard.margin - width, y: corner.minY - AssistantCard.margin, width: width, height: height)
+        let size = room, sticker = corner, margin = AssistantCard.margin
+        let width = min(AssistantCard.width + 2 * margin, size.width), height = max(0, min(card.intrinsicContentSize.height, size.height))
+        let x = sticker.midX >= size.width / 2 ? sticker.maxX + margin - width : sticker.minX - margin
+        let y = sticker.midY <= size.height / 2 ? sticker.minY - margin : sticker.maxY + margin - height
+        return NSRect(x: min(max(x, 0), size.width - width), y: min(max(y, 0), size.height - height), width: width, height: height)
     }
 
     /// Places the sticker, its label and the card, except while the card moves between them.
     func place() {
         let surface = corner, room = Sticker.room
-        if sticker.frame != surface.insetBy(dx: -room, dy: -room) { sticker.frame = surface.insetBy(dx: -room, dy: -room) }
+        if !snapping, sticker.frame != surface.insetBy(dx: -room, dy: -room) { sticker.frame = surface.insetBy(dx: -room, dy: -room) }
+        // The label on the side of the sticker toward the middle.
         if !label.isHidden {
-            let size = label.fittingSize, width = min(size.width, max(0, surface.minX - 10 - 8))
-            label.frame = NSRect(x: surface.minX - 10 - width, y: surface.midY - size.height / 2, width: width, height: size.height)
+            let size = label.fittingSize, trailing = surface.midX >= bounds.width / 2
+            let width = min(size.width, max(0, trailing ? surface.minX - 10 - 8 : bounds.width - surface.maxX - 10 - 8))
+            label.frame = NSRect(x: trailing ? surface.minX - 10 - width : surface.maxX + 10, y: surface.midY - size.height / 2,
+                                 width: width, height: size.height)
         }
         guard !morphing else { return }
         let frame = grown == true ? grownFrame : shrunk
@@ -184,6 +261,13 @@ final class Sticker: NSView {
     /// Called to open the card, and when the pointer or the focus comes or goes.
     var opened: () -> Void = {}
     var hovered: (Bool) -> Void = { _ in }
+    /// Called as a drag moves it, with the pointer's way since the press and since the last move, and when it ends.
+    var dragged: (CGSize, CGSize) -> Void = { _, _ in }
+    var dropped: () -> Void = {}
+    /// Where the press began and the pointer last was, in the window; whether it has moved 4 points, which makes it
+    /// a drag rather than a click.
+    private var press: NSPoint?, last = NSPoint.zero
+    private(set) var dragging = false
     /// How many of its space's requests wait; the badge hides at 0.
     var mine = 0 {
         didSet { badge.count = mine; badge.isHidden = mine == 0; place() }
@@ -237,7 +321,7 @@ final class Sticker: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        Sign.grab(surface, radius: Sticker.radius, lift: pointed ? .held : .rest)
+        Sign.grab(surface, radius: Sticker.radius, lift: pointed || dragging ? .held : .rest)
     }
 
     /// The badge answers for itself, the surface for the sticker; the shadow and the room around let the page have it.
@@ -264,11 +348,33 @@ final class Sticker: NSView {
         hovered(hovering)
     }
 
-    // AB06 tells a drag from a click; until then a press that ends on the sticker opens the card.
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) {
-        if surface.contains(convert(event.locationInWindow, from: nil)) { opened() }
+    // Overrides rather than a loop on the window's events: a test drives them, and the main loop keeps turning.
+    override func mouseDown(with event: NSEvent) {
+        (press, last, dragging) = (event.locationInWindow, event.locationInWindow, false)
     }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let press else { return }
+        let at = event.locationInWindow
+        guard dragging || hypot(at.x - press.x, at.y - press.y) >= 4 else { return }
+        if !dragging { dragging = true; needsDisplay = true; NSCursor.closedHand.set() }
+        dragged(CGSize(width: at.x - press.x, height: at.y - press.y), CGSize(width: at.x - last.x, height: at.y - last.y))
+        last = at
+    }
+
+    /// A press let go: the end of a drag, or a click when it moved less than 4 points and ends on the surface.
+    override func mouseUp(with event: NSEvent) {
+        defer { press = nil }
+        guard !dragging else {
+            dragging = false
+            needsDisplay = true
+            NSCursor.arrow.set()
+            return dropped()
+        }
+        if press != nil, surface.contains(convert(event.locationInWindow, from: nil)) { opened() }
+    }
+
+    override func resetCursorRects() { addCursorRect(surface, cursor: .openHand) }
 
     override var acceptsFirstResponder: Bool { !isHidden && alphaValue > 0 }
     override func becomeFirstResponder() -> Bool {

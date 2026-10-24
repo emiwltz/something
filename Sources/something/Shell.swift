@@ -83,6 +83,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
+        // One place for the sticker over every space, kept for the next start unless the person asked otherwise.
+        let preferences = library.preferences
+        glass.spot = preferences.rememberSticker ? preferences.sticker : nil
+        glass.moved = { [weak preferences] spot in if preferences?.rememberSticker == true { preferences?.sticker = spot } }
         // The toolbar's lower edge, over the center only: the sidebar runs up to the window's top.
         let edge = NSBox()
         (edge.boxType, edge.borderWidth, edge.fillColor, edge.translatesAutoresizingMaskIntoConstraints) = (.custom, 0, Look.Token.line.color, false)

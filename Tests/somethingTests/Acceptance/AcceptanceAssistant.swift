@@ -170,6 +170,50 @@ struct AcceptanceAssistant {
         }
     }
     @Test("c8: the notice slot", .disabled("not built yet: AB08")) func c8() async throws {}
-    @Test("c9: the sticker dragged", .disabled("not built yet: AB06")) func c9() async throws {}
+    /// Daily brief open, the sticker in its first corner: a drag takes it across the space, its eyes leaning with the
+    /// motion, and lets it go left of the middle; it goes to the leading side at the height it was let go. Logbook
+    /// then opens with the sticker in the same place, the label on its right, while My agents' request is in the chip.
+    @Test("c9: the sticker dragged") func c9() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let glass = shell.glass, sticker = glass.sticker, window = shell.window
+        glass.motion = { .reduced }
+        #expect(await wait(5) { glass.grown == false && glass.stickerShown && glass.corner.maxX == glass.bounds.width - 16 })
+        // The mockup's glide: through 70% across and 55% down the space, then 42% and 34%, let go at 20% and 42%.
+        let room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
+        func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            glass.convert(NSPoint(x: x * room.width, y: room.height - y * room.height), to: nil)
+        }
+        func mouse(_ type: NSEvent.EventType, _ at: NSPoint) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                            context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        let press = glass.convert(NSPoint(x: glass.corner.midX, y: glass.corner.midY), to: nil)
+        sticker.mouseDown(with: try mouse(.leftMouseDown, press))
+        for (x, y) in [(0.7, 0.55), (0.42, 0.34), (0.2, 0.42)] {
+            sticker.mouseDragged(with: try mouse(.leftMouseDragged, point(x, y)))
+            #expect(sticker.dragging && glass.label.isHidden && abs(sticker.sign.lean.width) <= 3 && abs(sticker.sign.lean.height) <= 3)
+        }
+        #expect(sticker.sign.lean == CGSize(width: -3, height: 3), "it moved left and down, the sign drawn flipped")
+        sticker.mouseUp(with: try mouse(.leftMouseUp, point(0.2, 0.42)))
+        let spot = try #require(library.preferences.sticker)
+        #expect(!spot.trailing && !spot.bottom && glass.spot == spot && !shell.assistant.open)
+        #expect(glass.corner.minX == 16 && abs(glass.corner.midY - (room.height - 0.42 * room.height)) < 1, "\(glass.corner)")
+        // Another space: the same place, its label on the side toward the middle.
+        let logbook = try await stage.open("logbook", in: shell, library)
+        defer { logbook.close() }
+        #expect(await wait(5) { glass.stickerShown && sticker.title == "Logbook" })
+        #expect(glass.spot == spot && glass.corner.minX == 16)
+        shell.waiting(1, mine: 0)
+        sticker.mouseEntered(with: try mouse(.mouseMoved, press))
+        #expect(!glass.label.isHidden && glass.label.title == "Logbook" && glass.label.frame.minX == glass.corner.maxX + 10)
+        #expect(glass.label.words == Glass.words(shell.assistant.presence, mine: 0) && sticker.badge.isHidden && shell.chip.count == 1)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: logbook.web, "c9" + suffix, root: stage.home.root)
+        }
+    }
     @Test("c10: a message held by the app", .disabled("not built yet: AB07")) func c10() async throws {}
 }

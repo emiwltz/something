@@ -13,8 +13,9 @@ import Observation
     enum Opening: String, Codable { case reduced, open }
     /// A group of the sidebar: its name and the names of its spaces, in order. The files never move.
     struct Group: Codable, Equatable { var name: String, spaces: [String] }
-    /// Where the sticker rests: against the trailing or the leading side, at `offset` points from the bottom or the
-    /// top edge, so that it keeps its place when the center resizes.
+    /// Where the sticker rests, the same over every space: against the trailing or the leading side, its surface
+    /// `offset` points from the bottom or the top edge of the center under the toolbar, whichever is nearer, so that it
+    /// keeps its place against those edges when the center resizes.
     struct StickerPlace: Codable, Equatable { var trailing: Bool, bottom: Bool, offset: Double }
 
     /// Every value kept. A missing key, or one this version cannot read, has its default.
@@ -29,7 +30,7 @@ import Observation
         var openAtStart = "last"
         var appearance = Appearance.system, motion = Motion.calm, assistantAtOpening = Opening.reduced
         var sidebarEyes = true, rememberSticker = true, holdOption = true, notify = false
-        /// nil while it rests at its first place, the bottom trailing corner.
+        /// nil while it rests at its first place, the bottom trailing corner; kept only while `rememberSticker`.
         var sticker: StickerPlace?
         /// Minutes; 0 for never.
         var sleepAfter = 10

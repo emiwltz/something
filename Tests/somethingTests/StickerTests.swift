@@ -2,7 +2,8 @@
 // sticker and the card, so a click beside them reaches the page; the badge counts only this space's requests and shows
 // the request; a click, Return or ⌘K grows the card from the sticker's corner, ⌘\, Esc or Reduce shrinks it back, the
 // focus leaving the card for the page; the label says what the assistant does on hover or focus; the sticker is only
-// over a space. Cursor, the key view loop and what VoiceOver reads are hand trials.
+// over a space; a drag moves it to the nearest side and keeps its place for every space, a press that moves less than 4
+// points is a click. Cursor, the key view loop and what VoiceOver reads are hand trials.
 import AppKit
 import SomethingCore
 import Testing
@@ -13,6 +14,11 @@ import Testing
 struct StickerTests {
     /// A window with Daily brief open, its assistant the sticker as a space opens; `body` gets the shell and the page.
     func brief(motion: Look.Motion = .reduced, _ body: (Shell, SpaceView) async throws -> Void) async throws {
+        try await brief(motion: motion) { shell, brief, _ in try await body(shell, brief) }
+    }
+
+    /// The same, `body` also getting the stage, to open another space.
+    func brief(motion: Look.Motion = .reduced, _ body: (Shell, SpaceView, Stage) async throws -> Void) async throws {
         let stage = try Stage("sticker")
         defer { stage.remove() }
         let (shell, library, _) = stage.window()
@@ -21,7 +27,7 @@ struct StickerTests {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
-        try await body(shell, brief)
+        try await body(shell, brief, stage)
     }
 
     func event(_ type: NSEvent.EventType, at point: NSPoint, in window: NSWindow) throws -> NSEvent {
@@ -189,6 +195,93 @@ struct StickerTests {
             #expect(await wait(5) { glass.grown == true && !glass.morphing })
             model.place = .space(title: "Renamed", name: brief.space.name, page: brief.space.page.path)
             #expect(model.open)
+        }
+    }
+
+    @Test(arguments: [
+        // A room of 700 by 500: the surface's origin let go, and where it goes.
+        (NSPoint(x: 500, y: 200), Preferences.StickerPlace(trailing: true, bottom: true, offset: 200)),
+        (NSPoint(x: 100, y: 300), Preferences.StickerPlace(trailing: false, bottom: false, offset: 156)),
+        (NSPoint(x: 327, y: 229), Preferences.StickerPlace(trailing: false, bottom: false, offset: 227)),
+        (NSPoint(x: 328, y: 227), Preferences.StickerPlace(trailing: true, bottom: true, offset: 227)),
+        // Within 44 points of the bottom or the top it clings there, 16 points in.
+        (NSPoint(x: 20, y: 59), Preferences.StickerPlace(trailing: false, bottom: true, offset: 16)),
+        (NSPoint(x: 20, y: 60), Preferences.StickerPlace(trailing: false, bottom: true, offset: 60)),
+        (NSPoint(x: 680, y: 397), Preferences.StickerPlace(trailing: true, bottom: false, offset: 16)),
+        (NSPoint(x: 680, y: 396), Preferences.StickerPlace(trailing: true, bottom: false, offset: 60)),
+        // Outside the room it comes back in.
+        (NSPoint(x: -40, y: -40), Preferences.StickerPlace(trailing: false, bottom: true, offset: 16)),
+        (NSPoint(x: 900, y: 900), Preferences.StickerPlace(trailing: true, bottom: false, offset: 16)),
+    ])
+    func theMagnetTakesTheStickerToTheNearestSide(origin: NSPoint, place: Preferences.StickerPlace) {
+        let room = NSSize(width: 700, height: 500), spot = Glass.magnet(origin, in: room)
+        #expect(spot == place)
+        let at = Glass.origin(of: spot, in: room)
+        #expect(at.x == (place.trailing ? 640 : 16) && at.y >= 16 && at.y <= 440)
+        #expect(Glass.magnet(at, in: room) == spot, "a place let go again stays")
+        #expect(Glass.origin(of: Glass.first, in: room) == NSPoint(x: 640, y: 16))
+        // Its edges hold it: the center grows, the sticker stays against the same side and edge.
+        let wide = Glass.origin(of: spot, in: NSSize(width: 1000, height: 800))
+        #expect(wide.x == (place.trailing ? 940 : 16) && (place.bottom ? wide.y == at.y : 800 - wide.y == 500 - at.y))
+    }
+
+    /// Presses the sticker at its middle and moves the pointer along `steps`, each from the press, in the window.
+    func drag(_ sticker: Sticker, in window: NSWindow, _ steps: [CGSize], release: Bool = true) throws {
+        let at = sticker.convert(NSPoint(x: sticker.surface.midX, y: sticker.surface.midY), to: nil)
+        func moved(_ d: CGSize) -> NSPoint { NSPoint(x: at.x + d.width, y: at.y + d.height) }
+        sticker.mouseDown(with: try event(.leftMouseDown, at: at, in: window))
+        for step in steps { sticker.mouseDragged(with: try event(.leftMouseDragged, at: moved(step), in: window)) }
+        if release { sticker.mouseUp(with: try event(.leftMouseUp, at: moved(steps.last ?? .zero), in: window)) }
+    }
+
+    @Test func aDragMovesTheStickerToASideAndKeepsItForEverySpace() async throws {
+        try await brief { shell, _, stage in
+            let glass = shell.glass, sticker = glass.sticker, preferences = shell.library.preferences
+            let start = glass.corner, room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
+            #expect(preferences.sticker == nil)
+            // Held, it follows the pointer, its eyes lean at most 3 points, and no label shows.
+            try drag(sticker, in: shell.window, [CGSize(width: -100, height: 80), CGSize(width: -700, height: 200)], release: false)
+            #expect(sticker.dragging && glass.held == NSPoint(x: start.minX - 700, y: start.minY + 200))
+            #expect(sticker.sign.lean == CGSize(width: -3, height: -3) && glass.label.isHidden && !shell.assistant.open)
+            sticker.mouseUp(with: try event(.leftMouseUp, at: .zero, in: shell.window))
+            // Let go left of the middle: the leading side, 16 points in, the height it was let go at, kept.
+            let spot = Glass.magnet(NSPoint(x: start.minX - 700, y: start.minY + 200), in: room)
+            #expect(!spot.trailing && glass.spot == spot && preferences.sticker == spot && !shell.assistant.open)
+            #expect(glass.corner == NSRect(origin: Glass.origin(of: spot, in: room), size: start.size) && glass.corner.minX == 16)
+            #expect(sticker.frame == glass.corner.insetBy(dx: -Sticker.room, dy: -Sticker.room) && sticker.sign.lean == .zero)
+            // Another space: the same place.
+            let logbook = try await stage.open("logbook", in: shell, shell.library)
+            defer { logbook.close() }
+            #expect(await wait(5) { glass.stickerShown })
+            #expect(glass.corner.origin == Glass.origin(of: spot, in: room))
+            // The center resizes: the sticker stays against its side and the edge that holds it.
+            shell.window.setContentSize(NSSize(width: 1000, height: 660))
+            shell.window.layoutIfNeeded()
+            let smaller = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
+            #expect(glass.corner.origin == Glass.origin(of: spot, in: smaller) && glass.corner.minX == 16)
+            // The card grows from the sticker's corner, inside the center.
+            shell.assistant.focus()
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(glass.card.frame.minX == 0 && glass.card.frame.minY >= 0 && glass.card.frame.maxY <= smaller.height)
+        }
+    }
+
+    @Test func aPressThatMovesLessThanFourPointsIsAClick() async throws {
+        try await brief { shell, _ in
+            let glass = shell.glass, start = glass.corner
+            try drag(glass.sticker, in: shell.window, [CGSize(width: 1, height: 1), CGSize(width: 2, height: 0)])
+            #expect(glass.corner == start && glass.held == nil && shell.library.preferences.sticker == nil)
+            #expect(await wait(5) { glass.grown == true && shell.assistant.open })
+        }
+    }
+
+    @Test func aStickerLetGoSnapsToItsSideUnderCalmMotion() async throws {
+        try await brief(motion: .calm) { shell, _ in
+            let glass = shell.glass
+            try drag(glass.sticker, in: shell.window, [CGSize(width: -300, height: 100)])
+            #expect(glass.snapping, "it moves to its side")
+            #expect(await wait(5) { !glass.snapping })
+            #expect(glass.sticker.frame == glass.corner.insetBy(dx: -Sticker.room, dy: -Sticker.room) && glass.spot?.trailing == true)
         }
     }
 

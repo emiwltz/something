@@ -81,6 +81,8 @@ enum Sign {
     /// sideways look (in eye units), the sleeping z's progress, and the seconds since the sign arrived.
     struct Pose: Equatable {
         var scale: CGFloat = 1, lift: CGFloat = 0, open: CGFloat = 1, look: CGFloat = 0, z: CGFloat = 1
+        /// How far the eyes lean, in points, toward where a dragged sticker moves.
+        var lean = CGSize.zero
         var arrived: TimeInterval = .infinity
         static let rest = Pose()
     }
@@ -145,7 +147,7 @@ enum Sign {
         // The face: two eyes, popping in after the corners when the sign arrives.
         let pop = out((pose.arrived - 0.55) / 0.5), eyes = g.eyes(state, side: s)
         c.setAlpha(pop)
-        c.translateBy(x: s / 2, y: eyes[0].midY)
+        c.translateBy(x: s / 2 + pose.lean.width, y: eyes[0].midY + pose.lean.height)
         c.scaleBy(x: 0.3 + 0.7 * pop, y: (0.3 + 0.7 * pop) * pose.open)
         c.translateBy(x: -s / 2 + pose.look * e, y: -eyes[0].midY)
         for eye in eyes { drawEye(state, eye, e: e, stroke: g.joyStroke, in: c) }
@@ -297,6 +299,8 @@ final class SignView: NSView {
     /// The state its eyes say; setting it restarts that state's motion.
     var state: Sign.State { didSet { began = clock(); refresh() } }
     var geometry = Sign.Geometry() { didSet { needsDisplay = true } }
+    /// How far the eyes lean, in points, while a drag moves the sticker.
+    var lean = CGSize.zero { didSet { if lean != oldValue { needsDisplay = true } } }
     /// The person's Motion choice; the system's Reduce Motion is folded in by `systemReduces`.
     var motion: Look.Motion = .calm { didSet { refresh() } }
     /// What VoiceOver calls it before its state's word ("something, Ready"); empty makes it decoration.
@@ -325,7 +329,9 @@ final class SignView: NSView {
     /// The pose it draws now.
     var pose: Sign.Pose {
         let now = clock()
-        return Sign.pose(state, at: now - began, arrived: arrival.map { now - $0 }, motion: playing)
+        var pose = Sign.pose(state, at: now - began, arrived: arrival.map { now - $0 }, motion: playing)
+        pose.lean = lean
+        return pose
     }
 
     /// Whether it is moving: in a window, under Calm motion, with a state that moves or an arrival not yet over.
