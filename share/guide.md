@@ -427,7 +427,8 @@ await something.store.set("seen", [...seen, "a1"]);
   page is not told: while they point, a layer of something's takes every click, so your page hears none, and the wheel
   still scrolls it. A part is an element at least 40x24 points, named by its tags and their order (`table`, the second
   `section`), never by a class, an id or a custom element: inside a custom element, its nearest standard parent is the
-  part. Plain, standard elements around what a person may want changed make it easy to point at.
+  part, so a custom element placed directly in `body` cannot be pointed at. Plain, standard elements around what a
+  person may want changed make it easy to point at.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
   ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
   `preventDefault()` cannot keep them. Every other key is your page's.

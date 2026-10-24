@@ -817,9 +817,14 @@ import WebKit
         #expect(overlay.banner == ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"])
         await wait(0.3)
         #expect(try await run(window, "return window.clicks ?? 0") as? Int == 0)
-        // ⌥ adds a part once a frame is drawn.
-        await overlay.click(at: try await center(".inner"), adding: true)
-        #expect(overlay.picks.map(\.path) == [cell.path, card.path])
+        // ⌥ adds a part once a frame is drawn, even while a follow asks about the parts there were: the click's
+        // question goes first, the follow's second, and the page answers them in that order.
+        let inner = try await center(".inner")
+        let adding = Task { @MainActor in await overlay.click(at: inner, adding: true) }
+        let following = Task { @MainActor in await overlay.follow() }
+        await adding.value
+        await following.value
+        #expect(overlay.picks.map(\.path) == [cell.path, card.path] && overlay.picks.map(\.rect) == [cell.rect, card.rect])
 
         // A reload keeps the mode and its picks, and the frames ask the new page where their parts are: moved by the
         // page before, back where the file has them after.

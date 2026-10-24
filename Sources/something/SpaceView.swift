@@ -441,7 +441,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
             scrolled = (page, x, y)
             // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
-            if let pointer { Task { @MainActor in await pointer.follow() } }
+            pointer?.followSoon()
             return
         }
         if message.name == "fault" {

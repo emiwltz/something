@@ -23,6 +23,7 @@ final class PointOverlay: NSView {
     }
 
     private var asking = false, pending: CGPoint?, pointer: CGPoint?
+    private var following = false, followAgain = false
     /// The hole's rectangle as drawn, moving towards its part; when it started and from where, while it moves.
     private var hole: CGRect?, from: CGRect?, began: TimeInterval = 0
     private var arrived: TimeInterval = 0
@@ -75,7 +76,7 @@ final class PointOverlay: NSView {
         let web = space.web, at = convert(event.locationInWindow, from: nil)
         Task { @MainActor in
             await Pointing.scroll(by: delta, at: at, in: web, frame: frame)
-            await follow()
+            followSoon()
         }
     }
 
@@ -138,21 +139,41 @@ final class PointOverlay: NSView {
         changed()
     }
 
-    /// Asks where the parts are now, after a scroll, a reload or a resize; a part the page lost is let go.
+    /// Asks where the parts are now, after a scroll, a reload or a resize; a part the page lost is let go. The
+    /// answers are applied by path: a click or a pointer move during the question keeps what it changed.
     func follow() async {
         guard let space, let frame = space.frame else { return }
         let paths = picks.map(\.path) + [hovered?.path].compactMap { $0 }
         let rects = await Pointing.rects(paths, in: space.web, frame: frame)
         guard rects.count == paths.count else { return }
-        picks = zip(picks, rects).compactMap { part, rect in rect.map { Pointing.Part(path: part.path, tag: part.tag, rect: $0) } }
-        if let part = hovered { hovered = rects.last.flatMap { $0 }.map { Pointing.Part(path: part.path, tag: part.tag, rect: $0) } }
+        let found = Dictionary(zip(paths, rects), uniquingKeysWith: { first, _ in first })
+        let moved = { (part: Pointing.Part) -> Pointing.Part? in
+            guard let rect = found[part.path] else { return part }
+            return rect.map { Pointing.Part(path: part.path, tag: part.tag, rect: $0) }
+        }
+        picks = picks.compactMap(moved)
+        if let part = hovered, found[part.path] != nil { hovered = moved(part) }
         changed()
         if let pointer { look(at: pointer) }
     }
 
+    /// A follow without waiting for it, one at a time: the wheel, the page's scroll and a live resize ask many times
+    /// a second, and the running one asks once more at its end for all that came meanwhile.
+    func followSoon() {
+        guard !following else { return followAgain = true }
+        following = true
+        Task { @MainActor in
+            repeat {
+                followAgain = false
+                await follow()
+            } while followAgain
+            following = false
+        }
+    }
+
     override func setFrameSize(_ size: NSSize) {
         super.setFrameSize(size)
-        Task { @MainActor in await follow() }
+        followSoon()
     }
 
     // MARK: Drawing
