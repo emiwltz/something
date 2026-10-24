@@ -45,8 +45,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private var covering: NSView?, strip: NSView?
     /// Point mode's overlay over the page while the person points at its parts (PointOverlay.swift); nil otherwise.
     private(set) var pointer: PointOverlay?
-    /// Whether there is a page to point at: displayed, loaded in its frame, and running.
-    var pointable: Bool { blocked.isEmpty && !stopped && frame != nil }
+    /// Whether point mode may stand over the page: it is shown and runs. A page still loading may be pointed at;
+    /// the overlay asks it once its frame says it loaded.
+    var pointable: Bool { blocked.isEmpty && !stopped }
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
@@ -126,6 +127,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
               let later = 0;
               addEventListener("scroll", () => { clearTimeout(later); later = setTimeout(said, 100); }, { passive: true });
               addEventListener("pagehide", said);
+              // Said once loaded too, after the scroll back: point mode's frames ask where their parts are now.
+              addEventListener("load", said, { once: true });
             }
             """
     }
@@ -437,7 +440,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             guard let place = message.body as? [Any], place.count == 3, let page = place[0] as? String,
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
             scrolled = (page, x, y)
-            // The page scrolled by itself (a key, an anchor, its own script): the frames follow it.
+            // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
             if let pointer { Task { @MainActor in await pointer.follow() } }
             return
         }

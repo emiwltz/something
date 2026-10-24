@@ -11,7 +11,7 @@ import Testing
 struct AcceptanceShow {
     /// Daily brief open, its card folded to the sticker; ⌥⌘S starts point mode: Point pressed in the toolbar, the space
     /// dimmed but for the part under the pointer, the sign's corners around it with its kind, and the banner saying
-    /// the mode and Esc. The card's Point is greyed only when there is nothing to point at.
+    /// the mode and Esc. The card's Point is greyed only when there is nothing to point at; a reload keeps the mode.
     @Test("f1: pointing") func f1() async throws {
         let stage = try Stage("show")
         defer { stage.remove() }
@@ -47,6 +47,12 @@ struct AcceptanceShow {
         #expect(brief.pointer == nil && !point.pressed && !shell.assistant.pointing)
         shell.point()
         #expect(brief.pointer != nil)
+        // A reload (⌘R, a change of the assistant, an undo) keeps the mode: the window shows the space again, as the
+        // app does at each load, and Point stays pressed and enabled while the page loads.
+        brief.load()
+        shell.show(brief)
+        #expect(brief.frame == nil && brief.pointer != nil && point.pressed && point.isEnabled && shell.assistant.pointable)
+        #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
         shell.point()
         #expect(brief.pointer == nil)
     }

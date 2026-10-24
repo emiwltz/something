@@ -74,23 +74,37 @@ enum Pointing {
         return Part(path: path, tag: tag, rect: rect)
     }
 
-    /// Where the parts of `paths` are now, in their order: nil for one the page no longer has, and all nil when the
-    /// page cannot be asked.
+    /// Where the parts of `paths` are now, in their order: nil for one the page no longer has; empty when the page
+    /// cannot be asked (between two loads), so that its parts are not taken for gone.
     @MainActor
     static func rects(_ paths: [String], in web: WKWebView, frame: WKFrameInfo) async -> [CGRect?] {
-        guard !paths.isEmpty else { return [] }
-        let found = try? await web.callAsyncJavaScript(rectsScript, arguments: ["paths": paths], in: frame, contentWorld: Lockdown.world)
-        let list = found as? [Any] ?? []
-        return paths.indices.map { $0 < list.count ? rect(list[$0]) : nil }
+        guard !paths.isEmpty,
+              let list = try? await web.callAsyncJavaScript(rectsScript, arguments: ["paths": paths], in: frame, contentWorld: Lockdown.world) as? [Any],
+              list.count == paths.count else { return [] }
+        return list.map(rect)
     }
 
-    /// Scrolls the page by `delta` points, as the wheel the overlay takes would have: its own world's scrollBy, which a
+    /// Scrolls what is under `point` by `delta` points, as the wheel the overlay takes would have: the nearest box
+    /// that scrolls that way (a page often scrolls inside one), else the page; by its own world's scrollBy, which a
     /// page cannot tell from the person's scroll.
     @MainActor
-    static func scroll(by delta: CGSize, in web: WKWebView, frame: WKFrameInfo) async {
-        _ = try? await web.callAsyncJavaScript("scrollBy({left: dx, top: dy, behavior: 'instant'}); return 0",
-                                               arguments: ["dx": delta.width, "dy": delta.height], in: frame, contentWorld: Lockdown.world)
+    static func scroll(by delta: CGSize, at point: CGPoint, in web: WKWebView, frame: WKFrameInfo) async {
+        _ = try? await web.callAsyncJavaScript(scrollScript, arguments: ["dx": delta.width, "dy": delta.height, "x": point.x, "y": point.y],
+                                               in: frame, contentWorld: Lockdown.world)
     }
+
+    /// The wheel's scroll, from something's world: `dx`, `dy` at `x`, `y` of the viewport.
+    static let scrollScript = """
+        const scrolls = (node) => {
+          const style = getComputedStyle(node), can = (overflow) => overflow === "auto" || overflow === "scroll";
+          return (dy !== 0 && can(style.overflowY) && node.scrollHeight > node.clientHeight)
+            || (dx !== 0 && can(style.overflowX) && node.scrollWidth > node.clientWidth);
+        };
+        let node = document.elementFromPoint(x, y);
+        while (node && node !== document.body && node !== document.documentElement && !scrolls(node)) node = node.parentElement;
+        (node && node !== document.body && node !== document.documentElement ? node : window).scrollBy({left: dx, top: dy, behavior: "instant"});
+        return 0;
+        """
 
     private static func rect(_ value: Any?) -> CGRect? {
         guard let box = value as? [NSNumber], box.count == 4 else { return nil }

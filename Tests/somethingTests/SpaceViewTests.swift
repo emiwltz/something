@@ -756,7 +756,7 @@ import WebKit
     /// Point mode asks the page from something's world only: a part is found where the page's own functions lie, by a
     /// path of standard tags and :nth-of-type, a small thing grown to its first ancestor of 40x24, a custom element
     /// passed over for its standard parent. The page's world sees no pointing function and hears no click of point
-    /// mode; the wheel scrolls the page and the frames follow.
+    /// mode; the wheel scrolls the page, or the box under it that scrolls, and the frames follow, a reload too.
     @Test func pointingFindsStandardPartsAndKeepsThePageOut() async throws {
         let home = Home(prefix: "something-window-")
         defer { home.remove() }
@@ -765,6 +765,7 @@ import WebKit
             <div class="hero" id="hero" style="position: relative; height: 100px"><span class="tiny" style="position: absolute; left: 300px; top: 40px">x</span></div>
             <table class="data" style="margin: 20px"><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>
             <section><my-card style="display: block; height: 80px"><p class="inner">inside</p></my-card></section>
+            <div class="pane" style="height: 60px; overflow-y: auto"><div style="height: 400px">long</div></div>
             <div style="height: 3000px"></div>
             <script>
               addEventListener("click", () => window.clicks = (window.clicks ?? 0) + 1, true);
@@ -782,7 +783,7 @@ import WebKit
         let frame = try #require(window.frame)
         func center(_ selector: String) async throws -> CGPoint {
             let box = try await window.web.callAsyncJavaScript("const b = document.querySelector(s).getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
-                                                               arguments: ["s": selector], in: frame, contentWorld: .defaultClient) as? [Double]
+                                                               arguments: ["s": selector], in: try #require(window.frame), contentWorld: .defaultClient) as? [Double]
             let point = try #require(box)
             return CGPoint(x: point[0], y: point[1])
         }
@@ -820,12 +821,25 @@ import WebKit
         await overlay.click(at: try await center(".inner"), adding: true)
         #expect(overlay.picks.map(\.path) == [cell.path, card.path])
 
+        // A reload keeps the mode and its picks, and the frames ask the new page where their parts are: moved by the
+        // page before, back where the file has them after.
+        _ = try await run(window, "document.querySelector('table').style.marginTop = '200px'; return 0")
+        await overlay.follow()
+        #expect(overlay.picks.first?.rect.minY == cell.rect.minY + 180)
+        window.load()
+        try await ready(window)
+        #expect(await wait(10, until: { overlay.picks.first?.rect == cell.rect }), "\(String(describing: overlay.picks.first))")
+        #expect(window.pointer === overlay && overlay.picks.map(\.path) == [cell.path, card.path] && window.pointable)
+
         // The wheel scrolls the page, from something's world, and the frames follow it.
         let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -300, wheel2: 0, wheel3: 0)
             .flatMap { NSEvent(cgEvent: $0) })
         overlay.scrollWheel(with: wheel)
         #expect(await wait(10, until: { overlay.picks.first?.rect.minY == cell.rect.minY - 300 }), "\(String(describing: overlay.picks.first))")
         #expect(try await run(window, "return scrollY") as? Double == 300)
+        // Over a box that scrolls, the wheel scrolls the box, not the page.
+        await Pointing.scroll(by: CGSize(width: 0, height: 100), at: try await center(".pane"), in: window.web, frame: try #require(window.frame))
+        #expect(try await run(window, "return [document.querySelector('.pane').scrollTop, scrollY]") as? [Double] == [100, 300])
 
         // Esc lets the picks go, then stops the mode.
         var stopped = false

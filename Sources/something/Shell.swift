@@ -262,6 +262,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func show(_ space: SpaceView?, templates: Bool = false) {
         library.previewing = false
         self.space = space
+        // A reload keeps point mode and its picks (the overlay asks again once the page loaded); only a page that
+        // cannot be shown or stopped ends it.
         if let space, !space.pointable { space.point(nil) }
         pressPoint(space?.pointer != nil)
         guard let space else {
@@ -284,7 +286,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
         }
-        heading(space.title, space.space.location.lastPathComponent, space: true, point: space.blocked.isEmpty && !space.stopped)
+        heading(space.title, space.space.location.lastPathComponent, space: true, point: space.pointable)
     }
 
     /// ⌥⌘S, the toolbar's Point and the card's: starts point mode over the space shown, or stops it. Starting folds

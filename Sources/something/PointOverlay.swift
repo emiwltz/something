@@ -72,16 +72,15 @@ final class PointOverlay: NSView {
         let line: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
         let delta = CGSize(width: -event.scrollingDeltaX * line, height: -event.scrollingDeltaY * line)
         guard let space, let frame = space.frame, delta != .zero else { return }
-        let web = space.web
+        let web = space.web, at = convert(event.locationInWindow, from: nil)
         Task { @MainActor in
-            await Pointing.scroll(by: delta, in: web, frame: frame)
+            await Pointing.scroll(by: delta, at: at, in: web, frame: frame)
             await follow()
         }
     }
 
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { _ = escape() } else { super.keyDown(with: event) }
-    }
+    /// Esc reaches escape() through the app's key monitor wherever the focus is in the window; this is the way of a
+    /// window without that monitor (a test's), the overlay being the first responder.
     override func cancelOperation(_ sender: Any?) { _ = escape() }
 
     /// Esc: lets go of the picked parts, or stops the mode. Returns true: the key is the overlay's.
