@@ -54,7 +54,7 @@ final class Glass: WindowLayer {
         [sticker, label, card].forEach(hold)
         (card.isHidden, label.isHidden) = (true, true)
         sticker.opened = { [weak self] in self?.model.focus() }
-        sticker.hovered = { [weak self] _ in self?.say() }
+        sticker.hovered = { [weak self] in self?.say() }
         sticker.dragged = { [weak self] total, step in self?.drag(total, step) }
         sticker.dropped = { [weak self] in self?.drop() }
         (sticker.badge.target, sticker.badge.action) = (self, #selector(showRequest))
@@ -121,7 +121,7 @@ final class Glass: WindowLayer {
         (held, grabbed, sticker.sign.lean) = (nil, nil, .zero)
         self.spot = spot
         moved(spot)
-        let to = corner.insetBy(dx: -Sticker.room, dy: -Sticker.room), duration = Look.duration(0.42, Look.motion(motion()))
+        let to = stickerFrame, duration = Look.duration(0.42, Look.motion(motion()))
         guard duration > 0, from != to else { return say() }
         (sticker.frame, snapping) = (from, true)
         NSAnimationContext.runAnimationGroup({ context in
@@ -158,7 +158,7 @@ final class Glass: WindowLayer {
         say()
     }
 
-    private var onSpace: Bool { if case .space = model.place { true } else { false } }
+    private var onSpace: Bool { model.place.space != nil }
 
     /// The sticker is there only over a space, and not under the grown card: hidden, neither a click on its badge
     /// nor VoiceOver finds it. It shows while the card grows from it or shrinks into it.
@@ -239,10 +239,13 @@ final class Glass: WindowLayer {
                       width: width, height: height)
     }
 
+    /// The sticker's frame: its surface and the room around it for the shadow and the badge.
+    private var stickerFrame: NSRect { corner.insetBy(dx: -Sticker.room, dy: -Sticker.room) }
+
     /// Places the sticker, its label and the card, except while the card moves between them.
     func place() {
-        let surface = corner, room = Sticker.room
-        if !snapping, sticker.frame != surface.insetBy(dx: -room, dy: -room) { sticker.frame = surface.insetBy(dx: -room, dy: -room) }
+        let surface = corner
+        if !snapping, sticker.frame != stickerFrame { sticker.frame = stickerFrame }
         // The label on the side of the sticker toward the middle.
         if !label.isHidden {
             let size = label.fittingSize, trailing = surface.midX >= bounds.width / 2
@@ -271,7 +274,7 @@ final class Sticker: NSView {
     let sign = SignView(.unknown, side: 30), badge = Badge()
     /// Called to open the card, and when the pointer or the focus comes or goes.
     var opened: () -> Void = {}
-    var hovered: (Bool) -> Void = { _ in }
+    var hovered: () -> Void = {}
     /// Called as a drag moves it, with the pointer's way since the press and since the last move, and when it ends.
     var dragged: (CGSize, CGSize) -> Void = { _, _ in }
     var dropped: () -> Void = {}
@@ -315,7 +318,7 @@ final class Sticker: NSView {
     func show(_ presence: Presence, title: String) {
         if sign.state != presence.state { sign.state = presence.state }
         (self.presence, self.title, label) = (presence, title, presence.label(title))
-        if hovering { hovered(true) }
+        if hovering { hovered() }
     }
 
     override func setFrameSize(_ size: NSSize) {
@@ -356,7 +359,7 @@ final class Sticker: NSView {
         pointed = on
         place()
         needsDisplay = true
-        hovered(hovering)
+        hovered()
     }
 
     // Overrides rather than a loop on the window's events: a test drives them, and the main loop keeps turning.
@@ -390,12 +393,12 @@ final class Sticker: NSView {
     override var acceptsFirstResponder: Bool { !isHidden && alphaValue > 0 }
     override func becomeFirstResponder() -> Bool {
         focused = true
-        hovered(hovering)
+        hovered()
         return true
     }
     override func resignFirstResponder() -> Bool {
         focused = false
-        hovered(hovering)
+        hovered()
         return true
     }
 

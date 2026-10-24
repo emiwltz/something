@@ -57,7 +57,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         layer = WindowLayer(over: split.view)
         glass = Glass(over: center, model: assistant)
         super.init()
-        library.heading = { [weak self] in self?.heading($0, $1, space: false) }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
@@ -243,7 +242,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         touring = nil
         guard let space else {
             page = nil
-            let gallery = Gallery(told: { [weak library] in library?.heading($0, $1) })
+            let gallery = Gallery(told: { [weak self] in self?.heading($0, $1, space: false) })
             put(templates ? Shell.hosted(GalleryView(library: library, model: gallery)) : Shell.hosted(BlankView(model: assistant, library: library)))
             return templates ? bare(Gallery.page.0, Gallery.page.1) : bare("New Space", "")
         }

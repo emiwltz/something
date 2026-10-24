@@ -29,8 +29,8 @@ struct SidebarView: View {
             Label {
                 Text("New Space")
             } icon: {
-                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color(nsColor: Look.Token.actfg.color))
-                    .frame(width: 20, height: 20).background(Color(nsColor: Look.Token.act.color), in: RoundedRectangle(cornerRadius: 6))
+                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
+                    .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
             }
             .tag(Row.to(.newSpace))
             Section("Spaces") {
@@ -53,7 +53,7 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             Button { library.select(.templates) } label: {
-                Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(Color(nsColor: Look.Token.ink2.color)) }
+                Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(Look.Token.ink2.ui) }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8).padding(.vertical, 6)
                     .background(library.selection == .templates ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
@@ -64,7 +64,7 @@ struct SidebarView: View {
         }
         // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through.
         .scrollContentBackground(.hidden)
-        .background(Color(nsColor: Look.Token.side.color).ignoresSafeArea())
+        .background(Look.Token.side.ui.ignoresSafeArea())
     }
 
     private func row(_ entry: Library.Entry) -> some View {

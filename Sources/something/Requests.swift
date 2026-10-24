@@ -64,10 +64,6 @@ import SomethingCore
     /// The space a request of `agent` belongs to: the person's assistant's is the space it works on (`place`), any
     /// other agent's is the space that launched it (`launches`, by space name); nil when none did.
     static func space(of agent: String, assistant: Bool, place: AssistantModel.Place, launches: [String: Set<String>]) -> String? {
-        if assistant {
-            if case .space(_, let name, _) = place { return name }
-            return nil
-        }
-        return launches.first { $0.value.contains(agent) }?.key
+        assistant ? place.space : launches.first { $0.value.contains(agent) }?.key
     }
 }

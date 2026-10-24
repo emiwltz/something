@@ -2,10 +2,11 @@
 // state, the space's title as the conversation menu, the state word, Reduce and the grip), the conversation (⌘J: your
 // bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days, the messages held for the
 // turn's end outlined with Take Back), one notice when it is stuck or waits for you, the present-tense line while it
-// works, and the composer: the agent and model chips (views New Space reuses), Point's slot, the conversation toggle,
-// the held messages' strip while the conversation is folded, and a flat field whose Send turns into Stop. Its words are
-// the model's and Presence's; the card keeps only the field's focus. A request is never answered here: the notice
-// leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it reach the space.
+// works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
+// while the conversation is folded, and a flat field whose Send turns into Stop (New Space reuses it and the notice).
+// Its words are the model's and Presence's; the card keeps only the field's focus. A request is never answered here:
+// the notice leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it
+// reach the space.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -53,11 +54,11 @@ struct AssistantCard: View {
                 Menu { ConversationMenu(model: model) } label: {
                     HStack(spacing: 5) {
                         Text(model.title).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+                        Chevron()
                     }
                     .padding(.horizontal, 6).frame(height: 22).contentShape(Rectangle())
                 }
-                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+                .plainMenu()
                 .accessibilityLabel("Conversation menu")
                 Text(presence.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
             }
@@ -103,10 +104,7 @@ struct AssistantCard: View {
                 .padding(.bottom, 4)
                 ForEach(Array(model.rows.enumerated()), id: \.offset) { _, row in line(row) }
                 ForEach(Array(model.held.enumerated()), id: \.offset) { _, text in
-                    Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).foregroundStyle(Look.Token.ink2.ui)
-                        .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
-                        .overlay(UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18)
-                            .strokeBorder(Look.Token.line2.ui))
+                    AssistantCard.mine(text).foregroundStyle(Look.Token.ink2.ui).overlay(AssistantCard.mineShape.strokeBorder(Look.Token.line2.ui))
                         .padding(.leading, 50)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
@@ -144,16 +142,14 @@ struct AssistantCard: View {
         case .mine(let caption, let text):
             VStack(alignment: .trailing, spacing: 2) {
                 if let caption, caption != model.here { Text(caption).font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui) }
-                Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).foregroundStyle(Look.Token.bg.ui)
-                    .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
-                    .background(Look.Token.ink.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18))
+                AssistantCard.mine(text).foregroundStyle(Look.Token.bg.ui).background(Look.Token.ink.ui, in: AssistantCard.mineShape)
             }
             .padding(.leading, 50)
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .reply(let text):
             Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
                 .font(Look.font(.voice, size: 13).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink.ui)
-                .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
+                .bubble()
                 .background(Look.Token.sunk.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18))
                 .padding(.trailing, 50)
         case .tool(let failed, let words, let command):
@@ -166,6 +162,12 @@ struct AssistantCard: View {
             .padding(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 4))
         }
     }
+
+    /// A message of the person's, held or sent, and the shape of its bubble.
+    private static func mine(_ text: String) -> some View {
+        Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).bubble()
+    }
+    private static let mineShape = UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18)
 
     /// One formatter for every day line, which the card draws on the main thread only.
     private static let dayFormat = { let format = DateFormatter(); format.locale = Locale(identifier: "en_GB"); return format }()
@@ -247,9 +249,14 @@ struct AssistantCard: View {
     private var composer: some View {
         VStack(spacing: 0) {
             HStack(spacing: 1) {
-                AgentChip(name: model.name, dot: model.dot) { AgentMenu(model: model) }
+                MenuChip(label: "Agent: \(model.name)") {
+                    Circle().fill(model.dot.ui).frame(width: 7, height: 7)
+                    Text(model.name)
+                } items: { AgentMenu(model: model) }
                 let words = model.modelWords
-                ModelChip(model: words.model, effort: words.effort) {
+                MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
+                    Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
+                } items: {
                     Text(words.model)
                     if let effort = words.effort { Text("Effort: \(effort)") }
                 }
@@ -391,42 +398,25 @@ struct NoticeView: View {
     }
 }
 
-// MARK: Chips, also New Space's
+// MARK: Chips
 
-/// The agent that builds: a dot of its state's colour, its name and its menu.
-struct AgentChip<Items: View>: View {
-    let name: String, dot: Look.Token
+/// A chip that opens a menu: what it shows and a chevron. The agent's (a dot of its state's colour and its name) and
+/// the model's (the effort lighter).
+struct MenuChip<Shown: View, Items: View>: View {
+    let label: String
+    @ViewBuilder let shown: () -> Shown
     @ViewBuilder let items: () -> Items
 
     var body: some View {
         Menu { items() } label: {
             HStack(spacing: 6) {
-                Circle().fill(dot.ui).frame(width: 7, height: 7)
-                Text(name)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+                shown()
+                Chevron()
             }
             .chip()
         }
-        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-        .accessibilityLabel("Agent: \(name)")
-    }
-}
-
-/// The model and its effort, the effort lighter.
-struct ModelChip<Items: View>: View {
-    let model: String, effort: String?
-    @ViewBuilder let items: () -> Items
-
-    var body: some View {
-        Menu { items() } label: {
-            HStack(spacing: 6) {
-                (Text(model) + Text(effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui))
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
-            }
-            .chip()
-        }
-        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-        .accessibilityLabel("Model: \(model)\(effort.map { ", effort \($0)" } ?? "")")
+        .plainMenu()
+        .accessibilityLabel(label)
     }
 }
 
@@ -445,7 +435,17 @@ struct PointChip: View {
     }
 }
 
+private struct Chevron: View {
+    var body: some View { Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui) }
+}
+
 extension View {
+    /// A menu drawn only by its label.
+    func plainMenu() -> some View { menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize() }
+
+    /// A bubble's room around its words.
+    func bubble() -> some View { padding(.horizontal, 11).padding(.vertical, 8 * Look.density) }
+
     /// The mockup's .chip: 26 points high, 9 on each side, Onest 12 medium in ink2; `pressed` has the selection's fill.
     func chip(pressed: Bool = false) -> some View {
         font(Look.font(.ui, size: 12, weight: .medium).ui)
@@ -454,15 +454,6 @@ extension View {
             .background(pressed ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control + 1))
             .contentShape(Rectangle())
     }
-}
-
-extension Look.Token {
-    /// The token as SwiftUI draws it, following night and day.
-    var ui: Color { Color(nsColor: color) }
-}
-
-extension NSFont {
-    var ui: Font { Font(self as CTFont) }
 }
 
 // MARK: Menus
@@ -509,10 +500,7 @@ struct AgentMenu: View {
 extension AssistantModel {
     /// One notice: a symbol, its title and sentence, red when something broke, and the actions that help.
     struct Notice {
-        struct Action {
-            let title: String, symbol: String?, run: () -> Void
-            init(title: String, symbol: String? = nil, run: @escaping () -> Void) { (self.title, self.symbol, self.run) = (title, symbol, run) }
-        }
+        struct Action { let title: String; var symbol: String? = nil; let run: () -> Void }
         let symbol: String, title: String, text: String, bad: Bool, actions: [Action]
     }
 

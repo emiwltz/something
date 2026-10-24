@@ -263,7 +263,7 @@ final class SheetButton: PanelButton {
 /// says on or off.
 final class SheetSwitch: NSButton {
     static let size = NSSize(width: 30, height: 18)
-    var changed: (Bool) -> Void = { _ in }
+    var changed: () -> Void = {}
     /// Where the knob stands, 0 (off) to 1 (on); animated between the two.
     @objc dynamic var knob: CGFloat = 0 { didSet { needsDisplay = true } }
 
@@ -293,7 +293,7 @@ final class SheetSwitch: NSButton {
             (context.duration, context.timingFunction) = (Look.duration(0.2, Look.motion(.calm)), Look.out.timing)
             animator().knob = on ? 1 : 0
         }
-        changed(on)
+        changed()
     }
 
     override func draw(_ dirtyRect: NSRect) {

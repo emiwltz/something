@@ -351,7 +351,7 @@ enum Ask {
         // Every switch starts off, and this sheet opens by itself at a first opening: Allow waits for one to be on.
         let allow = sheet.buttons[1]
         allow.enable(false)
-        for one in switches { one.changed = { _ in allow.enable(switches.contains { $0.state == .on }) } }
+        for one in switches { one.changed = { allow.enable(switches.contains { $0.state == .on }) } }
         return (sheet, {
             withExtendedLifetime(choosers) {}
             let on = zip(question.rights, switches).filter { $0.1.state == .on }.map(\.0)

@@ -12,7 +12,11 @@ import SomethingCore
 
 @Observable final class AssistantModel {
     /// Where the person is when they write: what each message's context line says.
-    enum Place: Equatable { case space(title: String, name: String, page: String), blank, templates }
+    enum Place: Equatable {
+        case space(title: String, name: String, page: String), blank, templates
+        /// The open space's name; nil off a space.
+        var space: String? { if case .space(_, let name, _) = self { name } else { nil } }
+    }
     /// Where the conversation's agent is.
     enum Light { case off, ready, working, waiting, error }
     /// One line of the conversation: the day its turns start, the person's message with what it was about, the
@@ -50,7 +54,7 @@ import SomethingCore
     /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
     /// card stays as it was, only its content changing.
     var place = Place.blank {
-        didSet { if case .space = place, Self.name(oldValue) == nil { open = false } }
+        didSet { if place.space != nil, oldValue.space == nil { open = false } }
     }
     var draft = ""
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
@@ -341,7 +345,7 @@ import SomethingCore
     /// Esc in the card: reduces it into the sticker over a space. Elsewhere there is no sticker to bring it back, so
     /// Esc leaves it open.
     func escape() {
-        if case .space = place { open = false }
+        if place.space != nil { open = false }
     }
 
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
@@ -509,8 +513,6 @@ import SomethingCore
     // MARK: Words
 
     /// Where the person is with `view` open: its title as its declaration gave it, else its name; the blank page for nil.
-    private static func name(_ place: Place) -> String? { if case .space(_, let name, _) = place { name } else { nil } }
-
     static func place(_ view: SpaceView?) -> Place {
         view.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
     }
@@ -574,12 +576,13 @@ import SomethingCore
         let after = denied ? " · denied" : failed ? " · failed" : ""
         // A command, code (Amp's, which calls something's tools), or a tool something lent (something_check), for which the
         // driver gives the command something ran.
-        switch Presence.Step.of(item) {
-        case .guide: return .tool(failed: failed, words: "Read guide" + after, command: nil)
-        case .command, .check: return .tool(failed: failed, words: after, command: item.text)
-        case .edit: return .tool(failed: failed, words: "Edited \(file)" + after, command: nil)
-        case .read: return .tool(failed: failed, words: "Read \(file)" + after, command: nil)
-        default: return .tool(failed: failed, words: "Used \(name)" + after, command: nil)
+        let words: String? = switch Presence.Step.of(item) {
+        case .guide: "Read guide"
+        case .command, .check: nil
+        case .edit: "Edited \(file)"
+        case .read: "Read \(file)"
+        default: "Used \(name)"
         }
+        return .tool(failed: failed, words: (words ?? "") + after, command: words == nil ? item.text : nil)
     }
 }

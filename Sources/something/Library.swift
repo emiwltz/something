@@ -37,8 +37,6 @@ import SomethingCore
     @ObservationIgnored var used: (String) -> Void = { _ in }
     /// What selecting does: the app shows the destination, closing the open space.
     @ObservationIgnored var opened: (Destination) -> Void = { _ in }
-    /// Writes a title and a subtitle in the toolbar while no space is open: a template's preview names it.
-    @ObservationIgnored var heading: (String, String) -> Void = { _, _ in }
     /// What Move to Trash… does before it moves anything: the window asks the person.
     @ObservationIgnored var trashing: (Entry) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.

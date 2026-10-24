@@ -3,6 +3,7 @@
 // these tokens instead of naming a colour or a size, so night, the person's Motion choice and the system's Reduce
 // Motion reach every window the same way. The values are the mockup's, exactly; spaces keep their own colours.
 import AppKit
+import SwiftUI
 
 enum Look {
     // MARK: Colours
@@ -188,4 +189,19 @@ enum Look {
     static func duration(_ calm: TimeInterval, _ motion: Motion) -> TimeInterval {
         motion == .reduced ? 0 : calm
     }
+}
+
+extension Look.Token {
+    /// The token as a SwiftUI colour, resolved by the appearance it is drawn in.
+    var ui: Color { Color(nsColor: color) }
+}
+
+extension Look.Curve {
+    /// The curve as a SwiftUI animation lasting `duration` seconds.
+    func animation(_ duration: TimeInterval) -> Animation { .timingCurve(Double(x1), Double(y1), Double(x2), Double(y2), duration: duration) }
+}
+
+extension NSFont {
+    /// The font as SwiftUI draws it.
+    var ui: Font { Font(self as CTFont) }
 }

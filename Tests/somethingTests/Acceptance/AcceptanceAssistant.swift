@@ -60,7 +60,7 @@ struct AcceptanceAssistant {
         #expect(card.height > 150 && card.height < 180, "header, the present-tense line and the composer: \(card.height)")
         // The field the card draws: SwiftUI builds the rest of its accessibility only for a real assistive client, which
         // a test cannot be, so the other words are read from what the card shows (the model) and seen in the pictures.
-        let field = try #require(AcceptanceAssistant.fields(in: host).first)
+        let field = try #require(AcceptanceTrust.fields(host).first)
         #expect(field.placeholderString == model.placeholder || field.placeholderAttributedString?.string == model.placeholder)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c2" + suffix, root: stage.home.root)
@@ -114,10 +114,6 @@ struct AcceptanceAssistant {
         return (shell, library, brief)
     }
 
-    /// The text fields drawn under `view`, depth first.
-    static func fields(in view: NSView) -> [NSTextField] {
-        view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? fields(in: $0) }
-    }
     @Test("c3: a thread kept after sleep", .disabled("not built yet: AB10")) func c3() async throws {}
     /// Daily brief open with its card and conversation: "Make the masthead smaller and calmer." was written while the
     /// weather corner ran, held by the app, and left when that turn ended; the fake claude read and edited brief.html

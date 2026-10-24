@@ -145,9 +145,8 @@ import WebKit
         defer { home.remove() }
         let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
         var headings: [String] = [], shown: [URL] = []
-        library.heading = { headings.append("\($0) · \($1)") }
         library.reveal = { shown.append($0) }
-        let gallery = Gallery(told: { library.heading($0, $1) }), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
+        let gallery = Gallery(told: { headings.append("\($0) · \($1)") }), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
         (window.contentView, window.isReleasedWhenClosed) = (host, false)
         defer { window.close() }
