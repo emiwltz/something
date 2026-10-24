@@ -195,6 +195,10 @@ struct StickerTests {
             #expect(await wait(5) { glass.grown == true && !glass.morphing })
             model.place = .space(title: "Renamed", name: brief.space.name, page: brief.space.page.path)
             #expect(model.open)
+            // From one space to another the card stays open.
+            model.place = .space(title: "Logbook", name: "logbook", page: "/Users/example/something/spaces/logbook/index.html")
+            #expect(model.open)
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
         }
     }
 

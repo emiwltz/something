@@ -47,9 +47,10 @@ import SomethingCore
     @ObservationIgnored var openReady: (String) -> Void = { _ in }
     @ObservationIgnored var ended: () -> Void = {}
 
-    /// A space opens with the assistant as the sticker, as the mockup does; a new title for the same space keeps it.
+    /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
+    /// card stays as it was, only its content changing.
     var place = Place.blank {
-        didSet { if case .space(_, let name, _) = place, name != Self.name(oldValue) { open = false } }
+        didSet { if case .space = place, Self.name(oldValue) == nil { open = false } }
     }
     var draft = ""
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
