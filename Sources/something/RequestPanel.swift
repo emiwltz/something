@@ -5,6 +5,8 @@
 // VoiceOver's press once the person made the panel key themselves (a click on it, or Show Request); no key, Return and
 // Space included, ever presses it. Closing it denies, and so does Escape while it has the keys. The exact command is
 // folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger, its footer always in sight.
+// A question shows in the same panel: its numbered options, a field for one's own answer, and Don't Answer. An option
+// that answers a lone question by one click is armed like Allow Once: a click meant for the space may land on it.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -15,7 +17,7 @@ struct Asker: Equatable {
     var program: String, space: String? = nil, assistant = false, preAllowed = false, name: String? = nil, folder: String? = nil
 }
 
-class RequestPanel: NSPanel {
+class RequestPanel: NSPanel, NSTextFieldDelegate {
     static let width: CGFloat = 392, wide: CGFloat = 560, widths: ClosedRange<CGFloat> = 360...720, arming: TimeInterval = 0.5
     let decide: (Answer) -> Void
     /// Moves the queue's request on screen by one, back or on.
@@ -36,9 +38,9 @@ class RequestPanel: NSPanel {
     private(set) var held = false
     private var shownAt: TimeInterval = 0, ticker: Timer?
     let header = PanelHeader(), allowButton = ArmedButton("Allow Once", primary: true)
-    private(set) var denyButton = PanelButton("Deny", hint: "esc")
-    /// For a question: the boxes of each question's options, and the field where an answer can be typed.
-    private(set) var boxes: [[NSButton]] = [], typed: [NSTextField] = []
+    private(set) var denyButton: NSButton = PanelButton("Deny", hint: "esc")
+    /// For a question: each question's options, and the field where an answer can be typed.
+    private(set) var boxes: [[OptionButton]] = [], typed: [NSTextField] = []
     private let body = NSStackView(), foot = NSStackView(), grip = Grip()
     private var widthRule = NSLayoutConstraint()
     /// The window and screen it was last placed beside, to place it again once it changed size.
@@ -129,9 +131,8 @@ class RequestPanel: NSPanel {
         (boxes, typed) = ([], [])
         var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age), who.program)]
         if question {
-            prompt.questions.forEach { views += ask($0) }
-            denyButton = PanelButton("Don't Answer", hint: "esc")
-            foot.setViews([denyButton, PanelButton("Answer", primary: true, target: self, action: #selector(reply))], in: .trailing)
+            denyButton = LinkButton("Don't Answer", nil, size: 12, weight: .semibold, target: self, action: #selector(deny))
+            views += ask(prompt.questions)
         } else {
             views.append(Self.text(Words.effect(prompt.request.tool, space: who.space), Look.body))
             let rows = [("Space", who.space), ("Folder", who.folder)].compactMap { key, value in value.map { (key, $0) } }
@@ -144,7 +145,8 @@ class RequestPanel: NSPanel {
             denyButton = PanelButton("Deny", hint: "esc")
             foot.setViews([denyButton, allowButton], in: .trailing)
         }
-        (denyButton.target, denyButton.action, denyButton.keyEquivalent) = (self, #selector(deny), "\u{1b}")
+        // A question has no Escape key equivalent: it would deny before Escape empties a typed answer.
+        (denyButton.target, denyButton.action, denyButton.keyEquivalent, foot.isHidden) = (self, #selector(deny), question ? "" : "\u{1b}", question)
         body.setViews(views, in: .top)
         stretch(views)
         size(width: kept, height: sized ? frame.height : nil)
@@ -265,7 +267,7 @@ class RequestPanel: NSPanel {
         ticker?.invalidate()
         body.setViews(Array(body.arrangedSubviews.prefix(1)) + [Self.text(sentence, Look.body)], in: .top)
         let ok = PanelButton("OK", primary: true, target: self, action: #selector(deny))
-        ok.keyEquivalent = "\r"
+        (ok.keyEquivalent, foot.isHidden) = ("\r", false)
         foot.setViews([ok], in: .trailing)
         fit()
     }
@@ -301,7 +303,7 @@ class RequestPanel: NSPanel {
         switch event.specialKey {
         case .leftArrow?: step(-1)
         case .rightArrow?: step(1)
-        default: super.keyDown(with: event)
+        default: event.keyCode == 53 ? cancelOperation(nil) : super.keyDown(with: event) // Escape, held by no button's key
         }
     }
 
@@ -319,15 +321,37 @@ class RequestPanel: NSPanel {
     /// Allow Once's click; nothing before it is armed.
     @objc func allow() { if armed { decide(.once) } }
     @objc func deny() { decide(.deny) }
-    @objc func reply() { decide(.choice(choice)) }
-    /// Does nothing: AppKit groups radio buttons by a shared action, and only that grouping is needed.
-    @objc func chose() {}
+    /// Answer, or Return in a field: the choices and typed answers, once there is one.
+    @objc func reply() { if choice.contains(where: { !$0.isEmpty }) { decide(.choice(choice)) } }
+
+    /// An option's click answers a lone question of one choice, its state put back, since a click sets even a momentary
+    /// button's; elsewhere AppKit toggles it, turning off the others of a one-choice question, radio buttons alike.
+    @objc func chose(_ sender: OptionButton) {
+        guard sender.toggles == nil else { return }
+        sender.state = .off
+        if armed { decide(.choice([[sender.title]])) }
+    }
 
     /// Each question's chosen labels, with the typed text when there is one.
     var choice: [[String]] {
         zip(boxes, typed).map { options, field in
-            options.filter { $0.state == .on }.map(\.title) + (field.stringValue.isEmpty ? [] : [field.stringValue])
+            let own = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            return options.filter { $0.state == .on }.map(\.title) + (own.isEmpty ? [] : [own])
         }
+    }
+
+    /// Rings the field that has the keys, since its system ring is off.
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        defer { typed.forEach { ($0.superview as? Box)?.focused = $0.currentEditor() != nil } }
+        return super.makeFirstResponder(responder)
+    }
+
+    /// Escape in a typed answer first empties it and leaves the field; only the next one answers nothing.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
+        guard command == #selector(cancelOperation(_:)) else { return false }
+        control.stringValue = ""
+        makeFirstResponder(nil)
+        return true
     }
 
     // MARK: The parts
@@ -365,19 +389,38 @@ class RequestPanel: NSPanel {
         return row
     }
 
-    private func ask(_ question: Question) -> [NSView] {
-        let options = question.options.map {
-            question.multiple ? NSButton(checkboxWithTitle: $0, target: nil, action: nil)
-                : NSButton(radioButtonWithTitle: $0, target: self, action: #selector(chose))
+    /// Each question in the agent's voice, its numbered options, and a field for one's own answer, Answer beside the
+    /// last; then Don't Answer, and why typing here is safe. Only a lone question of one choice is answered by a click.
+    private func ask(_ questions: [Question]) -> [NSView] {
+        let lone = questions.count == 1 && !questions[0].multiple
+        var views: [NSView] = []
+        for (index, question) in questions.enumerated() {
+            let options = question.options.enumerated().map {
+                OptionButton($0.offset + 1, $0.element, toggles: lone ? nil : question.multiple, target: self, action: #selector(chose))
+            }
+            let list = NSStackView(views: options)
+            (list.orientation, list.alignment, list.spacing) = (.vertical, .width, 6)
+            let field = NSTextField(string: "")
+            (field.isBordered, field.drawsBackground, field.focusRingType, field.font) = (false, false, .none, Look.font(.ui, size: 13))
+            (field.target, field.action, field.delegate) = (self, #selector(reply), self)
+            field.cell?.sendsActionOnEndEditing = false // only Return answers, never leaving the field by Tab, click or Escape
+            field.placeholderString = question.options.isEmpty ? "Your answer" : "Or type your answer"
+            let own = NSStackView(views: [Box(field, fill: .sunk, ring: .line, radius: 8, insets: NSEdgeInsets(top: 8, left: 10, bottom: 7, right: 10))])
+            own.spacing = 6
+            if index == questions.count - 1 { own.addArrangedSubview(PanelButton("Answer", primary: true, target: self, action: #selector(reply))) }
+            (boxes, typed) = (boxes + [options], typed + [field])
+            views += [question.header.map { Self.text($0, Look.small, .ink3) },
+                      Self.text(question.text, Look.Style(face: .voice, size: 15, weight: .regular, leading: 1.42)),
+                      options.isEmpty ? nil : Box(list), Box(own)].compactMap { $0 }
         }
-        // Radio buttons with the same action in the same stack form one group: one choice.
-        let group = NSStackView(views: options)
-        (group.orientation, group.alignment) = (.vertical, .leading)
-        let field = NSTextField(string: "")
-        field.placeholderString = question.options.isEmpty ? "Your answer" : "Or type your answer"
-        boxes.append(options)
-        typed.append(field)
-        return [question.header.map { Self.text($0, Look.small, .ink3) }, Self.text(question.text, Look.body), group, field].compactMap { $0 }
+        let lock = NSImageView(image: NSImage(systemSymbolName: "lock", accessibilityDescription: nil) ?? NSImage())
+        (lock.symbolConfiguration, lock.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 9, weight: .medium), Look.Token.ink3.color)
+        let hint = NSStackView(views: [lock, Self.text("The space can't see this window.", Look.Style(face: .ui, size: 11, weight: .regular, leading: 1.3), .ink3)])
+        hint.spacing = 5
+        let last = NSStackView(views: [denyButton, hint])
+        last.distribution = .equalSpacing
+        // The mockup's spacing around the row, measured on its picture.
+        return views + [Box(last, insets: NSEdgeInsets(top: 13, left: 0, bottom: 16, right: 0))]
     }
 
     /// A label in the panel's type, wrapping inside its insets.
@@ -523,11 +566,12 @@ class PanelButton: NSButton {
 /// A quiet link of the panel: a symbol, 5 points, then its words in ink2, drawn here because NSButton measures itself
 /// by the system's font and clips Onest.
 final class LinkButton: NSButton {
-    private let symbol: NSImage?
+    private let symbol: NSImage?, face: NSFont, lead: CGFloat
 
-    init(_ title: String, _ symbol: String, target: AnyObject, action: Selector) {
-        self.symbol = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
+    init(_ title: String, _ symbol: String?, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
+        self.symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
+        (face, lead) = (Look.font(.ui, size: size, weight: weight), symbol == nil ? 0 : 17)
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
     }
@@ -537,10 +581,10 @@ final class LinkButton: NSButton {
     override var title: String { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
 
     private var words: NSAttributedString {
-        NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 11.5, weight: .medium), .foregroundColor: Look.Token.ink2.color])
+        NSAttributedString(string: title, attributes: [.font: face, .foregroundColor: Look.Token.ink2.color])
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: (17 + words.size().width).rounded(.up), height: 18) }
+    override var intrinsicContentSize: NSSize { NSSize(width: (lead + words.size().width).rounded(.up), height: 18) }
 
     override func draw(_ dirtyRect: NSRect) {
         if let symbol {
@@ -552,7 +596,64 @@ final class LinkButton: NSButton {
             }
             tinted.draw(in: NSRect(x: 0, y: ((bounds.height - symbol.size.height) / 2).rounded(), width: symbol.size.width, height: symbol.size.height))
         }
-        words.draw(at: NSPoint(x: 17, y: ((bounds.height - words.size().height) / 2).rounded()))
+        words.draw(at: NSPoint(x: lead, y: ((bounds.height - words.size().height) / 2).rounded()))
+    }
+}
+
+/// One option of a question: its number in a small tile, its label, in a ringed row. `toggles` nil, a click answers;
+/// true, it turns on and off; false, it is one choice among its question's options. Its label wraps, since the agent
+/// writes it: the person reads the whole answer before a click sends it.
+final class OptionButton: NSButton {
+    let number: Int, toggles: Bool?
+    private var hovered = false { didSet { needsDisplay = true } }
+
+    init(_ number: Int, _ title: String, toggles: Bool?, target: AnyObject, action: Selector) {
+        (self.number, self.toggles) = (number, toggles)
+        super.init(frame: .zero)
+        (self.title, self.target, self.action, isBordered) = (title, target, action, false)
+        if let toggles { setButtonType(toggles ? .pushOnPushOff : .radio) }
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    private var words: NSAttributedString {
+        NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 12.8, weight: .medium), .foregroundColor: Look.Token.ink.color])
+    }
+
+    /// The label's height at a row's width: 38 points before it, 10 after.
+    func labelHeight(_ width: CGFloat) -> CGFloat {
+        words.boundingRect(with: NSSize(width: max(1, width - 48), height: .greatestFiniteMagnitude), options: .usesLineFragmentOrigin).height.rounded(.up)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: bounds.width > 48 ? max(34, labelHeight(bounds.width) + 16) : 34)
+    }
+
+    override func setFrameSize(_ size: NSSize) {
+        let wider = size.width != frame.width
+        super.setFrameSize(size)
+        if wider { invalidateIntrinsicContentSize() }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let on = state == .on, shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 9, yRadius: 9)
+        (on ? Look.Token.sel : hovered ? .hover : .bg2).color.setFill()
+        (on || hovered ? Look.Token.ink2 : .line2).color.setStroke()
+        shape.fill()
+        shape.stroke()
+        let tile = NSRect(x: 10, y: ((bounds.height - 18) / 2).rounded(), width: 18, height: 18)
+        (on ? Look.Token.act : .hover).color.setFill()
+        NSBezierPath(roundedRect: tile, xRadius: 5, yRadius: 5).fill()
+        let digit = NSAttributedString(string: "\(number)", attributes: [.font: Look.font(.ui, size: 10.5, weight: .semibold),
+                                                                         .foregroundColor: (on ? Look.Token.actfg : .ink2).color])
+        digit.draw(at: NSPoint(x: tile.midX - digit.size().width / 2, y: tile.midY - digit.size().height / 2))
+        let height = labelHeight(bounds.width)
+        words.draw(with: NSRect(x: 38, y: ((bounds.height - height) / 2).rounded(), width: bounds.width - 48, height: height),
+                   options: .usesLineFragmentOrigin)
     }
 }
 
@@ -570,6 +671,8 @@ final class ArmedButton: PanelButton {
 /// keeps its own width inside, at the leading edge.
 class Box: NSView {
     let fill: Look.Token?, ring: Look.Token?, radius: CGFloat
+    /// Rings it in ink2 at 1.5 points, as the mockup shows a field with the keys.
+    var focused = false { didSet { needsDisplay = true } }
 
     init(_ content: NSView, fill: Look.Token? = nil, ring: Look.Token? = nil, radius: CGFloat = 0, insets: NSEdgeInsets = NSEdgeInsets(),
          loose: Bool = false) {
@@ -593,7 +696,8 @@ class Box: NSView {
             shape.fill()
         }
         if let ring {
-            ring.color.setStroke()
+            (focused ? Look.Token.ink2 : ring).color.setStroke()
+            shape.lineWidth = focused ? 1.5 : 1
             shape.stroke()
         }
     }

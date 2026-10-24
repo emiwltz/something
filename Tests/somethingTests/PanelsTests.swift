@@ -289,6 +289,77 @@ final class FakePrompts: PromptSource {
         #expect(source.answers.last?.0 == "q2" && source.answers.last?.1 == .deny, "Escape leaves a question unanswered")
     }
 
+    /// A lone question of one choice: one click on an option answers; typed text answers; Escape in the field first
+    /// empties it; Don't Answer denies.
+    @Test func aLoneQuestionIsAnsweredByOneClick() throws {
+        var answers: [Answer] = []
+        let panel = RequestPanel { answers.append($0) }
+        var time: TimeInterval = 100
+        panel.clock = { time }
+        let prompt = Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil, at: "2026-10-17T09:00:03Z"),
+                            questions: [Question(header: nil, text: "Which color?", options: ["Blue", "Green", "Red"], multiple: false)])
+        panel.show(prompt, who: Asker(program: "Claude Code"), age: nil)
+        #expect(panel.boxes[0].map(\.number) == [1, 2, 3] && panel.boxes[0].allSatisfy { $0.toggles == nil })
+        #expect(PanelsTests.texts(panel.contentView).last == "The space can't see this window.")
+        #expect(panel.denyButton.title == "Don't Answer" && panel.denyButton.keyEquivalent.isEmpty)
+        time += 0.4
+        panel.boxes[0][1].performClick(nil)
+        #expect(answers.isEmpty && panel.boxes[0][1].state == .off, "a click before the panel armed answers nothing")
+        time += 0.2
+        panel.boxes[0][1].performClick(nil)
+        #expect(answers == [.choice([["Green"]])])
+        // The field has the keys: its ring shows it, and leaving it takes the ring away.
+        let ring = try #require(panel.typed[0].superview as? Box)
+        #expect(panel.makeFirstResponder(panel.typed[0]) && ring.focused)
+        #expect(panel.makeFirstResponder(nil) && !ring.focused)
+        panel.reply()
+        #expect(answers.count == 1, "Answer with nothing typed answers nothing")
+        let field = panel.typed[0]
+        field.stringValue = "  Teal  "
+        panel.reply()
+        #expect(answers.last == .choice([["Teal"]]))
+        // Escape as the field editor sends it, while the field is being edited: leaving the field must not answer.
+        #expect(panel.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor() as? NSTextView)
+        editor.string = "Cyan"
+        editor.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        #expect(field.stringValue.isEmpty && field.currentEditor() == nil && answers.count == 2, "Escape in the field empties it and answers nothing")
+        panel.cancelOperation(nil)
+        #expect(answers.last == .deny, "the next Escape answers nothing")
+        panel.denyButton.performClick(nil)
+        #expect(answers.count == 4 && answers.last == .deny)
+    }
+
+    /// Several choices keep toggles until Answer, the one beside the last field; a one-choice question among several
+    /// keeps one choice.
+    @Test func severalChoicesWaitForAnswer() throws {
+        var answers: [Answer] = []
+        let panel = RequestPanel { answers.append($0) }
+        panel.show(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: nil, about: nil, at: "2026-10-17T09:00:03Z"), questions: [
+            Question(header: nil, text: "Which color?", options: ["Blue", "Green"], multiple: false),
+            Question(header: nil, text: "Which pages?", options: ["Cart", "Home"], multiple: true),
+        ]), who: Asker(program: "Codex"), age: nil)
+        for (question, option) in [(0, 0), (0, 1), (1, 0), (1, 1), (1, 1)] { panel.boxes[question][option].performClick(nil) }
+        #expect(answers.isEmpty, "a click only toggles")
+        panel.reply()
+        #expect(answers == [.choice([["Green"], ["Cart"]])])
+        func buttons(_ view: NSView) -> [NSButton] { ((view as? NSButton).map { [$0] } ?? []) + view.subviews.flatMap(buttons) }
+        #expect(buttons(try #require(panel.contentView)).filter { $0.title == "Answer" }.count == 1)
+    }
+
+    /// An agent's long option wraps inside its row, so the whole answer is read before a click sends it.
+    @Test func aLongOptionWraps() throws {
+        let panel = RequestPanel { _ in }
+        let words = "Keep the invented cart page as it is today, and only move the help link below the list, where it was before."
+        panel.show(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: nil, about: nil, at: "2026-10-17T09:00:03Z"),
+                          questions: [Question(header: nil, text: "Which way?", options: [words, "Blue"], multiple: false)]), who: Asker(program: "Codex"), age: nil)
+        panel.size(width: RequestPanel.width)
+        panel.contentView?.layoutSubtreeIfNeeded()
+        let row = panel.boxes[0][0]
+        #expect(words.count > 100 && row.frame.width < RequestPanel.width && row.frame.height > 34 && panel.boxes[0][1].frame.height == 34)
+        #expect(row.frame.height >= row.labelHeight(row.frame.width) + 16, "the whole label fits its row")
+    }
+
     /// An invented command of several lines, as long as the mockup's.
     static let long = """
         cd ~/something/spaces && \\

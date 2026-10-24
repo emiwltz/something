@@ -179,7 +179,45 @@ struct AcceptanceTrust {
     }
     @Test("e4: Show Request", .disabled("not built yet: T5")) func e4() async throws {}
     @Test("e5: the Dock badge", .disabled("not built yet: T6")) func e5() async throws {}
-    @Test("e6: a question", .disabled("not built yet: T4")) func e6() async throws {}
+    /// Daily brief's assistant asks where the weather corner goes: the same panel, at the same place, its options
+    /// numbered; a click on the second answers with it.
+    @Test("e6: a question") func e6() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let source = FakePrompts()
+        let options = ["Top right, next to the date", "In the strip, after “In brief”", "Leave it out for now"]
+        source.prompts = [Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil,
+                                                  at: iso8601.string(from: Stage.now)),
+                                 questions: [Question(header: nil, text: "Where should the weather corner go?", options: options, multiple: false)])]
+        let panels = Panels(source: source, shows: false)
+        var time: TimeInterval = 100
+        (panels.now, panels.clock) = ({ Stage.now }, { time })
+        panels.who = { _ in App.who(Agent(id: "a1", kind: "claude", origin: "launched"), space: "Daily brief", home: "/Users/example", assistant: true) }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: Self.desk)
+        #expect(panel.title == "Claude Code asks you a question" && panel.header.kind == "Question")
+        #expect(PanelsTests.texts(panel.contentView) == ["something", "·  Question", "", "Claude Code asks you a question",
+                                                         "Daily brief · its assistant · just now", "Where should the weather corner go?",
+                                                         "", "The space can't see this window."])
+        #expect(panel.boxes[0].map(\.title) == options && panel.boxes[0].map(\.number) == [1, 2, 3])
+        #expect(panel.typed[0].placeholderString == "Or type your answer" && panel.denyButton.title == "Don't Answer")
+        let window = shell.window.frame, toolbar = window.height - shell.window.contentLayoutRect.maxY
+        #expect(panel.frame.width == RequestPanel.width && panel.frame.minX < window.maxX && panel.frame.maxX > window.maxX)
+        #expect(panel.frame.maxY == window.maxY - toolbar - 8 && !panel.isKeyWindow)
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: brief.web, "e6" + suffix, root: stage.home.root)
+        }
+        panel.boxes[0][1].performClick(nil)
+        #expect(source.answers.isEmpty, "a click before the panel armed answers nothing")
+        time += RequestPanel.arming
+        panel.boxes[0][1].performClick(nil)
+        #expect(source.answers.map(\.0) == ["q1"] && source.answers[0].1 == .choice([[options[1]]]) && panels.panel == nil)
+    }
     @Test("e7: the link sheet", .disabled("not built yet: T7")) func e7() async throws {}
     @Test("e8: the trash sheet", .disabled("not built yet: T8")) func e8() async throws {}
     @Test("e9: quit while assistants work", .disabled("not built yet: T9")) func e9() async throws {}
