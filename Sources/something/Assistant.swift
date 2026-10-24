@@ -164,11 +164,14 @@ import SomethingCore
         keep(\.notes, state.kinds.compactMapValues(\.note))
         let offered = builders.filter { installed[$0] == true && refused[$0] == nil }
         for each in sessions.values {
-            // A conversation whose program left the Mac keeps its builder: the card says it is missing rather than another
-            // agent taking the conversation over unasked.
+            // A conversation with a past keeps its builder while that builder is not known to be installed, whether its
+            // program left the Mac or the agents are not looked for yet (a space reopened at start): the card says it is
+            // missing rather than another agent taking the conversation over unasked. Only one refused passes on.
             let kind = each.kind ?? ""
-            if !offered.contains(kind), each.last == nil || installed[kind] != false { each.kind = offered.first { $0 == preferred } ?? offered.first }
-            if each.read(state) { keep(each) }
+            if !offered.contains(kind), !each.hasHistory || each.kind == nil || installed[kind] == true {
+                each.kind = offered.first { $0 == preferred } ?? offered.first
+            }
+            if each.read(state) { save(each) }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
         rest()
@@ -411,7 +414,7 @@ import SomethingCore
         if before?.session === session { before = nil }
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
-        keep(session)
+        save(session)
         ready = nil
     }
 
@@ -419,7 +422,7 @@ import SomethingCore
     /// new one with the builder chosen now.
     func session(for place: Place) -> Session {
         if let kept = sessions[place.key] { return kept }
-        let made = place.space.flatMap { Session.kept($0, in: places.assistants) } ?? Session(kind: kind, space: place.space)
+        let made = place.space.flatMap { Session.restored($0, in: places.assistants) } ?? Session(kind: kind, space: place.space)
         made.active = clock()
         sessions[place.key] = made
         return made
@@ -567,11 +570,11 @@ import SomethingCore
         halt(session)
         session.fold(engine.state)
         session.asleep = true
-        keep(session)
+        save(session)
     }
 
     /// Writes what a space's conversation keeps on disk.
-    private func keep(_ session: Session) { session.save(in: places.assistants) }
+    private func save(_ session: Session) { session.save(in: places.assistants) }
 
     /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
     /// while no other space is open. When one is, the new space is said `ready` instead, and nil returned.
@@ -592,7 +595,7 @@ import SomethingCore
         if let old = sessions[.space(name)] { halt(old) }
         built.space = name
         sessions[.space(name)] = built
-        keep(built)
+        save(built)
         let fresh = Session(kind: built.kind, model: built.model, effort: built.effort)
         fresh.active = clock()
         sessions[.new] = fresh
@@ -602,15 +605,16 @@ import SomethingCore
     /// The space `name` went to the Trash: its conversation goes with it, its agent stopped, and a space of the same
     /// name later begins a new one.
     func forget(_ name: String) {
+        // Halted first, as halting saves: the file goes after, before the open space's conversation is made again.
+        let gone = sessions.removeValue(forKey: .space(name))
+        gone.map(halt)
         try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
-        guard let gone = sessions.removeValue(forKey: .space(name)) else { return }
-        halt(gone)
-        if gone === session { session = session(for: place) }
+        if let gone, gone === session { session = session(for: place) }
     }
 
     /// The messages of the space `name`'s conversation, the person's and the agent's: what the Trash sheet says goes.
     func messages(of name: String) -> Int {
-        (sessions[.space(name)] ?? Session.kept(name, in: places.assistants)).map { AssistantModel.messages($0.rows) } ?? 0
+        (sessions[.space(name)] ?? Session.restored(name, in: places.assistants)).map { AssistantModel.messages($0.rows) } ?? 0
     }
 
     static func messages(_ rows: [Row]) -> Int {
@@ -627,6 +631,7 @@ import SomethingCore
         endLaunch(session)
         if let id = session.id, session.agent?.alive != false { engine.stopAll(within: 5, only: id) {} }
         session.stopped = true
+        save(session)
     }
 
     private func endLaunch(_ session: Session) { (session.launching, session.queued, session.launch) = (false, [], session.launch + 1) }
@@ -655,9 +660,10 @@ import SomethingCore
         // A wake: the conversation goes on when its kind can pick it up, else a new one begins and says why.
         if resume == nil, session.asleep, session.thread != nil {
             if resumes(session) { resume = session.thread } else {
-                session.renew(resumable(kind) ? "\(name(of: session)) could not pick its conversation up. Started a new conversation."
+                session.renew(!Preferences.at(places).resume ? "Started a new conversation: resuming is off in Settings."
+                              : resumable(kind) ? "\(name(of: session)) could not pick its conversation up. Started a new conversation."
                               : "\(name(of: session)) cannot resume a conversation. Started a new conversation.")
-                keep(session)
+                save(session)
             }
         }
         (session.launching, session.queued, session.failure) = (true, messages, nil)

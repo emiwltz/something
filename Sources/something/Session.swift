@@ -2,8 +2,8 @@
 // engine's state shows them, what went wrong, what the person is writing to it, the messages waiting for its launch or
 // for its turn to end, and the space it is about; the turns of its earlier agent that a resumed one continues, and
 // whether it began because the last one could not be picked up; and what a space's conversation keeps across sleep and
-// restarts, in assistants/<name>.json: its kind, model, effort, thread and last 60 items. A class, so a launch that
-// ends after a new conversation began can tell it was for another one.
+// restarts, in assistants/<name>.json: its kind, model, effort, thread, the kind that reported it, and last 60 items.
+// A class, so a launch that ends after a new conversation began can tell it was for another one.
 import Foundation
 import Observation
 import SomethingCore
@@ -24,6 +24,8 @@ import SomethingCore
     /// Its agent and the messages and tools of its thread, as the state shows them.
     private(set) var agent: Agent?
     private(set) var rows: [AssistantModel.Row] = []
+    /// The turns shown: those carried over (`kept`), then its agent's, as `read` last took them.
+    @ObservationIgnored private(set) var shown: [Turn] = []
     private(set) var turn: Turn?
     /// Whether its agent asks before every change: how it was launched, whatever the menu says now.
     var asking = false
@@ -59,7 +61,8 @@ import SomethingCore
     }
 
     /// Takes from `state` this conversation's agent and its thread, never another's. Only what changed is written,
-    /// so the window draws the assistant again only then. Returns whether its thread or its rows changed: what it keeps.
+    /// so the window draws the assistant again only then. Returns whether its thread changed or its last turn ended:
+    /// when it is saved, rather than at every row a streaming turn adds, up to four times a second.
     @discardableResult func read(_ state: State) -> Bool {
         let agent = state.agents.first { $0.id == id }, thread = state.threads.first { $0.agent == id }
         var changed = false
@@ -67,12 +70,19 @@ import SomethingCore
         if let agent, let reported = agent.thread, reported != self.thread { (self.thread, threadKind, changed) = (reported, agent.kind, true) }
         shown = kept + (thread?.turns ?? [])
         let rows = AssistantModel.rows(shown)
-        if self.rows != rows { (self.rows, changed) = (rows, true) }
+        if self.rows != rows { self.rows = rows }
         // Its last step is the sticker's words, even while the card that draws the rows is closed.
         let turn = thread?.turns.last
-        if self.turn != turn { self.turn = turn }
+        if self.turn != turn {
+            if let turn, turn.state != "working", self.turn?.id != turn.id || self.turn?.state != turn.state { changed = true }
+            self.turn = turn
+        }
         return changed
     }
+
+    /// Whether it has a past a builder took part in: a message sent, a thread reported, or turns carried over. Such a
+    /// conversation keeps its builder rather than pass to another unasked.
+    var hasHistory: Bool { last != nil || thread != nil || !kept.isEmpty }
 
     /// Keeps the turns of its agent's thread in `state` and lets that agent go: a later launch continues it, and the
     /// dead agent's thread, still in the state, never shows them twice.
@@ -88,7 +98,7 @@ import SomethingCore
         rows = []
     }
 
-    // MARK: Kept
+    // MARK: Saved
 
     /// The items kept, the newest.
     static let tail = 60
@@ -96,7 +106,7 @@ import SomethingCore
     /// The file of the space `name`'s conversation in `folder` (Places.assistants).
     static func file(_ name: String, in folder: URL) -> URL { folder.appendingPathComponent("\(name).json") }
 
-    /// Writes its kind, model, effort, thread and last `tail` items into `folder`, for a space's conversation only. A
+    /// Writes its kind, model, effort, thread, the kind that reported it, and last `tail` items into `folder`, for a space's conversation only. A
     /// file that cannot be written loses only what this change kept: the conversation goes on.
     func save(in folder: URL) {
         guard let space else { return }
@@ -106,30 +116,27 @@ import SomethingCore
             left -= items.count
             turns.insert(Turn(id: turn.id, state: turn.state, started: turn.started, ended: turn.ended, items: items), at: 0)
         }
-        let kept = Kept(kind: kind, model: model, effort: effort, thread: thread, asking: asking, turns: turns)
+        let saved = Saved(kind: kind, model: model, effort: effort, thread: thread, threadKind: threadKind, asking: asking, turns: turns)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(kept).write(to: Session.file(space, in: folder), options: .atomic)
+        try? JSONEncoder().encode(saved).write(to: Session.file(space, in: folder), options: .atomic)
     }
 
-    /// The turns shown: those kept, then its agent's, as `read` last took them.
-    @ObservationIgnored private(set) var shown: [Turn] = []
-
-    /// The conversation of the space `name` kept in `folder`, asleep: its next message wakes it. Nil when none was
-    /// kept or its file does not read.
-    static func kept(_ name: String, in folder: URL) -> Session? {
-        guard let data = try? Data(contentsOf: file(name, in: folder)), let kept = try? JSONDecoder().decode(Kept.self, from: data) else { return nil }
-        let session = Session(kind: kept.kind, model: kept.model, effort: kept.effort, space: name)
-        (session.thread, session.threadKind, session.asking, session.kept, session.asleep) = (kept.thread, kept.kind, kept.asking, kept.turns, true)
-        session.rows = AssistantModel.rows(kept.turns)
-        session.shown = kept.turns
+    /// The conversation of the space `name` saved in `folder`, asleep: its next message wakes it. Nil when none was
+    /// saved or its file does not read.
+    static func restored(_ name: String, in folder: URL) -> Session? {
+        guard let data = try? Data(contentsOf: file(name, in: folder)), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return nil }
+        let session = Session(kind: saved.kind, model: saved.model, effort: saved.effort, space: name)
+        (session.thread, session.threadKind, session.asking, session.kept, session.asleep) = (saved.thread, saved.threadKind, saved.asking, saved.turns, true)
+        session.rows = AssistantModel.rows(saved.turns)
+        session.shown = saved.turns
         return session
     }
 }
 
 extension Session {
-    /// What a space's conversation keeps on disk.
-    struct Kept: Codable {
-        var kind: String?, model: String?, effort: String?, thread: String?
+    /// What a space's conversation keeps on disk. `threadKind` missing reads as nil: its thread is never resumed.
+    struct Saved: Codable {
+        var kind: String?, model: String?, effort: String?, thread: String?, threadKind: String?
         var asking: Bool
         var turns: [Turn]
     }

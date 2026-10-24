@@ -21,13 +21,13 @@ import Testing
         ((try? String(contentsOf: home.root.appendingPathComponent("out/arguments"), encoding: .utf8)) ?? "").split(separator: "\n")
     }
 
-    func keep(_ kept: Session.Kept, _ name: String, in home: Home) throws {
+    func keep(_ kept: Session.Saved, _ name: String, in home: Home) throws {
         try FileManager.default.createDirectory(at: home.places.assistants, withIntermediateDirectories: true)
         try JSONEncoder().encode(kept).write(to: Session.file(name, in: home.places.assistants))
     }
 
-    func kept(_ name: String, in home: Home) throws -> Session.Kept {
-        try JSONDecoder().decode(Session.Kept.self, from: Data(contentsOf: Session.file(name, in: home.places.assistants)))
+    func kept(_ name: String, in home: Home) throws -> Session.Saved {
+        try JSONDecoder().decode(Session.Saved.self, from: Data(contentsOf: Session.file(name, in: home.places.assistants)))
     }
 
     /// Logbook kept Claude Code with Haiku at low effort. Its first message launches it so; ten idle minutes later, by
@@ -38,7 +38,7 @@ import Testing
         defer { home.remove() }
         var now = Date()
         model.clock = { now }
-        try keep(Session.Kept(kind: "claude", model: "haiku", effort: "low", thread: nil, asking: false, turns: []), "logbook", in: home)
+        try keep(Session.Saved(kind: "claude", model: "haiku", effort: "low", thread: nil, asking: false, turns: []), "logbook", in: home)
         await helper.look(model)
         let logbook = model.session(for: place(home, "Logbook", "logbook"))
         #expect(logbook.model == "haiku" && logbook.effort == "low" && logbook.rows.isEmpty)
@@ -92,8 +92,10 @@ import Testing
         model.putToSleep()
         #expect(model.asleep && model.presence.word == "Asleep · wakes on your next message" && !model.canSleep)
         model.send("Again.")
-        #expect(await wait(until: { model.id != nil && model.id != first && !model.launching && model.agent?.alive == true }))
-        #expect(!arguments(home).contains("--resume") && arguments(home).contains("--session-id"))
+        // The fake writes its arguments once running, which a loaded Mac may not have reached when the agent shows alive.
+        #expect(await wait(until: { model.id != nil && model.id != first && !model.launching && model.agent?.alive == true
+            && arguments(home).contains("--session-id") }), "\(arguments(home))")
+        #expect(!arguments(home).contains("--resume"))
         #expect(model.firstLines.contains("Claude Code cannot resume a conversation. Started a new conversation."), "\(model.firstLines)")
         #expect(await wait(until: { model.messageCount == 2 }))
         #expect(!model.rows.contains(.mine(caption: "about Stack", text: "Hello.")), "the old conversation is gone")
@@ -149,13 +151,42 @@ import Testing
         session.asking = true
         session.read(State(at: "2026-10-19T09:03:00Z", kinds: [:], agents: [agent]))
         session.save(in: folder)
-        let back = try #require(Session.kept("logbook", in: folder))
+        let back = try #require(Session.restored("logbook", in: folder))
         #expect(back.kind == "claude" && back.model == "opus" && back.effort == "high" && back.thread == "thread-1" && back.asking && back.asleep)
+        #expect(back.threadKind == "claude")
         #expect(back.kept.map(\.id) == ["t1", "t2"] && back.kept.map(\.items.count) == [30, 30])
         #expect(back.kept.flatMap(\.items).first?.id == "i1-10" && back.kept.flatMap(\.items).last?.id == "i2-29")
         #expect(back.rows == AssistantModel.rows(back.kept) && back.id == nil && back.space == "logbook")
         Session(kind: "claude").save(in: folder)
         #expect((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) == ["logbook.json"], "New Space keeps nothing")
+    }
+
+    /// A space reopened at start, before the agents are looked for, keeps its builder: once they are found, its next
+    /// message resumes the thread saved. A thread another kind reported is never resumed: that one wakes on a new
+    /// conversation.
+    @Test func aSavedConversationKeepsItsBuilderAndOnlyItsOwnThread() async throws {
+        let (home, model) = try helper.assistant(prefix: "something-session-")
+        defer { home.remove() }
+        let turn = Turn(id: "t1", state: "done", started: "2026-10-19T09:00:00Z", ended: nil,
+                        items: [Item(id: "i1", kind: "message", author: "agent", text: "Invented.", at: "2026-10-19T09:00:00Z")])
+        try keep(Session.Saved(kind: "claude", model: nil, effort: nil, thread: "thread-kept", threadKind: "claude", asking: false, turns: [turn]),
+                 "logbook", in: home)
+        try keep(Session.Saved(kind: "claude", model: nil, effort: nil, thread: "thread-other", threadKind: "codex", asking: false, turns: [turn]),
+                 "pet", in: home)
+        let logbook = model.session(for: place(home, "Logbook", "logbook")), pet = model.session(for: place(home, "Pebble", "pet"))
+        model.refresh()
+        #expect(logbook.kind == "claude" && pet.kind == "claude", "not looked for yet: the builder stays")
+        await helper.look(model)
+        #expect(logbook.kind == "claude" && pet.kind == "claude")
+        model.deliver("Newest first.", to: logbook)
+        #expect(await wait(until: { logbook.id != nil && !logbook.launching && arguments(home).contains("--resume") }), "\(arguments(home))")
+        let resumed = arguments(home)
+        #expect(resumed.firstIndex(of: "--resume").map { resumed[$0 + 1] == "thread-kept" } == true, "\(resumed)")
+        #expect(await wait(until: { logbook.agent?.state == "idle" }))
+        model.deliver("Hello.", to: pet)
+        #expect(await wait(until: { pet.id != nil && !pet.launching && arguments(home).contains("--session-id") }), "\(arguments(home))")
+        #expect(!arguments(home).contains("--resume") && pet.renewed?.hasSuffix("Started a new conversation.") == true)
+        await helper.finish(home, model)
     }
 
     /// A space moved to the Trash takes its conversation with it; one made again under a name (something new, Use
@@ -165,7 +196,7 @@ import Testing
         defer { home.remove() }
         let turn = Turn(id: "t1", state: "done", started: "2026-10-19T09:00:00Z", ended: nil,
                         items: [Item(id: "i1", kind: "message", author: "agent", text: "Invented.", at: "2026-10-19T09:00:00Z")])
-        let kept = Session.Kept(kind: "claude", model: nil, effort: nil, thread: "t", asking: false, turns: [turn])
+        let kept = Session.Saved(kind: "claude", model: nil, effort: nil, thread: "t", asking: false, turns: [turn])
         for name in ["logbook", "pet", "gone"] { try keep(kept, name, in: home) }
         for name in ["logbook", "pet"] { _ = try home.space(name, page(#"{"contract": 1, "title": "Invented"}"#, "")) }
         #expect(model.messages(of: "logbook") == 1 && model.session(for: place(home, "Logbook", "logbook")).rows.count == 2)
@@ -175,7 +206,7 @@ import Testing
         #expect(model.session(for: place(home, "Pebble", "pet")).rows.isEmpty)
         try keep(kept, "pet", in: home)
         try Library.forgetGone(home.places)
-        #expect(Session.kept("gone", in: home.places.assistants) == nil && Session.kept("pet", in: home.places.assistants) != nil)
+        #expect(Session.restored("gone", in: home.places.assistants) == nil && Session.restored("pet", in: home.places.assistants) != nil)
         await helper.finish(home, model)
     }
 }
