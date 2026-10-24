@@ -56,10 +56,66 @@ struct AcceptanceShell {
     }
 
     @Test("b1: the window", .disabled("not built yet: W3")) func b1() async throws {}
-    @Test("b3: sidebar groups", .disabled("not built yet: W2")) func b3() async throws {}
+    /// The sidebar and its groups (W2): Agents, Notes and Breaks, Breaks folded with its count, Daily brief open, the
+    /// pointer over Project watch, whose "…" shows. An open menu cannot be drawn offscreen: its structure is checked by
+    /// value and written beside the picture as b3-menu.txt.
+    @Test("b3: sidebar groups") func b3() async throws {
+        let stage = try Stage("shell-b3")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.preferences.fold("Breaks", true)
+        library.relist()
+        try stage.moment(shell)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let sections = library.sections()
+        #expect(sections.map(\.group) == ["Agents", "Notes", "Breaks"])
+        #expect(sections.map { $0.entries.map(\.title) } == [["Daily brief", "My agents", "Project watch"], ["Logbook", "Oracle"], ["Pebble", "Stack"]])
+        #expect(library.folded("Breaks") && library.label(group: "Breaks", count: 2) == "Breaks, 2 spaces, folded")
+        #expect(library.label(group: "Agents", count: 3) == "Agents, 3 spaces, open")
+        #expect(library.stops().contains(.space("pet")) == false, "a folded group's rows are not stops")
+        let row = try #require(library.entry("project"))
+        #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
+        #expect(Library.symbol("brief") != Library.symbol("oracle") && Library.symbol("oracle") == "doc")
+        let menu = SidebarMenu.text(library.menu(for: row))
+        #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
+                         "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export…", "—",
+                         "Move to Trash…  (red)"])
+        if let gallery {
+            try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
+            try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b3-menu.txt"), atomically: true, encoding: .utf8)
+        }
+        library.sidebar.hovered = "project"
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "b3" + suffix, root: stage.home.root)
+        }
+        // Show in Group ▸ Notes writes only the preferences; the file stays in the flat spaces folder.
+        if case let .submenu(_, _, picks) = library.menu(for: row)[3], case let .item(_, _, _, _, _, _, run) = picks[1] { run() }
+        #expect(library.preferences.group(of: "project") == "Notes")
+        #expect(FileManager.default.fileExists(atPath: stage.home.places.spaces.appendingPathComponent("project.html").path))
+    }
     @Test("b4: Info docked full height", .disabled("not built yet: W4")) func b4() async throws {}
     @Test("b5: full screen", .disabled("not built yet: W5")) func b5() async throws {}
-    @Test("b6: no space yet", .disabled("not built yet: W2")) func b6() async throws {}
+    /// No space yet (W2, the center AB12's): the sidebar says only where the spaces will be, New Space selected.
+    @Test("b6: no space yet") func b6() async throws {
+        let stage = try Stage("shell-b6")
+        defer { stage.remove() }
+        for file in try FileManager.default.contentsOfDirectory(at: stage.home.places.spaces, includingPropertiesForKeys: nil) {
+            try FileManager.default.removeItem(at: file)
+        }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: []) }
+        #expect(library.entries.isEmpty && library.selection == .newSpace)
+        #expect(library.stops() == [.newSpace], "no header shows while no space is listed")
+        #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
+        #expect(SidebarView.empty == "Your spaces appear here")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "b6" + suffix, root: stage.home.root)
+        }
+    }
+
     @Test("b7: the rail", .disabled("not built yet: W6")) func b7() async throws {}
     @Test("b8: rows with their eyes", .disabled("not built yet: W3")) func b8() async throws {}
 }

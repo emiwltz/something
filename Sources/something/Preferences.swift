@@ -1,5 +1,6 @@
 // What the app remembers for the person apart from the grants, in window.json: the window's memory (the last space
-// open, the recent ones, the groups of the sidebar and their folding, the names shown in place of a space's title),
+// open, the recent ones, the groups of the sidebar and their folding, the names Rename… shows in place of a space's
+// title, since a space's own name is its file and its grants are keyed by it),
 // whether the tour was seen, and the settings, whose defaults are the approved mockup's. One copy per file, read once
 // and shared by every model of the window, so that no write undoes another's; each change is written at once,
 // atomically, over the keys this version knows: a key it does not know is kept as it was.
@@ -121,6 +122,51 @@ import SomethingCore
         change { values in
             values.lastOpen = name
             if let name { values.recents = Array(([name] + values.recents.filter { $0 != name }).prefix(Preferences.recentLimit)) }
+        }
+    }
+
+    // MARK: The sidebar's groups, only a view: no file ever moves.
+
+    /// The group `space` shows in: the first that names it; nil when none does.
+    func group(of space: String) -> String? { values.groups.first { $0.spaces.contains(space) }?.name }
+
+    /// Puts `space` at the end of the group `name`, made when missing and unfolded so the space shows, and takes it
+    /// out of every other group.
+    func move(_ space: String, to name: String) {
+        change { values in
+            for index in values.groups.indices { values.groups[index].spaces.removeAll { $0 == space } }
+            if let index = values.groups.firstIndex(where: { $0.name == name }) { values.groups[index].spaces.append(space) }
+            else { values.groups.append(Group(name: name, spaces: [space])) }
+            values.folded.removeAll { $0 == name }
+        }
+    }
+
+    /// Makes an empty group under the first free name, "New Group", then "New Group 2"…, and returns that name.
+    @discardableResult func newGroup() -> String {
+        let taken = Set(values.groups.map(\.name))
+        let name = (["New Group"] + (2...999).map { "New Group \($0)" }).first { !taken.contains($0) } ?? "New Group \(taken.count + 1)"
+        change { $0.groups.append(Group(name: name, spaces: [])) }
+        return name
+    }
+
+    /// Renames the group `old` to `new`, trimmed, its spaces and folding kept. Returns false, changing nothing, for an
+    /// empty name, a name another group has, or a group that does not exist.
+    @discardableResult func renameGroup(_ old: String, to new: String) -> Bool {
+        let new = new.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !new.isEmpty, let index = values.groups.firstIndex(where: { $0.name == old }) else { return false }
+        guard new == old || !values.groups.contains(where: { $0.name == new }) else { return false }
+        change { values in
+            values.groups[index].name = new
+            values.folded = values.folded.map { $0 == old ? new : $0 }
+        }
+        return true
+    }
+
+    /// Folds or unfolds the group `name`: a folded group keeps its header and its count.
+    func fold(_ name: String, _ folded: Bool) {
+        change { values in
+            values.folded.removeAll { $0 == name }
+            if folded { values.folded.append(name) }
         }
     }
 

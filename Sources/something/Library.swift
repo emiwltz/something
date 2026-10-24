@@ -11,9 +11,12 @@ import SomethingAgents
 import SomethingCore
 
 @Observable final class Library {
-    /// One row of the sidebar: a space, its title, and whether it declares itself ("not a space yet" otherwise).
+    /// One row of the sidebar: a space, its title (the name Rename… gave it, else its declared one), and whether it
+    /// declares itself ("not a space yet" otherwise).
     struct Entry: Identifiable, Equatable {
         let space: Space, title: String, isSpace: Bool
+        /// The title its declaration gives, or its file's name.
+        var declared: String
         var id: String { space.name }
     }
 
@@ -38,6 +41,9 @@ import SomethingCore
     var fresh: String?
     /// Whether a template's preview fills the Templates page: the sidebar's Templates is not highlighted then.
     var previewing = false
+    /// What the sidebar holds besides the spaces: the row under the pointer, where the keyboard rests, a name being
+    /// typed (Sidebar.swift).
+    @ObservationIgnored let sidebar = SidebarState()
     /// Told the name of each space made from a template: its assistant offers to make it yours.
     @ObservationIgnored var used: (String) -> Void = { _ in }
     /// What selecting does: the app shows the destination, closing the open space.
@@ -78,7 +84,8 @@ import SomethingCore
             let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
             // A page with no declaration block, or one that does not read, is not a space yet: a scratch file, a draft.
             let declared = reading.declaration != nil && !reading.problems.contains { $0.code == "DECLARATION_MISSING" }
-            return Entry(space: space, title: reading.declaration?.title ?? space.name, isSpace: declared)
+            let own = reading.declaration?.title ?? space.name
+            return Entry(space: space, title: preferences.names[space.name] ?? own, isSpace: declared, declared: own)
         }.sorted { one, other in
             let order = one.title.compare(other.title, options: [.caseInsensitive, .diacriticInsensitive])
             return order == .orderedSame ? one.id < other.id : order == .orderedAscending
@@ -89,10 +96,17 @@ import SomethingCore
 
     /// The spaces in the sidebar's order: each group in its order, its spaces by title, then the spaces in no group,
     /// by title. A space two groups name shows in the first.
-    func order() -> [Entry] {
+    func order() -> [Entry] { sections().flatMap(\.entries) }
+
+    /// The sidebar's sections: each group, even empty, with its spaces by title, then the spaces in no group under no
+    /// name (nil), when there are any.
+    func sections() -> [(group: String?, entries: [Entry])] {
         var placed = Set<String>()
-        let grouped = preferences.groups.flatMap { group in entries.filter { group.spaces.contains($0.id) && placed.insert($0.id).inserted } }
-        return grouped + entries.filter { !placed.contains($0.id) }
+        let grouped = preferences.groups.map { group in
+            (Optional(group.name), entries.filter { group.spaces.contains($0.id) && placed.insert($0.id).inserted })
+        }
+        let rest = entries.filter { !placed.contains($0.id) }
+        return grouped + (rest.isEmpty ? [] : [(nil, rest)])
     }
 
     /// Lists the spaces, and lists them again each time the folder changes, from now on. The folder is looked at

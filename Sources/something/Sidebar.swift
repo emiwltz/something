@@ -1,12 +1,202 @@
-// The sidebar: New Space first, selected on the blank page, and still while the assistant makes one there; the spaces
-// in the library's order (one click opens one); and Templates pinned at the bottom. A page whose
-// declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
-// the person was elsewhere has a dot, a space that just arrived a ring of ink fading out, and each space the eyes of
-// its own assistant, which `eyes` gives (W3 adds the ring of a change of state, the folded groups and the preference).
-// Each space has Show in Finder, Export… and Move to Trash… in its context menu. Its rows are drawn here, not by a
-// List: the mockup's 25-point rows and the identity's quiet selection, by day and by night, which a sidebar List's own
-// highlight would cover; ↑ and ↓ move through them.
+// The sidebar: New Space and Go to… first; SPACES with New Group; the spaces in their groups, each group folding under
+// its header, which keeps its count; Templates pinned at the bottom, then the sign, the wordmark and Settings. Groups
+// are only a view, kept in the preferences: the files never move. A row shows the template's symbol (else a page),
+// the title, "…" under the pointer for the menu a right click also gives, and the eyes of its own assistant, which
+// `eyes` gives. A page whose declaration does not read is listed too, in secondary color: "not a space yet". A space
+// the assistant made while the person was elsewhere has a dot, one that just arrived a ring of ink fading out.
+// Rename… gives a space a name shown in place of its title, since its file is its name and its grants are keyed by
+// it; a group is renamed in place too, or by a double click. Its rows are drawn here, not by a List: the mockup's
+// 25-point rows and the identity's quiet selection, which a sidebar List's own 32-point rows and highlight would
+// cover; ↑ and ↓ move through New Space, the headers and the rows shown, Return folds the header the keys rest on.
+import AppKit
 import SwiftUI
+
+/// The sidebar's own state, apart from the spaces and the preferences.
+@Observable final class SidebarState {
+    /// What can be renamed in place.
+    enum Target: Hashable { case space(String), group(String) }
+    /// Where ↑ and ↓ stop.
+    enum Stop: Hashable { case newSpace, group(String), space(String) }
+
+    /// The row under the pointer: a space's name, or "new", "palette", "tpls", "group:<name>".
+    var hovered: String?
+    /// The group header the keys rest on; nil while they rest on the selection.
+    var cursor: String?
+    /// What is being renamed in place, and the name typed so far.
+    var renaming: Target?
+    var draft = ""
+}
+
+/// A context menu as data: the sidebar draws it, and the tests read it (a menu cannot be drawn offscreen).
+enum SidebarMenu {
+    indirect enum Line {
+        /// `key` is the id of the command whose key the item shows.
+        case item(String, symbol: String, key: String? = nil, checked: Bool = false, enabled: Bool = true, destructive: Bool = false,
+                  run: () -> Void)
+        case submenu(String, symbol: String, [Line])
+        case separator
+        case note(String)
+    }
+
+    /// The menu in words, one line per item, a submenu's indented: what the pictures write beside them.
+    static func text(_ lines: [Line], indent: String = "") -> [String] {
+        lines.flatMap { line -> [String] in
+            switch line {
+            case let .item(title, _, key, checked, enabled, destructive, _):
+                let marks = [key.map(Keys.shown), checked ? "✓" : nil, enabled ? nil : "(dimmed)", destructive ? "(red)" : nil].compactMap { $0 }
+                return [indent + ([title] + marks).joined(separator: "  ")]
+            case let .submenu(title, _, lines): return [indent + title + "  ▸"] + text(lines, indent: indent + "  ")
+            case .separator: return [indent + "—"]
+            case .note(let words): return [indent + "(" + words + ")"]
+            }
+        }
+    }
+}
+
+extension Library {
+    /// The symbol of the template a space was made from, by its name (agents, agents-2…); a page for any other.
+    static func symbol(_ space: String) -> String {
+        let base = space.replacingOccurrences(of: #"-\d+$"#, with: "", options: .regularExpression)
+        let symbols = ["brief": "note.text", "agents": "square.3.layers.3d", "project": "scope", "logbook": "clock", "pet": "sparkle",
+                       "stack": "play"]
+        return symbols[base] ?? "doc"
+    }
+
+    func folded(_ group: String) -> Bool { preferences.folded.contains(group) }
+
+    /// Folds the group, or unfolds it.
+    func toggle(_ group: String) { preferences.fold(group, !folded(group)) }
+
+    /// Rename… of a space: `title` is shown in place of its declared one, in the sidebar, the Go menu and ⌘P. Blank,
+    /// or its declared title, gives it back its own. The file keeps its name.
+    func rename(_ space: String, to title: String) {
+        guard let entry = entry(space) else { return }
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        preferences.change { $0.names[space] = title.isEmpty || title == entry.declared ? nil : title }
+        relist()
+    }
+
+    /// Starts renaming `target` in place, its group unfolded so its row shows.
+    func beginRename(_ target: SidebarState.Target) {
+        switch target {
+        case .group(let name): sidebar.draft = name
+        case .space(let name):
+            if let group = preferences.group(of: name) { preferences.fold(group, false) }
+            sidebar.draft = entry(name)?.title ?? name
+        }
+        sidebar.renaming = target
+    }
+
+    /// Return, or the field losing the focus: the name typed is kept. A group keeps its old name when the new one is
+    /// blank or another group's.
+    func commitRename() {
+        guard let target = sidebar.renaming else { return }
+        sidebar.renaming = nil
+        switch target {
+        case .group(let name): preferences.renameGroup(name, to: sidebar.draft)
+        case .space(let name): rename(name, to: sidebar.draft)
+        }
+    }
+
+    /// Esc: nothing changes.
+    func cancelRename() { sidebar.renaming = nil }
+
+    /// New Group: an empty group under the first free name, `space` moved into it when one is given, its name ready
+    /// to be typed.
+    func addGroup(moving space: String? = nil) {
+        let group = preferences.newGroup()
+        if let space { preferences.move(space, to: group) }
+        beginRename(.group(group))
+    }
+
+    /// The stops of ↑ and ↓: New Space, then each group's header and, unfolded, its rows; the rows of no group last.
+    /// With no space, no header shows: New Space alone.
+    func stops() -> [SidebarState.Stop] {
+        [.newSpace] + (entries.isEmpty ? [] : sections()).flatMap { group, entries -> [SidebarState.Stop] in
+            (group.map { [.group($0)] } ?? []) + (group.map(folded) == true ? [] : entries.map { .space($0.id) })
+        }
+    }
+
+    /// ↑ (-1) or ↓ (1): the keys rest on the next stop, which opens when it is a space or New Space. Returns the stop,
+    /// nil when there is none to go to (on the Templates page, the keys are not in the list).
+    @discardableResult func step(_ by: Int) -> SidebarState.Stop? {
+        let all = stops()
+        let here: SidebarState.Stop? = sidebar.cursor.map { .group($0) } ?? (selection == .newSpace ? .newSpace : selection.space.map { .space($0) })
+        guard let here else { return nil }
+        let at = all.firstIndex(of: here) ?? (by > 0 ? -1 : all.count)
+        let next = all[min(max(at + by, 0), all.count - 1)]
+        switch next {
+        case .group(let name): sidebar.cursor = name
+        case .newSpace:
+            sidebar.cursor = nil
+            select(.newSpace)
+        case .space(let name):
+            sidebar.cursor = nil
+            select(.space(name))
+        }
+        return next
+    }
+
+    /// Return: folds or unfolds the header the keys rest on. Returns whether there was one.
+    func enter() -> Bool {
+        guard let group = sidebar.cursor else { return false }
+        toggle(group)
+        return true
+    }
+
+    /// The menu of a space, by a right click or its "…": the mockup's, Show in Group listing every group with a check
+    /// on its own, then New Group… and the reminder that the file does not move.
+    func menu(for entry: Entry) -> [SidebarMenu.Line] {
+        let id = entry.id, mine = preferences.group(of: id)
+        let groups: [SidebarMenu.Line] = preferences.groups.map { group in
+            .item(group.name, symbol: "folder", checked: group.name == mine, enabled: group.name != mine) { [weak self] in
+                self?.preferences.move(id, to: group.name)
+            }
+        }
+        return [
+            .item("Open", symbol: "doc") { [weak self] in self?.select(.space(id)) },
+            .item("Show Info", symbol: "info.circle", key: "insp") { [weak self] in
+                self?.select(.space(id))
+                NSApp.sendAction(#selector(App.showSpaceInfo(_:)), to: nil, from: nil)
+            },
+            .item("Rename…", symbol: "pencil") { [weak self] in self?.beginRename(.space(id)) },
+            .submenu("Show in Group", symbol: "folder", groups + (groups.isEmpty ? [] : [.separator]) + [
+                .item("New Group…", symbol: "folder.badge.plus") { [weak self] in self?.addGroup(moving: id) },
+                .note("Groups are only in the sidebar. The file does not move."),
+            ]),
+            .separator,
+            .item("Show in Finder", symbol: "macwindow") { [weak self] in self?.showInFinder(id) },
+            .item("Export…", symbol: "square.and.arrow.up") { [weak self] in self?.export(id) },
+            .separator,
+            .item("Move to Trash…", symbol: "trash", destructive: true) { [weak self] in
+                if let entry = self?.entry(id) { self?.trashing(entry) }
+            },
+        ]
+    }
+
+    /// The menu of a group's header.
+    func menu(forGroup group: String) -> [SidebarMenu.Line] {
+        [.item("Rename…", symbol: "pencil") { [weak self] in self?.beginRename(.group(group)) },
+         .item("New Group", symbol: "folder.badge.plus") { [weak self] in self?.addGroup() }]
+    }
+
+    /// What VoiceOver says of a space's row: its title and its assistant's state, or that it is not a space yet.
+    static func label(_ entry: Entry, _ state: Sign.State) -> String {
+        entry.isSpace ? "\(entry.title), \(state.word)" : "\(entry.title), not a space yet"
+    }
+
+    /// What VoiceOver says of a group's header.
+    func label(group: String, count: Int) -> String {
+        "\(group), \(count) \(count == 1 ? "space" : "spaces"), \(folded(group) ? "folded" : "open")"
+    }
+}
+
+extension App {
+    /// Show Info from a row's menu: Info opens beside the space the menu just selected, and stays open when it was.
+    @objc func showSpaceInfo(_ sender: Any?) {
+        if shell.inspector.isCollapsed { shell.split.toggleInspector(sender) }
+    }
+}
 
 struct SidebarView: View {
     @Bindable var library: Library
@@ -14,114 +204,220 @@ struct SidebarView: View {
     /// The state of the space of that name's assistant, read from its own conversation.
     let eyes: (String) -> Sign.State
 
+    private var state: SidebarState { library.sidebar }
+    /// What the list says while there is no space, and no group header shows: the center invites to make one.
+    static let empty = "Your spaces appear here"
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 1) {
-                    nav(on: library.selection == .newSpace, key: "new", label: "New Space", open: newSpace) {
-                        // The identity's ink, never the system's accent: a rounded square of ink with its plus.
-                        Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
-                            .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
-                    }
-                    Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5).foregroundStyle(Look.Token.ink3.ui)
-                        .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2)).accessibilityAddTraits(.isHeader)
-                    if library.entries.isEmpty, !assistant.building {
-                        Text("Your spaces appear here").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-                            .padding(.horizontal, 10).padding(.vertical, 8)
-                    }
-                    ForEach(library.order()) { entry in
-                        space(entry).contextMenu {
-                            Button("Show in Finder") { library.showInFinder(entry.id) }
-                            Button("Export…") { library.export(entry.id) }
-                            Divider()
-                            Button("Move to Trash…") { library.trashing(entry) }
-                        }
-                    }
+            nav("new", label: "New Space", on: library.selection == .newSpace, open: newSpace) {
+                // The identity's ink, never the system's accent: a rounded square of ink with its plus.
+                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
+                    .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
+            }
+            // Go to… and Settings send their commands, and stay greyed until a command has its action (G2, G4).
+            nav("palette", label: "Go to…", on: false, open: Self.send("palette")) {
+                Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
+            }
+            .disabled(Keys.command("palette")?.action == nil)
+            HStack {
+                Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5).accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button { library.addGroup() } label: {
+                    Image(systemName: "folder.badge.plus").font(.system(size: 12)).frame(width: 24, height: 22).contentShape(Rectangle())
                 }
-                .padding(.horizontal, 10)
+                .buttonStyle(.plain).help("New Group").accessibilityLabel("New Group")
+            }
+            .foregroundStyle(Look.Token.ink3.ui)
+            .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2))
+            ScrollView {
+                list.padding(.bottom, 4)
             }
             .scrollIndicators(.never)
-            nav(on: library.selection == .templates && !library.previewing, key: "tpls", label: "Templates", open: { library.select(.templates) }) {
+            Spacer(minLength: 0)
+            nav("tpls", label: "Templates", on: library.selection == .templates && !library.previewing, open: { library.select(.templates) }) {
                 Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
             }
-            .padding(EdgeInsets(top: 4, leading: 10, bottom: 10, trailing: 10))
+            footer
         }
+        // The mockup's New Space starts 49 points down the window, just above where the toolbar's safe area ends.
+        .padding(EdgeInsets(top: -3, leading: 10, bottom: 10, trailing: 10))
         .font(Look.body.font.ui)
         .foregroundStyle(Look.Token.ink.ui)
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.upArrow) { step(-1) }
         .onKeyPress(.downArrow) { step(1) }
+        .onKeyPress(.return) { library.enter() ? .handled : .ignored }
         // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through.
         .background(Look.Token.side.ui.ignoresSafeArea())
     }
 
+    /// The groups and their rows, or, with no space at all, only the words that say where they will be.
+    @ViewBuilder private var list: some View {
+        if library.entries.isEmpty {
+            if !assistant.building {
+                Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
+                    .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            let sections = library.sections()
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(sections, id: \.group) { section in
+                    VStack(alignment: .leading, spacing: 1) {
+                        if let group = section.group { header(group, count: section.entries.count) }
+                        if section.group.map(library.folded) != true {
+                            ForEach(section.entries) { space($0) }
+                            if section.entries.isEmpty {
+                                Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                                    .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The sign listening, the wordmark, and Settings.
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Rectangle().fill(Look.Token.line.ui).frame(height: 1)
+            HStack(spacing: 8) {
+                Image(nsImage: Sign.image(.listen, side: 20)).accessibilityHidden(true)
+                Text("something").font(Look.font(.title, size: 15, weight: .bold).ui).kerning(-0.375)
+                Spacer(minLength: 0)
+                Button(action: Self.send("settings")) {
+                    Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
+                .disabled(Keys.command("settings")?.action == nil)
+            }
+            .padding(EdgeInsets(top: 10, leading: 8, bottom: 0, trailing: 4))
+        }
+        .padding(.top, 8)
+    }
+
+    /// Sends the command `id`'s action along the responder chain, as its menu item would.
+    private static func send(_ id: String) -> () -> Void {
+        { if let action = Keys.command(id)?.action { NSApp.sendAction(action, to: nil, from: nil) } }
+    }
+
     private func newSpace() {
+        state.cursor = nil
         library.select(.newSpace)
         assistant.focus()
     }
 
-    /// ↑ and ↓: New Space, then each space in order.
     private func step(_ by: Int) -> KeyPress.Result {
-        let all: [Library.Destination] = [.newSpace] + library.order().map { .space($0.id) }
-        guard let at = all.firstIndex(of: library.selection) else { return .ignored }
-        let next = min(max(at + by, 0), all.count - 1)
-        if next != at { all[next] == .newSpace ? newSpace() : library.select(all[next]) }
+        guard let stop = library.step(by) else { return .ignored }
+        if stop == .newSpace { assistant.focus() }
         return .handled
     }
 
-    /// New Space and Templates: 30 points, medium, their shortcut shown on the selected one, as the mockup's.
-    private func nav(on: Bool, key: String, label: String, open: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
+    /// Notes which row the pointer is over, and forgets it when the pointer leaves that row.
+    private func hover(_ key: String, _ inside: Bool) {
+        if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil }
+    }
+
+    /// New Space, Go to… and Templates: 30 points, medium, their shortcut shown under the pointer and on the selected one.
+    private func nav(_ key: String, label: String, on: Bool, open: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
         Button(action: open) {
             HStack(spacing: 9) {
                 icon().frame(width: 16)
                 Text(label).font(Look.font(.ui, size: 13, weight: .medium).ui)
                 Spacer(minLength: 0)
-                if on { Text(Keys.shown(key)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui) }
+                if on || state.hovered == key { Text(Keys.shown(key)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui) }
             }
             .padding(.horizontal, 8).frame(height: 30)
-            .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+            .background(on ? Look.Token.sel.ui : state.hovered == key ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hover(key, $0) }
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// A row of the list, 25 points in Emi's compact density: its symbol, its words, the selection's quiet fill.
-    private func row(on: Bool, open: @escaping () -> Void, @ViewBuilder icon: () -> some View, @ViewBuilder label: () -> some View) -> some View {
-        Button(action: open) {
-            HStack(spacing: 9) {
-                icon().font(.system(size: 12, weight: .light)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui).frame(width: 15)
-                label()
-            }
-            .lineLimit(1)
-            .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
-            .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id
-        return row(on: on, open: { library.select(.space(entry.id)) }) {
-            Image(systemName: "doc").overlay(alignment: .topTrailing) {
-                if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
-            }
-        } label: {
-            if entry.isSpace {
-                Text(entry.title).fontWeight(on ? .semibold : .regular)
-                Spacer(minLength: 4)
-                let state = eyes(entry.id)
-                Image(nsImage: Sign.miniEyes(state, template: false)).frame(width: 22).help(state.word)
-                    .accessibilityLabel("Assistant: \(state.word)")
+    /// A group's header, 26 points: its name, its count, and the chevron, shown under the pointer and while folded.
+    /// A click folds it; a double click renames it in place.
+    private func header(_ group: String, count: Int) -> some View {
+        let folded = library.folded(group), key = "group:" + group
+        let lit = state.hovered == key || state.cursor == group
+        return HStack(spacing: 6) {
+            if state.renaming == .group(group) {
+                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).frame(maxWidth: 160)
             } else {
-                Text(entry.title).foregroundStyle(Look.Token.ink3.ui)
+                Text(group).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text("\(count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).frame(width: 12)
+                .rotationEffect(.degrees(folded ? -90 : 0)).opacity(lit || folded ? 1 : 0)
+        }
+        .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
+        .foregroundStyle(lit ? Look.Token.ink2.ui : Look.Token.ink3.ui)
+        .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6)).frame(height: 26)
+        .background(lit ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .contentShape(Rectangle())
+        // A double click folds it twice, which leaves it as it was, then renames it.
+        .onTapGesture {
+            state.cursor = nil
+            library.toggle(group)
+        }
+        .simultaneousGesture(TapGesture(count: 2).onEnded { library.beginRename(.group(group)) })
+        .onHover { hover(key, $0) }
+        .contextMenu { Self.items(library.menu(forGroup: group)) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(library.label(group: group, count: count))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { library.toggle(group) }
+        .accessibilityAction(named: "Rename") { library.beginRename(.group(group)) }
+    }
+
+    /// A row of the list, 25 points in Emi's compact density: its symbol, its title, "…" under the pointer, its eyes.
+    private func space(_ entry: Library.Entry) -> some View {
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, hovered = state.hovered == entry.id
+        let now = eyes(entry.id), menu = library.menu(for: entry)
+        return HStack(spacing: 9) {
+            Image(systemName: Library.symbol(entry.id)).font(.system(size: 12)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui)
+                .frame(width: 15)
+                .overlay(alignment: .topTrailing) {
+                    if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
+                }
+            if state.renaming == .space(entry.id) {
+                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).fontWeight(.semibold)
+            } else {
+                Text(entry.title).fontWeight(on ? .semibold : .regular).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
                 Spacer(minLength: 4)
-                Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                if hovered {
+                    Menu { Self.items(menu) } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(Look.Token.ink2.ui)
+                    }
+                    .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().frame(width: 22, height: 20)
+                    .accessibilityLabel("More for \(entry.title)")
+                }
+                if entry.isSpace {
+                    Image(nsImage: Sign.miniEyes(now, template: false)).frame(width: 22).help(now.word)
+                } else {
+                    Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                }
             }
         }
+        .lineLimit(1)
+        .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
+        .background(on ? Look.Token.sel.ui : hovered ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            state.cursor = nil
+            library.select(.space(entry.id))
+        }
+        .onHover { hover(entry.id, $0) }
+        .contextMenu { Self.items(menu) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Library.label(entry, now))
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { library.select(.space(entry.id)) }
         // The mockup's .fresh: the ring at once, then gone in 1.6 s on the "out" curve; a row it leaves goes 0 to 0.
         .overlay {
             RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).allowsHitTesting(false)
@@ -130,5 +426,56 @@ struct SidebarView: View {
                     LinearKeyframe(0.0, duration: fresh ? 1.6 : 0.01, timingCurve: Look.out.unit)
                 }
         }
+    }
+
+    /// The lines of a menu as SwiftUI draws them in a context menu or the "…" menu.
+    static func items(_ lines: [SidebarMenu.Line]) -> some View {
+        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in item(line) }
+    }
+
+    private static func item(_ line: SidebarMenu.Line) -> AnyView {
+        switch line {
+        case let .item(title, symbol, key, checked, enabled, destructive, run):
+            let button = Button(role: destructive ? .destructive : nil, action: run) { Label(title, systemImage: checked ? "checkmark" : symbol) }
+                .disabled(!enabled)
+            guard let command = key.flatMap(Keys.command), let character = command.key.first else { return AnyView(button) }
+            return AnyView(button.keyboardShortcut(KeyEquivalent(character), modifiers: EventModifiers(command.modifiers)))
+        case let .submenu(title, symbol, lines): return AnyView(Menu { items(lines) } label: { Label(title, systemImage: symbol) })
+        case .separator: return AnyView(Divider())
+        case .note(let words): return AnyView(Text(words))
+        }
+    }
+}
+
+/// The field of a name renamed in place, which takes the focus as it appears: Return keeps the name, Esc puts the
+/// old one back, leaving the field keeps it.
+private struct RenameField: View {
+    @Bindable var state: SidebarState
+    let commit: () -> Void, cancel: () -> Void
+    @FocusState private var typing: Bool
+
+    var body: some View {
+        TextField("Name", text: $state.draft)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 4).frame(height: 22)
+            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Look.Token.ink.ui, lineWidth: 2))
+            .padding(.horizontal, -4)
+            .focused($typing)
+            .accessibilityLabel("Name")
+            .onSubmit(commit)
+            .onExitCommand(perform: cancel)
+            .onChange(of: typing) { _, now in if !now { commit() } }
+            .onAppear { typing = true }
+    }
+}
+
+private extension EventModifiers {
+    init(_ flags: NSEvent.ModifierFlags) {
+        self = []
+        if flags.contains(.command) { insert(.command) }
+        if flags.contains(.shift) { insert(.shift) }
+        if flags.contains(.option) { insert(.option) }
+        if flags.contains(.control) { insert(.control) }
     }
 }
