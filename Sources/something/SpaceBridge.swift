@@ -72,7 +72,8 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
 }
 
 /// A space's links: one sheet at a time, and after three Cancels in one load no more sheets until the page reloads,
-/// so a page cannot keep asking. A sheet that could not be shown is no Cancel: the person did not answer it. A class: the person's answer comes back while a second call may already be here.
+/// so a page cannot keep asking. A sheet that could not be shown is no Cancel: the person did not answer it. A class:
+/// the person's answer comes back while a second call may already be here.
 final class Links {
     static let cancels = 3
     private var waiting = false, cancelled = 0

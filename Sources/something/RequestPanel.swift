@@ -4,8 +4,9 @@
 // typed in a page must never answer it. Allow Once arms 0.5 s after a request appears, and then answers a click, or
 // VoiceOver's press once the person made the panel key themselves (a click on it, or Show Request); no key, Return and
 // Space included, ever presses it. Show Request (⌥⌘P) gives it the keys, ringed, with one pulse; when it goes away
-// they go back to the window that had them. Closing it denies, and so does Escape while it has the keys. The exact command is
-// folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger, its footer always in sight.
+// they go back to the window that had them. Closing it denies, and so does Escape while it has the keys. The exact
+// command is folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger, its footer always in
+// sight.
 // A question shows in the same panel: its numbered options, a field for one's own answer, and Don't Answer. An option
 // that answers a lone question by one click is armed like Allow Once: a click meant for the space may land on it.
 import AppKit
@@ -587,6 +588,9 @@ class PanelButton: NSButton {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    /// Enables it, or greys it: a button that draws itself does not grey on its own.
+    func enable(_ on: Bool) { (isEnabled, alphaValue) = (on, on ? 1 : 0.45) }
 
     private var label: NSAttributedString {
         let ink = (primary ? Look.Token.actfg : .ink).color

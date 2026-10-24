@@ -2,8 +2,9 @@
 // Fraunces, its sentence (some words bold), rows, a block of its own (a link's address), a fine print, and the actions
 // at the bottom right, the safe one first. The alert variant (Quit) centres it all under the sign, its actions sharing
 // the width. It hangs from the toolbar over the space, beside the sidebar. A space cannot draw it, so a space cannot
-// answer it. Escape presses the cancel action, or the safe one when there is none; the safe action holds the focus at first, and Return presses the
-// focused action unless it is destructive: a key meant for something else never confirms what cannot be undone.
+// answer it. Escape presses the cancel action, or the safe one when there is none; the safe action holds the focus at
+// first, and Return presses the focused action unless it is destructive: a key meant for something else never confirms
+// what cannot be undone.
 import AppKit
 
 final class Sheet: NSPanel {
@@ -27,14 +28,15 @@ final class Sheet: NSPanel {
     /// Called once an action was pressed: the window it hangs from takes it away.
     var ended: () -> Void = {}
 
-    /// A sheet `width` wide of the parts given, in this order; `alert` centres them. Text the page gave is shown as is.
+    /// A sheet of the parts given, in this order; `alert` centres them. Text the page gave is shown as is.
     init(icon: Icon?, title: String, body: Words = [], rows: [Row] = [],
-         block: NSView? = nil, fine: String? = nil, actions: [Action], alert: Bool = false, width: CGFloat = Sheet.width) {
+         block: NSView? = nil, fine: String? = nil, actions: [Action], alert: Bool = false) {
+        let width = Sheet.width
         isAlert = alert
         super.init(contentRect: NSRect(x: 0, y: 0, width: width, height: 100), styleMask: .borderless, backing: .buffered, defer: true)
         (isOpaque, backgroundColor, hasShadow, self.title) = (false, .clear, true, title)
         let tiled = icon.map { Self.tile($0, alert: alert) }
-        let text = Self.column(width: width, alert: alert, tiled: tiled != nil)
+        let text = Self.column(alert: alert, tiled: tiled != nil)
         let heading = Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)
         heading.preferredMaxLayoutWidth = Self.balanced(heading, width: text)
         var parts: [NSView] = [heading]
@@ -96,9 +98,9 @@ final class Sheet: NSPanel {
 
     override func cancelOperation(_ sender: Any?) { buttons.first { $0.keyEquivalent == "\u{1b}" }?.performClick(nil) }
 
-    /// How wide a sheet `width` wide sets its text: its insets, and the tile beside the text unless `alert` centres it.
-    static func column(width: CGFloat = Sheet.width, alert: Bool = false, tiled: Bool = true) -> CGFloat {
-        width - 40 - (alert || !tiled ? 0 : 46)
+    /// How wide a sheet sets its text: its insets, and the tile beside the text unless `alert` centres it.
+    static func column(alert: Bool = false, tiled: Bool = true) -> CGFloat {
+        Sheet.width - 40 - (alert || !tiled ? 0 : 46)
     }
 
     /// The narrowest width up to `width` that keeps `text` on as many lines as `width` does: the mockup balances the
@@ -233,14 +235,13 @@ final class SheetButton: PanelButton {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
 
-    override func becomeFirstResponder() -> Bool {
-        defer { superview?.setNeedsDisplay(frame.insetBy(dx: -4, dy: -4)) }
-        return super.becomeFirstResponder()
-    }
+    override func becomeFirstResponder() -> Bool { redrawRing(super.becomeFirstResponder()) }
+    override func resignFirstResponder() -> Bool { redrawRing(super.resignFirstResponder()) }
 
-    override func resignFirstResponder() -> Bool {
-        defer { superview?.setNeedsDisplay(frame.insetBy(dx: -4, dy: -4)) }
-        return super.resignFirstResponder()
+    /// The ring is drawn outside the button: its superview redraws around it. Returns `done`.
+    private func redrawRing(_ done: Bool) -> Bool {
+        superview?.setNeedsDisplay(frame.insetBy(dx: -4, dy: -4))
+        return done
     }
 
     override func draw(_ dirtyRect: NSRect) {

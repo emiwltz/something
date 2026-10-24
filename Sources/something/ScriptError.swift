@@ -31,8 +31,7 @@ final class ScriptError: NSView {
         let inset = Box(quote, fill: .hover, radius: 5, insets: NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6))
         inset.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         (fix.height, fix.least, fix.target, fix.action) = (26, 0, self, #selector(fixNow))
-        fix.isEnabled = !assistant.noAgent
-        fix.alphaValue = fix.isEnabled ? 1 : 0.45
+        fix.enable(!assistant.noAgent)
         close.isBordered = false
         (close.contentTintColor, close.target, close.action, close.toolTip) = (Look.Token.ink2.color, self, #selector(closeNow), "Close")
         close.symbolConfiguration = .init(pointSize: 10.5, weight: .semibold)

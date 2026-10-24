@@ -4,8 +4,8 @@
 // away from it cancelled (a clicked http, https or mailto link goes to the link sheet), no new window, and a reload
 // when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs. An
 // error the page does not catch is kept by its code, and the first one's line for the person's eyes only (ScriptError,
-// over the page). A page whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file no longer reloads it,
-// so a page that crashes at once is not reloaded in a loop, until the person reloads it.
+// over the page). A page whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file
+// no longer reloads it, so a page that crashes at once is not reloaded in a loop, until the person reloads it.
 // What the space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents

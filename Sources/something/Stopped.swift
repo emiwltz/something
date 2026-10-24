@@ -21,8 +21,7 @@ final class Stopped: NSView {
         super.init(frame: .zero)
         (reload.target, reload.action, fix.target, fix.action) = (self, #selector(reloadNow), self, #selector(fixNow))
         (reload.least, fix.least) = (0, 0)
-        fix.isEnabled = !assistant.noAgent
-        fix.alphaValue = fix.isEnabled ? 1 : 0.45
+        fix.enable(!assistant.noAgent)
         let file = space.space.location.lastPathComponent
         let (said, when) = Stopped.words(space.stops, file: file, calendar: space.calendar, hours: space.hours)
         let sign = NSImageView(image: Sign.image(.limit, side: 60))
@@ -81,14 +80,7 @@ final class Stopped: NSView {
         (style.alignment, style.minimumLineHeight, style.maximumLineHeight) = (.center, font.pointSize * leading, font.pointSize * leading)
         let field = NSTextField(wrappingLabelWithString: "")
         field.attributedStringValue = NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color.color, .paragraphStyle: style, .kern: kern])
-        // Balanced, as the mockup's text-wrap: the narrowest width that keeps its number of lines.
-        let text = field.attributedStringValue
-        guard balanced else { field.preferredMaxLayoutWidth = 360; return field }
-        func height(_ width: CGFloat) -> CGFloat { text.boundingRect(with: NSSize(width: width, height: 1_000), options: .usesLineFragmentOrigin).height }
-        var (narrow, wide) = (CGFloat(40), CGFloat(360))
-        while wide - narrow > 1 { let mid = (narrow + wide) / 2; if height(mid) > height(360) { narrow = mid } else { wide = mid } }
-        // The field lays its text out a few points narrower than it measures.
-        field.preferredMaxLayoutWidth = min(360, wide.rounded(.up) + 8)
+        field.preferredMaxLayoutWidth = balanced ? Sheet.balanced(field, width: 360) : 360
         return field
     }
 
@@ -98,8 +90,7 @@ final class Stopped: NSView {
         guard let space else { return }
         assistant.fix(Stopped.fault(space))
         space.asked()
-        fix.isEnabled = false
-        fix.alphaValue = 0.45
+        fix.enable(false)
     }
 
     // A screen reader hears that the open space stopped, as the mockup's role="alert" card says it.
