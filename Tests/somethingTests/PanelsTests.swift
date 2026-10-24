@@ -167,21 +167,17 @@ final class FakePrompts: PromptSource {
     }
 
     /// A sheet the app waits for (the rights, a link, an export) returns the button it ended with, and leaves no sheet
-    /// behind. Its window is offscreen and the app inactive: nothing is shown and the focus is not taken.
+    /// behind. Its window is offscreen and the app inactive: nothing is shown and the focus is not taken. No modal loop
+    /// runs: in this process, which never ran NSApp, runModal and a modal session alike end the whole test run quietly
+    /// (it still exits 0); endSheet calls the sheet's handler at once.
     @Test func aSheetWaitedForReturnsTheButtonItEndedWith() throws {
         let offscreen = Offscreen(NSView())
-        let ask = NativeAsk()
-        ask.window = { offscreen.window }
-        let timer = Timer(timeInterval: 0.1, repeats: true) { _ in
-            guard let sheet = offscreen.window.attachedSheet else { return }
-            offscreen.window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
-            // Ended from a timer, the modal loop returns at the next event: one is posted, as a click brings one.
-            if let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0,
-                                              context: nil, subtype: 0, data1: 0, data2: 0) { NSApp.postEvent(event, atStart: false) }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        defer { timer.invalidate() }
-        #expect(ask.withData("board", keys: ["seen"], bytes: 12) == true, "With Its Data is the second button")
+        let alert = Ask.withData("board", keys: ["seen"], bytes: 12)
+        #expect(alert.buttons.map(\.title) == ["Without Data", "With Its Data", "Cancel"], "With Its Data is the second button")
+        var answer: NSApplication.ModalResponse?
+        alert.beginSheetModal(for: offscreen.window) { answer = $0 }
+        offscreen.window.endSheet(alert.window, returnCode: .alertSecondButtonReturn)
+        #expect(answer == .alertSecondButtonReturn)
         #expect(offscreen.window.attachedSheet == nil)
         #expect(!NSApp.isActive)
     }

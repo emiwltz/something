@@ -240,7 +240,7 @@ struct Composer: View {
         Button { model.drawer.toggle() } label: { Image(systemName: model.drawer ? "chevron.down" : "chevron.up") }
             .buttonStyle(.borderless)
             .foregroundStyle(.tertiary)
-            .help(model.drawer ? "Hide Conversation (⌘J)" : "Show Conversation (⌘J)")
+            .help((model.drawer ? "Hide Conversation" : "Show Conversation") + " (\(Keys.shown("convo")))")
     }
 
     private var send: some View {

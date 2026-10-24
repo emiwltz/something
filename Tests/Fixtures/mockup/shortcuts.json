@@ -1,0 +1,34 @@
+{
+  "source": "The exploration mockup's SHORTCUTS table (command/command.js), [id, words, keys] by area. A fourth element, \"contextual\", marks a key that is no menu key equivalent: it works only where the words say.",
+  "areas": [
+    {"area": "Spaces", "items": [
+      ["palette", "Go to a space, or ask", "⌘P"],
+      ["new", "New Space", "⌘N"],
+      ["tpls", "Templates", "⇧⌘T"],
+      ["goto", "Go to space 1 to 9", "⌘1 … ⌘9"],
+      ["reload", "Reload space", "⌘R"],
+      ["insp", "Space info", "⌘I"],
+      ["escpanel", "Close Info or History", "esc", "contextual"]
+    ]},
+    {"area": "Assistant", "items": [
+      ["ask", "Talk to this space’s assistant", "⌘K"],
+      ["convo", "Show or hide the conversation", "⌘J"],
+      ["newconvo", "New conversation", "⇧⌘K"],
+      ["reduce", "Reduce or open the assistant", "⌘\\"],
+      ["stop", "Stop the assistant", "⌘."],
+      ["showreq", "Show the request that waits", "⌥⌘P"]
+    ]},
+    {"area": "Show", "items": [
+      ["pointpart", "Point at a part", "⌥⌘S"],
+      ["point", "Point inside a drawn frame", "hold ⌥", "contextual"],
+      ["undo", "Undo the last change", "⌘Z"]
+    ]},
+    {"area": "Window", "items": [
+      ["full", "Full screen", "⌃⌘F"],
+      ["sidebar", "Show or hide the sidebar", "⌃⌘S"],
+      ["settings", "Settings", "⌘,"],
+      ["keys", "Keyboard shortcuts", "⌘/"],
+      ["close", "Close window", "⌘W"]
+    ]}
+  ]
+}

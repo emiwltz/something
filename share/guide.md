@@ -415,10 +415,12 @@ await something.store.set("seen", [...seen, "a1"]);
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
   exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
 - **The assistant.** The person's assistant floats at the bottom of the window, over the bottom of your space: keep
-  what matters out of the last 100 points, or let it scroll. ⌘K, ⌘J, ⌘R and ⌘N belong to something; a space should not
-  rely on them. An error your page does not catch shows "This space has an error.", and the person may ask their
-  assistant to fix it: something tells the assistant the codes (`SCRIPT_ERROR`, `PROMISE_REJECTED`), never your
-  page's words.
+  what matters out of the last 100 points, or let it scroll. An error your page does not catch shows "This space has an
+  error.", and the person may ask their assistant to fix it: something tells the assistant the codes (`SCRIPT_ERROR`,
+  `PROMISE_REJECTED`), never your page's words.
+- **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
+  ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
+  `preventDefault()` cannot keep them. Every other key is your page's.
 
 ## Checking your space
 

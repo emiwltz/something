@@ -1,0 +1,60 @@
+{
+  "source": "The exploration mockup's menu bar (command/command.js: Desk.appMenu and Desk.menus) with no space open. \"separator\" is a line, \"header\" a section header, \"spaces\" the spaces something lists, \"system\" an item macOS adds by itself, \"needsSpace\" an item greyed while no space is open. Titles are the first state of a title that changes (Undo, Show Sidebar, Enter Full Screen).",
+  "menus": [
+    {"title": "something", "items": [
+      {"title": "About something"}, {"separator": true},
+      {"title": "Settings…", "key": "⌘,"}, {"separator": true},
+      {"title": "Services"}, {"separator": true},
+      {"title": "Hide something", "key": "⌘H"}, {"title": "Hide Others", "key": "⌥⌘H"}, {"title": "Show All"}, {"separator": true},
+      {"title": "Quit something", "key": "⌘Q"}
+    ]},
+    {"title": "File", "items": [
+      {"title": "New Space", "key": "⌘N"}, {"title": "New from Template…", "key": "⇧⌘T"}, {"separator": true},
+      {"title": "Import Space…"}, {"title": "Export Space…", "key": "⇧⌘E"}, {"separator": true},
+      {"title": "Show in Finder", "key": "⌥⌘R"}, {"title": "Move to Trash…", "key": "⌘⌫"}, {"separator": true},
+      {"title": "Close Window", "key": "⌘W"}
+    ]},
+    {"title": "Edit", "items": [
+      {"title": "Undo", "key": "⌘Z"}, {"title": "Redo", "key": "⇧⌘Z"}, {"separator": true},
+      {"title": "Cut", "key": "⌘X"}, {"title": "Copy", "key": "⌘C"}, {"title": "Paste", "key": "⌘V"}, {"title": "Select All", "key": "⌘A"},
+      {"separator": true, "system": true}, {"title": "Emoji & Symbols", "key": "fn E", "system": true}
+    ]},
+    {"title": "View", "items": [
+      {"title": "Show Sidebar", "key": "⌃⌘S"}, {"title": "Show Info", "key": "⌘I", "needsSpace": true}, {"separator": true},
+      {"title": "Show History…", "needsSpace": true}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"separator": true},
+      {"title": "Reload Space", "key": "⌘R"}, {"separator": true},
+      {"title": "Enter Full Screen", "key": "⌃⌘F"}
+    ]},
+    {"title": "Go", "items": [
+      {"title": "Go to…", "key": "⌘P"}, {"separator": true},
+      {"header": "Spaces"}, {"spaces": true}, {"separator": true},
+      {"title": "New Space", "key": "⌘N"}, {"title": "Templates", "key": "⇧⌘T"}
+    ]},
+    {"title": "Space", "items": [
+      {"header": "No space open"},
+      {"title": "Space Info", "key": "⌘I", "needsSpace": true}, {"title": "Reload", "key": "⌘R", "needsSpace": true},
+      {"title": "What It May Do…", "needsSpace": true}, {"title": "Versions…", "needsSpace": true}, {"separator": true},
+      {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export…", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
+      {"title": "Move to Trash…", "key": "⌘⌫", "needsSpace": true}
+    ]},
+    {"title": "Assistant", "items": [
+      {"header": "No space open"},
+      {"title": "Ask…", "key": "⌘K", "needsSpace": true}, {"title": "Show Conversation", "key": "⌘J", "needsSpace": true},
+      {"title": "New Conversation", "key": "⇧⌘K", "needsSpace": true}, {"title": "Reduce or Open", "key": "⌘\\", "needsSpace": true},
+      {"title": "Stop", "key": "⌘.", "needsSpace": true}, {"title": "Show Request", "key": "⌥⌘P"}, {"separator": true},
+      {"title": "Point at a Part", "key": "⌥⌘S", "needsSpace": true}, {"separator": true},
+      {"title": "Build With", "needsSpace": true}, {"title": "Ask Before Every Change…"}, {"separator": true},
+      {"title": "Put Idle Assistants to Sleep"}
+    ]},
+    {"title": "Window", "items": [
+      {"title": "Minimize", "key": "⌘M"}, {"title": "Zoom"}, {"separator": true},
+      {"title": "Bring All to Front"}, {"separator": true, "system": true}, {"title": "something", "system": true}
+    ]},
+    {"title": "Help", "items": [
+      {"title": "Search", "system": true}, {"separator": true, "system": true},
+      {"title": "something Help"}, {"title": "Keyboard Shortcuts", "key": "⌘/"}, {"title": "What something Does and Doesn’t"},
+      {"title": "Guide for Coding Agents"}, {"separator": true},
+      {"title": "Welcome Tour"}
+    ]}
+  ]
+}

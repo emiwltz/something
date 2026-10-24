@@ -28,7 +28,7 @@ struct SidebarView: View {
             HStack {
                 Label { Text("New Space") } icon: { Image(systemName: "plus.circle.fill").foregroundStyle(.tint) }
                 Spacer()
-                Text("⌘N").foregroundStyle(.tertiary)
+                Text(Keys.shown("new")).foregroundStyle(.tertiary)
             }
             .tag(Row.to(.newSpace))
             Section("Spaces") {

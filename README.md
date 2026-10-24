@@ -80,7 +80,7 @@ alone.
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
 - **Rights.** At the first opening of a space, a sheet lists what it declares (see your agents, write to them, start
-  them, remember things), each to allow or not. Info (⌥⌘I) shows each right with a switch to revoke it, and what the
+  them, remember things), each to allow or not. Info (⌘I) shows each right with a switch to revoke it, and what the
   space did.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There
   is no "always". A space sees that the agent waits, and can never answer.

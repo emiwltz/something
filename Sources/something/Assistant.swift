@@ -195,7 +195,7 @@ import SomethingCore
 
     /// What Stop does while the agent works: it pauses the turn, or ends an agent that cannot pause mid-task.
     var stopHelp: String {
-        agent?.can.interrupt == false && !launching ? "Stop ends \(name), which can't pause mid-task; your next message starts it again." : "Stop (⌘.)"
+        agent?.can.interrupt == false && !launching ? "Stop ends \(name), which can't pause mid-task; your next message starts it again." : Keys.tooltip("stop")
     }
 
     var light: Light {

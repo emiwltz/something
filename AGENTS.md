@@ -123,7 +123,8 @@ node --test Tests/something-js.test.mjs    # name the file: node 22 does not tak
 ```
 
 `perl -e 'alarm 900; exec @ARGV' swift test` stops a hung run after 15 minutes (CI stops it after 20). A hang usually
-means a test reached a real program, which `TestRunGuard` should have refused.
+means a test reached a real program, which `TestRunGuard` should have refused. A green run prints three `Test run with`
+lines, one per test bundle: a run can exit 0 after stopping midway.
 
 - **The Command Line Tools alone.** A newcomer has no Xcode. On a Mac with Xcode, also run
   `DEVELOPER_DIR=/Library/Developer/CommandLineTools swift build`. Some SwiftUI attributes are macros only Xcode ships

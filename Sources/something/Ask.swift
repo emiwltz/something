@@ -324,7 +324,7 @@ enum Ask {
             choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared, then: "Agents it starts will work in:",
                                     button: "Choose…", home: home) { folder = $0 })
         }
-        let footer = Ask.line("You can change this anytime in Info (⌥⌘I).", width: Ask.rightsWidth)
+        let footer = Ask.line("You can change this anytime in Info (\(Keys.shown("insp"))).", width: Ask.rightsWidth)
         footer.textColor = .secondaryLabelColor
         lines.addArrangedSubview(footer)
         lines.setCustomSpacing(14, after: lines.arrangedSubviews[lines.arrangedSubviews.count - 2])

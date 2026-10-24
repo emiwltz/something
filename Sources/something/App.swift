@@ -1,9 +1,9 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
-// Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the Help menu;
-// the spaces and exports LaunchServices hands it; the permission and question panels; the state pushed at most four
-// times a second; and quitting, which asks first while agents something launched run, then stops them. Closing the
-// window keeps the app and its agents running, as a Mac app with one main window does; the open space closes with it,
-// and opens again when the window comes back.
+// Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the menu bar
+// (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the permission and
+// question panels; the state pushed at most four times a second; and quitting, which asks first while agents something
+// launched run, then stops them. Closing the window keeps the app and its agents running, as a Mac app with one main
+// window does; the open space closes with it, and opens again when the window comes back.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -21,6 +21,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     lazy var assistant = AssistantModel(engine: engine, places: places)
     lazy var shell = Shell(library: library, info: info, assistant: assistant, autosave: true)
     lazy var panels = Panels(source: engine)
+    lazy var menuBar = MenuBar(builders: self)
     /// The open space. One at a time: opening another closes it.
     var current: SpaceView?
     var pushing = false
@@ -37,7 +38,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.mainMenu = Shell.menu()
+        menuBar.install()
+        menuBar.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
+        menuBar.open = { [weak self] in self?.current.map { ($0.space.name, $0.title) } }
+        menuBar.editingText = { [weak self] in self?.shell.window.firstResponder is NSText }
+        // WebKit hands a page the keys it has the focus for, ⌘P and ⌘1 included: something's own go to the menu first.
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.window === shell.window, Keys.claims(event) else { return event }
+            menuBar.refresh()
+            _ = menuBar.menu.performKeyEquivalent(with: event)
+            return nil
+        }
         ask.window = { [weak self] in self?.shell.window }
         library.opened = { [weak self] name in self?.open(name) }
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
@@ -264,10 +275,20 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     // MARK: Menus
 
+    @objc func showAbout(_ sender: Any?) { NSApp.orderFrontStandardAboutPanel(options: Keys.about(.main)) }
     @objc func importSpace(_ sender: Any?) { library.importChosen() }
     @objc func exportSpace(_ sender: Any?) { current.map { library.export($0.space.name) } }
     @objc func showInFinder(_ sender: Any?) { current.map { library.showInFinder($0.space.name) } }
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
+    @objc func toggleInfo(_ sender: Any?) { shell.split.toggleInspector(sender) }
+    @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }
+
+    /// Go ▸ a space (⌘1 to ⌘9 for the first nine).
+    @objc func goToSpace(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String else { return }
+        library.select(.space(name))
+        front()
+    }
 
     @objc func moveToTrash(_ sender: Any?) {
         if let entry = library.entry(current?.space.name) { confirmTrash(entry) }
@@ -280,6 +301,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
     @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
     @objc func chooseBuilder(_ sender: NSMenuItem) { (sender.representedObject as? String).map(assistant.choose) }
+    /// Never sent: Build With only holds its submenu, and this selector lets validateMenuItem grey it.
+    @objc func buildWith(_ sender: Any?) {}
 
     /// Build With ▸, made again each time it opens: the builders found (the agent menu of the capsule has the rest).
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -292,12 +315,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         if menu.items.isEmpty { menu.addItem(NSMenuItem(title: "No coding agent found", action: nil, keyEquivalent: "")) }
     }
 
+    /// Greyed, never hidden: Keys says when each command can act.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(stopAssistant) { return assistant.working }
-        if item.action == #selector(askAssistant) { return !assistant.noAgent }
-        if [#selector(newSpace), #selector(showTemplates)].contains(item.action) { return library.selection != .tour }
-        return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
-            ? current != nil : true
+        guard let id = item.identifier?.rawValue else { return true }
+        let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
+                                       touring: library.selection == .tour, editingText: shell.window.firstResponder is NSText)
+        return Keys.enabled(id, situation)
     }
 
     /// Shows `alert` as a sheet on the window; `then` runs when its first button is clicked.

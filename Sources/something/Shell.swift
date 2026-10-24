@@ -1,7 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), a toolbar with
-// the sidebar toggle, the open space's title and file, Reload and Info; and the menus. The center holds the open
-// space's web view edge to edge under the toolbar, what keeps a space from being shown, the blank page, the templates
-// or the tour, with the assistant floating over it at the bottom (not over the tour).
+// the sidebar toggle, the open space's title and file, Reload and Info. The center holds the open space's web view edge
+// to edge under the toolbar, what keeps a space from being shown, the blank page, the templates or the tour, with the
+// assistant floating over it at the bottom (not over the tour).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -111,7 +111,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         guard id == Shell.reload else { return NSToolbarItem(itemIdentifier: id) }
         let item = NSToolbarItem(itemIdentifier: id)
         item.label = "Reload"
-        item.toolTip = "Reload Space (⌘R)"
+        item.toolTip = Keys.tooltip("reload")
         item.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Reload")
         item.action = #selector(App.reloadSpace(_:))
         return item
@@ -185,57 +185,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         visible(true)
-    }
-
-    /// The app's menus, every item acting through the responder chain: the window, its split view, or the App.
-    static func menu() -> NSMenu {
-        func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
-            let holder = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            holder.submenu = NSMenu(title: title)
-            items.forEach { holder.submenu?.addItem($0) }
-            return holder
-        }
-        func item(_ title: String, _ action: String?, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
-            let made = NSMenuItem(title: title, action: action.map { Selector($0) }, keyEquivalent: key)
-            made.keyEquivalentModifierMask = modifiers
-            return made
-        }
-        let main = NSMenu()
-        main.addItem(submenu("something", [
-            item("About something", "orderFrontStandardAboutPanel:"), .separator(),
-            item("Hide something", "hide:", "h"), item("Hide Others", "hideOtherApplications:", "h", [.command, .option]),
-            item("Show All", "unhideAllApplications:"), .separator(), item("Quit something", "terminate:", "q"),
-        ]))
-        main.addItem(submenu("File", [
-            item("New Space", "newSpace:", "n"), item("Templates", "showTemplates:", "t", [.command, .shift]), .separator(),
-            item("Import Space…", "importSpace:", "i", [.command, .shift]), item("Export Space…", "exportSpace:", "e", [.command, .shift]),
-            item("Show in Finder", "showInFinder:", "r", [.command, .option]), item("Move to Trash…", "moveToTrash:"), .separator(),
-            item("Close Window", "performClose:", "w"),
-        ]))
-        main.addItem(submenu("Edit", [
-            item("Undo", "undo:", "z"), item("Redo", "redo:", "z", [.command, .shift]), .separator(),
-            item("Cut", "cut:", "x"), item("Copy", "copy:", "c"), item("Paste", "paste:", "v"), item("Select All", "selectAll:", "a"),
-        ]))
-        main.addItem(submenu("View", [
-            item("Show Sidebar", "toggleSidebar:", "s", [.command, .control]), item("Show Info", "toggleInspector:", "i", [.command, .option]),
-            item("Show Conversation", "toggleConversation:", "j"), item("Reload Space", "reloadSpace:", "r"), .separator(),
-            item("Enter Full Screen", "toggleFullScreen:", "f", [.command, .control]),
-        ]))
-        let builders = submenu("Build With", [])
-        builders.submenu?.delegate = NSApp.delegate as? NSMenuDelegate
-        main.addItem(submenu("Assistant", [
-            item("Ask…", "askAssistant:", "k"), item("Stop", "stopAssistant:", "."),
-            item("New Conversation", "newConversation:", "k", [.command, .shift]), .separator(), builders,
-        ]))
-        let windows = submenu("Window", [item("Minimize", "performMiniaturize:", "m"), item("Zoom", "performZoom:"), .separator(),
-                                         item("Bring All to Front", "arrangeInFront:")])
-        main.addItem(windows)
-        NSApp.windowsMenu = windows.submenu
-        let help = submenu("Help", [item("Welcome Tour", "showTour:"), item("What something Does and Doesn't", "showPromise:"), .separator(),
-                                    item("something Help", "openHelp:"), item("Guide for Coding Agents", "showGuide:")])
-        main.addItem(help)
-        NSApp.helpMenu = help.submenu
-        return main
     }
 }
 
