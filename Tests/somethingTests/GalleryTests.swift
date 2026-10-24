@@ -256,7 +256,7 @@ struct GalleryTests {
         await say("go-slow") { model.light == .working }
         try await draw(model, "assistant-working" + suffix, fixture)
         model.newConversation()
-        await say("Make the counters bigger.") { model.retry == 2 }
+        await say("Make the counters bigger.") { model.presence.stuck == .cannotReachModel }
         try await draw(model, "assistant-retrying" + suffix, fixture)
         model.newConversation()
         await say("Give it a darker header.") { model.signedOut }
@@ -265,7 +265,7 @@ struct GalleryTests {
         await say("ask-first") { model.light == .waiting }
         try await draw(model, "assistant-waiting" + suffix, fixture)
         model.newConversation()
-        await say("Add a clock in the corner.") { model.problem != nil }
+        await say("Add a clock in the corner.") { model.light == .error }
         try await draw(model, "assistant-error" + suffix, height: 748, fixture)
         model.newConversation()
         model.threadShown = false

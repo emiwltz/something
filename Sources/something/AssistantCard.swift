@@ -63,17 +63,26 @@ struct AssistantCard: View {
             }
             .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).help(Keys.tooltip("reduce", "Reduce")).accessibilityLabel("Reduce")
             .padding(.trailing, 2)
-            // The grip: six dots, two by three (AB06 makes it drag the card).
-            Grid(horizontalSpacing: 2.5, verticalSpacing: 2.5) {
-                ForEach(0..<3, id: \.self) { _ in GridRow { ForEach(0..<2, id: \.self) { _ in Circle().frame(width: 2.5, height: 2.5) } } }
+            // The grip: six 2-point dots, two by three, as the mockup's 13-point icon (AB06 makes it drag the card).
+            Grid(horizontalSpacing: 1.25, verticalSpacing: 1.25) {
+                ForEach(0..<3, id: \.self) { _ in GridRow { ForEach(0..<2, id: \.self) { _ in Circle().frame(width: 2, height: 2) } } }
             }
             .foregroundStyle(Look.Token.ink3.ui).frame(width: 22, height: 28).accessibilityHidden(true)
         }
         .padding(.leading, 42).padding(.trailing, 8)
         .frame(height: 54)
         .overlay(alignment: .topLeading) {
-            Image(nsImage: Sign.miniEyes(presence.state, template: false)).frame(width: 16, height: 10).position(x: 27, y: 27)
-                .accessibilityLabel(presence.state.word)
+            // Quiet eyes in ink3, red only when stuck; while it works they stay level, the line below moving instead.
+            Group {
+                if presence.state == .think {
+                    HStack(spacing: 3) { ForEach(0..<2, id: \.self) { _ in RoundedRectangle(cornerRadius: 1).frame(width: 5, height: 2) } }
+                } else {
+                    Image(nsImage: Sign.miniEyes(presence.state)).renderingMode(.template)
+                }
+            }
+            .foregroundStyle(presence.state == .limit ? Look.Token.bad.ui : Look.Token.ink3.ui)
+            .frame(width: 16, height: 10).position(x: 27, y: 27)
+            .accessibilityElement().accessibilityLabel(presence.state.word)
         }
     }
 
@@ -124,8 +133,7 @@ struct AssistantCard: View {
                 .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
                 .background(Look.Token.sunk.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18))
                 .padding(.trailing, 50)
-        case .tool(_, let words, let command):
-            let failed = words.hasSuffix("· failed") || words.hasSuffix("· denied")
+        case .tool(let failed, let words, let command):
             HStack(spacing: 7) {
                 Image(systemName: failed ? "xmark" : "checkmark").font(.system(size: 9, weight: .bold))
                     .foregroundStyle(failed ? Look.Token.ink3.ui : Look.Token.ok.ui).frame(width: 12)
@@ -136,12 +144,15 @@ struct AssistantCard: View {
         }
     }
 
+    /// One formatter for every day line, which the card draws on the main thread only.
+    private static let dayFormat = { let format = DateFormatter(); format.locale = Locale(identifier: "en_GB"); return format }()
+
     /// The words of a day line: "Today", "Yesterday", a weekday within the week, else the date ("3 October").
     static func day(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
         if calendar.isDate(date, inSameDayAs: now) { return "Today" }
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
-        let format = DateFormatter()
-        (format.locale, format.calendar, format.timeZone) = (Locale(identifier: "en_GB"), calendar, calendar.timeZone)
+        let format = dayFormat
+        (format.calendar, format.timeZone) = (calendar, calendar.timeZone)
         format.dateFormat = days == 1 ? "'Yesterday'" : days > 1 && days < 7 ? "EEEE" : "d MMMM"
         return format.string(from: date)
     }
@@ -230,7 +241,9 @@ struct Field: View {
                 .frame(minHeight: 30)
                 .focused($typing)
                 .accessibilityLabel("Message")
-                .onChange(of: model.focusing) { typing = true }
+                .onChange(of: model.wantsFocus, initial: true) {
+                    if model.wantsFocus { (typing, model.wantsFocus) = (true, false) }
+                }
                 .onKeyPress(.return, phases: .down) { press in
                     let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
                     switch Field.onReturn(shift: press.modifiers.contains(.shift), marked: marked) {
@@ -498,16 +511,20 @@ extension AssistantModel {
             return Notice(symbol: "powerplug", title: noBuilder, text: "something launches the coding agent you already use.", bad: true,
                           actions: [.init(title: "How to Get One", run: howTo), .init(title: "Look Again", run: lookAgain)])
         }
+        // What went wrong in the agent's or the engine's own words, which the notice says when its sentence does not.
+        let said = failure ?? problem.map { "\(name) said: “\($0)”" }
         if signedOut {
             return Notice(symbol: "exclamationmark.triangle", title: "\(name) isn't signed in to its model.",
-                          text: "Open Terminal, type \(command) and sign in, then click Try Again.", bad: true,
+                          text: [said, "Open Terminal, type \(command) and sign in, then click Try Again."].compactMap { $0 }.joined(separator: " "), bad: true,
                           actions: [.init(title: "Copy Command", run: copyCommand), .init(title: "Try Again", run: tryAgain)])
         }
         let presence = presence
-        if let said = presence.notice {
+        if let notice = presence.notice {
             let again: [Notice.Action] = session.last == nil ? [] : [.init(title: presence.stuck == .crashed ? "Start Again" : "Try Again", run: tryAgain)]
             let symbol = presence.stuck == .unknown ? "questionmark" : presence.stuck == .missing ? "powerplug" : "exclamationmark.triangle"
-            return Notice(symbol: symbol, title: said.title, text: said.text, bad: presence.stuck != .unknown,
+            var text = notice.text
+            if let problem, let said, !text.contains(problem) { text += (text.isEmpty ? "" : " ") + said }
+            return Notice(symbol: symbol, title: notice.title, text: text, bad: presence.stuck != .unknown,
                           actions: presence.stuck == .unknown || presence.stuck == .missing ? [] : again)
         }
         if presence.state == .wait {

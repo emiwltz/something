@@ -153,10 +153,10 @@ import WebKit
         let day = AssistantModel.Row.day(try #require(iso8601.date(from: "2026-10-19T09:00:00Z")))
         #expect(AssistantModel.rows(thread) == [
             day, .mine(caption: "about My agents", text: "Make the tiles wider."),
-            .tool(symbol: "book", words: "Read guide", command: nil), .tool(symbol: "eye", words: "Read agents.html", command: nil),
-            .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
-            .tool(symbol: "terminal", words: "", command: "something check agents"),
-            .tool(symbol: "terminal", words: " · failed", command: "something check agents --refuse send"),
+            .tool(failed: false, words: "Read guide", command: nil), .tool(failed: false, words: "Read agents.html", command: nil),
+            .tool(failed: false, words: "Edited agents.html", command: nil),
+            .tool(failed: false, words: "", command: "something check agents"),
+            .tool(failed: true, words: " · failed", command: "something check agents --refuse send"),
             .reply("Done: the tiles are wider."),
         ])
         // Amp's tools: its shell, its patches, and its code, which calls something's tools.
@@ -164,13 +164,13 @@ import WebKit
                    tool("code_exec", #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#)]
         #expect(AssistantModel.rows(AgentThread(id: "T-1", agent: "amp-1", title: nil, started: nil,
                                                 turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: amp)])) == [
-            day, .tool(symbol: "terminal", words: "", command: "cat agents.html"), .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
-            .tool(symbol: "terminal", words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
+            day, .tool(failed: false, words: "", command: "cat agents.html"), .tool(failed: false, words: "Edited agents.html", command: nil),
+            .tool(failed: false, words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
         ])
         // something's lent tools, by their name alone: the check shows the command something ran, the guide its words.
         #expect(AssistantModel.tool(tool("mcp__something__something_check", "something check agents"))
-                    == .tool(symbol: "terminal", words: "", command: "something check agents"))
-        #expect(AssistantModel.tool(tool("something_guide", "")) == .tool(symbol: "book", words: "Read guide", command: nil))
+                    == .tool(failed: false, words: "", command: "something check agents"))
+        #expect(AssistantModel.tool(tool("something_guide", "")) == .tool(failed: false, words: "Read guide", command: nil))
     }
 
     /// A Session reads only its own agent and thread from a state that holds others, and keeps the thread its agent
@@ -350,7 +350,7 @@ import WebKit
         model.newConversation()
         #expect(model.id == nil && model.rows.isEmpty)
         #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))
-        #expect(model.notice == nil && model.problem == nil)
+        #expect(model.notice == nil)
         await finish(home, model)
     }
 
@@ -417,15 +417,16 @@ import WebKit
         await look(model)
         model.draft = "sign-in-please"
         model.send()
-        #expect(await wait(until: { model.problem != nil }))
-        #expect(model.problem == "Invalid API key · Please run /login")
+        #expect(await wait(until: { model.light == .error }))
+        #expect(model.notice?.text == "Claude Code said: “Invalid API key · Please run /login” Open Terminal, type claude and sign in, then click Try Again.",
+                "the card says what Claude Code said")
         #expect(model.light == .error && model.signedOut, "a Claude Code never signed in gets the sign-in notice")
         #expect(model.notice?.title == "Claude Code isn't signed in to its model." && model.notice?.actions.map(\.title) == ["Copy Command", "Try Again"])
         model.copyCommand()
         #expect(copied == ["claude"])
         let first = model.id
         model.tryAgain()
-        #expect(await wait(until: { model.id != first && model.problem != nil }))
+        #expect(await wait(until: { model.id != first && model.light == .error }))
         #expect(input(home).filter { $0.contains("sign-in-please") }.count == 2)
         await finish(home, model)
     }
@@ -438,7 +439,7 @@ import WebKit
         await look(model)
         model.draft = "Make the counters bigger."
         model.send()
-        #expect(await wait(until: { model.retry == 2 }))
+        #expect(await wait(until: { model.presence.stuck == .cannotReachModel }))
         #expect(model.light == .working && !model.signedOut)
         #expect(model.presence.stuck == .cannotReachModel && model.notice?.title == "Stopped · can't reach its model")
         model.newConversation()
@@ -446,7 +447,7 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.light == .error }))
         #expect(model.signedOut && model.notice?.title == "Claude Code isn't signed in to its model.")
-        #expect(model.problem == "The model's server refused Claude Code's sign-in (error 401).")
+        #expect(model.notice?.text.contains("Claude Code said: “The model's server refused Claude Code's sign-in (error 401).”") == true)
         model.tryAgain()
         #expect(!model.signedOut, "Try Again starts a new agent, which has not retried")
         await finish(home, model)
@@ -502,7 +503,7 @@ import WebKit
         model.draft = "Make an invented board."
         model.send()
         #expect(await wait(until: { model.agent?.state == "working" }))
-        #expect(model.stopHelp == "Stop ends Amp, which can't pause mid-task; your next message starts it again.")
+        #expect(model.presence.stopHelp == "Stop ends Amp, which can't pause mid-task; your next message starts it again.")
         let first = model.id
         model.stop()
         #expect(await wait(until: { model.agent?.alive == false }), "Stop ends the fake Amp")

@@ -124,16 +124,16 @@ struct AssistantTrial {
             #expect(await wait(5) { opened.contains(.space("agents-board")) }, "the new space opens by itself: \(opened)")
             #expect(library.selection == .space("agents-board"))
             #expect(model.rows.first == .mine(caption: "on the blank page", text: "Please run-build a board of my agents."))
-            #expect(model.rows.contains(.tool(symbol: "book", words: "Read guide", command: nil)))
-            #expect(model.rows.filter { $0 == .tool(symbol: "pencil", words: "Edited agents-board.html", command: nil) }.count == 4, "a write, then three edits")
-            #expect(model.rows.contains(.tool(symbol: "terminal", words: "", command: "something check agents-board")))
+            #expect(model.rows.contains(.tool(failed: false, words: "Read guide", command: nil)))
+            #expect(model.rows.filter { $0 == .tool(failed: false, words: "Edited agents-board.html", command: nil) }.count == 4, "a write, then three edits")
+            #expect(model.rows.contains(.tool(failed: false, words: "", command: "something check agents-board")))
         }
     }
 
-    /// A Claude Code never signed in fails at the first message, and the drawer's red row says what it said;
+    /// A Claude Code never signed in fails at the first message, and the card's notice says what it said;
     /// signed in with a key the model's server refuses (401), it fails at once too, where Claude Code alone retries
     /// for about four minutes; a busy model server (529) is said in the status line at each retry, until
-    /// Claude Code gives up and the red row says so; once the server is free, Try Again gets an answer; after 30
+    /// Claude Code gives up and the notice says so; once the server is free, Try Again gets an answer; after 30
     /// idle minutes the agent is stopped, the drawer says so, and the next message starts a new one.
     @Test func signedOutThenRefusedThenTryAgainThenTheIdleStop() async throws {
         let api = try FakeMessagesAPI()
@@ -145,7 +145,7 @@ struct AssistantTrial {
             model.send()
             #expect(await wait(60) { model.problem != nil }, "rows: \(model.rows)")
             #expect(model.light == .error && model.notice?.title == "Claude Code isn't signed in to its model." && model.signedOut, "the same sign-in row as a refused key")
-            #expect(model.problem?.contains("/login") == true, "the red row says what Claude Code said: \(model.problem ?? "nothing")")
+            #expect(model.notice?.text.contains("/login") == true, "the card says what Claude Code said: \(model.notice?.text ?? "nothing")")
 
             try trial.signIn()
             api.refusing = true
@@ -153,6 +153,7 @@ struct AssistantTrial {
             model.tryAgain()
             let refused = "The model's server refused Claude Code's sign-in (error 401)."
             #expect(await wait(60) { model.problem == refused }, "problem: \(model.problem ?? "none"); rows: \(model.rows)")
+            #expect(model.notice?.text.contains(refused) == true, "the card says it: \(model.notice?.text ?? "nothing")")
             #expect(Date().timeIntervalSince(asked) < 30, "the refusal shows at the first retry")
             #expect(model.light == .error && model.presence.stuck == .undelivered && model.signedOut)
             print("AssistantTrial: a refused key showed after \(Int(Date().timeIntervalSince(asked))) s.")
@@ -164,10 +165,10 @@ struct AssistantTrial {
             #expect(await wait(30) { model.presence.stuck == .cannotReachModel }, "said: \(model.presence.word)")
             #expect(Date().timeIntervalSince(busy) < 10, "the card says it within a few seconds")
             print("AssistantTrial: \(model.presence.word) showed after \(Int(Date().timeIntervalSince(busy))) s.")
-            // Claude Code gives up after three 529s in a row (measured): the red row says what it said.
+            // Claude Code gives up after three 529s in a row (measured): the card says what it said.
             #expect(await wait(60) { model.problem != nil }, "said: \(model.presence.word)")
             #expect(model.light == .error && !model.signedOut)
-            #expect(model.problem?.contains("529") == true, "problem: \(model.problem ?? "none")")
+            #expect(model.notice?.text.contains("529") == true, "the card says: \(model.notice?.text ?? "nothing")")
 
             model.tryAgain()
             let answered = { model.light == .ready && model.rows.contains { if case .reply(let text) = $0 { text.hasPrefix("Invented reply") } else { false } } }

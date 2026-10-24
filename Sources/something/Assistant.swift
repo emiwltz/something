@@ -12,11 +12,11 @@ import SomethingCore
 @Observable final class AssistantModel {
     /// Where the person is when they write: what each message's context line says.
     enum Place: Equatable { case space(title: String, name: String, page: String), blank, templates }
-    /// The dot in front of the builder's name.
-    enum Light: String { case off = "not started", ready, working, waiting = "waiting for you", error }
+    /// Where the conversation's agent is.
+    enum Light { case off, ready, working, waiting, error }
     /// One line of the conversation: the day its turns start, the person's message with what it was about, the
-    /// agent's text, or one tool it ran.
-    enum Row: Equatable { case day(Date), mine(caption: String?, text: String), reply(String), tool(symbol: String, words: String, command: String?) }
+    /// agent's text, or one tool it ran and whether it failed or was refused.
+    enum Row: Equatable { case day(Date), mine(caption: String?, text: String), reply(String), tool(failed: Bool, words: String, command: String?) }
     /// What the open space reported while it ran: its title, its name and the codes, never its text. A page that
     /// stopped is named by its file, with the app's own reason `stopped`, which is no code of the contract.
     struct Fault: Equatable {
@@ -56,8 +56,8 @@ import SomethingCore
     var floating: CGFloat = 0
     /// Whether the open space's journal could not be written.
     var unkept = false
-    /// Grows at each ⌘K: the input takes the focus.
-    private(set) var focusing = 0
+    /// Set by ⌘K until the field takes the focus, which it may do only once it is drawn.
+    var wantsFocus = false
     /// The conversation, and what the window reads of it.
     private(set) var session = Session(kind: nil)
     var kind: String? { session.kind }
@@ -175,11 +175,6 @@ import SomethingCore
 
     var working: Bool { light == .working || light == .waiting }
 
-    /// What Stop does while the agent works: it pauses the turn, or ends an agent that cannot pause mid-task.
-    var stopHelp: String {
-        agent?.can.interrupt == false && !launching ? "Stop ends \(name), which can't pause mid-task; your next message starts it again." : Keys.tooltip("stop")
-    }
-
     var light: Light {
         if failure != nil { return .error }
         guard let agent, !session.stopped else { return launching ? .working : .off }
@@ -196,13 +191,6 @@ import SomethingCore
     private var apiRetry: [String: JSONValue] {
         guard case .object(let retry)? = agent?.detail["apiRetry"] else { return [:] }
         return retry
-    }
-
-    /// The number of the agent's last retry in this turn, nil when it did not retry. Not "of how many": Claude Code
-    /// says 10, but gives up after three in a row from a busy server (529, measured on 2.1.296).
-    var retry: Int? {
-        guard case .number(let attempt)? = apiRetry["attempt"] else { return nil }
-        return Int(attempt)
     }
 
     /// Whether the last message failed because the model's server refused the agent's sign-in: signing in cures it.
@@ -284,7 +272,7 @@ import SomethingCore
     /// ⌘K: opens the card, its field taking the focus.
     func focus() {
         open = true
-        focusing += 1
+        wantsFocus = true
     }
 
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
@@ -470,15 +458,16 @@ import SomethingCore
     /// One tool in a few words: "Edited agents.html", "Read guide", "Ran" and the command.
     static func tool(_ item: Item) -> Row {
         let name = item.tool?.name ?? "tool", file = (item.text as NSString).lastPathComponent
-        let after = item.decision?.outcome == "denied" ? " · denied" : item.tool?.status == "failed" ? " · failed" : ""
+        let denied = item.decision?.outcome == "denied", failed = denied || item.tool?.status == "failed"
+        let after = denied ? " · denied" : failed ? " · failed" : ""
         // A command, code (Amp's, which calls something's tools), or a tool something lent (something_check), for which the
         // driver gives the command something ran.
         switch Presence.Step.of(item) {
-        case .guide: return .tool(symbol: "book", words: "Read guide" + after, command: nil)
-        case .command, .check: return .tool(symbol: "terminal", words: after, command: item.text)
-        case .edit: return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
-        case .read: return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)
-        default: return .tool(symbol: "wrench.and.screwdriver", words: "Used \(name)" + after, command: nil)
+        case .guide: return .tool(failed: failed, words: "Read guide" + after, command: nil)
+        case .command, .check: return .tool(failed: failed, words: after, command: item.text)
+        case .edit: return .tool(failed: failed, words: "Edited \(file)" + after, command: nil)
+        case .read: return .tool(failed: failed, words: "Read \(file)" + after, command: nil)
+        default: return .tool(failed: failed, words: "Used \(name)" + after, command: nil)
         }
     }
 }

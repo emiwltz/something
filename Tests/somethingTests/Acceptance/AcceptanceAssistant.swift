@@ -48,25 +48,35 @@ struct AcceptanceAssistant {
         let card = host.frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
         #expect(card.width == AssistantCard.width && card.maxX == shell.center.bounds.width - 16 && card.minY == 16)
         #expect(card.height > 150 && card.height < 180, "header, the present-tense line and the composer: \(card.height)")
+        // The field the card draws: SwiftUI builds the rest of its accessibility only for a real assistive client, which
+        // a test cannot be, so the other words are read from what the card shows (the model) and seen in the pictures.
+        let field = try #require(AcceptanceAssistant.fields(in: host).first)
+        #expect(field.placeholderString == model.placeholder || field.placeholderAttributedString?.string == model.placeholder)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c2" + suffix, root: stage.home.root)
         }
         // ⌘J opens the conversation above the composer: the days, the bubbles, the tool line.
         shell.toggleConversation(nil)
         #expect(model.threadShown && model.rows.first.map { if case .day = $0 { true } else { false } } == true)
-        #expect(model.rows.contains(.tool(symbol: "pencil", words: "Edited brief.html", command: nil)))
+        #expect(model.rows.contains(.tool(failed: false, words: "Edited brief.html", command: nil)))
         #expect(model.rows.contains(.reply("Done. The two agents that wait for you now open the page, oldest first, with what each one asks.")))
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c2-thread" + suffix, root: stage.home.root)
         }
-        // ⌘\ reduces it; ⌘K opens it again with the focus in its field.
+        // ⌘\ reduces it; ⌘K opens it again, and the field, drawn anew, takes the request for the focus (whether the
+        // window gives it the focus is for a trial by hand: this window is never shown).
         shell.reduceAssistant(nil)
         #expect(!model.cardShown)
         model.focus()
-        #expect(model.cardShown)
+        shell.window.layoutIfNeeded()
+        #expect(model.cardShown && !model.wantsFocus, "the field took the request")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
+    }
+    /// The text fields drawn under `view`, depth first.
+    static func fields(in view: NSView) -> [NSTextField] {
+        view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? fields(in: $0) }
     }
     @Test("c3: a thread kept after sleep", .disabled("not built yet: AB10")) func c3() async throws {}
     @Test("c4: still working, Stop", .disabled("not built yet: AB07")) func c4() async throws {}
