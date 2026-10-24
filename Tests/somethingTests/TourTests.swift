@@ -33,10 +33,10 @@ import Testing
         #expect(await wait(until: { model.kind == "claude" && !tour.looking }))
         #expect(tour.screen(model) == .assistant)
         var ended = false
-        tour.finished = { ended = $0 == nil }
+        tour.finished = { ended = $0 == nil && $1 }
         tour.toggle(.notify)
         Self.press(welcome, .escape)
-        #expect(ended && tour.skipped && Preferences(home.places).toured && !Preferences(home.places).launcherOffered && !Preferences(home.places).notify)
+        #expect(ended && Preferences(home.places).toured && !Preferences(home.places).launcherOffered && !Preferences(home.places).notify)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 
@@ -79,7 +79,7 @@ import Testing
         Self.press(window, .return)
         #expect(tour.step == .ready)
         var ended = false
-        tour.finished = { ended = $0 == nil }
+        tour.finished = { ended = $0 == nil && !$1 }
         Self.press(window, .return)
         #expect(ended && Preferences(home.places).toured && Preferences(home.places).notify)
         try await Task.sleep(for: .milliseconds(500))
@@ -254,7 +254,7 @@ import Testing
         skipped.skip()
         #expect(Preferences(home.places).launcherOffered && !FileManager.default.fileExists(atPath: Launcher.place(home.places).path))
         var problem: String?
-        tour.finished = { problem = $0 }
+        tour.finished = { found, _ in problem = found }
         tour.end()
         let launcher = Launcher.place(home.places)
         #expect(problem == nil)
@@ -291,34 +291,49 @@ import Testing
         defer { home.remove() }
         let (shell, library, _) = window(home, model)
         library.preferences.motion = .reduced
+        shell.show(nil)
         #expect(App.welcomes(library), "a first start: never toured, no space")
         let tour = Tour(places: home.places)
         let welcome = shell.welcome(tour, onScreen: false)
         #expect(shell.welcoming === welcome && welcome.frame == Welcome.place(over: shell.window.frame))
         #expect(shell.window.frame.maxY - welcome.frame.maxY == 152 && welcome.frame.midX == shell.window.frame.midX)
-        let sidebar = shell.split.splitViewItems[0].viewController.view
-        #expect(await wait(until: { shell.center.alphaValue == 0.35 && sidebar.alphaValue == 0.7 }))
-        #expect(shell.center.contentFilters.count == 2)
-        let veil = Veil(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
-        #expect(veil.hitTest(NSPoint(x: 50, y: 5)) === veil, "the veil takes the clicks meant for the window behind it")
+        #expect(shell.veil?.frame == shell.window.frame && shell.veil?.contentView is Veil)
+        let veil = try #require(shell.veil?.contentView)
+        #expect(veil.hitTest(NSPoint(x: veil.bounds.midX, y: 5)) === veil, "the veil takes the clicks meant for the window behind it")
+        let sidebar = shell.split.splitViewItems[0].viewController.view, page = try #require(shell.shown)
+        #expect(await wait(until: { page.alphaValue == 0.35 && sidebar.alphaValue == 0.7 }))
+        #expect(page.contentFilters.count == 2 && shell.center.contentFilters.isEmpty && shell.center.alphaValue == 1,
+                "only the page steps back: the glass, the sticker and its badge stay sharp under the veil")
+        // A page put while the welcome is open steps back too; the one it replaces comes back whole.
+        shell.show(nil, templates: true)
+        let templates = try #require(shell.shown)
+        #expect(templates.contentFilters.count == 2 && templates.alphaValue == 0.35 && page.contentFilters.isEmpty && page.alphaValue == 1)
         let welcoming = Keys.Situation(space: true, agent: true, welcoming: true, waiting: true)
         for id in ["new", "tpls", "ask", "trash", "close", "full", "sidebar", "tour", "help", "space:invented"] {
             #expect(!Keys.enabled(id, welcoming), "\(id) is greyed while the welcome is open")
         }
         #expect(Keys.enabled("new", Keys.Situation()) && Keys.enabled("showreq", welcoming) && Keys.enabled("quit", welcoming))
-        // What App's finished does at Make Your First Space.
-        tour.finished = { _ in shell.welcomed() }
+        // Make Your First Space: New Space, its field asked for the keys, the window back in full.
+        var ended: Bool?
+        tour.finished = { _, skipped in ended = skipped; shell.welcomed(skipped: skipped) }
+        library.select(.templates)
+        model.wantsFocus = false
         tour.move(.ready)
         Self.press(welcome, .return)
-        #expect(shell.welcoming == nil && !tour.skipped && Preferences(home.places).toured)
-        #expect(await wait(until: { shell.center.alphaValue == 1 && sidebar.alphaValue == 1 }) && shell.center.contentFilters.isEmpty)
+        #expect(ended == false && shell.welcoming == nil && Preferences(home.places).toured)
+        #expect(library.selection == .newSpace && model.wantsFocus)
+        #expect(await wait(until: { templates.alphaValue == 1 && sidebar.alphaValue == 1 && templates.contentFilters.isEmpty }))
+        #expect(await wait(until: { shell.veil == nil }))
         #expect(!App.welcomes(Library(places: home.places, ask: FakeAsk(), share: Home.share)), "the tour ended is kept")
-        // Help › Welcome Tour again: its close button skips it.
+        // Help › Welcome Tour again: its close button skips it, which says so and leaves New Space's field the keys.
         let again = Tour(places: home.places)
-        again.finished = { _ in shell.welcomed() }
+        var toast: Toast?
+        again.finished = { _, skipped in ended = skipped; toast = shell.welcomed(skipped: skipped) }
         let second = shell.welcome(again, onScreen: false)
+        model.wantsFocus = false
         second.performClose(nil)
-        #expect(again.skipped && shell.welcoming == nil)
+        #expect(ended == true && shell.welcoming == nil && library.selection == .newSpace && model.wantsFocus)
+        #expect(toast?.words == "Skipped · everything is in Settings when you want it")
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 

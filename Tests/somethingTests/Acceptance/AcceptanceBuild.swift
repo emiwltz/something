@@ -446,6 +446,10 @@ extension Picture {
         let cg = try #require(page.cgImage(forProposedRect: nil, context: nil, hints: nil)), scale = CGFloat(cg.width) / size.width
         let blur = CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 7 * scale]), tone = CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])
         let blurred = filtered(page, [blur, tone].compactMap { $0 })
+        // The sticker and its badge stay sharp under the veil: the step back filters the page, not the glass.
+        let sticker = shell.glass.sticker, spot = sticker.convert(sticker.bounds, to: frame)
+        let sharp = sticker.isHidden || sticker.window == nil ? nil : try bitmap(sticker.bounds.size)
+        sharp.map { sticker.cacheDisplay(in: sticker.bounds, to: $0) }
         let content = try #require(welcome.contentView?.superview)
         disguise(content, root.path)
         await wait(1.0)
@@ -459,6 +463,7 @@ extension Picture {
             Look.Token.bg.color.setFill()
             center.fill()
             blurred.draw(in: center, from: center, operation: .sourceOver, fraction: 0.35)
+            sharp?.draw(in: spot, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             Look.Token.bg.color.withAlphaComponent(0.3).setFill()
             sidebar.fill()
             Look.Token.bg.color.withAlphaComponent(0.42).setFill()

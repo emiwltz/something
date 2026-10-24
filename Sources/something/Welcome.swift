@@ -620,8 +620,9 @@ private struct BigSticker: NSViewRepresentable {
     var explained = false
     /// The install command just copied, for a moment.
     private(set) var copied: String?
-    /// Called when the tour ended, with what went wrong when the launcher could not be made.
-    @ObservationIgnored var finished: (_ problem: String?) -> Void = { _ in }
+    /// Called when the tour ended, with what went wrong when the launcher could not be made, and whether it was
+    /// skipped (Escape, Skip Tour, or its window closed) rather than ended at Ready.
+    @ObservationIgnored var finished: (_ problem: String?, _ skipped: Bool) -> Void = { _, _ in }
     let places: Places, app: URL
 
     /// The tour of the something.app at `app`, whose place says whether it offers the launcher.
@@ -727,9 +728,6 @@ private struct BigSticker: NSViewRepresentable {
         }
     }
 
-    /// Whether the tour was skipped (Escape, Skip Tour, or its window closed) rather than ended at Ready.
-    private(set) var skipped = false
-
     /// Escape: ends the tour as it is, every comfort left as it was, and asks nothing more.
     func skip() { end(applying: false) }
 
@@ -737,16 +735,15 @@ private struct BigSticker: NSViewRepresentable {
     /// notifications follow their switch, and the launcher is made when its switch is on.
     func end(applying: Bool = true) {
         let notify = notify
-        skipped = !applying
         Preferences.at(places).change { [offersLauncher] in
             $0.toured = true
             if offersLauncher { $0.launcherOffered = true }
             if applying { $0.notify = notify }
         }
-        guard applying, offersLauncher, addLauncher, let prefix = Launcher.prefix(of: app) else { return finished(nil) }
+        guard applying, offersLauncher, addLauncher, let prefix = Launcher.prefix(of: app) else { return finished(nil, !applying) }
         do {
             try Launcher.make(prefix: prefix, places: places, icon: Bundle.main.url(forResource: "something", withExtension: "icns"))
-            finished(nil)
-        } catch { finished(error.sentence) }
+            finished(nil, false)
+        } catch { finished(error.sentence, false) }
     }
 }

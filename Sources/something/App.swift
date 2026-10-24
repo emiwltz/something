@@ -148,20 +148,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Whether the welcome opens at the start: it was never ended, and there is no space yet.
     static func welcomes(_ library: Library) -> Bool { !library.preferences.toured && !library.entries.contains(where: \.isSpace) }
 
-    /// Help › Welcome Tour, and the first start: the welcome over the window, which steps back until it ends. Make
-    /// Your First Space ends on New Space, its field focused; skipped, the window stays where it was and says so.
+    /// Help › Welcome Tour, and the first start: the welcome over the window, which steps back until it ends
+    /// (Shell.welcomed(skipped:)), saying what went wrong when the launcher could not be made.
     @objc func showTour(_ sender: Any?) {
         shell.front()
-        if let open = shell.welcoming { return open.makeKeyAndOrderFront(nil) }
         let tour = Tour(places: places)
-        tour.finished = { [weak self, unowned tour] problem in
+        tour.finished = { [weak self] problem, skipped in
             guard let self else { return }
-            shell.welcomed()
-            if tour.skipped {
-                shell.toast("Skipped · everything is in Settings when you want it", quiet: true)
-            } else {
-                newSpace(nil)
-            }
+            shell.welcomed(skipped: skipped)
             if let problem { ask.tell(problem) }
         }
         shell.welcome(tour)

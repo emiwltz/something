@@ -18,7 +18,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let inspector: NSSplitViewItem
     let assistant: AssistantModel, library: Library
     /// What the center shows, and the page in it when a space is open.
-    private var shown: NSView?
+    private(set) var shown: NSView?
     private weak var page: NSView?
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
@@ -41,7 +41,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var visible: (Bool) -> Void = { _ in }
     /// The welcome window while it is open over this one, and the veil between them.
     private(set) var welcoming: NSWindow?
-    private var veil: NSWindow?
+    private(set) var veil: NSWindow?
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -296,26 +296,48 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if window.isVisible { window.makeKey() }
     }
 
-    /// Steps the window back (`back`) or forward, in half a second, at once under Reduced motion.
+    /// The welcome ended: Make Your First Space opens New Space; skipped, the window stays where it was and says so.
+    /// Either way, on New Space its field takes the keys, as the mockup's skip focuses it. Returns the toast, if any.
+    @discardableResult
+    func welcomed(skipped: Bool) -> Toast? {
+        welcomed()
+        if !skipped { library.select(.newSpace) }
+        if library.selection == .newSpace { assistant.focus() }
+        return skipped ? toast("Skipped · everything is in Settings when you want it", quiet: true) : nil
+    }
+
+    /// Steps the window back (`back`) or forward, in half a second, at once under Reduced motion. Only the page is
+    /// blurred and faded, as the mockup filters its view: the glass, the sticker and its badge stay sharp under the veil.
     private func stepBack(_ back: Bool) {
-        let center = center, sidebar = split.splitViewItems[0].viewController.view, veil = veil
-        center.wantsLayer = true
-        center.layerUsesCoreImageFilters = true
-        center.contentFilters = back ? [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 7]),
-                                        CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])].compactMap { $0 } : []
-        if back { veil?.alphaValue = 0 }
+        let page = shown, sidebar = split.splitViewItems[0].viewController.view, veil = veil
+        if back {
+            Self.blur(page, true)
+            veil?.alphaValue = 0
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = Look.duration(0.5, Look.motion(library.preferences.motion))
             context.timingFunction = Look.douce.timing
-            center.animator().alphaValue = back ? 0.35 : 1
+            page?.animator().alphaValue = back ? 0.35 : 1
             sidebar.animator().alphaValue = back ? 0.7 : 1
             veil?.animator().alphaValue = back ? 1 : 0
         }, completionHandler: back ? nil : { [weak self] in
+            // The blur goes once the page is back in full, so that it never snaps off a page still faded.
+            if self?.welcoming == nil { Self.blur(page, false) }
             guard let veil else { return }
             self?.window.removeChildWindow(veil)
             veil.orderOut(nil)
             if self?.veil === veil { self?.veil = nil }
         })
+    }
+
+    /// Blurs and desaturates `view` as the welcome steps the window back (`on`), or takes both off, and with them the
+    /// Core Image layer that a web view would otherwise keep for the rest of the session.
+    private static func blur(_ view: NSView?, _ on: Bool) {
+        guard let view else { return }
+        view.wantsLayer = true
+        view.layerUsesCoreImageFilters = on
+        view.contentFilters = on ? [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 7]),
+                                    CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])].compactMap { $0 } : []
     }
 
     /// The toolbar's title and subtitle when no space is shown, its space's items greyed, and Info closed.
@@ -327,6 +349,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Puts `shown` in the center in place of what was there, under the assistant.
     private func put(_ shown: NSView) {
         self.shown?.removeFromSuperview()
+        // While the welcome is open, the page put in its place steps back too, and the one taken away comes back whole.
+        if welcoming != nil {
+            Self.blur(self.shown, false)
+            self.shown?.alphaValue = 1
+            Self.blur(shown, true)
+            shown.alphaValue = 0.35
+        }
         glass.isHidden = false
         shown.translatesAutoresizingMaskIntoConstraints = false
         center.addSubview(shown, positioned: .below, relativeTo: glass)

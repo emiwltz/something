@@ -570,7 +570,7 @@ struct AcceptanceTrust {
         }
         panel.cancelOperation(nil)
         #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil)
-        #expect(tour.step == .welcome && !tour.skipped && shell.welcoming === welcome, "Escape at the panel answers it, not the tour")
+        #expect(tour.step == .welcome && shell.welcoming === welcome, "Escape at the panel answers it, not the tour")
     }
     /// ⌘Q while two requests wait and one assistant works: each request is named, "will be denied"; Cancel is the default.
     @Test("e15: quit with requests") func e15() async throws {
