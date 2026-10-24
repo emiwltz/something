@@ -285,6 +285,52 @@ struct StickerTests {
         }
     }
 
+    @Test func aStickerGrabbedOnItsWayFollowsThePointer() async throws {
+        try await brief(motion: .calm) { shell, _ in
+            let glass = shell.glass, sticker = glass.sticker
+            try drag(sticker, in: shell.window, [CGSize(width: -300, height: 100)])
+            #expect(glass.snapping)
+            try drag(sticker, in: shell.window, [CGSize(width: 0, height: 60)], release: false)
+            let held = try #require(glass.held)
+            #expect(!glass.snapping && sticker.frame == glass.corner.insetBy(dx: -Sticker.room, dy: -Sticker.room))
+            #expect(glass.corner.origin == held, "the snap ended and the sticker is where the pointer holds it")
+            sticker.mouseUp(with: try event(.leftMouseUp, at: .zero, in: shell.window))
+            #expect(await wait(5) { !glass.snapping && glass.held == nil })
+        }
+    }
+
+    @Test(arguments: [true, false])
+    func theRememberedPlaceComesBackAndADragKeepsItOnlyWhenAsked(remember: Bool) async throws {
+        let stage = try Stage("sticker")
+        defer { stage.remove() }
+        let ask = FakeAsk(), places = stage.home.places
+        let library = Library(places: places, ask: ask, share: Home.share)
+        library.relist()
+        // Saved before the window opens, as at the next start.
+        let saved = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
+        library.preferences.rememberSticker = remember
+        library.preferences.sticker = saved
+        let shell = Shell(library: library, info: Info(places: places, ask: ask),
+                          assistant: AssistantModel(engine: stage.home.engine(), places: places), autosave: false)
+        defer { shell.window.close() }
+        shell.window.setContentSize(Stage.Size.main)
+        shell.glass.motion = { .reduced }
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let glass = shell.glass
+        #expect(await wait(5) { glass.stickerShown })
+        let room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
+        #expect(glass.spot == (remember ? saved : nil))
+        #expect(glass.corner.origin == Glass.origin(of: remember ? saved : Glass.first, in: room))
+        #expect(glass.corner.minX == (remember ? 16 : room.width - 60))
+        // A drag moves it; Preferences keep the new place only when asked to remember it.
+        let before = glass.spot
+        try drag(glass.sticker, in: shell.window, [CGSize(width: remember ? 700 : -700, height: -150)])
+        let spot = try #require(glass.spot)
+        #expect(spot != before && spot.trailing == remember)
+        #expect(library.preferences.sticker == (remember ? spot : saved))
+    }
+
     @Test func theStickersEyesFollowThePersonsMotion() async throws {
         try await brief { shell, _ in
             let sign = shell.glass.sticker.sign

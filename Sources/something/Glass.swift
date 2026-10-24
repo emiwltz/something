@@ -4,8 +4,8 @@
 // every one), and a label beside it says in words what it does, on hover or focus. It drags, its eyes leaning with the
 // motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for every space,
 // kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the sticker's corner;
-// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. The sticker is only over a space: on the blank page and the templates the card stands alone, as the window
-// shows it, and over the tour there is neither.
+// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. The sticker is only over a space: on the
+// blank page and the templates the card stands alone, as the window shows it, and over the tour there is neither.
 import AppKit
 import Observation
 
@@ -71,7 +71,9 @@ final class Glass: WindowLayer {
     }
 
     /// Where the sticker moves: the center under the toolbar.
-    private var room: NSSize { NSSize(width: bounds.width, height: max(0, bounds.height - (superview?.safeAreaInsets.top ?? 0))) }
+    private var room: NSSize {
+        NSSize(width: bounds.width, height: max(0, bounds.height - (superview?.safeAreaInsets.top ?? 0)))
+    }
 
     /// The surface's origin at `place` in a room of `size` (origin at the bottom left), kept `margin` inside it.
     static func origin(of place: Preferences.StickerPlace, in size: NSSize) -> NSPoint {
@@ -92,8 +94,15 @@ final class Glass: WindowLayer {
     }
 
     /// The sticker follows the pointer `total` from where it was grabbed, kept 6 points inside the room, its eyes
-    /// leaning half the last `step`, at most `lean` points.
+    /// leaning half the last `step`, at most `lean` points. Grabbed on its way to its side, it is caught where it is
+    /// drawn: the snap ends, or it would not follow the pointer until the snap's end.
     private func drag(_ total: CGSize, _ step: CGSize) {
+        if grabbed == nil, snapping {
+            let drawn = sticker.layer?.presentation()?.frame.origin
+            sticker.layer?.removeAllAnimations()
+            snapping = false
+            if let drawn { grabbed = NSPoint(x: drawn.x + Sticker.room, y: drawn.y + Sticker.room) }
+        }
         let start = grabbed ?? corner.origin, size = room
         grabbed = start
         held = NSPoint(x: min(max(start.x + total.width, 6), max(6, size.width - Glass.side - 6)),
@@ -222,10 +231,12 @@ final class Glass: WindowLayer {
     /// toolbar, its corner nearest the sticker's middle the sticker's (with its margin), kept inside the room.
     private var grownFrame: NSRect {
         let size = room, sticker = corner, margin = AssistantCard.margin
-        let width = min(AssistantCard.width + 2 * margin, size.width), height = max(0, min(card.intrinsicContentSize.height, size.height))
+        let width = min(AssistantCard.width + 2 * margin, size.width)
+        let height = max(0, min(card.intrinsicContentSize.height, size.height))
         let x = sticker.midX >= size.width / 2 ? sticker.maxX + margin - width : sticker.minX - margin
         let y = sticker.midY <= size.height / 2 ? sticker.minY - margin : sticker.maxY + margin - height
-        return NSRect(x: min(max(x, 0), size.width - width), y: min(max(y, 0), size.height - height), width: width, height: height)
+        return NSRect(x: min(max(x, 0), size.width - width), y: min(max(y, 0), size.height - height),
+                      width: width, height: height)
     }
 
     /// Places the sticker, its label and the card, except while the card moves between them.
