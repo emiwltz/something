@@ -1,11 +1,11 @@
-// The person's assistant as the window shows it: the coding agent that builds spaces with them in
-// ~/something/spaces. The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change;
-// the knowledge files written into the spaces folder; one conversation per place, each space's and New Space's, of which
-// the card shows New Space's until each space's is bound to its own; the agent launched at the first message, never before, and told
-// at each message which space is open; a message written while a turn runs held until it ends, and Take Back; Stop, New
-// Conversation, the stop after 30 idle minutes, the switch to another builder, and what went wrong. The engine keeps
-// every space away from this agent (Bridge.visible); the only words something writes to it on its own are its context
-// line and Ask to Fix, never a page's text.
+// The person's assistant as the window shows it: the coding agent that builds spaces with them in ~/something/spaces.
+// The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change; the knowledge
+// files written into the spaces folder; one conversation per place, each space's own and New Space's, the card showing
+// the open place's and a build from New Space going on as the new space's own; each agent launched at its first
+// message, never before, and told at each message which space is open; a message written while a turn runs held until
+// it ends, and Take Back; Stop, New Conversation, the stop after 30 idle minutes, the switch to another builder, and
+// what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words something writes
+// to it on its own are its context line and Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -56,9 +56,12 @@ import SomethingCore
     @ObservationIgnored var ended: () -> Void = {}
 
     /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
-    /// card stays as it was, only its content changing.
+    /// card stays as it was, only its content changing: each place shows its own conversation.
     var place = Place.blank {
-        didSet { if place.space != nil, oldValue.space == nil { open = false } }
+        didSet {
+            if place.space != nil, oldValue.space == nil { open = false }
+            if place.key != oldValue.key { session = session(for: place) }
+        }
     }
     var draft = ""
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
@@ -72,8 +75,8 @@ import SomethingCore
     var unkept = false
     /// Set by ⌘K until the field takes the focus, which it may do only once it is drawn.
     var wantsFocus = false
-    /// Each place's conversation, made at its first use; and the one the card shows and the messages go to, with what
-    /// the window reads of it: New Space's, which serves every place until each space's card is bound to its own.
+    /// Each place's conversation, made at its first use; and the one the card shows and the messages go to, the open
+    /// place's, with what the window reads of it.
     private(set) var sessions: [Place.Key: Session] = [:]
     private(set) var session = Session(kind: nil)
     var kind: String? { session.kind }
@@ -90,9 +93,9 @@ import SomethingCore
     private(set) var notes: [String: String] = [:]
     /// Why a builder that refused what something lends it is not offered, until the agents are looked for again.
     private(set) var refused: [String: String] = [:]
-    /// The spaces there were and the conversation's last turn when the person asked from the blank page, until the
-    /// turn that followed ends (answered, stopped, failed, or never started); the last turn now.
-    private(set) var before: (spaces: Set<String>, turn: String?)?
+    /// The spaces there were, the conversation building and its last turn when the person asked from the blank page,
+    /// until the turn that followed ends (answered, stopped, failed, or never started).
+    private(set) var before: (spaces: Set<String>, session: Session, turn: String?)?
     var ready: Library.Entry?
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
     var fromTemplate: String?
@@ -162,27 +165,33 @@ import SomethingCore
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
         if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
-        // A build watched is concluded on the refresh where its turn ends, before a held message starts the next.
-        if let before, !launching {
-            let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
-            if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
+        // A build watched is concluded on the refresh where its turn ends, before a held message starts the next, wherever
+        // the person went meanwhile.
+        if let before, !before.session.launching {
+            let built = before.session, light = light(built)
+            let answered = built.turn.map { $0.id != before.turn && $0.state != "working" } == true && ![.working, .waiting].contains(light)
+            if answered || built.id == nil || built.stopped || light == .error || built.agent?.alive == false {
                 ended()
-                self.before = nil
+                if self.before?.session === built { self.before = nil }
             }
         }
-        // A turn ended: the oldest held message leaves, one per turn, as the mockup sends them.
-        if let next = session.held.first, light == .ready, !launching, session.releasedAfter != .some(session.turn?.id) {
-            session.held.removeFirst()
-            session.releasedAfter = .some(session.turn?.id)
-            deliver(next)
+        // A turn ended: the oldest held message of its conversation leaves, one per turn, as the mockup sends them.
+        for each in sessions.values {
+            guard let next = each.held.first, light(each) == .ready, !each.launching, each.releasedAfter != .some(each.turn?.id) else { continue }
+            each.held.removeFirst()
+            each.releasedAfter = .some(each.turn?.id)
+            deliver(next, to: each)
         }
     }
 
-    /// Sets the one-shot timer for the next moment the presence changes by itself, if there is one.
+    /// Sets the one-shot timer for the next moment a presence changes by itself, the card's or a space's in the
+    /// sidebar, if there is one.
     private func keepTime() {
-        let turn = session.turn
-        let at = working ? turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
-            : turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor }
+        let now = clock()
+        let at = sessions.values.compactMap { each -> Date? in
+            [.working, .waiting].contains(light(each)) ? each.turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
+                : each.turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor }
+        }.filter { $0 > now }.min()
         guard at != beatAt else { return }
         beatTimer?.invalidate()
         (beatTimer, beatAt) = (nil, at)
@@ -200,7 +209,9 @@ import SomethingCore
     /// The kinds that can build, in the order they are offered (Extensions.swift).
     var builders: [String] { Registry.app.builders.map(\.kind) }
 
-    var name: String { Registry.app.name(of: kind ?? preferred ?? builders.first ?? "") }
+    var name: String { name(of: session) }
+
+    func name(of session: Session) -> String { Registry.app.name(of: session.kind ?? preferred ?? builders.first ?? "") }
 
     /// What to type in Terminal to sign the builder in: its program, whose name is its kind.
     var command: String { kind ?? builders.first ?? "" }
@@ -234,17 +245,22 @@ import SomethingCore
     /// Whether Start Again picks this conversation up: its agent reported a thread, its kind resumes as it was launched,
     /// Ask Before Every Change is what it was (a resume keeps how it asked), and the last start did not fail, which a
     /// conversation the program cannot find again does: Start Again then begins a new one rather than fail for ever.
-    var resumes: Bool {
-        session.thread != nil && Registry.resumesAsBuilt.contains(kind ?? "") && session.asking == askEverything
-            && failure == nil && agent?.error?.code != "LAUNCH_FAILED"
+    var resumes: Bool { resumes(session) }
+
+    func resumes(_ session: Session) -> Bool {
+        session.thread != nil && Registry.resumesAsBuilt.contains(session.kind ?? "") && session.asking == askEverything
+            && session.failure == nil && session.agent?.error?.code != "LAUNCH_FAILED"
     }
 
     /// The other builders the person may choose when this one left the Mac.
     var others: [Entry] { entries.filter { $0.id != kind && $0.enabled } }
 
-    var light: Light {
-        if failure != nil { return .error }
-        guard let agent, !session.stopped else { return launching ? .working : .off }
+    var light: Light { light(session) }
+
+    /// Where the agent of `session` is.
+    func light(_ session: Session) -> Light {
+        if session.failure != nil { return .error }
+        guard let agent = session.agent, !session.stopped else { return session.launching ? .working : .off }
         switch agent.state {
         case "working": return .working
         case "waiting": return .waiting
@@ -283,7 +299,8 @@ import SomethingCore
         case .space(let title, _, _):
             if !held.isEmpty { return "Write another request…" }
             if presence.stuck == .cannotReachModel { return "Write your next request · it waits until the model answers" }
-            if working { return "Write your next request · it waits for this one" }
+            // Waiting for an answer, the way on is the request's own window, not this field: it reads as usual.
+            if light == .working { return "Write your next request · it waits for this one" }
             return presence.state == .sleep ? "Ask for a change · it wakes up" : "Ask \(AssistantModel.clean(title))'s assistant for a change…"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
@@ -335,7 +352,7 @@ import SomethingCore
         }
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
-            (before, threadShown) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session.turn?.id), true)
+            (before, threadShown) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session, session.turn?.id), true)
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -373,9 +390,10 @@ import SomethingCore
     func newConversation() {
         takeBack()
         halt(session)
+        if before?.session === session { before = nil }
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
-        (before, ready) = (nil, nil)
+        ready = nil
     }
 
     /// The conversation of `place`, made at its first use with the builder chosen now, launching nothing.
@@ -390,8 +408,8 @@ import SomethingCore
     /// The conversation whose agent is `agent`, of any place; nil when none of them launched it.
     func session(of agent: String) -> Session? { sessions.values.first { $0.id == agent } }
 
-    /// The space the assistant `agent` works on: its conversation's space, or the open one for New Space's, which serves
-    /// every place.
+    /// The space the assistant `agent` works on: its conversation's space, or the open one for New Space's, which builds
+    /// spaces that do not exist yet.
     func space(of agent: String) -> String? { session(of: agent)?.space ?? place.space }
 
     /// The messages held for the end of the turn, as the person wrote them.
@@ -487,9 +505,44 @@ import SomethingCore
         guard let before, let new = entries.first(where: { $0.isSpace && !before.spaces.contains($0.id) }) else { return nil }
         self.before = nil
         made.insert(new.id)
+        hand(before.session, to: new.id)
         if open == nil { return new.id }
         ready = new
         return nil
+    }
+
+    /// The build's conversation becomes the space `name`'s own, its agent going on there rather than another being
+    /// launched; New Space begins a new one with the same builder, model and effort.
+    private func hand(_ built: Session, to name: String) {
+        guard sessions[.new] === built else { return }
+        if let old = sessions[.space(name)] { halt(old) }
+        built.space = name
+        sessions[.space(name)] = built
+        let fresh = Session(kind: built.kind, model: built.model, effort: built.effort)
+        fresh.active = clock()
+        sessions[.new] = fresh
+        session = session(for: place)
+    }
+
+    /// The space `name` went to the Trash: its conversation goes with it, its agent stopped, and a space of the same
+    /// name later begins a new one.
+    func forget(_ name: String) {
+        guard let gone = sessions.removeValue(forKey: .space(name)) else { return }
+        halt(gone)
+        if gone === session { session = session(for: place) }
+    }
+
+    /// The messages of the space `name`'s conversation, the person's and the agent's: what the Trash sheet says goes.
+    func messages(of name: String) -> Int { sessions[.space(name)].map { AssistantModel.messages($0.rows) } ?? 0 }
+
+    static func messages(_ rows: [Row]) -> Int {
+        rows.filter { if case .mine = $0 { true } else if case .reply = $0 { true } else { false } }.count
+    }
+
+    /// The eyes of the space `name`'s assistant, as its card would draw them: asleep while it has no conversation yet,
+    /// which its next message starts.
+    func eyes(of name: String) -> Sign.State {
+        presence(of: sessions[.space(name)] ?? Session(kind: kind)).state
     }
 
     private func halt(_ session: Session) {

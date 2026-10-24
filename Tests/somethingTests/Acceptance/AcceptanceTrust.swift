@@ -427,8 +427,8 @@ struct AcceptanceTrust {
         try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                       characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
-    /// The trash sheet says what goes with the space: its page, what it remembers and its assistant's conversation
-    /// (the one conversation all spaces share until AB09b, three messages here). Cancel holds the focus and Escape;
+    /// The trash sheet says what goes with the space: its page, what it remembers and its assistant's own conversation
+    /// (three messages, as the mockup's; Daily brief's here has none yet, said "empty"). Cancel holds the focus and Escape;
     /// Return never presses Move to Trash, a click does, and the space and its memory go to the Trash (the test's own).
     @Test("e8: the trash sheet") func e8() async throws {
         let stage = try Stage("trust")
@@ -440,15 +440,17 @@ struct AcceptanceTrust {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let entry = try #require(library.entry("brief"))
-        let sheet = Ask.trash(entry, remembers: library.remembers("brief"))
+        #expect(shell.assistant.messages(of: "brief") == 0)
+        let sheet = Ask.trash(entry, remembers: library.remembers("brief"), messages: 3)
         #expect(sheet.title == "Move Daily brief and its memory to the Trash?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
         #expect(PanelsTests.texts(sheet.contentView) == ["Move Daily brief and its memory to the Trash?", "These go with it:",
                                                          "Its page", "brief.html", "What it remembers", "12 entries",
+                                                         "Its assistant's conversation", "3 messages",
                                                          "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Move to Trash"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
-        let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"))
-        #expect(Array(PanelsTests.texts(empty.contentView)[3...5]) == ["pet.html", "What it remembers", "nothing yet"])
+        let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"), messages: shell.assistant.messages(of: "pet"))
+        #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant's conversation", "empty"])
         // The balanced title keeps the two lines it has at the full column, as the field itself draws them.
         let title = try #require(Self.fields(sheet.contentView).first { $0.stringValue == sheet.title })
         let full = try #require(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: Sheet.column(), height: 10_000)).height)
@@ -465,7 +467,7 @@ struct AcceptanceTrust {
         let trash = stage.home.root.appendingPathComponent("Trash")
         library.recycle = { try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
             try FileManager.default.moveItem(at: $0, to: trash.appendingPathComponent($0.lastPathComponent)) }
-        let kept = Ask.trash(entry, remembers: 12)
+        let kept = Ask.trash(entry, remembers: 12, messages: 3)
         kept.hang(on: shell.window) { if $0 == .destructive { library.trash("brief") } }
         kept.buttons[0].performClick(nil)
         #expect(await wait(until: { shell.window.attachedSheet == nil }) && library.entry("brief") != nil, "Cancel keeps the space")

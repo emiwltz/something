@@ -11,9 +11,9 @@ import SomethingCore
     var kind: String?
     /// What the agent is launched with; nil leaves its own default.
     let model: String?, effort: String?
-    /// The space this conversation is about; nil for New Space's, which serves every place until each space's card is
-    /// bound to its own.
-    let space: String?
+    /// The space this conversation is about; nil for New Space's, which the blank page and the templates share. A build
+    /// from New Space becomes the new space's own conversation (AssistantModel.appeared).
+    var space: String?
     /// Its agent, once launched, and the thread that agent last reported: what a later launch may resume.
     var id: String?
     private(set) var thread: String?

@@ -45,7 +45,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
         (self.assistant, self.library) = (assistant, library)
-        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: SidebarView(library: library, assistant: assistant)))
+        let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
+        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
         let content = NSViewController()
         content.view = center

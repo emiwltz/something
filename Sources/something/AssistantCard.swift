@@ -526,11 +526,14 @@ extension AssistantModel {
     }
 
     /// The presence of this conversation's agent now.
-    var presence: Presence {
+    var presence: Presence { presence(of: session) }
+
+    /// The presence of the agent of `session` now: the card's, or a space's in the sidebar.
+    func presence(of session: Session) -> Presence {
         _ = beat
-        return Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped,
-                                         resumes: resumes),
-                 agent: agent, turn: session.turn, now: clock())
+        return Presence(Presence.Facts(name: name(of: session), installed: session.kind.flatMap { installed[$0] }, waking: session.launching,
+                                       failure: session.failure, stopped: session.stopped, resumes: resumes(session)),
+                        agent: session.agent, turn: session.turn, now: clock())
     }
 
     /// Whether the card is drawn: open, and on the blank page (whose field is its own) only while it has a
@@ -567,14 +570,13 @@ extension AssistantModel {
     }
 
     /// The messages of the conversation, the person's and the agent's.
-    var messageCount: Int {
-        rows.filter { if case .mine = $0 { true } else if case .reply = $0 { true } else { false } }.count
-    }
+    var messageCount: Int { AssistantModel.messages(rows) }
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
     var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-    /// Not while its model does not answer: the card says Stopped, and Try Again is the way on.
-    var stops: Bool { working && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// Not while its model does not answer: the card says Stopped, and Try Again is the way on; nor while it waits for
+    /// an answer, which its request's window gives.
+    var stops: Bool { light == .working && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The notice above the composer, the most pressing first; nil when nothing blocks or waits.
     var notice: Notice? {

@@ -470,15 +470,16 @@ enum Ask {
         return alert
     }
 
-    /// The sheet before Move to Trash: what goes with the space, its page and how many entries its memory holds (nil
-    /// when it does not read); then Cancel and Move to Trash. The assistant's conversation joins the rows only when it
-    /// belongs to the space and goes with it (AB09b): until then every space shares it, and the Trash leaves it.
-    static func trash(_ entry: Library.Entry, remembers: Int?) -> Sheet {
+    /// The sheet before Move to Trash: what goes with the space, its page, how many entries its memory holds (nil
+    /// when it does not read) and its assistant's conversation, of `messages` messages; then Cancel and Move to Trash.
+    static func trash(_ entry: Library.Entry, remembers: Int?, messages: Int) -> Sheet {
         let page = entry.space.location.lastPathComponent + (entry.space.form == .folder ? "/" : "")
         let memory = remembers.map { $0 == 0 ? "nothing yet" : "\($0) entr\($0 == 1 ? "y" : "ies")" } ?? "does not read"
         return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
                      rows: [.init(mark: .symbol("doc"), label: [("Its page", false)], meta: page),
-                            .init(mark: .symbol("square.3.layers.3d"), label: [("What it remembers", false)], meta: memory)],
+                            .init(mark: .symbol("square.3.layers.3d"), label: [("What it remembers", false)], meta: memory),
+                            .init(mark: .symbol("bubble.left"), label: [("Its assistant's conversation", false)],
+                                  meta: messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")],
                      fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
     }

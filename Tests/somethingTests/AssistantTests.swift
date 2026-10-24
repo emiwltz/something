@@ -22,7 +22,8 @@ import WebKit
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
-    /// checks it and never ends its turn. An interrupt ends the running turn as Claude Code does.
+    /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt ends the
+    /// running turn as Claude Code does.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -72,6 +73,10 @@ import WebKit
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_q1","model":"opus","role":"assistant","content":[{"type":"text","text":"I will group the lines by the hour they were written."}]},"parent_tool_use_id":null,"uuid":"aq1","session_id":"s1"}'
           exit 3 ;;
+        *'counters match'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_c1","model":"opus","role":"assistant","content":[{"type":"text","text":"I can compare them, but I need to run the check script once. I asked you below."}]},"parent_tool_use_id":null,"uuid":"ac1","session_id":"s1"}'
+          echo '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"sh check.sh"},"tool_use_id":"toolu_c2"}}' ;;
         *'ask-first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_9"}}' ;;
@@ -226,8 +231,8 @@ import WebKit
     }
 
     /// Each place has its own conversation, made at its first use and launching nothing: two spaces make two Sessions,
-    /// the blank page and the templates share New Space's, which the card still shows. Every one is read, counted when
-    /// quitting with its own space, and stopped when idle.
+    /// the blank page and the templates share New Space's. The card shows the open place's. Every one is read, counted
+    /// when quitting with its own space, and stopped when idle.
     @Test func eachPlaceHasItsOwnSession() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -248,7 +253,7 @@ import WebKit
         #expect(await wait(until: { agents.agent?.state == "working" && brief.agent?.state == "working" }))
         let (first, second) = (try #require(agents.id), try #require(brief.id))
         #expect(first != second && model.engine.assistants == [first, second])
-        #expect(model.id == nil && model.rows.isEmpty && model.light == .off, "the card still shows New Space's conversation")
+        #expect(model.session === agents && model.id == first, "the card shows My agents' conversation")
         #expect(model.session(of: second) === brief && model.session(of: "nobody") == nil)
         // Quitting counts both, each by its own space.
         let leaving = App.leaving(agents: model.engine.state.agents, waiting: [], who: { _ in Asker(program: "") }) { model.space(of: $0.id) }
@@ -259,8 +264,69 @@ import WebKit
         #expect(await wait(until: { !["working", "waiting"].contains(agents.agent?.state) && !["working", "waiting"].contains(brief.agent?.state) }))
         now += AssistantModel.idleLimit
         model.checkIdle()
-        #expect(agents.idled && brief.idled && !model.idled)
+        #expect(agents.idled && brief.idled && model.idled && !model.session(for: .blank).idled)
         #expect(await wait(until: { model.engine.state.agents.allSatisfy { $0.alive == false } }))
+        await finish(home, model)
+    }
+
+    /// The card follows the open space (AB09b). A build asked from New Space goes on as the new space's own
+    /// conversation: its agent is not launched twice, and New Space starts afresh. Two spaces launch two agents, each
+    /// card showing only its own rows; the sidebar reads each one's eyes; quitting asks once and stops both; New
+    /// Conversation starts a fresh thread; the Trash takes a space's conversation with it.
+    @Test func eachSpaceHasItsOwnCard() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let place = { (title: String, name: String) in
+            AssistantModel.Place.space(title: title, name: name, page: home.places.spaces.appendingPathComponent("\(name).html").path)
+        }
+        // The build: the agent writes the space during its turn; once the turn ends the app lists it and opens it.
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
+        var opened: String?
+        model.ended = {
+            _ = try? home.space("garden", page(#"{"contract": 1, "title": "Garden notes"}"#, ""))
+            library.relist()
+            opened = model.appeared(library.entries, open: nil)
+            if let opened { model.place = place("Garden notes", opened) }
+        }
+        model.place = .blank
+        model.send("Make me a page for my garden notes.")
+        #expect(await wait(until: { opened == "garden" }))
+        let builder = try #require(model.id)
+        #expect(model.session.space == "garden" && model.rows.contains(.mine(caption: "on the blank page", text: "Make me a page for my garden notes.")))
+        #expect(model.session(for: .blank).id == nil && model.session(for: .blank).rows.isEmpty, "New Space starts afresh")
+        model.send("Add a row per plant.")
+        #expect(await wait(until: { model.messageCount == 4 }))
+        #expect(model.id == builder && model.engine.assistants == [builder], "the build's agent goes on in its space")
+        #expect(model.eyes(of: "garden") == model.presence.state && [.listen, .done].contains(model.presence.state) && model.eyes(of: "agents") == .sleep)
+        // New Conversation: the garden's agent stops, and its card shows a fresh thread.
+        model.newConversation()
+        #expect(model.id == nil && model.rows.isEmpty && model.session.space == "garden")
+        #expect(await wait(until: { model.engine.state.agents.first { $0.id == builder }?.alive == false }))
+        // Two spaces, two agents, each card its own rows.
+        model.place = place("My agents", "agents")
+        model.send("go-slow, agents.")
+        model.place = place("Daily brief", "brief")
+        model.send("go-slow, brief.")
+        let (agents, brief) = (model.session(for: place("My agents", "agents")), model.session)
+        #expect(await wait(until: { agents.agent?.state == "working" && brief.agent?.state == "working" }))
+        #expect(agents.id != brief.id && model.engine.assistants.count == 3)
+        #expect(model.rows.contains(.mine(caption: "about Daily brief", text: "go-slow, brief.")) && !model.rows.contains { "\($0)".contains("agents.") })
+        model.place = place("My agents", "agents")
+        #expect(model.id == agents.id && model.rows.contains(.mine(caption: "about My agents", text: "go-slow, agents.")))
+        #expect(!model.rows.contains { "\($0)".contains("brief.") } && model.eyes(of: "brief") == .think && model.eyes(of: "agents") == .think)
+        // Quitting asks once, naming both, then stops both.
+        let leaving = App.leaving(agents: model.engine.state.agents, waiting: [], who: { _ in Asker(program: "") }) { model.space(of: $0.id) }
+        #expect(Set(leaving.working.compactMap(\.space)) == ["agents", "brief"])
+        var (asked, quit) = (0, false)
+        App.quit(leaving, source: FakePrompts(), stop: { done in model.engine.stopAll(within: 5, done: done) },
+                 confirm: { asked += 1; $0(true) }, reply: { quit = $0 })
+        #expect(await wait(until: { quit }) && asked == 1)
+        #expect(model.engine.state.agents.allSatisfy { $0.alive == false })
+        // The Trash takes My agents' conversation: a space of that name later begins anew.
+        #expect(model.messages(of: "agents") == 1)
+        model.forget("agents")
+        #expect(model.session !== agents && model.messages(of: "agents") == 0 && model.id == nil)
         await finish(home, model)
     }
 
@@ -392,7 +458,7 @@ import WebKit
     }
 
     /// No agent is started before the first message; it gets the context line, its reply and the person's words show
-    /// in the drawer, and the next message goes to the same agent. New Conversation stops it.
+    /// in the drawer, and the next message goes to the same agent. The blank page has its own. New Conversation stops it.
     @Test func theFirstMessageLaunchesTheAssistant() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -408,12 +474,15 @@ import WebKit
         #expect(model.rows.dropFirst().first == .mine(caption: "about My agents", text: "Make the tiles wider."))
         #expect(model.rows.first.map { if case .day = $0 { true } else { false } } == true, "a conversation starts with its day")
         #expect(input(home).contains { $0.contains(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nMake the tiles wider."#) })
-        model.place = .blank
-        model.draft = "And a second board."
+        let agents = model.place
+        model.draft = "And wider still."
         model.send()
         #expect(await wait(until: { model.rows.filter { $0 == .reply("Invented reply.") }.count == 2 }))
         #expect(model.id == id && model.engine.state.agents.count == 1)
-        #expect(model.rows.contains(.mine(caption: "on the blank page", text: "And a second board.")))
+        model.place = .blank
+        #expect(model.id == nil && model.rows.isEmpty, "the blank page has its own conversation")
+        model.place = agents
+        #expect(model.id == id && model.rows.contains(.mine(caption: "about My agents", text: "And wider still.")))
         model.newConversation()
         #expect(model.id == nil && model.rows.isEmpty)
         #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))

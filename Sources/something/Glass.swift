@@ -4,8 +4,9 @@
 // every one), and a label beside it says in words what it does, on hover or focus. It drags, its eyes leaning with the
 // motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for every space,
 // kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the sticker's corner;
-// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. The sticker is only over a space: on the
-// blank page and the templates the card stands alone, as the window shows it, and over the tour there is neither.
+// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the card stays open
+// and fades to that space's own conversation. The sticker is only over a space: on the blank page and the templates
+// the card stands alone, as the window shows it, and over the tour there is neither.
 import AppKit
 import Observation
 
@@ -45,6 +46,10 @@ final class Glass: WindowLayer {
     private var grabbed: NSPoint?
     /// Whether the sticker, let go, is on its way to its side: its frame is the animation's meanwhile.
     private(set) var snapping = false
+    /// The conversation the card shows, and how many times the card faded from one to another: it stays in its place
+    /// from one space to another, only its content changing.
+    private var shown: ObjectIdentifier?
+    private(set) var fades = 0
 
     init(over center: NSView, model: AssistantModel) {
         self.model = model
@@ -150,6 +155,18 @@ final class Glass: WindowLayer {
     /// The sticker's eyes and words from the assistant's presence, and the card grown or shrunk as the model says.
     private func update() {
         let presence = model.presence
+        let session = ObjectIdentifier(model.session)
+        if session != shown, shown != nil, grown == true, !morphing, let layer = card.layer {
+            // A transition of no duration would take Core Animation's default: under Reduced motion, none at all.
+            let duration = Look.duration(0.2, Look.motion(motion()))
+            if duration > 0 {
+                let fade = CATransition()
+                (fade.type, fade.duration) = (.fade, duration)
+                layer.add(fade, forKey: "conversation")
+            }
+            fades += 1
+        }
+        shown = session
         sticker.sign.motion = motion()
         sticker.show(presence, title: model.title)
         let open = model.cardShown

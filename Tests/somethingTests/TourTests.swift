@@ -98,7 +98,7 @@ import Testing
         model.send("A second one.")
         #expect(await wait(until: { !model.building }))
         #expect(opened == ["waiting", nil, nil] && model.ready?.id == "second" && model.made.contains("second"))
-        #expect(answers == [1, 2, 3])
+        #expect(answers == [1, 1, 2], "the space made keeps its build's conversation; New Space begins a new one")
         #expect(model.notice?.title == "“Second” is ready." && model.notice?.actions.map(\.title) == ["Open"])
         await assistants.finish(home, model)
 

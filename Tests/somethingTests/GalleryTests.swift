@@ -360,7 +360,7 @@ struct GalleryTests {
         (model.ready, model.threadShown) = (library.entry("stack"), false)
         model.place = .space(title: "Garden notes", name: "garden-notes", page: fixture.places.spaces.appendingPathComponent("garden-notes.html").path)
         try await draw(model, "assistant-space-ready" + suffix, fixture)
-        let side = NSHostingView(rootView: SidebarView(library: library, assistant: model))
+        let side = NSHostingView(rootView: SidebarView(library: library, assistant: model, eyes: model.eyes))
         let offscreen = Offscreen(side)
         offscreen.window.setContentSize(NSSize(width: 232, height: 320))
         side.frame.size = NSSize(width: 232, height: 320)

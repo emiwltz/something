@@ -389,10 +389,11 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,
   with the `launch` right for that kind. For `opencode`, `pi` and `omp`, `can.resume` is false and `because.resume`
   says why. A permission or a question of an agent started elsewhere is answered where it runs: it is no `request`.
-- **The person's assistant is read-only too**: the agent something's own window talks to is listed as launched, but
-  its `can` is all false and `because.send` says why; a write to it answers `READ_ONLY_AGENT`. Its conversation, its
-  held messages and its requests are the person's: they are never in a space's state. Its `error` keeps its `code`
-  but not its words, and no conversation in or below the spaces folder is ever listed as seen elsewhere.
+- **The person's assistants are read-only too**: each space has its own assistant, so `agents` may list several agents
+  something's own window talks to, each as launched, but with its `can` all false and `because.send` saying why; a
+  write to one answers `READ_ONLY_AGENT`. Their conversations, their held messages and their requests are the
+  person's: they are never in a space's state. Each one's `error` keeps its `code` but not its words, and no
+  conversation in or below the spaces folder is ever listed as seen elsewhere.
 - **`other` agents are seen by their process only**: no conversation, no state beyond `unknown`.
 
 ## Memory
@@ -416,8 +417,8 @@ await something.store.set("seen", [...seen, "a1"]);
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
   exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
-- **The assistant.** The person's assistant rests over your space as a 44-point sticker, 16 points from its bottom
-  right corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
+- **The assistant.** Your space's own assistant rests over it as a 44-point sticker, 16 points from its bottom right
+  corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
   left or right edge. Keep what matters out of the 76 points along those two edges, or let it scroll. The first error
   your page does not catch shows a 40-point strip, "Script error", across the top of your space, which it pushes
   down: the error's first line, as a quote, and Ask to Fix. The person reads your error's words there; their

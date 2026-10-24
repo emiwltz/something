@@ -105,8 +105,9 @@ enum Picture {
         // Below the title bar, as the columns' own contents start.
         let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
         let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
+        let sidebar = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
         let columns: [(item: NSSplitViewItem, view: NSView)] = [
-            (shell.split.splitViewItems[0], NSHostingView(rootView: SidebarView(library: library, assistant: shell.assistant))),
+            (shell.split.splitViewItems[0], NSHostingView(rootView: sidebar.rootView)),
             (shell.inspector, NSHostingView(rootView: inspector.rootView)),
         ].filter { !$0.0.isCollapsed }
         let offscreens = columns.map { column in

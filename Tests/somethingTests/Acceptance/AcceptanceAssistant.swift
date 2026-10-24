@@ -153,7 +153,48 @@ struct AcceptanceAssistant {
         _ = await wait(until: { stopped })
     }
     @Test("c5: model and effort", .disabled("not built yet: AB11")) func c5() async throws {}
-    @Test("c6: one assistant per space", .disabled("not built yet: AB09b")) func c6() async throws {}
+    /// Each space has its own assistant and conversation. Daily brief's works on the weather corner, its card open
+    /// with the conversation; Logbook's sleeps, never written to; My agents' answered, then waits for a permission. The
+    /// card stays open and in place from one to the other, fading to each one's own rows; the sidebar shows each one's
+    /// eyes, and the sticker's badge only My agents' request.
+    @Test("c6: one assistant per space") func c6() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.atWork(stage)
+        defer { brief.close() }
+        let model = shell.assistant, engine = model.engine, glass = shell.glass
+        let briefs = model.session
+        model.focus()
+        shell.toggleConversation(nil)
+        #expect(await wait(5) { glass.grown == true && !glass.morphing })
+        let fades = glass.fades
+        // Logbook: its own conversation, empty and asleep; the card stayed open, its content faded.
+        let logbook = try await stage.open("logbook", in: shell, library)
+        defer { logbook.close() }
+        #expect(await wait(5) { glass.fades == fades + 1 })
+        #expect(model.cardShown && glass.grown == true && model.session !== briefs && model.rows.isEmpty && model.title == "Logbook")
+        #expect(model.presence.state == .sleep && model.placeholder == "Ask for a change · it wakes up")
+        // My agents: written to, it answers, then asks; the card leads to the request, never shows Allow.
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        model.send("Check that the counters match what the terminal says.")
+        #expect(await wait(until: { model.presence.state == .wait }), "said: \(model.presence.word)")
+        #expect(model.cardShown && model.title == "My agents" && model.messageCount == 2 && model.engine.assistants.count == 2)
+        #expect(model.rows.contains(.reply("I can compare them, but I need to run the check script once. I asked you below.")))
+        #expect(!model.rows.contains { "\($0)".contains("weather corner") }, "only My agents' rows")
+        let notice = try #require(model.notice)
+        #expect(notice.title == "Claude Code is waiting for your answer" && !notice.actions.contains { $0.title.contains("Allow") })
+        #expect(model.eyes(of: "brief") == .think && model.eyes(of: "logbook") == .sleep && model.eyes(of: "agents") == .wait)
+        #expect(briefs.agent?.state == "working" && briefs.rows.contains(.mine(caption: "about Daily brief", text: "Add a small weather corner, top right.")))
+        shell.waiting(1, mine: 1)
+        #expect(glass.mine == 1 && glass.sticker.mine == 1 && shell.chip.count == 1, "the badge counts this space's own request")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: agents.web, "c6" + suffix, root: stage.home.root)
+        }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     /// Project watch open, its assistant reduced to the sticker with the label shown, in each of the seven states its
     /// presence can take: the eyes and the words of each, from invented agents at the Stage's moment. c7.png is asleep,
     /// as the mockup's shot; c7-<state>.png each state.

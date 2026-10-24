@@ -1,12 +1,16 @@
 // The sidebar: New Space first, selected on the blank page; the spaces in the library's order (one click opens one),
 // with an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
 // declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
-// the person was elsewhere has a dot. Each space has Show in Finder, Export… and Move to Trash… in its context menu.
+// the person was elsewhere has a dot, and each space the eyes of its own assistant, which `eyes` gives (W3 adds the
+// ring, the folded groups and the preference). Each space has Show in Finder, Export… and Move to Trash… in its context
+// menu.
 import SwiftUI
 
 struct SidebarView: View {
     @Bindable var library: Library
     let assistant: AssistantModel
+    /// The state of the space of that name's assistant, read from its own conversation.
+    let eyes: (String) -> Sign.State
     /// A row of the list: a destination, or the space being made, which is where New Space is while it is made.
     enum Row: Hashable { case to(Library.Destination), pending }
 
@@ -70,7 +74,13 @@ struct SidebarView: View {
     private func row(_ entry: Library.Entry) -> some View {
         Label {
             if entry.isSpace {
-                Text(entry.title)
+                HStack(spacing: 4) {
+                    Text(entry.title)
+                    Spacer(minLength: 0)
+                    let state = eyes(entry.id)
+                    Image(nsImage: Sign.miniEyes(state, template: false)).frame(width: 22).help(state.word)
+                        .accessibilityLabel("Assistant: \(state.word)")
+                }
             } else {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(entry.title)
