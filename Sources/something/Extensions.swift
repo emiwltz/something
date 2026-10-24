@@ -17,6 +17,11 @@ extension Registry {
         "copilot": "GitHub Copilot CLI", "auggie": "Auggie", "dsh": "DeepSeek Harness", "zcode": "ZCode",
     ])
 
+    /// The builders whose conversation, resumed, is launched as a new one would be (the same rules, the same lent
+    /// tools): Start Again picks theirs up; any other starts a new one. Codex joins once a trial shows that its
+    /// thread/resume keeps the sandbox and the tools.
+    static let resumesAsBuilt: Set = ["claude"]
+
     /// Answers `something hook permission`, which Claude Code's plan B runs for each request (PermissionSpool.swift).
     static func hook(_ words: [String]) -> Int32 { SpoolHook.main(words) }
 }

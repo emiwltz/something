@@ -119,13 +119,14 @@ import Testing
         #expect(missing.word == "Codex isn't on this Mac")
         #expect(missing.notice?.text == "something launches the agent you already use. Install Codex, or choose another one for this space.")
 
-        var crashed = agent("error", alive: false, error: true)
+        let crashed = agent("error", alive: false, error: true)
         let crash = iso8601.date(from: crashed.updated ?? "")!
         #expect(of(crashed).word == "Stopped unexpectedly")
         #expect(of(crashed).notice == .init(title: "The assistant stopped",
                                           text: "Claude Code quit unexpectedly at \(Presence.clock.string(from: crash)). Starting again begins a new conversation."))
-        crashed.can.resume = true
-        #expect(of(crashed).notice?.text.hasSuffix("Your conversation is kept; starting again picks it up.") == true)
+        var resuming = facts
+        resuming.resumes = true
+        #expect(of(resuming, crashed).notice?.text.hasSuffix("Your conversation is kept; starting again picks it up.") == true)
         let failed = of(Presence.Facts(name: "Claude Code", failure: "Claude Code failed: the program stopped at once."), nil)
         #expect(failed.notice?.text == "Claude Code failed: the program stopped at once.")
 

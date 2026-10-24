@@ -140,7 +140,9 @@ import SomethingCore
         keep(\.installed, state.kinds.filter { builders.contains($0.key) }.compactMapValues(\.installed))
         keep(\.notes, state.kinds.compactMapValues(\.note))
         let offered = builders.filter { installed[$0] == true && refused[$0] == nil }
-        if !offered.contains(kind ?? "") { session.kind = offered.first { $0 == preferred } ?? offered.first }
+        // A conversation whose program left the Mac keeps its builder: the card says it is missing rather than another
+        // agent taking the conversation over unasked.
+        if !offered.contains(kind ?? ""), session.last == nil || installed[kind ?? ""] != false { session.kind = offered.first { $0 == preferred } ?? offered.first }
         session.read(state)
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
         keepTime()
@@ -212,6 +214,20 @@ import SomethingCore
 
     var working: Bool { light == .working || light == .waiting }
 
+    /// Whether nothing can be sent until the person acts on the notice: its program left the Mac, or it quit.
+    var blocked: Bool { kind != nil && [.missing, .crashed].contains(presence.stuck) }
+
+    /// Whether Start Again picks this conversation up: its agent reported a thread, its kind resumes as it was launched,
+    /// Ask Before Every Change is what it was (a resume keeps how it asked), and the last start did not fail, which a
+    /// conversation the program cannot find again does: Start Again then begins a new one rather than fail for ever.
+    var resumes: Bool {
+        session.thread != nil && Registry.resumesAsBuilt.contains(kind ?? "") && session.asking == askEverything
+            && failure == nil && agent?.error?.code != "LAUNCH_FAILED"
+    }
+
+    /// The other builders the person may choose when this one left the Mac.
+    var others: [Entry] { entries.filter { $0.id != kind && $0.enabled } }
+
     var light: Light {
         if failure != nil { return .error }
         guard let agent, !session.stopped else { return launching ? .working : .off }
@@ -247,6 +263,7 @@ import SomethingCore
     }
 
     var placeholder: String {
+        if blocked { return presence.stuck == .missing ? "Choose an agent to continue" : "Start Again to send a message" }
         switch place {
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _):
@@ -269,6 +286,7 @@ import SomethingCore
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
             else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
         return [how, "A new conversation starts each time something starts."]
+            + (session.renewed ? ["\(name) stopped and could not pick its conversation up: Started a new conversation."] : [])
             + (idled ? ["\(name) was stopped to save memory. Your next message starts it again."] : [])
     }
 
@@ -292,7 +310,7 @@ import SomethingCore
     /// conversation has none.
     func send(_ sentence: String? = nil) {
         let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, kind != nil else { return }
+        guard !text.isEmpty, kind != nil, !blocked else { return }
         if sentence == nil { draft = "" }
         fromTemplate = nil
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
@@ -361,6 +379,22 @@ import SomethingCore
         halt()
         session.id = nil
         deliver(last)
+    }
+
+    /// Start Again, once the agent quit: launches it again, continuing its conversation when it `resumes`, else in a
+    /// new conversation that says so; nothing is sent on its own. A launch that never started its conversation sends its
+    /// last message again, as Try Again does.
+    func startAgain() {
+        guard session.thread != nil else { return tryAgain() }
+        let thread = resumes ? session.thread : nil
+        halt()
+        if thread != nil {
+            session.kept += engine.state.threads.first { $0.agent == session.id }?.turns ?? []
+        } else {
+            newConversation()
+            session.renewed = true
+        }
+        start([], resume: thread)
     }
 
     /// Copies the command that signs the builder in, in Terminal.
@@ -434,14 +468,22 @@ import SomethingCore
     /// it starts waits for it.
     private func deliver(_ message: String) {
         let session = session
-        guard let kind = session.kind else { return }
+        guard session.kind != nil else { return }
         (session.last, session.failure, active) = (message, nil, clock())
         if session.launching { return session.queued.append(message) }
         if let id = session.id, session.agent?.alive != false, !session.stopped {
             do { _ = try engine.deliver(message, to: id, when: "next") } catch { session.failure = error.sentence }
             return refresh()
         }
-        (session.launching, session.queued) = (true, [message])
+        start([message])
+    }
+
+    /// Launches this conversation's agent, continuing the thread `resume` when given, and sends `messages` once it runs,
+    /// with what is written meanwhile.
+    private func start(_ messages: [String], resume: String? = nil) {
+        let session = session
+        guard let kind = session.kind else { return }
+        (session.launching, session.queued, session.failure) = (true, messages, nil)
         let number = session.launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
@@ -450,7 +492,7 @@ import SomethingCore
             session.queued = []
             do {
                 let id = try engine.launchAssistant(kind, folder: places.spaces.path, model: session.model, effort: session.effort,
-                                                    askEverything: askEverything, lent: lent(for: kind))
+                                                    resume: resume, askEverything: askEverything, lent: lent(for: kind))
                 (session.id, session.asking, session.stopped, session.idled) = (id, askEverything, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { session.failure = error.sentence }
@@ -500,9 +542,9 @@ import SomethingCore
 
     /// The conversation's rows from the agent's thread: the day each turn starts when it is another than the last
     /// one's, messages and finished tools, never thoughts; a running tool is the present-tense line's.
-    static func rows(_ thread: AgentThread?, calendar: Calendar = .current) -> [Row] {
+    static func rows(_ turns: [Turn], calendar: Calendar = .current) -> [Row] {
         var last: Date?
-        return (thread?.turns ?? []).flatMap { turn -> [Row] in
+        return turns.flatMap { turn -> [Row] in
             let start = (turn.started ?? turn.items.first?.at).flatMap(iso8601.date)
             let day: [Row] = start.map { start in
                 defer { last = start }

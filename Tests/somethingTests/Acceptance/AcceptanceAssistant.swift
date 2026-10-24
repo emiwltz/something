@@ -206,7 +206,115 @@ struct AcceptanceAssistant {
             }
         }
     }
-    @Test("c8: the notice slot", .disabled("not built yet: AB08")) func c8() async throws {}
+    /// One notice above the composer when the assistant cannot go on, never an Allow button. In the mockup's order of
+    /// spaces: Logbook, where the fake claude quits mid-answer (c8 and c8-crashed: Start Again, the field greyed); the
+    /// same conversation, picked up again, then said unknown by an invented state (c8-unknown: no action, something will
+    /// not guess); Project watch, its model retried (c8-model: Try Again, the conversation open); Daily brief, waiting
+    /// for an answer (c8-waiting: Show Request), then its program gone from the Mac (c8-missing: How to Get One).
+    @Test("c8: the notice slot") func c8() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine, glass = shell.glass
+        glass.motion = { .reduced }
+        var asked = 0
+        model.showRequest = { asked += 1 }
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        /// Opens the card over `view` and draws it as `ids`, after `check` holds.
+        func draw(_ view: SpaceView, _ ids: [String]) async throws {
+            model.focus()
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            try await stage.appearances { suffix in
+                for id in ids { try await Picture.window(shell, library: library, web: view.web, id + suffix, root: stage.home.root) }
+            }
+        }
+
+        // Logbook: Claude Code quits while it answers.
+        let logbook = try await stage.open("logbook", in: shell, library)
+        model.draft = "One line per hour."
+        model.send()
+        #expect(await wait(until: { model.presence.stuck == .crashed }), "said: \(model.presence.word)")
+        #expect(model.presence.header == "Stopped unexpectedly" && model.presence.state == .limit && model.dot == .bad)
+        let crashed = try #require(model.notice)
+        #expect(crashed.title == "The assistant stopped" && crashed.bad && crashed.actions.map(\.title) == ["Start Again"])
+        #expect(crashed.text.hasPrefix("Claude Code quit unexpectedly at ") && crashed.text.hasSuffix("Your conversation is kept; starting again picks it up."))
+        #expect(model.blocked && !model.canSend && model.placeholder == "Start Again to send a message" && model.messageCount == 2)
+        try await draw(logbook, ["c8", "c8-crashed"])
+
+        // Start Again picks it up; then a state no source gives is said unknown, with nothing to click.
+        crashed.actions[0].run()
+        #expect(await wait(until: { model.agent?.alive == true && model.agent?.state == "idle" && !model.launching }))
+        #expect(model.notice == nil && model.messageCount == 2)
+        engine.changed = {}
+        var state = engine.state
+        let index = try #require(state.agents.firstIndex { $0.id == model.id })
+        let at = Date()
+        model.clock = { at }
+        (state.agents[index].state, state.agents[index].updated) = ("unknown", iso8601.string(from: at.addingTimeInterval(-4 * 60 - 5)))
+        model.session.read(state)
+        let unknown = try #require(model.notice)
+        #expect(model.presence.state == .unknown && model.presence.header == "State unknown · something cannot read it")
+        #expect(unknown.title == "State unknown · something cannot read it" && !unknown.bad && unknown.actions.isEmpty)
+        #expect(unknown.text == "Claude Code gave no sign for 4 minutes. It may still be working; something will not guess.")
+        #expect(!model.blocked && model.placeholder == "Ask Logbook's assistant for a change…")
+        try await draw(logbook, ["c8-unknown"])
+        (engine.changed, model.clock) = ({ model.refresh() }, Date.init)
+        model.refresh()
+        logbook.close()
+
+        // Project watch: its model does not answer, and Claude Code retries.
+        model.newConversation()
+        let project = try await stage.open("project", in: shell, library)
+        defer { project.close() }
+        model.draft = "Show the slides milestone in red."
+        model.send()
+        #expect(await wait(until: { model.presence.stuck == .cannotReachModel }), "said: \(model.presence.word)")
+        let limit = try #require(model.notice)
+        #expect(limit.title == "Stopped · can't reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
+        #expect(limit.text == "Its model did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
+        #expect(!model.blocked && model.presence.header == "Stopped · can't reach its model")
+        shell.toggleConversation(nil)
+        try await draw(project, ["c8-model"])
+        shell.toggleConversation(nil)
+
+        // Daily brief: a request waits in its own window; the notice leads there.
+        model.newConversation()
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        model.draft = "ask-first"
+        model.send()
+        #expect(await wait(until: { model.presence.state == .wait }))
+        let waiting = try #require(model.notice)
+        #expect(waiting.title == "Claude Code is waiting for your answer" && !waiting.bad)
+        #expect(waiting.text == "The request is in its own window, outside the space. Only you can answer it there.")
+        #expect(waiting.actions.map(\.title) == ["Show Request \(Keys.shown("showreq"))"] && !waiting.actions.contains { $0.title.contains("Allow") })
+        waiting.actions[0].run()
+        #expect(asked == 1 && !model.blocked)
+        try await draw(brief, ["c8-waiting"])
+
+        // Then Claude Code leaves the Mac: the conversation keeps its builder and says it is missing.
+        model.newConversation()
+        model.draft = "Hello."
+        model.send()
+        #expect(await wait(until: { model.light == .ready }))
+        try FileManager.default.removeItem(at: claude)
+        engine.lookAgain()
+        #expect(await wait(until: { model.presence.stuck == .missing }))
+        let missing = try #require(model.notice)
+        #expect(missing.title == "Claude Code isn't on this Mac" && missing.bad && missing.actions.map(\.title) == ["How to Get One"])
+        #expect(missing.text == "something launches the agent you already use. Install Claude Code, or choose another one for this space.")
+        #expect(model.blocked && model.placeholder == "Choose an agent to continue" && model.presence.header == "Claude Code isn't on this Mac")
+        try await draw(brief, ["c8-missing"])
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     /// Daily brief open, the sticker in its first corner: a drag takes it across the space, its eyes leaning with the
     /// motion, and lets it go left of the middle; it goes to the leading side at the height it was let go. Logbook
     /// then opens with the sticker in the same place, the label on its right, while My agents' request is in the chip.

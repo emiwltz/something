@@ -9,13 +9,15 @@ import SomethingCore
 struct Presence: Equatable {
     /// What the conversation knows that the state does not: the agent's name, whether its program is on this Mac (nil
     /// while not known), whether it is being started, why its last launch or message failed, and whether something
-    /// stopped it (for idleness, or Stop on an agent that cannot pause).
+    /// stopped it (for idleness, or Stop on an agent that cannot pause), and whether starting it again picks its
+    /// conversation up.
     struct Facts: Equatable {
         var name: String
         var installed: Bool? = nil
         var waking = false
         var failure: String? = nil
         var stopped = false
+        var resumes = false
     }
 
     /// Why it cannot go on: its program is gone, its model does not answer, it quit, a message did not get through to
@@ -96,10 +98,10 @@ struct Presence: Equatable {
         case .crashed?:
             Notice(title: "The assistant stopped", text: facts.failure
                 ?? "\(name) quit unexpectedly\(seen.map { " at " + Presence.clock.string(from: $0) } ?? ""). "
-                + (agent?.can.resume == true ? "Your conversation is kept; starting again picks it up." : "Starting again begins a new conversation."))
+                + (facts.resumes ? "Your conversation is kept; starting again picks it up." : "Starting again begins a new conversation."))
         case .cannotReachModel?:
             Notice(title: "Stopped · can't reach its model",
-                   text: "\(agent?.model ?? name) did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
+                   text: "\(agent?.model ?? "Its model") did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
                        + (untouched ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
         case .undelivered?:
             Notice(title: "Your message didn't reach \(name)", text: facts.failure ?? "")

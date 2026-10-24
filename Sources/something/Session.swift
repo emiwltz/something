@@ -1,6 +1,7 @@
 // One conversation with a builder: its kind, the model and effort it is launched with, its agent and thread as the
 // engine's state shows them, what went wrong, the messages waiting for its launch or for its turn to end, and the space
-// it is about. A class, so a launch that ends after a new conversation began can tell it was for another one.
+// it is about; the turns of its earlier agent that a resumed one continues, and whether it began because the last one
+// could not be picked up. A class, so a launch that ends after a new conversation began can tell it was for another one.
 import Observation
 import SomethingCore
 
@@ -37,6 +38,10 @@ import SomethingCore
     /// a state read again before the next turn starts sends no second one.
     var held: [String] = []
     @ObservationIgnored var releasedAfter: String??
+    /// The turns its agent had when Start Again resumed its thread in a new one, which reports only the turns it runs:
+    /// the conversation shows both. And whether it is the new conversation Start Again began, which its first lines say.
+    var kept: [Turn] = []
+    var renewed = false
 
     init(kind: String?, model: String? = nil, effort: String? = nil, space: String? = nil) {
         (self.kind, self.model, self.effort, self.space) = (kind, model, effort, space)
@@ -48,7 +53,7 @@ import SomethingCore
         let agent = state.agents.first { $0.id == id }, thread = state.threads.first { $0.agent == id }
         if self.agent != agent { self.agent = agent }
         if let reported = agent?.thread, reported != self.thread { self.thread = reported }
-        let rows = AssistantModel.rows(thread)
+        let rows = AssistantModel.rows(kept + (thread?.turns ?? []))
         if self.rows != rows { self.rows = rows }
         // Its last step is the sticker's words, even while the card that draws the rows is closed.
         let turn = thread?.turns.last

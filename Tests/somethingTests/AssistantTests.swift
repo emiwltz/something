@@ -17,7 +17,8 @@ import WebKit
     /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "go-wrong" likewise but
     /// fails it, "small game" starts building one and never ends its turn, "ask-first"
-    /// asks a permission, "counters bigger" retries its model twice and never ends its turn, "darker header"
+    /// asks a permission, "line per hour" starts answering and quits mid-turn (code 3), "counters bigger" (or "slides
+    /// milestone") retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
@@ -59,7 +60,7 @@ import WebKit
           tool 2 Bash '{"command":"something new stack"}'
           tool 3 Write '{"file_path":"/Users/example/something/spaces/stack.html"}'
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}' ;;
-        *'counters bigger'*'"type":"user"'*)
+        *'counters bigger'*'"type":"user"'*|*'slides milestone'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           for n in 1 2; do echo "{\"type\":\"system\",\"subtype\":\"api_retry\",\"attempt\":$n,\"max_retries\":10,\"retry_delay_ms\":512,\"error_status\":529,\"error\":\"overloaded\",\"uuid\":\"r$n\",\"session_id\":\"s1\"}"; done ;;
         *'darker header'*'"type":"user"'*)
@@ -67,6 +68,10 @@ import WebKit
           echo '{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"retry_delay_ms":512,"error_status":401,"error":"authentication_failed","uuid":"r1","session_id":"s1"}'
           echo '{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming","session_id":"s1","uuid":"u3"}'
           echo '{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u4","session_id":"s1"}' ;;
+        *'line per hour'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_q1","model":"opus","role":"assistant","content":[{"type":"text","text":"I will group the lines by the hour they were written."}]},"parent_tool_use_id":null,"uuid":"aq1","session_id":"s1"}'
+          exit 3 ;;
         *'ask-first'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_9"}}' ;;
@@ -175,7 +180,7 @@ import WebKit
         let thread = AgentThread(id: "s1", agent: "claude-1", title: nil, started: nil,
                                  turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: items)])
         let day = AssistantModel.Row.day(try #require(iso8601.date(from: "2026-10-19T09:00:00Z")))
-        #expect(AssistantModel.rows(thread) == [
+        #expect(AssistantModel.rows(thread.turns) == [
             day, .mine(caption: "about My agents", text: "Make the tiles wider."),
             .tool(failed: false, words: "Read guide", command: nil), .tool(failed: false, words: "Read agents.html", command: nil),
             .tool(failed: false, words: "Edited agents.html", command: nil),
@@ -186,8 +191,7 @@ import WebKit
         // Amp's tools: its shell, its patches, and its code, which calls something's tools.
         let amp = [tool("shell_command", "cat agents.html"), tool("apply_patch", "/Users/example/something/spaces/agents.html"),
                    tool("code_exec", #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#)]
-        #expect(AssistantModel.rows(AgentThread(id: "T-1", agent: "amp-1", title: nil, started: nil,
-                                                turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: amp)])) == [
+        #expect(AssistantModel.rows([Turn(id: "1", state: "done", started: nil, ended: nil, items: amp)]) == [
             day, .tool(failed: false, words: "", command: "cat agents.html"), .tool(failed: false, words: "Edited agents.html", command: nil),
             .tool(failed: false, words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
         ])
@@ -579,6 +583,92 @@ import WebKit
         #expect(model.notice?.text.contains("Claude Code said: “The model's server refused Claude Code's sign-in (error 401).”") == true)
         model.tryAgain()
         #expect(!model.signedOut, "Try Again starts a new agent, which has not retried")
+        await finish(home, model)
+    }
+
+    /// Claude Code quits mid-turn: the card says it stopped, offers Start Again and sends nothing until then. Start
+    /// Again resumes its thread (`--resume`) in a new agent, the conversation kept; when it cannot pick it up (here Ask
+    /// Before Every Change changed since, which a resume would not apply), it starts a new conversation and says so.
+    @Test func startAgainPicksTheConversationUp() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "One line per hour."
+        model.send()
+        #expect(await wait(until: { model.presence.stuck == .crashed }), "said: \(model.presence.word)")
+        let thread = try #require(model.session.thread), first = model.id
+        #expect(model.presence.word == "Stopped unexpectedly" && model.resumes && model.blocked)
+        #expect(model.notice?.title == "The assistant stopped" && model.notice?.actions.map(\.title) == ["Start Again"])
+        #expect(model.notice?.text.hasSuffix("Your conversation is kept; starting again picks it up.") == true, "\(model.notice?.text ?? "")")
+        #expect(model.placeholder == "Start Again to send a message" && !model.canSend && !model.stops)
+        model.draft = "Not now."
+        model.send()
+        #expect(model.draft == "Not now." && input(home).filter { $0.contains("Not now.") }.isEmpty, "nothing leaves while it is stopped")
+        model.draft = ""
+        let rows = model.rows
+        // The fake writes its arguments once it runs, which may be after its agent is said alive.
+        func arguments() -> [Substring] {
+            ((try? String(contentsOf: home.root.appendingPathComponent("out/arguments"), encoding: .utf8)) ?? "").split(separator: "\n")
+        }
+        model.notice?.actions.first?.run()
+        #expect(await wait(until: { model.id != first && model.agent?.alive == true && !model.launching && arguments().contains("--mcp-config")
+            && arguments().contains("--resume") }), "\(arguments())")
+        let resumed = arguments()
+        #expect(resumed.firstIndex(of: "--resume").map { resumed[$0 + 1] == thread } == true, "\(resumed)")
+        #expect(model.rows == rows && model.notice == nil && !model.blocked && model.firstLines.count == 2, "the conversation is kept")
+        // Quits again; Ask Before Every Change changed since: a new conversation, said as such.
+        model.draft = "One line per hour, again."
+        model.send()
+        #expect(await wait(until: { model.presence.stuck == .crashed }))
+        model.toggleAsking()
+        #expect(!model.resumes && model.notice?.text.hasSuffix("Starting again begins a new conversation.") == true)
+        let second = model.id
+        model.startAgain()
+        #expect(await wait(until: { model.id != second && model.id != nil && !model.launching && arguments().firstIndex(of: "--session-id").map { $0 + 1 < arguments().count } == true }))
+        #expect(!arguments().contains("--resume") && model.rows.isEmpty && model.asking)
+        #expect(model.firstLines.contains("Claude Code stopped and could not pick its conversation up: Started a new conversation."))
+        await finish(home, model)
+    }
+
+    /// The program left the Mac while a conversation ran: the card says it is missing rather than another builder taking
+    /// over, with How to Get One and Use Another Agent, and nothing can be sent; New Conversation lets the other one in.
+    @Test func aMissingBuilderIsSaid() async throws {
+        let (home, model) = try assistant(["claude", "codex"])
+        defer { home.remove() }
+        var shown = 0
+        model.howTo = { shown += 1 }
+        await look(model)
+        model.draft = "Hello."
+        model.send()
+        #expect(await wait(until: { model.light == .ready }))
+        try FileManager.default.removeItem(at: home.root.appendingPathComponent("bin/claude"))
+        await look(model)
+        #expect(model.kind == "claude" && model.presence.stuck == .missing && model.blocked)
+        #expect(model.notice?.title == "Claude Code isn't on this Mac" && model.notice?.actions.map(\.title) == ["How to Get One", "Use Another Agent"])
+        #expect(model.others.map(\.id) == ["codex"] && model.placeholder == "Choose an agent to continue" && !model.canSend)
+        model.notice?.actions.first?.run()
+        #expect(shown == 1)
+        model.newConversation()
+        model.refresh()
+        #expect(model.kind == "codex" && !model.blocked)
+        await finish(home, model)
+    }
+
+    /// A request waits: the notice says where it is and leads there, never answering it.
+    @Test func aRequestIsShownElsewhere() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        var shown = 0
+        model.showRequest = { shown += 1 }
+        await look(model)
+        model.draft = "ask-first"
+        model.send()
+        #expect(await wait(until: { model.presence.state == .wait }))
+        let notice = try #require(model.notice)
+        #expect(notice.title == "Claude Code is waiting for your answer" && notice.actions.map(\.title) == ["Show Request \(Keys.shown("showreq"))"])
+        #expect(!notice.actions.contains { $0.title.contains("Allow") } && !model.blocked)
+        notice.actions[0].run()
+        #expect(shown == 1)
         await finish(home, model)
     }
 

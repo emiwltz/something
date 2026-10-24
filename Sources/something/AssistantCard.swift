@@ -291,6 +291,7 @@ struct Field: View {
                 .padding(.horizontal, 2).padding(.vertical, 5)
                 .frame(minHeight: 30)
                 .focused($typing)
+                .disabled(model.blocked)
                 .accessibilityLabel("Message")
                 .onChange(of: model.wantsFocus, initial: true) {
                     if model.wantsFocus { (typing, model.wantsFocus) = (true, false) }
@@ -361,7 +362,11 @@ struct NoticeView: View {
                     HStack(spacing: 6) {
                         ForEach(notice.actions, id: \.title) { action in
                             Button(action: action.run) {
-                                Text(action.title).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                                HStack(spacing: 6) {
+                                    if let symbol = action.symbol { Image(systemName: symbol).font(.system(size: 10.5, weight: .semibold)) }
+                                    Text(action.title)
+                                }
+                                .font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                                     .padding(.horizontal, 11).frame(height: 27)
                                     .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.control + 1))
                                     .overlay(RoundedRectangle(cornerRadius: Look.control + 1).strokeBorder(Look.Token.line2.ui))
@@ -499,8 +504,22 @@ struct AgentMenu: View {
 extension AssistantModel {
     /// One notice: a symbol, its title and sentence, red when something broke, and the actions that help.
     struct Notice {
-        struct Action { let title: String, run: () -> Void }
+        struct Action {
+            let title: String, symbol: String?, run: () -> Void
+            init(title: String, symbol: String? = nil, run: @escaping () -> Void) { (self.title, self.symbol, self.run) = (title, symbol, run) }
+        }
         let symbol: String, title: String, text: String, bad: Bool, actions: [Action]
+    }
+
+    /// Use Another Agent: the other builders in a menu at the pointer, the person choosing one (App.chooseBuilder).
+    func chooseAnother() {
+        let menu = NSMenu()
+        for entry in others {
+            let item = NSMenuItem(title: entry.title, action: #selector(App.chooseBuilder(_:)), keyEquivalent: "")
+            item.representedObject = entry.id
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
     }
 
     /// The agents something sees but does not launch, each with why.
@@ -511,7 +530,8 @@ extension AssistantModel {
     /// The presence of this conversation's agent now.
     var presence: Presence {
         _ = beat
-        return Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped),
+        return Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped,
+                                         resumes: resumes),
                  agent: agent, turn: session.turn, now: clock())
     }
 
@@ -554,7 +574,7 @@ extension AssistantModel {
     }
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
-    var canSend: Bool { kind != nil && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     var stops: Bool { working && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The notice above the composer, the most pressing first; nil when nothing blocks or waits.
@@ -571,13 +591,19 @@ extension AssistantModel {
                           actions: [.init(title: "Copy Command", run: copyCommand), .init(title: "Try Again", run: tryAgain)])
         }
         let presence = presence
-        if let notice = presence.notice {
-            let again: [Notice.Action] = session.last == nil ? [] : [.init(title: presence.stuck == .crashed ? "Start Again" : "Try Again", run: tryAgain)]
-            let symbol = presence.stuck == .unknown ? "questionmark" : presence.stuck == .missing ? "powerplug" : "exclamationmark.triangle"
+        if let notice = presence.notice, let stuck = presence.stuck {
+            // The one or two things that help; a state nobody reads has none, since something will not guess.
+            let actions: [Notice.Action] = switch stuck {
+            case .missing: [.init(title: "How to Get One", run: howTo)] + (others.isEmpty ? [] : [.init(title: "Use Another Agent", run: chooseAnother)])
+            case .crashed: [.init(title: "Start Again", run: startAgain)]
+            case .cannotReachModel, .undelivered: session.last == nil ? [] : [.init(title: "Try Again", symbol: "arrow.clockwise", run: tryAgain)]
+            case .unknown: []
+            }
+            let symbol = stuck == .unknown ? "questionmark" : stuck == .missing ? "powerplug" : "exclamationmark.triangle"
             var text = notice.text
-            if let problem, let said, !text.contains(problem) { text += (text.isEmpty ? "" : " ") + said }
-            return Notice(symbol: symbol, title: notice.title, text: text, bad: presence.stuck != .unknown,
-                          actions: presence.stuck == .unknown || presence.stuck == .missing ? [] : again)
+            // A crash is said as quitting; what the agent wrote as it went is no sentence for the person.
+            if stuck != .crashed, let problem, let said, !text.contains(problem) { text += (text.isEmpty ? "" : " ") + said }
+            return Notice(symbol: symbol, title: notice.title, text: text, bad: stuck != .unknown, actions: actions)
         }
         if presence.state == .wait {
             return Notice(symbol: "checkmark.shield", title: "\(name) is waiting for your answer",
