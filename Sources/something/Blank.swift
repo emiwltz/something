@@ -20,12 +20,18 @@ struct BlankView: View {
 
     @Bindable var model: AssistantModel
     let library: Library, gallery: Gallery
-    /// The conversation's length when the page opened: a reply older than the page belongs to another moment.
-    let since: Int
+    /// The conversation shown when the page opened, and its length then: a reply older than the page belongs to another
+    /// moment.
+    let opened: ObjectIdentifier, since: Int
 
     init(model: AssistantModel, library: Library, gallery: Gallery) {
-        (self.model, self.library, self.gallery, since) = (model, library, gallery, model.rows.count)
+        (self.model, self.library, self.gallery) = (model, library, gallery)
+        (opened, since) = (ObjectIdentifier(model.session), model.rows.count)
     }
+
+    /// The first row newer than the page: every row of a conversation begun since it opened (another builder chosen in
+    /// Built by, New Conversation, a wake on a new one) is.
+    var start: Int { ObjectIdentifier(model.session) == opened ? since : 0 }
 
     var body: some View {
         Group {
@@ -92,7 +98,7 @@ struct BlankView: View {
 
     /// The assistant's last words when a build asked here ended without a space (a question, an error), while the page
     /// stays New Space (a space made is opening).
-    private var reply: String? { library.selection == .newSpace ? BlankView.reply(in: model, since: since) : nil }
+    private var reply: String? { library.selection == .newSpace ? BlankView.reply(in: model, since: start) : nil }
 
     /// The last reply, when it came at or after row `since` and answers a message sent from the blank page; else nil.
     static func reply(in model: AssistantModel, since: Int) -> String? {

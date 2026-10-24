@@ -206,13 +206,21 @@ struct AcceptanceBuild {
         shell.show(nil)
         let fresh = try #require(shell.center.subviews.first { $0 is NSHostingView<BlankView> } as? NSHostingView<BlankView>)
         #expect(fresh.rootView.since == model.rows.count && BlankView.reply(in: model, since: fresh.rootView.since) == nil)
-        // A reply given in a space never comes to New Space: it answers no message sent from the blank page.
+        // A conversation begun while the page is open (New Conversation, another builder) is all newer than the page:
+        // its reply shows, though the earlier one had more rows.
+        model.newConversation()
+        #expect(model.rows.isEmpty && fresh.rootView.start == 0 && fresh.rootView.since > 0)
+        BlankView.suggest(BlankView.chips[0], to: model)
+        #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
+        #expect(BlankView.reply(in: model, since: fresh.rootView.start) == "Invented reply.")
+        // A reply given in a space never comes to New Space: each place has its own conversation.
+        let blank = model.rows
         model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
         let count = model.rows.count
         model.send("Hello.")
         #expect(await wait(until: { model.rows.count >= count + 2 && model.rows.last == .reply("Invented reply.") && !model.working }))
         model.place = .blank
-        #expect(BlankView.reply(in: model, since: 0) == nil)
+        #expect(model.rows == blank && BlankView.reply(in: model, since: fresh.rootView.start) == "Invented reply.")
         // The game: the build starts (the fake keeps working on it), the field holds the sentence read only, the
         // suggestions and templates step aside, Stop is offered, the assistant stays away.
         model.draft = "Half written"
