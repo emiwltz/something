@@ -155,6 +155,10 @@ import WebKit
             .tool(symbol: "terminal", words: "", command: "cat agents.html"), .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
             .tool(symbol: "terminal", words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
         ])
+        // something's lent tools, by their name alone: the check shows the command something ran, the guide its words.
+        #expect(AssistantModel.tool(tool("mcp__something__something_check", "something check agents"))
+                    == .tool(symbol: "terminal", words: "", command: "something check agents"))
+        #expect(AssistantModel.tool(tool("something_guide", "")) == .tool(symbol: "book", words: "Read guide", command: nil))
     }
 
     /// Quit asks nothing when no request waits and no agent works: idle agents are stopped without a word.

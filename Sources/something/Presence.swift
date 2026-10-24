@@ -18,8 +18,9 @@ struct Presence: Equatable {
         var stopped = false
     }
 
-    /// Why it cannot go on: its program is gone, its model does not answer, it quit, or no source says what it does.
-    enum Stuck: Equatable { case missing, cannotReachModel, crashed, unknown }
+    /// Why it cannot go on: its program is gone, its model does not answer, it quit, a message did not get through to
+    /// it while it lives, or no source says what it does.
+    enum Stuck: Equatable { case missing, cannotReachModel, crashed, undelivered, unknown }
 
     /// The line above the composer: the present-tense step and whether 10 s went by (Stop is offered), the start of a
     /// sleeping agent, or the file the turn just changed.
@@ -56,7 +57,15 @@ struct Presence: Equatable {
         let name = facts.name, edited = turn.map(Presence.edited) ?? [], step = Presence.step(turn)
         var ended: TimeInterval?
         if turn?.state == "done", let at = turn?.ended.flatMap(iso8601.date) { ended = date.timeIntervalSince(at) }
-        (state, stuck) = Presence.state(facts, agent, justDone: ended.map { $0 >= 0 && $0 < Presence.changedFor } == true)
+        let (shown, why) = Presence.state(facts, agent, justDone: ended.map { $0 >= 0 && $0 < Presence.changedFor } == true)
+        // A failure beside a live agent is a message that did not get through, not a crash: the agent keeps its state.
+        (state, stuck) = (shown, why ?? (facts.failure == nil ? nil : .undelivered))
+        // Only a turn whose every step read, checked, failed or was refused leaves the space as it was; no turn, a
+        // command or a patch of several files may have changed it, so nothing is claimed then.
+        let untouched = turn.map { $0.items.allSatisfy { item in
+            ["message", "thought"].contains(item.kind) || item.tool?.status == "failed" || item.decision?.outcome == "denied"
+                || [.read, .guide, .check].contains(Step.of(item))
+        } } ?? false
         now = switch state {
         case _ where stuck != nil: nil
         case .sleep where facts.waking: .waking
@@ -68,6 +77,7 @@ struct Presence: Equatable {
         word = switch (stuck, state) {
         case (.missing?, _): "\(name) isn't on this Mac"
         case (.crashed?, _): "Stopped unexpectedly"
+        case (.undelivered?, _): "Couldn't reach \(name)"
         case (nil, .sleep) where facts.waking: "Waking up…"
         case (nil, .think): step
         case (nil, .done) where !edited.isEmpty: "Just finished · changed \(edited[edited.count - 1])"
@@ -85,7 +95,9 @@ struct Presence: Equatable {
         case .cannotReachModel?:
             Notice(title: "Stopped · can't reach its model",
                    text: "\(agent?.model ?? name) did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
-                       + (edited.isEmpty ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
+                       + (untouched ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
+        case .undelivered?:
+            Notice(title: "Your message didn't reach \(name)", text: facts.failure ?? "")
         case .unknown?:
             Notice(title: "State unknown · something cannot read it",
                    text: "\(name) gave no sign\(seen.map { Presence.minutes(date.timeIntervalSince($0)) } ?? ""). It may still be working; something will not guess.")
@@ -103,11 +115,11 @@ struct Presence: Equatable {
     /// What VoiceOver reads on the sticker of the space titled `title`.
     func label(_ title: String) -> String { "Assistant of \(title), \(word). Open with \(Keys.shown("ask"))" }
 
-    /// The state from the facts first (a missing program, a failed launch, a start under way, a stop), then from the
+    /// The state from the facts first (a missing program, a failure with no live agent, a start under way, a stop), then from the
     /// agent. What no source gives is `unknown`, never `listen`: an agent whose life nothing proves is never idle.
     private static func state(_ facts: Facts, _ agent: Agent?, justDone: Bool) -> (Sign.State, Stuck?) {
         if facts.installed == false { return (.limit, .missing) }
-        if facts.failure != nil { return (.limit, .crashed) }
+        if facts.failure != nil, agent?.alive != true { return (.limit, .crashed) }
         guard !facts.waking, !facts.stopped, let agent else { return (.sleep, nil) }
         if agent.alive == false { return agent.error != nil || agent.state == "interrupted" ? (.limit, .crashed) : (.sleep, nil) }
         switch agent.state {

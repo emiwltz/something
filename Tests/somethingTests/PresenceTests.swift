@@ -129,6 +129,18 @@ import Testing
         #expect(retrying.notice?.text == "Opus 4.7 did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
         #expect(of(agent("error"), turn("error", [tool("Edit", "brief.html")])).notice?.text == "Opus 4.7 did not answer. Your last message is kept.",
                 "a turn that changed a file does not say nothing changed")
+        let unsure: [(Turn?, String)] = [(turn("error", [tool("apply_patch", "brief.html\nagents.html")]), "a patch of several files"),
+                                         (turn("error", [tool("Bash", "sed -i '' s/a/b/ brief.html")]), "a command"), (nil, "no turn")]
+        for (turn, why) in unsure {
+            #expect(of(agent("error"), turn).notice?.text == "Opus 4.7 did not answer. Your last message is kept.", "\(why) may have changed the space")
+        }
+        #expect(of(agent("error"), turn("error", [tool("Edit", "brief.html", "failed"), tool("Bash", "something check brief")])).notice?.text
+                    == "Opus 4.7 did not answer. Your last message is kept and nothing in the space changed.", "a failed edit and a check change nothing")
+
+        let refused = of(Presence.Facts(name: "Claude Code", installed: true, failure: "The message could not be delivered."), agent("idle"))
+        #expect((refused.state, refused.stuck, refused.word) == (.listen, .undelivered, "Couldn't reach Claude Code"),
+                "a live agent that missed a message did not stop")
+        #expect(refused.notice == .init(title: "Your message didn't reach Claude Code", text: "The message could not be delivered."))
 
         let unknown = of(agent("unknown"))
         #expect(unknown.word == "State unknown · something cannot read it")
