@@ -78,7 +78,7 @@ struct AcceptanceShell {
         #expect(library.stops().contains(.space("pet")) == false, "a folded group's rows are not stops")
         let row = try #require(library.entry("project"))
         #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
-        #expect(Library.symbol("brief") != Library.symbol("oracle") && Library.symbol("oracle") == "doc")
+        #expect(Template.symbol(of: "brief") != Template.symbol(of: "oracle") && Template.symbol(of: "oracle") == "doc")
         let menu = SidebarMenu.text(library.menu(for: row))
         #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
                          "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export…", "—",
@@ -87,7 +87,13 @@ struct AcceptanceShell {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
             try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b3-menu.txt"), atomically: true, encoding: .utf8)
         }
-        library.sidebar.hovered = "project"
+        // Vision may read a row's symbol as a letter before its title ("• Oracle"): a line contains the title.
+        let drawn = try stage.drawn(shell)
+        for line in ["Agents", "Notes", "Breaks", "Daily brief", "Project watch", "Oracle"] {
+            #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
+        }
+        #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
+        library.sidebar.hovered = .space("project")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b3" + suffix, root: stage.home.root)
         }
@@ -110,7 +116,9 @@ struct AcceptanceShell {
         #expect(library.entries.isEmpty && library.selection == .newSpace)
         #expect(library.stops() == [.newSpace], "no header shows while no space is listed")
         #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
-        #expect(SidebarView.empty == "Your spaces appear here")
+        let drawn = try stage.drawn(shell)
+        #expect(drawn.contains { $0.contains("Your spaces appear here") }, "the drawn sidebar says where the spaces will be: \(drawn)")
+        #expect(!drawn.contains { ["Agents", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "b6" + suffix, root: stage.home.root)
         }

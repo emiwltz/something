@@ -18,8 +18,12 @@ import SwiftUI
     /// Where ↑ and ↓ stop.
     enum Stop: Hashable { case newSpace, group(String), space(String) }
 
-    /// The row under the pointer: a space's name, or "new", "palette", "tpls", "group:<name>".
-    var hovered: String?
+    /// What can be under the pointer: one of the fixed rows ("new", "palette", "tpls"), a group's header, a space's row,
+    /// apart so that a space named like a fixed row lights only its own.
+    enum Hover: Hashable { case nav(String), group(String), space(String) }
+
+    /// The row under the pointer.
+    var hovered: Hover?
     /// The group header the keys rest on; nil while they rest on the selection.
     var cursor: String?
     /// What is being renamed in place, and the name typed so far.
@@ -54,14 +58,6 @@ enum SidebarMenu {
 }
 
 extension Library {
-    /// The symbol of the template a space was made from, by its name (agents, agents-2…); a page for any other.
-    static func symbol(_ space: String) -> String {
-        let base = space.replacingOccurrences(of: #"-\d+$"#, with: "", options: .regularExpression)
-        let symbols = ["brief": "note.text", "agents": "square.3.layers.3d", "project": "scope", "logbook": "clock", "pet": "sparkle",
-                       "stack": "play"]
-        return symbols[base] ?? "doc"
-    }
-
     func folded(_ group: String) -> Bool { preferences.folded.contains(group) }
 
     /// Folds the group, or unfolds it.
@@ -123,7 +119,9 @@ extension Library {
         let all = stops()
         let here: SidebarState.Stop? = sidebar.cursor.map { .group($0) } ?? (selection == .newSpace ? .newSpace : selection.space.map { .space($0) })
         guard let here else { return nil }
-        let at = all.firstIndex(of: here) ?? (by > 0 ? -1 : all.count)
+        // An open space in a folded group (opened from the Go menu) is not a stop: the keys start from its header.
+        let header = selection.space.flatMap(preferences.group(of:)).flatMap { all.firstIndex(of: .group($0)) }
+        let at = all.firstIndex(of: here) ?? header ?? (by > 0 ? -1 : all.count)
         let next = all[min(max(at + by, 0), all.count - 1)]
         switch next {
         case .group(let name): sidebar.cursor = name
@@ -317,7 +315,7 @@ struct SidebarView: View {
     }
 
     /// Notes which row the pointer is over, and forgets it when the pointer leaves that row.
-    private func hover(_ key: String, _ inside: Bool) {
+    private func hover(_ key: SidebarState.Hover, _ inside: Bool) {
         if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil }
     }
 
@@ -328,21 +326,21 @@ struct SidebarView: View {
                 icon().frame(width: 16)
                 Text(label).font(Look.font(.ui, size: 13, weight: .medium).ui)
                 Spacer(minLength: 0)
-                if on || state.hovered == key { Text(Keys.shown(key)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui) }
+                if on || state.hovered == .nav(key) { Text(Keys.shown(key)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui) }
             }
             .padding(.horizontal, 8).frame(height: 30)
-            .background(on ? Look.Token.sel.ui : state.hovered == key ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+            .background(on ? Look.Token.sel.ui : state.hovered == .nav(key) ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hover(key, $0) }
+        .onHover { hover(.nav(key), $0) }
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     /// A group's header, 26 points: its name, its count, and the chevron, shown under the pointer and while folded.
     /// A click folds it; a double click renames it in place.
     private func header(_ group: String, count: Int) -> some View {
-        let folded = library.folded(group), key = "group:" + group
+        let folded = library.folded(group), key = SidebarState.Hover.group(group)
         let lit = state.hovered == key || state.cursor == group
         return HStack(spacing: 6) {
             if state.renaming == .group(group) {
@@ -360,12 +358,12 @@ struct SidebarView: View {
         .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6)).frame(height: 26)
         .background(lit ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .contentShape(Rectangle())
-        // A double click folds it twice, which leaves it as it was, then renames it.
+        // The double click first, so that SwiftUI waits for it and a rename does not fold the group on the way.
+        .onTapGesture(count: 2) { library.beginRename(.group(group)) }
         .onTapGesture {
             state.cursor = nil
             library.toggle(group)
         }
-        .simultaneousGesture(TapGesture(count: 2).onEnded { library.beginRename(.group(group)) })
         .onHover { hover(key, $0) }
         .contextMenu { Self.items(library.menu(forGroup: group)) }
         .accessibilityElement(children: .ignore)
@@ -377,21 +375,21 @@ struct SidebarView: View {
 
     /// A row of the list, 25 points in Emi's compact density: its symbol, its title, "…" under the pointer, its eyes.
     private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, hovered = state.hovered == entry.id
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, hovered = state.hovered == .space(entry.id)
         let now = eyes(entry.id), menu = library.menu(for: entry)
         return HStack(spacing: 9) {
-            Image(systemName: Library.symbol(entry.id)).font(.system(size: 12)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui)
+            Image(systemName: Template.symbol(of: entry.id)).font(.system(size: 12)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui)
                 .frame(width: 15)
                 .overlay(alignment: .topTrailing) {
                     if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
                 }
             if state.renaming == .space(entry.id) {
-                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).fontWeight(.semibold)
+                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
-                Text(entry.title).fontWeight(on ? .semibold : .regular).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
+                Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
                 Spacer(minLength: 4)
                 if hovered {
-                    Menu { Self.items(menu) } label: {
+                    Menu { Self.items(menu, live: false) } label: {
                         Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(Look.Token.ink2.ui)
                     }
                     .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().frame(width: 22, height: 20)
@@ -412,7 +410,7 @@ struct SidebarView: View {
             state.cursor = nil
             library.select(.space(entry.id))
         }
-        .onHover { hover(entry.id, $0) }
+        .onHover { hover(.space(entry.id), $0) }
         .contextMenu { Self.items(menu) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Library.label(entry, now))
@@ -428,19 +426,26 @@ struct SidebarView: View {
         }
     }
 
-    /// The lines of a menu as SwiftUI draws them in a context menu or the "…" menu.
-    static func items(_ lines: [SidebarMenu.Line]) -> some View {
-        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in item(line) }
+    /// A row's title: semibold when it is the open space. The face is picked by name, since `fontWeight` does not
+    /// change a bundled font.
+    private static func title(on: Bool) -> NSFont { Look.font(.ui, size: Look.body.size, weight: on ? .semibold : .regular) }
+
+    /// The lines of a menu as SwiftUI draws them in a context menu or the "…" menu. `live` registers an item's key:
+    /// the "…" menu exists while the pointer is over its row, and a key it registered would act on that row, not on
+    /// the open space, so it only writes the key in its title.
+    static func items(_ lines: [SidebarMenu.Line], live: Bool = true) -> some View {
+        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in item(line, live: live) }
     }
 
-    private static func item(_ line: SidebarMenu.Line) -> AnyView {
+    private static func item(_ line: SidebarMenu.Line, live: Bool) -> AnyView {
         switch line {
         case let .item(title, symbol, key, checked, enabled, destructive, run):
-            let button = Button(role: destructive ? .destructive : nil, action: run) { Label(title, systemImage: checked ? "checkmark" : symbol) }
+            let shown = live ? title : ([title] + [key.map(Keys.shown)].compactMap { $0 }).joined(separator: "  ")
+            let button = Button(role: destructive ? .destructive : nil, action: run) { Label(shown, systemImage: checked ? "checkmark" : symbol) }
                 .disabled(!enabled)
-            guard let command = key.flatMap(Keys.command), let character = command.key.first else { return AnyView(button) }
+            guard live, let command = key.flatMap(Keys.command), let character = command.key.first else { return AnyView(button) }
             return AnyView(button.keyboardShortcut(KeyEquivalent(character), modifiers: EventModifiers(command.modifiers)))
-        case let .submenu(title, symbol, lines): return AnyView(Menu { items(lines) } label: { Label(title, systemImage: symbol) })
+        case let .submenu(title, symbol, lines): return AnyView(Menu { items(lines, live: live) } label: { Label(title, systemImage: symbol) })
         case .separator: return AnyView(Divider())
         case .note(let words): return AnyView(Text(words))
         }

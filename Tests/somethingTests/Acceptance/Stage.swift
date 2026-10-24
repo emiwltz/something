@@ -9,6 +9,7 @@ import SwiftUI
 @testable import SomethingAgents
 import SomethingCore
 import Testing
+import Vision
 import WebKit
 @testable import something
 
@@ -71,6 +72,22 @@ final class Stage {
         let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
         let own = host.rootView.eyes
         host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { Stage.moment[$0] ?? own($0) })
+    }
+
+    /// The lines of text the drawn sidebar shows, read off its picture by Vision: what the screen shows, not what the
+    /// model computes. SwiftUI builds no accessibility tree while no assistive app asks, so the picture is read.
+    func drawn(_ shell: Shell) throws -> [String] {
+        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+        let offscreen = Offscreen(NSHostingView(rootView: host.rootView))
+        offscreen.window.setContentSize(host.view.bounds.size)
+        offscreen.view.layoutSubtreeIfNeeded()
+        let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
+        offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
+        let read = VNRecognizeTextRequest()
+        read.recognitionLevel = .accurate
+        read.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: try #require(rep.cgImage)).perform([read])
+        return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     }
 
     /// The main window of the home, never shown, at `size`, its spaces listed.

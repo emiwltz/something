@@ -100,6 +100,11 @@ import Testing
         #expect(library.step(1) == .space("pet") && library.selection == .space("pet"))
         #expect(!library.enter(), "Return on a row is the system's")
         #expect(library.step(1) == .space("oracle") && library.step(1) == .space("oracle"), "the last stop holds")
+        library.toggle("Breaks")
+        library.select(.space("pet"))
+        #expect(library.step(1) == .space("oracle"), "from a space its folded group hides, the keys start at its header")
+        library.select(.space("pet"))
+        #expect(library.step(-1) == .space("logbook"))
         library.select(.templates)
         #expect(library.step(-1) == nil, "on the Templates page the keys are not in the list")
         library.select(.space("agents"))
@@ -145,7 +150,7 @@ import Testing
         library.trashing = { asked.append($0.id) }
         run("Move to Trash…", in: library.menu(for: try #require(library.entry("agents"))))
         #expect(asked == ["agents"], "Move to Trash… asks first")
-        #expect(Library.symbol("agents-2") == "square.3.layers.3d" && Library.symbol("oracle") == "doc")
+        #expect(Template.symbol(of: "agents-2") == "square.3.layers.3d" && Template.symbol(of: "oracle") == "doc")
         #expect(Library.label(try #require(library.entry("pet")), .sleep) == "Pebble, \(Sign.State.sleep.word)")
     }
 }

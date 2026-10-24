@@ -48,6 +48,14 @@ struct Template: Identifiable {
         return NSBitmapImageRep(cgImage: cg).colorAt(x: 1, y: cg.height - 2)
     }
 
+    /// The symbol of the template a space was made from, by the space's name (agents, agents-2…); a page for any other.
+    static func symbol(of space: String) -> String {
+        let base = space.replacingOccurrences(of: #"-\d+$"#, with: "", options: .regularExpression)
+        let symbols = ["brief": "note.text", "agents": "square.3.layers.3d", "project": "scope", "logbook": "clock", "pet": "sparkle",
+                       "stack": "play"]
+        return symbols[base] ?? "doc"
+    }
+
     /// Its filter on the Templates page: what it is for, not what it may do.
     var category: Category {
         switch id {
