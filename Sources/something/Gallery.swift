@@ -5,7 +5,7 @@
 // of what a person grabs. All · Agents · Notes · Play filters the cards, by categories the app keeps (a declaration has
 // none: contract 1 is not changed for them). Preview is a state of the same view: the picture full width under a bar
 // that says nothing runs, with Close Preview (esc) and Use This Template. Use makes the template one of the person's
-// spaces (Library.use). The blank page and the welcome show the same pictures smaller.
+// spaces (Library.use). New Space shows the first three cards, and the tour the same pictures smaller.
 import SomethingAgents
 import SomethingCore
 import SwiftUI
@@ -87,8 +87,10 @@ struct Template: Identifiable {
     @ObservationIgnored let told: (String, String) -> Void
     /// Where each card was last drawn in the window, so that a test checks the columns the page shows.
     @ObservationIgnored var drawn: [Template.ID: CGRect] = [:]
+    /// The toolbar's title and subtitle when no preview is open: the Templates page's, or New Space's.
+    @ObservationIgnored let home: (String, String)
 
-    init(told: @escaping (String, String) -> Void = { _, _ in }) { self.told = told }
+    init(home: (String, String) = Gallery.page, told: @escaping (String, String) -> Void = { _, _ in }) { (self.home, self.told) = (home, told) }
 
     /// The templates of `templates` the filter keeps, in their order.
     func cards(_ templates: [Template]) -> [Template] {
@@ -101,13 +103,12 @@ struct Template: Identifiable {
 
     /// The toolbar's title and subtitle in this state.
     var heading: (String, String) {
-        previewing.map { ($0.title, "Template preview") } ?? Gallery.page
+        previewing.map { ($0.title, "Template preview") } ?? home
     }
 }
 
 struct GalleryView: View {
     let library: Library, model: Gallery
-    @FocusState private var focused: Template.ID?
 
     /// The columns of cards in `width`: three, two in a narrow window, one when even two would be cramped.
     static func columns(_ width: CGFloat) -> Int { width >= 650 ? 3 : width >= 380 ? 2 : 1 }
@@ -136,15 +137,7 @@ struct GalleryView: View {
                     Text("Finished spaces to start from. Use one and you get your own copy to change; its assistant comes with it.")
                         .font(Look.font(.ui, size: 13.5).ui).foregroundStyle(Look.Token.ink2.ui)
                         .fixedSize(horizontal: false, vertical: true).padding(.bottom, 24)
-                    Grid(horizontalSpacing: 20, verticalSpacing: 20) {
-                        ForEach(Array(stride(from: 0, to: cards.count, by: n)), id: \.self) { start in
-                            GridRow(alignment: .top) {
-                                ForEach(cards[start ..< min(start + n, cards.count)]) { card($0) }
-                                // A short last row keeps its cards at the width of the others.
-                                ForEach(0 ..< n - min(n, cards.count - start), id: \.self) { _ in Color.clear.gridCellUnsizedAxes(.vertical) }
-                            }
-                        }
-                    }
+                    TemplateGrid(cards: cards, columns: n, library: library, model: model)
                 }
                 .frame(width: width)
                 .padding(EdgeInsets(top: 36, leading: 40, bottom: 60, trailing: 40))
@@ -179,67 +172,6 @@ struct GalleryView: View {
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Look.Token.line.ui))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Show")
-    }
-
-    /// One template's card: picture, name, the shield line, one sentence; its actions on the picture.
-    private func card(_ template: Template) -> some View {
-        let lifted = model.hovered == template.id || focused == template.id
-        return VStack(alignment: .leading, spacing: 4) {
-            Button { model.preview(template) } label: { Self.picture(template, ratio: 16 / 9, radius: 7) }
-                .buttonStyle(.plain)
-                .focused($focused, equals: template.id)
-                .accessibilityLabel("Preview \(template.title)")
-                .overlay(alignment: .bottomTrailing) {
-                    actions(template).padding(8).opacity(lifted ? 1 : 0).offset(y: lifted ? 0 : 4).allowsHitTesting(lifted)
-                }
-                .padding(.bottom, 7)
-            Group {
-                Text(template.title).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                HStack(spacing: 5) {
-                    Image(systemName: "checkmark.shield").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-                    // One line, so every card of a row keeps the mockup's height.
-                    Text(template.needs).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
-                        .lineLimit(1).truncationMode(.tail)
-                }
-                .accessibilityElement(children: .combine)
-                Text(template.line).font(Look.font(.ui, size: 12).ui).lineSpacing(3.5).foregroundStyle(Look.Token.ink3.ui)
-                    .fixedSize(horizontal: false, vertical: true).padding(.top, 2)
-            }
-            .padding(.horizontal, 5)
-        }
-        .padding(EdgeInsets(top: 8, leading: 8, bottom: 13, trailing: 8))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Grabbed(lifted: lifted, radius: 12))
-        .offset(x: lifted ? -1 : 0, y: lifted ? -1 : 0)
-        .animation(Look.out.animation(Look.duration(0.22, Look.motion(library.preferences.motion))), value: lifted)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.drawn[template.id] = $0 }
-        .onHover { inside in
-            if inside { model.hovered = template.id } else if model.hovered == template.id { model.hovered = nil }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(template.title)
-    }
-
-    /// Preview, Show in Finder and Use, on glass at the picture's corner.
-    private func actions(_ template: Template) -> some View {
-        HStack(spacing: 5) {
-            Button { model.preview(template) } label: {
-                HStack(spacing: 5) { Image(systemName: "eye"); Text("Preview") }.padding(.horizontal, 10).frame(height: 26).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).foregroundStyle(Look.Token.ink.ui)
-            .accessibilityLabel("Preview")
-            Button { library.revealTemplate(template) } label: {
-                Image(systemName: "macwindow").font(.system(size: 12)).frame(width: 24, height: 24).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).foregroundStyle(Look.Token.ink.ui)
-            .help("Show in Finder").accessibilityLabel("Show \(template.title) in Finder")
-            Button("Use") { library.use(template) }.buttonStyle(Primary(height: 26, padding: 10))
-        }
-        .font(Look.font(.ui, size: 12, weight: .semibold).ui)
-        .padding(4)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Look.Token.glass.ui)
-            .shadow(color: .black.opacity(0.18), radius: 9, y: 6))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Look.Token.line2.ui))
     }
 
     /// A template's picture at `ratio`, its top kept and the rest cut, rounded with a hairline inside.
@@ -301,6 +233,91 @@ struct GalleryView: View {
     }
 }
 
+/// The templates in rows of `columns`, 20 points apart: the Templates page's and New Space's.
+struct TemplateGrid: View {
+    let cards: [Template], columns: Int, library: Library, model: Gallery
+
+    var body: some View {
+        let n = max(1, columns)
+        Grid(horizontalSpacing: 20, verticalSpacing: 20) {
+            ForEach(Array(stride(from: 0, to: cards.count, by: n)), id: \.self) { start in
+                GridRow(alignment: .top) {
+                    ForEach(cards[start ..< min(start + n, cards.count)]) { TemplateCard(template: $0, library: library, model: model) }
+                    // A short last row keeps its cards at the width of the others.
+                    ForEach(0 ..< n - min(n, cards.count - start), id: \.self) { _ in Color.clear.gridCellUnsizedAxes(.vertical) }
+                }
+            }
+        }
+    }
+}
+
+/// One template's card: picture, name, the shield line, one sentence; Preview, Show in Finder and Use on its picture
+/// under the pointer or with the focus.
+struct TemplateCard: View {
+    let template: Template, library: Library, model: Gallery
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let lifted = model.hovered == template.id || focused
+        return VStack(alignment: .leading, spacing: 4) {
+            Button { model.preview(template) } label: { GalleryView.picture(template, ratio: 16 / 9, radius: 7) }
+                .buttonStyle(.plain)
+                .focused($focused)
+                .accessibilityLabel("Preview \(template.title)")
+                .overlay(alignment: .bottomTrailing) {
+                    actions.padding(8).opacity(lifted ? 1 : 0).offset(y: lifted ? 0 : 4).allowsHitTesting(lifted)
+                }
+                .padding(.bottom, 7)
+            Group {
+                Text(template.title).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                HStack(spacing: 5) {
+                    Image(systemName: "checkmark.shield").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
+                    // One line, so every card of a row keeps the mockup's height.
+                    Text(template.needs).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                .accessibilityElement(children: .combine)
+                Text(template.line).font(Look.font(.ui, size: 12).ui).lineSpacing(3.5).foregroundStyle(Look.Token.ink3.ui)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 2)
+            }
+            .padding(.horizontal, 5)
+        }
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 13, trailing: 8))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Grabbed(lifted: lifted, radius: 12))
+        .offset(x: lifted ? -1 : 0, y: lifted ? -1 : 0)
+        .animation(Look.out.animation(Look.duration(0.22, Look.motion(library.preferences.motion))), value: lifted)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.drawn[template.id] = $0 }
+        .onHover { inside in
+            if inside { model.hovered = template.id } else if model.hovered == template.id { model.hovered = nil }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(template.title)
+    }
+
+    /// Preview, Show in Finder and Use, on glass at the picture's corner.
+    private var actions: some View {
+        HStack(spacing: 5) {
+            Button { model.preview(template) } label: {
+                HStack(spacing: 5) { Image(systemName: "eye"); Text("Preview") }.padding(.horizontal, 10).frame(height: 26).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink.ui)
+            .accessibilityLabel("Preview")
+            Button { library.revealTemplate(template) } label: {
+                Image(systemName: "macwindow").font(.system(size: 12)).frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink.ui)
+            .help("Show in Finder").accessibilityLabel("Show \(template.title) in Finder")
+            Button("Use") { library.use(template) }.buttonStyle(Primary(height: 26, padding: 10))
+        }
+        .font(Look.font(.ui, size: 12, weight: .semibold).ui)
+        .padding(4)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Look.Token.glass.ui)
+            .shadow(color: .black.opacity(0.18), radius: 9, y: 6))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Look.Token.line2.ui))
+    }
+}
+
 /// A card's surface: a hairline at rest; under the pointer or with the focus, the hard offset shadow of what a person
 /// grabs, drawn as Sign.grab draws the sticker's (a ring of ink and its copy 3 points down and right).
 private struct Grabbed: View {
@@ -342,20 +359,11 @@ struct Secondary: ButtonStyle {
     }
 }
 
-/// A template's picture at 16:10, rounded, with a hairline; a button that uses the template when `use` is given.
+/// A template's picture at 16:10, rounded, with a hairline: the tour's.
 struct Preview: View {
     let template: Template
-    var use: ((Template) -> Void)?
 
     var body: some View {
-        if let use {
-            Button { use(template) } label: { picture }.buttonStyle(.plain).help("Use Template: \(template.title)")
-        } else {
-            picture
-        }
-    }
-
-    private var picture: some View {
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         return Group {
             if let preview = template.preview { Image(nsImage: preview).resizable().aspectRatio(contentMode: .fill) } else { Color.secondary.opacity(0.1) }

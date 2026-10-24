@@ -2,8 +2,8 @@
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
 // waiting requests, Point, Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
-// from being shown, the blank page, the templates or the tour, with the glass over it, which holds the assistant
-// (Glass.swift; not over the tour).
+// from being shown, New Space, the templates or the tour; over a space, the glass, which holds the assistant
+// (Glass.swift). Off the spaces the assistant is away: New Space has its own field.
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -243,8 +243,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         touring = nil
         guard let space else {
             page = nil
-            let gallery = Gallery(told: { [weak self] in self?.heading($0, $1, space: false) })
-            put(templates ? Shell.hosted(GalleryView(library: library, model: gallery)) : Shell.hosted(BlankView(model: assistant, library: library)))
+            let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] in self?.heading($0, $1, space: false) })
+            put(templates ? Shell.hosted(GalleryView(library: library, model: gallery))
+                : Shell.hosted(BlankView(model: assistant, library: library, gallery: gallery)))
+            glass.isHidden = true
             return templates ? bare(Gallery.page.0, Gallery.page.1) : bare("New Space", "")
         }
         page = space.blocked.isEmpty ? space.web : nil

@@ -162,7 +162,8 @@ import Testing
         #expect(shell.split.splitViewItems[0].isCollapsed)
         library.select(.newSpace)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(shell.touring == nil && shell.window.title == "New Space" && shell.glass.isHidden == false)
+        // New Space is its own composer: the assistant's glass stays away from it.
+        #expect(shell.touring == nil && shell.window.title == "New Space" && shell.glass.isHidden == true)
         #expect(!shell.split.splitViewItems[0].isCollapsed)
     }
 

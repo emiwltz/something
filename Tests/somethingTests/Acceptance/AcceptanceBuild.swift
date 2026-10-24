@@ -18,7 +18,87 @@ struct AcceptanceBuild {
     @Test("a6: welcome, the summary", .disabled("not built yet: AB17")) func a6() async throws {}
     @Test("a7: welcome with no builder", .disabled("not built yet: AB17")) func a7() async throws {}
     @Test("a8: welcome after the first hello", .disabled("not built yet: AB17")) func a8() async throws {}
-    @Test("d1: New Space", .disabled("not built yet: AB12")) func d1() async throws {}
+    /// New Space with Claude Code as its builder: the sign, the question, the field with Build greyed until something
+    /// is written, Built by and the model, the three suggestions, the first three templates and See All; the assistant
+    /// away. d1-smallest in the smallest window; d1-no-agent: the notice in the field's place, no suggestion.
+    @Test("d1: New Space") func d1() async throws {
+        let stage = try Stage("build")
+        defer { stage.remove() }
+        let (shell, library, host) = try await Self.newSpace(stage, builder: true)
+        let model = shell.assistant
+        #expect(shell.window.title == "New Space" && shell.window.subtitle == "" && shell.glass.isHidden && !model.cardShown)
+        #expect(model.kind == "claude" && model.draft.isEmpty && !model.canSend)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d1" + suffix, root: stage.home.root)
+            let words = await Self.read(host)
+            #expect(words == Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], "\(words)")
+        }
+        // Build is greyed while the field is empty or blank, and only then. (An offscreen SwiftUI view gives VoiceOver only
+        // its descriptions: neither a control's enabled state nor its press can be reached here, so the model's are read.)
+        model.draft = "  \n "
+        #expect(!model.canSend)
+        model.draft = "A page of my agents."
+        #expect(model.canSend)
+        model.draft = ""
+
+        shell.window.setContentSize(NSSize(width: 640, height: 480))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d1-smallest" + suffix, root: stage.home.root)
+        }
+        // A suggestion sends its whole sentence, the draft kept: the build starts (the fake keeps working on the game),
+        // the field holds the sentence read only, the suggestions and templates step aside, the assistant stays away.
+        shell.window.setContentSize(Stage.Size.main)
+        model.draft = "Half written"
+        model.send(BlankView.chips[2].1)
+        #expect(model.building && model.draft == "Half written")
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[2].1)) && model.light == .working }))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d1-building" + suffix, root: stage.home.root)
+            let building = await Self.read(host)
+            #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains("Who is waiting for me"), "\(building)")
+        }
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+
+        let none = try Stage("build")
+        defer { none.remove() }
+        let (bare, alone, page) = try await Self.newSpace(none, builder: false)
+        #expect(bare.assistant.noAgent && bare.assistant.notice?.title == "No coding agent found.")
+        try await none.appearances { suffix in
+            try await Picture.window(bare, library: alone, web: nil, "d1-no-agent" + suffix, root: none.home.root)
+            let words = await Self.read(page)
+            #expect(!words.contains("Build") && !words.contains("Who is waiting for me") && words.contains("How to Get One"), "\(words)")
+        }
+    }
+
+    /// What VoiceOver reads of New Space before the templates' cards, as far as an offscreen SwiftUI view gives it (its
+    /// field, menus and the sign are out of reach here).
+    static let newSpaceWords = ["What do you want to make?", "Build", "Who is waiting for me", "A morning brief of my agents", "A small game for my breaks", "Or start from a template",
+                                "See All Templates"]
+
+    /// New Space in a window of `stage`, the toolbar's chip at the mockup's one request; with `builder`, AssistantTests'
+    /// fake claude is the builder found, else none is.
+    static func newSpace(_ stage: Stage, builder: Bool) async throws -> (Shell, Library, NSView) {
+        let bin = stage.home.root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        if builder {
+            let claude = bin.appendingPathComponent("claude")
+            try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        }
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { builder ? model.kind == "claude" : model.noAgent }))
+        library.select(.newSpace)
+        shell.show(nil)
+        shell.waiting(1, mine: 0)
+        let host = try #require(shell.center.subviews.first { $0 is NSHostingView<BlankView> })
+        return (shell, library, host)
+    }
+
     @Test("d2: the build ladder", .disabled("not built yet: AB14")) func d2() async throws {}
     @Test("d3: the arrival", .disabled("not built yet: AB15")) func d3() async throws {}
     /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right
@@ -76,7 +156,7 @@ struct AcceptanceBuild {
     /// The Templates page in the window, the toolbar's chip at the mockup's one request, the assistant's glass hidden (the
     /// mockup shows the page alone); and the page's model.
     static func templates(_ stage: Stage, _ size: NSSize = Stage.Size.main) throws -> (Shell, Library, Gallery, NSView) {
-        let (shell, library, _) = stage.window(size)
+        let (shell, library, _) = stage.window()
         library.select(.templates)
         shell.show(nil, templates: true)
         shell.glass.isHidden = true
