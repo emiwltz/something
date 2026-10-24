@@ -27,9 +27,8 @@ struct AcceptanceBuild {
         library.relist()
         #expect(App.welcomes(library) && library.entries.allSatisfy { !$0.isSpace })
         #expect(await wait(until: { Arrival.sign(in: shell.center) != nil }), "New Space's sign, under the film")
-        let film = Film(center: shell.center, motion: .calm)
-        shell.layer.hold(film)
-        film.frame = shell.layer.bounds
+        let film = Film(over: shell, motion: .calm)
+        #expect(film.cover.frame == shell.window.frame && shell.film === film)
         film.layoutSubtreeIfNeeded()
         film.hold()
         let frame = try #require(film.grown), shape = frame.shape
@@ -43,7 +42,7 @@ struct AcceptanceBuild {
             #expect(words == Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], "\(words)")
         }
         film.leave()
-        #expect(shell.layer.isHidden)
+        #expect(shell.film == nil && film.superview == nil)
     }
     /// The welcome's first step over the main window of a first start, dimmed: the sign, "something", the one sentence,
     /// 1 of 5, Skip Tour and Continue; Return goes on to the builders (Escape is TourTests').

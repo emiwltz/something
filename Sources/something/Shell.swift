@@ -42,6 +42,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The welcome window while it is open over this one, and the veil between them.
     private(set) var welcoming: NSWindow?
     private(set) var veil: NSWindow?
+    /// The first-launch film while it plays over this window (Film.swift).
+    var film: Film?
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -121,6 +123,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         titleLine.invalidateIntrinsicContentSize()
         veil?.setFrame(window.frame, display: true)
+        film?.cover.setFrame(window.frame, display: true)
         welcoming?.setFrame(Welcome.place(over: window.frame), display: true)
     }
 

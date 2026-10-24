@@ -2,8 +2,9 @@
 // corner, then "something" and "A blank page. Your world." rise under it. At 2.7 s the words go, the sign's frame (the
 // arrival's, Arrival.swift) grows to the window's edges, 12 points in, and the paper fades from under it onto New Space;
 // the frame fades as New Space's own sign lands, and the welcome opens. Under Reduced motion there is no film. It
-// lives in the window layer, takes the clicks while it plays so nothing under it is pressed unseen, and is drawn in
-// draw(_:) and its subviews, so cacheDisplay pictures it.
+// plays in a window of its own laid over the whole window, toolbar and lights included, as the welcome's veil is:
+// that window takes the clicks and the keys while it plays, so nothing under it is pressed unseen, and the menus grey
+// the window's commands (App). It is drawn in draw(_:) and its subviews, so cacheDisplay pictures it.
 import AppKit
 
 final class Film: NSView {
@@ -22,12 +23,17 @@ final class Film: NSView {
     private(set) var grown: Arrival?
     /// Every time scaled by this; a seam for tests.
     var pace: Double = 1
-    private let center: NSView, motion: Look.Motion
+    /// The borderless window it plays in, over the whole of the shell's.
+    let cover: NSWindow
+    private weak var shell: Shell?
+    private let motion: Look.Motion
+    private var left = false
 
     /// Plays the film over `shell`'s window, on New Space, and calls `then` when the welcome should open. Under Reduced
     /// motion there is none: `then` is called at once and it returns nil. A film already playing ends first.
+    /// `onScreen` false leaves its window off the screen, as a test's are.
     @discardableResult
-    static func play(in shell: Shell, library: Library, pace: Double = 1, then: @escaping () -> Void) -> Film? {
+    static func play(in shell: Shell, library: Library, pace: Double = 1, onScreen: Bool = true, then: @escaping () -> Void) -> Film? {
         Film.end(in: shell)
         let motion = library.preferences.motion
         guard Look.motion(motion) == .calm else {
@@ -35,23 +41,27 @@ final class Film: NSView {
             return nil
         }
         library.select(.newSpace)
-        let film = Film(center: shell.center, motion: motion)
+        let film = Film(over: shell, motion: motion)
         film.pace = pace
-        shell.layer.hold(film)
-        film.frame = film.superview?.bounds ?? .zero
+        if onScreen {
+            shell.window.addChildWindow(film.cover, ordered: .above)
+            film.cover.makeKeyAndOrderFront(nil)
+        }
         film.run(then)
         return film
     }
 
     /// Ends any film over `shell`'s window, New Space's sign shown again.
-    static func end(in shell: Shell) {
-        shell.layer.subviews.compactMap { $0 as? Film }.forEach { $0.leave() }
-    }
+    static func end(in shell: Shell) { shell.film?.leave() }
 
-    init(center: NSView, motion: Look.Motion) {
-        (self.center, self.motion) = (center, motion)
-        super.init(frame: .zero)
-        autoresizingMask = [.width, .height]
+    /// A film in its own window over all of `shell`'s, kept as its film, not shown yet.
+    init(over shell: Shell, motion: Look.Motion) {
+        (self.shell, self.motion) = (shell, motion)
+        cover = Cover(contentRect: shell.window.frame, styleMask: .borderless, backing: .buffered, defer: true)
+        super.init(frame: NSRect(origin: .zero, size: shell.window.frame.size))
+        (cover.isOpaque, cover.backgroundColor, cover.hasShadow, cover.isReleasedWhenClosed) = (false, .clear, false, false)
+        cover.contentView = self
+        shell.film = self
         (paper.boxType, paper.borderWidth, paper.fillColor, paper.autoresizingMask) = (.custom, 0, Look.Token.bg.color, [.width, .height])
         sign.name = "something"
         sign.motion = motion
@@ -70,8 +80,12 @@ final class Film: NSView {
 
     override var isFlipped: Bool { true }
 
-    /// While it plays, what is under it never takes a click.
-    override func hitTest(_ point: NSPoint) -> NSView? { superview.map { bounds.contains(convert(point, from: $0)) } == true ? self : nil }
+    /// While it plays, what is under it never takes a click, nor a key.
+    override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point, from: superview)) ? self : nil }
+    override var acceptsFirstResponder: Bool { true }
+    override func keyDown(with event: NSEvent) {}
+    override func mouseDown(with event: NSEvent) {}
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     /// The sign, then the name 18 points under it and the line 14 under that, all centred in the window.
     override func layout() {
@@ -93,7 +107,7 @@ final class Film: NSView {
 
     private func after(_ seconds: TimeInterval, _ step: @escaping (Film) -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds * pace) { [weak self] in
-            if let self, self.superview != nil { step(self) }
+            if let self, !self.left { step(self) }
         }
     }
 
@@ -124,7 +138,11 @@ final class Film: NSView {
                 film.land()
                 film.grown?.fade(0.45 * film.pace) {}
             }
-            film.after(Film.opens) { _ in then() }
+            film.after(Film.opens) { film in
+                // The welcome opens under the film's last, faded instant: the clicks go to it.
+                film.cover.ignoresMouseEvents = true
+                then()
+            }
             film.after(Film.ends) { $0.leave() }
         }
     }
@@ -138,7 +156,7 @@ final class Film: NSView {
         hero?.isHidden = true
         let g = sign.geometry, box = sign.frame.insetBy(dx: g.inset * Film.side, dy: g.inset * Film.side)
         let frame = Arrival(start: Arrival.Start(rect: box, arm: g.arm * Film.side, stroke: g.stroke, face: true), still: nil, stillRect: .zero)
-        (frame.reach, frame.holds, frame.frame) = ((bounds, Film.inset), true, bounds)
+        (frame.reach, frame.holds, frame.frame, frame.span) = ((bounds, Film.inset), true, bounds, Arrival.grows * pace)
         sign.isHidden = true
         addSubview(frame)
         grown = frame
@@ -146,7 +164,7 @@ final class Film: NSView {
     }
 
     /// New Space's sign, which the film's frame lands on at the end.
-    private var hero: SignView? { Arrival.sign(in: center) }
+    private var hero: SignView? { shell.flatMap { Arrival.sign(in: $0.center) } }
 
     private func land() {
         guard let hero else { return }
@@ -161,9 +179,21 @@ final class Film: NSView {
         hero?.isHidden = false
     }
 
-    /// Takes it away, New Space's sign shown again.
+    /// Takes it and its window away, New Space's sign shown again and the keys back to the window or the welcome.
     func leave() {
+        guard !left else { return }
+        left = true
         hero?.isHidden = false
-        removeFromSuperview()
+        cover.parent?.removeChildWindow(cover)
+        cover.orderOut(nil)
+        cover.contentView = nil
+        guard let shell, shell.film === self else { return }
+        shell.film = nil
+        if shell.welcoming == nil, shell.window.isVisible { shell.window.makeKey() }
     }
+}
+
+/// The film's window: borderless, yet it takes the keys while the film plays.
+private final class Cover: NSWindow {
+    override var canBecomeKey: Bool { true }
 }

@@ -358,7 +358,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
         let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
-                                       welcoming: shell.welcoming != nil, editingText: shell.window.firstResponder is NSText,
+                                       welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
                                        waiting: !panels.queue.waiting.isEmpty)
         return Keys.enabled(id, situation)
     }

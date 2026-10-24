@@ -34,6 +34,8 @@ final class Arrival: NSView {
     /// Whether the frame stays drawn once grown, until it fades: the film's frame holds at the window's edges.
     var holds = false { didSet { needsDisplay = true } }
     private var timer: Timer?
+    /// How long it grows: `grows`, or the film's at its pace.
+    var span = Arrival.grows
     /// The clock in seconds; a seam for tests.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
 
@@ -177,14 +179,14 @@ final class Arrival: NSView {
         grow { [weak self] in self?.fade(Arrival.fades, arrived) }
     }
 
-    /// Grows the frame in `grows` seconds, and calls `grown` once it is at its end.
+    /// Grows the frame in `span` seconds, and calls `grown` once it is at its end.
     func grow(_ grown: @escaping () -> Void) {
         playing = true
         let began = clock()
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
                 guard let self else { return timer.invalidate() }
-                self.progress = min(1, CGFloat((self.clock() - began) / Arrival.grows))
+                self.progress = min(1, CGFloat((self.clock() - began) / self.span))
                 guard self.progress >= 1 else { return }
                 timer.invalidate()
                 self.playing = false

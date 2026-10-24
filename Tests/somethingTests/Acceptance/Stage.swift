@@ -156,10 +156,16 @@ enum Picture {
         // them; the window layer (the toast) covers all.
         let covers = web?.superview?.subviews.filter { $0 !== web && !$0.isHidden } ?? []
         let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.layer].filter { !$0.isHidden }
-        let over = try floating.map { view in
+        var over = try floating.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, view.convert(view.bounds, to: frame))
+        }
+        // The first-launch film plays in its own window over the whole of this one, toolbar included.
+        if let film = shell.film {
+            let drawn = try bitmap(film.bounds.size)
+            film.cacheDisplay(in: film.bounds, to: drawn)
+            over.append((drawn, frame.bounds))
         }
         // A window never shown is never key, and draws its lights gray: the main window keeps the keys while the
         // request panel, which never takes them, stands in front, so its lights are drawn in their colors.
