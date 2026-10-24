@@ -26,7 +26,8 @@ struct AcceptanceTrust {
         }
     }
 
-    static let short = "cd ~/something/spaces && something check agents --strict --report /tmp/something-check/agents.json && python3 -c \"import json; print(1)\""
+    /// The mockup's command, folded to four lines, the fourth fading.
+    static let short = #"cd ~/something/spaces && something check agents --strict --report /tmp/something-check/agents.json && python3 -c "import json; r=json.load(open('/tmp/something-check/agents.json')); print(len(r['errors']), 'errors')""#
     /// The mockup's long command, fourteen lines.
     static let long = #"""
         cd ~/something/spaces && \
@@ -86,6 +87,15 @@ struct AcceptanceTrust {
         #expect(panel.styleMask.contains(.nonactivatingPanel) && panel.level == .floating && panel.worksWhenModal && !panel.isKeyWindow)
         #expect(panel.allowButton.title == "Allow Once" && panel.denyButton.title == "Deny" && panel.denyButton.keyEquivalent == "\u{1b}")
         #expect(panel.standardWindowButton(.closeButton)?.accessibilityLabel() == "Close: deny")
+        // Each line as full as it can be, as the mockup breaks it; folded to four, from the first, the fourth fading.
+        let code = try #require(panel.code), manager = try #require(code.text.layoutManager), string = code.text.string as NSString
+        var lines: [String] = []
+        manager.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: manager.numberOfGlyphs)) { _, _, _, glyphs, _ in
+            lines.append(string.substring(with: manager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)).replacingOccurrences(of: CommandText.joint, with: ""))
+        }
+        #expect(lines.prefix(4) == ["cd ~/something/spaces && something check agents ", "--strict --report ",
+                                    "/tmp/something-check/agents.json && python3 -c ", "\"import json; "])
+        #expect(code.shown == CommandBox.folded && code.full > code.shown && code.text.visibleRect.minY == 0)
         // Arming: the fill half across, then the button takes a click.
         time += 0.25
         panel.tick()
@@ -121,7 +131,7 @@ struct AcceptanceTrust {
         panel.place(beside: shell.window, screen: Self.desk)
         time += 1
         panel.tick()
-        #expect(PanelsTests.texts(panel.contentView).contains("The exact command · 14 lines") && code.text.string == Self.long)
+        #expect(PanelsTests.texts(panel.contentView).contains("The exact command · 14 lines") && code.exact == Self.long)
         #expect(code.shown == CommandBox.folded && code.full > code.shown, "folded to four lines, the last one fading")
         #expect(code.expand.image?.accessibilityDescription == "Expand the command")
         code.expand.performClick(nil)
@@ -221,8 +231,9 @@ struct AcceptanceTrust {
     @Test("e7: the link sheet", .disabled("not built yet: T7")) func e7() async throws {}
     @Test("e8: the trash sheet", .disabled("not built yet: T8")) func e8() async throws {}
     @Test("e9: quit while assistants work", .disabled("not built yet: T9")) func e9() async throws {}
-    /// Full screen cannot be entered offscreen: the window is drawn at the screen's size, and the panel placed as it is
-    /// for a window in full screen, at the screen's top right below the toolbar.
+    /// Full screen cannot be entered offscreen: the panel is placed as it is for a window in full screen, at the screen's
+    /// top right below the toolbar, over the page drawn at the screen's size, the sidebar folded and no chrome around
+    /// (the toolbar that hides itself comes with W5).
     @Test("e13: the panel in full screen") func e13() async throws {
         let stage = try Stage("trust")
         defer { stage.remove() }
@@ -231,6 +242,13 @@ struct AcceptanceTrust {
         shell.window.setFrameOrigin(.zero)
         let agents = try await stage.open("agents", in: shell, library)
         defer { agents.close() }
+        shell.split.splitViewItems[0].isCollapsed = true
+        shell.window.layoutIfNeeded()
+        var size = shell.window.contentRect(forFrameRect: shell.window.frame).size
+        (size.width, size.height) = (size.width + screen.width - agents.web.frame.width, size.height + screen.height - agents.web.frame.height)
+        shell.window.setContentSize(size)
+        shell.window.layoutIfNeeded()
+        _ = await wait(1.5) // WebKit lays the page out again at its new size on the run loop.
         let source = FakePrompts()
         Self.request("r", [0], in: source)
         let panels = Self.panels(source)
@@ -240,13 +258,14 @@ struct AcceptanceTrust {
         let panel = try #require(panels.panel)
         time += 1
         panel.tick()
+        #expect(agents.web.frame.size == screen.size, "the page fills the screen")
         let toolbar = shell.window.frame.height - shell.window.contentLayoutRect.maxY
         panel.setFrameOrigin(RequestPanel.place(panel.frame.size, window: shell.window.frame, toolbar: toolbar, screen: screen, fullScreen: true))
         #expect(panel.frame.maxX == screen.maxX - 16 && panel.frame.maxY == screen.maxY - toolbar - 8)
         #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary), "it shows over a window in full screen")
         #expect(panel.title == "Codex wants to run a command" && panel.allowButton.isEnabled)
         try await stage.appearances { suffix in
-            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e13" + suffix, root: stage.home.root)
+            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e13" + suffix, root: stage.home.root, fullScreen: screen)
         }
     }
     @Test("e14: the panel over the welcome", .disabled("not built yet: AB17w")) func e14() async throws {}
@@ -256,24 +275,43 @@ struct AcceptanceTrust {
 extension Picture {
     /// The main window and the request panel on one canvas, as they stand on the screen, with 40 points of desk
     /// around them: the panel is a window of its own and overhangs the main one. The window is drawn as `window`
-    /// draws it; the panel by its frame, its corners and its shadow, which the window server draws, reconstructed.
-    static func panel(_ panel: RequestPanel, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL) async throws {
+    /// draws it; the panel and the edges of the requests waiting behind it by their frames, their corners and the
+    /// panel's shadow, which the window server draws, reconstructed. Over a space in `fullScreen` (a screen's frame), the
+    /// canvas is that screen, and the page fills it without the window's chrome, as the mockup's e13 shows it.
+    static func panel(_ panel: RequestPanel, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL,
+                      fullScreen: NSRect? = nil) async throws {
         guard let gallery else { return }
-        try await window(shell, library: library, web: web, name + "-window", root: root)
-        let file = gallery.appendingPathComponent(name + "-window.png")
-        defer { try? FileManager.default.removeItem(at: file) }
-        let image = try #require(NSImage(contentsOf: file))
-        let frame = try #require(panel.contentView?.superview)
-        disguise(frame, root.path)
-        frame.layoutSubtreeIfNeeded()
-        let drawn = try bitmap(frame.bounds.size)
-        frame.cacheDisplay(in: frame.bounds, to: drawn)
-        let canvas = shell.window.frame.union(panel.frame).insetBy(dx: -40, dy: -40)
+        var page: NSImage?
+        if fullScreen == nil {
+            try await window(shell, library: library, web: web, name + "-window", root: root)
+            let file = gallery.appendingPathComponent(name + "-window.png")
+            defer { try? FileManager.default.removeItem(at: file) }
+            page = try #require(NSImage(contentsOf: file))
+        } else {
+            page = try await web?.takeSnapshot(configuration: nil)
+        }
+        func drawn(_ window: NSWindow) throws -> NSBitmapImageRep {
+            let frame = try #require(window.contentView?.superview)
+            disguise(frame, root.path)
+            frame.layoutSubtreeIfNeeded()
+            let drawn = try bitmap(frame.bounds.size)
+            frame.cacheDisplay(in: frame.bounds, to: drawn)
+            return drawn
+        }
+        let canvas = fullScreen ?? shell.window.frame.union(panel.frame).insetBy(dx: -40, dy: -40)
         let place = panel.frame.offsetBy(dx: -canvas.minX, dy: -canvas.minY)
+        let edges = try (panel.position == nil ? [] : panel.edges.reversed()).map { edge in
+            (try drawn(edge.window), edge.window.alphaValue,
+             NSRect(x: place.minX + edge.inset, y: place.minY - edge.below, width: place.width - 2 * edge.inset, height: 24))
+        }
+        let content = try drawn(panel)
         try png(of: canvas.size, name) {
             Look.Token.bg.color.setFill()
             NSRect(origin: .zero, size: canvas.size).fill()
-            image.draw(in: shell.window.frame.offsetBy(dx: -canvas.minX, dy: -canvas.minY))
+            page?.draw(in: fullScreen.map { NSRect(origin: .zero, size: $0.size) } ?? shell.window.frame.offsetBy(dx: -canvas.minX, dy: -canvas.minY))
+            for (image, alpha, frame) in edges {
+                image.draw(in: frame, from: .zero, operation: .sourceOver, fraction: alpha, respectFlipped: true, hints: nil)
+            }
             let shape = NSBezierPath(roundedRect: place, xRadius: Look.window, yRadius: Look.window)
             for shade in Look.float(NSAppearance.currentDrawing()) {
                 NSGraphicsContext.saveGraphicsState()
@@ -286,7 +324,7 @@ extension Picture {
             }
             NSGraphicsContext.saveGraphicsState()
             shape.addClip()
-            drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            content.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             NSGraphicsContext.restoreGraphicsState()
             Look.Token.line2.color.setStroke()
             shape.stroke()

@@ -1,9 +1,9 @@
 // The acceptance stage: the one invented world every screen scenario starts from, and the drawing that turns a
 // window into a picture. The home holds the six templates as the mockup names them and Oracle (an invented page of
 // Tests/Fixtures). Each scenario builds its own Stage, rather than one per area suite, so no scenario sees what another
-// left; the suites are serialized, so two never run at once. Nothing is shown: the app is .prohibited, and each window
-// is drawn offscreen (drawing a view needs no permission of macOS, a screenshot would need Screen Recording). Pictures
-// are written only when SOMETHING_GALLERY names a folder.
+// left; each suite is serialized, and the suites, which run side by side, take turns to draw. Nothing is shown: the
+// app is .prohibited, and each window is drawn offscreen (drawing a view needs no permission of macOS, a screenshot
+// would need Screen Recording). Pictures are written only when SOMETHING_GALLERY names a folder.
 import AppKit
 import SwiftUI
 @testable import SomethingAgents
@@ -71,12 +71,21 @@ final class Stage {
         return view
     }
 
+    /// Whether a scenario is drawing its pictures now: NSApp's appearance is one for the whole process.
+    private static var drawing = false
+
     /// Runs `body` in the light appearance, then, when pictures are drawn, in the dark one; `body` gets the picture's
-    /// suffix ("" or "-dark") and asserts in both.
+    /// suffix ("" or "-dark") and asserts in both. The area suites run side by side on the main actor and meet at each
+    /// await: one scenario draws at a time, or another's night would reach this one's day picture.
     func appearances(_ body: (String) async throws -> Void) async throws {
-        defer { NSApp.appearance = nil }
+        _ = await wait(600, until: { !Stage.drawing })
+        Stage.drawing = true
+        defer { (Stage.drawing, NSApp.appearance) = (false, nil) }
         for dark in gallery == nil ? [false] : [false, true] {
-            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            let name: NSAppearance.Name = dark ? .darkAqua : .aqua
+            NSApp.appearance = NSAppearance(named: name)
+            // The windows follow it later, on the run loop.
+            _ = await wait(5, until: { NSApp.windows.allSatisfy { $0.appearance != nil || $0.effectiveAppearance.name == name } })
             try await body(dark ? "-dark" : "")
         }
     }
@@ -126,6 +135,15 @@ enum Picture {
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, view.convert(view.bounds, to: frame))
         }
+        // A window never shown is never key, and draws its lights gray: the main window keeps the keys while the
+        // request panel, which never takes them, stands in front, so its lights are drawn in their colors, 12 points.
+        let colors: [(NSWindow.ButtonType, UInt32)] = [(.closeButton, 0xFF5F57), (.miniaturizeButton, 0xFEBC2E), (.zoomButton, 0x28C840)]
+        let lights = colors.compactMap { type, rgb -> (NSRect, NSColor)? in
+            guard let button = shell.window.standardWindowButton(type) else { return nil }
+            let place = button.convert(button.bounds, to: frame)
+            let color = NSColor(srgbRed: CGFloat(rgb >> 16) / 255, green: CGFloat(rgb >> 8 & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
+            return (NSRect(x: place.midX - 6, y: place.midY - 6, width: 12, height: 12), color)
+        }
         try png(of: frame.bounds.size, name) {
             rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             for (drawn, place) in apart {
@@ -136,6 +154,12 @@ enum Picture {
             if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
             for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
+            for (place, color) in lights {
+                color.setFill()
+                NSBezierPath(ovalIn: place).fill()
+                (color.shadow(withLevel: 0.12) ?? color).setStroke()
+                NSBezierPath(ovalIn: place.insetBy(dx: 0.25, dy: 0.25)).stroke()
             }
         }
         withExtendedLifetime(offscreens) {}
@@ -215,8 +239,11 @@ enum Picture {
 
     /// Shows the temporary home as /Users/example: the pictures say what a person would read.
     static func disguise(_ view: NSView, _ root: String) {
-        if let field = view as? NSTextField { field.stringValue = field.stringValue.replacingOccurrences(of: root, with: "/Users/example") }
-        if let text = view as? NSTextView { text.string = text.string.replacingOccurrences(of: root, with: "/Users/example") }
+        // Only what names the home is set again: setting a text view's string scrolls it to its end.
+        if let field = view as? NSTextField, field.stringValue.contains(root) {
+            field.stringValue = field.stringValue.replacingOccurrences(of: root, with: "/Users/example")
+        }
+        if let text = view as? NSTextView, text.string.contains(root) { text.string = text.string.replacingOccurrences(of: root, with: "/Users/example") }
         view.subviews.forEach { disguise($0, root) }
     }
 }

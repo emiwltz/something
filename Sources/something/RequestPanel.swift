@@ -49,6 +49,15 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     private weak var whyBox: Box?
     private var copies = 0
     private var desk: NSRect?
+    /// While more requests wait, the edges of the next ones under the panel's bottom, 6 and 11 points, as a small
+    /// stack: windows of their own, since a window draws nothing outside its frame. The nearer one is first.
+    let edges = [(10, 6, 1), (20, 11, 0.8)].map { inset, below, alpha in
+        let edge = NSWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
+        (edge.isOpaque, edge.backgroundColor, edge.ignoresMouseEvents, edge.hasShadow) = (false, .clear, true, false)
+        (edge.alphaValue, edge.isReleasedWhenClosed) = (alpha, false)
+        edge.contentView = Box(NSView(), fill: .bg2, ring: .line2, radius: Look.window)
+        return (window: edge, inset: CGFloat(inset), below: CGFloat(below))
+    }
 
     init(decide: @escaping (Answer) -> Void) {
         self.decide = decide
@@ -102,6 +111,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     func arrive(beside window: NSWindow?) {
         if let window { place(beside: window) }
         orderFrontRegardless()
+        stack()
     }
 
     /// Puts the panel in its place beside `window`, on `screen` (the window's own by default).
@@ -116,7 +126,25 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     /// The queue's position ("2 of 3"), shown in the header with its steps; nil for a lone request.
     var position: String? {
         get { header.position }
-        set { header.position = newValue }
+        set {
+            header.position = newValue
+            stack()
+        }
+    }
+
+    /// Puts the edges under the panel while more requests wait and it is on the screen; takes them away otherwise.
+    private func stack() {
+        // The farther edge goes first, so that the nearer one, ordered just below the panel, lies over it.
+        for edge in edges.reversed() {
+            edge.window.setFrame(NSRect(x: frame.minX + edge.inset, y: frame.minY - edge.below, width: frame.width - 2 * edge.inset, height: 24),
+                                 display: false)
+            if position != nil && isVisible {
+                if edge.window.parent == nil { addChildWindow(edge.window, ordered: .below) }
+            } else if edge.window.parent != nil {
+                removeChildWindow(edge.window)
+                edge.window.orderOut(nil)
+            }
+        }
     }
 
     /// Shows `prompt`, asked by `who` `age` ago, in place of what the panel showed, and arms Allow Once again.
@@ -259,6 +287,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         var fitted = frameRect(forContentRect: NSRect(origin: .zero, size: content.fittingSize))
         fitted.origin = NSPoint(x: frame.minX, y: top - fitted.height)
         setFrame(fitted, display: isVisible)
+        stack()
     }
 
     /// Says `sentence` in place of the request, under who asked, with OK, which puts the panel away as Escape does.
@@ -405,9 +434,13 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
             (field.target, field.action, field.delegate) = (self, #selector(reply), self)
             field.cell?.sendsActionOnEndEditing = false // only Return answers, never leaving the field by Tab, click or Escape
             field.placeholderString = question.options.isEmpty ? "Your answer" : "Or type your answer"
-            let own = NSStackView(views: [Box(field, fill: .sunk, ring: .line, radius: 8, insets: NSEdgeInsets(top: 8, left: 10, bottom: 7, right: 10))])
+            let own = NSStackView(views: [Box(field, fill: .sunk, ring: .line, radius: 8, insets: NSEdgeInsets(top: 9, left: 10, bottom: 8, right: 10))])
             own.spacing = 6
-            if index == questions.count - 1 { own.addArrangedSubview(PanelButton("Answer", primary: true, target: self, action: #selector(reply))) }
+            if index == questions.count - 1 {
+                let answer = PanelButton("Answer", primary: true, target: self, action: #selector(reply))
+                answer.height = 32
+                own.addArrangedSubview(answer)
+            }
             (boxes, typed) = (boxes + [options], typed + [field])
             views += [question.header.map { Self.text($0, Look.small, .ink3) },
                       Self.text(question.text, Look.Style(face: .voice, size: 15, weight: .regular, leading: 1.42)),
@@ -515,6 +548,7 @@ final class PanelHeader: NSView {
 /// after its title. A primary button arming fills from the left on a pale ground.
 class PanelButton: NSButton {
     let primary: Bool, hint: String?
+    var height: CGFloat = 30
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }
 
@@ -538,11 +572,11 @@ class PanelButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: max(primary ? 112 : 96, (label.size().width + 26).rounded(.up)), height: 30)
+        NSSize(width: max(primary ? 112 : 96, (label.size().width + 26).rounded(.up)), height: height)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: Look.control + 1, yRadius: Look.control + 1)
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: Look.control, yRadius: Look.control)
         Look.Token.bg2.color.setFill()
         shape.fill()
         if primary {
@@ -704,11 +738,11 @@ class Box: NSView {
 }
 
 /// The exact command on a sunk ground: its caption with the count of its lines and ↕, then the text as the agent sent
-/// it, monospaced and selectable, a line breaking only at a space, never inside `--strict` or a path. Folded, it shows
-/// four whole lines, the last one fading while more is hidden below.
+/// it, monospaced and selectable, a line breaking only at a space, never inside `--strict` or a path, each line as full
+/// as it can be. Folded, it shows four whole lines, the last one fading while more is hidden below.
 final class CommandBox: Box, NSLayoutManagerDelegate {
     static let line: CGFloat = 18, inset: CGFloat = 6, folded = 2 * inset + 4 * line
-    let exact: String, text = NSTextView(usingTextLayoutManager: false), expand: NSButton
+    let exact: String, text = CommandText(usingTextLayoutManager: false), expand: NSButton
     private let scroll = NSScrollView(), fade = Fade()
     private var height = NSLayoutConstraint()
 
@@ -729,7 +763,10 @@ final class CommandBox: Box, NSLayoutManagerDelegate {
         let style = NSMutableParagraphStyle()
         (style.minimumLineHeight, style.maximumLineHeight) = (Self.line, Self.line)
         let font = Look.font(.code, size: 11.5, weight: .regular)
-        text.textStorage?.setAttributedString(NSAttributedString(string: exact, attributes: [
+        // Unicode never breaks a line before `/`, `.` or `)` even after a space, which would leave `--strict` alone on
+        // its line before `--report /tmp/…`: a zero-width space after such a space allows it. Copying takes it out.
+        let shown = exact.replacingOccurrences(of: #"(?<= )(?=[/.,:;!?)\]}])"#, with: CommandText.joint, options: .regularExpression)
+        text.textStorage?.setAttributedString(NSAttributedString(string: shown, attributes: [
             .font: font, .foregroundColor: Look.Token.ink.color, .paragraphStyle: style,
             // Centred in its 18 points, as the mockup's lines are: the extra height would all go above the glyphs.
             .baselineOffset: ((Self.line - font.ascender + font.descender) / 2).rounded()]))
@@ -750,7 +787,8 @@ final class CommandBox: Box, NSLayoutManagerDelegate {
                                      scroll.widthAnchor.constraint(equalTo: widthAnchor, constant: -1),
                                      expand.widthAnchor.constraint(equalToConstant: 22), expand.heightAnchor.constraint(equalToConstant: 22),
                                      fade.leadingAnchor.constraint(equalTo: scroll.leadingAnchor), fade.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-                                     fade.bottomAnchor.constraint(equalTo: scroll.bottomAnchor), fade.heightAnchor.constraint(equalToConstant: 16)])
+                                     // Over the last line's 16 points and the inset under it, as the mockup fades it.
+                                     fade.bottomAnchor.constraint(equalTo: scroll.bottomAnchor), fade.heightAnchor.constraint(equalToConstant: 16 + Self.inset)])
     }
 
     required init?(coder: NSCoder) { nil }
@@ -769,13 +807,26 @@ final class CommandBox: Box, NSLayoutManagerDelegate {
     func fold(_ visible: CGFloat) {
         height.constant = max(Self.line + 2 * Self.inset, visible.rounded())
         fade.isHidden = visible <= 0 || full <= height.constant + 1
+        // From its first line: the text view keeps its end in sight as the box shrinks.
+        text.scroll(.zero)
     }
 
     /// A line breaks only after a space, so that a flag, a path or a word is never cut in two.
     func layoutManager(_ layoutManager: NSLayoutManager, shouldBreakLineByWordBeforeCharacterAt index: Int) -> Bool {
         guard index > 0, let text = layoutManager.textStorage?.string as NSString?, let before = Unicode.Scalar(text.character(at: index - 1))
         else { return true }
-        return CharacterSet.whitespacesAndNewlines.contains(before)
+        return CharacterSet.whitespacesAndNewlines.contains(before) || String(before) == CommandText.joint
+    }
+}
+
+/// The command's text, which copies and drags the words without the zero-width spaces put in for its line breaks.
+final class CommandText: NSTextView {
+    static let joint = "\u{200B}"
+
+    override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        let words = selectedRanges.map { (string as NSString).substring(with: $0.rangeValue) }.joined()
+        pboard.declareTypes([.string], owner: nil)
+        return pboard.setString(words.replacingOccurrences(of: Self.joint, with: ""), forType: .string)
     }
 }
 

@@ -383,7 +383,7 @@ final class FakePrompts: PromptSource {
     /// lines, and its text is what the agent sent. (A word longer than a whole line has to be cut: none is here.)
     @Test func theCommandBreaksOnlyAtSpaces() throws {
         let (panel, code) = try commandPanel()
-        #expect(Self.texts(panel.contentView).contains("The exact command · 7 lines") && code.text.string == Self.long)
+        #expect(Self.texts(panel.contentView).contains("The exact command · 7 lines") && code.exact == Self.long)
         for width in [360.0, 392, 560] {
             panel.size(width: width)
             let manager = try #require(code.text.layoutManager), string = code.text.string as NSString
@@ -394,7 +394,7 @@ final class FakePrompts: PromptSource {
             #expect(starts.count > 7, "at \(width), the long lines wrap")
             for start in starts where start > 0 {
                 let before = Character(UnicodeScalar(string.character(at: start - 1)) ?? " ")
-                #expect(before.isWhitespace, "at \(width), a line starts inside a word: \(string.substring(from: start).prefix(20))")
+                #expect(before.isWhitespace || String(before) == CommandText.joint, "at \(width), a line starts inside a word: \(string.substring(from: start).prefix(20))")
             }
         }
         let (short, box) = try commandPanel("npm test")
@@ -412,6 +412,11 @@ final class FakePrompts: PromptSource {
         #expect(buttons.count == 2)
         buttons[0].performClick(nil)
         #expect(pasteboard.string(forType: .string) == Self.long && buttons[0].title == "Copied")
+        // Copying the selected text gives the same words: the zero-width spaces that let a line break stay out.
+        let text = try #require(panel.code?.text)
+        text.selectAll(nil)
+        #expect(text.string.contains(CommandText.joint) && text.writeSelection(to: pasteboard, types: [.string]))
+        #expect(pasteboard.string(forType: .string) == Self.long)
         let height = panel.frame.height
         buttons[1].performClick(nil)
         #expect(Self.texts(panel.contentView).last?.hasPrefix("Codex is this space's assistant: it may change your spaces and run something's own commands without asking; everything else it does asks you") == true)
