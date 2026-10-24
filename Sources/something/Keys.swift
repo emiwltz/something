@@ -1,6 +1,6 @@
 // The one list of the app's commands, and the menu bar made from it. Each command has its menu words, its key, the
-// action it sends, the slice that wires it, and its line in the shortcut sheet; the menus, the tooltips, Settings ›
-// Shortcuts, the ⌘/ sheet and ⌘P all read it, so a key cannot say two things. The table and the menus are the
+// action it sends, the slice that wires it, and its line in the shortcut sheet; the menus and the tooltips read it,
+// and Settings › Shortcuts, the ⌘/ sheet and ⌘P are to read it (G4, G1, G2), so a key cannot say two things. The table and the menus are the
 // mockup's (Tests/Fixtures/mockup), checked both ways. A command not wired yet has no action: its item is present and
 // greyed, never hidden. The keys marked `mine` are something's even while a page has the focus: WebKit would hand them
 // to the page first, so the app's key monitor gives them to the menu before it (share/guide.md says so).
@@ -35,76 +35,77 @@ enum Keys {
         var shown: String { words ?? (key.isEmpty ? "" : Keys.symbols(modifiers) + Keys.name(key)) }
     }
 
-    /// A selector by name: the actions are App's or AppKit's responders', found through the responder chain.
-    private static func app(_ name: String) -> Selector { Selector(name) }
-
-    /// Every command, the shortcut sheet's in its order first.
+    /// Every command, the shortcut sheet's in its order first. The actions are App's or AppKit's responders', found
+    /// through the responder chain; undo: and redo: are declared by no class Swift sees.
     static let commands: [Command] = [
         Command(id: "palette", title: "Go to…", key: "p", owner: "G2", area: .spaces, line: "Go to a space, or ask", mine: true),
-        Command(id: "new", title: "New Space", key: "n", action: app("newSpace:"), owner: "F5", area: .spaces, line: "New Space", mine: true),
-        Command(id: "tpls", title: "Templates", key: "t", modifiers: [.command, .shift], action: app("showTemplates:"), owner: "F5",
+        Command(id: "new", title: "New Space", key: "n", action: #selector(App.newSpace(_:)), owner: "F5",
+                area: .spaces, line: "New Space", mine: true),
+        Command(id: "tpls", title: "Templates", key: "t", modifiers: [.command, .shift], action: #selector(App.showTemplates(_:)), owner: "F5",
                 area: .spaces, line: "Templates", mine: true),
         Command(id: "goto", title: "Go to Space", owner: "F5", area: .spaces, line: "Go to space 1 to 9", words: "⌘1 … ⌘9", mine: true),
-        Command(id: "reload", title: "Reload Space", key: "r", action: app("reloadSpace:"), owner: "F5", area: .spaces, line: "Reload space",
-                mine: true, needsSpace: true),
-        Command(id: "insp", title: "Show Info", key: "i", action: app("toggleInfo:"), owner: "W4", area: .spaces, line: "Space info",
+        Command(id: "reload", title: "Reload Space", key: "r", action: #selector(App.reloadSpace(_:)), owner: "F5", area: .spaces,
+                line: "Reload space", mine: true, needsSpace: true),
+        Command(id: "insp", title: "Show Info", key: "i", action: #selector(App.toggleInfo(_:)), owner: "W4", area: .spaces, line: "Space info",
                 mine: true, needsSpace: true),
         Command(id: "escpanel", title: "Close Info or History", owner: "W4", area: .spaces, line: "Close Info or History", words: "esc"),
-        Command(id: "ask", title: "Ask…", key: "k", action: app("askAssistant:"), owner: "F5", area: .assistant,
+        Command(id: "ask", title: "Ask…", key: "k", action: #selector(App.askAssistant(_:)), owner: "F5", area: .assistant,
                 line: "Talk to this space’s assistant", mine: true, needsSpace: true),
-        Command(id: "convo", title: "Show Conversation", key: "j", action: app("showConversation:"), owner: "F5", area: .assistant,
+        Command(id: "convo", title: "Show Conversation", key: "j", action: #selector(App.showConversation(_:)), owner: "F5", area: .assistant,
                 line: "Show or hide the conversation", mine: true, needsSpace: true),
-        Command(id: "newconvo", title: "New Conversation", key: "k", modifiers: [.command, .shift], action: app("newConversation:"),
+        Command(id: "newconvo", title: "New Conversation", key: "k", modifiers: [.command, .shift], action: #selector(App.newConversation(_:)),
                 owner: "AB09b", area: .assistant, line: "New conversation", mine: true, needsSpace: true),
         Command(id: "reduce", title: "Reduce or Open", key: "\\", owner: "AB05", area: .assistant, line: "Reduce or open the assistant",
                 mine: true, needsSpace: true),
         // Stop also works on the New Space page, where a build runs before its space exists.
-        Command(id: "stop", title: "Stop", key: ".", action: app("stopAssistant:"), owner: "F5", area: .assistant, line: "Stop the assistant",
-                mine: true),
+        Command(id: "stop", title: "Stop", key: ".", action: #selector(App.stopAssistant(_:)), owner: "F5", area: .assistant,
+                line: "Stop the assistant", mine: true),
         Command(id: "showreq", title: "Show Request", key: "p", modifiers: [.command, .option], owner: "T5", area: .assistant,
                 line: "Show the request that waits", mine: true),
         Command(id: "pointpart", title: "Point at a Part", key: "s", modifiers: [.command, .option], owner: "T14", area: .show,
                 line: "Point at a part", mine: true, needsSpace: true),
         Command(id: "point", title: "Point Inside a Drawn Frame", owner: "T14", area: .show, line: "Point inside a drawn frame", words: "hold ⌥"),
-        Command(id: "undo", title: "Undo", key: "z", action: app("undo:"), owner: "T13", area: .show, line: "Undo the last change"),
-        Command(id: "full", title: "Enter Full Screen", key: "f", modifiers: [.command, .control], action: app("toggleFullScreen:"),
+        Command(id: "undo", title: "Undo", key: "z", action: Selector(("undo:")), owner: "T13", area: .show, line: "Undo the last change"),
+        Command(id: "full", title: "Enter Full Screen", key: "f", modifiers: [.command, .control], action: #selector(NSWindow.toggleFullScreen(_:)),
                 owner: "W5", area: .window, line: "Full screen", mine: true),
-        Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control], action: app("toggleSidebar:"),
-                owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
+        Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control],
+                action: #selector(NSSplitViewController.toggleSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
         Command(id: "settings", title: "Settings…", key: ",", owner: "G4", area: .window, line: "Settings", mine: true),
         Command(id: "keys", title: "Keyboard Shortcuts", key: "/", owner: "G1", area: .window, line: "Keyboard shortcuts", mine: true),
-        Command(id: "close", title: "Close Window", key: "w", action: app("performClose:"), owner: "F5", area: .window, line: "Close window"),
+        Command(id: "close", title: "Close Window", key: "w", action: #selector(NSWindow.performClose(_:)), owner: "F5",
+                area: .window, line: "Close window"),
         // Only in the menus.
-        Command(id: "about", title: "About something", action: app("showAbout:"), owner: "F5"),
-        Command(id: "hide", title: "Hide something", key: "h", action: app("hide:"), owner: "F5"),
-        Command(id: "hideOthers", title: "Hide Others", key: "h", modifiers: [.command, .option], action: app("hideOtherApplications:"), owner: "F5"),
-        Command(id: "showAll", title: "Show All", action: app("unhideAllApplications:"), owner: "F5"),
-        Command(id: "quit", title: "Quit something", key: "q", action: app("terminate:"), owner: "F5"),
-        Command(id: "import", title: "Import Space…", action: app("importSpace:"), owner: "F5"),
-        Command(id: "export", title: "Export Space…", key: "e", modifiers: [.command, .shift], action: app("exportSpace:"), owner: "F5",
+        Command(id: "about", title: "About something", action: #selector(App.showAbout(_:)), owner: "F5"),
+        Command(id: "hide", title: "Hide something", key: "h", action: #selector(NSApplication.hide(_:)), owner: "F5"),
+        Command(id: "hideOthers", title: "Hide Others", key: "h", modifiers: [.command, .option],
+                action: #selector(NSApplication.hideOtherApplications(_:)), owner: "F5"),
+        Command(id: "showAll", title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), owner: "F5"),
+        Command(id: "quit", title: "Quit something", key: "q", action: #selector(NSApplication.terminate(_:)), owner: "F5"),
+        Command(id: "import", title: "Import Space…", action: #selector(App.importSpace(_:)), owner: "F5"),
+        Command(id: "export", title: "Export Space…", key: "e", modifiers: [.command, .shift], action: #selector(App.exportSpace(_:)), owner: "F5",
                 needsSpace: true),
-        Command(id: "finder", title: "Show in Finder", key: "r", modifiers: [.command, .option], action: app("showInFinder:"), owner: "F5",
+        Command(id: "finder", title: "Show in Finder", key: "r", modifiers: [.command, .option], action: #selector(App.showInFinder(_:)), owner: "F5",
                 needsSpace: true),
-        Command(id: "trash", title: "Move to Trash…", key: "\u{8}", action: app("moveToTrash:"), owner: "T8", needsSpace: true),
-        Command(id: "redo", title: "Redo", key: "z", modifiers: [.command, .shift], action: app("redo:"), owner: "T13"),
-        Command(id: "cut", title: "Cut", key: "x", action: app("cut:"), owner: "F5"),
-        Command(id: "copy", title: "Copy", key: "c", action: app("copy:"), owner: "F5"),
-        Command(id: "paste", title: "Paste", key: "v", action: app("paste:"), owner: "F5"),
-        Command(id: "selectAll", title: "Select All", key: "a", action: app("selectAll:"), owner: "F5"),
+        Command(id: "trash", title: "Move to Trash…", key: "\u{8}", action: #selector(App.moveToTrash(_:)), owner: "T8", needsSpace: true),
+        Command(id: "redo", title: "Redo", key: "z", modifiers: [.command, .shift], action: Selector(("redo:")), owner: "T13"),
+        Command(id: "cut", title: "Cut", key: "x", action: #selector(NSText.cut(_:)), owner: "F5"),
+        Command(id: "copy", title: "Copy", key: "c", action: #selector(NSText.copy(_:)), owner: "F5"),
+        Command(id: "paste", title: "Paste", key: "v", action: #selector(NSText.paste(_:)), owner: "F5"),
+        Command(id: "selectAll", title: "Select All", key: "a", action: #selector(NSText.selectAll(_:)), owner: "F5"),
         Command(id: "history", title: "Show History…", owner: "T19", needsSpace: true),
         Command(id: "rights", title: "What It May Do…", owner: "W4", needsSpace: true),
         Command(id: "versions", title: "Versions…", owner: "T19", needsSpace: true),
         // The menu item only holds the submenu; its selector is there so that the app can grey it.
-        Command(id: "buildWith", title: "Build With", action: app("buildWith:"), owner: "AB11", needsSpace: true),
+        Command(id: "buildWith", title: "Build With", action: #selector(App.buildWith(_:)), owner: "AB11", needsSpace: true),
         Command(id: "askAll", title: "Ask Before Every Change…", owner: "G5"),
         Command(id: "sleep", title: "Put Idle Assistants to Sleep", owner: "AB10"),
-        Command(id: "minimize", title: "Minimize", key: "m", action: app("performMiniaturize:"), owner: "F5"),
-        Command(id: "zoom", title: "Zoom", action: app("performZoom:"), owner: "W1"),
-        Command(id: "front", title: "Bring All to Front", action: app("arrangeInFront:"), owner: "F5"),
-        Command(id: "help", title: "something Help", action: app("openHelp:"), owner: "G7"),
-        Command(id: "promise", title: "What something Does and Doesn’t", action: app("showPromise:"), owner: "G7"),
-        Command(id: "guide", title: "Guide for Coding Agents", action: app("showGuide:"), owner: "G7"),
-        Command(id: "tour", title: "Welcome Tour", action: app("showTour:"), owner: "F5"),
+        Command(id: "minimize", title: "Minimize", key: "m", action: #selector(NSWindow.performMiniaturize(_:)), owner: "F5"),
+        Command(id: "zoom", title: "Zoom", action: #selector(NSWindow.performZoom(_:)), owner: "W1"),
+        Command(id: "front", title: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), owner: "F5"),
+        Command(id: "help", title: "something Help", action: #selector(App.openHelp(_:)), owner: "G7"),
+        Command(id: "promise", title: "What something Does and Doesn’t", action: #selector(App.showPromise(_:)), owner: "G7"),
+        Command(id: "guide", title: "Guide for Coding Agents", action: #selector(App.showGuide(_:)), owner: "G7"),
+        Command(id: "tour", title: "Welcome Tour", action: #selector(App.showTour(_:)), owner: "F5"),
         Command(id: "send", title: "Send Comments", owner: "T18", words: "⌘↵"),
     ]
 
@@ -213,23 +214,34 @@ enum Keys {
         }
     }
 
-    /// Whether `event` is a key something keeps from a page: a `mine` command's, or ⌘1 to ⌘9.
-    static func claims(_ event: NSEvent) -> Bool {
-        guard event.type == .keyDown, let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+    /// A key something keeps from a page: a `mine` command's, or ⌘1 to ⌘9 for the space of that number.
+    enum Claim: Equatable { case command(String), space(Int) }
+
+    /// The keys 1 to 9 of the top row (kVK_ANSI_1 … kVK_ANSI_9), wherever a layout puts its digits.
+    static let digitKeys: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+
+    /// What `event` asks of something before the page, nil when the key is the page's. A layout may need ⇧ for a
+    /// character: AZERTY's digits (the bare top row types &, é …) and its . and /, so ⇧ is then part of the key.
+    static func claim(_ event: NSEvent) -> Claim? {
+        guard event.type == .keyDown, let key = event.charactersIgnoringModifiers?.lowercased() else { return nil }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
-        if modifiers == .command, let digit = Int(key), (1...9).contains(digit) { return true }
-        return commands.contains { $0.mine && !$0.key.isEmpty && $0.key == key && $0.modifiers == modifiers }
+        if let index = digitKeys.firstIndex(of: event.keyCode),
+           modifiers == .command || (modifiers == [.command, .shift] && key == "\(index + 1)") { return .space(index + 1) }
+        if modifiers == .command, let digit = Int(key), (1...9).contains(digit) { return .space(digit) }
+        return commands.first { command in
+            guard command.mine, !command.key.isEmpty, command.key == key else { return false }
+            if command.modifiers == modifiers { return true }
+            let shiftTyped = command.key.first?.isLetter == false && !command.modifiers.contains(.shift)
+            return shiftTyped && command.modifiers == modifiers.subtracting(.shift)
+        }.map { .command($0.id) }
     }
+
+    static func claims(_ event: NSEvent) -> Bool { claim(event) != nil }
 
     // MARK: About
 
-    /// "Version 0.3.0 (31)" from `bundle`'s Info.plist; "Version dev" from a clone.
-    static func versionLine(_ bundle: Bundle) -> String {
-        let short = Resources.version(of: bundle), build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        return "Version \(short)" + (build.map { " (\($0))" } ?? "")
-    }
-
-    /// The About panel's contents: the sign (the app's icon), its version line, and the promise.
+    /// The About panel's contents: the sign (the app's icon), the version ("0.3.0" and the build, "31", which the panel
+    /// writes "Version 0.3.0 (31)"; "dev" from a clone), and the promise.
     static func about(_ bundle: Bundle) -> [NSApplication.AboutPanelOptionKey: Any] {
         let centered = NSMutableParagraphStyle()
         centered.alignment = .center
@@ -237,7 +249,6 @@ enum Keys {
                                          attributes: [.font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle: centered,
                                                       .foregroundColor: NSColor.secondaryLabelColor])
         let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String
-        // The panel writes "Version <applicationVersion> (<version>)" itself, as versionLine says it.
         return [.applicationName: "something", .applicationVersion: Resources.version(of: bundle), .version: build ?? "",
                 .applicationIcon: NSApplication.shared.applicationIconImage as Any, .credits: credits]
     }
@@ -273,6 +284,30 @@ final class MenuBar: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
+
+    /// How an item a claimed key chose acts: as a click on it would, only when the responder chain enables it.
+    var act: (NSMenuItem) -> Void = { item in
+        guard let menu = item.menu else { return }
+        menu.update()
+        if item.isEnabled { menu.performActionForItem(at: menu.index(of: item)) }
+    }
+
+    /// The key monitor's work: a key something claims, typed in `window`, acts through its menu item and never reaches
+    /// the page (nil); any other key, or one typed in another window, is returned to go on its way. The item is found
+    /// by the command, not by its key equivalent, so a key typed with ⇧ on a layout that needs it still finds it.
+    func intercept(_ event: NSEvent, window: NSWindow?) -> NSEvent? {
+        guard let window, event.window === window, let claim = Keys.claim(event) else { return event }
+        refresh()
+        let items = menu.items.compactMap(\.submenu).flatMap(\.items)
+        switch claim {
+        case .space(let number):
+            let spaces = items.filter { $0.identifier?.rawValue.hasPrefix("space:") == true }
+            if number <= spaces.count { act(spaces[number - 1]) }
+        case .command(let id):
+            if let item = items.first(where: { $0.identifier?.rawValue == id }) { act(item) }
+        }
+        return nil
+    }
 
     /// Brings Go, the headers and ⌘⌫ up to date.
     func refresh() {

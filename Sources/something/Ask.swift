@@ -89,25 +89,40 @@ final class NativeAsk: Asking {
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         let sheet = Ask.rights(question)
-        return wait(sheet.alert) == .alertFirstButtonReturn ? sheet.answer() : nil
+        return NativeAsk.agreed(wait(sheet.alert)) ? sheet.answer() : nil
     }
 
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
-        wait(Ask.lowers(mode, kind: kind, folder: folder, space: space)) == .alertFirstButtonReturn
+        NativeAsk.agreed(wait(Ask.lowers(mode, kind: kind, folder: folder, space: space)))
     }
 
     func link(_ url: URL, space: String) -> LinkChoice {
-        switch wait(Ask.link(url, space: space)) {
-        case .alertFirstButtonReturn:
-            NSWorkspace.shared.open(url)
-            return .open
+        let choice = NativeAsk.linkChoice(wait(Ask.link(url, space: space)))
+        if choice == .open { NSWorkspace.shared.open(url) }
+        return choice
+    }
+
+    func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
+        NativeAsk.withDataChoice(wait(Ask.withData(space, keys: keys, bytes: bytes)))
+    }
+
+    // The buttons' meanings, apart from the modal loop so that a test can hold them.
+
+    /// true when the sheet ended with its first button (Allow); false for any other, or none.
+    static func agreed(_ response: NSApplication.ModalResponse?) -> Bool { response == .alertFirstButtonReturn }
+
+    /// Open for the link sheet's first button, Block for its third, Cancel for its second or none.
+    static func linkChoice(_ response: NSApplication.ModalResponse?) -> LinkChoice {
+        switch response {
+        case .alertFirstButtonReturn: return .open
         case .alertThirdButtonReturn: return .block
         default: return .cancel
         }
     }
 
-    func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
-        switch wait(Ask.withData(space, keys: keys, bytes: bytes)) {
+    /// false for "Without Data" (the first button), true for "With Its Data" (the second), nil for Cancel or none.
+    static func withDataChoice(_ response: NSApplication.ModalResponse?) -> Bool? {
+        switch response {
         case .alertFirstButtonReturn: return false
         case .alertSecondButtonReturn: return true
         default: return nil

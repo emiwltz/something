@@ -47,7 +47,7 @@ struct AcceptanceCommand {
                      "  Versions…  (greyed)", "  Put Idle Assistants to Sleep  (greyed)"] {
             #expect(opened.contains(line + "\n"), "\(line)")
         }
-        #expect(Keys.versionLine(.main).hasPrefix("Version "))
+        #expect(Keys.about(.main)[.applicationVersion] as? String == Resources.version(of: .main))
         if let gallery {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
             try ("No space open\n\n" + closed + "\nDaily brief open\n\n" + opened).write(to: gallery.appendingPathComponent("g9-menus.txt"),

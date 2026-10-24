@@ -1,6 +1,7 @@
 // The one table of commands and the menu bar made from it, against the mockup's tables (Tests/Fixtures/mockup) both
 // ways: the same keys with the same words, the same menus in the same order; every command owned by a slice; greyed,
-// never hidden, while no space is open; the keys something keeps from a page; About's version line.
+// never hidden, while no space is open; the keys something keeps from a page, on any layout, and the monitor that
+// keeps them; About's version and promise.
 import AppKit
 import Foundation
 import Testing
@@ -186,22 +187,63 @@ enum Mockup {
         #expect(bar.submenu("Assistant")?.items.first?.title == "Daily brief’s assistant")
     }
 
+    static func event(_ key: String, _ modifiers: NSEvent.ModifierFlags, keyCode: UInt16 = 0, window: Int = 0) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: window, context: nil,
+                                      characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: keyCode))
+    }
+
     @Test func theKeysSomethingKeepsFromAPage() throws {
-        func event(_ key: String, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
-            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
-                                          characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
-        }
         let kept: [(String, NSEvent.ModifierFlags)] = [("p", .command), ("k", .command), ("j", .command), ("i", .command), ("n", .command),
             (",", .command), ("/", .command), ("\\", .command), (".", .command), ("K", [.command, .shift]), ("T", [.command, .shift]),
             ("p", [.command, .option]), ("s", [.command, .option]), ("1", .command), ("9", .command), ("f", [.command, .control]),
             ("s", [.command, .control]), ("r", .command)]
-        for (key, modifiers) in kept { #expect(Keys.claims(try event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
+        for (key, modifiers) in kept { #expect(Keys.claims(try Self.event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
         let left: [(String, NSEvent.ModifierFlags)] = [("z", .command), ("Z", [.command, .shift]), ("c", .command), ("v", .command),
             ("a", .command), ("w", .command), ("0", .command), ("P", [.command, .shift]), ("p", []), ("1", [.command, .option])]
-        for (key, modifiers) in left { #expect(!Keys.claims(try event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
+        for (key, modifiers) in left { #expect(!Keys.claims(try Self.event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
         // The guide tells a page which keys it cannot keep.
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
         for command in Keys.commands where command.mine { #expect(guide.contains(command.shown), "\(command.shown)") }
+    }
+
+    /// On a layout that needs ⇧ for a character (French AZERTY: . is ⇧;, / is ⇧:, the digits are the shifted top row),
+    /// the keys are still something's; a ⇧ the character does not need still leaves them to the page.
+    @Test func aLayoutThatNeedsShiftKeepsTheKeys() throws {
+        #expect(Keys.claim(try Self.event(".", [.command, .shift], keyCode: 43)) == .command("stop"))
+        #expect(Keys.claim(try Self.event("/", [.command, .shift], keyCode: 47)) == .command("keys"))
+        #expect(Keys.claim(try Self.event("&", .command, keyCode: 18)) == .space(1), "the bare 1 key types &")
+        #expect(Keys.claim(try Self.event("ç", .command, keyCode: 25)) == .space(9))
+        #expect(Keys.claim(try Self.event("1", [.command, .shift], keyCode: 18)) == .space(1), "⇧ types the digit")
+        #expect(Keys.claim(try Self.event("!", [.command, .shift], keyCode: 18)) == nil, "⇧⌘1 on QWERTY types !")
+        #expect(Keys.claim(try Self.event("P", [.command, .shift], keyCode: 35)) == nil)
+        #expect(Keys.claim(try Self.event("&", [.command, .option], keyCode: 18)) == nil)
+        #expect(Keys.claim(try Self.event("1", [.command, .option], keyCode: 18)) == nil)
+        #expect(Keys.claim(try Self.event("K", [.command, .shift], keyCode: 40)) == .command("newconvo"))
+    }
+
+    /// The key monitor: a claimed key typed in the app's window acts through its item and never reaches the page; in
+    /// another window, or a key that is the page's, it goes on.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theMonitorGivesAClaimedKeyToItsItem() throws {
+        let bar = MenuBar(builders: nil)
+        bar.spaces = { [("brief", "Daily brief"), ("agents", "My agents")] }
+        var acted: [String] = []
+        bar.act = { acted.append($0.identifier?.rawValue ?? "") }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let other = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        other.isReleasedWhenClosed = false
+        #expect(bar.intercept(try Self.event("2", .command, keyCode: 19, window: window.windowNumber), window: window) == nil)
+        #expect(bar.intercept(try Self.event("k", .command, keyCode: 40, window: window.windowNumber), window: window) == nil)
+        #expect(bar.intercept(try Self.event("9", .command, keyCode: 25, window: window.windowNumber), window: window) == nil,
+                "a number with no space is still not the page's")
+        #expect(acted == ["space:agents", "ask"])
+        #expect(bar.intercept(try Self.event("&", .command, keyCode: 18, window: window.windowNumber), window: window) == nil)
+        #expect(acted.last == "space:brief", "AZERTY's ⌘&")
+        let elsewhere = try Self.event("k", .command, keyCode: 40, window: other.windowNumber)
+        #expect(bar.intercept(elsewhere, window: window) === elsewhere)
+        let copy = try Self.event("c", .command, keyCode: 8, window: window.windowNumber)
+        #expect(bar.intercept(copy, window: window) === copy)
+        #expect(acted.count == 3)
     }
 
     @Test func aboutSaysTheVersionAndThePromise() throws {
@@ -212,7 +254,6 @@ enum Mockup {
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
             .write(to: folder.appendingPathComponent("Contents/Info.plist"))
         let bundle = try #require(Bundle(url: folder))
-        #expect(Keys.versionLine(bundle) == "Version 0.3.0 (31)")
         let about = Keys.about(bundle)
         #expect(about[.applicationVersion] as? String == "0.3.0" && about[.version] as? String == "31")
         #expect((about[.credits] as? NSAttributedString)?.string.hasSuffix("Nothing leaves this Mac.") == true)

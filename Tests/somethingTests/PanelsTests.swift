@@ -1,7 +1,7 @@
 // The permission and question panels against a fake prompt source shaped like the Engine's: one panel at a time in
 // the order the requests came, Allow Once and Deny, Escape denies, never modal, closed when the agent withdraws its
-// request, and a question answered with the chosen and typed answers. A sheet the app waits for returns the button
-// it ended with. No panel is shown.
+// request, and a question answered with the chosen and typed answers. The sheets the app waits for mean what their
+// buttons say, one at a time. No panel is shown.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -166,19 +166,33 @@ final class FakePrompts: PromptSource {
         #expect(Ask.quit(3, assistant: true).informativeText == "Your assistant and 2 other agents something started are still running. Quitting stops them.")
     }
 
-    /// A sheet the app waits for (the rights, a link, an export) returns the button it ended with, and leaves no sheet
-    /// behind. Its window is offscreen and the app inactive: nothing is shown and the focus is not taken. No modal loop
-    /// runs: in this process, which never ran NSApp, runModal and a modal session alike end the whole test run quietly
-    /// (it still exits 0); endSheet calls the sheet's handler at once.
-    @Test func aSheetWaitedForReturnsTheButtonItEndedWith() throws {
+    /// The sheets the app waits for (the rights, a link, an export) mean what their buttons say, the second of the
+    /// export being With Its Data. The modal loop itself is not run: in this process, which never ran NSApp, runModal
+    /// and a modal session alike end the whole test run quietly (it still exits 0).
+    @Test func theSheetsButtonsMeanWhatTheySay() {
+        #expect(Ask.withData("board", keys: ["seen"], bytes: 12).buttons.map(\.title) == ["Without Data", "With Its Data", "Cancel"])
+        #expect(NativeAsk.withDataChoice(.alertFirstButtonReturn) == false && NativeAsk.withDataChoice(.alertSecondButtonReturn) == true)
+        #expect(NativeAsk.withDataChoice(.alertThirdButtonReturn) == nil && NativeAsk.withDataChoice(nil) == nil)
+        #expect(Ask.link(URL(string: "https://example.com")!, space: "board").buttons.map(\.title)
+                == ["Open", "Cancel", "Block Links Until Reload"])
+        #expect(NativeAsk.linkChoice(.alertFirstButtonReturn) == .open && NativeAsk.linkChoice(.alertSecondButtonReturn) == .cancel)
+        #expect(NativeAsk.linkChoice(.alertThirdButtonReturn) == .block && NativeAsk.linkChoice(nil) == .cancel)
+        #expect(NativeAsk.agreed(.alertFirstButtonReturn) && !NativeAsk.agreed(.alertSecondButtonReturn) && !NativeAsk.agreed(nil))
+    }
+
+    /// A sheet asked for with no window, or while another sheet is up, is answered as Escape would, and begins none:
+    /// one question at a time. Its window is offscreen and the app inactive: nothing is shown and the focus is not taken.
+    @Test func aSecondSheetIsAnsweredAsEscapeWould() throws {
+        let ask = NativeAsk()
+        #expect(ask.withData("board", keys: [], bytes: 0) == nil, "no window")
         let offscreen = Offscreen(NSView())
-        let alert = Ask.withData("board", keys: ["seen"], bytes: 12)
-        #expect(alert.buttons.map(\.title) == ["Without Data", "With Its Data", "Cancel"], "With Its Data is the second button")
-        var answer: NSApplication.ModalResponse?
-        alert.beginSheetModal(for: offscreen.window) { answer = $0 }
-        offscreen.window.endSheet(alert.window, returnCode: .alertSecondButtonReturn)
-        #expect(answer == .alertSecondButtonReturn)
-        #expect(offscreen.window.attachedSheet == nil)
+        ask.window = { offscreen.window }
+        let first = Ask.trash("board")
+        first.beginSheetModal(for: offscreen.window) { _ in }
+        defer { offscreen.window.endSheet(first.window) }
+        #expect(ask.withData("board", keys: ["seen"], bytes: 12) == nil)
+        #expect(ask.link(URL(string: "https://example.com")!, space: "board") == .cancel)
+        #expect(offscreen.window.attachedSheet === first.window, "no second sheet began")
         #expect(!NSApp.isActive)
     }
 }
