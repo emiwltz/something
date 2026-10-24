@@ -342,7 +342,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         Ask.trash(entry, remembers: library.remembers(entry.id), messages: assistant.messages(of: entry.id)).hang(on: shell.window) { [weak self] in
             guard $0 == .destructive else { return }
             self?.library.trash(entry.id)
-            self?.assistant.forget(entry.id)
+            // Its conversation goes only with the space: one that stayed, its move refused, keeps its assistant.
+            if self?.library.entry(entry.id) == nil { self?.assistant.forget(entry.id) }
         }
     }
 

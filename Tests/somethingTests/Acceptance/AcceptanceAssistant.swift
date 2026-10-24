@@ -164,8 +164,9 @@ struct AcceptanceAssistant {
         defer { brief.close() }
         let model = shell.assistant, engine = model.engine, glass = shell.glass
         let briefs = model.session
+        // The card open with its conversation, whatever an earlier ⌘J left: the card keeps it from space to space.
         model.focus()
-        shell.toggleConversation(nil)
+        model.threadShown = true
         #expect(await wait(5) { glass.grown == true && !glass.morphing })
         let fades = glass.fades
         // Logbook: its own conversation, empty and asleep; the card stayed open, its content faded.
@@ -186,7 +187,16 @@ struct AcceptanceAssistant {
         #expect(notice.title == "Claude Code is waiting for your answer" && !notice.actions.contains { $0.title.contains("Allow") })
         #expect(model.eyes(of: "brief") == .think && model.eyes(of: "logbook") == .sleep && model.eyes(of: "agents") == .wait)
         #expect(briefs.agent?.state == "working" && briefs.rows.contains(.mine(caption: "about Daily brief", text: "Add a small weather corner, top right.")))
-        shell.waiting(1, mine: 1)
+        // The counts the app makes of its queue (App.counted): My agents' request is this space's own, no other's.
+        let queue = RequestQueue()
+        queue.space = { request in
+            RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent),
+                               working: model.space(of: request.agent), launches: [:])
+        }
+        queue.follow(engine.requests)
+        #expect(queue.waiting.count == 1 && queue.count(in: "agents") == 1 && queue.count(in: "brief") == 0)
+        shell.waiting(queue.waiting.count, mine: queue.count(in: "agents"))
+        #expect(model.threadShown && model.rows.first.map { if case .day = $0 { true } else { false } } == true)
         #expect(glass.mine == 1 && glass.sticker.mine == 1 && shell.chip.count == 1, "the badge counts this space's own request")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: agents.web, "c6" + suffix, root: stage.home.root)

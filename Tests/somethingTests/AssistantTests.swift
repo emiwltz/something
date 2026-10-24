@@ -800,6 +800,32 @@ import WebKit
         await finish(home, model)
     }
 
+    /// A build from New Space goes on while the person opens a space: its request belongs to no space until the
+    /// hand-off, so the open space's own count stays 0; and what each place's field holds stays with that place.
+    @Test func aBuildsRequestIsNoSpacesOwn() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "ask-first"
+        model.send()
+        #expect(await wait(until: { model.presence.state == .wait }))
+        let builder = try #require(model.id)
+        model.draft = "Half written for New Space"
+        model.place = .space(title: "Who waits", name: "waiting", page: "index.html")
+        #expect(model.draft.isEmpty && model.space(of: builder) == nil)
+        let queue = RequestQueue()
+        queue.space = { request in
+            RequestQueue.space(of: request.agent, assistant: model.engine.assistants.contains(request.agent),
+                               working: model.space(of: request.agent), launches: [:])
+        }
+        queue.follow(model.engine.requests)
+        #expect(queue.waiting.map(\.agent) == [builder] && queue.count(in: "waiting") == 0)
+        model.draft = "For Who waits"
+        model.place = .blank
+        #expect(model.draft == "Half written for New Space")
+        await finish(home, model)
+    }
+
     /// What the menu and the drawer say of each builder, what it is lent, and whether Ask Before Every Change means
     /// anything for it: from its descriptor, in the words of 0.2.
     @Test func eachBuilderIsSaidFromItsDescriptor() async throws {

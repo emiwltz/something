@@ -63,7 +63,11 @@ import SomethingCore
             if place.key != oldValue.key { session = session(for: place) }
         }
     }
-    var draft = ""
+    /// What the field holds: the open place's own, so a message half written goes to the agent it was written for.
+    var draft: String {
+        get { session.draft }
+        set { session.draft = newValue }
+    }
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
     var open = true
     var threadShown = false
@@ -408,9 +412,9 @@ import SomethingCore
     /// The conversation whose agent is `agent`, of any place; nil when none of them launched it.
     func session(of agent: String) -> Session? { sessions.values.first { $0.id == agent } }
 
-    /// The space the assistant `agent` works on: its conversation's space, or the open one for New Space's, which builds
-    /// spaces that do not exist yet.
-    func space(of agent: String) -> String? { session(of: agent)?.space ?? place.space }
+    /// The space the assistant `agent` works on: its conversation's space; nil for New Space's, which has none until
+    /// the hand-off, whichever space is open meanwhile, so its requests are never counted as that space's own.
+    func space(of agent: String) -> String? { session(of: agent)?.space }
 
     /// The messages held for the end of the turn, as the person wrote them.
     var held: [String] { session.held.map { AssistantModel.shown($0).text } }

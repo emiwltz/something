@@ -1,7 +1,8 @@
 // One conversation with a builder: its kind, the model and effort it is launched with, its agent and thread as the
-// engine's state shows them, what went wrong, the messages waiting for its launch or for its turn to end, and the space
-// it is about; the turns of its earlier agent that a resumed one continues, and whether it began because the last one
-// could not be picked up. A class, so a launch that ends after a new conversation began can tell it was for another one.
+// engine's state shows them, what went wrong, what the person is writing to it, the messages waiting for its launch or
+// for its turn to end, and the space it is about; the turns of its earlier agent that a resumed one continues, and
+// whether it began because the last one could not be picked up. A class, so a launch that ends after a new
+// conversation began can tell it was for another one.
 import Foundation
 import Observation
 import SomethingCore
@@ -41,6 +42,8 @@ import SomethingCore
     /// Back and Stop can give them back; one leaves each time a turn ends. And the turn after which one last left, so
     /// a state read again before the next turn starts sends no second one.
     var held: [String] = []
+    /// What the person is writing to it, not sent yet.
+    var draft = ""
     @ObservationIgnored var releasedAfter: String??
     /// The turns its agent had when Start Again resumed its thread in a new one, which reports only the turns it runs:
     /// the conversation shows both. And whether it is the new conversation Start Again began, which its first lines say.
