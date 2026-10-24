@@ -98,7 +98,7 @@ enum Keys {
         // The menu item only holds the submenu; its selector is there so that the app can grey it.
         Command(id: "buildWith", title: "Build With", action: #selector(App.buildWith(_:)), owner: "AB11", needsSpace: true),
         Command(id: "askAll", title: "Ask Before Every Change…", owner: "G5"),
-        Command(id: "sleep", title: "Put Idle Assistants to Sleep", owner: "AB10"),
+        Command(id: "sleep", title: "Put Idle Assistants to Sleep", action: #selector(App.putIdleToSleep(_:)), owner: "AB10"),
         Command(id: "minimize", title: "Minimize", key: "m", action: #selector(NSWindow.performMiniaturize(_:)), owner: "F5"),
         Command(id: "zoom", title: "Zoom", action: #selector(NSWindow.performZoom(_:)), owner: "W1"),
         Command(id: "front", title: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), owner: "F5"),

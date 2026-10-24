@@ -309,6 +309,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
     @objc func showRequest(_ sender: Any?) { panels.present(in: current?.space.name) }
     @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
+    /// Put Idle Assistants to Sleep, said in a toast.
+    @objc func putIdleToSleep(_ sender: Any?) {
+        let count = assistant.putIdleToSleep()
+        _ = shell.toast(count == 0 ? "No idle assistant to put to sleep"
+                        : "\(count) idle assistant\(count == 1 ? " is" : "s are") asleep · each wakes on your next message", quiet: true)
+    }
     @objc func chooseBuilder(_ sender: NSMenuItem) { (sender.representedObject as? String).map(assistant.choose) }
     /// Never sent: Build With only holds its submenu, and this selector lets validateMenuItem grey it.
     @objc func buildWith(_ sender: Any?) {}

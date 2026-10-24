@@ -3,9 +3,10 @@
 // files written into the spaces folder; one conversation per place, each space's own and New Space's, the card showing
 // the open place's and a build from New Space going on as the new space's own; each agent launched at its first
 // message, never before, and told at each message which space is open; a message written while a turn runs held until
-// it ends, and Take Back; Stop, New Conversation, the stop after 30 idle minutes, the switch to another builder, and
-// what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words something writes
-// to it on its own are its context line and Ask to Fix, never a page's text.
+// it ends, and Take Back; Stop, New Conversation, the switch to another builder, and what went wrong; sleep (after the
+// Preferences' delay, past the cap of awake assistants, or when the person asks), and the wake on the next message,
+// which resumes the conversation a space keeps when its kind can. The engine keeps every space away from this agent
+// (Bridge.visible); something writes to it on its own only its context line and Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -35,12 +36,14 @@ import SomethingCore
     /// One builder in the agent menu.
     struct Entry: Identifiable { let id: String, title: String, checked: Bool, enabled: Bool, note: String? }
 
-    static let idleLimit: TimeInterval = 30 * 60
-
     @ObservationIgnored let engine: Engine
     @ObservationIgnored let places: Places
-    /// The clock of the idle stop; a test moves it.
+    /// The clock of sleep and of the presence; a test moves it.
     @ObservationIgnored var clock: () -> Date = Date.init
+    /// Whether a builder of `kind` picks its conversation up when it wakes: only Claude Code until a trial proves
+    /// another (Registry.resumesAsBuilt). Any other is never put to sleep by itself nor counted by the cap; a test
+    /// fakes one.
+    @ObservationIgnored var resumable: (String) -> Bool = { Registry.resumesAsBuilt.contains($0) }
     /// Puts a word on the pasteboard; a test keeps it.
     @ObservationIgnored var copy: (String) -> Void = {
         NSPasteboard.general.clearContents()
@@ -60,7 +63,11 @@ import SomethingCore
     var place = Place.blank {
         didSet {
             if place.space != nil, oldValue.space == nil { open = false }
-            if place.key != oldValue.key { session = session(for: place) }
+            if place.key != oldValue.key {
+                // The assistant left stays awake for the whole delay from now: it was the open one until now.
+                session.active = clock()
+                session = session(for: place)
+            }
         }
     }
     /// What the field holds: the open place's own, so a message half written goes to the agent it was written for.
@@ -90,7 +97,7 @@ import SomethingCore
     var asking: Bool { session.asking }
     var launching: Bool { session.launching }
     var failure: String? { session.failure }
-    var idled: Bool { session.idled }
+    var asleep: Bool { session.asleep }
     private(set) var askEverything: Bool
     /// What the state says of each builder: installed or not; absent while not known.
     private(set) var installed: [String: Bool] = [:]
@@ -108,10 +115,10 @@ import SomethingCore
     @ObservationIgnored private var preferred: String?
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
-    @ObservationIgnored private var timer: Timer?
     /// The presence changes with time alone twice: Stop is offered 10 s into a turn, and "Changed …" leaves 3.6 s after
-    /// it. A one-shot timer moves `beat` then, which the presence reads, so the card and the sticker ask again; no timer
-    /// runs at rest. `beatAt` is the moment it was set for.
+    /// it; and an idle assistant falls asleep after the Preferences' delay. A one-shot timer moves `beat` then, which the
+    /// presence reads, so the card and the sticker ask again; no timer runs at rest. `beatAt` is the moment it was set
+    /// for.
     private(set) var beat = 0
     @ObservationIgnored private var beatTimer: Timer?
     @ObservationIgnored private var beatAt: Date?
@@ -124,8 +131,6 @@ import SomethingCore
         askEverything = kept.askEverything
         sessions[.new] = session
         refresh()
-        // Once a minute: has the agent been idle for `idleLimit`?
-        timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.checkIdle() }
     }
 
     // MARK: Knowledge files
@@ -163,9 +168,10 @@ import SomethingCore
             // agent taking the conversation over unasked.
             let kind = each.kind ?? ""
             if !offered.contains(kind), each.last == nil || installed[kind] != false { each.kind = offered.first { $0 == preferred } ?? offered.first }
-            each.read(state)
+            if each.read(state) { keep(each) }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
+        rest()
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
         if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
@@ -189,13 +195,14 @@ import SomethingCore
     }
 
     /// Sets the one-shot timer for the next moment a presence changes by itself, the card's or a space's in the
-    /// sidebar, if there is one.
+    /// sidebar, or an assistant falls asleep, if there is one.
     private func keepTime() {
-        let now = clock()
-        let at = sessions.values.compactMap { each -> Date? in
-            [.working, .waiting].contains(light(each)) ? each.turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
-                : each.turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor }
-        }.filter { $0 > now }.min()
+        let now = clock(), delay = sleepDelay
+        let at = sessions.values.flatMap { each -> [Date?] in
+            [[.working, .waiting].contains(light(each)) ? each.turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
+                : each.turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor },
+             delay.flatMap { restful(each) ? each.active + $0 : nil }]
+        }.compactMap { $0 }.filter { $0 > now }.min()
         guard at != beatAt else { return }
         beatTimer?.invalidate()
         (beatTimer, beatAt) = (nil, at)
@@ -203,8 +210,12 @@ import SomethingCore
         beatTimer = Timer.scheduledTimer(withTimeInterval: wait + 0.05, repeats: false) { [weak self] _ in self?.tick() }
     }
 
-    /// The presence is asked again: the time alone changed it.
-    func tick() { beat += 1 }
+    /// The presence is asked again, the time alone having changed it; an assistant idle for long enough falls asleep.
+    func tick() {
+        rest()
+        keepTime()
+        beat += 1
+    }
 
     private func keep<Value: Equatable>(_ property: ReferenceWritableKeyPath<AssistantModel, Value>, _ value: Value) {
         if self[keyPath: property] != value { self[keyPath: property] = value }
@@ -251,9 +262,11 @@ import SomethingCore
     /// conversation the program cannot find again does: Start Again then begins a new one rather than fail for ever.
     var resumes: Bool { resumes(session) }
 
+    /// Only a thread an earlier launch of the same kind reported, and only while the person keeps "Resume each space's
+    /// conversation" on.
     func resumes(_ session: Session) -> Bool {
-        session.thread != nil && Registry.resumesAsBuilt.contains(session.kind ?? "") && session.asking == askEverything
-            && session.failure == nil && session.agent?.error?.code != "LAUNCH_FAILED"
+        session.thread != nil && session.threadKind == session.kind && resumable(session.kind ?? "") && session.asking == askEverything
+            && session.failure == nil && session.agent?.error?.code != "LAUNCH_FAILED" && Preferences.at(places).resume
     }
 
     /// The other builders the person may choose when this one left the Mac.
@@ -311,8 +324,10 @@ import SomethingCore
         }
     }
 
-    /// The conversation's first lines: where the agent works and how it asks, then how long a conversation lasts.
+    /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
+    /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     var firstLines: [String] {
+        guard session.kept.isEmpty else { return [] }
         let folder = Words.path(places.spaces.path, home: places.home.path), agent = kind.flatMap(Registry.app.agent)
         let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
             else if agent?.asksNothingByDefault == true {
@@ -321,9 +336,8 @@ import SomethingCore
             else if agent?.builder?.preAllowed == false { "\(name) works in \(folder). It asks as your own \(name) settings say." }
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
             else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
-        return [how, "A new conversation starts each time something starts."]
-            + (session.renewed ? ["\(name) stopped and could not pick its conversation up. Started a new conversation."] : [])
-            + (idled ? ["\(name) was stopped to save memory. Your next message starts it again."] : [])
+        return [how] + (resumable(kind ?? "") ? [] : ["\(name) cannot resume a conversation, so each one starts fresh."])
+            + [session.renewed].compactMap { $0 }
     }
 
     /// The builders found, as the agent menus list them.
@@ -397,13 +411,15 @@ import SomethingCore
         if before?.session === session { before = nil }
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
+        keep(session)
         ready = nil
     }
 
-    /// The conversation of `place`, made at its first use with the builder chosen now, launching nothing.
+    /// The conversation of `place`, made at its first use, launching nothing: the one its space kept, asleep, else a
+    /// new one with the builder chosen now.
     func session(for place: Place) -> Session {
         if let kept = sessions[place.key] { return kept }
-        let made = Session(kind: kind, space: place.space)
+        let made = place.space.flatMap { Session.kept($0, in: places.assistants) } ?? Session(kind: kind, space: place.space)
         made.active = clock()
         sessions[place.key] = made
         return made
@@ -443,12 +459,10 @@ import SomethingCore
         let thread = resumes ? session.thread : nil
         halt(session)
         if thread != nil {
-            session.kept += engine.state.threads.first { $0.agent == session.id }?.turns ?? []
-            // The dead agent's turns are kept now: its thread, still in the state, must not show them a second time.
-            session.id = nil
+            session.fold(engine.state)
         } else {
             newConversation()
-            session.renewed = true
+            session.renewed = "\(name) stopped and could not pick its conversation up. Started a new conversation."
         }
         start([], resume: thread)
     }
@@ -493,15 +507,71 @@ import SomethingCore
         Preferences.at(places).askEverything = askEverything
     }
 
-    /// Stops each conversation's agent after `idleLimit` without a turn: a Claude Code process holds a few hundred MB.
-    func checkIdle() {
-        for each in sessions.values {
-            guard let agent = each.agent, agent.alive == true, !each.stopped, !["working", "waiting"].contains(agent.state),
-                  clock().timeIntervalSince(each.active) >= AssistantModel.idleLimit else { continue }
-            halt(each)
-            each.idled = true
+    // MARK: Sleep
+
+    /// The Preferences' "Put idle assistants to sleep after", in seconds; nil for never.
+    var sleepDelay: TimeInterval? {
+        let minutes = Preferences.at(places).sleepAfter
+        return minutes > 0 ? TimeInterval(minutes * 60) : nil
+    }
+
+    /// Whether the agent of `session` runs, or is starting.
+    func awake(_ session: Session) -> Bool { session.launching || (session.id != nil && session.agent?.alive != false && !session.stopped) }
+
+    /// Whether `session` can be put to sleep without the person asking: awake and idle, not the open place's, not the
+    /// build watched, and of a kind that picks its conversation up when it wakes.
+    private func restful(_ session: Session) -> Bool {
+        idle(session) && session !== self.session && resumable(session.kind ?? "")
+    }
+
+    /// Awake with nothing under way: no turn running or waiting, no message held, not starting, not the build watched.
+    /// An agent whose state nobody can read is not idle: something never guesses.
+    private func idle(_ session: Session) -> Bool {
+        awake(session) && !session.launching && session.held.isEmpty && before?.session !== session
+            && !["working", "waiting", "unknown"].contains(session.agent?.state)
+    }
+
+    /// Puts to sleep each restful assistant idle for the Preferences' delay, then, while more than "awake at most" of
+    /// the kinds that resume are awake, the one idle the longest: a Claude Code process holds a few hundred MB.
+    func rest() {
+        let now = clock()
+        if let delay = sleepDelay {
+            for each in sessions.values where restful(each) && now.timeIntervalSince(each.active) >= delay { sleep(each) }
+        }
+        var count = sessions.values.filter { awake($0) && resumable($0.kind ?? "") }.count
+        for each in sessions.values.filter(restful).sorted(by: { $0.active < $1.active }) where count > Preferences.at(places).awakeAtMost {
+            sleep(each)
+            count -= 1
         }
     }
+
+    /// Whether Put to Sleep can act on the open place's assistant: awake, with nothing under way.
+    var canSleep: Bool { idle(session) }
+
+    /// Put to Sleep: the open place's assistant sleeps now, whatever its kind; one that cannot resume begins a new
+    /// conversation at its next message, and says so.
+    func putToSleep() {
+        guard canSleep else { return }
+        sleep(session)
+    }
+
+    /// Put Idle Assistants to Sleep: every other assistant awake with nothing under way sleeps now. Returns how many.
+    @discardableResult func putIdleToSleep() -> Int {
+        let idle = sessions.values.filter { $0 !== session && idle($0) }
+        idle.forEach(sleep)
+        return idle.count
+    }
+
+    /// Stops the agent of `session` and keeps its turns: its next message wakes it.
+    private func sleep(_ session: Session) {
+        halt(session)
+        session.fold(engine.state)
+        session.asleep = true
+        keep(session)
+    }
+
+    /// Writes what a space's conversation keeps on disk.
+    private func keep(_ session: Session) { session.save(in: places.assistants) }
 
     /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
     /// while no other space is open. When one is, the new space is said `ready` instead, and nil returned.
@@ -522,6 +592,7 @@ import SomethingCore
         if let old = sessions[.space(name)] { halt(old) }
         built.space = name
         sessions[.space(name)] = built
+        keep(built)
         let fresh = Session(kind: built.kind, model: built.model, effort: built.effort)
         fresh.active = clock()
         sessions[.new] = fresh
@@ -531,13 +602,16 @@ import SomethingCore
     /// The space `name` went to the Trash: its conversation goes with it, its agent stopped, and a space of the same
     /// name later begins a new one.
     func forget(_ name: String) {
+        try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
         guard let gone = sessions.removeValue(forKey: .space(name)) else { return }
         halt(gone)
         if gone === session { session = session(for: place) }
     }
 
     /// The messages of the space `name`'s conversation, the person's and the agent's: what the Trash sheet says goes.
-    func messages(of name: String) -> Int { sessions[.space(name)].map { AssistantModel.messages($0.rows) } ?? 0 }
+    func messages(of name: String) -> Int {
+        (sessions[.space(name)] ?? Session.kept(name, in: places.assistants)).map { AssistantModel.messages($0.rows) } ?? 0
+    }
 
     static func messages(_ rows: [Row]) -> Int {
         rows.filter { if case .mine = $0 { true } else if case .reply = $0 { true } else { false } }.count
@@ -577,6 +651,15 @@ import SomethingCore
     private func start(_ messages: [String], in session: Session? = nil, resume: String? = nil) {
         let session = session ?? self.session
         guard let kind = session.kind else { return }
+        var resume = resume
+        // A wake: the conversation goes on when its kind can pick it up, else a new one begins and says why.
+        if resume == nil, session.asleep, session.thread != nil {
+            if resumes(session) { resume = session.thread } else {
+                session.renew(resumable(kind) ? "\(name(of: session)) could not pick its conversation up. Started a new conversation."
+                              : "\(name(of: session)) cannot resume a conversation. Started a new conversation.")
+                keep(session)
+            }
+        }
         (session.launching, session.queued, session.failure) = (true, messages, nil)
         let number = session.launch
         engine.lookFor(kind) { [weak self] in
@@ -587,7 +670,7 @@ import SomethingCore
             do {
                 let id = try engine.launchAssistant(kind, folder: places.spaces.path, model: session.model, effort: session.effort,
                                                     resume: resume, askEverything: askEverything, lent: lent(for: kind))
-                (session.id, session.asking, session.stopped, session.idled) = (id, askEverything, false, false)
+                (session.id, session.asking, session.stopped, session.asleep) = (id, askEverything, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { session.failure = error.sentence }
             // Only now: the launch changes the state, and a build watched must not see it ended with no agent yet.

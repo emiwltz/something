@@ -1,6 +1,6 @@
 // The person's assistant as the window drives it (AssistantModel): the context line of each message and its caption
 // in the drawer, the knowledge files, the builders offered, a lazy launch with a fake `claude` that speaks Claude
-// Code's lines (text invented), the idle stop with a moved clock, the red row and Try Again, the switch, and Ask to
+// Code's lines (text invented), the red row and Try Again, the switch, and Ask to
 // Fix, which sends something's words only, whatever the page says.
 import AppKit
 import Foundation
@@ -232,7 +232,7 @@ import WebKit
 
     /// Each place has its own conversation, made at its first use and launching nothing: two spaces make two Sessions,
     /// the blank page and the templates share New Space's. The card shows the open place's. Every one is read, counted
-    /// when quitting with its own space, and stopped when idle.
+    /// when quitting with its own space, and put to sleep when idle, the open one last.
     @Test func eachPlaceHasItsOwnSession() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -262,9 +262,13 @@ import WebKit
         _ = try model.engine.interrupt(first)
         _ = try model.engine.interrupt(second)
         #expect(await wait(until: { !["working", "waiting"].contains(agents.agent?.state) && !["working", "waiting"].contains(brief.agent?.state) }))
-        now += AssistantModel.idleLimit
-        model.checkIdle()
-        #expect(agents.idled && brief.idled && model.idled && !model.session(for: .blank).idled)
+        now += 10 * 60
+        model.tick()
+        #expect(brief.asleep && !agents.asleep && !model.session(for: .blank).asleep, "the open space's assistant stays awake")
+        model.place = .blank
+        now += 10 * 60
+        model.tick()
+        #expect(agents.asleep && brief.asleep)
         #expect(await wait(until: { model.engine.state.agents.allSatisfy { $0.alive == false } }))
         await finish(home, model)
     }
@@ -620,34 +624,6 @@ import WebKit
         return { flag.raised }
     }
 
-    /// After 30 minutes without a turn, by the assistant's clock, the agent stops; the drawer says so, and the next
-    /// message starts a new one.
-    @Test func anIdleAssistantStopsAfterHalfAnHour() async throws {
-        let (home, model) = try assistant()
-        defer { home.remove() }
-        var now = Date()
-        model.clock = { now }
-        await look(model)
-        model.draft = "Hello."
-        model.send()
-        #expect(await wait(until: { model.light == .ready }))
-        let first = try #require(model.id)
-        now += AssistantModel.idleLimit - 1
-        model.checkIdle()
-        #expect(model.engine.state.agents.first?.alive == true && !model.idled)
-        now += 1
-        model.checkIdle()
-        #expect(model.idled && model.light == .off)
-        #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))
-        #expect(model.firstLines.last == "Claude Code was stopped to save memory. Your next message starts it again.")
-        #expect(model.notice == nil && model.presence.word == "Asleep · wakes on your next message", "a stop something asked for is not said as a failure")
-        model.draft = "Hello again."
-        model.send()
-        #expect(await wait(until: { model.id != first && model.light == .ready }))
-        #expect(!model.idled)
-        await finish(home, model)
-    }
-
     /// A first turn that ends in an error opens the drawer on the red row; Copy Command copies `claude`; Try Again
     /// starts a new agent and sends the same message.
     @Test func aFailedTurnSaysWhyAndTriesAgain() async throws {
@@ -725,7 +701,7 @@ import WebKit
             && arguments().contains("--resume") }), "\(arguments())")
         let resumed = arguments()
         #expect(resumed.firstIndex(of: "--resume").map { resumed[$0 + 1] == thread } == true, "\(resumed)")
-        #expect(model.rows == rows && model.notice == nil && !model.blocked && model.firstLines.count == 2, "the conversation is kept")
+        #expect(model.rows == rows && model.notice == nil && !model.blocked && model.firstLines.isEmpty, "the conversation is kept")
         // Quits again; Ask Before Every Change changed since: a new conversation, said as such.
         model.draft = "One line per hour, again."
         model.send()
@@ -846,7 +822,8 @@ import WebKit
         for (kind, line, canAsk, lent) in said {
             model.choose(kind)
             #expect(model.kind == kind && model.command == kind)
-            #expect(model.firstLines == [line, "A new conversation starts each time something starts."], "\(kind)")
+            let fresh = kind == "claude" ? [] : ["\(Registry.app.name(of: kind)) cannot resume a conversation, so each one starts fresh."]
+            #expect(model.firstLines == [line] + fresh, "\(kind)")
             #expect(model.canAskEverything == canAsk && (model.lent(for: kind)?.tools.map(\.name) ?? []) == lent, "\(kind)")
             // Served by this program, `something mcp`, which the agent starts with its own environment.
             #expect(model.lent(for: kind).map { $0.server?.words.last == "mcp" && $0.server?.words.count == 2 } ?? true, "\(kind)")

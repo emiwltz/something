@@ -49,6 +49,8 @@ struct Places {
     var journals: URL { support.appendingPathComponent("journal") }
     /// The window's memory and the settings (Preferences.swift).
     var window: URL { support.appendingPathComponent("window.json") }
+    /// What each space's assistant keeps across sleep and restarts (Session.swift), a file per space.
+    var assistants: URL { support.appendingPathComponent("assistants") }
     /// Claude Code's plan-B spools (PermissionSpool.swift): never in $TMPDIR, which a sandboxed agent (Codex in
     /// workspace-write) may write, and could then answer Claude's requests.
     var spools: URL { support.appendingPathComponent("spool") }

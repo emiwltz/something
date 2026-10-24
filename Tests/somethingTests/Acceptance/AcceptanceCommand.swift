@@ -44,7 +44,7 @@ struct AcceptanceCommand {
         #expect(go.filter { $0.state == .on }.map(\.title) == ["Daily brief"])
         let opened = Mockup.dump(bar.menu, Keys.Situation(space: true))
         for line in ["  # Daily brief", "  # Daily brief’s assistant", "  Space Info  ⌘I", "  Ask…  ⌘K", "  ✓ Daily brief  ⌘1",
-                     "  Versions…  (greyed)", "  Put Idle Assistants to Sleep  (greyed)"] {
+                     "  Versions…  (greyed)", "  Put Idle Assistants to Sleep"] {
             #expect(opened.contains(line + "\n"), "\(line)")
         }
         #expect(Keys.about(.main)[.applicationVersion] as? String == Resources.version(of: .main))

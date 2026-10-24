@@ -114,7 +114,53 @@ struct AcceptanceAssistant {
         return (shell, library, brief)
     }
 
-    @Test("c3: a thread kept after sleep", .disabled("not built yet: AB10")) func c3() async throws {}
+    /// Logbook open with its card and conversation (⌘J): its assistant asleep, its thread kept on disk from Monday as a
+    /// restart leaves it (assistants/logbook.json, written by the app's own Session.save): the person's message, the
+    /// edit, the reply. Nothing runs; the field says the next message wakes it, and the first lines, said when the
+    /// conversation began, are not repeated.
+    @Test("c3: a thread kept after sleep") func c3() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        // What Logbook's assistant kept when it fell asleep on Monday.
+        let monday = { (minute: Int) in iso8601.string(from: Date(timeIntervalSince1970: 1_792_404_000 + Double(minute * 60))) }
+        let kept = Session(kind: "claude", model: "haiku", effort: "low", space: "logbook")
+        kept.kept = [Turn(id: "t1", state: "done", started: monday(0), ended: monday(2), items: [
+            Item(id: "i1", kind: "message", author: "person", text: "[something] Open space: “Logbook” (logbook, ~/something/spaces/logbook.html).\nGroup the entries by day.", at: monday(0)),
+            Item(id: "i2", kind: "tool", author: "agent", text: "/Users/example/something/spaces/logbook.html", at: monday(1), tool: Tool(name: "Edit", status: "done")),
+            Item(id: "i3", kind: "message", author: "agent", text: "Grouped. Each day now starts with a small heading, newest first.", at: monday(2)),
+        ])]
+        var agent = Agent(id: "a0", kind: "claude", origin: "launched")
+        (agent.thread, agent.alive, kept.id) = ("00000000-0000-4000-8000-000000000001", false, "a0")
+        kept.read(State(at: monday(2), kinds: [:], agents: [agent]))
+        kept.save(in: stage.home.places.assistants)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine
+        model.clock = { Stage.now }
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let logbook = try await stage.open("logbook", in: shell, library)
+        defer { logbook.close() }
+        model.focus()
+        shell.toggleConversation(nil)
+        shell.waiting(1, mine: 0)
+        #expect(model.threadShown && model.asleep && model.id == nil && engine.state.agents.isEmpty, "nothing runs while it sleeps")
+        #expect(model.title == "Logbook" && model.presence.state == .sleep && model.presence.word == "Asleep · wakes on your next message")
+        #expect(model.rows == [.day(Date(timeIntervalSince1970: 1_792_404_000)), .mine(caption: "about Logbook", text: "Group the entries by day."),
+                               .tool(failed: false, words: "Edited logbook.html", command: nil),
+                               .reply("Grouped. Each day now starts with a small heading, newest first.")])
+        #expect(AssistantCard.day(Date(timeIntervalSince1970: 1_792_404_000), now: Stage.now) == "Monday")
+        #expect(model.firstLines.isEmpty && model.messageCount == 2 && model.placeholder == "Ask for a change · it wakes up")
+        #expect(model.dot == .ink3 && model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
+        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: logbook.web, "c3" + suffix, root: stage.home.root)
+        }
+    }
     /// Daily brief open with its card and conversation: "Make the masthead smaller and calmer." was written while the
     /// weather corner ran, held by the app, and left when that turn ended; the fake claude read and edited brief.html
     /// and now checks the page, a turn that never ends. 11 s into it the line says "Still working" and offers Stop ⌘.;

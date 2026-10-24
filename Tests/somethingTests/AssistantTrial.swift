@@ -133,8 +133,8 @@ struct AssistantTrial {
     /// A Claude Code never signed in fails at the first message, and the card's notice says what it said;
     /// signed in with a key the model's server refuses (401), it fails at once too, where Claude Code alone retries
     /// for about four minutes; a busy model server (529) is said in the status line at each retry, until
-    /// Claude Code gives up and the notice says so; once the server is free, Try Again gets an answer; after 30
-    /// idle minutes the agent is stopped, the drawer says so, and the next message starts a new one.
+    /// Claude Code gives up and the notice says so; once the server is free, Try Again gets an answer; Put to
+    /// Sleep stops the agent, the card says it is asleep, and the next message wakes it, resuming its conversation.
     @Test func signedOutThenRefusedThenTryAgainThenTheIdleStop() async throws {
         let api = try FakeMessagesAPI()
         defer { api.stop() }
@@ -176,11 +176,9 @@ struct AssistantTrial {
             #expect(model.problem == nil && model.notice == nil)
             let first = try #require(model.id)
 
-            model.clock = { Date().addingTimeInterval(AssistantModel.idleLimit + 60) }
-            model.checkIdle()
+            model.putToSleep()
             #expect(await wait(15) { trial.engine.state.agents.first { $0.id == first }?.alive == false })
-            #expect(model.light == .off && model.firstLines.last == "Claude Code was stopped to save memory. Your next message starts it again.")
-            model.clock = Date.init
+            #expect(model.light == .off && model.asleep && model.presence.word == "Asleep · wakes on your next message")
             model.draft = "And the clock too."
             model.send()
             #expect(await wait(90) { model.id != nil && model.id != first && model.light == .ready }, "rows: \(model.rows)")

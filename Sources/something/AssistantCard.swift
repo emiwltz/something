@@ -466,6 +466,7 @@ struct ConversationMenu: View {
         Section("\(model.title) · its assistant") {
             Button("New Conversation") { model.newConversation() }
             Button("Stop") { model.stop() }.disabled(!model.working).help(model.presence.stopHelp)
+            Button("Put to Sleep") { model.putToSleep() }.disabled(!model.canSleep)
         }
         if model.canAskEverything {
             Divider()

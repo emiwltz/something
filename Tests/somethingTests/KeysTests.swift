@@ -130,7 +130,10 @@ enum Mockup {
         for title in ["Space", "Assistant"] {
             let items = try #require(bar.submenu(title)).items.filter { !$0.isSeparatorItem && !$0.isSectionHeader }
             #expect(!items.isEmpty && items.allSatisfy { !$0.isHidden })
-            for item in items { #expect(!Keys.enabled(try #require(item.identifier?.rawValue), none), "\(title) › \(item.title)") }
+            // Put Idle Assistants to Sleep acts on the spaces not open: the mockup leaves it enabled.
+            for item in items where item.identifier?.rawValue != "sleep" {
+                #expect(!Keys.enabled(try #require(item.identifier?.rawValue), none), "\(title) › \(item.title)")
+            }
             #expect(bar.submenu(title)?.items.first?.title == "No space open")
         }
         // Both ways: what the mockup greys without a space is greyed, and a command the table greys is greyed somewhere
@@ -149,8 +152,9 @@ enum Mockup {
         let open = Keys.Situation(space: true)
         #expect(["insp", "reload", "finder", "export", "trash", "ask", "convo", "newconvo", "reduce", "buildWith"].allSatisfy { Keys.enabled($0, open) })
         // Not wired yet: present and greyed, a space open or not.
-        #expect(!["palette", "settings", "keys", "pointpart", "history", "rights", "versions", "askAll", "sleep"]
+        #expect(!["palette", "settings", "keys", "pointpart", "history", "rights", "versions", "askAll"]
             .contains { Keys.enabled($0, open) })
+        #expect(Keys.enabled("sleep", none) && Keys.enabled("sleep", open))
         #expect(Keys.enabled("stop", Keys.Situation(working: true)), "a build on the New Space page can be stopped")
         #expect(!Keys.enabled("showreq", open) && Keys.enabled("showreq", Keys.Situation(waiting: true)), "Show Request while one waits")
     }

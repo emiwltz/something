@@ -172,19 +172,24 @@ import SomethingCore
         return entries.contains { $0.id == name } ? name : nil
     }
 
-    /// Drops the grants of every name whose file and folder are both gone from the spaces folder (deleted, or renamed
-    /// in Finder). A spaces folder that cannot be listed drops nothing. Throws a `SpaceError` when the grants file
-    /// does not read or cannot be written.
+    /// Drops the grants and the assistant's conversation of every name whose file and folder are both gone from the
+    /// spaces folder (deleted, or renamed in Finder). A spaces folder that cannot be listed drops nothing. Throws a
+    /// `SpaceError` when the grants file does not read or cannot be written.
     static func forgetGone(_ places: Places) throws {
-        try Grants(places.grants).update { file in
-            guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return }
-            file.spaces = file.spaces.filter { there.contains($0.key) || there.contains("\($0.key).html") }
+        guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return }
+        let gone = { (name: String) in !there.contains(name) && !there.contains("\(name).html") }
+        for file in (try? FileManager.default.contentsOfDirectory(at: places.assistants, includingPropertiesForKeys: nil)) ?? []
+        where file.pathExtension == "json" && gone(file.deletingPathExtension().lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
         }
+        try Grants(places.grants).update { file in file.spaces = file.spaces.filter { !gone($0.key) } }
     }
 
-    /// Drops what the grants file kept for `name`: a new space of that name never inherits the answers a deleted
-    /// one left. Throws a `SpaceError` when the grants file does not read or cannot be written.
+    /// Drops what the grants file kept for `name`, and its assistant's conversation: a new space of that name never
+    /// inherits the answers or the conversation a deleted one left. Throws a `SpaceError` when the grants file does not
+    /// read or cannot be written.
     static func forget(_ name: String, in places: Places) throws {
+        try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
         try Grants(places.grants).update { $0.spaces[name] = nil }
     }
 
