@@ -219,11 +219,15 @@ public final class Engine {
 
     /// Starts the person's assistant, an agent of `kind` working in `folder` (the spaces folder, its links resolved,
     /// since an agent may match its rules against real paths), and returns its id, which `assistants` holds from then on.
-    /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. Only the app calls
-    /// this: a space launches through `launch`, which never makes an assistant. Throws as `launch`.
-    public func launchAssistant(_ kind: String, folder: String, askEverything: Bool, lent: Lent? = nil) throws -> String {
-        try registry.checkLaunch(kind, model: nil, mode: nil, effort: nil)
-        return try launch(kind, folder: HeldFiles.real(folder), model: nil, mode: nil, effort: nil, planB: false,
+    /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. It runs `model` at
+    /// `effort` when given, and continues the conversation `resume` when given (a space's own, woken again, or a Quick
+    /// Change's). Only the app calls this: a space launches through `launch`, which never makes an assistant. Throws as
+    /// `launch`, and BAD_PARAMS for an empty `resume` or one an agent could read as an option.
+    public func launchAssistant(_ kind: String, folder: String, model: String? = nil, effort: String? = nil, resume: String? = nil,
+                                askEverything: Bool, lent: Lent? = nil) throws -> String {
+        try registry.checkLaunch(kind, model: model, mode: nil, effort: effort)
+        if let resume, resume.isEmpty || resume.hasPrefix("-") { throw CodedError("BAD_PARAMS", "resume is a conversation's id.") }
+        return try launch(kind, folder: HeldFiles.real(folder), model: model, mode: nil, effort: effort, planB: false, resume: resume,
                           assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
     }
 

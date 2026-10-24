@@ -225,6 +225,77 @@ import SomethingCore
         #expect(engine.state.agents.map(\.thread) == [threads[1]])
     }
 
+    /// A space's assistant woken again continues its conversation with its model and effort, building exactly as it did
+    /// before its sleep; a Quick Change runs once with the same model. Each id stays an assistant once it ended and the
+    /// state forgot it: no space writes to it, and its conversation is never shown as seen elsewhere.
+    @Test func anAssistantWakesWithItsModelEffortAndConversation() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        var now = Date()
+        engine.clock = { now }
+        let spaces = place.work.appendingPathComponent("spaces")
+        try FileManager.default.createDirectory(at: spaces, withIntermediateDirectories: true)
+        engine.assistantFolder = spaces.path
+        let file = place.out.appendingPathComponent("arguments")
+        func launched(_ what: String, _ launch: () throws -> String) async throws -> (id: String, arguments: [String]) {
+            try? FileManager.default.removeItem(at: file)
+            let id = try launch()
+            var arguments: [String] = []
+            try await until(what) {
+                arguments = ((try? String(contentsOf: file, encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+                return arguments.contains("--include-hook-events")
+            }
+            return (id, arguments)
+        }
+        for (model, effort, resume) in [("-x", nil, nil), (nil, "-x", nil), (nil, nil, "-x"), (nil, nil, "")] as [(String?, String?, String?)] {
+            #expect(throws: CodedError.self) {
+                try engine.launchAssistant("claude", folder: spaces.path, model: model, effort: effort, resume: resume, askEverything: false)
+            }
+        }
+        #expect(engine.assistants.isEmpty)
+
+        let thread = "c0ffee00-0000-4000-8000-0000000000a1", asking = "c0ffee00-0000-4000-8000-0000000000a2"
+        let woken = try await launched("the wake") {
+            try engine.launchAssistant("claude", folder: spaces.path, model: "opus", effort: "high", resume: thread, askEverything: false)
+        }
+        #expect(woken.arguments.contains("--model=opus") && woken.arguments.contains("--effort=high"))
+        #expect(Array(woken.arguments.drop { $0 != "--resume" }.prefix(2)) == ["--resume", thread] && !woken.arguments.contains("--session-id"))
+        #expect(woken.arguments.contains("--allowedTools"), "a building assistant still builds once woken")
+        let wokenAsking = try await launched("the asking wake") {
+            try engine.launchAssistant("claude", folder: spaces.path, resume: asking, askEverything: true)
+        }
+        #expect(wokenAsking.arguments.contains(asking) && !wokenAsking.arguments.contains("--allowedTools"), "one that asked everything still does")
+        let quick = try await launched("the Quick Change") {
+            try engine.launchAssistant("claude", folder: spaces.path, model: "opus", askEverything: false)
+        }
+        #expect(quick.arguments.contains("--model=opus") && quick.arguments.contains("--session-id"))
+        let ids: Set = [woken.id, wokenAsking.id, quick.id]
+        #expect(engine.assistants == ids)
+        #expect(engine.state.agents.first { $0.id == woken.id }?.thread == thread)
+
+        let host = EngineHost(engine, folder: place.work.path)
+        host.granted.rights = ["state", "send"]
+        for id in ids {
+            let answer = Bridge.answer(["method": "send", "params": ["agent": id, "text": "Invented."]], host: host)
+            #expect((answer["error"] as? [String: Any])?["code"] as? String == "READ_ONLY_AGENT")
+        }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        try await until("the stop") { stopped }
+        try await until("the ends") { engine.state.agents.allSatisfy { $0.alive == false } }
+        let quickThread = try #require(engine.state.agents.first { $0.id == quick.id }?.thread)
+        now += Engine.endedKept
+        engine.update()
+        #expect(engine.state.agents.isEmpty && engine.assistants == ids, "assistants only grows")
+        let sightings = [thread, asking, quickThread].map { key in
+            Sighting(kind: "claude", key: key, facts: StateMap.Facts(alive: false, evidence: "registry", turnOpen: false, waiting: .nothing),
+                     folder: spaces.path, updated: Date())
+        }
+        engine.saw(Seen(sightings: sightings))
+        #expect(engine.state.agents.isEmpty, "a woken assistant's conversation is never seen elsewhere")
+    }
+
     /// One agent stops alone (the assistant's New Conversation), and its end is no failure; the others run on.
     @Test func oneAgentStopsAlone() async throws {
         let place = try Place()
