@@ -45,28 +45,53 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1-smallest" + suffix, root: stage.home.root)
         }
-        // A turn that ends without a new space (the fake answers in words): its reply stays on the page above the field,
-        // to be answered there, since the assistant's card stays away. (A plain text is out of reach offscreen: the
-        // page's own choice is read, and d1-answer shows it.)
+        // Each suggestion sends its whole sentence, the draft kept, and so does Return in the field (the draft sent); an
+        // input method's Return builds nothing. The fake answers the first two and the field in words: each build ends
+        // without a new space, and its reply stays on the page above the field, to be answered there, since the
+        // assistant's card stays away. (A plain text is out of reach offscreen: the page's own choice is read, and
+        // d1-answer shows it.)
         shell.window.setContentSize(Stage.Size.main)
-        model.send("A page for my mornings.")
-        #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
-        #expect(BlankView.reply(in: model) == "Invented reply." && model.draft.isEmpty && !model.blocked)
+        let since = try #require((host as? NSHostingView<BlankView>)?.rootView.since)
+        model.draft = "Half written"
+        for chip in BlankView.chips.prefix(2) {
+            BlankView.suggest(chip, to: model)
+            #expect(model.building && model.draft == "Half written")
+            #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: chip.1), .reply("Invented reply.")] }))
+            #expect(BlankView.reply(in: model, since: since) == "Invented reply.")
+        }
+        #expect(BuildField.returned(shift: false, marked: true, model) == .ignored && !model.building && model.draft == "Half written")
+        model.draft = "A page for my mornings."
+        #expect(BuildField.returned(shift: false, marked: false, model) == .handled && model.building && model.draft.isEmpty)
+        #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: "A page for my mornings."), .reply("Invented reply.")] }))
+        #expect(BlankView.reply(in: model, since: since) == "Invented reply." && !model.blocked)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1-answer" + suffix, root: stage.home.root)
             let answered = await Self.read(host)
             #expect(shell.glass.isHidden && answered.contains("Who is waiting for me"), "\(answered)")
         }
-        // A suggestion sends its whole sentence, the draft kept: the build starts (the fake keeps working on the game),
-        // the field holds the sentence read only, the suggestions and templates step aside, the assistant stays away.
+        // A reply older than the page belongs to another moment: back on New Space (as after a space made opens, or a
+        // conversation in a space), the page shows none, whether or not the conversation is shown.
+        model.threadShown = true
+        shell.show(nil)
+        let fresh = try #require(shell.center.subviews.first { $0 is NSHostingView<BlankView> } as? NSHostingView<BlankView>)
+        #expect(fresh.rootView.since == model.rows.count && BlankView.reply(in: model, since: fresh.rootView.since) == nil)
+        // A reply given in a space never comes to New Space: it answers no message sent from the blank page.
+        model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+        let count = model.rows.count
+        model.send("Hello.")
+        #expect(await wait(until: { model.rows.count >= count + 2 && model.rows.last == .reply("Invented reply.") && !model.working }))
+        model.place = .blank
+        #expect(BlankView.reply(in: model, since: 0) == nil)
+        // The game: the build starts (the fake keeps working on it), the field holds the sentence read only, the
+        // suggestions and templates step aside, Stop is offered, the assistant stays away.
         model.draft = "Half written"
         BlankView.suggest(BlankView.chips[2], to: model)
         #expect(model.building && model.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[2].1)) && model.light == .working }))
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1-building" + suffix, root: stage.home.root)
-            let building = await Self.read(host)
-            #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains("Who is waiting for me"), "\(building)")
+            let building = await Self.read(fresh)
+            #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains("Who is waiting for me") && building.contains("Stop"), "\(building)")
         }
         var stopped = false
         model.engine.stopAll(within: 6) { stopped = true }

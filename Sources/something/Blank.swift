@@ -2,8 +2,8 @@
 // Return builds (⇧Return adds a line), who builds it and with which model, three suggestions that each send a whole
 // sentence, and the first three templates with See All. Without a coding agent, the notice takes the field's place.
 // While the assistant builds, the field holds the sentence sent and says what it does; the rest steps aside. The
-// assistant's card stays away here (the page is its own composer), so when a turn ends without a new space, its reply
-// stays above the field, to be answered there; a template's preview fills the page.
+// assistant's card stays away here (the page is its own composer), so when a build asked here ends without a new space
+// while the page is shown, its reply stays above the field, to be answered there; a template's preview fills the page.
 import AppKit
 import SwiftUI
 
@@ -20,6 +20,12 @@ struct BlankView: View {
 
     @Bindable var model: AssistantModel
     let library: Library, gallery: Gallery
+    /// The conversation's length when the page opened: a reply older than the page belongs to another moment.
+    let since: Int
+
+    init(model: AssistantModel, library: Library, gallery: Gallery) {
+        (self.model, self.library, self.gallery, since) = (model, library, gallery, model.rows.count)
+    }
 
     var body: some View {
         Group {
@@ -84,15 +90,18 @@ struct BlankView: View {
         return model.rows.reversed().lazy.compactMap { if case .mine(_, let text) = $0 { text } else { nil } }.first ?? ""
     }
 
-    /// The assistant's last words when its turn ended without a space (a question, an error): the last row of the
-    /// conversation started here, when it is a reply.
-    private var reply: String? { BlankView.reply(in: model) }
+    /// The assistant's last words when a build asked here ended without a space (a question, an error), while the page
+    /// stays New Space (a space made is opening).
+    private var reply: String? { library.selection == .newSpace ? BlankView.reply(in: model, since: since) : nil }
 
-    static func reply(in model: AssistantModel) -> String? {
-        guard !model.building, model.threadShown else { return nil }
-        return model.rows.reversed().lazy.compactMap { row -> String?? in
-            switch row { case .reply(let text): text; case .mine: .some(nil); default: nil }
-        }.first ?? nil
+    /// The last reply, when it came at or after row `since` and answers a message sent from the blank page; else nil.
+    static func reply(in model: AssistantModel, since: Int) -> String? {
+        let rows = model.rows
+        guard !model.building, let at = rows.lastIndex(where: { if case .reply = $0 { true } else { false } }), at >= since,
+              case .reply(let text) = rows[at], !rows[at...].contains(where: { if case .mine = $0 { true } else { false } }),
+              case .mine(let caption, _)? = rows[..<at].last(where: { if case .mine = $0 { true } else { false } }),
+              caption == "on the blank page" else { return nil }
+        return text
     }
 
     /// `text` in the agent's voice, read only, as the card draws a reply.
@@ -144,6 +153,13 @@ struct BlankView: View {
             if case .working(let step, _) = model.presence.now { Text(step).foregroundStyle(Look.Token.ink.ui).lineLimit(1) }
             Text("It opens here when it is ready. You will be asked what it may do.").lineLimit(2)
             Spacer(minLength: 0)
+            // Until the ladder (AB14) carries it, Stop is here: the card that had it stays away from this page.
+            Button { model.stop() } label: {
+                HStack(spacing: 6) { Image(systemName: "stop").font(.system(size: 9)); Text("Stop"); Text(Keys.shown("stop")).foregroundStyle(Look.Token.ink3.ui) }
+                    .font(Look.font(.ui, size: 12, weight: .medium).ui)
+            }
+            .buttonStyle(Secondary())
+            .accessibilityLabel("Stop")
         }
         .font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink2.ui)
         .padding(.horizontal, 8)
@@ -211,6 +227,18 @@ struct BuildField: View {
     let sent: String?
     @FocusState private var typing: Bool
 
+    /// What Return does in the field: nothing while an input method composes (`marked`, ignored), a new line with
+    /// `shift`, else it builds; handled then.
+    static func returned(shift: Bool, marked: Bool, _ model: AssistantModel) -> KeyPress.Result {
+        switch Field.onReturn(shift: shift, marked: marked) {
+        case .compose: return .ignored
+        case .send: model.send()
+        case .newline:
+            if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
+        }
+        return .handled
+    }
+
     var body: some View {
         let busy = sent != nil, shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         HStack(alignment: .bottom, spacing: 10) {
@@ -231,13 +259,7 @@ struct BuildField: View {
                         }
                         .onKeyPress(.return, phases: .down) { press in
                             let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
-                            switch Field.onReturn(shift: press.modifiers.contains(.shift), marked: marked) {
-                            case .compose: return .ignored
-                            case .send: model.send()
-                            case .newline:
-                                if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
-                            }
-                            return .handled
+                            return BuildField.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
                         }
                 }
             }
