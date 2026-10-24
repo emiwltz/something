@@ -492,15 +492,13 @@ import SomethingCore
     static func tool(_ item: Item) -> Row {
         let name = item.tool?.name ?? "tool", file = (item.text as NSString).lastPathComponent
         let after = item.decision?.outcome == "denied" ? " · denied" : item.tool?.status == "failed" ? " · failed" : ""
-        if item.text.hasPrefix("something guide") { return .tool(symbol: "book", words: "Read guide" + after, command: nil) }
         // A command, code (Amp's, which calls something's tools), or a tool something lent (something_check), for which the
         // driver gives the command something ran.
-        if name.hasPrefix("something_") || ["bash", "commandexecution", "execute", "shell_command", "code_exec"].contains(name.lowercased()) {
-            return .tool(symbol: "terminal", words: after, command: item.text)
-        }
-        switch name.lowercased() {
-        case "edit", "write", "multiedit", "notebookedit", "filechange", "apply_patch": return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
-        case "read": return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)
+        switch Presence.Step.of(item) {
+        case .guide: return .tool(symbol: "book", words: "Read guide" + after, command: nil)
+        case .command, .check: return .tool(symbol: "terminal", words: after, command: item.text)
+        case .edit: return .tool(symbol: "pencil", words: "Edited \(file)" + after, command: nil)
+        case .read: return .tool(symbol: "eye", words: "Read \(file)" + after, command: nil)
         default: return .tool(symbol: "wrench.and.screwdriver", words: "Used \(name)" + after, command: nil)
         }
     }
