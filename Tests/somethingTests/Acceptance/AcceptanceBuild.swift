@@ -30,7 +30,7 @@ struct AcceptanceBuild {
         let (shell, library, _) = stage.window()
         let room = try await stage.open("waiting-room", in: shell, library)
         defer { room.close() }
-        shell.waiting(1)
+        shell.waiting(1, mine: 0)
         let question = RightsQuestion(space: "Waiting room", description: nil, rights: ["state", "store"], scope: nil, missing: [],
                                       folder: nil, made: true, page: space.location.path, declared: ["state", "store"])
         let sheet = Ask.rights(question, home: stage.home.root.path).sheet
@@ -73,14 +73,14 @@ struct AcceptanceBuild {
         <div class="w"><div class="age">34<small>minutes</small></div><div><b>Amp · ~/code/shop</b><span>Asks to run the tests before touching the cart page.</span></div><button>Open Terminal</button></div>
         <p class="none">Nobody else waits. Two Claude Code sessions are working, and pi is idle.</p></body></html>
         """
-    /// The Templates page in the window, the toolbar's chip at the mockup's one request, the old composer gone (the
+    /// The Templates page in the window, the toolbar's chip at the mockup's one request, the assistant's glass hidden (the
     /// mockup shows the page alone); and the page's model.
     static func templates(_ stage: Stage, _ size: NSSize = Stage.Size.main) throws -> (Shell, Library, Gallery, NSView) {
         let (shell, library, _) = stage.window(size)
         library.select(.templates)
         shell.show(nil, templates: true)
-        shell.floating?.isHidden = true
-        shell.waiting(1)
+        shell.glass.isHidden = true
+        shell.waiting(1, mine: 0)
         let host = try #require(shell.center.subviews.first { $0 is NSHostingView<GalleryView> } as? NSHostingView<GalleryView>)
         return (shell, library, host.rootView.model, host)
     }
