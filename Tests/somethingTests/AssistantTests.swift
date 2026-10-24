@@ -1092,4 +1092,92 @@ import WebKit
         #expect(!input(home).contains { $0.contains(crafted) })
         await finish(home, model)
     }
+
+    /// A turn of a space's assistant becomes a version of that space, named by the person's sentence, and its undo:
+    /// the space the turn began on, even once the person opened another; nothing for a turn that changed nothing; Undo
+    /// and Redo by that sentence, refused while the assistant works on that space; and typing undone first.
+    @Test func aTurnThatChangedItsSpaceIsKeptAndUndoneByItsSentence() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let place = { (title: String, name: String) in
+            AssistantModel.Place.space(title: title, name: name, page: home.places.spaces.appendingPathComponent("\(name).html").path)
+        }
+        let brief = try home.space("brief", "<p>white</p>"), agents = try home.space("agents", "<p>tiles</p>")
+        let undo = WindowUndo(), changes = Changes(places: home.places, undo: undo)
+        var toasts: [(words: String, action: Toast.Action?, quiet: Bool)] = []
+        changes.find = { Spaces(root: home.places.spaces).named($0) }
+        changes.title = { ["brief": "Daily brief", "agents": "My agents"][$0] ?? $0 }
+        changes.working = { model.works(on: $0) }
+        changes.recycle = { try FileManager.default.removeItem(at: $0) }
+        changes.toast = { words, action, quiet, _ in toasts.append((words, action, quiet)) }
+        model.turnStarts = { changes.before($0) }
+        model.turnEnded = { changes.after($0, sentence: $1, who: $2) }
+        let finishing = home.root.appendingPathComponent("out/finish")
+        func end() async throws {
+            let session = model.session(for: place("Daily brief", "brief"))
+            #expect(await wait(until: { session.agent?.state == "working" }), "the turn did not start")
+            try FileManager.default.createDirectory(at: finishing.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: finishing)
+            #expect(await wait(until: { !model.works(on: "brief") }), "the turn did not end")
+        }
+
+        // The turn starts on Daily brief, which is kept as it was; the person opens My agents meanwhile.
+        model.place = place("Daily brief", "brief")
+        model.send("go-slow, make it blue.")
+        #expect(changes.versions.list("brief").map(\.kind) == [.outside] && model.works(on: "brief"))
+        model.place = place("My agents", "agents")
+        try "<p>blue</p>".write(to: brief.location, atomically: true, encoding: .utf8)
+        try await end()
+        let made = changes.versions.list("brief")
+        #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "go-slow, make it blue." && made.first?.who == "Claude Code")
+        #expect(changes.versions.list("agents").isEmpty, "the open space is not the turn's")
+        #expect(toasts.last?.words == "Changed Daily brief" && toasts.last?.action?.label == "Undo “go-slow, make it blue.” ⌘Z" && toasts.last?.quiet == false)
+        #expect(undo.undoActionName == "“go-slow, make it blue.”" && undo.undoMenuItemTitle == "Undo “go-slow, make it blue.”")
+
+        // A turn that changes nothing is no version, and says nothing; while it runs, the undo waits.
+        model.place = place("Daily brief", "brief")
+        model.send("go-slow, look at it.")
+        #expect(model.works(on: "brief"))
+        let shown = toasts.count
+        undo.undo()
+        #expect(try String(contentsOf: brief.location, encoding: .utf8) == "<p>blue</p>" && undo.canUndo && !undo.canRedo)
+        #expect(toasts.count == shown + 1 && toasts.last?.words == "Daily brief’s assistant is working · undo once it’s done" && toasts.last?.quiet == true)
+        try await end()
+        #expect(changes.versions.list("brief").count == 2 && toasts.count == shown + 1)
+
+        // Typing in a field of the window is undone first, then the change, by its sentence.
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled], backing: .buffered, defer: true)
+        let owner = UndoOwner(undo)
+        window.delegate = owner
+        let field = NSTextView(frame: window.contentLayoutRect)
+        field.allowsUndo = true
+        window.contentView?.addSubview(field)
+        window.makeFirstResponder(field)
+        field.insertText("Typed", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await wait(0.1)
+        #expect(field.undoManager === undo && undo.undoActionName != "“go-slow, make it blue.”")
+        undo.undo()
+        #expect(field.string.isEmpty && undo.undoActionName == "“go-slow, make it blue.”")
+        undo.undo()
+        #expect(try String(contentsOf: brief.location, encoding: .utf8) == "<p>white</p>")
+        #expect(toasts.last?.words == "Undone “go-slow, make it blue.”" && toasts.last?.action?.label == "Redo ⇧⌘Z")
+        #expect(changes.versions.list("brief").first?.kind == .restore && undo.redoMenuItemTitle == "Redo “go-slow, make it blue.”")
+        await wait(0.1)
+        // Redo, from the toast's action: the change again, which can be undone again.
+        toasts.last?.action?.act()
+        #expect(try String(contentsOf: brief.location, encoding: .utf8) == "<p>blue</p>" && toasts.last?.words == "Changed Daily brief")
+        // The typing undone first stays below it, to redo.
+        #expect(undo.undoActionName == "“go-slow, make it blue.”" && undo.redoActionName != undo.undoActionName)
+        #expect(try String(contentsOf: agents.location, encoding: .utf8) == "<p>tiles</p>")
+        withExtendedLifetime(owner) {}
+        await finish(home, model)
+    }
+}
+
+/// A window's delegate that gives it `undo`, as Shell does.
+final class UndoOwner: NSObject, NSWindowDelegate {
+    let undo: UndoManager
+    init(_ undo: UndoManager) { self.undo = undo }
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 }

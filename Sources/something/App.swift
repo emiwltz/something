@@ -1,10 +1,10 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
 // Info (Inspector.swift) and the assistant (Assistant.swift); the welcome at the first start (Welcome.swift); the menu bar
 // (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the panel of the
-// agents' requests; the state pushed at most four times a second; and quitting, which asks first while a request waits
-// or an agent something launched works, then denies the requests and stops the agents. Closing the window keeps the
-// app and its agents running, as a Mac app with one main window does; the open space closes with it, and opens again
-// when the window comes back.
+// agents' requests; each turn's change kept and undone by its sentence (Changes.swift); the state pushed at most four
+// times a second; and quitting, which asks first while a request waits or an agent something launched works, then
+// denies the requests and stops the agents. Closing the window keeps the app and its agents running, as a Mac app with
+// one main window does; the open space closes with it, and opens again when the window comes back.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -23,6 +23,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     lazy var shell = Shell(library: library, info: info, assistant: assistant, autosave: true)
     lazy var panels = Panels(source: engine)
     lazy var menuBar = MenuBar(builders: self)
+    /// Each turn's change as a version, and its undo by the person's sentence.
+    lazy var changes = Changes(places: places, undo: shell.undo)
     /// The open space. One at a time: opening another closes it.
     var current: SpaceView?
     var pushing = false
@@ -100,6 +102,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             _ = self?.shell.toast(words, action: Toast.Action(label: "Back to New Space") { self?.library.select(.newSpace) })
         }
         assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
+        changes.follow(assistant, in: shell, library: library)
         assistant.ended = { [weak self] in
             guard let self else { return }
             library.relist()

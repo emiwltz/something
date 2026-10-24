@@ -5,8 +5,10 @@
 // message, never before, and told at each message which space is open; a message written while a turn runs held until
 // it ends, and Take Back; Stop, New Conversation, the switch to another builder, and what went wrong; sleep (after the
 // Preferences' delay, past the cap of awake assistants, or when the person asks), and the wake on the next message,
-// which resumes the conversation a space keeps when its kind can. The engine keeps every space away from this agent
-// (Bridge.visible); something writes to it on its own only its context line and Ask to Fix, never a page's text.
+// which resumes the conversation a space keeps when its kind can. Each turn of a space's conversation is said when it
+// begins and when it ends, so that the window keeps the space as each turn found and left it. The engine keeps every
+// space away from this agent (Bridge.visible); something writes to it on its own only its context line and Ask to Fix,
+// never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -57,6 +59,11 @@ import SomethingCore
     /// The window's: opening a space said ready, and, when a build from the blank page ended, its space.
     @ObservationIgnored var openReady: (String) -> Void = { _ in }
     @ObservationIgnored var ended: () -> Void = {}
+    /// A turn of a space's conversation begins, and ends with the person's sentence and the agent's name: the window
+    /// keeps that space as it was before, then what the turn made of it (Changes). The session's space, wherever the
+    /// person went meanwhile.
+    @ObservationIgnored var turnStarts: (_ space: String) -> Void = { _ in }
+    @ObservationIgnored var turnEnded: (_ space: String, _ sentence: String, _ who: String) -> Void = { _, _, _ in }
 
     /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
     /// card stays as it was, only its content changing: each place shows its own conversation.
@@ -223,6 +230,15 @@ import SomethingCore
                 ended()
                 if self.before?.session === built { self.before = nil }
             }
+        }
+        // A turn that may have changed its space ended, however it ended: before the next starts, it is kept.
+        for each in sessions.values {
+            guard let changing = each.changing, let space = each.space, !each.launching else { continue }
+            let light = light(each)
+            let answered = each.turn.map { $0.id != changing.after && $0.state != "working" } == true && ![.working, .waiting].contains(light)
+            guard answered || each.id == nil || each.stopped || light == .error || each.agent?.alive == false else { continue }
+            each.changing = nil
+            turnEnded(space, changing.sentence, name(of: each))
         }
         // A turn ended: the oldest held message of its conversation leaves, one per turn, as the mockup sends them.
         for each in sessions.values {
@@ -689,6 +705,12 @@ import SomethingCore
         idle(session) && session !== self.session && resumable(session.kind ?? "")
     }
 
+    /// Whether an assistant works on the space `name` now: starting, in a turn, or waiting for the person. Its change
+    /// cannot be undone meanwhile: the restore would mix with what it writes.
+    func works(on name: String) -> Bool {
+        sessions.values.contains { $0.space == name && ($0.launching || $0.changing != nil || [.working, .waiting].contains(light($0))) }
+    }
+
     /// Awake with nothing under way: no turn running or waiting, no message held, not starting, not the build watched.
     /// An agent whose state nobody can read is not idle: something never guesses.
     private func idle(_ session: Session) -> Bool {
@@ -808,6 +830,10 @@ import SomethingCore
     func deliver(_ message: String, to session: Session) {
         guard session.kind != nil else { return }
         (session.last, session.failure, session.active) = (message, nil, clock())
+        if let space = session.space, session.changing == nil {
+            session.changing = (AssistantModel.shown(message).text, session.turn?.id)
+            turnStarts(space)
+        }
         if session.launching { return session.queued.append(message) }
         if let id = session.id, session.agent?.alive != false, !session.stopped {
             do { _ = try engine.deliver(message, to: id, when: "next") } catch { session.failure = error.sentence }

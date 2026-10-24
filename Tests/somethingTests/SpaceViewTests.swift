@@ -642,6 +642,29 @@ import WebKit
         #expect(try await run(window, "return document.getElementById('word') === null && window.done === undefined") as? Bool == true)
     }
 
+    /// A reload keeps where the person scrolled the page to, read and given back from something's world; a reload
+    /// that brings another page of the space starts at its top, and the page's own world sees no handler.
+    @Test func aReloadKeepsTheScroll() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let tall = "<div style='height: 4000px'>tall</div><script>window.done = true</script>"
+        let space = try home.space("tall", page(nil, tall))
+        let window = try await home.window(space)
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        #expect(try await run(window, "return window.webkit?.messageHandlers?.scrolled === undefined") as? Bool == true)
+        _ = try await run(window, "scrollTo(0, 900); return 0")
+        #expect(await wait(until: { window.scrolled?.y == 900 }), "the scroll was not said: \(String(describing: window.scrolled))")
+        try page(nil, "<p>changed</p>" + tall).write(to: space.location, atomically: true, encoding: .utf8)
+        window.load()
+        try await ready(window)
+        for _ in 0..<100 where try await run(window, "return scrollY") as? Double != 900 { await wait(0.05) }
+        #expect(try await run(window, "return [scrollY, document.body.textContent.startsWith('changed')]") as? [AnyHashable] == [900, true])
+        // Another page of the space is not where the last one was read.
+        #expect(SpaceView.scrollScript(back: ("/other.html", 0, 900)).contains(#"["/other.html", 0.0, 900.0]"#))
+    }
+
     /// A page whose process ends is said stopped; after two stops a changed file no longer reloads it, until the
     /// person's Reload. Ask to Fix names only the title, the file and something's own sentence.
     @Test func aPageThatStopsTwiceWaitsForReload() async throws {

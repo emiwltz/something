@@ -5,7 +5,9 @@
 // when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs. An
 // error the page does not catch is kept by its code, and the first one's line for the person's eyes only (ScriptError,
 // over the page). A page whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file
-// no longer reloads it, so a page that crashes at once is not reloaded in a loop, until the person reloads it.
+// no longer reloads it, so a page that crashes at once is not reloaded in a loop, until the person reloads it. A
+// reload keeps where the page was scrolled to, as long as it is the same page of the space: an undo, a turn or a
+// change outside something leaves the person where they were reading.
 // What the space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents
@@ -67,6 +69,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var loads = 0
     /// Whether the person's assistant made this space while they waited for it: the rights sheet says so.
     var made = false
+    /// Where the person last scrolled the space's page to, and which page of the space it was, from something's own
+    /// world; nil until they scroll. A reload goes back there.
+    private(set) var scrolled: (page: String, x: Double, y: Double)?
 
     /// The space `space` of the spaces folder, not yet loaded. `share` is the folder of something.js; `rules` is
     /// Lockdown's rule list. Throws a `SpaceError` when something.js cannot be read: without it the space could not
@@ -88,6 +93,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         area.addSubview(web)
         SpaceView.hold(web, by: self)
         web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "fault")
+        web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "scrolled")
     }
 
     /// Reports each error the space's page leaves uncaught, its code and its line (message, file and line number), from
@@ -104,6 +110,28 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             message: said(() => event.reason instanceof Error ? `${event.reason.name}: ${event.reason.message}` : event.reason)}));
         }
         """
+
+    /// Says where the space's page is scrolled to, a moment after it stops moving and when it goes, from something's
+    /// world, which the page cannot see; and, once it has loaded, scrolls the same page back to `back`.
+    static func scrollScript(back: (page: String, x: Double, y: Double)?) -> String {
+        let back = back.map { "[\(SpaceView.json(string: $0.page)), \($0.x), \($0.y)]" } ?? "null"
+        return """
+            if (window !== top && parent === top) {
+              const back = \(back), said = () => webkit.messageHandlers.scrolled.postMessage([location.pathname, scrollX, scrollY]);
+              if (back && back[0] === location.pathname) addEventListener("load", () => scrollTo({ left: back[1], top: back[2], behavior: "instant" }), { once: true });
+              let later = 0;
+              addEventListener("scroll", () => { clearTimeout(later); later = setTimeout(said, 100); }, { passive: true });
+              addEventListener("pagehide", said);
+            }
+            """
+    }
+
+    /// `text` as a JSON string, for a script.
+    static func json(string text: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        return String(decoding: (try? encoder.encode(text)) ?? Data("\"\"".utf8), as: UTF8.self)
+    }
 
     /// The text of something.js in `share`. Throws a `SpaceError` when it cannot be read: without it the space could
     /// not reach anything.
@@ -255,6 +283,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         controller.removeAllUserScripts()
         SpaceView.scripts(bridge, granted).forEach(controller.addUserScript)
         controller.addUserScript(WKUserScript(source: SpaceView.faultScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
+        controller.addUserScript(WKUserScript(source: SpaceView.scrollScript(back: scrolled), injectionTime: .atDocumentStart,
+                                              forMainFrameOnly: false, in: Lockdown.world))
         staged.forEach(controller.addUserScript)
     }
 
@@ -399,6 +429,11 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// blocked until the next reload. A link of a frame inside the space goes nowhere. Or an error (`faultScript`).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty else { return }
+        if message.name == "scrolled" {
+            guard let place = message.body as? [Any], place.count == 3, let page = place[0] as? String,
+                  let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
+            return scrolled = (page, x, y)
+        }
         if message.name == "fault" {
             guard let fault = message.body as? [String: Any], let code = fault["code"] as? String else { return }
             return self.fault(code, message: fault["message"] as? String ?? "", file: fault["file"] as? String, line: fault["line"] as? String)

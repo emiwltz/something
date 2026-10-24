@@ -1,7 +1,7 @@
 // One conversation with a builder: its kind, the model and effort it is launched with, its agent and thread as the
 // engine's state shows them, what went wrong, what the person is writing to it, the messages waiting for its launch or
 // for its turn to end, and the space it is about; the turns of its earlier agent that a resumed one continues, and
-// whether it began because the last one could not be picked up; and what a space's conversation keeps across sleep and
+// whether it began because the last one could not be picked up; the turn under way that may change its space; and what a space's conversation keeps across sleep and
 // restarts, in assistants/<name>.json: its kind, model, effort, thread, the kind that reported it, and last 60 items.
 // A class, so a launch that ends after a new conversation began can tell it was for another one.
 import Foundation
@@ -52,6 +52,9 @@ import SomethingCore
     /// What the person is writing to it, not sent yet.
     var draft = ""
     @ObservationIgnored var releasedAfter: String??
+    /// The turn under way that may change its space: the person's sentence, and the turn its agent had before, so that
+    /// its end is the end of another turn. Its version is taken when it ends (AssistantModel.turnEnded).
+    @ObservationIgnored var changing: (sentence: String, after: String?)?
     /// The turns its agent had when Start Again resumed its thread in a new one, which reports only the turns it runs:
     /// the conversation shows both. And, for the new conversation Start Again or a wake began, the line that says so.
     var kept: [Turn] = []

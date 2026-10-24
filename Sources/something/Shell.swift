@@ -44,6 +44,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private(set) var veil: NSWindow?
     /// The first-launch film while it plays over this window (Film.swift).
     var film: Film?
+    /// The window's undo manager: typing, and the changes of the spaces (Changes.swift).
+    let undo = WindowUndo()
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -133,6 +135,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         let side = split.splitViewItems.first.flatMap { $0.isCollapsed ? nil : $0.viewController.view.frame.width } ?? 0
         return sheet is Sheet ? Sheet.place(in: window, sidebar: side) : rect
     }
+
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
