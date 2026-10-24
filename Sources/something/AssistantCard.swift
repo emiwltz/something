@@ -193,7 +193,7 @@ struct AssistantCard: View {
                     Text("Still working").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
                     Button { model.stop() } label: {
                         HStack(spacing: 6) {
-                            Text("Stop").fontWeight(.semibold)
+                            Text("Stop").font(Look.font(.ui, size: 12, weight: .semibold).ui)
                             Text(Keys.shown("stop")).font(Look.font(.ui, size: 10, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui)
                                 .padding(.vertical, 2).padding(.horizontal, 4)
                                 .background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 5))
@@ -211,7 +211,7 @@ struct AssistantCard: View {
                 Spacer(minLength: 0)
             case .changed(let file):
                 Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Look.Token.ok.ui).frame(width: 13)
-                Text("Changed ") + Text(file).fontWeight(.semibold)
+                Text("Changed ") + Text(file).font(Look.font(.ui, size: 12, weight: .semibold).ui)
                 Spacer(minLength: 4)
                 Text("Just now").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
             }
@@ -229,7 +229,7 @@ struct AssistantCard: View {
         let count = model.held.count
         return HStack(spacing: 7) {
             Image(systemName: "clock").font(.system(size: 10.5))
-            (Text("\(count) message\(count > 1 ? "s" : "") wait\(count > 1 ? "" : "s")").fontWeight(.semibold).foregroundColor(Look.Token.ink.ui)
+            (Text("\(count) message\(count > 1 ? "s" : "") wait\(count > 1 ? "" : "s")").font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui)
                 + Text(count > 1 ? " · they send when it finishes" : " · sends when it finishes"))
                 .lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)

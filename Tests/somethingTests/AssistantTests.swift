@@ -19,9 +19,9 @@ import WebKit
     /// fails it, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "counters bigger" retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
-    /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" starts
-    /// editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then checks it
-    /// and never ends its turn. An interrupt ends the running turn as Claude Code does.
+    /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
+    /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
+    /// checks it and never ends its turn. An interrupt ends the running turn as Claude Code does.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -85,6 +85,8 @@ import WebKit
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"ub3"}' ;;
         *'weather corner'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_w0","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w0","name":"Read","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw0","session_id":"s1"}'
+          echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w0","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw0","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
           later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
         *'"subtype":"initialize"'*)
@@ -451,9 +453,11 @@ import WebKit
         try await Task.sleep(for: .milliseconds(500))
         #expect(sent("Taken back.") == 0 && sent("Stopped back.") == 0 && sent("Second message") == 1)
         // A turn that fails releases nothing: the held text comes back to the field rather than wait for ever. The
-        // stopped turn's waiter takes its finish first.
+        // stopped turn's waiter takes its finish first; its late "done" must be read before the next turn starts, or it
+        // would end that turn as a success (seen under a loaded run).
         try Data().write(to: end)
         #expect(await wait(until: { !FileManager.default.fileExists(atPath: end.path) && model.light == .ready }))
+        try await Task.sleep(for: .seconds(1))
         model.draft = "go-wrong, third."
         model.send()
         #expect(await wait(until: { model.agent?.state == "working" }))
@@ -477,15 +481,31 @@ import WebKit
         model.draft = "Hello."
         model.send()
         #expect(await wait(until: { model.light == .ready }))
-        model.clock = { Date().addingTimeInterval(Presence.late - 0.4) }
+        model.clock = { Date().addingTimeInterval(Presence.late - 1) }
         model.draft = "Add a weather corner."
         model.send()
-        #expect(await wait(5) { if case .working(_, late: true)? = model.presence.now { true } else { false } }, "\(String(describing: model.presence.now))")
+        let late = { () -> Bool? in if case .working(_, late: let late)? = model.presence.now { late } else { nil } }
+        #expect(await wait(5) { late() == false }, "\(String(describing: model.presence.now))")
+        // The presence reads the clock each time it is asked: only an observer told by the timer proves it fires.
+        var (beat, told) = (model.beat, toldOfPresence(model))
+        #expect(await wait(5) { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
+        #expect(late() == true, "\(String(describing: model.presence.now))")
         model.clock = { Date().addingTimeInterval(Presence.changedFor - 1.5) }
         try Data().write(to: home.root.appendingPathComponent("out/finish"))
         #expect(await wait(5) { model.presence.now == .changed("brief.html") }, "\(String(describing: model.presence.now))")
-        #expect(await wait(5) { model.presence.now == nil }, "\(String(describing: model.presence.now))")
+        (beat, told) = (model.beat, toldOfPresence(model))
+        #expect(await wait(5) { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
+        #expect(model.presence.now == nil, "\(String(describing: model.presence.now))")
         await finish(home, model)
+    }
+
+    /// Whether an observer of the presence has been told of a change since this was called, as the card and the
+    /// sticker are.
+    private func toldOfPresence(_ model: AssistantModel) -> () -> Bool {
+        final class Flag: @unchecked Sendable { var raised = false }
+        let flag = Flag()
+        withObservationTracking { _ = model.presence.now } onChange: { flag.raised = true }
+        return { flag.raised }
     }
 
     /// After 30 minutes without a turn, by the assistant's clock, the agent stops; the drawer says so, and the next

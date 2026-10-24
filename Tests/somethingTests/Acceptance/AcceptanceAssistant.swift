@@ -268,6 +268,10 @@ struct AcceptanceAssistant {
         #expect(model.held == ["Also make the date bigger."] && model.draft.isEmpty)
         #expect(model.placeholder == "Write another request…" && model.messageCount == 3)
         #expect(model.stops && model.presence.now == .working("Editing brief.html…", late: false))
+        // Above the held message, the turn's tool lines so far, as the reference draws them.
+        let turn = Array(model.rows.suffix(2))
+        if case .mine(_, let text)? = turn.first { #expect(text == "Add a small weather corner, top right.") } else { Issue.record("rows: \(model.rows)") }
+        #expect(turn.last == .tool(failed: false, words: "Read brief.html", command: nil), "rows: \(model.rows)")
         // 11 s into the turn, as the reference draws it: "Still working" and Stop beside the line.
         let later = Date().addingTimeInterval(11)
         model.clock = { later }

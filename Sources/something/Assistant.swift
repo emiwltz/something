@@ -146,17 +146,19 @@ import SomethingCore
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
         if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
+        // A build watched is concluded on the refresh where its turn ends, before a held message starts the next.
+        if let before, !launching {
+            let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
+            if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
+                ended()
+                self.before = nil
+            }
+        }
         // A turn ended: the oldest held message leaves, one per turn, as the mockup sends them.
         if let next = session.held.first, light == .ready, !launching, session.releasedAfter != .some(session.turn?.id) {
             session.held.removeFirst()
             session.releasedAfter = .some(session.turn?.id)
-            return deliver(next)
-        }
-        guard let before, !launching else { return }
-        let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
-        if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
-            ended()
-            self.before = nil
+            deliver(next)
         }
     }
 
