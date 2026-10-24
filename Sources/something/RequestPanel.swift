@@ -400,7 +400,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     func control(_ control: NSControl, textView: NSTextView, doCommandBy command: Selector) -> Bool {
         guard command == #selector(cancelOperation(_:)) else { return false }
         control.stringValue = ""
-        makeFirstResponder(nil)
+        _ = makeFirstResponder(nil)
         return true
     }
 
