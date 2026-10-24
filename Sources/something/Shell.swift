@@ -227,6 +227,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let control = controls[$0.itemIdentifier]
             $0.isEnabled = space && control?.action != nil && (point || $0.itemIdentifier != Shell.point)
             control?.isEnabled = $0.isEnabled
+            // A borderless button with a tint draws the same enabled or not; the mockup's disabled .ib is at .32.
+            control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
     }
 

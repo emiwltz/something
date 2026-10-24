@@ -124,6 +124,22 @@ enum Words {
         }
     }
 
+    /// What an agent at work is doing, as its conversation `thread` says: "editing brief.html" while a file tool runs
+    /// on one file, "changing files" or "running a command" by the running tool's kind, else "working", since the
+    /// text of a tool item is whatever its driver gives (a path, a patch, a command) and nothing more is known.
+    static func doing(_ thread: AgentThread?) -> String {
+        guard let turn = thread?.turns.last, turn.state == "working",
+              let item = turn.items.last(where: { $0.tool?.status == "running" }), let tool = item.tool else { return "working" }
+        switch kinds[tool.name] {
+        case .file?:
+            let path = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let one = !path.isEmpty && !path.contains(where: \.isWhitespace) && !item.truncated
+            return one ? "editing " + (path as NSString).lastPathComponent : "changing files"
+        case .command?: return "running a command"
+        default: return "working"
+        }
+    }
+
     /// The effect of a request, said before its exact text, in the mockup's words: by its tool's kind, in the space
     /// titled `space` when known. Its folder has a row of its own in the panel, not a place in this sentence.
     static func effect(_ tool: String?, space: String?) -> String {

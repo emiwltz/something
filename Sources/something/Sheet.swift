@@ -132,9 +132,10 @@ final class Sheet: NSPanel {
             NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16)])
             return tile
         case .sign:
-            // The app's own tile stays light by night, as its icon does.
-            let tile = Box(NSImageView(image: Sign.image(.listen, side: 30)), fill: .bg, ring: .line2, radius: 11,
-                           insets: NSEdgeInsets(top: 7, left: 7, bottom: 7, right: 7))
+            // The app's own tile stays light by night, as its icon does; the mockup's 30-point sign draws its corners
+            // about 22 points wide, which a 25-point image of ours does, in the same 44-point tile.
+            let tile = Box(NSImageView(image: Sign.image(.listen, side: 25)), fill: .bg, ring: .line2, radius: 11,
+                           insets: NSEdgeInsets(top: 9.5, left: 9.5, bottom: 9.5, right: 9.5))
             tile.appearance = NSAppearance(named: .aqua)
             return tile
         }

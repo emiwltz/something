@@ -212,6 +212,22 @@ import WebKit
         #expect(App.leaving(agents: [agent("idle", state: "idle")], waiting: [], who: { _ in Asker(program: "") }, space: { _ in nil }).isEmpty)
     }
 
+    /// The quit alert says what each agent at work is doing when its running tool says it, and "working" otherwise.
+    @Test func quittingSaysWhatEachAgentIsDoing() {
+        func thread(_ tool: String, _ text: String, status: String = "running", turn: String = "working") -> AgentThread {
+            let item = Item(id: "i", kind: "tool", author: "agent", text: text, at: "2026-10-17T09:00:00Z", tool: Tool(name: tool, status: status))
+            return AgentThread(id: "t", agent: "a", title: nil, started: nil,
+                               turns: [Turn(id: "u", state: turn, started: nil, ended: nil, items: [item])])
+        }
+        #expect(Words.doing(thread("Edit", "/Users/example/something/spaces/brief.html")) == "editing brief.html")
+        #expect(Words.doing(thread("edit", "*** Begin Patch\n*** Update File: a.html")) == "changing files")
+        #expect(Words.doing(thread("Bash", "make test")) == "running a command")
+        #expect(Words.doing(thread("Edit", "brief.html", status: "done")) == "working")
+        #expect(Words.doing(thread("Edit", "brief.html", turn: "done")) == "working")
+        #expect(Words.doing(thread("Read", "brief.html")) == "working")
+        #expect(Words.doing(nil) == "working")
+    }
+
     /// AGENTS.md and CLAUDE.md are written when missing, written again while they keep something's marker, and left
     /// alone once the person removed it.
     @Test func theKnowledgeFilesAreWrittenUnderTheMarkerOnly() throws {

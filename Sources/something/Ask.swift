@@ -418,7 +418,7 @@ enum Ask {
         }
         let words = Words.quit(requests: leaving.requests.count, working: leaving.working.count)
         return Sheet(icon: .sign, title: words.title,
-                     rows: leaving.requests.map { row($0, .wait, "will be denied", bad: true) } + leaving.working.map { row($0, .think, "working", bad: false) },
+                     rows: leaving.requests.map { row($0, .wait, "will be denied", bad: true) } + leaving.working.map { row($0, .think, $0.doing, bad: false) },
                      fine: words.fine, actions: [.init(title: "Quit", role: .secondary), .init(title: "Cancel", role: .primary)], alert: true)
     }
 

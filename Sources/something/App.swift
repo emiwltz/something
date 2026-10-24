@@ -366,20 +366,25 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// What quitting ends now, from the app's own sources.
     func leaving() -> Leaving {
-        App.leaving(agents: engine.state.agents, waiting: panels.queue.waiting, who: who) { agent in
+        App.leaving(agents: engine.state.agents, threads: engine.state.threads, waiting: panels.queue.waiting, who: who) { agent in
             RequestQueue.space(of: agent.id, assistant: self.engine.assistants.contains(agent.id), place: self.assistant.place,
                                launches: self.launches.ids).map { self.library.entry($0)?.title ?? $0 }
         }
     }
 
     /// What quitting ends: the requests `waiting`, oldest first, each named as the panel names it (`who`); then the
-    /// agents something launched that are alive, work and wait for nothing, each by its space's title (`space`).
-    static func leaving(agents: [Agent], waiting: [Request], who: (Request) -> Asker, space: (Agent) -> String?) -> Leaving {
+    /// agents something launched that are alive, work and wait for nothing, each by its space's title (`space`) and
+    /// what its conversation in `threads` says it is doing.
+    static func leaving(agents: [Agent], threads: [AgentThread] = [], waiting: [Request], who: (Request) -> Asker,
+                        space: (Agent) -> String?) -> Leaving {
         let working = agents.filter { agent in
             agent.origin == "launched" && agent.alive == true && agent.state == "working" && !waiting.contains { $0.agent == agent.id }
         }
         return Leaving(requests: waiting.map { let who = who($0); return Leaving.Row(id: $0.id, space: who.space, program: who.program) },
-                       working: working.map { Leaving.Row(id: $0.id, space: space($0), program: Registry.app.name(of: $0.kind)) })
+                       working: working.map { agent in
+                           Leaving.Row(id: agent.id, space: space(agent), program: Registry.app.name(of: agent.kind),
+                                       doing: Words.doing(threads.first { $0.agent == agent.id }))
+                       })
     }
 
     /// Quitting: when `leaving` holds anything, `confirm` asks the person first. Then each request waiting is denied,
@@ -406,9 +411,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 }
 
 /// What quitting ends: the requests waiting, which it denies, and the agents at work, which it stops. A row is a
-/// request's id or an agent's, the title of its space (nil when none is known) and its program's name.
+/// request's id or an agent's, the title of its space (nil when none is known), its program's name and, for an agent,
+/// what it is doing.
 struct Leaving: Equatable {
-    struct Row: Equatable { var id: String, space: String?, program: String }
+    struct Row: Equatable { var id: String, space: String?, program: String, doing = "working" }
     var requests: [Row] = [], working: [Row] = []
     var isEmpty: Bool { requests.isEmpty && working.isEmpty }
 }

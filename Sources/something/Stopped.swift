@@ -110,7 +110,9 @@ final class Stopped: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        Look.Token.bg.color.withAlphaComponent(0.75).setFill()
+        // The mockup's page at .25 opacity, blurred: without the blur (cacheDisplay, or a reduced-transparency Mac)
+        // the page would read too clearly, so the veil leaves less of it.
+        Look.Token.bg.color.withAlphaComponent(0.88).setFill()
         bounds.fill()
         let shape = NSBezierPath(roundedRect: card.frame, xRadius: Look.card, yRadius: Look.card)
         for shade in Look.float(effectiveAppearance) {

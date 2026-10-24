@@ -435,10 +435,10 @@ struct AcceptanceTrust {
     /// agent is stopped.
     @Test("e9: quit while assistants work") func e9() async throws {
         let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex")],
-                              working: [.init(id: "a2", space: "Daily brief", program: "Claude Code"),
+                              working: [.init(id: "a2", space: "Daily brief", program: "Claude Code", doing: "editing brief.html"),
                                         .init(id: "a3", space: "Project watch", program: "Claude Code")])
         let sheet = try await quit(leaving, "e9", texts: ["1 request waits and 2 assistants are working. Quit anyway?",
-                                              "My agents · Codex", "will be denied", "Daily brief · Claude Code", "working",
+                                              "My agents · Codex", "will be denied", "Daily brief · Claude Code", "editing brief.html",
                                               "Project watch · Claude Code", "working",
                                               "Quitting denies this request. It stops those working in the middle of a turn; what they already changed stays."])
         #expect(sheet.title == "1 request waits and 2 assistants are working. Quit anyway?")
@@ -484,10 +484,10 @@ struct AcceptanceTrust {
     /// ⌘Q while two requests wait and one assistant works: each request is named, "will be denied"; Cancel is the default.
     @Test("e15: quit with requests") func e15() async throws {
         let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex"), .init(id: "r2", space: "Project watch", program: "Claude Code")],
-                              working: [.init(id: "a3", space: "Daily brief", program: "Claude Code")])
+                              working: [.init(id: "a3", space: "Daily brief", program: "Claude Code", doing: "editing brief.html")])
         let sheet = try await quit(leaving, "e15", texts: ["2 requests wait and 1 assistant is working. Quit anyway?",
                                                "My agents · Codex", "will be denied", "Project watch · Claude Code", "will be denied",
-                                               "Daily brief · Claude Code", "working",
+                                               "Daily brief · Claude Code", "editing brief.html",
                                                "Quitting denies these requests. It stops the one working in the middle of a turn; what it already changed stays."])
         #expect(sheet.title == "2 requests wait and 1 assistant is working. Quit anyway?")
     }
