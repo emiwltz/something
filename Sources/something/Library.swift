@@ -242,6 +242,11 @@ import SomethingCore
         }
     }
 
+    /// Shows `template`'s own file in the Finder.
+    func revealTemplate(_ template: Template) {
+        reveal(share.appendingPathComponent("templates/\(template.id).html"))
+    }
+
     /// Makes `template` a new space, under its name or the first free one after it (agents-2, agents-3…), and opens
     /// it. A template that follows a folder asks for it first, and the copy follows the one chosen; Cancel makes
     /// nothing. Says what failed. A second call before the first space opened does nothing.

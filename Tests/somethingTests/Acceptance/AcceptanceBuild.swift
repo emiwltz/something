@@ -77,8 +77,14 @@ struct AcceptanceBuild {
         gallery.shown = .agents
         #expect(gallery.cards(library.templates).map(\.id) == ["agents", "project"])
         gallery.shown = .all
+        // The cards as drawn: their left edges make three columns, then two in the narrow window.
+        let columns = { Set(gallery.drawn.values.map { $0.minX.rounded() }).count }
+        #expect(gallery.drawn.count == 6 && columns() == 3, "\(gallery.drawn)")
+        // Forgotten first, so that only cards drawn at the new size count.
+        gallery.drawn = [:]
         shell.window.setContentSize(NSSize(width: 760, height: 680))
-        #expect(GalleryView.columns(760 - 236 - 80) == 2 && GalleryView.columns(1200 - 236 - 80) == 3)
+        await wait(0.3)
+        #expect(gallery.drawn.count == 6 && columns() == 2, "\(gallery.drawn)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5-narrow" + suffix, root: stage.home.root)
         }

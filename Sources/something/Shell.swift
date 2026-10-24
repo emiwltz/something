@@ -243,8 +243,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         touring = nil
         guard let space else {
             page = nil
-            put(templates ? Shell.hosted(GalleryView(library: library)) : Shell.hosted(BlankView(model: assistant, library: library)))
-            return templates ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
+            let gallery = Gallery(told: { [weak library] in library?.heading($0, $1) })
+            put(templates ? Shell.hosted(GalleryView(library: library, model: gallery)) : Shell.hosted(BlankView(model: assistant, library: library)))
+            return templates ? bare(Gallery.page.0, Gallery.page.1) : bare("New Space", "")
         }
         page = space.blocked.isEmpty ? space.web : nil
         if space.blocked.isEmpty {

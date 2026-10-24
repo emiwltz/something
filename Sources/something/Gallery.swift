@@ -22,6 +22,8 @@ struct Template: Identifiable {
     }
 
     let id: String, title: String, line: String, rights: [String], follows: Bool, preview: NSImage?
+    /// The page's own colour, under its picture in Preview; read once here, not at each drawing.
+    let ground: NSColor?
 
     /// The names of the templates `share`/templates holds, in their order.
     static func present(_ share: URL) -> [String] {
@@ -34,9 +36,16 @@ struct Template: Identifiable {
         return present(share).compactMap { name in
             guard let space = Spaces(root: folder).named(name),
                   let declared = Declaration.read(space, home: URL(fileURLWithPath: "/"), kinds: Registry.app.kinds).declaration else { return nil }
+            let picture = NSImage(contentsOf: folder.appendingPathComponent("\(name).png"))
             return Template(id: name, title: declared.title, line: declared.description ?? "", rights: declared.rights,
-                            follows: declared.folder == placeholder, preview: NSImage(contentsOf: folder.appendingPathComponent("\(name).png")))
+                            follows: declared.folder == placeholder, preview: picture, ground: picture.flatMap(ground))
         }
+    }
+
+    /// The colour of `picture` near its bottom left corner, where a page's background shows.
+    static func ground(_ picture: NSImage) -> NSColor? {
+        guard let cg = picture.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        return NSBitmapImageRep(cgImage: cg).colorAt(x: 1, y: cg.height - 2)
     }
 
     /// Its filter on the Templates page: what it is for, not what it may do.
@@ -66,13 +75,20 @@ struct Template: Identifiable {
 
 /// What the Templates page shows: a filter, the card under the pointer, or one template's preview.
 @Observable final class Gallery {
+    /// The page's title and subtitle in the toolbar when no preview is open.
+    static let page = ("Templates", "Start from one, then make it yours")
+
     var shown = Template.Category.all
     /// The card under the pointer, whose actions show (the focus shows them too).
     var hovered: Template.ID?
     /// The template whose preview fills the view; nil shows the cards.
     private(set) var previewing: Template?
     /// Told the toolbar's title and subtitle each time the preview opens or closes.
-    @ObservationIgnored var told: (String, String) -> Void = { _, _ in }
+    @ObservationIgnored let told: (String, String) -> Void
+    /// Where each card was last drawn in the window, so that a test checks the columns the page shows.
+    @ObservationIgnored var drawn: [Template.ID: CGRect] = [:]
+
+    init(told: @escaping (String, String) -> Void = { _, _ in }) { self.told = told }
 
     /// The templates of `templates` the filter keeps, in their order.
     func cards(_ templates: [Template]) -> [Template] {
@@ -92,18 +108,13 @@ struct Template: Identifiable {
 
     /// The toolbar's title and subtitle in this state.
     var heading: (String, String) {
-        previewing.map { ($0.title, "Template preview") } ?? ("Templates", "Start from one, then make it yours")
+        previewing.map { ($0.title, "Template preview") } ?? Gallery.page
     }
 }
 
 struct GalleryView: View {
     let library: Library, model: Gallery
     @FocusState private var focused: Template.ID?
-
-    init(library: Library, model: Gallery = Gallery()) {
-        (self.library, self.model) = (library, model)
-        model.told = { [weak library] in library?.heading($0, $1) }
-    }
 
     /// The columns of cards in `width`: three, two in a narrow window, one when even two would be cramped.
     static func columns(_ width: CGFloat) -> Int { width >= 650 ? 3 : width >= 380 ? 2 : 1 }
@@ -206,6 +217,7 @@ struct GalleryView: View {
         .background(Grabbed(lifted: lifted, radius: 12))
         .offset(x: lifted ? -1 : 0, y: lifted ? -1 : 0)
         .animation(.timingCurve(0.16, 1, 0.3, 1, duration: Look.duration(0.22, Look.motion(library.preferences.motion))), value: lifted)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { model.drawn[template.id] = $0 }
         .onHover { inside in
             if inside { model.hovered = template.id } else if model.hovered == template.id { model.hovered = nil }
         }
@@ -221,7 +233,7 @@ struct GalleryView: View {
             }
             .buttonStyle(.plain).foregroundStyle(Look.Token.ink.swiftUI)
             .accessibilityLabel("Preview")
-            Button { library.reveal(library.share.appendingPathComponent("templates/\(template.id).html")) } label: {
+            Button { library.revealTemplate(template) } label: {
                 Image(systemName: "macwindow").font(.system(size: 12)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain).foregroundStyle(Look.Token.ink.swiftUI)
@@ -289,14 +301,8 @@ struct GalleryView: View {
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .background(Color(nsColor: template.preview.flatMap(Self.ground) ?? Look.Token.bg.color))
+            .background(Color(nsColor: template.ground ?? Look.Token.bg.color))
         }
-    }
-
-    /// The colour of `picture` near its bottom left corner, where a page's background shows.
-    static func ground(_ picture: NSImage) -> NSColor? {
-        guard let cg = picture.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        return NSBitmapImageRep(cgImage: cg).colorAt(x: 1, y: cg.height - 2)
     }
 }
 

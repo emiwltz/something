@@ -133,7 +133,7 @@ import WebKit
             return gallery.cards(templates).map(\.id)
         }
         #expect(kept == [TemplatesTests.names, ["agents", "project"], ["brief", "logbook"], ["stack", "pet"]])
-        let made = { (rights: [String]) in Template(id: "x", title: "X", line: "", rights: rights, follows: false, preview: nil).needs }
+        let made = { (rights: [String]) in Template(id: "x", title: "X", line: "", rights: rights, follows: false, preview: nil, ground: nil).needs }
         #expect(made([]) == "Asks for nothing" && made(["state"]) == "Sees your agents" && made(["state", "launch"]) == "Sees and starts agents")
         #expect(made(["send:claude"]) == "Writes to your agents" && made(["store"]) == "Remembers")
     }
@@ -147,7 +147,7 @@ import WebKit
         var headings: [String] = [], shown: [URL] = []
         library.heading = { headings.append("\($0) · \($1)") }
         library.reveal = { shown.append($0) }
-        let gallery = Gallery(), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
+        let gallery = Gallery(told: { library.heading($0, $1) }), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
         (window.contentView, window.isReleasedWhenClosed) = (host, false)
         defer { window.close() }
@@ -167,7 +167,9 @@ import WebKit
         #expect(!window.performKeyEquivalent(with: escape), "Escape means nothing on the cards")
         library.use(pebble)
         #expect(Spaces(root: home.places.spaces).list().map(\.name) == ["pet"])
-        #expect(GalleryView.ground(try #require(pebble.preview)) != nil)
+        #expect(pebble.ground != nil)
+        library.revealTemplate(pebble)
+        #expect(shown == [Home.share.appendingPathComponent("templates/pet.html")])
     }
 
     @MainActor @Test func projectWatchFollowsTheFolderChosenFirst() throws {
