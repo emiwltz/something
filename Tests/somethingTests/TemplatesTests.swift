@@ -104,7 +104,7 @@ import WebKit
         let home = try home()
         defer { home.remove() }
         let ask = FakeAsk(), library = Library(places: home.places, ask: ask, share: Home.share)
-        var used: [String] = [], opened: [String?] = []
+        var used: [String] = [], opened: [Library.Destination] = []
         library.used = { used.append($0) }
         library.opened = { opened.append($0) }
         let agents = try #require(library.templates.first { $0.id == "agents" })
@@ -114,10 +114,10 @@ import WebKit
         library.use(agents)
         library.use(agents)
         #expect(used == ["agents"] && Spaces(root: home.places.spaces).list().map(\.name) == ["agents"])
-        #expect(await wait(30, until: { opened == ["agents"] }))
+        #expect(await wait(30, until: { opened == [.space("agents")] }))
         await wait(0.05)
         library.use(agents)
-        #expect(used == ["agents", "agents-2"] && library.selection == "agents-2" && ask.told.isEmpty)
+        #expect(used == ["agents", "agents-2"] && library.selection == .space("agents-2") && ask.told.isEmpty)
         let made = try String(contentsOf: home.places.spaces.appendingPathComponent("agents-2.html"), encoding: .utf8)
         #expect(made == (try String(contentsOf: TemplatesTests.folder.appendingPathComponent("agents.html"), encoding: .utf8)))
     }
@@ -138,7 +138,7 @@ import WebKit
         let declaration = try #require(Declaration.read(space, home: home.root, kinds: Registry.app.kinds).declaration)
         let chosen = "~/code/my \"shop\" </script>"
         #expect(declaration.folder == chosen && declaration.agents == .folders([chosen]))
-        #expect(library.selection == "project")
+        #expect(library.selection == .space("project"))
     }
 
     // MARK: Playing them

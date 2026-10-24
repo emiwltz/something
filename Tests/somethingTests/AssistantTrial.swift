@@ -95,11 +95,11 @@ struct AssistantTrial {
         let trial = try await Trial(api)
         try await trial.run {
             let (engine, places, library, model) = (trial.engine, trial.places, trial.library, trial.model)
-            var opened: [String?] = []
+            var opened: [Library.Destination] = []
             library.opened = { opened.append($0) }
             model.ended = {
                 library.relist()
-                if let new = model.appeared(library.entries, open: library.selection) { library.select(new) }
+                if let new = model.appeared(library.entries, open: library.selection.space) { library.select(.space(new)) }
             }
             library.watch()
             // The tools are lent as the app lends them, by this clone's real program (AssistantBuild.placeProgram).
@@ -121,8 +121,8 @@ struct AssistantTrial {
             #expect(built, "rows: \(model.rows); problem: \(model.problem ?? "none")")
             #expect(asked.count <= 1, "asked: \(asked)")
             print("AssistantTrial: the standard build asked \(asked.count) permission window(s).")
-            #expect(await wait(5) { opened.contains("agents-board") }, "the new space opens by itself: \(opened)")
-            #expect(library.selection == "agents-board")
+            #expect(await wait(5) { opened.contains(.space("agents-board")) }, "the new space opens by itself: \(opened)")
+            #expect(library.selection == .space("agents-board"))
             #expect(model.rows.first == .mine(caption: "on the blank page", text: "Please run-build a board of my agents."))
             #expect(model.rows.contains(.tool(symbol: "book", words: "Read guide", command: nil)))
             #expect(model.rows.filter { $0 == .tool(symbol: "pencil", words: "Edited agents-board.html", command: nil) }.count == 4, "a write, then three edits")

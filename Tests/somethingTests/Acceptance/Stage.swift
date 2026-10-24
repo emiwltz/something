@@ -64,7 +64,7 @@ final class Stage {
         let view = try await home.window(try #require(library.entry(name)?.space))
         view.open()
         #expect(await wait(until: { !view.web.isLoading && view.frame != nil }), "\(name) did not load")
-        library.select(name)
+        library.select(.space(name))
         shell.show(view)
         shell.assistant.place = AssistantModel.place(view)
         await Picture.settle(view)

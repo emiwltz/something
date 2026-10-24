@@ -28,10 +28,10 @@ import Testing
         #expect(tour.screen(model) == .none)
         let (shell, _, _) = window(home, model)
         shell.show(tour)
-        // What App's finished does: the blank page in the tour's place.
+        // What App's finished does: New Space, whose blank page takes the tour's place.
         tour.finished = { problem in
             ended = problem == nil
-            shell.show(nil, endingTour: true)
+            shell.show(nil)
         }
         tour.end()
         #expect(ended && Preferences(home.places).toured && !Preferences(home.places).launcherOffered)
@@ -145,23 +145,24 @@ import Testing
         #expect(!known.contains { $0.contains(home.root.path) || $0.contains(home.root.resolvingSymlinksInPath().path) })
     }
 
-    /// Help › Welcome Tour while a space is open: the space closes on the next turn of the main queue, which must not
-    /// put the blank page in the tour's place.
-    @Test func theTourStaysWhenTheOpenSpaceCloses() async throws {
+    /// Help › Welcome Tour just after a space was selected: the tour is a destination like the space, so the space,
+    /// which had not opened yet, never takes the tour's place; leaving the tour brings back the sidebar it folded.
+    @Test func theTourIsADestinationLikeASpace() async throws {
         let (home, model) = try assistants.assistant([], prefix: "something-tour-")
         defer { home.remove() }
         let (shell, library, _) = window(home, model)
-        library.opened = { _ in shell.show(nil) }
-        library.select("invented")
-        // What App.showTour does.
-        library.select(nil)
         let tour = Tour(places: home.places)
-        shell.show(tour)
+        // What App.open does with each destination; no space is listed here, so a space shows the blank page.
+        library.opened = { $0 == .tour ? shell.show(tour) : shell.show(nil) }
+        library.select(.space("invented"))
+        library.select(.tour)
         try await Task.sleep(for: .milliseconds(100))
         #expect(shell.touring === tour && shell.window.title == "something" && shell.floating?.isHidden == true)
         #expect(shell.split.splitViewItems[0].isCollapsed)
-        shell.show(nil, endingTour: true)
+        library.select(.newSpace)
+        try await Task.sleep(for: .milliseconds(100))
         #expect(shell.touring == nil && shell.window.title == "New Space" && shell.floating?.isHidden == false)
+        #expect(!shell.split.splitViewItems[0].isCollapsed)
     }
 
     /// The window of `home`, never shown, with `model` as its assistant.

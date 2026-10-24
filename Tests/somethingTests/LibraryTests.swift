@@ -1,5 +1,6 @@
 // The sidebar's list and Info, in a throwaway home: the spaces sorted by title with the pages that are not spaces yet,
-// the folder watched, the last space open remembered (and 1.0's default read once), Show in Finder, Move to Trash
+// the sidebar's order (groups, then the rest), the destinations each opened once, the folder watched, the last space
+// open remembered (and 1.0's default read once), Show in Finder, Move to Trash
 // into the test's own home, export and import; a right switched off in Info reaches the open space as a `granted`
 // event and the bridge refuses from then on, "Ask Again" asks, and the activity is the journal, newest first.
 // No window is shown, and nothing reaches the person's Finder or Trash.
@@ -67,7 +68,7 @@ import Testing
         defer { test.remove() }
         try Library.prepare(test.places)
         let library = library(test, FakeAsk())
-        var opened: [String?] = []
+        var opened: [Library.Destination] = []
         library.opened = { opened.append($0) }
         library.watch()
         defer { library.stop() }
@@ -77,8 +78,8 @@ import Testing
         let soon: Double = 10
         try test.space("garden", page(#"{"contract": 1, "title": "Garden"}"#, ""))
         #expect(await wait(soon, until: { library.entries.map(\.id) == ["garden"] }))
-        library.select("garden")
-        #expect(await wait(soon, until: { opened == ["garden"] }), "the space opens just after it is selected")
+        library.select(.space("garden"))
+        #expect(await wait(soon, until: { opened == [.space("garden")] }), "the space opens just after it is selected")
 
         // Rewritten in place, as an editor without an atomic save does: no entry of the folder changes.
         let file = test.places.spaces.appendingPathComponent("garden.html")
@@ -89,8 +90,8 @@ import Testing
         #expect(await wait(soon, until: { library.entries.map(\.title) == ["Kitchen garden"] }))
 
         try FileManager.default.removeItem(at: file)
-        #expect(await wait(soon, until: { library.entries.isEmpty && opened == ["garden", nil] }))
-        #expect(library.selection == nil)
+        #expect(await wait(soon, until: { library.entries.isEmpty && opened == [.space("garden"), .newSpace] }))
+        #expect(library.selection == .newSpace)
 
         try FileManager.default.removeItem(at: test.places.spaces)
         try Library.prepare(test.places)
@@ -138,11 +139,57 @@ import Testing
         try #"{"app": 1, "default": "shop", "spaces": {}}"#.write(to: test.places.grants, atomically: true, encoding: .utf8)
         let library = library(test, FakeAsk())
         #expect(library.last() == "today", "window.json now says it")
-        library.select("shop")
+        library.select(.space("shop"))
         #expect(self.library(test, FakeAsk()).last() == "shop")
         try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("shop.html"))
         #expect(self.library(test, FakeAsk()).last() == nil, "a space gone is passed over")
         #expect(try AppFile.read(test.places.grants) == AppFile(), "app.json is read, never written for the window")
+    }
+
+    /// The groups in their order, each one's spaces by title, then the spaces in no group by title: the one order of
+    /// the sidebar, ⌘1…⌘9, the Go menu and ⌘P. A name no space has is passed over; a space two groups name shows once.
+    @Test func theOrderIsTheGroupsThenTheRestEachByTitle() throws {
+        let test = Home(prefix: "something-library-")
+        defer { test.remove() }
+        for (name, title) in [("pond", "Pond"), ("brief", "Daily brief"), ("log", "logbook"), ("pet", "Pebble"), ("stack", "Stack")] {
+            try test.space(name, page(#"{"contract": 1, "title": "\#(title)"}"#, ""))
+        }
+        let library = library(test, FakeAsk())
+        #expect(library.order().map(\.id) == ["brief", "log", "pet", "pond", "stack"], "no group: by title")
+        library.preferences.groups = [.init(name: "Notes", spaces: ["stack", "log", "gone"]), .init(name: "Empty", spaces: []),
+                                      .init(name: "Breaks", spaces: ["pet", "stack"])]
+        #expect(library.order().map(\.id) == ["log", "stack", "pet", "brief", "pond"])
+        #expect(library.entries.map(\.id) == ["brief", "log", "pet", "pond", "stack"], "the entries stay by title")
+    }
+
+    /// Selecting where the window already is opens nothing again; of two selections before the first opened, only
+    /// the second opens; only a space is remembered as the last one open.
+    @Test func eachDestinationOpensOnceAndTheLastOfTwoQuickSelectionsWins() async throws {
+        let test = Home(prefix: "something-library-")
+        defer { test.remove() }
+        try test.space("shop", page(nil, ""))
+        try test.space("pond", page(nil, ""))
+        let library = library(test, FakeAsk())
+        var opened: [Library.Destination] = []
+        library.opened = { opened.append($0) }
+        #expect(library.selection == .newSpace)
+        library.select(.newSpace)
+        library.select(.templates)
+        library.select(.templates)
+        #expect(await wait(10, until: { opened == [.templates] }))
+        library.select(.space("shop"))
+        library.select(.tour)
+        #expect(await wait(10, until: { opened == [.templates, .tour] }), "\(opened)")
+        library.select(.space("pond"))
+        library.select(.space("shop"))
+        #expect(await wait(10, until: { opened == [.templates, .tour, .space("shop")] }), "\(opened)")
+        library.select(.space("shop"))
+        library.select(.newSpace)
+        #expect(await wait(10, until: { opened == [.templates, .tour, .space("shop"), .newSpace] }), "\(opened)")
+        await wait(0.05)
+        #expect(opened.count == 4 && library.selection == .newSpace)
+        #expect(library.preferences.lastOpen == "shop" && library.last() == "shop", "New Space, the templates and the tour are not remembered")
+        #expect(library.preferences.recents == ["shop", "pond"])
     }
 
     @Test func showInFinderAndMoveToTrash() throws {
@@ -159,11 +206,11 @@ import Testing
         library.showInFinder("today")
         #expect(revealed == [test.places.spaces.appendingPathComponent("today.html")])
 
-        library.select("today")
+        library.select(.space("today"))
         library.trash("today")
         let trash = test.root.appendingPathComponent("Trash")
         #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["today.html", "today.json"])
-        #expect(library.entries.isEmpty && library.selection == nil)
+        #expect(library.entries.isEmpty && library.selection == .newSpace)
         #expect(try AppFile.read(test.places.grants).spaces["today"] == nil, "a space made again under its name asks again")
         #expect(ask.told.isEmpty)
     }
@@ -195,13 +242,13 @@ import Testing
         var file = try AppFile.read(test.places.grants)
         file.spaces["board-2"] = answered(declared: ["store"], granted: ["store"])
         try file.write(test.places.grants)
-        var opened: [String?] = []
+        var opened: [Library.Destination] = []
         library.opened = { opened.append($0) }
         ask.chosen = saved
         library.importChosen()
         #expect(ask.told.isEmpty, "\(ask.told)")
-        #expect(library.selection == "board-2" && library.entry("board-2")?.space.form == .folder)
-        #expect(await wait(30, until: { opened == ["board-2"] }))
+        #expect(library.selection == .space("board-2") && library.entry("board-2")?.space.form == .folder)
+        #expect(await wait(30, until: { opened == [.space("board-2")] }))
         #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
 

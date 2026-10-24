@@ -22,7 +22,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
     var visible: (Bool) -> Void = { _ in }
-    /// The tour while it is shown: the blank page stays behind it until it ends.
+    /// The tour while it is shown.
     private(set) var touring: Tour?
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
@@ -117,14 +117,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         return item
     }
 
-    /// Shows `space` in the center, or the blank page for nil (the templates for `gallery`), with its title and file
-    /// in the toolbar. While the tour is shown, nil keeps it unless `endingTour`, and a space ends it.
-    func show(_ space: SpaceView?, endingTour: Bool = false, gallery: Bool = false) {
-        if let touring, space == nil, !endingTour { return show(touring) }
+    /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file
+    /// in the toolbar. It ends the tour, and the sidebar the tour folded comes back.
+    func show(_ space: SpaceView?, templates: Bool = false) {
+        if touring != nil { split.splitViewItems[0].isCollapsed = false }
         touring = nil
         guard let space else {
-            put(gallery ? Shell.hosted(GalleryView(library: library)) : Shell.hosted(BlankView(model: assistant, library: library)))
-            return gallery ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
+            put(templates ? Shell.hosted(GalleryView(library: library)) : Shell.hosted(BlankView(model: assistant, library: library)))
+            return templates ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
         }
         if space.blocked.isEmpty {
             put(space.web)

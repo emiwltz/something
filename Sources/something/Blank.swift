@@ -37,7 +37,7 @@ struct BlankView: View {
             }
         }
         .overlay(alignment: .bottomTrailing) {
-            if !model.building { Button("Skip for now") { library.select(Library.gallery) }.buttonStyle(.link).padding(24) }
+            if !model.building { Button("Skip for now") { library.select(.templates) }.buttonStyle(.link).padding(24) }
         }
         .background(Color(nsColor: .textBackgroundColor))
     }

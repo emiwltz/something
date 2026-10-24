@@ -1,5 +1,5 @@
-// The sidebar: New Space first, selected on the blank page; the spaces sorted by title (one click opens one), with
-// an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
+// The sidebar: New Space first, selected on the blank page; the spaces in the library's order (one click opens one),
+// with an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
 // declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
 // the person was elsewhere has a dot. Each space has Show in Finder, Export… and Move to Trash… in its context menu.
 import SwiftUI
@@ -7,16 +7,22 @@ import SwiftUI
 struct SidebarView: View {
     @Bindable var library: Library
     let assistant: AssistantModel
-    /// The tags of the two rows that are not spaces; a space's name never starts with "+".
-    static let new = "+new", pending = "+pending"
+    /// A row of the list: a destination, or the space being made, which is where New Space is while it is made.
+    enum Row: Hashable { case to(Library.Destination), pending }
 
     var body: some View {
-        List(selection: Binding(get: { library.selection == Library.gallery ? nil : library.selection ?? (assistant.building ? SidebarView.pending : SidebarView.new) }, set: { tag in
-            if tag == SidebarView.new || tag == SidebarView.pending {
-                library.select(nil)
+        List(selection: Binding<Row?>(get: {
+            switch library.selection {
+            case .newSpace: assistant.building ? .pending : .to(.newSpace)
+            case .space: .to(library.selection)
+            case .templates, .tour: nil
+            }
+        }, set: { row in
+            if row == .pending || row == .to(.newSpace) {
+                library.select(.newSpace)
                 assistant.focus()
-            } else {
-                library.select(tag)
+            } else if case .to(let destination)? = row {
+                library.select(destination)
             }
         })) {
             HStack {
@@ -24,16 +30,16 @@ struct SidebarView: View {
                 Spacer()
                 Text("⌘N").foregroundStyle(.tertiary)
             }
-            .tag(SidebarView.new)
+            .tag(Row.to(.newSpace))
             Section("Spaces") {
                 if assistant.building {
-                    Label("New Space", systemImage: "sparkle").italic().tag(SidebarView.pending)
+                    Label("New Space", systemImage: "sparkle").italic().tag(Row.pending)
                 }
                 if library.entries.isEmpty, !assistant.building {
                     Text("No spaces yet.").foregroundStyle(.secondary)
                 }
-                ForEach(library.entries) { entry in
-                    row(entry).tag(entry.id).contextMenu {
+                ForEach(library.order()) { entry in
+                    row(entry).tag(Row.to(.space(entry.id))).contextMenu {
                         Button("Show in Finder") { library.showInFinder(entry.id) }
                         Button("Export…") { library.export(entry.id) }
                         Divider()
@@ -44,11 +50,11 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
-            Button { library.select(Library.gallery) } label: {
+            Button { library.select(.templates) } label: {
                 Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(.tint) }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8).padding(.vertical, 6)
-                    .background(library.selection == Library.gallery ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
+                    .background(library.selection == .templates ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

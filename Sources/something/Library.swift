@@ -1,5 +1,6 @@
-// The spaces of ~/something/spaces as the sidebar lists them, sorted by title; the open one; the last one open, kept
-// in the preferences; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
+// The spaces of ~/something/spaces, sorted by title, and the sidebar's order of them (its groups, then the rest), the one
+// order of the sidebar, ⌘1…⌘9, the Go menu and ⌘P; where the window is (a space, New Space, the templates or the tour);
+// the last space open, kept in the preferences; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
 // by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash, and Use Template.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
@@ -20,16 +21,22 @@ import SomethingCore
     @ObservationIgnored let preferences: Preferences
     /// share/ and its templates, for the gallery, the blank page and the welcome.
     @ObservationIgnored let share: URL
+    /// Where the window is: a space, the blank page of New Space, the templates, or the tour. No history is kept: the
+    /// mockup has no back or forward.
+    enum Destination: Hashable {
+        case space(String), newSpace, templates, tour
+        /// The space's name, for a space; nil elsewhere.
+        var space: String? { if case .space(let name) = self { name } else { nil } }
+    }
+
     @ObservationIgnored let templates: [Template]
     private(set) var entries: [Entry] = []
-    /// The name of the open space, `Library.gallery` for the templates; nil when neither is shown.
-    private(set) var selection: String?
-    /// What the selection is while the templates are shown; a space's name never starts with "+".
-    static let gallery = "+templates"
+    /// Where the window is, New Space at first.
+    private(set) var selection = Destination.newSpace
     /// Told the name of each space made from a template: its assistant offers to make it yours.
     @ObservationIgnored var used: (String) -> Void = { _ in }
-    /// What selecting does: the app opens the space, or closes the open one for nil.
-    @ObservationIgnored var opened: (String?) -> Void = { _ in }
+    /// What selecting does: the app shows the destination, closing the open space.
+    @ObservationIgnored var opened: (Destination) -> Void = { _ in }
     /// What Move to Trash… does before it moves anything: the window asks the person.
     @ObservationIgnored var trashing: (Entry) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
@@ -72,7 +79,15 @@ import SomethingCore
             return order == .orderedSame ? one.id < other.id : order == .orderedAscending
         }
         if listed != entries { entries = listed }
-        if let selection, selection != Library.gallery, !entries.contains(where: { $0.id == selection }) { select(nil) }
+        if let name = selection.space, entry(name) == nil { select(.newSpace) }
+    }
+
+    /// The spaces in the sidebar's order: each group in its order, its spaces by title, then the spaces in no group,
+    /// by title. A space two groups name shows in the first.
+    func order() -> [Entry] {
+        var placed = Set<String>()
+        let grouped = preferences.groups.flatMap { group in entries.filter { group.spaces.contains($0.id) && placed.insert($0.id).inserted } }
+        return grouped + entries.filter { !placed.contains($0.id) }
     }
 
     /// Lists the spaces, and lists them again each time the folder changes, from now on. The folder is looked at
@@ -130,16 +145,16 @@ import SomethingCore
         watched = false
     }
 
-    /// Opens the space `name` (or the templates), or closes the open one for nil, and remembers a space for the next
-    /// start. It opens just after: the sidebar calls this while it changes its selection, and opening may wait for the
-    /// rights sheet.
-    func select(_ name: String?) {
-        guard name != selection else { return }
-        selection = name
-        if let name, name != Library.gallery { preferences.opened(name) }
+    /// Goes to `destination`, once: selecting where the window already is does nothing. A space is remembered for the
+    /// next start. It opens just after: the sidebar calls this while it changes its selection, and opening may wait for
+    /// the rights sheet.
+    func select(_ destination: Destination) {
+        guard destination != selection else { return }
+        selection = destination
+        if let name = destination.space { preferences.opened(name) }
         DispatchQueue.main.async { [weak self] in
             // A second click before this one opened: only the last one opens.
-            if let self, self.selection == name { self.opened(name) }
+            if let self, self.selection == destination { self.opened(destination) }
         }
     }
 
@@ -237,7 +252,7 @@ import SomethingCore
             let space = try Command.new(free, folder: false, places: places, template: page, following: folder)
             relist()
             used(space.name)
-            select(space.name)
+            select(.space(space.name))
             // Queued after the opening select asked for, which runs first and may wait for the rights sheet.
             using = true
             DispatchQueue.main.async { [weak self] in self?.using = false }
@@ -264,7 +279,7 @@ import SomethingCore
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
             let space = try Export.place(received, as: name, in: folder, memory: places.data)
             relist()
-            select(space.name)
+            select(.space(space.name))
         } catch {
             ask.tell("\(url.lastPathComponent) was not imported. \(error.sentence)")
         }

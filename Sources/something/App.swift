@@ -65,11 +65,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.assistant.lookAgain() }
         }
         assistant.showRequest = { [weak self] in self?.panels.panel?.orderFrontRegardless() }
-        assistant.openReady = { [weak self] in self?.library.select($0) }
+        assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
         assistant.ended = { [weak self] in
             guard let self else { return }
             library.relist()
-            if let new = assistant.appeared(library.entries, open: library.selection) { library.select(new) }
+            if let new = assistant.appeared(library.entries, open: library.selection.space) { library.select(.space(new)) }
         }
         // Before any reading: the conversations there are the person's with their assistant, never a space's to see.
         engine.assistantFolder = places.spaces.path
@@ -91,11 +91,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 guard library.entry(opening) != nil else {
                     return ask.tell("There is no space \(opening) in \(places.spaces.path). Type something new \(opening) to make it.")
                 }
-                library.select(opening)
+                library.select(.space(opening))
             } else if !early.isEmpty {
                 early.forEach(receive)
             } else if let last = library.last() {
-                library.select(last)
+                library.select(.space(last))
             } else if !library.preferences.toured {
                 showTour(nil)
             }
@@ -119,31 +119,33 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             return ask.tell(Command.elsewhere(url))
         }
         library.relist()
-        library.select(space.name)
+        library.select(.space(space.name))
         front()
     }
 
     /// Shows the tour in the window, the open space closed; it ends on the blank page.
     @objc func showTour(_ sender: Any?) {
-        library.select(nil)
-        let tour = Tour(places: places)
-        tour.finished = { [weak self] problem in
-            guard let self else { return }
-            shell.split.splitViewItems[0].isCollapsed = false
-            shell.show(nil, endingTour: true)
-            problem.map(ask.tell)
-        }
-        shell.show(tour)
+        library.select(.tour)
         shell.front()
     }
 
+    /// The tour in the center, made anew; at its end the window goes to New Space.
+    private func showTourNow() {
+        let tour = Tour(places: places)
+        tour.finished = { [weak self] problem in
+            self?.library.select(.newSpace)
+            problem.map { self?.ask.tell($0) }
+        }
+        shell.show(tour)
+    }
+
     @objc func newSpace(_ sender: Any?) {
-        library.select(nil)
+        library.select(.newSpace)
         askAssistant(sender)
     }
 
     @objc func showTemplates(_ sender: Any?) {
-        library.select(Library.gallery)
+        library.select(.templates)
         shell.front()
     }
 
@@ -165,26 +167,37 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Shows the window; the space open when it was closed opens again.
     func front() {
         shell.front()
-        if current == nil, let name = library.selection { open(name) }
+        if current == nil, library.selection.space != nil { open(library.selection) }
     }
 
-    /// Closes the open space and opens the space `name` in the center; nil leaves the center empty. The space already
-    /// open stays as it is.
-    func open(_ name: String?) {
+    /// Closes the open space and shows `destination` in the center. The space already open stays as it is. nil, when
+    /// the window closed, only closes the open space: the selection stays, and opens again with the window.
+    func open(_ destination: Library.Destination?) {
+        let name = destination?.space
         if let name, current?.space.name == name { return }
+        let closing = current != nil
         current?.close()
         current = nil
         assistant.fault = nil
         assistant.unkept = false
         if assistant.ready?.id == name { assistant.ready = nil }
         defer {
-            assistant.place = name == Library.gallery ? .templates : AssistantModel.place(current)
+            assistant.place = (destination ?? library.selection) == .templates ? .templates : AssistantModel.place(current)
             info.show(current?.space)
             // The readers look often while a space is open, and rarely when nobody is looking.
             engine.start(often: current != nil, visible: shown)
             current?.watching(shown)
         }
-        guard let name, let space = library.entry(name)?.space else { return shell.show(nil, gallery: name == Library.gallery) }
+        switch destination {
+        case nil:
+            if closing { shell.show(nil) }
+            return
+        case .newSpace?: return shell.show(nil)
+        case .templates?: return shell.show(nil, templates: true)
+        case .tour?: return showTourNow()
+        case .space?: break
+        }
+        guard let name, let space = library.entry(name)?.space else { return shell.show(nil) }
         guard let rules else {
             shell.show(nil)
             return ask.tell("something is still starting; try again in a moment.")
@@ -282,7 +295,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(stopAssistant) { return assistant.working }
         if item.action == #selector(askAssistant) { return !assistant.noAgent }
-        if [#selector(newSpace), #selector(showTemplates)].contains(item.action) { return shell.touring == nil }
+        if [#selector(newSpace), #selector(showTemplates)].contains(item.action) { return library.selection != .tour }
         return [#selector(exportSpace), #selector(showInFinder), #selector(reloadSpace), #selector(moveToTrash)].contains(item.action)
             ? current != nil : true
     }

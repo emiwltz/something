@@ -105,7 +105,7 @@ struct GalleryTests {
         #expect(await wait(until: { !board.web.isLoading && board.frame != nil }), "the agents template did not load")
         board.launched = ["a1"]
         SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"]).json(), in: board.web, frame: try #require(board.frame))
-        library.select("agents")
+        library.select(.space("agents"))
         shell.show(board)
         shell.assistant.place = AssistantModel.place(board)
         info.show(board.space)
@@ -115,7 +115,7 @@ struct GalleryTests {
         let review = try await fixture.window(try #require(library.entry("morning-review")?.space))
         defer { review.close() }
         review.open()
-        library.select("morning-review")
+        library.select(.space("morning-review"))
         shell.show(review)
         shell.assistant.place = AssistantModel.place(review)
         info.show(review.space)
@@ -132,7 +132,7 @@ struct GalleryTests {
         defer { unshown.close() }
         unshown.open()
         library.relist()
-        library.select("newer")
+        library.select(.space("newer"))
         shell.inspector.isCollapsed = true
         shell.show(unshown)
         shell.assistant.place = AssistantModel.place(unshown)
@@ -190,8 +190,8 @@ struct GalleryTests {
 
         // The templates: the gallery three and two cards wide, then each one as `something check` draws it, big.
         let (templates, templatesLibrary, _) = window(fixture)
-        templatesLibrary.select(Library.gallery)
-        templates.show(nil, gallery: true)
+        templatesLibrary.select(.templates)
+        templates.show(nil, templates: true)
         templates.assistant.place = .templates
         try await draw(templates, library: templatesLibrary, web: nil, "templates" + suffix, fixture)
         templates.window.setContentSize(NSSize(width: 900, height: 760))
@@ -318,8 +318,7 @@ struct GalleryTests {
             window.shell.show(tour)
             try await draw(window.shell, library: window.library, web: nil, name + suffix, window.home)
         }
-        none.shell.split.splitViewItems[0].isCollapsed = false
-        none.shell.show(nil, endingTour: true)
+        none.shell.show(nil)
         try await draw(none.shell, library: none.library, web: nil, "blank-no-agent" + suffix, none.home)
 
         // The blank page of a home with spaces: idle, then building the third suggestion.

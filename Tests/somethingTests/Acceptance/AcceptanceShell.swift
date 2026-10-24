@@ -25,7 +25,7 @@ struct AcceptanceShell {
         #expect(Set(library.entries.map(\.title)) == Set(titles), "\(library.entries.map(\.title))")
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        #expect(shell.window.title == "Daily brief" && library.selection == "brief")
+        #expect(shell.window.title == "Daily brief" && library.selection == .space("brief"))
         #expect(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.reload }?.isHidden == false)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b1-baseline" + suffix, root: stage.home.root)
