@@ -315,12 +315,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// Build With ▸, made again each time it opens: the builders found (the agent menu of the capsule has the rest).
     func menuNeedsUpdate(_ menu: NSMenu) {
-        menu.removeAllItems()
-        for entry in assistant.entries {
-            let item = NSMenuItem(title: entry.title, action: entry.enabled ? #selector(chooseBuilder) : nil, keyEquivalent: "")
-            (item.representedObject, item.state, item.toolTip) = (entry.id, entry.checked ? .on : .off, entry.note)
-            menu.addItem(item)
-        }
+        menu.items = AssistantModel.builderItems(assistant.entries)
         if menu.items.isEmpty { menu.addItem(NSMenuItem(title: "No coding agent found", action: nil, keyEquivalent: "")) }
     }
 

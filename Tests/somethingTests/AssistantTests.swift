@@ -611,6 +611,8 @@ import WebKit
             ((try? String(contentsOf: home.root.appendingPathComponent("out/arguments"), encoding: .utf8)) ?? "").split(separator: "\n")
         }
         model.notice?.actions.first?.run()
+        model.refresh()
+        #expect(model.rows == rows, "the kept turns are shown once while it starts again")
         #expect(await wait(until: { model.id != first && model.agent?.alive == true && !model.launching && arguments().contains("--mcp-config")
             && arguments().contains("--resume") }), "\(arguments())")
         let resumed = arguments()
@@ -626,7 +628,25 @@ import WebKit
         model.startAgain()
         #expect(await wait(until: { model.id != second && model.id != nil && !model.launching && arguments().firstIndex(of: "--session-id").map { $0 + 1 < arguments().count } == true }))
         #expect(!arguments().contains("--resume") && model.rows.isEmpty && model.asking)
-        #expect(model.firstLines.contains("Claude Code stopped and could not pick its conversation up: Started a new conversation."))
+        #expect(model.firstLines.contains("Claude Code stopped and could not pick its conversation up. Started a new conversation."))
+        await finish(home, model)
+    }
+
+    /// Start Again whose resumed launch fails: the conversation stays shown once, never doubled by the dead agent's thread.
+    @Test func aFailedStartAgainKeepsTheConversationOnce() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "One line per hour."
+        model.send()
+        #expect(await wait(until: { model.presence.stuck == .crashed }), "said: \(model.presence.word)")
+        let rows = model.rows
+        #expect(!rows.isEmpty)
+        try FileManager.default.removeItem(at: home.root.appendingPathComponent("bin/claude"))
+        model.startAgain()
+        #expect(await wait(until: { !model.launching && model.failure != nil }), "said: \(model.presence.word)")
+        model.refresh()
+        #expect(model.rows == rows, "\(model.rows.count) rows, \(rows.count) before")
         await finish(home, model)
     }
 

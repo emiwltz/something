@@ -286,7 +286,7 @@ import SomethingCore
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
             else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
         return [how, "A new conversation starts each time something starts."]
-            + (session.renewed ? ["\(name) stopped and could not pick its conversation up: Started a new conversation."] : [])
+            + (session.renewed ? ["\(name) stopped and could not pick its conversation up. Started a new conversation."] : [])
             + (idled ? ["\(name) was stopped to save memory. Your next message starts it again."] : [])
     }
 
@@ -383,13 +383,15 @@ import SomethingCore
 
     /// Start Again, once the agent quit: launches it again, continuing its conversation when it `resumes`, else in a
     /// new conversation that says so; nothing is sent on its own. A launch that never started its conversation sends its
-    /// last message again, as Try Again does.
+    /// last message again, as Try Again does, or launches afresh when nothing was sent yet.
     func startAgain() {
-        guard session.thread != nil else { return tryAgain() }
+        guard session.thread != nil else { return session.last == nil ? start([]) : tryAgain() }
         let thread = resumes ? session.thread : nil
         halt()
         if thread != nil {
             session.kept += engine.state.threads.first { $0.agent == session.id }?.turns ?? []
+            // The dead agent's turns are kept now: its thread, still in the state, must not show them a second time.
+            session.id = nil
         } else {
             newConversation()
             session.renewed = true

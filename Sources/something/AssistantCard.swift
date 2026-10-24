@@ -514,12 +514,17 @@ extension AssistantModel {
     /// Use Another Agent: the other builders in a menu at the pointer, the person choosing one (App.chooseBuilder).
     func chooseAnother() {
         let menu = NSMenu()
-        for entry in others {
-            let item = NSMenuItem(title: entry.title, action: #selector(App.chooseBuilder(_:)), keyEquivalent: "")
-            item.representedObject = entry.id
-            menu.addItem(item)
-        }
+        menu.items = Self.builderItems(others)
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    /// One menu item per builder in `entries`, each choosing its builder: Build With ▸ and Use Another Agent alike.
+    static func builderItems(_ entries: [Entry]) -> [NSMenuItem] {
+        entries.map { entry in
+            let item = NSMenuItem(title: entry.title, action: entry.enabled ? #selector(App.chooseBuilder(_:)) : nil, keyEquivalent: "")
+            (item.representedObject, item.state, item.toolTip) = (entry.id, entry.checked ? .on : .off, entry.note)
+            return item
+        }
     }
 
     /// The agents something sees but does not launch, each with why.
