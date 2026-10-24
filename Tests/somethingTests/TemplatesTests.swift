@@ -9,6 +9,7 @@ import CryptoKit
 import Foundation
 import SomethingAgents
 import SomethingCore
+import SwiftUI
 import Testing
 import WebKit
 @testable import something
@@ -109,7 +110,7 @@ import WebKit
         library.opened = { opened.append($0) }
         let agents = try #require(library.templates.first { $0.id == "agents" })
         #expect(library.templates.map(\.id) == TemplatesTests.names)
-        #expect(agents.title == "My agents" && agents.tags == ["Sees your agents", "Writes to your agents"] && !agents.follows)
+        #expect(agents.title == "My agents" && agents.needs == "Sees and writes to your agents" && !agents.follows)
         // A double click: the second click comes before the first space opened, and makes nothing.
         library.use(agents)
         library.use(agents)
@@ -122,12 +123,59 @@ import WebKit
         #expect(made == (try String(contentsOf: TemplatesTests.folder.appendingPathComponent("agents.html"), encoding: .utf8)))
     }
 
+    // MARK: The Templates page
+
+    /// The filters keep each template under one category, in the page's order; the shield line names every right.
+    @Test func filtersByCategory() throws {
+        let templates = Template.all(Home.share), gallery = Gallery()
+        let kept = Template.Category.allCases.map { category in
+            gallery.shown = category
+            return gallery.cards(templates).map(\.id)
+        }
+        #expect(kept == [TemplatesTests.names, ["agents", "project"], ["brief", "logbook"], ["stack", "pet"]])
+        let made = { (rights: [String]) in Template(id: "x", title: "X", line: "", rights: rights, follows: false, preview: nil).needs }
+        #expect(made([]) == "Asks for nothing" && made(["state"]) == "Sees your agents" && made(["state", "launch"]) == "Sees and starts agents")
+        #expect(made(["send:claude"]) == "Writes to your agents" && made(["store"]) == "Remembers")
+    }
+
+    /// Preview is a state of the page: it names the template in the toolbar, Escape (Close Preview's key) goes back to
+    /// the cards, and Use This Template makes the copy. Show in Finder shows the template's own file.
+    @MainActor @Test func previewThenEscapeThenUse() async throws {
+        let home = try home()
+        defer { home.remove() }
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
+        var headings: [String] = [], shown: [URL] = []
+        library.heading = { headings.append("\($0) · \($1)") }
+        library.reveal = { shown.append($0) }
+        let gallery = Gallery(), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        (window.contentView, window.isReleasedWhenClosed) = (host, false)
+        defer { window.close() }
+        let pebble = try #require(library.templates.first { $0.id == "pet" })
+        gallery.hovered = "pet"
+        gallery.preview(pebble)
+        #expect(gallery.hovered == nil && gallery.heading == ("Pebble", "Template preview"))
+        #expect(headings == ["Pebble · Template preview"])
+        // SwiftUI draws the preview, and registers Close Preview's key, on the run loop.
+        await wait(0.3)
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(window.performKeyEquivalent(with: escape))
+        #expect(gallery.previewing == nil)
+        #expect(headings.last == "Templates · Start from one, then make it yours")
+        await wait(0.3)
+        #expect(!window.performKeyEquivalent(with: escape), "Escape means nothing on the cards")
+        library.use(pebble)
+        #expect(Spaces(root: home.places.spaces).list().map(\.name) == ["pet"])
+        #expect(GalleryView.ground(try #require(pebble.preview)) != nil)
+    }
+
     @MainActor @Test func projectWatchFollowsTheFolderChosenFirst() throws {
         let home = try home()
         defer { home.remove() }
         let ask = FakeAsk(), library = Library(places: home.places, ask: ask, share: Home.share)
         let project = try #require(library.templates.first { $0.id == "project" })
-        #expect(project.follows && project.tags == ["Sees your agents", "Writes to your agents", "Starts agents", "Remembers"])
+        #expect(project.follows && project.needs == "Sees, writes to and starts agents · Remembers")
         // Cancel makes nothing.
         library.use(project)
         #expect(ask.folderMessages == ["Choose the project folder this space follows"] && Spaces(root: home.places.spaces).list().isEmpty)

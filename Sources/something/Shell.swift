@@ -57,6 +57,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         layer = WindowLayer(over: split.view)
         glass = Glass(over: center, model: assistant)
         super.init()
+        library.heading = { [weak self] in self?.heading($0, $1, space: false) }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
