@@ -95,17 +95,27 @@ import Testing
         }
     }
 
-    /// A long title at the narrowest window gives way: the tools stay in the toolbar, none in its overflow menu.
+    /// A long title at the narrowest window gives way: the window keeps its 640 points, the tools stay in the toolbar,
+    /// none in its overflow menu, 10 points from the edge. Widened, the title gets its whole line back.
     @Test func aLongTitleNeverPushesTheToolsOut() throws {
         try window { shell in
             shell.window.setContentSize(shell.window.contentMinSize)
             shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
+            let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent
             // The toolbar lays its items out again on a later turn of the run loop.
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
-            shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+            func settle() {
+                RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
+                shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+            }
+            settle()
+            #expect(shell.window.contentView?.frame.width == 640)
             let full = try #require(shell.controls[Shell.full])
             #expect(full.window === shell.window && !full.isHiddenOrHasHiddenAncestor)
-            #expect(full.convert(full.bounds, to: nil).maxX <= shell.window.frame.width, "\(full.convert(full.bounds, to: nil)) \(shell.window.frame)")
+            #expect(full.convert(full.bounds, to: nil).maxX <= 640 - 10 + 2, "\(full.convert(full.bounds, to: nil))")
+            #expect(shell.titleLine.intrinsicContentSize.width < whole)
+            shell.window.setContentSize(NSSize(width: 1200, height: 760))
+            settle()
+            #expect(shell.titleLine.intrinsicContentSize.width == whole)
         }
     }
 

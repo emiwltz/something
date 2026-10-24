@@ -30,7 +30,8 @@ final class Toast: NSView {
         layer.hold(toast)
         // It starts below the center's edge (170% of its height, as the mockup's) and rises 22 points above it.
         let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: 68 - 22)
-        NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor)])
+        NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor),
+                                     toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -32)])
         (toast.bottom, toast.motion) = (bottom, motion)
         layer.layoutSubtreeIfNeeded()
         toast.move(to: -22)
@@ -50,7 +51,9 @@ final class Toast: NSView {
         icon.contentTintColor = Look.Token.bg.color
         NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 14), icon.heightAnchor.constraint(equalToConstant: 14)])
         let text = NSTextField(labelWithString: words)
-        (text.font, text.textColor) = (Look.font(.ui, size: 12.5, weight: .medium), Look.Token.bg.color)
+        (text.font, text.textColor, text.lineBreakMode) = (Look.font(.ui, size: 12.5, weight: .medium), Look.Token.bg.color, .byTruncatingMiddle)
+        // A long path or title is cut in its middle rather than widening the toast past the center.
+        text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let row = NSStackView(views: [icon, text] + [button].compactMap { $0 })
         row.spacing = 10
         // The action's veil reaches `pad` beyond its words on each side, as the mockup's padding does.

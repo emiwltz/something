@@ -48,7 +48,10 @@ struct AcceptanceShell {
         shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame-narrow" + suffix, root: stage.home.root)
-            #expect(shell.controls[Shell.full]?.window === shell.window)
+            #expect(shell.window.contentView?.frame.width == 640)
+            let full = try #require(shell.controls[Shell.full])
+            #expect(full.window === shell.window && full.convert(full.bounds, to: nil).maxX <= 640 - 10 + 2)
+            #expect(shell.titleLine.intrinsicContentSize.width < ceil(shell.titleLine.line.size().width) + TitleLine.indent, "cut")
         }
     }
 

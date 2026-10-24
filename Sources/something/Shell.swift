@@ -29,7 +29,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// The title and the file, on one line: the system's title would put the file under it.
-    private let titleLine = TitleLine()
+    let titleLine = TitleLine()
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
@@ -96,7 +96,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         host.translatesAutoresizingMaskIntoConstraints = false
         center.addSubview(host)
         let margin = AssistantView.margin, wide = host.widthAnchor.constraint(equalToConstant: 640 + 2 * margin)
-        wide.priority = .defaultHigh
+        // Below the window's wish to keep its size (500): the assistant narrows, the window keeps its 640-point minimum.
+        wide.priority = .defaultLow
+        host.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
         NSLayoutConstraint.activate([wide, host.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: 2 * margin - AssistantView.sides),
                                      host.centerXAnchor.constraint(equalTo: center.centerXAnchor),
                                      host.bottomAnchor.constraint(equalTo: center.bottomAnchor),
@@ -119,8 +121,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         closed()
     }
 
-    /// The window or the sidebar changed width: the title measures the room it has again.
+    /// The sidebar changed width: the title measures the room it has again.
     @objc private func columnsMoved() { titleLine.invalidateIntrinsicContentSize() }
+
+    /// The window changed size, which does not always move the columns: the title measures its room again.
+    func windowDidResize(_ notification: Notification) { titleLine.invalidateIntrinsicContentSize() }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
@@ -151,7 +156,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                 width = 9 + 13 + 6 + ceil(words.size(withAttributes: [.font: font]).width) + 9
             }
             NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28), button.widthAnchor.constraint(equalToConstant: width)])
-            (item.view, item.label, item.isBordered, item.autovalidates) = (button, label, false, false)
+            // The image and action serve the overflow menu, where the toolbar puts an item without its view.
+            (item.view, item.label, item.isBordered, item.autovalidates, item.image, item.action) = (button, label, false, false, button.image, action)
             return item
         }
         switch id {
@@ -167,6 +173,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         case Shell.sidebar:
             let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Sidebar"), Keys.command("sidebar")?.action)
             (sidebar.view as? NSButton)?.target = split
+            sidebar.target = split
             return sidebar
         case Shell.tools:
             // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart, and a
