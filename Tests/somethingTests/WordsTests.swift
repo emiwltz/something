@@ -61,15 +61,12 @@ import Testing
                 == "09:02\tinterrupted pi “shop” — failed (A_LATER_CODE)", "a code this version does not know")
     }
 
-    @Test func theRightsSheetTicksEveryRightAndAllowsFirst() throws {
+    @Test func theRightsSheetShowsTheLaunchFolder() throws {
         let question = RightsQuestion(space: "Morning review", description: nil, rights: ["state", "store"], scope: nil, missing: [],
                                       folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
         let window = Ask.rights(question, home: home)
-        #expect(window.alert.buttons.map(\.title) == ["Allow", "Not Now"])
-        #expect(window.alert.buttons[1].keyEquivalent == "\u{1b}", "Escape is Not Now")
-        #expect(window.alert.buttons[0].keyEquivalent == "", "Return does not allow every ticked right unread")
-        #expect(window.answer() == RightsAnswer(allowed: ["state", "store"], refused: [], folder: "/Users/example/code/shop", remap: [:]))
-        let paths = labels(in: try #require(window.alert.accessoryView)).filter { $0.toolTip != nil }
+        #expect(window.answer() == RightsAnswer(allowed: [], refused: ["state", "store"], folder: "/Users/example/code/shop", remap: [:]))
+        let paths = labels(in: try #require(window.sheet.contentView)).filter { $0.toolTip != nil }
         #expect(paths.map(\.stringValue) == ["~/code/shop"] && paths.map(\.toolTip) == ["/Users/example/code/shop"])
     }
 
@@ -84,11 +81,11 @@ import Testing
         #expect(kept == "/Users/example/code/shop-copy")
     }
 
-    /// Past six folders, the scope says how many more, all of them in a tooltip: an alert does not scroll.
+    /// Past six folders, the scope says how many more, all of them in a tooltip: a sheet does not scroll.
     @Test func aLongScopeKeepsTheWindowOnTheScreen() throws {
         let folders = (1...8).map { "/Users/example/code/project-\($0)" }
         let question = RightsQuestion(space: "Board", description: nil, rights: ["state"], scope: .folders(folders), missing: [], folder: nil)
-        let shown = labels(in: try #require(Ask.rights(question, home: home).alert.accessoryView)).map(\.stringValue)
+        let shown = labels(in: try #require(Ask.rights(question, home: home).sheet.contentView)).map(\.stringValue)
         #expect(shown.filter { $0.hasPrefix("~/code/project-") }.count == 6 && shown.contains("and 2 more"))
     }
 

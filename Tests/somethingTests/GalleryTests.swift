@@ -154,13 +154,13 @@ struct GalleryTests {
         let opening = RightsQuestion(space: "Morning review", description: "Reads what the agents said overnight and asks each one for a summary.",
                                    rights: ["state", "send:claude", "launch:claude", "store"], scope: .folders(folders),
                                    missing: [folders[2]], folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
-        try draw(Ask.rights(opening, home: "/Users/example").alert, "rights-first-opening" + suffix, fixture)
+        try draw(try #require(Ask.rights(opening, home: "/Users/example").sheet.contentView), "rights-first-opening" + suffix, fixture)
         let pi = RightsQuestion(space: "Morning review", description: nil, rights: ["launch:pi"], scope: nil, missing: [],
                                 folder: FolderQuestion(declared: "~/code/garden", found: nil))
-        try draw(Ask.rights(pi, home: "/Users/example").alert, "rights-launch-pi" + suffix, fixture)
+        try draw(try #require(Ask.rights(pi, home: "/Users/example").sheet.contentView), "rights-launch-pi" + suffix, fixture)
         let any = RightsQuestion(space: "Morning review", description: nil, rights: ["launch", "launch:omp"], scope: nil, missing: [],
                                  folder: FolderQuestion(declared: "~/code/garden", found: nil))
-        try draw(Ask.rights(any, home: "/Users/example").alert, "rights-launch-any-and-omp" + suffix, fixture)
+        try draw(try #require(Ask.rights(any, home: "/Users/example").sheet.contentView), "rights-launch-any-and-omp" + suffix, fixture)
         try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review", home: "/Users/example"), "lowering-mode" + suffix, fixture)
         let link = try #require(URL(string: "https://example.com/notes/overnight"))
         try Picture.view(try #require(Ask.link(link, space: "Morning review").contentView), "link" + suffix, root: fixture.root)
@@ -368,7 +368,7 @@ struct GalleryTests {
         try draw(side, "sidebar-ready" + suffix, fixture)
         let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", rights: ["store"], scope: nil, missing: [],
                                   folder: nil, made: true)
-        try draw(Ask.rights(made, home: "/Users/example").alert, "rights-made-by-agent" + suffix, fixture)
+        try draw(try #require(Ask.rights(made, home: "/Users/example").sheet.contentView), "rights-made-by-agent" + suffix, fixture)
         try draw(Ask.doesAndDoesnt(), "does-and-doesnt" + suffix, fixture)
     }
 

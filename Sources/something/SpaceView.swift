@@ -316,7 +316,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         return RightsQuestion(space: declaration.title, description: declaration.description, rights: toAsk.rights,
                               scope: toAsk.scope ? declaration.agents : nil, missing: missing,
                               folder: toAsk.folder ? FolderQuestion(declared: declaration.folder, found: declaration.folder.flatMap(here)) : nil,
-                              made: made)
+                              made: made, page: space.location.path, declared: declaration.rights)
     }
 
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice

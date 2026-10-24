@@ -21,7 +21,58 @@ struct AcceptanceBuild {
     @Test("d1: New Space", .disabled("not built yet: AB12")) func d1() async throws {}
     @Test("d2: the build ladder", .disabled("not built yet: AB14")) func d2() async throws {}
     @Test("d3: the arrival", .disabled("not built yet: AB15")) func d3() async throws {}
-    @Test("d4: the rights sheet", .disabled("not built yet: AB16")) func d4() async throws {}
+    /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right
+    /// with its switch off, the fine print, Don't Allow holding the focus and Allow greyed until a switch is on.
+    @Test("d4: the rights sheet") func d4() async throws {
+        let stage = try Stage("build")
+        defer { stage.remove() }
+        let space = try stage.home.space("waiting-room", Self.waitingRoom)
+        let (shell, library, _) = stage.window()
+        let room = try await stage.open("waiting-room", in: shell, library)
+        defer { room.close() }
+        shell.waiting(1)
+        let question = RightsQuestion(space: "Waiting room", description: nil, rights: ["state", "store"], scope: nil, missing: [],
+                                      folder: nil, made: true, page: space.location.path, declared: ["state", "store"])
+        let sheet = Ask.rights(question, home: stage.home.root.path).sheet
+        #expect(sheet.title == "Waiting room would like to" && sheet.frame.width == 440 && !sheet.isAlert)
+        #expect(PanelsTests.texts(sheet.contentView) == [
+            "Waiting room would like to", "~/something/spaces/waiting-room.html · made just now",
+            "See your agents", "Which agents run on this Mac, what each one is doing, and its last messages. It only reads.",
+            "Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.",
+            "It does not ask to write to your agents or start agents. Each right starts off; change it later in its Info."])
+        let switches = SpaceViewTests.switches(sheet.contentView)
+        #expect(switches.map(\.state) == [.off, .off] && switches.map { $0.accessibilityLabel() } == ["See your agents", "Remember things"])
+        #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.hint) == ["esc", nil])
+        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && !sheet.buttons[1].isEnabled)
+        #expect(sheet.accessibilitySubrole() == .dialog)
+        // Under the toolbar, centred over the space beside the sidebar.
+        let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
+        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == shell.split.splitViewItems[0].viewController.view.frame.width)
+        try await stage.appearances { suffix in
+            try await Picture.sheet(sheet, over: shell, library: library, web: room.web, "d4" + suffix, root: stage.home.root)
+        }
+        switches[1].performClick(nil)
+        #expect(sheet.buttons[1].isEnabled)
+    }
+
+    /// The space the assistant just made in the mockup, its words invented: one agent waiting in its terminal.
+    static let waitingRoom = """
+        <!doctype html><html><head><meta charset="utf-8"><title>Waiting room</title>
+        <script type="application/json" id="something">{"contract": 1, "title": "Waiting room", "rights": ["state", "store"]}</script><style>
+        body{margin:0;padding:34px 46px;background:#F4F4F1;color:#121316;font:13.5px -apple-system,sans-serif}
+        @media (prefers-color-scheme:dark){body{background:#15171C;color:#F1F1EE}.w{background:#1F2126!important}}
+        h2{font:600 34px/1.05 Georgia,serif;letter-spacing:-.025em;margin:0}
+        .lead{color:#5C5E66;margin:8px 0 22px}
+        .w{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;background:#fff;border-radius:10px;
+           box-shadow:0 0 0 1px rgba(18,19,22,.1);padding:14px 16px}
+        .age{font:600 22px/1 -apple-system;width:64px}.age small{display:block;font-size:11px;font-weight:500;color:#8A8C92;margin-top:3px}
+        b{display:block;font-size:13px}span{color:#5C5E66;font-size:12.5px}
+        button{font:500 12.5px -apple-system;padding:6px 11px;border-radius:7px;border:1px solid rgba(18,19,22,.17);background:#fff}
+        .none{color:#8A8C92;font-size:12.5px;margin:12px 2px}
+        </style></head><body><h2>Waiting room</h2><p class="lead">Agents that wait for you in their own terminal, oldest first.</p>
+        <div class="w"><div class="age">34<small>minutes</small></div><div><b>Amp · ~/code/shop</b><span>Asks to run the tests before touching the cart page.</span></div><button>Open Terminal</button></div>
+        <p class="none">Nobody else waits. Two Claude Code sessions are working, and pi is idle.</p></body></html>
+        """
     /// The Templates page in the window, the toolbar's chip at the mockup's one request, the old composer gone (the
     /// mockup shows the page alone); and the page's model.
     static func templates(_ stage: Stage, _ size: NSSize = Stage.Size.main) throws -> (Shell, Library, Gallery, NSView) {

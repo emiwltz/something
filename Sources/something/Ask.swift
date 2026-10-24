@@ -3,7 +3,7 @@
 // the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching
 // the assistant's builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window. The
-// sheets and the panels share two labels: a line that wraps at a width, and a path on one line.
+// rights sheet's lines share two labels: a line that wraps at a width, and a path on one line.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -24,6 +24,10 @@ struct RightsQuestion: Equatable {
     var folder: FolderQuestion?
     /// Whether the person's assistant made the space while they waited for it: the sheet says so first.
     var made = false
+    /// The space's page (its file, or its folder), absolute, shown under the title; nil shows none.
+    var page: String? = nil
+    /// Every right the space declares, answered before or not: the fine print says what it does not ask for.
+    var declared: [String] = []
 }
 
 struct FolderQuestion: Equatable {
@@ -40,7 +44,7 @@ struct RightsAnswer: Equatable {
 }
 
 protocol Asking: AnyObject {
-    /// The person's answers, or nil when they chose "Not Now": nothing is remembered and the space gets nothing new.
+    /// The person's answers, or nil when they chose "Don't Allow": nothing is remembered and the space gets nothing new.
     func rights(_ question: RightsQuestion) -> RightsAnswer?
     /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
@@ -94,7 +98,7 @@ final class NativeAsk: Asking {
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         let sheet = Ask.rights(question)
-        return NativeAsk.agreed(wait(sheet.alert)) ? sheet.answer() : nil
+        return wait(sheet.sheet) == .primary ? sheet.answer() : nil
     }
 
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
@@ -201,11 +205,12 @@ final class Chooser: NSObject {
 
     init(_ lines: NSStackView, _ text: String, folder: String?, then: String, button title: String, home: String,
          chosen: @escaping (String) -> Void) {
-        let button = NSButton(title: title, target: nil, action: #selector(choose))
+        let button = PanelButton(title, action: #selector(choose))
+        (button.least, button.height) = (0, 26)
         self.home = home
         self.then = then
         self.chosen = chosen
-        width = Ask.rightsWidth - button.fittingSize.width - 8
+        width = Ask.rightsColumn - button.intrinsicContentSize.width - 8
         super.init()
         button.target = self
         row.orientation = .vertical
@@ -214,7 +219,9 @@ final class Chooser: NSObject {
         // As wide as the sheet's lines leave it: every Choose… button stands at the same place.
         row.widthAnchor.constraint(equalToConstant: width).isActive = true
         say(text, folder)
-        lines.addArrangedSubview(NSStackView(views: [row, button]))
+        let line = NSStackView(views: [row, button])
+        line.alignment = .centerY
+        lines.addArrangedSubview(line)
     }
 
     private func say(_ text: String, _ folder: String?) {
@@ -256,18 +263,17 @@ enum Ask {
         return alert
     }
 
-    /// A label that wraps at `width` points: a long sentence must not widen its window.
+    /// A label in the sheet's small type that wraps at `width` points: a long sentence must not widen its window.
     static func line(_ text: String, width: CGFloat) -> NSTextField {
-        let label = NSTextField(wrappingLabelWithString: text)
-        label.preferredMaxLayoutWidth = width
-        return label
+        Sheet.label([(text, false)], Look.small, color: .ink2, width: width)
     }
 
     /// `path` on one line, with ~ for `home`, its middle names given way to "…" until it fits `width`; the whole path
     /// shows when the pointer rests on it.
     static func path(_ path: String, home: String, width: CGFloat) -> NSTextField {
         let label = NSTextField(labelWithString: "")
-        let font = label.font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        let font = Look.font(.code, size: 11)
+        (label.font, label.textColor) = (font, Look.Token.ink2.color)
         label.stringValue = Words.path(path, home: home) { ($0 as NSString).size(withAttributes: [.font: font]).width <= width }
         label.toolTip = path
         // Even its first and last names may not fit: AppKit then cuts what is left, rather than widen the window.
@@ -276,48 +282,51 @@ enum Ask {
         return label
     }
 
-    /// How wide the rights sheet's lines wrap: a long folder or many of them would otherwise widen it past the screen.
-    static let rightsWidth: CGFloat = 400
+    /// How wide the rights sheet is, as the mockup sets it, and how wide its text runs beside the tile.
+    static let rightsWidth: CGFloat = 440, rightsColumn = Sheet.column(width: rightsWidth)
 
-    /// The rights sheet, not yet shown, and the answers its boxes and choosers hold once it closed with its first
-    /// button, "Allow". Every right is ticked: the person unticks what they refuse, and clicks Allow, which Return does
-    /// not press. Paths are shown from `home`.
-    /// The sheet is built apart from showing it so that a test can draw it without showing it.
-    static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (alert: NSAlert, answer: () -> RightsAnswer) {
-        let about = ([question.made ? "Your agent made this space." : nil, question.description].compactMap { $0 }).joined(separator: "\n\n")
-        let alert = Ask.alert("Allow “\(question.space)” to:", about, buttons: ["Allow", "Not Now"], escape: 1)
-        // Every box is ticked, and this sheet opens by itself at a first opening: Return must not allow it all
-        // unread. Allow is clicked; Escape is Not Now.
-        alert.buttons[0].keyEquivalent = ""
+    /// The rights sheet, not yet shown, and the answers its switches and choosers hold once it closed with "Allow".
+    /// "<Space> would like to", where its page is, then one row per right with a switch that starts off: Allow is
+    /// armed only once a switch is on, and Return and Escape press Don't Allow, which holds the focus. Paths are shown
+    /// from `home`. The sheet is built apart from showing it so that a test can draw it without showing it.
+    static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (sheet: Sheet, answer: () -> RightsAnswer) {
+        let text = rightsColumn
         let lines = NSStackView()
-        lines.orientation = .vertical
-        lines.alignment = .leading
-        // The alert puts its accessory 6 points left of its own text: the boxes line up with the message.
-        lines.edgeInsets.left = 6
+        (lines.orientation, lines.alignment, lines.spacing) = (.vertical, .leading, 10)
         func indented(_ view: NSView) {
             let line = NSStackView(views: [view])
-            line.edgeInsets.left = 20
+            line.edgeInsets.left = 14
             lines.addArrangedSubview(line)
         }
-        // A box's title does not wrap: the warning a right may carry goes in a label under its box.
-        let boxes = question.rights.map { NSButton(checkboxWithTitle: Ask.title(for: $0), target: nil, action: nil) }
-        for (right, box) in zip(question.rights, boxes) {
-            box.state = .on
-            lines.addArrangedSubview(box)
-            if let warning = Ask.warning(for: right) { indented(Ask.line(warning + ".", width: Ask.rightsWidth - 20)) }
+        if let page = question.page {
+            let words = NSMutableAttributedString(string: Words.path(page, home: home),
+                                                  attributes: [.font: Look.font(.code, size: 11.5), .foregroundColor: Look.Token.ink3.color])
+            if question.made {
+                words.append(NSAttributedString(string: " · made just now", attributes: [.font: Look.medium.font, .foregroundColor: Look.Token.ink3.color]))
+            }
+            let place = NSTextField(labelWithAttributedString: words)
+            (place.lineBreakMode, place.toolTip) = (.byTruncatingMiddle, page)
+            place.widthAnchor.constraint(lessThanOrEqualToConstant: text).isActive = true
+            lines.addArrangedSubview(place)
+        } else if question.made {
+            lines.addArrangedSubview(line("Your agent made this space.", width: text))
         }
+        if let description = question.description { lines.addArrangedSubview(Sheet.label([(description, false)], Look.medium, color: .ink2, width: text)) }
+        if let last = lines.arrangedSubviews.last { lines.setCustomSpacing(14, after: last) }
+        let switches = question.rights.map { SheetSwitch(right($0).title) }
+        lines.addArrangedSubview(list(question.rights, switches, width: text))
         if let scope = question.scope {
-            let sentence = "With “\(Ask.title(for: "state"))”, it sees "
+            let sentence = "With “\(right("state").title)”, it sees "
             switch scope {
-            case .all: lines.addArrangedSubview(Ask.line(sentence + "all your agents.", width: Ask.rightsWidth))
+            case .all: lines.addArrangedSubview(line(sentence + "all your agents.", width: text))
             case .folders(let folders) where folders.isEmpty:
-                lines.addArrangedSubview(Ask.line(sentence + "only the agents it starts.", width: Ask.rightsWidth))
+                lines.addArrangedSubview(line(sentence + "only the agents it starts.", width: text))
             case .folders(let folders):
-                lines.addArrangedSubview(Ask.line(sentence + "only the agents working in:", width: Ask.rightsWidth))
+                lines.addArrangedSubview(line(sentence + "only the agents working in:", width: text))
                 // Six at most: a sheet does not scroll, and twenty folders would push its buttons off the screen.
-                folders.prefix(6).forEach { indented(Ask.path($0, home: home, width: Ask.rightsWidth - 20)) }
+                folders.prefix(6).forEach { indented(path($0, home: home, width: text - 14)) }
                 if folders.count > 6 {
-                    let more = Ask.line("and \(folders.count - 6) more", width: Ask.rightsWidth - 20)
+                    let more = line("and \(folders.count - 6) more", width: text - 14)
                     more.toolTip = folders.dropFirst(6).joined(separator: "\n")
                     indented(more)
                 }
@@ -336,17 +345,82 @@ enum Ask {
             choosers.append(Chooser(lines, now, folder: asked.found ?? asked.declared, then: "Agents it starts will work in:",
                                     button: "Choose…", home: home) { folder = $0 })
         }
-        let footer = Ask.line("You can change this anytime in Info (\(Keys.shown("insp"))).", width: Ask.rightsWidth)
-        footer.textColor = .secondaryLabelColor
-        lines.addArrangedSubview(footer)
-        lines.setCustomSpacing(14, after: lines.arrangedSubviews[lines.arrangedSubviews.count - 2])
-        lines.frame.size = lines.fittingSize
-        alert.accessoryView = lines
-        return (alert, {
+        let sheet = Sheet(icon: .symbol("doc"), title: "\(question.space) would like to", block: lines, fine: fine(question),
+                          actions: [.init(title: "Don't Allow", role: .cancel, hint: "esc"), .init(title: "Allow", role: .primary)],
+                          width: rightsWidth)
+        // Every switch starts off, and this sheet opens by itself at a first opening: Allow waits for one to be on.
+        let allow = sheet.buttons[1]
+        allow.enable(false)
+        for one in switches { one.changed = { _ in allow.enable(switches.contains { $0.state == .on }) } }
+        return (sheet, {
             withExtendedLifetime(choosers) {}
-            let ticked = zip(question.rights, boxes).filter { $0.1.state == .on }.map(\.0)
-            return RightsAnswer(allowed: ticked, refused: question.rights.filter { !ticked.contains($0) }, folder: folder, remap: remap)
+            let on = zip(question.rights, switches).filter { $0.1.state == .on }.map(\.0)
+            return RightsAnswer(allowed: on, refused: question.rights.filter { !on.contains($0) }, folder: folder, remap: remap)
         })
+    }
+
+    /// One row per right, in a ringed list: its symbol in a tile, its name and what it lets the space do, its switch.
+    private static func list(_ rights: [String], _ switches: [SheetSwitch], width: CGFloat) -> NSView {
+        let rows = NSStackView()
+        (rows.orientation, rows.spacing) = (.vertical, 0)
+        for (index, (one, toggle)) in zip(rights, switches).enumerated() {
+            if index > 0 {
+                let rule = Box(NSView(), fill: .line)
+                rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
+                rows.addArrangedSubview(rule)
+            }
+            let words = right(one)
+            let image = NSImageView(image: NSImage(systemSymbolName: words.symbol, accessibilityDescription: nil) ?? NSImage())
+            (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink2.color)
+            let tile = Box(image, fill: .bg2, ring: .line, radius: 7, insets: NSEdgeInsets(top: 5, left: 5, bottom: 5, right: 5))
+            NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16)])
+            let room = width - 24 - 26 - 30 - 22
+            let name = Sheet.label([(words.title, false)], Look.Style(face: .ui, size: 13, weight: .semibold, leading: 1.3), width: room)
+            let detail = Sheet.label([(words.detail, false)], Look.Style(face: .ui, size: 11.5, weight: .regular, leading: 1.4), color: .ink2, width: room)
+            if let warning = words.warning {
+                let said = NSMutableAttributedString(attributedString: detail.attributedStringValue)
+                said.append(NSAttributedString(string: " " + warning + ".", attributes: [.font: Look.font(.ui, size: 11.5, weight: .medium),
+                                                                                         .foregroundColor: Look.Token.bad.color,
+                                                                                         .paragraphStyle: said.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as Any]))
+                detail.attributedStringValue = said
+            }
+            let label = NSStackView(views: [name, detail])
+            (label.orientation, label.alignment, label.spacing) = (.vertical, .leading, 1)
+            label.widthAnchor.constraint(equalToConstant: room).isActive = true
+            let line = NSStackView(views: [tile, label, toggle])
+            (line.spacing, line.alignment) = (11, .centerY)
+            rows.addArrangedSubview(Box(line, insets: NSEdgeInsets(top: 7.5, left: 12, bottom: 7.5, right: 12)))
+        }
+        // The rules between the rows run from edge to edge, as the mockup's borders do.
+        rows.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width).isActive = true }
+        return Box(rows, fill: .bg, ring: .line, radius: Look.card)
+    }
+
+    /// The rights sheet's fine print: what the space does not ask for, among the four rights, then that each starts off.
+    static func fine(_ question: RightsQuestion) -> String {
+        let asked = Set((question.declared.isEmpty ? question.rights : question.declared).map { $0.split(separator: ":")[0] })
+        let not = [("state", "see your agents"), ("send", "write to your agents"), ("launch", "start agents"), ("store", "remember things")]
+            .filter { !asked.contains(Substring($0.0)) }.map(\.1)
+        let lead = not.isEmpty ? "" : "It does not ask to " + (not.count > 1 ? not.dropLast().joined(separator: ", ") + " or " + not[not.count - 1] : not[0]) + ". "
+        return lead + "Each right starts off; change it later in its Info."
+    }
+
+    /// A right as the rights sheet says it: its name, what it lets the space do, the warning a person must read before
+    /// allowing it (or nil), and its symbol.
+    static func right(_ right: String) -> (title: String, detail: String, warning: String?, symbol: String) {
+        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
+        let kind = parts.count == 2 ? Registry.app.name(of: parts[1]) : nil
+        let warning = warning(for: right)
+        switch parts[0] {
+        case "state": return ("See your agents", "Which agents run on this Mac, what each one is doing, and its last messages. It only reads.", nil, "eye")
+        case "send": return ("Write to your \(kind.map { $0 + " " } ?? "")agents",
+                             "Send a message to an agent you pick, stop it, or change its settings. It shows in that agent’s own conversation.", nil, "message")
+        case "launch": return ("Start \(kind ?? "agents")",
+                               "Launch \(kind == nil ? "one of your agents" : "it") in a folder." + (warning == nil ? " Anything that agent then needs still asks you." : ""),
+                               warning, "play")
+        case "store": return ("Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.", nil, "note.text")
+        default: return (right, "", nil, "shield")
+        }
     }
 
     /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button. The

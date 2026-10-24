@@ -9,7 +9,8 @@ import AppKit
 
 final class Sheet: NSPanel {
     enum Role { case cancel, secondary, primary, destructive }
-    struct Action { var title: String, role: Role }
+    /// An action; `hint` is the key that presses it, shown after its title.
+    struct Action { var title: String, role: Role, hint: String? = nil }
     enum Icon { case symbol(String), sign }
     /// A sentence in parts, each bold or not: the words a space chose are never read as markup.
     typealias Words = [(text: String, bold: Bool)]
@@ -28,20 +29,22 @@ final class Sheet: NSPanel {
     /// Called once an action was pressed: the window it hangs from takes it away.
     var ended: () -> Void = {}
 
-    /// A sheet of the parts given, in this order; `alert` centres them. Text the page gave is shown as is.
-    init(icon: Icon?, title: String, body: Words = [], rows: [Row] = [],
-         block: NSView? = nil, fine: String? = nil, actions: [Action], alert: Bool = false) {
-        let width = Sheet.width
+    /// A sheet of the parts given, in this order, `width` points wide; `alert` centres them. Text the page gave is
+    /// shown as is.
+    init(icon: Icon?, title: String, body: Words = [], rows: [Row] = [], block: NSView? = nil, fine: String? = nil,
+         actions: [Action], alert: Bool = false, width: CGFloat = Sheet.width) {
         isAlert = alert
         super.init(contentRect: NSRect(x: 0, y: 0, width: width, height: 100), styleMask: .borderless, backing: .buffered, defer: true)
         (isOpaque, backgroundColor, hasShadow, self.title) = (false, .clear, true, title)
         let tiled = icon.map { Self.tile($0, alert: alert) }
-        let text = Self.column(alert: alert, tiled: tiled != nil)
+        let text = Self.column(alert: alert, tiled: tiled != nil, width: width)
         let heading = Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)
         heading.preferredMaxLayoutWidth = Self.balanced(heading, width: text)
         var parts: [NSView] = [heading]
         if !body.isEmpty { parts.append(Self.label(body, Look.body, color: .ink2, width: text, centred: alert)) }
         if !rows.isEmpty { parts.append(Self.list(rows, width: text)) }
+        // A block of its own is as wide as the text, so that what it holds can wrap there.
+        block?.widthAnchor.constraint(equalToConstant: text).isActive = true
         if let block { parts.append(block) }
         if let fine { parts.append(Self.label([(fine, false)], Look.small, color: .ink3, width: text, centred: alert)) }
         let column = NSStackView(views: parts)
@@ -98,9 +101,10 @@ final class Sheet: NSPanel {
 
     override func cancelOperation(_ sender: Any?) { buttons.first { $0.keyEquivalent == "\u{1b}" }?.performClick(nil) }
 
-    /// How wide a sheet sets its text: its insets, and the tile beside the text unless `alert` centres it.
-    static func column(alert: Bool = false, tiled: Bool = true) -> CGFloat {
-        Sheet.width - 40 - (alert || !tiled ? 0 : 46)
+    /// How wide a sheet `width` points wide sets its text: its insets, and the tile beside the text unless `alert`
+    /// centres it.
+    static func column(alert: Bool = false, tiled: Bool = true, width: CGFloat = Sheet.width) -> CGFloat {
+        width - 40 - (alert || !tiled ? 0 : 46)
     }
 
     /// The narrowest width up to `width` that keeps `text` on as many lines as `width` does: the mockup balances the
@@ -224,7 +228,7 @@ final class SheetButton: PanelButton {
 
     init(_ action: Sheet.Action, target: AnyObject, action selector: Selector) {
         role = action.role
-        super.init(action.title, primary: [.primary, .destructive].contains(role), target: target, action: selector)
+        super.init(action.title, primary: [.primary, .destructive].contains(role), hint: action.hint, target: target, action: selector)
         least = 0
         if role == .destructive { fill = .bad }
         focusRingType = .none
@@ -251,5 +255,52 @@ final class SheetButton: PanelButton {
         ring.lineWidth = 2
         Look.Token.ink.color.setStroke()
         ring.stroke()
+    }
+}
+
+/// A switch as the mockup draws it, 30 by 18: filled in ink when on, in mist when off, its knob sliding between the
+/// two in the calm motion. `changed` hears each change the person makes. It reads as a checkbox to VoiceOver, which
+/// says on or off.
+final class SheetSwitch: NSButton {
+    static let size = NSSize(width: 30, height: 18)
+    var changed: (Bool) -> Void = { _ in }
+    /// Where the knob stands, 0 (off) to 1 (on); animated between the two.
+    @objc dynamic var knob: CGFloat = 0 { didSet { needsDisplay = true } }
+
+    init(_ label: String) {
+        super.init(frame: NSRect(origin: .zero, size: Self.size))
+        setButtonType(.switch)
+        (title, isBordered, state, focusRingType) = ("", false, .off, .exterior)
+        (target, action) = (self, #selector(flip))
+        setAccessibilityLabel(label)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize { Self.size }
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+    override var focusRingMaskBounds: NSRect { bounds }
+    override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill() }
+
+    override static func defaultAnimation(forKey key: NSAnimatablePropertyKey) -> Any? {
+        key == "knob" ? CABasicAnimation() : super.defaultAnimation(forKey: key)
+    }
+
+    @objc private func flip() {
+        let on = state == .on
+        NSAnimationContext.runAnimationGroup { context in
+            (context.duration, context.timingFunction) = (Look.duration(0.2, Look.motion(.calm)), Look.out.timing)
+            animator().knob = on ? 1 : 0
+        }
+        changed(on)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let track = NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2)
+        (state == .on ? Look.Token.ink : .mist).color.setFill()
+        track.fill()
+        Look.Token.bg2.color.setFill()
+        NSBezierPath(ovalIn: NSRect(x: 2 + 12 * knob, y: 2, width: 14, height: 14)).fill()
     }
 }

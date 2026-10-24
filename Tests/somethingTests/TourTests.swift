@@ -103,7 +103,8 @@ import Testing
         await assistants.finish(home, model)
 
         let question = RightsQuestion(space: "Second", description: "Invented.", rights: ["store"], scope: nil, missing: [], folder: nil, made: true)
-        #expect(Ask.rights(question).alert.informativeText == "Your agent made this space.\n\nInvented.")
+        let said = PanelsTests.texts(Ask.rights(question).sheet.contentView)
+        #expect(Array(said.prefix(3)) == ["Second would like to", "Your agent made this space.", "Invented."])
     }
 
     /// Under a Homebrew prefix, the tour offers the launcher once and makes it in the home's Applications: a bundle of

@@ -454,6 +454,48 @@ import WebKit
         }
     }
 
+    /// The rights sheet: one switch per right, all off; Allow greyed until one is on; the switches answer which are
+    /// allowed and which refused; Return and Escape press Don't Allow, which grants nothing (NativeAsk returns nil).
+    @Test func theRightsSheetStartsOffAndAllowsOnlyWhatIsOn() throws {
+        let question = RightsQuestion(space: "Review", description: nil, rights: ["state", "send:codex", "store"], scope: nil,
+                                      missing: [], folder: nil, page: "/Users/example/something/spaces/review.html")
+        let (sheet, answer) = Ask.rights(question, home: "/Users/example")
+        let switches = Self.switches(sheet.contentView)
+        #expect(switches.map(\.state) == [.off, .off, .off] && switches.map { $0.accessibilityLabel() } == ["See your agents", "Write to your Codex agents", "Remember things"])
+        #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.role) == [.cancel, .primary])
+        #expect(!sheet.buttons[1].isEnabled, "Allow waits for a switch")
+        #expect(answer() == RightsAnswer(allowed: [], refused: ["state", "send:codex", "store"], folder: nil, remap: [:]))
+        switches[0].performClick(nil)
+        switches[2].performClick(nil)
+        #expect(sheet.buttons[1].isEnabled)
+        #expect(answer() == RightsAnswer(allowed: ["state", "store"], refused: ["send:codex"], folder: nil, remap: [:]))
+        switches[0].performClick(nil)
+        switches[2].performClick(nil)
+        #expect(!sheet.buttons[1].isEnabled, "all off again")
+        sheet.buttons[1].performClick(nil)
+        #expect(sheet.chosen == nil, "a greyed Allow cannot be pressed")
+        // Escape presses Don't Allow, so nothing is granted, even with a switch on; Return too, as it holds the focus.
+        switches[1].performClick(nil)
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                                   characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(sheet.performKeyEquivalent(with: escape) && sheet.chosen == .cancel)
+        let other = Ask.rights(question).sheet
+        #expect(other.firstResponder === other.buttons[0])
+        Self.switches(other.contentView)[0].performClick(nil)
+        other.keyDown(with: try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                                          characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)))
+        #expect(other.chosen == .cancel)
+        // The fine print says what the space does not ask for, among all it declares.
+        #expect(Ask.fine(question) == "It does not ask to start agents. Each right starts off; change it later in its Info.")
+        var all = question
+        all.declared = ["state", "send", "launch:pi", "store"]
+        #expect(Ask.fine(all) == "Each right starts off; change it later in its Info.")
+    }
+
+    static func switches(_ view: NSView?) -> [SheetSwitch] {
+        (view?.subviews ?? []).flatMap { ($0 as? SheetSwitch).map { [$0] } ?? switches($0) }
+    }
+
     @Test func rightsAreAskedOnceAndRemembered() async throws {
         let home = Home(prefix: "something-window-")
         defer { home.remove() }
@@ -471,7 +513,8 @@ import WebKit
         first.close()
         #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, rights: ["state", "store", "launch:codex"],
                                                  scope: .folders(["~/code/shop", "~/code/blog"]), missing: ["~/code/blog"],
-                                                 folder: FolderQuestion(declared: "~/code/shop", found: shop.path))])
+                                                 folder: FolderQuestion(declared: "~/code/shop", found: shop.path),
+                                                 page: space.location.path, declared: ["state", "store", "launch:codex"])])
         #expect(first.granted.rights == ["state", "launch:codex"] && first.granted.refused == ["store"])
         #expect(first.granted.folder == shop.path)
         #expect(first.granted.agents == .folders([shop.path, "/Users/example/blog"]))
