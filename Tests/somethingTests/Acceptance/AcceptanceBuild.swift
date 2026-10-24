@@ -7,6 +7,7 @@
 import AppKit
 import SwiftUI
 import SomethingAgents
+import SomethingCore
 import Testing
 import WebKit
 @testable import something
@@ -330,8 +331,8 @@ struct AcceptanceBuild {
     }
     /// The arrival after a build from New Space: the page written and the turn ended, the space appears and opens, and
     /// the sign's frame grows from New Space's sign to the center's edges over a still of the page left; drawn at 0.6
-    /// of its time. Then it plays to its end through `Arrival.open`, as App.open calls it: the page is not loaded and
-    /// no rights are asked while it plays; once it is gone the page loads and asks its rights. A space no longer shown
+    /// of its time (d3-growing). Then it plays to its end through `Arrival.open`, as App.open calls it: the page is not loaded and
+    /// no rights are asked while it plays; once it is gone the page loads and asks its rights (d3). A space no longer shown
     /// when its arrival ends is not opened, and a new opening ends an arrival still playing.
     @Test("d3: the arrival") func d3() async throws {
         let (stage, shell, library, _) = try await Self.building("fail")
@@ -370,7 +371,7 @@ struct AcceptanceBuild {
         library.select(.space(name))
         try await stage.appearances { suffix in
             // One picture: the still keeps the day it was taken in (the mockup has no night of this screen).
-            if suffix.isEmpty { try await Picture.window(shell, library: library, web: room.web, "d3", root: stage.home.root) }
+            if suffix.isEmpty { try await Picture.window(shell, library: library, web: room.web, "d3-growing", root: stage.home.root) }
         }
         var current = true
         Arrival.open(room, after: arrival, library: library, motion: .calm) { current }
@@ -383,6 +384,11 @@ struct AcceptanceBuild {
         // Once it is gone: the page loads and asks for its rights.
         #expect(await wait(until: { room.web.url != nil && !ask.questions.isEmpty }), "\(String(describing: room.web.url))")
         #expect(ask.questions.first?.rights == ["state", "store"])
+        // The mockup's d3 is the end of it: the space arrived, its row selected and fresh.
+        #expect(library.fresh == name && library.selection == .space(name))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: room.web, "d3" + suffix, root: stage.home.root)
+        }
 
         // Back on New Space, a new page: opening the space again arrives from nowhere.
         shell.show(nil)
@@ -415,6 +421,14 @@ struct AcceptanceBuild {
         let room = try await stage.open("waiting-room", in: shell, library)
         defer { room.close() }
         shell.waiting(1, mine: 0)
+        // The build's conversation, handed to the space it made (AssistantModel.hand): its agent alive and listening, the
+        // row's eyes awake until the Preferences' delay.
+        var builder = Agent(id: "a1", kind: "claude", origin: "launched")
+        (builder.state, builder.alive) = ("idle", true)
+        let handed = shell.assistant.session(for: shell.assistant.place)
+        handed.id = builder.id
+        handed.read(SomethingCore.State(at: iso8601.string(from: Stage.now), kinds: [:], agents: [builder]))
+        #expect(shell.assistant.eyes(of: "waiting-room") == .listen)
         let question = RightsQuestion(space: "Waiting room", description: nil, rights: ["state", "store"], scope: nil, missing: [],
                                       folder: nil, made: true, page: space.location.path, declared: ["state", "store"])
         let sheet = Ask.rights(question, home: stage.home.root.path).sheet

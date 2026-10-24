@@ -261,7 +261,7 @@ struct TemplateCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
-                Text(template.line).font(Look.font(.ui, size: 12).ui).lineSpacing(3.5).foregroundStyle(Look.Token.ink3.ui)
+                Text(template.line).font(Look.font(.ui, size: 12).ui).lineSpacing(1.8).foregroundStyle(Look.Token.ink3.ui)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 2)
             }
             .padding(.horizontal, 5)

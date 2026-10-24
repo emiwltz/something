@@ -151,7 +151,7 @@ struct AssistantCard: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .reply(let text):
             Text(AssistantCard.markdown(text))
-                .font(Look.font(.voice, size: 13).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink.ui)
+                .font(Look.font(.voice, size: 13).ui).lineSpacing(1.5).foregroundStyle(Look.Token.ink.ui)
                 .bubble()
                 .background(Look.Token.sunk.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18))
                 .padding(.trailing, 50)
@@ -170,6 +170,12 @@ struct AssistantCard: View {
     /// parse.
     static func markdown(_ text: String) -> AttributedString {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+    }
+
+    /// A button's title split before its shortcut (a last word holding ⌘), nil when it has none.
+    static func shortcut(of title: String) -> (String, String?) {
+        guard let space = title.lastIndex(of: " "), title[space...].contains("⌘") else { return (title, nil) }
+        return (String(title[..<space]), String(title[title.index(after: space)...]))
     }
 
     /// A message of the person's, held or sent, and the shape of its bubble.
@@ -383,7 +389,10 @@ struct NoticeView: View {
                             Button(action: action.run) {
                                 HStack(spacing: 6) {
                                     if let symbol = action.symbol { Image(systemName: symbol).font(.system(size: 10.5, weight: .semibold)) }
-                                    Text(action.title)
+                                    // Its shortcut, when it ends with one, smaller and quiet beside the words, as the mockup's.
+                                    let (words, keys) = AssistantCard.shortcut(of: action.title)
+                                    Text(words)
+                                    if let keys { Text(keys).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui) }
                                 }
                                 .font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                                     .padding(.horizontal, 11).frame(height: 27)

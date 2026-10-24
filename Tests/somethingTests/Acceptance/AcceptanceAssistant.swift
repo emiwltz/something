@@ -267,8 +267,9 @@ struct AcceptanceAssistant {
         defer { brief.close() }
         let model = shell.assistant, engine = model.engine, glass = shell.glass
         let briefs = model.session
-        // The card open with its conversation, whatever an earlier ⌘J left: the card keeps it from space to space.
-        model.focus()
+        // The card open with its conversation, whatever an earlier ⌘J left: the card keeps it from space to space. Its
+        // field is not typed in, as the mockup's.
+        model.open = true
         model.threadShown = true
         #expect(await wait(5) { glass.grown == true && !glass.morphing })
         let fades = glass.fades

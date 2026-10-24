@@ -152,7 +152,7 @@ struct WelcomeView: View {
             .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 16)
             // Rows of plain stacks, not a lazy grid: a lazy grid gives VoiceOver none of its radios.
             let columns = grid ? 2 : 1
-            VStack(spacing: 6) {
+            VStack(spacing: 5) {
                 ForEach(Array(stride(from: 0, to: found.count, by: columns)), id: \.self) { start in
                     HStack(spacing: 8) {
                         ForEach(start..<start + columns, id: \.self) { index in
@@ -200,7 +200,7 @@ struct WelcomeView: View {
                 Spacer(minLength: 0)
             }
             .padding(compact ? EdgeInsets(top: 6, leading: 11, bottom: 6, trailing: 12) : EdgeInsets(top: 9, leading: 13, bottom: 9, trailing: 14))
-            .frame(minHeight: compact ? 44 : 52)
+            .frame(minHeight: compact ? 49 : 52)
             .background(Look.Token.bg2.ui, in: shape)
             .overlay(shape.strokeBorder(on ? Look.Token.ink.ui : Look.Token.line.ui, lineWidth: on ? 1.5 : 1))
             .contentShape(shape)
@@ -239,13 +239,13 @@ struct WelcomeView: View {
                             .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         Button { tour.copy(row.command, with: assistant.copy) } label: {
                             let done = tour.copied == row.command
-                            HStack(spacing: 7) { Image(systemName: done ? "checkmark" : "doc.on.doc").font(.system(size: 11)); Text(done ? "Copied" : "Copy Command") }
+                            HStack(spacing: 7) { Image(systemName: done ? "checkmark" : "square.on.square").font(.system(size: 11)); Text(done ? "Copied" : "Copy Command") }
                                 .font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle((done ? Look.Token.ok : .ink).ui).frame(minWidth: 98)
                         }
                         .buttonStyle(Secondary())
                         .accessibilityLabel("Copy the command that installs \(row.name)")
                     }
-                    .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
+                    .padding(EdgeInsets(top: 9.5, leading: 14, bottom: 9.5, trailing: 8))
                     .plate()
                 }
             }

@@ -189,7 +189,8 @@ enum Picture {
     static func lights(of window: NSWindow) -> [(NSRect, NSColor)] {
         let colors: [(NSWindow.ButtonType, UInt32)] = [(.closeButton, 0xFF5F57), (.miniaturizeButton, 0xFEBC2E), (.zoomButton, 0x28C840)]
         return colors.compactMap { type, rgb -> (NSRect, NSColor)? in
-            guard let button = window.standardWindowButton(type), let frame = window.contentView?.superview else { return nil }
+            // A button the window disables (a panel's minimize and zoom) stays grey, as macOS draws it.
+            guard let button = window.standardWindowButton(type), button.isEnabled, let frame = window.contentView?.superview else { return nil }
             let place = button.convert(button.bounds, to: frame)
             let color = NSColor(srgbRed: CGFloat(rgb >> 16) / 255, green: CGFloat(rgb >> 8 & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
             return (NSRect(x: place.midX - 6, y: place.midY - 6, width: 12, height: 12), color)

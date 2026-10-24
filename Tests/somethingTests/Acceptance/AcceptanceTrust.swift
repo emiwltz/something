@@ -71,15 +71,20 @@ struct AcceptanceTrust {
         let glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
         #expect(await wait(5) { glass.grown == false && glass.stickerShown })
-        var agent = Agent(id: "a1", kind: "codex", origin: "launched")
-        (agent.state, agent.alive) = ("waiting", true)
-        // Its own conversation says so too, which the sidebar's eyes read: the same light as the sticker's.
-        let session = shell.assistant.session(for: shell.assistant.place)
-        session.id = agent.id
-        session.read(State(at: iso8601.string(from: Stage.now), kinds: [:], agents: [agent]))
+        let agent = Self.asks(shell)
         #expect(shell.assistant.eyes(of: "agents") == .wait || mine == 0)
         sticker.show(Presence(Presence.Facts(name: "Codex", installed: true), agent: agent, turn: nil, now: Stage.now), title: "My agents")
         #expect(sticker.sign.state == .wait && glass.mine == mine && sticker.badge.isHidden == (mine == 0) && sticker.badge.count == mine)
+    }
+
+    /// The open space's assistant, Codex, waiting for an answer, as its own conversation reads it: the sidebar's eyes.
+    @discardableResult static func asks(_ shell: Shell) -> Agent {
+        var agent = Agent(id: "a1", kind: "codex", origin: "launched")
+        (agent.state, agent.alive) = ("waiting", true)
+        let session = shell.assistant.session(for: shell.assistant.place)
+        session.id = agent.id
+        session.read(State(at: iso8601.string(from: Stage.now), kinds: [:], agents: [agent]))
+        return agent
     }
 
     @Test("e1: the request panel") func e1() async throws {
@@ -244,7 +249,8 @@ struct AcceptanceTrust {
         model.showRequest = { _ = panels.present(in: "agents") }
         panels.refresh()
         #expect(glass.mine == 1)
-        model.focus()
+        // The card open, its field not typed in: the request panel holds the keys.
+        model.open = true
         #expect(await wait(5) { glass.grown == true && !glass.morphing })
         let notice = try #require(model.notice)
         #expect(notice.title == "Claude Code is waiting for your answer" && notice.actions.map(\.title) == ["Show Request \(Keys.shown("showreq"))"])
@@ -552,6 +558,9 @@ struct AcceptanceTrust {
         let panels = Self.panels(source, shell, open: "agents")
         panels.clock = { time }
         panels.refresh()
+        // The window is inert under the welcome, not its state: My agents' row keeps the eyes of its assistant asking.
+        Self.asks(shell)
+        #expect(shell.assistant.eyes(of: "agents") == .wait)
         let situation = Keys.Situation(space: true, welcoming: true, waiting: !panels.queue.waiting.isEmpty)
         #expect(Keys.enabled("showreq", situation) && !Keys.enabled("new", situation) && !Keys.enabled("reload", situation))
         #expect(panels.present(in: "agents"))

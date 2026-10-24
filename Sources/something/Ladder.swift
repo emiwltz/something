@@ -139,10 +139,11 @@ struct LadderView: View {
                     Image(nsImage: Sign.miniEyes(ladder.eyes, joy: ladder.eyes == .done)).renderingMode(.template)
                         .foregroundStyle(Look.Token.eyes.ui).frame(width: 16, height: 10)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                    Text(AssistantCard.markdown(say)).font(Look.font(.voice, size: 17).ui).lineSpacing(5).foregroundStyle(Look.Token.ink.ui)
+                    Text(AssistantCard.markdown(say)).font(Look.font(.voice, size: 17).ui).lineSpacing(1).foregroundStyle(Look.Token.ink.ui)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 4)
+                // The mockup's 4 points before the eyes; none after, so the line wraps where the mockup's does.
+                .padding(.leading, 4)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Your assistant: \(say)")
             }

@@ -35,6 +35,8 @@ import SomethingCore
     private(set) var selection = Destination.newSpace
     /// The space that just arrived (Arrival): its row is ringed a moment in the sidebar.
     var fresh: String?
+    /// Whether a template's preview fills the Templates page: the sidebar's Templates is not highlighted then.
+    var previewing = false
     /// Told the name of each space made from a template: its assistant offers to make it yours.
     @ObservationIgnored var used: (String) -> Void = { _ in }
     /// What selecting does: the app shows the destination, closing the open space.

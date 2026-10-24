@@ -245,9 +245,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file
     /// in the toolbar.
     func show(_ space: SpaceView?, templates: Bool = false) {
+        library.previewing = false
         guard let space else {
             page = nil
-            let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] in self?.heading($0, $1, space: false) })
+            let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] title, subtitle in
+                self?.heading(title, subtitle, space: false)
+                self?.library.previewing = templates && title != Gallery.page.0
+            })
             put(templates ? Shell.hosted(GalleryView(library: library, model: gallery))
                 : Shell.hosted(BlankView(model: assistant, library: library, gallery: gallery)))
             glass.isHidden = true

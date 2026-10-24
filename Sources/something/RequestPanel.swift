@@ -434,7 +434,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
 
     /// Copy Command and Why am I asked?, quiet links under the command.
     private func links() -> NSView {
-        let row = NSStackView(views: [LinkButton("Copy Command", "doc.on.doc", target: self, action: #selector(copyCommand)),
+        let row = NSStackView(views: [LinkButton("Copy Command", "square.on.square", target: self, action: #selector(copyCommand)),
                                       LinkButton("Why am I asked?", "questionmark.circle", target: self, action: #selector(why))])
         row.spacing = 14
         return row

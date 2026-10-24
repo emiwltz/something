@@ -1,5 +1,5 @@
-// The sidebar: New Space first, selected on the blank page; the spaces in the library's order (one click opens one),
-// with an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
+// The sidebar: New Space first, selected on the blank page, and still while the assistant makes one there; the spaces
+// in the library's order (one click opens one); and Templates pinned at the bottom. A page whose
 // declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
 // the person was elsewhere has a dot, a space that just arrived a ring of ink fading out, and each space the eyes of
 // its own assistant, which `eyes` gives (W3 adds the ring of a change of state, the folded groups and the preference).
@@ -18,18 +18,13 @@ struct SidebarView: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
-                    nav(on: library.selection == .newSpace && !assistant.building, key: "new", label: "New Space", open: newSpace) {
+                    nav(on: library.selection == .newSpace, key: "new", label: "New Space", open: newSpace) {
                         // The identity's ink, never the system's accent: a rounded square of ink with its plus.
                         Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
                             .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
                     }
                     Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5).foregroundStyle(Look.Token.ink3.ui)
                         .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2)).accessibilityAddTraits(.isHeader)
-                    if assistant.building {
-                        row(on: library.selection == .newSpace, open: newSpace) {
-                            Image(systemName: "sparkle")
-                        } label: { Text("New Space").italic() }
-                    }
                     if library.entries.isEmpty, !assistant.building {
                         Text("Your spaces appear here").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
                             .padding(.horizontal, 10).padding(.vertical, 8)
@@ -46,7 +41,7 @@ struct SidebarView: View {
                 .padding(.horizontal, 10)
             }
             .scrollIndicators(.never)
-            nav(on: library.selection == .templates, key: "tpls", label: "Templates", open: { library.select(.templates) }) {
+            nav(on: library.selection == .templates && !library.previewing, key: "tpls", label: "Templates", open: { library.select(.templates) }) {
                 Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
             }
             .padding(EdgeInsets(top: 4, leading: 10, bottom: 10, trailing: 10))
