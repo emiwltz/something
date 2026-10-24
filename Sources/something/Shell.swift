@@ -400,7 +400,6 @@ final class Veil: NSView {
         Look.Token.bg.color.withAlphaComponent(0.42).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: Look.window, yRadius: Look.window).fill()
     }
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
     override func mouseDown(with event: NSEvent) {}
     override func rightMouseDown(with event: NSEvent) {}
     override func scrollWheel(with event: NSEvent) {}

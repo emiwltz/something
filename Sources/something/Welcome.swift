@@ -479,8 +479,8 @@ struct WelcomeView: View {
 }
 
 extension View {
-    /// The welcome's plate: bg2 in a hairline, at the card's radius.
-    fileprivate func plate() -> some View {
+    /// A plate: bg2 in a hairline, at the card's radius (the welcome's, the ladder's steps).
+    func plate() -> some View {
         let shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
         return background(Look.Token.bg2.ui, in: shape).overlay(shape.strokeBorder(Look.Token.line.ui))
     }

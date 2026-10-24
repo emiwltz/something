@@ -148,9 +148,7 @@ struct LadderView: View {
                 .accessibilityLabel("Your assistant: \(say)")
             }
             if !ladder.choices.isEmpty { choices }
-            if ladder.steps.contains(where: { $0.mark == .now }) {
-                TimelineView(.periodic(from: .now, by: 0.1)) { _ in steps(now: model.clock()) }
-            } else {
+            TimelineView(.animation(minimumInterval: 0.1, paused: !ladder.steps.contains { $0.mark == .now })) { _ in
                 steps(now: model.clock())
             }
             foot
@@ -195,8 +193,7 @@ struct LadderView: View {
             }
         }
         .padding(.vertical, 4)
-        .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line.ui))
+        .plate()
     }
 
     private func row(_ step: Ladder.Step, now: Date) -> some View {
@@ -255,7 +252,7 @@ struct LadderView: View {
         }
     }
 
-    static func word(_ mark: Ladder.Mark) -> String {
+    private static func word(_ mark: Ladder.Mark) -> String {
         switch mark {
         case .later: "to come"
         case .now: "now"

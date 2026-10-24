@@ -3,7 +3,8 @@
 // denied; a question is answered or left unanswered. The panel is not modal, so a request the agent withdraws leaves
 // it while the person still looks at it. A space sees the request in its state and can never answer it. One question
 // is left out of the panel: the one New Space's build asks while that page is shown, which the page answers (`inline`),
-// and, once that build is stopped, until its agent withdraws it; the Dock and the toolbar's chip still count it. Its permissions, and every other conversation's questions, come here.
+// and, once that build is stopped, until its agent withdraws it; the Dock and the toolbar's chip still count it. Its
+// permissions, and every other conversation's questions, come here.
 import AppKit
 import SomethingAgents
 import SomethingCore

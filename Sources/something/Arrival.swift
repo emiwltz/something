@@ -55,12 +55,11 @@ final class Arrival: NSView {
         guard let host = shell.center.subviews.first(where: { $0 is NSHostingView<BlankView> || $0 is NSHostingView<GalleryView> }) else { return nil }
         let blank = (host as? NSHostingView<BlankView>)?.rootView
         let gallery = blank?.gallery ?? (host as? NSHostingView<GalleryView>)?.rootView.model
-        let start: Start?
-        var sign: NSView?
+        var start: Start, sign: NSView?
         if let used = gallery?.used, name == used || name.hasPrefix("\(used)-"), let card = gallery?.drawn[used] {
             // The card's frame, in the page's coordinates as SwiftUI gave them, without a face.
             let rect = glass.convert(host.convert(card, to: nil), from: nil)
-            start = Start(rect: rect, arm: min(rect.width, rect.height) * 0.3, stroke: 22, face: false)
+            (start, sign) = (Start(rect: rect, arm: min(rect.width, rect.height) * 0.3, stroke: 22, face: false), nil)
         } else if let blank, let built = shell.assistant.sessions[.space(name)], ObjectIdentifier(built) == blank.opened,
                   let hero = Arrival.sign(in: host) {
             let g = hero.geometry, side = hero.bounds.width
@@ -68,9 +67,8 @@ final class Arrival: NSView {
                           arm: g.arm * side, stroke: g.stroke, face: true)
             sign = hero
         } else {
-            start = nil
+            return nil
         }
-        guard let start else { return nil }
         // The page's still without the sign, which the frame takes from there.
         sign?.isHidden = true
         let still = host.bitmapImageRepForCachingDisplay(in: host.bounds)
@@ -79,8 +77,8 @@ final class Arrival: NSView {
         // The glass is not flipped and the arrival is: its rectangles are turned over once, here.
         let height = glass.bounds.height
         func flip(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: height - r.maxY, width: r.width, height: r.height) }
-        let arrival = Arrival(start: Start(rect: flip(start.rect), arm: start.arm, stroke: start.stroke, face: start.face),
-                              still: still, stillRect: flip(host.convert(host.bounds, to: glass)))
+        start.rect = flip(start.rect)
+        let arrival = Arrival(start: start, still: still, stillRect: flip(host.convert(host.bounds, to: glass)))
         glass.hold(arrival)
         arrival.frame = glass.bounds
         return arrival
@@ -153,7 +151,7 @@ final class Arrival: NSView {
         }
         guard shape.eyes > 0 else { return }
         // The sign's eyes at rest, Ready, as the mockup's frame carries them, around the face's center.
-        let side = start.rect.width / (1 - 2 * Sign.Geometry().inset), g = Sign.Geometry(), eyes = g.eyes(.listen, side: side)
+        let g = Sign.Geometry(), side = start.rect.width / (1 - 2 * g.inset), eyes = g.eyes(.listen, side: side)
         let shift = CGPoint(x: shape.face.x - side / 2, y: shape.face.y - eyes[0].midY)
         c.setAlpha(shape.eyes)
         for eye in eyes { Sign.drawEye(.listen, eye.offsetBy(dx: shift.x, dy: shift.y), e: g.eye * side, stroke: g.joyStroke, in: c) }

@@ -64,11 +64,10 @@ import SomethingCore
         didSet {
             if place.space != nil, oldValue.space == nil { open = false }
             // Leaving New Space stops its build, the words kept in its field, and says so.
-            if oldValue == .blank, place != .blank, before?.session === session, let left = ladder {
-                stop(before)
-                told(left.left)
+            if oldValue == .blank, place != .blank {
+                if before?.session === session, let left = ladder { stop(before); told(left.left) }
+                (halted, nudged) = (nil, false)
             }
-            if oldValue == .blank, place != .blank { (halted, nudged) = (nil, false) }
             if place.key != oldValue.key {
                 // The assistant left stays awake for the whole delay from now: it was the open one until now.
                 session.active = clock()
@@ -251,7 +250,7 @@ import SomethingCore
     /// The question of the build asked from the blank page while the page is shown, when it is one question with one
     /// choice among at most nine labels, which keys 1 to 9 can answer. Any other request, of this build (a permission)
     /// or of any other conversation, goes to the panel.
-    func inlineQuestion() -> Asked? {
+    private func inlineQuestion() -> Asked? {
         guard place == .blank, let build = before else { return nil }
         return question(of: build)
     }
