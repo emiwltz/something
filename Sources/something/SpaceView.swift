@@ -3,7 +3,9 @@
 // `granted` injected in that frame before its scripts, the something:// scheme as its only source, every navigation
 // away from it cancelled (a clicked http, https or mailto link goes to the link sheet), no new window, and a reload
 // when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs. An
-// error the page does not catch is reported by its code alone, for the window's "This space has an error."
+// error the page does not catch is reported by its code alone, for the window's "This space has an error." A page
+// whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file no longer reloads it,
+// so a page that crashes at once is not reloaded in a loop, until the person reloads it.
 // What the space's calls do is in SpaceBridge.swift.
 import AppKit
 import SomethingAgents
@@ -13,6 +15,8 @@ import WebKit
 final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let space: Space, places: Places, engine: Engine, ask: Asking
     let web: WKWebView
+    /// The space's place in the window: the web view, and what covers it while the page is stopped.
+    let area = NSView()
     private(set) var title: String
     private(set) var granted = Granted()
     /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
@@ -26,8 +30,16 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
     let links = Links()
-    /// Called after each load: the title or the problems may have changed, and the window shows them.
+    /// Called after each load, and when the page stopped: the title, the problems or the stop changed, and the window
+    /// shows them.
     var loaded: () -> Void = {}
+    /// When the page's process ended since the space opened, oldest first; `stopped` from the last end to the next
+    /// load; `paused`, after two, until a load the person asks for or Ask to Fix.
+    private(set) var stops: [Date] = []
+    private(set) var stopped = false, paused = false
+    /// The clock of the stops, the calendar and the 12 or 24 hours they are said in; a test sets them.
+    var now: () -> Date = Date.init, calendar = Calendar.current, hours = Locale.current
+    private var covering: NSView?
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
@@ -67,6 +79,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         scheme = Scheme(space: space)
         web = SpaceView.webView(scheme, rules: rules)
         super.init()
+        area.frame = web.frame
+        web.autoresizingMask = [.width, .height]
+        area.addSubview(web)
         SpaceView.hold(web, by: self)
         web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "fault")
     }
@@ -164,7 +179,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.looking = false
-                if self.timer != nil, self.loads == loads, now != self.stamp { self.load() }
+                if self.timer != nil, !self.paused, self.loads == loads, now != self.stamp { self.load() }
             }
         }
     }
@@ -195,6 +210,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// or, when the declaration keeps the space from being displayed, keeps why in `blocked` for the window to say.
     func load() {
         loads += 1
+        (stopped, paused) = (false, false)
         stamp = SpaceView.stamp(of: space)
         pushed = nil
         frame = nil
@@ -375,6 +391,27 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         }
         guard let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
+    }
+
+    /// The page's process ended: WebKit shows nothing more, and the window says the space stopped. Reloading it at
+    /// once could crash it again in a loop, so the second stop also pauses the watch.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        stops.append(now())
+        (stopped, paused, frame) = (true, stops.count >= 2, nil)
+        loaded()
+    }
+
+    /// Ask to Fix was sent: the stops so far are forgotten, and the fix reloads the page when it changes a file.
+    func asked() { (stops, paused) = ([], false) }
+
+    /// Puts `view` over the page in place of what covered it, nil to uncover it.
+    func cover(_ view: NSView?) {
+        covering?.removeFromSuperview()
+        covering = view
+        guard let view else { return }
+        view.frame = area.bounds
+        view.autoresizingMask = [.width, .height]
+        area.addSubview(view)
     }
 
     /// window.open and target="_blank": no new window, ever.

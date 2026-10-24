@@ -18,7 +18,9 @@ contract, version 1. The look and the content are yours and theirs; the contract
 4. **Run `something check <name>` until it reports no error and no warning**, then once more with
    `--refuse <right>` for each right you declared: the page must hide what was refused, not throw.
 5. **Tell the person how to open it:** a click on it in something's sidebar, or `something open <name>`. The first
-   opening asks them for the rights. Saving the file again reloads the open space.
+   opening asks them for the rights. Saving the file again reloads the open space. A page that stops (its process
+   ends, as `PAGE_CRASHED` in the check) is said stopped in the window; after two stops something no longer reloads
+   it on a save until the person clicks Reload or asks its assistant to fix it.
 
 Rules that hold everywhere:
 

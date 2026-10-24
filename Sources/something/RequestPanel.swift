@@ -568,7 +568,7 @@ final class PanelHeader: NSView {
 /// A button of the panel, drawn in the identity: secondary (a ring on bg2) or primary (act), with a key hint ("esc")
 /// after its title. A primary button arming fills from the left on a pale ground.
 class PanelButton: NSButton {
-    let primary: Bool, hint: String?
+    let primary: Bool, hint: String?, symbol: NSImage?
     var height: CGFloat = 30
     /// Its narrowest width, and the colour a primary one is filled with.
     lazy var least: CGFloat = primary ? 112 : 96
@@ -576,8 +576,11 @@ class PanelButton: NSButton {
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }
 
-    init(_ title: String, primary: Bool = false, hint: String? = nil, target: AnyObject? = nil, action: Selector? = nil) {
+    /// `symbol`, a system symbol's name, goes 7 points before the title.
+    init(_ title: String, primary: Bool = false, hint: String? = nil, symbol: String? = nil, target: AnyObject? = nil, action: Selector? = nil) {
         (self.primary, self.hint) = (primary, hint)
+        self.symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold))
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
         setContentHuggingPriority(.required, for: .horizontal)
@@ -596,7 +599,7 @@ class PanelButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: max(least, (label.size().width + 26).rounded(.up)), height: height)
+        NSSize(width: max(least, (label.size().width + 26 + lead).rounded(.up)), height: height)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -616,9 +619,20 @@ class PanelButton: NSButton {
             Look.Token.line2.color.setStroke()
             shape.stroke()
         }
-        let label = label, size = label.size()
-        label.draw(at: NSPoint(x: ((bounds.width - size.width) / 2).rounded(), y: ((bounds.height - size.height) / 2).rounded()))
+        let label = label, size = label.size(), x = ((bounds.width - size.width - lead) / 2).rounded()
+        if let symbol {
+            let ink = (primary ? Look.Token.actfg : .ink).color
+            NSImage(size: symbol.size, flipped: false) { rect in
+                symbol.draw(in: rect)
+                ink.set()
+                rect.fill(using: .sourceAtop)
+                return true
+            }.draw(in: NSRect(origin: NSPoint(x: x, y: ((bounds.height - symbol.size.height) / 2).rounded()), size: symbol.size))
+        }
+        label.draw(at: NSPoint(x: x + lead, y: ((bounds.height - size.height) / 2).rounded()))
     }
+
+    private var lead: CGFloat { symbol.map { $0.size.width + 7 } ?? 0 }
 }
 
 /// A quiet link of the panel: a symbol, 5 points, then its words in ink2, drawn here because NSButton measures itself

@@ -598,4 +598,45 @@ import WebKit
         #expect(await wait(until: { !window.web.isLoading && window.web.url?.path == "/.blocked" }))
         #expect(try await run(window, "return document.getElementById('word') === null && window.done === undefined") as? Bool == true)
     }
+
+    /// A page whose process ends is said stopped; after two stops a changed file no longer reloads it, until the
+    /// person's Reload. Ask to Fix names only the title, the file and something's own sentence.
+    @Test func aPageThatStopsTwiceWaitsForReload() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let space = try home.space("crash", page(nil, "<title>Crash</title><script>window.done = true</script>"))
+        let window = try await home.window(space)
+        defer { window.close() }
+        var shown = 0
+        window.loaded = { shown += 1 }
+        window.open()
+        try await ready(window)
+        let loads = window.loads
+        window.webViewWebContentProcessDidTerminate(window.web)
+        #expect(window.stopped && !window.paused && window.stops.count == 1 && window.frame == nil && shown == 2)
+        func change(_ seconds: TimeInterval) throws {
+            try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(seconds)], ofItemAtPath: space.location.path)
+        }
+        // Once: a changed file still reloads it, the fix the assistant writes.
+        try change(5)
+        #expect(await wait(until: { window.loads == loads + 1 }))
+        #expect(!window.stopped)
+        try await ready(window)
+        window.webViewWebContentProcessDidTerminate(window.web)
+        window.webViewWebContentProcessDidTerminate(window.web)
+        #expect(window.stopped && window.paused && window.stops.count == 3)
+        try change(10)
+        await wait(2.5)
+        #expect(window.loads == loads + 1 && window.stopped, "a page that stopped twice is not reloaded by the watch")
+        window.load()
+        #expect(!window.stopped && !window.paused)
+        try await ready(window)
+        let fault = Stopped.fault(window)
+        #expect(fault == AssistantModel.Fault(title: "crash", name: "crash.html", codes: ["STOPPED"]))
+        #expect(AssistantModel.fixing(fault) == "The page of the space “crash” (crash.html) stopped responding. Find why and fix it.")
+        let (said, when) = Stopped.words([Date(timeIntervalSince1970: 0), Date(timeIntervalSince1970: 60), Date(timeIntervalSince1970: 120)],
+                                         file: "crash.html", calendar: { var utc = Calendar(identifier: .gregorian); utc.timeZone = .gmt; return utc }(),
+                                         hours: Locale(identifier: "en_GB"))
+        #expect(said == "It stopped 3 times. something won't reload it again until you ask." && when == "crash.html · stopped at 00:01 and 00:02")
+    }
 }

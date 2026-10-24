@@ -129,8 +129,10 @@ enum Picture {
             return (drawn, place)
         }
         let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
-        // The assistant floats over the page, which was drawn over it; the window layer (the toast) covers both.
-        let floating = (web == nil ? [] : [shell.floating].compactMap { $0 }) + [shell.layer].filter { !$0.isHidden }
+        // What covers the page in its area (Stopped), then the assistant, float over the page, which was drawn over
+        // them; the window layer (the toast) covers all.
+        let covers = web?.superview?.subviews.filter { $0 !== web && !$0.isHidden } ?? []
+        let floating = covers + (web == nil ? [] : [shell.floating].compactMap { $0 }.filter { !$0.isHidden }) + [shell.layer].filter { !$0.isHidden }
         let over = try floating.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)

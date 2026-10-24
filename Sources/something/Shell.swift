@@ -211,8 +211,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var toolbarItems: [NSToolbarItem] { (window.toolbar?.items ?? []).flatMap { ($0 as? NSToolbarItemGroup)?.subitems ?? [$0] } }
 
     /// Writes the title and the file in the toolbar, for the window menu and VoiceOver too, and greys what acts on a
-    /// space when none is open.
-    func heading(_ title: String, _ file: String, space: Bool) {
+    /// space when none is open (Point too when `point` is false: the page stopped).
+    func heading(_ title: String, _ file: String, space: Bool, point: Bool = true) {
         (window.title, window.subtitle) = (title, file)
         let line = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
                                                                          .foregroundColor: Look.Token.ink.color, .kern: -0.135])
@@ -222,10 +222,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         titleLine.line = line
         titleLine.setAccessibilityLabel(file.isEmpty ? title : "\(title), \(file)")
-        // Point stays greyed until its slice gives it an action.
+        // Point stays greyed until its slice gives it an action, and while the page is stopped: nothing to point at.
         toolbarItems.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
             let control = controls[$0.itemIdentifier]
-            $0.isEnabled = space && control?.action != nil
+            $0.isEnabled = space && control?.action != nil && (point || $0.itemIdentifier != Shell.point)
             control?.isEnabled = $0.isEnabled
         }
     }
@@ -246,12 +246,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return templates ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
         }
         if space.blocked.isEmpty {
-            put(space.web)
+            put(space.area)
+            space.cover(space.stopped ? Stopped(space, assistant: assistant, motion: library.preferences.motion) : nil)
         } else {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
         }
-        heading(space.title, space.space.location.lastPathComponent, space: true)
+        heading(space.title, space.space.location.lastPathComponent, space: true, point: !space.stopped)
     }
 
     /// Shows the tour in the center, alone: the sidebar folded, Info and the assistant hidden.

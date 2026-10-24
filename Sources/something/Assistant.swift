@@ -16,8 +16,12 @@ import SomethingCore
     enum Light: String { case off = "not started", ready, working, waiting = "waiting for you", error }
     /// One line of the drawer: the person's message with what it was about, the agent's text, or one tool it ran.
     enum Row: Equatable { case mine(caption: String?, text: String), reply(String), tool(symbol: String, words: String, command: String?) }
-    /// What the open space reported while it ran: its title, its name and the codes, never its text.
-    struct Fault: Equatable { var title: String, name: String, codes: [String] }
+    /// What the open space reported while it ran: its title, its name and the codes, never its text. A page that
+    /// stopped is named by its file, with the app's own reason `stopped`, which is no code of the contract.
+    struct Fault: Equatable {
+        static let stopped = "STOPPED"
+        var title: String, name: String, codes: [String]
+    }
     /// One builder in the agent menu.
     struct Entry: Identifiable { let id: String, title: String, checked: Bool, enabled: Bool, note: String? }
 
@@ -458,7 +462,8 @@ import SomethingCore
 
     /// Ask to Fix's words.
     static func fixing(_ fault: Fault) -> String {
-        "The space “\(clean(fault.title))” (\(fault.name)) has problems: \(fault.codes.joined(separator: ", ")). Run something check \(fault.name) and fix what it reports."
+        if fault.codes == [Fault.stopped] { return "The page of the space “\(clean(fault.title))” (\(fault.name)) stopped responding. Find why and fix it." }
+        return "The space “\(clean(fault.title))” (\(fault.name)) has problems: \(fault.codes.joined(separator: ", ")). Run something check \(fault.name) and fix what it reports."
     }
 
     /// A message as the drawer shows it: its context line taken off, said as a caption ("about My agents").
