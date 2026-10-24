@@ -1,7 +1,7 @@
 // The build ladder: Plan · Write · Check read from crafted items, Claude Code's (something's lent tools) and pi's
 // (`something check` in its shell), a check that fails then passes, the question it asks and what Stop leaves; then,
 // through the fake claude, Stop mid-Write and leaving New Space keeping the words, and the build's question answered
-// on the page while its permission, and any space's question, still go to the panel (SP8).
+// on the page while its permission, and any space's question, still go to the panel (SP8), and never once stopped.
 import Foundation
 import SomethingAgents
 import SomethingCore
@@ -12,7 +12,7 @@ import Testing
     static let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
     static let room = "/Users/example/something/spaces/waiting-room.html"
 
-    /// A tool item `id` of `name` running `text`, and when something saw it begin (and end, at `ended`).
+    /// A tool item `id` of `name` running `text`, with its status; when something saw it begin and end is given by `seen`.
     func tool(_ id: String, _ name: String, _ text: String, _ status: String = "done") -> Item {
         Item(id: id, kind: "tool", author: "agent", text: text, at: "2026-10-23T16:20:00Z", tool: Tool(name: name, status: status))
     }
@@ -164,6 +164,27 @@ import Testing
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now && model.ladder?.say == "One card per agent. Writing it now." }))
         #expect(AssistantTests().input(home).contains { $0.contains("\"answers\"") && $0.contains("One card per agent") })
         #expect(panels.panel == nil && model.engine.state.requests.isEmpty)
+        await AssistantTests().finish(home, model)
+    }
+
+    /// Stopping, or leaving New Space, while the build asks: the question it withdraws later never reaches the panel.
+    @Test(arguments: [false, true]) func aStoppedBuildsQuestionNeverReachesThePanel(leaving: Bool) async throws {
+        let (home, model) = try await assistant("ask")
+        let panels = Panels(source: model.engine, shows: false)
+        panels.inline = { [weak model] in model?.answersInline($0) == true }
+        var opened = false
+        model.engine.changed = { [weak model] in
+            panels.refresh()
+            model?.refresh()
+            opened = opened || panels.panel != nil
+        }
+        model.send("Who is waiting for me")
+        #expect(await wait(until: { model.asked != nil }))
+        if leaving { model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html") } else { model.stop() }
+        panels.refresh()
+        #expect(model.engine.state.requests.count == 1 && panels.queue.waiting.isEmpty && panels.panel == nil)
+        #expect(await wait(until: { model.engine.state.requests.isEmpty }))
+        #expect(!opened && panels.panel == nil)
         await AssistantTests().finish(home, model)
     }
 

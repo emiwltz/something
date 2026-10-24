@@ -1,11 +1,12 @@
 // The build ladder on New Space: what the assistant does with the sentence sent there, read from its build's turn as
 // three steps, Plan · Write · Check, each with its time. The words stay true to what agents report, tools and their
 // end, never what a page holds: Write begins with the first file written, Check with the first `something check`; a
-// check followed by a write found problems, which the writes after it fix; a check passed only when its command says
-// so (the lent tool reports a page with problems as done, so it says "Checked"). Above the steps, the agent's last
-// words in its own voice, or the question it asks while it builds, answered here (keys 1 to 9 while no text is edited, Ladder.choice) while its permissions
-// still go to the panel (AssistantModel.inlineQuestion). Below, where it is built and Stop (⌘.), which says what stays
-// on disk. The times are when something saw each step: agents stamp theirs to the second.
+// check followed by a write found problems, which the writes after it fix; a check passed only when its command says so
+// (the lent tool reports a page with problems as done, so it says "Checked"). Above the steps, the agent's last words
+// in its own voice, or the question it asks while it builds, answered here (keys 1 to 9 while no text is edited,
+// Ladder.choice) while its permissions still go to the panel (AssistantModel.inlineQuestion). Below, where it is built
+// and Stop (⌘.), which says what stays on disk. The times are when something saw each step: agents stamp theirs to the
+// second.
 import AppKit
 import SomethingAgents
 import SomethingCore

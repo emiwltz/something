@@ -22,8 +22,8 @@ import WebKit
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
-    /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt ends the
-    /// running turn as Claude Code does. For the ladder, "Who is waiting for me" reads the guide, says what it makes and
+    /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt withdraws
+    /// the ladder's question and ends the running turn as Claude Code does. For the ladder, "Who is waiting for me" reads the guide, says what it makes and
     /// starts writing waiting-room.html 0.9 s later, never ending its turn; with "ask" in $HOME/out/ladder it asks
     /// which way the page should read (AskUserQuestion, then another permission once "permission" is in that file too)
     /// and writes once answered; with "fail" it writes, a check fails, two edits fix it and a second check passes, then
@@ -71,6 +71,7 @@ import WebKit
           tool m2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
           echo '{"type":"assistant","message":{"id":"msg_m3","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_m3","name":"Bash","input":{"command":"something check brief"}}]},"parent_tool_use_id":null,"uuid":"am3","session_id":"s1"}' ;;
         *'"subtype":"interrupt"'*)
+          echo '{"type":"control_cancel_request","request_id":"rq1"}'
           echo '{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_tools","session_id":"s1","uuid":"u8"}'
           echo '{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u7","session_id":"s1"}' ;;
         *'small game'*'"type":"user"'*)

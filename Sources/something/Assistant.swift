@@ -130,6 +130,9 @@ import SomethingCore
     /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
     struct Asked: Equatable { let request: String, question: Question }
     private(set) var asked: Asked?
+    /// The question of a build the person stopped or left, until its agent withdraws it, which comes later: kept out of
+    /// the panel meanwhile, as nobody should be asked what they just stopped.
+    @ObservationIgnored private var dropped: String?
     /// Says a sentence in a toast: the window's.
     @ObservationIgnored var told: (String) -> Void = { _ in }
     var ready: Library.Entry?
@@ -235,6 +238,7 @@ import SomethingCore
     /// blank page answers.
     private func follow() {
         keep(\.asked, inlineQuestion())
+        if let dropped, !engine.state.requests.contains(where: { $0.id == dropped }) { self.dropped = nil }
         guard var build = before, let turn = build.session.turn, turn.id != build.turn else { return }
         let now = clock(), was = build.seen.count
         for item in turn.items {
@@ -248,7 +252,13 @@ import SomethingCore
     /// choice among at most nine labels, which keys 1 to 9 can answer. Any other request, of this build (a permission)
     /// or of any other conversation, goes to the panel.
     func inlineQuestion() -> Asked? {
-        guard place == .blank, let build = before, build.session === sessions[.new], let id = build.session.id else { return nil }
+        guard place == .blank, let build = before else { return nil }
+        return question(of: build)
+    }
+
+    /// The question `build` asks that the blank page can answer, wherever the person is.
+    private func question(of build: Build) -> Asked? {
+        guard build.session === sessions[.new], let id = build.session.id else { return nil }
         for request in engine.state.requests where request.kind == "question" && request.agent == id {
             if let questions = engine.prompt(request.id)?.questions, questions.count == 1, let one = questions.first, !one.multiple,
                (1...9).contains(one.options.count) { return Asked(request: request.id, question: one) }
@@ -257,7 +267,7 @@ import SomethingCore
     }
 
     /// Whether `request` is answered on the blank page rather than in the panel: Panels' filter.
-    func answersInline(_ request: Request) -> Bool { inlineQuestion()?.request == request.id }
+    func answersInline(_ request: Request) -> Bool { request.id == dropped || inlineQuestion()?.request == request.id }
 
     /// The ladder New Space shows: the build's as it goes, or the one stopped there; nil when there is neither.
     var ladder: Ladder? {
@@ -499,7 +509,8 @@ import SomethingCore
     /// stays on disk, and the sentence goes back into the field, to change or build again. The watch ends here: a space
     /// it began is not opened by itself.
     private func stop(_ build: Build?) {
-        if build != nil {
+        if let build {
+            dropped = question(of: build)?.request
             halted = ladder?.halted()
             (before, asked, nudged) = (nil, nil, false)
         }
