@@ -34,6 +34,11 @@ struct AcceptanceStopped {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.brief(stage)
         defer { brief.close() }
+        // Point as its slice will wire it: enabled on a page that runs, greyed only by the stop.
+        let point = { shell.toolbarItems.first { $0.itemIdentifier == Shell.point }?.isEnabled }
+        shell.controls[Shell.point]?.action = #selector(NSResponder.cancelOperation(_:))
+        shell.show(brief)
+        #expect(point() == true)
         Self.stop(brief, at: -1)
         let cover = try #require(brief.area.subviews.last as? Stopped)
         #expect(brief.stopped && !brief.paused && cover.frame == brief.web.frame)
@@ -44,7 +49,10 @@ struct AcceptanceStopped {
         #expect(cover.subviews.first?.accessibilityLabel() == "This space stopped")
         // Nothing to point at in a page that stopped; Reload and Info still act.
         let items = shell.toolbarItems
-        #expect(items.first { $0.itemIdentifier == Shell.point }?.isEnabled == false)
+        #expect(point() == false)
+        // Back to today's Point, with no action: the toolbar's own validation would light a stub up in the pictures.
+        shell.controls[Shell.point]?.action = nil
+        shell.heading(brief.title, "brief.html", space: true, point: false)
         #expect(items.filter { [Shell.reload, Shell.info].contains($0.itemIdentifier) }.allSatisfy { $0.isEnabled })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "e10" + suffix, root: stage.home.root)
@@ -52,6 +60,7 @@ struct AcceptanceStopped {
         // Ask Its Assistant to Fix It is sent once, and the stops before it are forgotten.
         cover.fixNow()
         #expect(!cover.fix.isEnabled && brief.stops.isEmpty && brief.stopped)
+        #expect(Stopped.words([], file: "brief.html", calendar: brief.calendar, hours: brief.hours).when == "brief.html")
     }
 
     @Test("e11: stopped twice") func e11() async throws {
@@ -71,6 +80,24 @@ struct AcceptanceStopped {
         // Reload, the person's: the page loads again, the watch resumes and the cover goes.
         cover.reloadNow()
         #expect(!brief.stopped && !brief.paused && !brief.area.subviews.contains { $0 is Stopped })
+    }
+
+    @Test("A stopped space that closes lets its cover and its web view go") func freed() async throws {
+        let stage = try Stage("stopped")
+        defer { stage.remove() }
+        weak var space: SpaceView?, cover: Stopped?
+        try await {
+            let (shell, _, brief) = try await Self.brief(stage)
+            Self.stop(brief, at: 0)
+            cover = brief.area.subviews.last as? Stopped
+            #expect(cover != nil)
+            shell.show(nil)
+            brief.close()
+            space = brief
+        }()
+        // The fade-in holds the cover until it ends.
+        #expect(await wait(2, until: { cover == nil }))
+        #expect(space == nil)
     }
 
     @Test("e12: the script error strip", .disabled("not built yet: T11")) func e12() async throws {}

@@ -418,8 +418,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
 
-    /// Stops watching and lets the web view go; its data store goes with it.
+    /// Stops watching, drops its cover and lets the web view go; its data store goes with it.
     func close() {
+        cover(nil)
         loads += 1
         watching(false)
         SpaceView.release(web)

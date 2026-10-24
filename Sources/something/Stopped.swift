@@ -7,7 +7,9 @@ import AppKit
 import SomethingCore
 
 final class Stopped: NSView {
-    let space: SpaceView, assistant: AssistantModel
+    // Weak: the space holds its cover, and a closed space must go with its web view.
+    weak var space: SpaceView?
+    let assistant: AssistantModel
     let reload: PanelButton, fix: PanelButton
     private let card = NSStackView()
 
@@ -65,7 +67,7 @@ final class Stopped: NSView {
         let times = stops.suffix(2).map { Words.time(iso8601.string(from: $0), now: stops.last ?? $0, calendar: calendar, locale: Words.english, clock: hours) }
         let said = stops.count < 2 ? "Its page stopped responding. Nothing is lost: the page, its memory and its assistant are as they were."
             : "It stopped \(stops.count == 2 ? "twice" : "\(stops.count) times"). something won't reload it again until you ask."
-        return (said, "\(file) · stopped at " + times.joined(separator: " and "))
+        return (said, times.isEmpty ? file : "\(file) · stopped at " + times.joined(separator: " and "))
     }
 
     /// What Ask Its Assistant to Fix It sends: the space's title and its file, and something's own sentence.
@@ -90,17 +92,22 @@ final class Stopped: NSView {
         return field
     }
 
-    @objc func reloadNow() { space.load() }
+    @objc func reloadNow() { space?.load() }
 
     @objc func fixNow() {
+        guard let space else { return }
         assistant.fix(Stopped.fault(space))
         space.asked()
         fix.isEnabled = false
         fix.alphaValue = 0.45
     }
 
-    // Clicks stay on the cover: the page under it is gone.
-    override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point) ?? (frame.contains(point) ? self : nil) }
+    // A screen reader hears that the open space stopped, as the mockup's role="alert" card says it.
+    override func viewDidMoveToWindow() {
+        guard window != nil else { return }
+        NSAccessibility.post(element: card, notification: .announcementRequested,
+                             userInfo: [.announcement: "This space stopped", .priority: NSAccessibilityPriorityLevel.high.rawValue])
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         Look.Token.bg.color.withAlphaComponent(0.75).setFill()
