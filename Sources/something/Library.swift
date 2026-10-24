@@ -1,5 +1,5 @@
 // The spaces of ~/something/spaces as the sidebar lists them, sorted by title; the open one; the last one open, kept
-// in window.json; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
+// in the preferences; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
 // by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash, and Use Template.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
@@ -17,6 +17,7 @@ import SomethingCore
 
     @ObservationIgnored let places: Places
     @ObservationIgnored let ask: Asking
+    @ObservationIgnored let preferences: Preferences
     /// share/ and its templates, for the gallery, the blank page and the welcome.
     @ObservationIgnored let share: URL
     @ObservationIgnored let templates: [Template]
@@ -45,6 +46,7 @@ import SomethingCore
     init(places: Places, ask: Asking, share: URL) {
         self.places = places
         self.ask = ask
+        preferences = Preferences.at(places)
         (self.share, templates) = (share, Template.all(share))
     }
 
@@ -134,30 +136,10 @@ import SomethingCore
     func select(_ name: String?) {
         guard name != selection else { return }
         selection = name
-        if let name, name != Library.gallery { remember(name) }
+        if let name, name != Library.gallery { preferences.opened(name) }
         DispatchQueue.main.async { [weak self] in
             // A second click before this one opened: only the last one opens.
             if let self, self.selection == name { self.opened(name) }
-        }
-    }
-
-    /// What window.json keeps: the UI's own memory, apart from the grants, so that app.json changes only when a grant
-    /// does. The assistant keeps its builder and Ask Before Every Change there too, and the tour whether it was
-    /// seen and whether it offered the launcher.
-    struct WindowFile: Codable {
-        var lastOpen: String?, assistant: String?, askEverything: Bool?, toured: Bool?, launcherOffered: Bool?
-
-        /// What `places` keep; nil when window.json is missing or does not read.
-        static func read(_ places: Places) -> WindowFile? {
-            (try? Data(contentsOf: places.window)).flatMap { try? JSONDecoder().decode(WindowFile.self, from: $0) }
-        }
-
-        /// Changes what window.json keeps; a file that cannot be written loses only this memory of the UI.
-        static func update(_ places: Places, _ change: (inout WindowFile) -> Void) {
-            var file = read(places) ?? WindowFile()
-            change(&file)
-            try? FileManager.default.createDirectory(at: places.support, withIntermediateDirectories: true)
-            try? JSONEncoder().encode(file).write(to: places.window, options: .atomic)
         }
     }
 
@@ -166,17 +148,13 @@ import SomethingCore
     func last() -> String? {
         var name: String?
         if FileManager.default.fileExists(atPath: places.window.path) {
-            name = WindowFile.read(places)?.lastOpen
+            name = preferences.lastOpen
         } else {
             let old = (try? Data(contentsOf: places.grants)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             name = old?["default"] as? String
-            remember(name)
+            preferences.opened(name)
         }
         return entries.contains { $0.id == name } ? name : nil
-    }
-
-    private func remember(_ name: String?) {
-        WindowFile.update(places) { $0.lastOpen = name }
     }
 
     /// Drops the grants of every name whose file and folder are both gone from the spaces folder (deleted, or renamed
@@ -209,6 +187,7 @@ import SomethingCore
         do {
             try recycle(entry.space.location)
             if FileManager.default.fileExists(atPath: memory.path) { try recycle(memory) }
+            preferences.forget(name)
             try Library.forget(name, in: places)
         } catch {
             ask.tell("“\(entry.title)” was not moved to the Trash. \(error.sentence)")

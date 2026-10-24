@@ -34,7 +34,7 @@ import Testing
             shell.show(nil, endingTour: true)
         }
         tour.end()
-        #expect(ended && Library.WindowFile.read(home.places)?.toured == true && Library.WindowFile.read(home.places)?.launcherOffered == nil)
+        #expect(ended && Preferences(home.places).toured && !Preferences(home.places).launcherOffered)
         #expect(shell.touring == nil && shell.window.title == "New Space" && model.place == .blank && model.noAgent)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
@@ -53,7 +53,7 @@ import Testing
         tour.end()
         try await Task.sleep(for: .milliseconds(500))
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty && model.id == nil)
-        #expect(Library.WindowFile.read(home.places)?.assistant == "pi")
+        #expect(Preferences(home.places).assistant == "pi")
     }
 
     /// A suggestion sends its whole sentence, from the blank page, with the conversation open, and leaves the draft as

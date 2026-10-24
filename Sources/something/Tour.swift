@@ -1,6 +1,6 @@
 // The tour, shown in the window at the first start and again from Help › Welcome Tour: Welcome, then who
 // builds with you, then the blank page itself, where it ends. It never starts an agent: choosing a builder only says
-// which one the first message will start. Its end is kept in window.json, with whether it offered the launcher.
+// which one the first message will start. Its end is kept in the preferences, with whether it offered the launcher.
 import SwiftUI
 
 @Observable final class Tour {
@@ -11,7 +11,7 @@ import SwiftUI
     var step = 0
     /// Whether the welcome offers to add something to Applications, and whether its box is ticked.
     let offersLauncher: Bool
-    var addLauncher = true
+    var addLauncher: Bool
     /// Called when the tour ended, with what went wrong when the launcher could not be made.
     @ObservationIgnored var finished: (_ problem: String?) -> Void = { _ in }
     let places: Places, app: URL
@@ -20,12 +20,13 @@ import SwiftUI
     init(places: Places, app: URL = Bundle.main.bundleURL) {
         (self.places, self.app) = (places, app)
         offersLauncher = Launcher.offered(app: app, places: places)
+        addLauncher = Preferences.at(places).addToApplications
     }
 
     /// Ends the tour: it is not shown again at the next start, nor the launcher offered again; the launcher is made
     /// when the box was ticked.
     func end() {
-        Library.WindowFile.update(places) { [offersLauncher] in
+        Preferences.at(places).change { [offersLauncher] in
             $0.toured = true
             if offersLauncher { $0.launcherOffered = true }
         }

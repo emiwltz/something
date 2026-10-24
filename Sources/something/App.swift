@@ -81,6 +81,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             do { try AssistantModel.writeKnowledge(places, share: Resources.share) } catch { ask.tell(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
             do { try Library.forgetGone(places) } catch { ask.tell(error.sentence) }
+            library.preferences.forgetGone(in: places.spaces)
             library.watch()
             let early = handed ?? []
             handed = nil
@@ -95,7 +96,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 early.forEach(receive)
             } else if let last = library.last() {
                 library.select(last)
-            } else if Library.WindowFile.read(places)?.toured != true {
+            } else if !library.preferences.toured {
                 showTour(nil)
             }
         }

@@ -24,7 +24,7 @@ enum Launcher {
     /// Whether the tour offers the launcher: something runs from a Homebrew prefix, the tour never offered it, and
     /// no launcher is there.
     static func offered(app: URL, places: Places) -> Bool {
-        prefix(of: app) != nil && Library.WindowFile.read(places)?.launcherOffered != true
+        prefix(of: app) != nil && !Preferences.at(places).launcherOffered
             && !FileManager.default.fileExists(atPath: place(places).path)
     }
 

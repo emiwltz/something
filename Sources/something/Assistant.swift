@@ -1,5 +1,5 @@
 // The person's assistant as the window shows it: the coding agent that builds spaces with them in
-// ~/something/spaces. The builder chosen among the installed ones, kept in window.json with Ask Before Every Change;
+// ~/something/spaces. The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change;
 // the knowledge files written into the spaces folder; the agent launched at the first message, never before, and told
 // at each message which space is open; Stop, New Conversation, the stop after 30 idle minutes, the switch to another
 // builder, and what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words
@@ -103,9 +103,9 @@ import SomethingCore
     init(engine: Engine, places: Places) {
         self.engine = engine
         self.places = places
-        let kept = Library.WindowFile.read(places)
-        preferred = kept?.assistant
-        askEverything = kept?.askEverything ?? false
+        let kept = Preferences.at(places)
+        preferred = kept.assistant
+        askEverything = kept.askEverything
         refresh()
         // Once a minute: has the agent been idle for `idleLimit`?
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.checkIdle() }
@@ -351,7 +351,7 @@ import SomethingCore
         let switched = { [self] in
             newConversation()
             (kind, preferred) = (chosen, chosen)
-            Library.WindowFile.update(places) { $0.assistant = chosen }
+            Preferences.at(places).assistant = chosen
         }
         if id != nil, agent?.alive != false, !stopped {
             confirmSwitch(name, Registry.app.name(of: chosen), switched)
@@ -379,7 +379,7 @@ import SomethingCore
     /// Ask Before Every Change: from the next conversation on.
     func toggleAsking() {
         askEverything.toggle()
-        Library.WindowFile.update(places) { [askEverything] in $0.askEverything = askEverything }
+        Preferences.at(places).askEverything = askEverything
     }
 
     /// Stops the agent after `idleLimit` without a turn: a Claude Code process holds a few hundred MB.

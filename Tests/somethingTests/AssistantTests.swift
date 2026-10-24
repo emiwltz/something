@@ -419,7 +419,7 @@ import WebKit
         await look(model)
         model.choose("pi")
         #expect(model.kind == "pi" && asked.isEmpty, "no conversation: nothing to ask")
-        #expect(Library.WindowFile.read(home.places)?.assistant == "pi")
+        #expect(Preferences(home.places).assistant == "pi")
         model.choose("claude")
         model.draft = "Hello."
         model.send()
@@ -430,7 +430,7 @@ import WebKit
         #expect(model.kind == "pi" && model.id == nil)
         #expect(model.entries.first { $0.id == "pi" }?.title == "pi · never asks before acting")
         model.toggleAsking()
-        #expect(Library.WindowFile.read(home.places)?.askEverything == true)
+        #expect(Preferences(home.places).askEverything)
         #expect(AssistantModel(engine: model.engine, places: home.places).askEverything)
         await finish(home, model)
     }
