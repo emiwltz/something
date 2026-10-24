@@ -162,7 +162,6 @@ struct GalleryTests {
         let link = try #require(URL(string: "https://example.com/notes/overnight"))
         try Picture.view(try #require(Ask.link(link, space: "Morning review").contentView), "link" + suffix, root: fixture.root)
         try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)
-        try draw(Ask.trash("Morning review"), "trash" + suffix, fixture)
         try draw(Ask.quit(2), "quit-while-agents-run" + suffix, fixture)
         try draw(Ask.quit(3, assistant: true), "quit-assistant-and-others" + suffix, fixture)
         try draw(Ask.quit(1, assistant: true), "quit-assistant" + suffix, fixture)

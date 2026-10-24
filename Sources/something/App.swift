@@ -336,9 +336,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         alert.beginSheetModal(for: shell.window) { if $0 == .alertFirstButtonReturn { then() } }
     }
 
-    /// Asks in a sheet, then moves the space and its memory to the Trash.
+    /// Asks in a sheet that says what goes with the space, then moves the space and its memory to the Trash.
     func confirmTrash(_ entry: Library.Entry) {
-        sheet(Ask.trash(entry.title)) { [weak self] in self?.library.trash(entry.id) }
+        shell.front()
+        // One conversation is shared by every space until each space has its own (AB09b): its messages, without tools.
+        let messages = assistant.rows.filter { if case .tool = $0 { false } else { true } }.count
+        let window = shell.window, sheet = Ask.trash(entry, remembers: library.remembers(entry.id), messages: messages)
+        guard window.attachedSheet == nil else { return }
+        sheet.ended = { [weak window, unowned sheet] in window?.endSheet(sheet) }
+        window.beginSheet(sheet) { [weak self] _ in if sheet.chosen == .destructive { self?.library.trash(entry.id) } }
     }
 
     // MARK: The window and quitting

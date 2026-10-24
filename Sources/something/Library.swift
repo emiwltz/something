@@ -194,6 +194,11 @@ import SomethingCore
         if let entry = entry(name) { reveal(entry.space.location) }
     }
 
+    /// How many entries the memory of `name` holds, 0 when it has none; nil when its file does not read.
+    func remembers(_ name: String) -> Int? {
+        (try? Memory(folder: places.data, space: name).get("")).map { ($0 as? [String: Any])?.count ?? 0 }
+    }
+
     /// Moves the space and its memory to the Trash, where the person can put both back, and forgets its answers.
     /// Says what failed.
     func trash(_ name: String) {

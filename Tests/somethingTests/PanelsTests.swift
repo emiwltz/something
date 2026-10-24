@@ -700,7 +700,7 @@ final class FakeNotifier: Notifier {
         #expect(ask.withData("board", keys: [], bytes: 0) == nil, "no window")
         let offscreen = Offscreen(NSView())
         ask.window = { offscreen.window }
-        let first = Ask.trash("board")
+        let first = Ask.quit(1)
         first.beginSheetModal(for: offscreen.window) { _ in }
         defer { offscreen.window.endSheet(first.window) }
         #expect(ask.withData("board", keys: ["seen"], bytes: 12) == nil)

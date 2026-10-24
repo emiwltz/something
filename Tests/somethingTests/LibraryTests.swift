@@ -206,6 +206,10 @@ import Testing
         library.showInFinder("today")
         #expect(revealed == [test.places.spaces.appendingPathComponent("today.html")])
 
+        // What the trash sheet says goes with it: two entries, none for a space with no memory, nil for one that does not read.
+        try Memory(folder: test.places.data, space: "today").set("notes/first", "tea")
+        try Data("not json".utf8).write(to: Memory(folder: test.places.data, space: "broken").file)
+        #expect(library.remembers("today") == 2 && library.remembers("elsewhere") == 0 && library.remembers("broken") == nil)
         library.select(.space("today"))
         library.trash("today")
         let trash = test.root.appendingPathComponent("Trash")

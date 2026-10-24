@@ -383,7 +383,45 @@ struct AcceptanceTrust {
         try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                       characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
-    @Test("e8: the trash sheet", .disabled("not built yet: T8")) func e8() async throws {}
+    /// The trash sheet says what goes with the space: its page, what it remembers and its assistant's conversation
+    /// (the one conversation all spaces share until AB09b, three messages here). Cancel holds the focus and Escape;
+    /// Return never presses Move to Trash, a click does, and the space and its memory go to the Trash (the test's own).
+    @Test("e8: the trash sheet") func e8() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let memory = Memory(folder: stage.home.places.data, space: "brief")
+        for index in 1...12 { try memory.set("story-\(index)", index) }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let entry = try #require(library.entry("brief"))
+        let sheet = Ask.trash(entry, remembers: library.remembers("brief"), messages: 3)
+        #expect(sheet.title == "Move Daily brief and its memory to the Trash?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
+        #expect(PanelsTests.texts(sheet.contentView) == ["Move Daily brief and its memory to the Trash?", "These go with it:",
+                                                         "Its page", "brief.html", "What it remembers", "12 entries",
+                                                         "Its assistant's conversation", "3 messages",
+                                                         "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder."])
+        #expect(sheet.buttons.map(\.title) == ["Cancel", "Move to Trash"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
+        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
+        let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"), messages: 1)
+        #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant's conversation", "1 message"])
+        try await stage.appearances { suffix in
+            try await Picture.sheet(sheet, over: shell, library: library, web: brief.web, "e8" + suffix, root: stage.home.root)
+        }
+        sheet.makeFirstResponder(sheet.buttons[1])
+        sheet.keyDown(with: try Self.key("\r", 36))
+        #expect(sheet.chosen == nil, "Return never moves a space to the Trash")
+        // As the app does: the sheet hangs from the window, and its destructive action moves the space.
+        let trash = stage.home.root.appendingPathComponent("Trash")
+        library.recycle = { try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: $0, to: trash.appendingPathComponent($0.lastPathComponent)) }
+        sheet.ended = { [weak window = shell.window, unowned sheet] in window?.endSheet(sheet) }
+        shell.window.beginSheet(sheet) { _ in if sheet.chosen == .destructive { library.trash("brief") } }
+        sheet.buttons[1].performClick(nil)
+        #expect(await wait(until: { library.entry("brief") == nil }) && shell.window.attachedSheet == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["brief.html", "brief.json"])
+    }
     @Test("e9: quit while assistants work", .disabled("not built yet: T9")) func e9() async throws {}
     /// Full screen cannot be entered offscreen: the panel is placed as it is for a window in full screen, at the screen's
     /// top right below the toolbar, over the page drawn at the screen's size, the sidebar folded and no chrome around

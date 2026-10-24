@@ -793,7 +793,9 @@ class Box: NSView {
     required init?(coder: NSCoder) { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: radius, yRadius: radius)
+        // Inset half a point for the ring's stroke only: a rule one point tall is a fill alone.
+        let edge: CGFloat = ring == nil ? 0 : 0.5
+        let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: edge, dy: edge), xRadius: radius, yRadius: radius)
         if let fill {
             fill.color.setFill()
             shape.fill()

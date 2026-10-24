@@ -29,7 +29,9 @@ final class Sheet: NSPanel {
         (isOpaque, backgroundColor, hasShadow, self.title) = (false, .clear, true, title)
         let tiled = icon.map { Self.tile($0, alert: alert) }
         let text = Self.column(width: width, alert: alert, tiled: tiled != nil)
-        var parts: [NSView] = [Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)]
+        let heading = Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)
+        heading.preferredMaxLayoutWidth = Self.balanced(heading.attributedStringValue, width: text)
+        var parts: [NSView] = [heading]
         if !body.isEmpty { parts.append(Self.label(body, Look.body, color: .ink2, width: text, centred: alert)) }
         if !rows.isEmpty { parts.append(Self.list(rows, width: text)) }
         if let block { parts.append(block) }
@@ -85,6 +87,21 @@ final class Sheet: NSPanel {
         width - 40 - (alert || !tiled ? 0 : 46)
     }
 
+    /// The narrowest width up to `width` that keeps `text` on as many lines as `width` does: the mockup balances the
+    /// lines of a title (text-wrap: balance) rather than leave one word alone on the last.
+    static func balanced(_ text: NSAttributedString, width: CGFloat) -> CGFloat {
+        func height(_ wide: CGFloat) -> CGFloat {
+            text.boundingRect(with: NSSize(width: wide, height: 10_000), options: .usesLineFragmentOrigin).height.rounded(.up)
+        }
+        let lines = height(width)
+        var (low, high) = (width / 2, width)
+        while high - low > 1 {
+            let middle = (low + high) / 2
+            if height(middle) > lines { low = middle } else { high = middle }
+        }
+        return high.rounded(.up)
+    }
+
     /// Where a sheet hangs in `window`, in its coordinates: under its toolbar, centred over the space beside a sidebar
     /// `sidebar` points wide (the system centres a sheet on the rectangle's width).
     static func place(in window: NSWindow, sidebar: CGFloat) -> NSRect {
@@ -132,13 +149,20 @@ final class Sheet: NSPanel {
             if index > 0 { lines.addArrangedSubview(Box(NSView(), fill: .line)) }
             let image = NSImageView(image: NSImage(systemSymbolName: row.symbol, accessibilityDescription: nil) ?? NSImage())
             (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink3.color)
-            let label = label([(row.label, false)], Look.medium, width: width - 80)
+            // One line at its own height, centred with its symbol and its detail.
+            let label = label([(row.label, false)], Look.Style(face: Look.medium.face, size: Look.medium.size, weight: Look.medium.weight, leading: 1),
+                              width: width - 80)
             let meta = row.meta.map { RequestPanel.text($0, Look.Style(face: .code, size: 11, weight: .regular, leading: 1), .ink3) }
+            // The label takes the room left, so that each detail stands at the right edge.
+            label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            image.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            meta?.setContentHuggingPriority(.required, for: .horizontal)
             let line = NSStackView(views: [image, label, meta].compactMap { $0 })
-            line.spacing = 9
+            (line.spacing, line.distribution, line.alignment) = (9, .fill, .centerY)
             line.heightAnchor.constraint(greaterThanOrEqualToConstant: Look.row + 3).isActive = true
             lines.addArrangedSubview(line)
         }
+        lines.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width - 24).isActive = true }
         lines.arrangedSubviews.filter { $0 is Box }.forEach { $0.heightAnchor.constraint(equalToConstant: 1).isActive = true }
         return Box(lines, fill: .bg, ring: .line, radius: Look.card, insets: NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 12))
     }

@@ -399,10 +399,16 @@ enum Ask {
         return alert
     }
 
-    /// The sheet before Move to Trash: Move to Trash, then Cancel (Escape).
-    static func trash(_ title: String) -> NSAlert {
-        alert("Move “\(title)” to the Trash?", "Its memory on this Mac goes with it. You can put both back from the Trash.",
-              buttons: ["Move to Trash", "Cancel"], escape: 1)
+    /// The sheet before Move to Trash: what goes with the space, its page, how many entries its memory holds (nil when
+    /// it does not read) and how many messages its assistant's conversation has; then Cancel and Move to Trash.
+    static func trash(_ entry: Library.Entry, remembers: Int?, messages: Int) -> Sheet {
+        let page = entry.space.location.lastPathComponent + (entry.space.form == .folder ? "/" : "")
+        let memory = remembers.map { $0 == 0 ? "nothing yet" : "\($0) entr\($0 == 1 ? "y" : "ies")" } ?? "does not read"
+        return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
+                     rows: [("doc", "Its page", page), ("square.3.layers.3d", "What it remembers", memory),
+                            ("bubble.left", "Its assistant's conversation", messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")],
+                     fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
+                     actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
     }
 
     /// The sheet that asks before quitting while `count` agents something launched run, the person's assistant among
