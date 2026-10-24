@@ -1,0 +1,193 @@
+// Each space's past, kept in the engine's own folder, never in the spaces folder agents edit:
+// Application Support/something/versions/<space>/, an index.json of its versions, newest first, and blobs/<sha256>,
+// each file's content kept once however many versions hold it. A version is taken only when the space's files changed:
+// after a turn of its assistant, named by the person's sentence, or for a change no turn claims ("Edited outside
+// something"). Restoring writes a version's files back, sends the files it did not have to the Trash, and is itself a
+// version, so it can be undone the same way. The Preferences' limits (versions per space, the storage limit) drop the
+// oldest versions first; the latest version of a space is never dropped, nor a space or its memory. A space heavier
+// than an export carries (15 MB of files, 500 files) is not versioned, and says so.
+import CryptoKit
+import Foundation
+import SomethingCore
+
+struct Versions {
+    /// What made a version: a turn of the assistant, an edit no turn claims, or the person restoring an older one.
+    enum Kind: String, Codable { case turn, outside, restore }
+
+    struct Version: Codable, Equatable, Identifiable {
+        let id: String, kind: Kind
+        /// The person's sentence that asked for it; nil outside something and for a restore.
+        let sentence: String?
+        let when: Date
+        /// The agent's name for a turn, "You" for a restore; nil outside something, where nobody is known.
+        let who: String?
+        /// Each file, by its path in the space, and the SHA-256 of its content: the name of its blob.
+        let files: [String: String]
+        /// What changed since the version before, in words: "brief.html · one line added".
+        let summary: String
+        /// The id of the version a restore brought back.
+        var restored: String?
+        /// The page's picture, a file in the space's folder, once History draws one.
+        var thumb: String?
+    }
+
+    /// The most a space may weigh to be versioned: what an export carries, about 15 MB of files and 500 files.
+    static let most = 15_000_000
+
+    let root: URL
+    /// Versions kept per space, 0 for all of them; the storage limit of the whole store in bytes, 0 for none.
+    var keep: Int, limit: Int
+
+    init(root: URL, keep: Int, limit: Int) { (self.root, self.keep, self.limit) = (root, keep, limit) }
+
+    /// The store of `places`, with the limits the person chose.
+    init(_ places: Places, _ preferences: Preferences) {
+        self.init(root: places.versions, keep: preferences.versionsKept, limit: preferences.storageLimit * 1_000_000)
+    }
+
+    func folder(_ name: String) -> URL { root.appendingPathComponent(name, isDirectory: true) }
+    private func index(_ name: String) -> URL { folder(name).appendingPathComponent("index.json") }
+    private func blob(_ name: String, _ hash: String) -> URL { folder(name).appendingPathComponent("blobs/\(hash)") }
+
+    /// The versions kept for the space `name`, newest first; none when it has none or its index does not read.
+    func list(_ name: String) -> [Version] {
+        guard let data = try? Data(contentsOf: index(name)) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([Version].self, from: data)) ?? []
+    }
+
+    /// How many versions the space `name` keeps and what their files weigh, each content counted once.
+    func weight(_ name: String) -> (versions: Int, bytes: Int) {
+        let versions = list(name)
+        return (versions.count, Set(versions.flatMap(\.files.values)).reduce(0) { $0 + size(name, $1) })
+    }
+
+    /// Takes a version of `space` when its files differ from its latest version, and returns it; nil when nothing
+    /// changed. Throws a `SpaceError` when the space is too heavy to be versioned or the store cannot be written.
+    @discardableResult
+    func capture(_ space: Space, kind: Kind, sentence: String? = nil, who: String? = nil, restored: String? = nil,
+                 at when: Date = Date()) throws -> Version? {
+        let size = space.size()
+        guard size.bytes <= Versions.most, size.files <= Export.most else {
+            throw SpaceError("something keeps no versions of \(space.name): it has \(size.files) files weighing \(Size.words(size.bytes)), and versions are kept up to 15 MB and \(Export.most) files.")
+        }
+        var contents: [String: Data] = [:]
+        for file in space.files() { contents[file.path] = try Data(contentsOf: file.url) }
+        let files = contents.mapValues { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() }
+        var versions = list(space.name)
+        guard files != versions.first?.files else { return nil }
+        do {
+            try FileManager.default.createDirectory(at: folder(space.name).appendingPathComponent("blobs"), withIntermediateDirectories: true)
+            for (path, hash) in files where !FileManager.default.fileExists(atPath: blob(space.name, hash).path) {
+                try contents[path]?.write(to: blob(space.name, hash), options: .atomic)
+            }
+        } catch {
+            throw SpaceError("A version of \(space.name) could not be kept: \(error.localizedDescription)")
+        }
+        let before = versions.first.map { $0.files.compactMapValues { try? Data(contentsOf: blob(space.name, $0)) } }
+        var version = Version(id: UUID().uuidString.lowercased(), kind: kind, sentence: sentence, when: when, who: who, files: files,
+                              summary: Versions.summary(before, contents))
+        version.restored = restored
+        versions.insert(version, at: 0)
+        try save(space.name, versions)
+        prune()
+        return version
+    }
+
+    /// Brings `space` back to its version `id`: what it is now is kept first when no version holds it, each file of
+    /// the version is written back, and the files it did not have go to the Trash through `recycle`. Returns the
+    /// restore's own version, nil when the space was already that version. Throws a `SpaceError` when the version is
+    /// gone or incomplete (nothing is written then), or a file cannot be written.
+    @discardableResult
+    func restore(_ id: String, of space: Space, recycle: (URL) throws -> Void, at when: Date = Date()) throws -> Version? {
+        guard let chosen = list(space.name).first(where: { $0.id == id }) else {
+            throw SpaceError("This version of \(space.name) is no longer kept.")
+        }
+        // Read whole before anything is written: a missing blob or a path out of the space restores nothing.
+        var contents: [String: Data] = [:]
+        for (path, hash) in chosen.files {
+            let parts = path.split(separator: "/")
+            guard !path.hasPrefix("/"), !parts.contains(".."), let data = try? Data(contentsOf: blob(space.name, hash)) else {
+                throw SpaceError("This version of \(space.name) is incomplete in \(folder(space.name).path); nothing was restored.")
+            }
+            contents[path] = data
+        }
+        guard space.form == .folder || contents.count == 1 else {
+            throw SpaceError("This version of \(space.name) was a folder; the space is one file now, so nothing was restored.")
+        }
+        try capture(space, kind: .outside, at: when)
+        do {
+            if space.form == .file, let data = contents.values.first {
+                try data.write(to: space.location, options: .atomic)
+            } else {
+                for (path, data) in contents {
+                    let url = space.location.appendingPathComponent(path)
+                    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: url, options: .atomic)
+                }
+                for file in space.files() where contents[file.path] == nil { try recycle(file.url) }
+            }
+        } catch {
+            throw SpaceError("\(space.name) was not fully restored: \(error.localizedDescription)")
+        }
+        return try capture(space, kind: .restore, who: "You", restored: chosen.id, at: when)
+    }
+
+    /// Sends the versions of `name` to the Trash with its space, through `recycle`.
+    func trash(_ name: String, recycle: (URL) throws -> Void) throws {
+        if FileManager.default.fileExists(atPath: folder(name).path) { try recycle(folder(name)) }
+    }
+
+    /// Keeps the person's limits: each space its newest `keep` versions, then, while the store is heavier than
+    /// `limit`, the oldest version of all goes, a space's latest never; then the contents no version holds.
+    func prune() {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+        var all = Dictionary(uniqueKeysWithValues: names.map { ($0, list($0)) }.filter { !$0.1.isEmpty })
+        if keep > 0 { all = all.mapValues { Array($0.prefix(keep)) } }
+        func bytes(_ name: String) -> Int { Set(all[name, default: []].flatMap(\.files.values)).reduce(0) { $0 + size(name, $1) } }
+        var weights = Dictionary(uniqueKeysWithValues: all.keys.map { ($0, bytes($0)) })
+        while limit > 0, weights.values.reduce(0, +) > limit,
+              let oldest = all.filter({ $0.value.count > 1 }).min(by: { ($0.value.last?.when ?? .distantFuture) < ($1.value.last?.when ?? .distantFuture) })?.key {
+            all[oldest]?.removeLast()
+            weights[oldest] = bytes(oldest)
+        }
+        for (name, versions) in all {
+            if versions.count != list(name).count { try? save(name, versions) }
+            let held = Set(versions.flatMap(\.files.values))
+            let blobs = (try? FileManager.default.contentsOfDirectory(atPath: folder(name).appendingPathComponent("blobs").path)) ?? []
+            for hash in blobs where !held.contains(hash) { try? FileManager.default.removeItem(at: blob(name, hash)) }
+        }
+    }
+
+    /// What changed from `before` (nil for a first version) to `after`, by file, in words; three files at most, then
+    /// how many more.
+    static func summary(_ before: [String: Data]?, _ after: [String: Data]) -> String {
+        guard let before else { return after.count == 1 ? after.keys.first ?? "" : "\(after.count) files" }
+        let changed = Set(before.keys).union(after.keys).filter { before[$0] != after[$0] }.sorted()
+        let said = changed.prefix(3).map { path -> String in
+            guard let old = before[path] else { return "\(path) · new file" }
+            guard let new = after[path] else { return "\(path) · removed" }
+            guard let one = String(data: old, encoding: .utf8), let other = String(data: new, encoding: .utf8) else { return "\(path) · changed" }
+            let difference = other.components(separatedBy: "\n").difference(from: one.components(separatedBy: "\n"))
+            let (added, removed) = (difference.insertions.count, difference.removals.count), both = min(added, removed)
+            let lines = { (count: Int) in count == 1 ? "one line" : "\(count) lines" }
+            let parts = [(both, "changed"), (added - both, "added"), (removed - both, "removed")].filter { $0.0 > 0 }
+            return "\(path) · " + (parts.isEmpty ? "changed" : parts.enumerated().map { $0.offset == 0 ? "\(lines($0.element.0)) \($0.element.1)" : "\($0.element.0) \($0.element.1)" }.joined(separator: ", "))
+        }
+        return (said + (changed.count > 3 ? ["and \(changed.count - 3) more files"] : [])).joined(separator: "; ")
+    }
+
+    private func size(_ name: String, _ hash: String) -> Int {
+        (try? blob(name, hash).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+    }
+
+    private func save(_ name: String, _ versions: [Version]) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do { try encoder.encode(versions).write(to: index(name), options: .atomic) } catch {
+            throw SpaceError("The versions of \(name) could not be written: \(error.localizedDescription)")
+        }
+    }
+}

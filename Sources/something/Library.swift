@@ -1,7 +1,8 @@
 // The spaces of ~/something/spaces, sorted by title, and the sidebar's order of them (its groups, then the rest), the one
 // order of the sidebar, ⌘1…⌘9, the Go menu and ⌘P; where the window is (a space, New Space or the templates);
 // the last space open, kept in the preferences; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
-// by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash, and Use Template.
+// by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash (its versions
+// with it), and Use Template.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
 // imported or copied under a name forgets what the grants file kept for it first.
 import AppKit
@@ -208,14 +209,15 @@ import SomethingCore
         (try? Memory(folder: places.data, space: name).get("")).map { ($0 as? [String: Any])?.count ?? 0 }
     }
 
-    /// Moves the space and its memory to the Trash, where the person can put both back, and forgets its answers.
-    /// Says what failed.
+    /// Moves the space, its memory and its versions to the Trash, where the person can put them back, and forgets its
+    /// answers. Says what failed.
     func trash(_ name: String) {
         guard let entry = entry(name) else { return }
         let memory = Memory(folder: places.data, space: name).file
         do {
             try recycle(entry.space.location)
             if FileManager.default.fileExists(atPath: memory.path) { try recycle(memory) }
+            try Versions(places, preferences).trash(name, recycle: recycle)
             preferences.forget(name)
             try Library.forget(name, in: places)
         } catch {
