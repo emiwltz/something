@@ -197,19 +197,23 @@ enum Keys {
 
     /// What the items' enabled state depends on.
     struct Situation {
-        var space = false, working = false, agent = true, touring = false, editingText = false, waiting = false
+        var space = false, working = false, agent = true, welcoming = false, editingText = false, waiting = false
     }
+
+    /// What still acts while the welcome is open: the app's own items, Show Request (the panel then takes the keys) and
+    /// the text commands its fields may need. The window behind is inert, so nothing else does.
+    static let besideWelcome: Set = ["about", "hide", "hideOthers", "showAll", "quit", "showreq", "undo", "redo", "cut", "copy", "paste", "selectAll"]
 
     /// Whether the item of `id` can act in `situation`: never before its owner wires it, never without a space when it
     /// acts on one.
     static func enabled(_ id: String, _ situation: Situation) -> Bool {
+        guard !situation.welcoming || besideWelcome.contains(id) else { return false }
         guard let command = command(id) else { return true }
         guard command.action != nil, !(command.needsSpace && !situation.space) else { return false }
         switch id {
         case "stop": return situation.working
         case "ask": return situation.agent
         case "showreq": return situation.waiting
-        case "new", "tpls": return !situation.touring
         // ⌘⌫ deletes text in a field; the item steps aside (MenuBar also takes its key away).
         case "trash": return !situation.editingText
         default: return true

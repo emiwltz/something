@@ -8,6 +8,7 @@ import AppKit
 import SwiftUI
 import SomethingAgents
 import Testing
+import WebKit
 @testable import something
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-build-"))
@@ -429,10 +430,12 @@ struct AcceptanceBuild {
 extension Picture {
     /// The main window of a first start, stepped back as the mockup dims it (its center blurred and faded, its sidebar
     /// faded, a veil of the background over it all), and the welcome window centred over it with its float shadow and
-    /// its lights in their colors. The dimming is the mockup's CSS, redrawn here: the real window is not filtered.
-    static func welcome(_ welcome: NSWindow, over shell: Shell, library: Library, _ name: String, root: URL) async throws {
+    /// its lights in their colors (gray when not `keyed`). The dimming is the mockup's CSS, redrawn here: the real
+    /// window's filters are its layers', which an offscreen drawing does not apply.
+    static func welcome(_ welcome: NSWindow, over shell: Shell, library: Library, web: WKWebView? = nil, _ name: String, root: URL,
+                        keyed: Bool = true) async throws {
         guard let gallery else { return }
-        try await window(shell, library: library, web: nil, name + "-window", root: root, keyed: false)
+        try await window(shell, library: library, web: web, name + "-window", root: root, keyed: false)
         let file = gallery.appendingPathComponent(name + "-window.png")
         defer { try? FileManager.default.removeItem(at: file) }
         let page = try #require(NSImage(contentsOf: file)), size = shell.window.frame.size
@@ -476,7 +479,7 @@ extension Picture {
             NSGraphicsContext.restoreGraphicsState()
             Look.Token.line2.color.setStroke()
             shape.stroke()
-            paint(lights(of: welcome).map { ($0.0.offsetBy(dx: place.minX, dy: place.minY), $0.1) })
+            if keyed { paint(lights(of: welcome).map { ($0.0.offsetBy(dx: place.minX, dy: place.minY), $0.1) }) }
         }
     }
 }

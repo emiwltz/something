@@ -531,7 +531,47 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e13" + suffix, root: stage.home.root, fullScreen: screen)
         }
     }
-    @Test("e14: the panel over the welcome", .disabled("not built yet: AB17w")) func e14() async throws {}
+    /// A request arrives while the welcome, opened again from Help, stands over My agents: Show Request, which the menus
+    /// leave while they grey every command of the window behind, brings the panel in front of the welcome, holding the
+    /// keys, the welcome's lights gray. Escape there denies the request and leaves the tour at its step. That the keys
+    /// then go back to the welcome is a hand trial: a window never shown never becomes key.
+    @Test("e14: the panel over the welcome") func e14() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        let tour = Tour(places: stage.home.places)
+        let welcome = shell.welcome(tour, onScreen: false)
+        defer { shell.welcomed() }
+        #expect(shell.welcoming === welcome && shell.window.frame.maxY - welcome.frame.maxY == 152)
+        let source = FakePrompts()
+        Self.request("r", [0], in: source)
+        var time: TimeInterval = 100
+        let panels = Self.panels(source, shell, open: "agents")
+        panels.clock = { time }
+        panels.refresh()
+        let situation = Keys.Situation(space: true, welcoming: true, waiting: !panels.queue.waiting.isEmpty)
+        #expect(Keys.enabled("showreq", situation) && !Keys.enabled("new", situation) && !Keys.enabled("reload", situation))
+        #expect(panels.present(in: "agents"))
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: Self.desk)
+        #expect(panel.held && panel.ring.lit && panel.title == "Codex wants to run a command")
+        #expect(panel.level.rawValue > welcome.level.rawValue, "the panel floats over the welcome")
+        time += 1
+        panel.tick()
+        try await stage.appearances { suffix in
+            try await Picture.welcome(welcome, over: shell, library: library, web: agents.web, "e14-welcome" + suffix, root: stage.home.root, keyed: false)
+            let file = gallery.map { $0.appendingPathComponent("e14-welcome\(suffix).png") }
+            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
+            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e14" + suffix, root: stage.home.root,
+                                    page: file.flatMap { NSImage(contentsOf: $0) })
+        }
+        panel.cancelOperation(nil)
+        #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil)
+        #expect(tour.step == .welcome && !tour.skipped && shell.welcoming === welcome, "Escape at the panel answers it, not the tour")
+    }
     /// ⌘Q while two requests wait and one assistant works: each request is named, "will be denied"; Cancel is the default.
     @Test("e15: quit with requests") func e15() async throws {
         let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex"), .init(id: "r2", space: "Project watch", program: "Claude Code")],
@@ -634,17 +674,18 @@ extension Picture {
     /// draws it; the panel and the edges of the requests waiting behind it by their frames, their corners and the
     /// panel's shadow, which the window server draws, reconstructed. Over a space in `fullScreen` (a screen's frame), the
     /// canvas is that screen, and the page fills it without the window's chrome, as the mockup's e13 shows it. A panel
-    /// that holds the keys (Show Request) has its lights in their colors, and the main window's are gray.
+    /// that holds the keys (Show Request) has its lights in their colors, and the main window's are gray. A `given` page
+    /// stands for the main window as drawn elsewhere (the welcome over it).
     static func panel(_ panel: RequestPanel, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL,
-                      fullScreen: NSRect? = nil, keyed: Bool? = nil) async throws {
+                      fullScreen: NSRect? = nil, keyed: Bool? = nil, page given: NSImage? = nil) async throws {
         guard let gallery else { return }
-        var page: NSImage?
-        if fullScreen == nil {
+        var page = given
+        if given == nil, fullScreen == nil {
             try await window(shell, library: library, web: web, name + "-window", root: root, keyed: keyed ?? !panel.held)
             let file = gallery.appendingPathComponent(name + "-window.png")
             defer { try? FileManager.default.removeItem(at: file) }
             page = try #require(NSImage(contentsOf: file))
-        } else {
+        } else if given == nil {
             page = try await web?.takeSnapshot(configuration: nil)
         }
         func drawn(_ window: NSWindow) throws -> NSBitmapImageRep {

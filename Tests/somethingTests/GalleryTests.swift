@@ -292,9 +292,8 @@ struct GalleryTests {
         try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
     }
 
-    /// The tour's screens (welcome with the launcher's box; every builder, one, none), the blank page (idle, building
-    /// with the conversation open, without an agent), a space the assistant made said ready, the rights sheet of a
-    /// space it made, and Help › What something Does and Doesn't.
+    /// The blank page (without an agent, idle, building with the conversation open), a space the assistant made said
+    /// ready, the rights sheet of a space it made, and Help › What something Does and Doesn't.
     func drawOnboarding(suffix: String, _ fixture: Home) async throws {
         /// The window of a home whose PATH has `programs`, the builders looked for.
         func onboarding(_ programs: [String]) async throws -> (shell: Shell, library: Library, home: Home) {
@@ -309,21 +308,9 @@ struct GalleryTests {
             #expect(await wait(until: { shell.assistant.installed.count == Registry.app.builders.count }))
             return (shell, library, home)
         }
-        let every = try await onboarding(Registry.app.builders.map(\.kind))
-        defer { every.home.remove() }
-        let welcome = Tour(places: every.home.places, app: every.home.root.appendingPathComponent("brew/Cellar/something/0.2.0/something.app"))
-        every.shell.show(welcome)
-        try await draw(every.shell, library: every.library, web: nil, "tour-welcome" + suffix, every.home)
-        welcome.move(.assistant)
-        try await draw(every.shell, library: every.library, web: nil, "tour-builders-every" + suffix, every.home)
-        let one = try await onboarding(["claude"]), none = try await onboarding([])
-        defer { one.home.remove(); none.home.remove() }
-        for (window, name) in [(one, "tour-builders-one"), (none, "tour-none")] {
-            let tour = Tour(places: window.home.places)
-            tour.move(.assistant)
-            window.shell.show(tour)
-            try await draw(window.shell, library: window.library, web: nil, name + suffix, window.home)
-        }
+        // The welcome's steps are drawn by AcceptanceBuild (a2–a8), over the window they step back.
+        let none = try await onboarding([])
+        defer { none.home.remove() }
         none.shell.show(nil)
         try await draw(none.shell, library: none.library, web: nil, "blank-no-agent" + suffix, none.home)
 

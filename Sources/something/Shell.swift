@@ -2,8 +2,9 @@
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
 // waiting requests, Point, Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
-// from being shown, New Space, the templates or the tour; over a space, the glass, which holds the assistant
-// (Glass.swift). Off the spaces the assistant is away: New Space has its own field.
+// from being shown, New Space or the templates; over a space, the glass, which holds the assistant (Glass.swift). Off
+// the spaces the assistant is away: New Space has its own field. While the welcome is open over it, the window steps
+// back under a veil that takes every click.
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -38,8 +39,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
     var visible: (Bool) -> Void = { _ in }
-    /// The tour while it is shown.
-    private(set) var touring: Tour?
+    /// The welcome window while it is open over this one, and the veil between them.
+    private(set) var welcoming: NSWindow?
+    private var veil: NSWindow?
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -116,7 +118,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     @objc private func columnsMoved() { titleLine.invalidateIntrinsicContentSize() }
 
     /// The window changed size, which does not always move the columns: the title measures its room again.
-    func windowDidResize(_ notification: Notification) { titleLine.invalidateIntrinsicContentSize() }
+    func windowDidResize(_ notification: Notification) {
+        titleLine.invalidateIntrinsicContentSize()
+        veil?.setFrame(window.frame, display: true)
+        welcoming?.setFrame(Welcome.place(over: window.frame), display: true)
+    }
 
     /// something's sheets hang under the toolbar, centred over the space beside the sidebar; the system's own where
     /// it puts them.
@@ -237,10 +243,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file
-    /// in the toolbar. It ends the tour, and the sidebar the tour folded comes back.
+    /// in the toolbar.
     func show(_ space: SpaceView?, templates: Bool = false) {
-        if touring != nil { split.splitViewItems[0].isCollapsed = false }
-        touring = nil
         guard let space else {
             page = nil
             let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] in self?.heading($0, $1, space: false) })
@@ -261,16 +265,57 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         heading(space.title, space.space.location.lastPathComponent, space: true, point: !space.stopped)
     }
 
-    /// Shows the tour's content in the center, alone, holding the keys: the sidebar folded, Info and the assistant
-    /// hidden. (Its own window, Welcome.window, takes its place when App opens it there.)
-    func show(_ tour: Tour) {
-        touring = tour
-        let keys = WelcomeKeys(tour: tour, assistant: assistant, motion: library.preferences.motion)
-        put(keys)
-        window.makeFirstResponder(keys)
-        glass.isHidden = true
-        split.splitViewItems[0].isCollapsed = true
-        bare("something", "")
+    /// Opens `tour`'s welcome over this window, where Welcome.place puts it, and steps this window back as the mockup
+    /// dims it: the center blurred and faded, the sidebar faded, and over it all, toolbar included, a veil of the
+    /// background that takes every click. The welcome takes the keys; the menus grey this window's commands (App).
+    /// `onScreen` false leaves both windows off the screen, as a test's are. Returns the welcome's window.
+    @discardableResult
+    func welcome(_ tour: Tour, onScreen: Bool = true) -> NSWindow {
+        welcomed()
+        let welcome = Welcome.window(tour, assistant: assistant, motion: library.preferences.motion)
+        welcome.setFrame(Welcome.place(over: window.frame), display: false)
+        let veil = NSWindow(contentRect: window.frame, styleMask: .borderless, backing: .buffered, defer: true)
+        (veil.isOpaque, veil.backgroundColor, veil.hasShadow, veil.isReleasedWhenClosed) = (false, .clear, false, false)
+        veil.contentView = Veil()
+        (welcoming, self.veil) = (welcome, veil)
+        stepBack(true)
+        guard onScreen else { return welcome }
+        window.addChildWindow(veil, ordered: .above)
+        veil.addChildWindow(welcome, ordered: .above)
+        welcome.makeKeyAndOrderFront(nil)
+        return welcome
+    }
+
+    /// Closes the welcome and its veil, and brings this window forward again, its keys back.
+    func welcomed() {
+        guard let welcome = welcoming else { return }
+        welcoming = nil
+        veil?.removeChildWindow(welcome)
+        welcome.close()
+        stepBack(false)
+        if window.isVisible { window.makeKey() }
+    }
+
+    /// Steps the window back (`back`) or forward, in half a second, at once under Reduced motion.
+    private func stepBack(_ back: Bool) {
+        let center = center, sidebar = split.splitViewItems[0].viewController.view, veil = veil
+        center.wantsLayer = true
+        center.layerUsesCoreImageFilters = true
+        center.contentFilters = back ? [CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 7]),
+                                        CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])].compactMap { $0 } : []
+        if back { veil?.alphaValue = 0 }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = Look.duration(0.5, Look.motion(library.preferences.motion))
+            context.timingFunction = Look.douce.timing
+            center.animator().alphaValue = back ? 0.35 : 1
+            sidebar.animator().alphaValue = back ? 0.7 : 1
+            veil?.animator().alphaValue = back ? 1 : 0
+        }, completionHandler: back ? nil : { [weak self] in
+            guard let veil else { return }
+            self?.window.removeChildWindow(veil)
+            veil.orderOut(nil)
+            if self?.veil === veil { self?.veil = nil }
+        })
     }
 
     /// The toolbar's title and subtitle when no space is shown, its space's items greyed, and Info closed.
@@ -313,6 +358,20 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         NSApp.activate()
         visible(true)
     }
+}
+
+/// The veil over the main window while the welcome is open: the background at 42%, at the window's corners, taking
+/// every click so that nothing behind the welcome can be used.
+final class Veil: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        Look.Token.bg.color.withAlphaComponent(0.42).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: Look.window, yRadius: Look.window).fill()
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    override func mouseDown(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// The toolbar's title: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It

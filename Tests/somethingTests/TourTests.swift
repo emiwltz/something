@@ -1,5 +1,5 @@
 // The welcome tour, the blank page and the launcher: the welcome's keys, its steps with and without a builder and Look
-// Again, its end on the blank page with no agent started, the suggestions' whole sentences, the space the assistant
+// Again, its end with no agent started, the welcome over the window that steps back and its menus greyed, the suggestions' whole sentences, the space the assistant
 // made opened or said ready, the rights sheet's first line, and the launcher, made in the test home's Applications only
 // under a Homebrew prefix and its switch on, never twice, never registered, removed only when something made it.
 import AppKit
@@ -32,18 +32,11 @@ import Testing
         #expect(tour.looking)
         #expect(await wait(until: { model.kind == "claude" && !tour.looking }))
         #expect(tour.screen(model) == .assistant)
-        let (shell, _, _) = window(home, model)
-        shell.show(tour)
-        // What App's finished does: New Space, whose blank page takes the tour's place.
         var ended = false
-        tour.finished = { problem in
-            ended = problem == nil
-            shell.show(nil)
-        }
+        tour.finished = { ended = $0 == nil }
         tour.toggle(.notify)
         Self.press(welcome, .escape)
-        #expect(ended && Preferences(home.places).toured && !Preferences(home.places).launcherOffered && !Preferences(home.places).notify)
-        #expect(shell.touring == nil && shell.window.title == "New Space" && model.place == .blank)
+        #expect(ended && tour.skipped && Preferences(home.places).toured && !Preferences(home.places).launcherOffered && !Preferences(home.places).notify)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 
@@ -289,25 +282,44 @@ import Testing
         #expect(!known.contains { $0.contains(home.root.path) || $0.contains(home.root.resolvingSymlinksInPath().path) })
     }
 
-    /// Help › Welcome Tour just after a space was selected: the tour is a destination like the space, so the space,
-    /// which had not opened yet, never takes the tour's place; leaving the tour brings back the sidebar it folded.
-    @Test func theTourIsADestinationLikeASpace() async throws {
+    /// The first start of a home with no space: the welcome opens over the window, 152 points under its top, and the
+    /// window steps back (its center blurred and faded, its sidebar faded) under a veil that takes every click. While it
+    /// is open the menus grey the window's commands, ⌘N first, and leave Show Request. Make Your First Space ends it, the
+    /// window as it was, and it does not open again at the next start; the close button skips it as Escape does.
+    @Test func theWelcomeStepsTheWindowBack() async throws {
         let (home, model) = try assistants.assistant([], prefix: "something-tour-")
         defer { home.remove() }
         let (shell, library, _) = window(home, model)
+        library.preferences.motion = .reduced
+        #expect(App.welcomes(library), "a first start: never toured, no space")
         let tour = Tour(places: home.places)
-        // What App.open does with each destination; no space is listed here, so a space shows the blank page.
-        library.opened = { $0 == .tour ? shell.show(tour) : shell.show(nil) }
-        library.select(.space("invented"))
-        library.select(.tour)
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(shell.touring === tour && shell.window.title == "something" && shell.glass.isHidden == true)
-        #expect(shell.split.splitViewItems[0].isCollapsed)
-        library.select(.newSpace)
-        try await Task.sleep(for: .milliseconds(100))
-        // New Space is its own composer: the assistant's glass stays away from it.
-        #expect(shell.touring == nil && shell.window.title == "New Space" && shell.glass.isHidden == true)
-        #expect(!shell.split.splitViewItems[0].isCollapsed)
+        let welcome = shell.welcome(tour, onScreen: false)
+        #expect(shell.welcoming === welcome && welcome.frame == Welcome.place(over: shell.window.frame))
+        #expect(shell.window.frame.maxY - welcome.frame.maxY == 152 && welcome.frame.midX == shell.window.frame.midX)
+        let sidebar = shell.split.splitViewItems[0].viewController.view
+        #expect(await wait(until: { shell.center.alphaValue == 0.35 && sidebar.alphaValue == 0.7 }))
+        #expect(shell.center.contentFilters.count == 2)
+        let veil = Veil(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(veil.hitTest(NSPoint(x: 50, y: 5)) === veil, "the veil takes the clicks meant for the window behind it")
+        let welcoming = Keys.Situation(space: true, agent: true, welcoming: true, waiting: true)
+        for id in ["new", "tpls", "ask", "trash", "close", "full", "sidebar", "tour", "help", "space:invented"] {
+            #expect(!Keys.enabled(id, welcoming), "\(id) is greyed while the welcome is open")
+        }
+        #expect(Keys.enabled("new", Keys.Situation()) && Keys.enabled("showreq", welcoming) && Keys.enabled("quit", welcoming))
+        // What App's finished does at Make Your First Space.
+        tour.finished = { _ in shell.welcomed() }
+        tour.move(.ready)
+        Self.press(welcome, .return)
+        #expect(shell.welcoming == nil && !tour.skipped && Preferences(home.places).toured)
+        #expect(await wait(until: { shell.center.alphaValue == 1 && sidebar.alphaValue == 1 }) && shell.center.contentFilters.isEmpty)
+        #expect(!App.welcomes(Library(places: home.places, ask: FakeAsk(), share: Home.share)), "the tour ended is kept")
+        // Help › Welcome Tour again: its close button skips it.
+        let again = Tour(places: home.places)
+        again.finished = { _ in shell.welcomed() }
+        let second = shell.welcome(again, onScreen: false)
+        second.performClose(nil)
+        #expect(again.skipped && shell.welcoming == nil)
+        #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 
     /// The window of `home`, never shown, with `model` as its assistant.

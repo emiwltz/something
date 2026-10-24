@@ -1,5 +1,5 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
-// Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the menu bar
+// Info (Inspector.swift) and the assistant (Assistant.swift); the welcome at the first start (Welcome.swift); the menu bar
 // (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the panel of the
 // agents' requests; the state pushed at most four times a second; and quitting, which asks first while a request waits
 // or an agent something launched works, then denies the requests and stops the agents. Closing the window keeps the
@@ -118,7 +118,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 early.forEach(receive)
             } else if let last = library.last() {
                 library.select(.space(last))
-            } else if !library.preferences.toured {
+            } else if App.welcomes(library) {
                 showTour(nil)
             }
         }
@@ -145,20 +145,26 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         front()
     }
 
-    /// Shows the tour in the window, the open space closed; it ends on the blank page.
-    @objc func showTour(_ sender: Any?) {
-        library.select(.tour)
-        shell.front()
-    }
+    /// Whether the welcome opens at the start: it was never ended, and there is no space yet.
+    static func welcomes(_ library: Library) -> Bool { !library.preferences.toured && !library.entries.contains(where: \.isSpace) }
 
-    /// The tour in the center, made anew; at its end the window goes to New Space.
-    private func showTourNow() {
+    /// Help › Welcome Tour, and the first start: the welcome over the window, which steps back until it ends. Make
+    /// Your First Space ends on New Space, its field focused; skipped, the window stays where it was and says so.
+    @objc func showTour(_ sender: Any?) {
+        shell.front()
+        if let open = shell.welcoming { return open.makeKeyAndOrderFront(nil) }
         let tour = Tour(places: places)
-        tour.finished = { [weak self] problem in
-            self?.library.select(.newSpace)
-            problem.map { self?.ask.tell($0) }
+        tour.finished = { [weak self, unowned tour] problem in
+            guard let self else { return }
+            shell.welcomed()
+            if tour.skipped {
+                shell.toast("Skipped · everything is in Settings when you want it", quiet: true)
+            } else {
+                newSpace(nil)
+            }
+            if let problem { ask.tell(problem) }
         }
-        shell.show(tour)
+        shell.welcome(tour)
     }
 
     @objc func newSpace(_ sender: Any?) {
@@ -216,7 +222,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             return
         case .newSpace?: return shell.show(nil)
         case .templates?: return shell.show(nil, templates: true)
-        case .tour?: return showTourNow()
         case .space?: break
         }
         guard let name, let space = library.entry(name)?.space else { return shell.show(nil) }
@@ -338,7 +343,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
         let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
-                                       touring: library.selection == .tour, editingText: shell.window.firstResponder is NSText,
+                                       welcoming: shell.welcoming != nil, editingText: shell.window.firstResponder is NSText,
                                        waiting: !panels.queue.waiting.isEmpty)
         return Keys.enabled(id, situation)
     }

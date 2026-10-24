@@ -1,5 +1,5 @@
 // The spaces of ~/something/spaces, sorted by title, and the sidebar's order of them (its groups, then the rest), the one
-// order of the sidebar, ⌘1…⌘9, the Go menu and ⌘P; where the window is (a space, New Space, the templates or the tour);
+// order of the sidebar, ⌘1…⌘9, the Go menu and ⌘P; where the window is (a space, New Space or the templates);
 // the last space open, kept in the preferences; the folder looked at twice a second, so that a space made, changed, renamed or removed in Finder or
 // by an agent shows at once; and what acts on a space: import, export, Show in Finder, Move to Trash, and Use Template.
 // A space deleted or renamed in Finder loses its grants at the next start: a name never inherits rights. A space made,
@@ -21,10 +21,10 @@ import SomethingCore
     @ObservationIgnored let preferences: Preferences
     /// share/ and its templates, for the gallery, the blank page and the welcome.
     @ObservationIgnored let share: URL
-    /// Where the window is: a space, the blank page of New Space, the templates, or the tour. No history is kept: the
-    /// mockup has no back or forward.
+    /// Where the window is: a space, the blank page of New Space, or the templates. No history is kept: the mockup has
+    /// no back or forward.
     enum Destination: Hashable {
-        case space(String), newSpace, templates, tour
+        case space(String), newSpace, templates
         /// The space's name, for a space; nil elsewhere.
         var space: String? { if case .space(let name) = self { name } else { nil } }
     }
