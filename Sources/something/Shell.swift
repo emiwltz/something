@@ -284,8 +284,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         welcomed()
         let welcome = Welcome.window(tour, assistant: assistant, motion: library.preferences.motion)
         welcome.setFrame(Welcome.place(over: window.frame), display: false)
-        let veil = NSWindow(contentRect: window.frame, styleMask: .borderless, backing: .buffered, defer: true)
-        (veil.isOpaque, veil.backgroundColor, veil.hasShadow, veil.isReleasedWhenClosed) = (false, .clear, false, false)
+        let veil = Cover(over: window.frame)
         veil.contentView = Veil()
         (welcoming, self.veil) = (welcome, veil)
         stepBack(true)
@@ -397,6 +396,17 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         NSApp.activate()
         visible(true)
     }
+}
+
+/// A borderless, clear window laid over the whole of the main window, toolbar and lights included: the welcome's veil,
+/// which never takes the keys, and the first-launch film's (Film.swift), which takes them while it plays.
+final class Cover: NSWindow {
+    private var keys = false
+    convenience init(over frame: NSRect, keys: Bool = false) {
+        self.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: true)
+        (self.keys, isOpaque, backgroundColor, hasShadow, isReleasedWhenClosed) = (keys, false, .clear, false, false)
+    }
+    override var canBecomeKey: Bool { keys }
 }
 
 /// The veil over the main window while the welcome is open: the background at 42%, at the window's corners, taking

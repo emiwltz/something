@@ -34,7 +34,7 @@ final class Film: NSView {
     /// `onScreen` false leaves its window off the screen, as a test's are.
     @discardableResult
     static func play(in shell: Shell, library: Library, pace: Double = 1, onScreen: Bool = true, then: @escaping () -> Void) -> Film? {
-        Film.end(in: shell)
+        shell.film?.leave()
         let motion = library.preferences.motion
         guard Look.motion(motion) == .calm else {
             then()
@@ -51,15 +51,11 @@ final class Film: NSView {
         return film
     }
 
-    /// Ends any film over `shell`'s window, New Space's sign shown again.
-    static func end(in shell: Shell) { shell.film?.leave() }
-
     /// A film in its own window over all of `shell`'s, kept as its film, not shown yet.
     init(over shell: Shell, motion: Look.Motion) {
         (self.shell, self.motion) = (shell, motion)
-        cover = Cover(contentRect: shell.window.frame, styleMask: .borderless, backing: .buffered, defer: true)
+        cover = Cover(over: shell.window.frame, keys: true)
         super.init(frame: NSRect(origin: .zero, size: shell.window.frame.size))
-        (cover.isOpaque, cover.backgroundColor, cover.hasShadow, cover.isReleasedWhenClosed) = (false, .clear, false, false)
         cover.contentView = self
         shell.film = self
         (paper.boxType, paper.borderWidth, paper.fillColor, paper.autoresizingMask) = (.custom, 0, Look.Token.bg.color, [.width, .height])
@@ -96,14 +92,13 @@ final class Film: NSView {
         sign.frame = CGRect(x: ((bounds.width - Film.side) / 2).rounded(), y: y, width: Film.side, height: Film.side)
         y += Film.side + 18
         for (field, size) in zip([word, sentence], words) {
-            field.frame = CGRect(x: ((bounds.width - size.width) / 2).rounded(), y: y + rise(field), width: size.width, height: size.height)
+            // A line still hidden waits 8 points lower, and rises as it shows.
+            field.frame = CGRect(x: ((bounds.width - size.width) / 2).rounded(), y: y + (field.alphaValue > 0 ? 0 : 8),
+                                 width: size.width, height: size.height)
             y += size.height + 14
         }
         grown?.frame = bounds
     }
-
-    /// How far down a line still is as it rises, 8 points while hidden.
-    private func rise(_ field: NSTextField) -> CGFloat { field.alphaValue > 0 ? 0 : 8 }
 
     private func after(_ seconds: TimeInterval, _ step: @escaping (Film) -> Void) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds * pace) { [weak self] in
@@ -132,10 +127,14 @@ final class Film: NSView {
             }
         }
         after(Film.lands) { film in
-            film.grow()
+            // The words go and the frame grows from the sign to the window's edges; New Space's sign waits under the paper.
+            film.place().grow {}
             film.after(Film.uncovers) { film in film.animate(0.6, Look.douce) { film.paper.alphaValue = 0 } }
             film.after(Film.lets) { film in
-                film.land()
+                if let hero = film.hero {
+                    hero.isHidden = false
+                    hero.arrive()
+                }
                 film.grown?.fade(0.45 * film.pace) {}
             }
             film.after(Film.opens) { film in
@@ -146,9 +145,6 @@ final class Film: NSView {
             film.after(Film.ends) { $0.leave() }
         }
     }
-
-    /// The words go and the frame grows from the sign to the window's edges; New Space's sign waits under the paper.
-    private func grow() { place().grow {} }
 
     /// Puts the sign's frame in the sign's place, the words going, and returns it.
     private func place() -> Arrival {
@@ -165,12 +161,6 @@ final class Film: NSView {
 
     /// New Space's sign, which the film's frame lands on at the end.
     private var hero: SignView? { shell.flatMap { Arrival.sign(in: $0.center) } }
-
-    private func land() {
-        guard let hero else { return }
-        hero.isHidden = false
-        hero.arrive()
-    }
 
     /// The film's last moment, still: the frame at the window's edges, the paper gone, New Space's sign landed (a1).
     func hold() {
@@ -191,9 +181,4 @@ final class Film: NSView {
         shell.film = nil
         if shell.welcoming == nil, shell.window.isVisible { shell.window.makeKey() }
     }
-}
-
-/// The film's window: borderless, yet it takes the keys while the film plays.
-private final class Cover: NSWindow {
-    override var canBecomeKey: Bool { true }
 }

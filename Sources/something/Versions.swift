@@ -69,8 +69,8 @@ struct Versions {
         guard !Versions.isLink(space.location) else {
             throw SpaceError("something keeps no versions of \(space.name): it is a link to somewhere else.")
         }
-        let size = space.size()
-        guard size.bytes <= Versions.most, size.files <= Export.most else {
+        guard Versions.fits(space) else {
+            let size = space.size()
             throw SpaceError("something keeps no versions of \(space.name): it has \(size.files) files weighing \(Size.words(size.bytes)), and versions are kept up to 15 MB and \(Export.most) files.")
         }
         var contents: [String: Data] = [:]
@@ -127,8 +127,7 @@ struct Versions {
             throw SpaceError("\(space.name) holds a link to somewhere else where this version would write; nothing was restored.")
         }
         let wanted = { (file: (path: String, url: URL)) in space.form == .file ? contents.values.first : contents[file.path] }
-        let size = space.size()
-        let heavy = size.bytes > Versions.most || size.files > Export.most
+        let heavy = !Versions.fits(space)
         if !heavy {
             let now = try Dictionary(uniqueKeysWithValues: space.files().map { ($0.path, Versions.hash(try Data(contentsOf: $0.url))) })
             if now == chosen.files { return nil }
@@ -210,6 +209,9 @@ struct Versions {
     }
 
     private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    /// Whether `space` is light enough to be versioned: what an export carries.
+    private static func fits(_ space: Space) -> Bool { let size = space.size(); return size.bytes <= most && size.files <= Export.most }
 
     private static func isLink(_ url: URL) -> Bool { (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true }
 
