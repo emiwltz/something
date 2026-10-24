@@ -1,9 +1,10 @@
 // The request panel against a fake prompt source shaped like the Engine's: one panel that shows the requests in the
 // order they came and steps through them, Allow Once armed after 0.5 s and pressed by no key, VoiceOver's press only
 // on a panel the person took, Deny, Escape and the close button deny, its place across the window's corner, never
-// modal, left by a request the agent withdraws, and a question answered with the chosen and typed answers. The queue
-// behind it: arrival order, steps that wrap, and each space's own count. The sheets the app waits for mean what their
-// buttons say, one at a time. No panel is seen: the one that arrives is transparent.
+// modal, left by a request the agent withdraws, Show Request on the open space's request, and a question answered
+// with the chosen and typed answers. The queue behind it: arrival order, steps that wrap, and each space's own count.
+// The sheets the app waits for mean what their buttons say, one at a time. No panel is seen: the one that arrives is
+// transparent.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -259,6 +260,31 @@ final class FakePrompts: PromptSource {
         time += 1
         panel.allow()
         #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2")
+    }
+
+    /// Show Request: the open space's request first, else the oldest, the panel then holding the keys, ringed; nothing
+    /// to show and the item greyed while none waits.
+    @Test func showRequestPicksTheOpenSpacesRequestFirst() throws {
+        let source = FakePrompts()
+        let panels = Panels(source: source, shows: false)
+        panels.queue.space = { ["a1": "Daily brief", "a2": "My agents"][$0.agent] }
+        #expect(!panels.present(in: "My agents") && panels.panel == nil)
+        #expect(!Keys.enabled("showreq", Keys.Situation(space: true)) && Keys.enabled("showreq", Keys.Situation(waiting: true)))
+        source.prompts = ["a1", "a2", "a3"].enumerated().map { index, agent in
+            Prompt(request: Request(id: "r\(index + 1)", agent: agent, kind: "permission", tool: "Bash", about: "npm test",
+                                    at: "2026-10-17T09:00:01Z"), input: "npm test")
+        }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        #expect(panel.request?.id == "r1" && !panel.held && !panel.ring.lit, "it arrives without the keys")
+        #expect(panels.present(in: "My agents"))
+        #expect(panel.request?.id == "r2" && panel.position == "2 of 3" && panel.held && panel.ring.lit)
+        #expect(panel.ring.pulse != nil || Look.motion(.calm) == .reduced, "it pulses once")
+        #expect(panels.present(in: "Logbook") && panel.request?.id == "r1", "no request of the open space: the oldest")
+        panel.step(2)
+        #expect(panels.present(in: nil) && panel.request?.id == "r1", "no space open: the oldest")
+        panel.resignKey()
+        #expect(!panel.held && !panel.ring.lit, "the ring goes with the keys")
     }
 
     @Test func aQuestionIsAnsweredWithTheChoices() throws {

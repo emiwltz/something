@@ -3,7 +3,8 @@
 // words first, where it acts, the exact text, then Deny and Allow Once. It never takes the keys when it arrives: a key
 // typed in a page must never answer it. Allow Once arms 0.5 s after a request appears, and then answers a click, or
 // VoiceOver's press once the person made the panel key themselves (a click on it, or Show Request); no key, Return and
-// Space included, ever presses it. Closing it denies, and so does Escape while it has the keys. The exact command is
+// Space included, ever presses it. Show Request (⌥⌘P) gives it the keys, ringed, with one pulse; when it goes away
+// they go back to the window that had them. Closing it denies, and so does Escape while it has the keys. The exact command is
 // folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger, its footer always in sight.
 // A question shows in the same panel: its numbered options, a field for one's own answer, and Don't Answer. An option
 // that answers a lone question by one click is armed like Allow Once: a click meant for the space may land on it.
@@ -37,7 +38,9 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     /// Whether the person made it key themselves, by a click on it or Show Request. Lost with the keys.
     private(set) var held = false
     private var shownAt: TimeInterval = 0, ticker: Timer?
-    let header = PanelHeader(), allowButton = ArmedButton("Allow Once", primary: true)
+    let header = PanelHeader(), allowButton = ArmedButton("Allow Once", primary: true), ring = KeyRing()
+    /// The window that had the keys before Show Request took them: it gets them back when the panel goes away.
+    private weak var previous: NSWindow?
     private(set) var denyButton: NSButton = PanelButton("Deny", hint: "esc")
     /// For a question: each question's options, and the field where an answer can be typed.
     private(set) var boxes: [[OptionButton]] = [], typed: [NSTextField] = []
@@ -90,6 +93,11 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         grip.drag = { [weak self] in self?.resize(to: $0) }
         grip.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(grip)
+        ring.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(ring)
+        NSLayoutConstraint.activate([ring.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+                                     ring.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+                                     ring.topAnchor.constraint(equalTo: content.topAnchor), ring.bottomAnchor.constraint(equalTo: content.bottomAnchor)])
         NSLayoutConstraint.activate([grip.widthAnchor.constraint(equalToConstant: 14), grip.heightAnchor.constraint(equalToConstant: 14),
                                      grip.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -2),
                                      grip.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -2)])
@@ -301,20 +309,33 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         fit()
     }
 
-    /// Show Request: the person asked for the panel, so it takes the keys.
-    func present() {
+    /// Show Request: the person asked for the panel, so it takes the keys, ringed, and pulses once to say where they
+    /// went. `onScreen` false leaves it off the screen, as a test's panel is.
+    func present(onScreen: Bool = true) {
+        if !isKeyWindow { previous = NSApp.keyWindow ?? NSApp.mainWindow }
+        (held, ring.lit) = (true, true)
+        ring.pulseOnce(Look.motion(.calm))
+        guard onScreen else { return }
         orderFrontRegardless()
         makeKey()
-        held = true
     }
 
     func dismiss() {
+        let keyed = isKeyWindow
         ticker?.invalidate()
         orderOut(nil)
         dismissed = true
+        // AppKit would hand the keys to the frontmost window; they go back where they were, a window like the welcome's.
+        if keyed, let previous, previous.isVisible { previous.makeKey() }
+        previous = nil
     }
 
     override var canBecomeKey: Bool { true }
+
+    override func becomeKey() {
+        super.becomeKey()
+        ring.lit = true
+    }
 
     /// A click on the panel is the person's own: it makes the panel key, and VoiceOver's press may then answer.
     override func sendEvent(_ event: NSEvent) {
@@ -323,7 +344,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     }
 
     override func resignKey() {
-        held = false
+        (held, ring.lit) = (false, false)
         super.resignKey()
     }
 
@@ -699,6 +720,51 @@ final class ArmedButton: PanelButton {
     override func performKeyEquivalent(with event: NSEvent) -> Bool { false }
     override func keyDown(with event: NSEvent) {}
     override func accessibilityPerformPress() -> Bool { voice() }
+}
+
+/// The panel's ring while it has the keys, 1.5 points of ink2 inside its edge as the mockup rings a window in front;
+/// and once, on Show Request, a pulse that spreads 10 points inward and fades, since a window draws nothing outside its
+/// frame where the mockup's spreads. It takes no click.
+final class KeyRing: NSView {
+    var lit = false { didSet { needsDisplay = true } }
+    /// How far the pulse has gone, 0 to 1; nil when none plays.
+    private(set) var pulse: Double?
+    private var timer: Timer?
+
+    /// Plays the pulse once, over 1.1 s; not at all under Reduced `motion`.
+    func pulseOnce(_ motion: Look.Motion) {
+        timer?.invalidate()
+        let length = Look.duration(1.1, motion), start = CACurrentMediaTime()
+        guard length > 0 else { return }
+        pulse = 0
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
+            guard let self else { return timer.invalidate() }
+            let done = (CACurrentMediaTime() - start) / length
+            pulse = done < 1 ? done : nil
+            if pulse == nil { timer.invalidate() }
+            needsDisplay = true
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        func stroke(_ color: NSColor, _ width: CGFloat) {
+            let inset = width / 2, shape = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), xRadius: Look.window - inset,
+                                                        yRadius: Look.window - inset)
+            color.setStroke()
+            shape.lineWidth = width
+            shape.stroke()
+        }
+        // As the mockup's: spread and faded by 60 % of its length, calm at the end.
+        if let pulse {
+            let spread = 1 - pow(1 - min(1, pulse / 0.6), 2)
+            stroke(Look.Token.ink.color.withAlphaComponent(0.24 * (1 - spread)), 1.5 + 10 * spread)
+        }
+        if lit { stroke(Look.Token.ink2.color, 1.5) }
+    }
 }
 
 /// A view around `content`, on a rounded `fill`, ringed in `ring`, drawn again in each appearance; `loose`, the content

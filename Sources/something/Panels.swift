@@ -55,8 +55,18 @@ final class Panels {
         if shows, !panel.isVisible { panel.arrive(beside: beside()) }
     }
 
-    /// Show Request: the panel in front, with the keys.
-    func present() { panel?.present() }
+    /// Show Request: the request of the space open (`space`, by name) in front, else the oldest, the panel key and
+    /// pulsing once. Returns false when no request waits.
+    @discardableResult func present(in space: String?) -> Bool {
+        guard let oldest = queue.waiting.first else { return false }
+        if panel?.told != true, queue.shown.map({ queue.space($0) != space || space == nil }) ?? true {
+            queue.select(queue.waiting.first { space != nil && queue.space($0) == space }?.id ?? oldest.id)
+            refresh()
+        }
+        guard let panel else { return false }
+        panel.present(onScreen: shows)
+        return true
+    }
 
     private func open() -> RequestPanel {
         let made = RequestPanel { [weak self] answer in

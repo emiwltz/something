@@ -187,7 +187,42 @@ struct AcceptanceTrust {
         panel.allow()
         #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2")
     }
-    @Test("e4: Show Request", .disabled("not built yet: T5")) func e4() async throws {}
+    /// ⌥⌘P while My agents' assistant waits: the same panel in the same place, now holding the keys, ringed in ink2
+    /// after one pulse, the main window's lights gray. Escape denies. That the keys really move to the panel and back
+    /// is a hand trial: a window never shown never becomes key.
+    @Test("e4: Show Request") func e4() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        let source = FakePrompts()
+        Self.request("r", [0], in: source)
+        var time: TimeInterval = 100
+        let panels = Self.panels(source)
+        panels.clock = { time }
+        panels.queue.space = { _ in "agents" }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: Self.desk)
+        let arrived = panel.frame
+        #expect(!panel.held && !panel.ring.lit)
+        let item = try #require(MenuBar(builders: nil).menu.items.compactMap(\.submenu).flatMap(\.items).first { $0.identifier?.rawValue == "showreq" })
+        #expect(item.title == "Show Request" && item.keyEquivalent == "p" && item.keyEquivalentModifierMask == [.command, .option])
+        #expect(item.action == #selector(App.showRequest(_:)) && Keys.tooltip("showreq") == "Show Request (⌥⌘P)")
+        #expect(panels.present(in: agents.space.name))
+        #expect(panel.held && panel.ring.lit && panel.request?.id == "r1" && panel.frame == arrived, "in front where it was, with the keys")
+        #expect(panel.ring.pulse != nil || Look.motion(.calm) == .reduced, "one pulse")
+        time += 1
+        panel.tick()
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e4" + suffix, root: stage.home.root)
+        }
+        #expect(panel.denyButton.keyEquivalent == "\u{1b}")
+        panel.cancelOperation(nil)
+        #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil && !panels.present(in: agents.space.name))
+    }
     @Test("e5: the Dock badge", .disabled("not built yet: T6")) func e5() async throws {}
     /// Daily brief's assistant asks where the weather corner goes: the same panel, at the same place, its options
     /// numbered; a click on the second answers with it.
@@ -277,13 +312,14 @@ extension Picture {
     /// around them: the panel is a window of its own and overhangs the main one. The window is drawn as `window`
     /// draws it; the panel and the edges of the requests waiting behind it by their frames, their corners and the
     /// panel's shadow, which the window server draws, reconstructed. Over a space in `fullScreen` (a screen's frame), the
-    /// canvas is that screen, and the page fills it without the window's chrome, as the mockup's e13 shows it.
+    /// canvas is that screen, and the page fills it without the window's chrome, as the mockup's e13 shows it. A panel
+    /// that holds the keys (Show Request) has its lights in their colors, and the main window's are gray.
     static func panel(_ panel: RequestPanel, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL,
                       fullScreen: NSRect? = nil) async throws {
         guard let gallery else { return }
         var page: NSImage?
         if fullScreen == nil {
-            try await window(shell, library: library, web: web, name + "-window", root: root)
+            try await window(shell, library: library, web: web, name + "-window", root: root, keyed: !panel.held)
             let file = gallery.appendingPathComponent(name + "-window.png")
             defer { try? FileManager.default.removeItem(at: file) }
             page = try #require(NSImage(contentsOf: file))
@@ -328,6 +364,7 @@ extension Picture {
             NSGraphicsContext.restoreGraphicsState()
             Look.Token.line2.color.setStroke()
             shape.stroke()
+            if panel.held { paint(lights(of: panel).map { ($0.0.offsetBy(dx: place.minX, dy: place.minY), $0.1) }) }
         }
     }
 }

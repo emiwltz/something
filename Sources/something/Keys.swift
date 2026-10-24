@@ -60,8 +60,8 @@ enum Keys {
         // Stop also works on the New Space page, where a build runs before its space exists.
         Command(id: "stop", title: "Stop", key: ".", action: #selector(App.stopAssistant(_:)), owner: "F5", area: .assistant,
                 line: "Stop the assistant", mine: true),
-        Command(id: "showreq", title: "Show Request", key: "p", modifiers: [.command, .option], owner: "T5", area: .assistant,
-                line: "Show the request that waits", mine: true),
+        Command(id: "showreq", title: "Show Request", key: "p", modifiers: [.command, .option], action: #selector(App.showRequest(_:)),
+                owner: "T5", area: .assistant, line: "Show the request that waits", mine: true),
         Command(id: "pointpart", title: "Point at a Part", key: "s", modifiers: [.command, .option], owner: "T14", area: .show,
                 line: "Point at a part", mine: true, needsSpace: true),
         Command(id: "point", title: "Point Inside a Drawn Frame", owner: "T14", area: .show, line: "Point inside a drawn frame", words: "hold ⌥"),
@@ -197,7 +197,7 @@ enum Keys {
 
     /// What the items' enabled state depends on.
     struct Situation {
-        var space = false, working = false, agent = true, touring = false, editingText = false
+        var space = false, working = false, agent = true, touring = false, editingText = false, waiting = false
     }
 
     /// Whether the item of `id` can act in `situation`: never before its owner wires it, never without a space when it
@@ -208,6 +208,7 @@ enum Keys {
         switch id {
         case "stop": return situation.working
         case "ask": return situation.agent
+        case "showreq": return situation.waiting
         case "new", "tpls": return !situation.touring
         // ⌘⌫ deletes text in a field; the item steps aside (MenuBar also takes its key away).
         case "trash": return !situation.editingText

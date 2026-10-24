@@ -79,7 +79,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             guard let self else { return }
             sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.assistant.lookAgain() }
         }
-        assistant.showRequest = { [weak self] in self?.panels.present() }
+        assistant.showRequest = { [weak self] in self?.showRequest(nil) }
         assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
         assistant.ended = { [weak self] in
             guard let self else { return }
@@ -298,6 +298,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.focus()
     }
     @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
+    @objc func showRequest(_ sender: Any?) { panels.present(in: current?.space.name) }
     @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
     @objc func chooseBuilder(_ sender: NSMenuItem) { (sender.representedObject as? String).map(assistant.choose) }
     /// Never sent: Build With only holds its submenu, and this selector lets validateMenuItem grey it.
@@ -318,7 +319,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
         let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
-                                       touring: library.selection == .tour, editingText: shell.window.firstResponder is NSText)
+                                       touring: library.selection == .tour, editingText: shell.window.firstResponder is NSText,
+                                       waiting: !panels.queue.waiting.isEmpty)
         return Keys.enabled(id, situation)
     }
 

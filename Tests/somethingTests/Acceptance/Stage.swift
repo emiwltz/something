@@ -98,8 +98,9 @@ final class Stage {
 /// views are drawn apart on a plain background and composed in their place.
 @MainActor
 enum Picture {
-    /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x.
-    static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL) async throws {
+    /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x; its lights gray when
+    /// it lost the keys (`keyed` false).
+    static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL, keyed: Bool = true) async throws {
         // Below the title bar, as the columns' own contents start.
         let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
         let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
@@ -136,14 +137,8 @@ enum Picture {
             return (drawn, view.convert(view.bounds, to: frame))
         }
         // A window never shown is never key, and draws its lights gray: the main window keeps the keys while the
-        // request panel, which never takes them, stands in front, so its lights are drawn in their colors, 12 points.
-        let colors: [(NSWindow.ButtonType, UInt32)] = [(.closeButton, 0xFF5F57), (.miniaturizeButton, 0xFEBC2E), (.zoomButton, 0x28C840)]
-        let lights = colors.compactMap { type, rgb -> (NSRect, NSColor)? in
-            guard let button = shell.window.standardWindowButton(type) else { return nil }
-            let place = button.convert(button.bounds, to: frame)
-            let color = NSColor(srgbRed: CGFloat(rgb >> 16) / 255, green: CGFloat(rgb >> 8 & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
-            return (NSRect(x: place.midX - 6, y: place.midY - 6, width: 12, height: 12), color)
-        }
+        // request panel, which never takes them, stands in front, so its lights are drawn in their colors.
+        let lights = keyed ? Self.lights(of: shell.window) : []
         try png(of: frame.bounds.size, name) {
             rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             for (drawn, place) in apart {
@@ -155,14 +150,29 @@ enum Picture {
             for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
-            for (place, color) in lights {
-                color.setFill()
-                NSBezierPath(ovalIn: place).fill()
-                (color.shadow(withLevel: 0.12) ?? color).setStroke()
-                NSBezierPath(ovalIn: place.insetBy(dx: 0.25, dy: 0.25)).stroke()
-            }
+            paint(lights)
         }
         withExtendedLifetime(offscreens) {}
+    }
+
+    /// The places of `window`'s lights in its frame view, 12 points each, with the colors a key window draws them in.
+    static func lights(of window: NSWindow) -> [(NSRect, NSColor)] {
+        let colors: [(NSWindow.ButtonType, UInt32)] = [(.closeButton, 0xFF5F57), (.miniaturizeButton, 0xFEBC2E), (.zoomButton, 0x28C840)]
+        return colors.compactMap { type, rgb -> (NSRect, NSColor)? in
+            guard let button = window.standardWindowButton(type), let frame = window.contentView?.superview else { return nil }
+            let place = button.convert(button.bounds, to: frame)
+            let color = NSColor(srgbRed: CGFloat(rgb >> 16) / 255, green: CGFloat(rgb >> 8 & 0xFF) / 255, blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
+            return (NSRect(x: place.midX - 6, y: place.midY - 6, width: 12, height: 12), color)
+        }
+    }
+
+    static func paint(_ lights: [(NSRect, NSColor)]) {
+        for (place, color) in lights {
+            color.setFill()
+            NSBezierPath(ovalIn: place).fill()
+            (color.shadow(withLevel: 0.12) ?? color).setStroke()
+            NSBezierPath(ovalIn: place.insetBy(dx: 0.25, dy: 0.25)).stroke()
+        }
     }
 
     /// Draws an alert's window as it would be shown, with the app's icon.

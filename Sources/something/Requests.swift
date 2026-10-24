@@ -50,6 +50,11 @@ import SomethingCore
         current = kept.firstIndex { $0.id == was } ?? min(max(0, current - removedBefore), max(0, kept.count - 1))
     }
 
+    /// Puts `id` on screen, when it waits.
+    func select(_ id: String) {
+        if let index = waiting.firstIndex(where: { $0.id == id }) { current = index }
+    }
+
     /// Moves the one on screen by `by`, wrapping at both ends.
     func step(_ by: Int) {
         guard !waiting.isEmpty else { return }
