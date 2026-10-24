@@ -1,6 +1,8 @@
 // Block 3's spikes SP9, SP10, SP11 and SP12: the smallest prototypes that answer what block 3 stands on. Each answer is
 // written in the commit that adds this file, with the numbers this Mac measured; the file is test code only and is
-// removed at the end of the phase. Every window is offscreen at alpha 0 and never ordered front.
+// removed at the end of the phase. Every window is offscreen at alpha 0 and never ordered front. SP10 was answered on
+// macOS 27 only: remove this file once a CI run on macOS 15 of a commit holding it has printed its SP10 lines, or carry
+// "SP10 on macOS 15" to the hand trials, because block 3's unanimated inspector stands on it.
 import AppKit
 import Darwin
 import Observation
@@ -43,7 +45,7 @@ private let gridPage = page(nil, """
     </script>
     """)
 
-/// The overlay point mode puts over the web view: it takes every click, and hands the wheel to the page under it.
+/// The overlay point mode puts over the web view: it takes every click, and tries to pass the wheel to the page.
 private final class Overlay: NSView {
     weak var web: WKWebView?
     var clicks = 0
@@ -153,8 +155,8 @@ private func footprint(_ pid: pid_t) -> Double? {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
     /// SP9. part(x,y) through callAsyncJavaScript in Lockdown.world on a 2,000-cell page: 100 calls, median at most
-    /// 33 ms (hover at 30 Hz); the page's own world sees nothing of it; the overlay takes the click and the wheel
-    /// reaches the page.
+    /// 33 ms (hover at 30 Hz); the page's own world sees nothing of it; the overlay takes the click. Forwarding a real
+    /// wheel is a hand trial; scrollBy from Lockdown.world scrolls the page.
     @Test func partIsFastEnoughForHover() async throws {
         let home = Home(prefix: "something-spike-")
         defer { home.remove() }
@@ -187,7 +189,7 @@ private func footprint(_ pid: pid_t) -> Double? {
         // The page's world has no trace of it.
         #expect(try await run(space, "return typeof pointedOnce") as? String == "undefined")
 
-        // The overlay takes the click; the wheel it is given scrolls the page.
+        // The overlay takes the click. A wheel made offscreen may scroll nothing; then scrollBy does, from something's world.
         let center = NSPoint(x: 450, y: 320)
         #expect(window.contentView?.hitTest(center) === overlay)
         let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -400, wheel2: 0, wheel3: 0))
@@ -340,7 +342,8 @@ private func footprint(_ pid: pid_t) -> Double? {
         print("SP11 second view: load \(Int(secondLoad)) ms, \(secondProcesses.count) new WebContent process(es): \(sizes(secondProcesses)); "
               + String(format: "app process %.0f -> %.0f -> %.0f MB", mine, app, footprint(ours) ?? 0))
         #expect(median(thumbs) < 200)
-        #expect(secondProcesses.count == 1, "a second locked view is a process of its own")
+        // A measurement: another app's WebContent process may start in the same window of time.
+        #expect(secondProcesses.count >= 1, "a second locked view is a process of its own")
     }
 
     /// SP12a. The system's sidebar List against the custom rows: its row height, its keys and what VoiceOver reads.
