@@ -15,7 +15,8 @@ import WebKit
     /// answers a message with an invented reply; one holding "sign-in-please" with the error a Claude Code never
     /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
-    /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "small game" starts building one and never ends its turn, "ask-first"
+    /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "go-wrong" likewise but
+    /// fails it, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "counters bigger" retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" starts
@@ -43,6 +44,9 @@ import WebKit
         *'go-slow'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           later "$done" "$idle" ;;
+        *'go-wrong'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          later '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' "$idle" ;;
         *'masthead smaller'*'"type":"user"'*)
           tool m1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
           tool m2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
@@ -409,16 +413,25 @@ import WebKit
         model.draft = "go-slow, first."
         model.send()
         #expect(await wait(until: { model.agent?.state == "working" }))
-        model.draft = "Second message."
+        model.draft = "Second message, go-slow."
         model.send()
-        #expect(model.draft.isEmpty && model.held == ["Second message."] && model.placeholder == "Write another request…")
+        #expect(model.draft.isEmpty && model.held == ["Second message, go-slow."] && model.placeholder == "Write another request…")
+        model.draft = "Third message."
+        model.send()
+        #expect(model.held == ["Second message, go-slow.", "Third message."])
         #expect(model.messageCount == 1, "a held message is not yet in the conversation")
         try await Task.sleep(for: .milliseconds(500))
-        #expect(sent("Second message.") == 0, "held while the turn runs")
-        // The turn ends: the held message leaves, once, with the context line of where it was written.
+        #expect(sent("Second message") == 0 && sent("Third message.") == 0, "held while the turn runs")
+        // The turn ends: the oldest held message leaves, once, with the context line of where it was written; the
+        // other waits for the next end.
         try Data().write(to: end)
-        #expect(await wait(until: { model.rows.contains(.mine(caption: "about My agents", text: "Second message.")) && model.light == .ready }), "\(model.rows) \(model.light) \(String(describing: model.agent?.state))")
-        #expect(model.held.isEmpty && sent(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nSecond message."#) == 1)
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "about My agents", text: "Second message, go-slow.")) && model.agent?.state == "working" }), "\(model.rows) \(model.light) \(String(describing: model.agent?.state))")
+        #expect(sent(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nSecond message, go-slow."#) == 1)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(sent("Third message.") == 0 && model.held == ["Third message."], "one message per turn")
+        try Data().write(to: end)
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "about My agents", text: "Third message.")) && model.light == .ready }), "\(model.rows) \(model.light)")
+        #expect(model.held.isEmpty && sent("Third message.") == 1 && sent("Second message") == 1)
         // Take Back: the text returns to the field, after what it holds.
         model.draft = "go-slow, second."
         model.send()
@@ -436,7 +449,42 @@ import WebKit
         #expect(model.held.isEmpty && model.draft == "Stopped back.")
         #expect(await wait(until: { model.agent?.state == "interrupted" && !model.working }))
         try await Task.sleep(for: .milliseconds(500))
-        #expect(sent("Taken back.") == 0 && sent("Stopped back.") == 0 && sent("Second message.") == 1)
+        #expect(sent("Taken back.") == 0 && sent("Stopped back.") == 0 && sent("Second message") == 1)
+        // A turn that fails releases nothing: the held text comes back to the field rather than wait for ever. The
+        // stopped turn's waiter takes its finish first.
+        try Data().write(to: end)
+        #expect(await wait(until: { !FileManager.default.fileExists(atPath: end.path) && model.light == .ready }))
+        model.draft = "go-wrong, third."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" }))
+        model.draft = "Never sent."
+        model.send()
+        #expect(model.held == ["Never sent."])
+        try Data().write(to: end)
+        #expect(await wait(until: { model.light == .error && model.held.isEmpty }), "\(model.light) \(model.held)")
+        #expect(model.draft == "Never sent.")
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(sent("Never sent.") == 0)
+        await finish(home, model)
+    }
+
+    /// The time alone moves the present-tense line: with no tick by hand, "Still working" comes 10 s into a turn and
+    /// "Changed …" leaves 3.6 s after it ends, by the one-shot timer the assistant sets.
+    @Test func theLineMovesWithTheTime() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        model.draft = "Hello."
+        model.send()
+        #expect(await wait(until: { model.light == .ready }))
+        model.clock = { Date().addingTimeInterval(Presence.late - 0.4) }
+        model.draft = "Add a weather corner."
+        model.send()
+        #expect(await wait(5) { if case .working(_, late: true)? = model.presence.now { true } else { false } }, "\(String(describing: model.presence.now))")
+        model.clock = { Date().addingTimeInterval(Presence.changedFor - 1.5) }
+        try Data().write(to: home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(5) { model.presence.now == .changed("brief.html") }, "\(String(describing: model.presence.now))")
+        #expect(await wait(5) { model.presence.now == nil }, "\(String(describing: model.presence.now))")
         await finish(home, model)
     }
 

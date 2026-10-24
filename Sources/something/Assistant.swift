@@ -2,8 +2,9 @@
 // ~/something/spaces. The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change;
 // the knowledge files written into the spaces folder; the agent launched at the first message, never before, and told
 // at each message which space is open; a message written while a turn runs held until it ends, and Take Back; Stop, New
-// Conversation, the stop after 30 idle minutes, the switch to another builder, and what went wrong. The engine keeps every space away from this agent (Bridge.visible); the only words
-// something writes to it on its own are its context line and Ask to Fix, never a page's text.
+// Conversation, the stop after 30 idle minutes, the switch to another builder, and what went wrong. The engine keeps
+// every space away from this agent (Bridge.visible); the only words something writes to it on its own are its context
+// line and Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -143,6 +144,8 @@ import SomethingCore
         session.read(state)
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
         keepTime()
+        // No turn will end to release them: the held messages go back into the field rather than wait for ever.
+        if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
         // A turn ended: the oldest held message leaves, one per turn, as the mockup sends them.
         if let next = session.held.first, light == .ready, !launching, session.releasedAfter != .some(session.turn?.id) {
             session.held.removeFirst()
@@ -291,7 +294,8 @@ import SomethingCore
         if sentence == nil { draft = "" }
         fromTemplate = nil
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
-        if session.id != nil, !launching, working {
+        // Behind messages already held it waits too, so they leave in the order they were written.
+        if session.id != nil, !launching, working || !session.held.isEmpty {
             return session.held.append(AssistantModel.context(place, home: places.home.path) + "\n" + text)
         }
         if place == .blank, before == nil {

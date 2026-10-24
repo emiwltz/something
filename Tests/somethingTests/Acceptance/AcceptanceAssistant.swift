@@ -268,6 +268,11 @@ struct AcceptanceAssistant {
         #expect(model.held == ["Also make the date bigger."] && model.draft.isEmpty)
         #expect(model.placeholder == "Write another request…" && model.messageCount == 3)
         #expect(model.stops && model.presence.now == .working("Editing brief.html…", late: false))
+        // 11 s into the turn, as the reference draws it: "Still working" and Stop beside the line.
+        let later = Date().addingTimeInterval(11)
+        model.clock = { later }
+        model.tick()
+        #expect(model.presence.now == .working("Editing brief.html…", late: true))
         #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c10" + suffix, root: stage.home.root)

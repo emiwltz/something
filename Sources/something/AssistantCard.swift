@@ -192,22 +192,29 @@ struct AssistantCard: View {
                     Spacer(minLength: 4)
                     Text("Still working").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
                     Button { model.stop() } label: {
-                        HStack(spacing: 6) { Text("Stop").fontWeight(.semibold); Text(Keys.shown("stop")).font(Look.font(.ui, size: 10).ui) }
+                        HStack(spacing: 6) {
+                            Text("Stop").fontWeight(.semibold)
+                            Text(Keys.shown("stop")).font(Look.font(.ui, size: 10, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui)
+                                .padding(.vertical, 2).padding(.horizontal, 4)
+                                .background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 5))
+                        }
                             .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
                             .overlay(RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.line2.ui))
                     }
                     .buttonStyle(.plain).help(model.presence.stopHelp)
+                } else {
+                    Spacer(minLength: 0)
                 }
             case .waking:
                 Image(nsImage: Sign.miniEyes(.sleep, template: false)).frame(width: 18, height: 12)
                 Text("Waking up…")
+                Spacer(minLength: 0)
             case .changed(let file):
                 Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Look.Token.ok.ui).frame(width: 13)
                 Text("Changed ") + Text(file).fontWeight(.semibold)
                 Spacer(minLength: 4)
                 Text("Just now").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
             }
-            Spacer(minLength: 0)
         }
         .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink.ui)
         .padding(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 4))
@@ -223,13 +230,13 @@ struct AssistantCard: View {
         return HStack(spacing: 7) {
             Image(systemName: "clock").font(.system(size: 10.5))
             (Text("\(count) message\(count > 1 ? "s" : "") wait\(count > 1 ? "" : "s")").fontWeight(.semibold).foregroundColor(Look.Token.ink.ui)
-                + Text(" · sends when it finishes"))
+                + Text(count > 1 ? " · they send when it finishes" : " · sends when it finishes"))
                 .lineLimit(1).truncationMode(.tail)
             Spacer(minLength: 0)
             Button { model.takeBack() } label: {
                 Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).frame(width: 22, height: 22).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).foregroundStyle(Look.Token.ink3.ui).help("Take Back").accessibilityLabel("Take back the waiting message")
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink3.ui).help("Take Back").accessibilityLabel(count > 1 ? "Take back the waiting messages" : "Take back the waiting message")
         }
         .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
         .padding(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 3))
