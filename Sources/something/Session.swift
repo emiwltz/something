@@ -106,8 +106,9 @@ import SomethingCore
     /// The file of the space `name`'s conversation in `folder` (Places.assistants).
     static func file(_ name: String, in folder: URL) -> URL { folder.appendingPathComponent("\(name).json") }
 
-    /// Writes its kind, model, effort, thread, the kind that reported it, and last `tail` items into `folder`, for a space's conversation only. A
-    /// file that cannot be written loses only what this change kept: the conversation goes on.
+    /// Writes its kind, model, effort, thread, the kind that reported it, and last `tail` items into `folder`, for a
+    /// space's conversation only. A file that cannot be written loses only what this change kept: the conversation goes
+    /// on. A renewed conversation is written too, empty: it keeps the space's agent, model and effort.
     func save(in folder: URL) {
         guard let space else { return }
         var left = Session.tail, turns: [Turn] = []

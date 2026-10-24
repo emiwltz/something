@@ -67,6 +67,9 @@ import SomethingCore
                 // The assistant left stays awake for the whole delay from now: it was the open one until now.
                 session.active = clock()
                 session = session(for: place)
+                // The left one is restful only now: nothing else may set the timer before its delay ends.
+                rest()
+                keepTime()
             }
         }
     }
@@ -121,7 +124,7 @@ import SomethingCore
     /// for.
     private(set) var beat = 0
     @ObservationIgnored private var beatTimer: Timer?
-    @ObservationIgnored private var beatAt: Date?
+    @ObservationIgnored private(set) var beatAt: Date?
 
     init(engine: Engine, places: Places) {
         self.engine = engine
@@ -661,8 +664,9 @@ import SomethingCore
         if resume == nil, session.asleep, session.thread != nil {
             if resumes(session) { resume = session.thread } else {
                 session.renew(!Preferences.at(places).resume ? "Started a new conversation: resuming is off in Settings."
-                              : resumable(kind) ? "\(name(of: session)) could not pick its conversation up. Started a new conversation."
-                              : "\(name(of: session)) cannot resume a conversation. Started a new conversation.")
+                              : !resumable(kind) ? "\(name(of: session)) cannot resume a conversation. Started a new conversation."
+                              : session.asking != askEverything ? "Started a new conversation: Ask Before Every Change changed."
+                              : "\(name(of: session)) could not pick its conversation up. Started a new conversation.")
                 save(session)
             }
         }

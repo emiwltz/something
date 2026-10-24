@@ -1,6 +1,7 @@
 // Sleep and wake of each space's assistant (AB10), with the fake `claude` of AssistantTests and a moved clock: an idle
 // one sleeps after the Preferences' delay and wakes on the same thread, model and effort; a kind that cannot resume is
-// never put to sleep by itself and, put to sleep by the person, wakes on a new conversation that says so; the cap of
+// never put to sleep by itself and, put to sleep by the person, wakes on a new conversation that says so; leaving a
+// space sets its sleep, and a wake after Ask Before Every Change changed starts anew and says why; the cap of
 // awake assistants never takes a working or waiting one; what a space keeps on disk round-trips, its last 60 items;
 // and a space trashed, recreated or gone starts empty.
 import Foundation
@@ -99,6 +100,34 @@ import Testing
         #expect(model.firstLines.contains("Claude Code cannot resume a conversation. Started a new conversation."), "\(model.firstLines)")
         #expect(await wait(until: { model.messageCount == 2 }))
         #expect(!model.rows.contains(.mine(caption: "about Stack", text: "Hello.")), "the old conversation is gone")
+        await helper.finish(home, model)
+    }
+
+    /// Leaving a space sets the timer for its assistant's sleep by itself: nothing else changes once its turn is long
+    /// over. Asleep while Ask Before Every Change was turned on, it wakes on a new conversation that says why.
+    @Test func leavingASpaceSetsItsSleepAndAModeChangeRenewsIt() async throws {
+        let (home, model) = try helper.assistant(prefix: "something-session-")
+        defer { home.remove() }
+        var now = Date()
+        model.clock = { now }
+        await helper.look(model)
+        model.place = place(home, "Stack", "stack")
+        model.send("Hello.")
+        #expect(await wait(until: { model.agent?.state == "idle" && model.messageCount == 2 }))
+        let stack = model.session, first = try #require(model.id)
+        now += 60
+        model.place = .blank
+        #expect(model.beatAt == stack.active + 10 * 60, "\(String(describing: model.beatAt)) \(stack.active)")
+        now += 10 * 60
+        model.tick()
+        #expect(stack.asleep)
+        model.toggleAsking()
+        model.place = place(home, "Stack", "stack")
+        model.send("Again.")
+        #expect(await wait(until: { model.id != nil && model.id != first && !model.launching && model.agent?.alive == true
+            && arguments(home).contains("--session-id") }), "\(arguments(home))")
+        #expect(!arguments(home).contains("--resume"))
+        #expect(model.firstLines.contains("Started a new conversation: Ask Before Every Change changed."), "\(model.firstLines)")
         await helper.finish(home, model)
     }
 

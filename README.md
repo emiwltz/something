@@ -30,9 +30,8 @@ conversation, ⌘. stops it. Templates (⇧⌘T) are six finished spaces to star
 
 Each space has its own assistant. **something stops idle assistants on its own** to save memory: one idle for 10
 minutes falls asleep, and at most 3 stay awake (the open space's, and any that works or waits for you, are never put to
-sleep). Both are settings, `sleepAfter` (minutes, 0 for never) and `awakeAtMost` in
-`~/Library/Application Support/something/window.json` until the Settings window shows them; Put Idle Assistants to
-Sleep (Assistant menu) does it at once. A sleeping
+sleep). The Settings window will show both, Put idle assistants to sleep after and Awake at most; Put Idle Assistants
+to Sleep (Assistant menu) does it at once. A sleeping
 assistant wakes on your next message and picks its conversation up, kept in
 `~/Library/Application Support/something/assistants/`: its agent, model, effort and last 60 items. An agent that cannot
 resume a conversation (all but Claude Code for now) is never put to sleep on its own; put to sleep by you, it starts a
