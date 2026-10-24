@@ -234,7 +234,7 @@ import WebKit
         again.close()
         elsewhere.close()
 
-        try Library.forget("board", in: home.places)
+        try Library.forget("board", in: home.places, recycle: { _ in Issue.record("no versions to trash") })
         let new = try opened(board)
         defer { new.close() }
         #expect(new.launched.isEmpty)

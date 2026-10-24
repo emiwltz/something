@@ -109,7 +109,8 @@ enum Command: Equatable {
                 if let from, !Template.present(share).contains(from) {
                     throw SpaceError("There is no template \(from). The templates are: \(Template.present(share).joined(separator: ", ")).")
                 }
-                let space = try Command.new(name, folder: folder, places: places, template: template)
+                let space = try Command.new(name, folder: folder, places: places, template: template,
+                                            recycle: { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) })
                 say("Made \(space.page.path). Open it with: something open \(name)", false)
                 if from != nil, (try? String(contentsOf: space.page, encoding: .utf8))?.contains("\"\(Template.placeholder)\"") == true {
                     say("It follows \(Template.placeholder), a placeholder: write the project folder in its place, then run: something check \(name)", false)
@@ -162,9 +163,10 @@ enum Command: Equatable {
 
     /// Makes the space `name` from `template` and returns it; one that follows the placeholder folder follows
     /// `following` instead, when given. A new space never inherits the answers a deleted space of the same name left
-    /// in the grants file. Throws a `SpaceError` when the name is not free or a file cannot be written; then no space
-    /// is left.
-    static func new(_ name: String, folder: Bool, places: Places, template: URL, following: String? = nil) throws -> Space {
+    /// in the grants file, nor the versions it left (they go to the Trash through `recycle`). Throws a `SpaceError` when
+    /// the name is not free or a file cannot be written; then no space is left.
+    static func new(_ name: String, folder: Bool, places: Places, template: URL, following: String? = nil,
+                    recycle: (URL) throws -> Void) throws -> Space {
         let space = try Spaces(root: places.spaces).new(name, from: template, folder: folder)
         do {
             // A folder named "</script>" must not end the declaration's block: "<" is written as \u003c.
@@ -173,7 +175,7 @@ enum Command: Equatable {
                 let text = try String(contentsOf: space.page, encoding: .utf8)
                 try text.replacingOccurrences(of: "\"\(Template.placeholder)\"", with: quoted).write(to: space.page, atomically: true, encoding: .utf8)
             }
-            try Library.forget(name, in: places)
+            try Library.forget(name, in: places, recycle: recycle)
         } catch {
             try? FileManager.default.removeItem(at: space.location)
             throw error

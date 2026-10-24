@@ -1,7 +1,9 @@
 // Each space's past, in a throwaway home: a content kept once however many versions hold it, nothing taken when
 // nothing changed, a file space and a folder space restored, the files a version did not have sent to the test's own
 // Trash, the limits (versions per space, the storage limit) dropping the oldest first and never a space's latest, a space
-// too heavy refused in words, and the summaries of what changed. Nothing reaches the person's Trash.
+// too heavy refused in words yet still restored through the Trash, a version of the other form or a link refused before
+// anything is written, an index that does not read never written over, and the summaries of what changed. Nothing
+// reaches the person's Trash.
 import Foundation
 import SomethingCore
 import Testing
@@ -47,7 +49,6 @@ import Testing
         #expect(second.files["style.css"] == first.files["style.css"])
         #expect(try blobs(versions, "board") == 3, "style.css is kept once for both versions")
         #expect(versions.list("board").map(\.sentence) == ["Add a line", "Make me a board"], "newest first")
-        #expect(versions.weight("board").versions == 2)
     }
 
     @Test func aFileSpaceIsRestoredAndTheRestoreIsAVersion() throws {
@@ -103,6 +104,80 @@ import Testing
         #expect(throws: SpaceError.self) { try versions.restore("gone", of: space, recycle: { _ in }) }
     }
 
+    @Test func aVersionOfTheOtherFormRestoresNothing() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let page = try test.space("today", "<p>Morning</p>\n")
+        let versions = store(test)
+        let morning = try #require(try versions.capture(page, kind: .turn, sentence: "Say morning"))
+        // The page became a folder of the same name: a single page written into it would leave it without index.html.
+        try FileManager.default.removeItem(at: page.location)
+        let space = try folder(test, "today", ["index.html": "<p>Board</p>\n", "style.css": "p {}\n"])
+        #expect {
+            try versions.restore(morning.id, of: space, recycle: { _ in Issue.record("nothing to trash") })
+        } throws: { error in
+            (error as? SpaceError)?.sentence.contains("was a single page; the space is a folder now") == true
+        }
+        #expect(space.files().map(\.path) == ["index.html", "style.css"])
+        #expect(versions.list("today").count == 1, "nothing was taken either")
+    }
+
+    @Test func aRestoreNeverWritesThroughALink() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let space = try folder(test, "board", ["index.html": "<p>One</p>\n", "parts/a.js": "let a = 1\n"])
+        let versions = store(test)
+        let first = try #require(try versions.capture(space, kind: .turn, sentence: "Make me a board"))
+        let elsewhere = test.root.appendingPathComponent("elsewhere")
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: space.location.appendingPathComponent("parts"))
+        try FileManager.default.createSymbolicLink(at: space.location.appendingPathComponent("parts"), withDestinationURL: elsewhere)
+        #expect(throws: SpaceError.self) { try versions.restore(first.id, of: space, recycle: { _ in Issue.record("nothing to trash") }) }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path).isEmpty, "nothing written outside the space")
+    }
+
+    @Test func anIndexThatDoesNotReadIsNeverWrittenOver() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let space = try test.space("today", "<p>Morning</p>\n")
+        let versions = store(test, keep: 1)
+        try versions.capture(space, kind: .turn, sentence: "Say morning")
+        let index = versions.folder("today").appendingPathComponent("index.json")
+        try Data("not json".utf8).write(to: index)
+        try "<p>Evening</p>\n".write(to: space.location, atomically: true, encoding: .utf8)
+        #expect {
+            try versions.capture(space, kind: .turn, sentence: "Say evening")
+        } throws: { error in
+            (error as? SpaceError)?.sentence.contains("The versions of today do not read") == true
+        }
+        versions.prune()
+        #expect(try String(contentsOf: index, encoding: .utf8) == "not json")
+        #expect(try blobs(versions, "today") == 1, "its contents are left whole")
+    }
+
+    @Test func aSpaceTooHeavyIsStillRestoredItsChangesSentToTheTrash() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let space = try folder(test, "many", ["index.html": "<p>Few</p>\n", "a.txt": "a"])
+        let versions = store(test)
+        let few = try #require(try versions.capture(space, kind: .turn, sentence: "Make it"))
+        // An agent filled it past 500 files and changed its page: no version can hold it now.
+        for step in 1...Export.most { try "\(step)".write(to: space.location.appendingPathComponent("f\(step).txt"), atomically: true, encoding: .utf8) }
+        try "<p>Many</p>\n".write(to: space.location.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        let trash = test.root.appendingPathComponent("Trash")
+        try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+        var trashed: [String] = []
+        let restore = try #require(try versions.restore(few.id, of: space, recycle: { url in
+            trashed.append(url.lastPathComponent)
+            try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+        }))
+        #expect(space.files().map(\.path).sorted() == ["a.txt", "index.html"])
+        #expect(try String(contentsOf: space.location.appendingPathComponent("index.html"), encoding: .utf8) == "<p>Few</p>\n")
+        #expect(trashed.count == Export.most + 1 && trashed.contains("index.html") && !trashed.contains("a.txt"), "the changed page and each extra file")
+        #expect(try String(contentsOf: trash.appendingPathComponent("index.html"), encoding: .utf8) == "<p>Many</p>\n")
+        #expect(restore.kind == .restore && versions.list("many").map(\.kind) == [.restore, .turn])
+    }
+
     @Test func pruningKeepsTheNewestWithinTheCountAndTheStorageLimit() throws {
         let test = Home(prefix: "something-versions-")
         defer { test.remove() }
@@ -121,7 +196,7 @@ import Testing
         try String(repeating: "o", count: 1000).write(to: other.location, atomically: true, encoding: .utf8)
         try small.capture(other, kind: .turn, sentence: "Other")
         #expect(small.list("today").map(\.sentence) == ["Step 4"] && small.list("other").count == 1)
-        #expect(small.weight("today").bytes + small.weight("other").bytes == 2000)
+        #expect(try blobs(small, "today") + blobs(small, "other") == 2, "1000 bytes each, 2000 in all")
         let tiny = store(test, keep: 0, limit: 10)
         tiny.prune()
         #expect(tiny.list("today").count == 1 && tiny.list("other").count == 1, "a space's latest version is never dropped")

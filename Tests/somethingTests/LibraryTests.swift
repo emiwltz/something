@@ -207,7 +207,7 @@ import Testing
         try Memory(folder: test.places.data, space: "today").set("notes/first", "tea")
         try Data("not json".utf8).write(to: Memory(folder: test.places.data, space: "broken").file)
         #expect(library.remembers("today") == 2 && library.remembers("elsewhere") == 0 && library.remembers("broken") == nil)
-        try Versions(test.places, library.preferences).capture(try #require(library.entry("today")).space, kind: .turn, sentence: "Make it")
+        try Versions(root: test.places.versions, keep: 50, limit: 0).capture(try #require(library.entry("today")).space, kind: .turn, sentence: "Make it")
         library.select(.space("today"))
         library.trash("today")
         let trash = test.root.appendingPathComponent("Trash")
@@ -215,6 +215,30 @@ import Testing
         #expect(library.entries.isEmpty && library.selection == .newSpace)
         #expect(try AppFile.read(test.places.grants).spaces["today"] == nil, "a space made again under its name asks again")
         #expect(ask.told.isEmpty)
+    }
+
+    @Test func aSpaceMadeUnderAGoneNameStartsWithoutItsVersions() throws {
+        let test = Home(prefix: "something-library-"), ask = FakeAsk()
+        defer { test.remove() }
+        let old = try test.space("today", page(#"{"contract": 1, "title": "Today"}"#, "<p>Morning</p>"))
+        let versions = Versions(root: test.places.versions, keep: 50, limit: 0)
+        try versions.capture(old, kind: .turn, sentence: "Say morning")
+        let library = library(test, ask)
+        // Deleted in Finder, then made again from New Space under the same name: the old past goes to the Trash.
+        try FileManager.default.removeItem(at: old.location)
+        library.relist()
+        let made = try Command.new("today", folder: false, places: test.places, template: Home.share.appendingPathComponent("template.html"),
+                                   recycle: library.recycle)
+        #expect(versions.list(made.name).isEmpty)
+        let trash = test.root.appendingPathComponent("Trash")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path) == ["today"], "the old versions are in the Trash, not deleted")
+        // Renamed in Finder while the app was closed: the next start sends the versions left under the old name away.
+        try versions.capture(made, kind: .turn, sentence: "Say evening")
+        try FileManager.default.moveItem(at: made.location, to: test.places.spaces.appendingPathComponent("tonight.html"))
+        try FileManager.default.removeItem(at: trash)
+        try Library.forgetGone(test.places, recycle: library.recycle)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path) == ["today"])
+        #expect(versions.list("today").isEmpty && ask.told.isEmpty)
     }
 
     @Test func exportAsksForTheDataAndImportStartsWithoutGrants() async throws {
@@ -303,7 +327,7 @@ import Testing
         var file = try AppFile.read(test.places.grants)
         file.spaces["notes"] = answered(declared: ["store"], granted: ["store"])
         try file.write(test.places.grants)
-        try Library.forgetGone(test.places)
+        try Library.forgetGone(test.places, recycle: { _ in Issue.record("no versions to trash") })
         #expect(try AppFile.read(test.places.grants).spaces["notes"] != nil)
         // Deleted, or renamed, in Finder: the next start forgets its answers, so a new space of that name asks again.
         try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("notes.html"))
@@ -313,10 +337,10 @@ import Testing
         file = try AppFile.read(test.places.grants)
         file.spaces["board"] = answered(declared: ["store"], granted: ["store"])
         try file.write(test.places.grants)
-        try Library.forgetGone(test.places)
+        try Library.forgetGone(test.places, recycle: { _ in Issue.record("no versions to trash") })
         #expect(try AppFile.read(test.places.grants).spaces.keys.sorted() == ["board"])
         try FileManager.default.removeItem(at: test.places.spaces)
-        try Library.forgetGone(test.places)
+        try Library.forgetGone(test.places, recycle: { _ in Issue.record("no versions to trash") })
         #expect(try AppFile.read(test.places.grants).spaces.keys.sorted() == ["board"])
     }
 

@@ -231,10 +231,10 @@ import Testing
         #expect(model.messages(of: "logbook") == 1 && model.session(for: place(home, "Logbook", "logbook")).rows.count == 2)
         model.forget("logbook")
         #expect(model.session(for: place(home, "Logbook", "logbook")).rows.isEmpty && model.messages(of: "logbook") == 0)
-        try Library.forget("pet", in: home.places)
+        try Library.forget("pet", in: home.places, recycle: { _ in Issue.record("no versions to trash") })
         #expect(model.session(for: place(home, "Pebble", "pet")).rows.isEmpty)
         try keep(kept, "pet", in: home)
-        try Library.forgetGone(home.places)
+        try Library.forgetGone(home.places, recycle: { _ in Issue.record("no versions to trash") })
         #expect(Session.restored("gone", in: home.places.assistants) == nil && Session.restored("pet", in: home.places.assistants) != nil)
         await helper.finish(home, model)
     }

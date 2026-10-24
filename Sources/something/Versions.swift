@@ -5,7 +5,9 @@
 // something"). Restoring writes a version's files back, sends the files it did not have to the Trash, and is itself a
 // version, so it can be undone the same way. The Preferences' limits (versions per space, the storage limit) drop the
 // oldest versions first; the latest version of a space is never dropped, nor a space or its memory. A space heavier
-// than an export carries (15 MB of files, 500 files) is not versioned, and says so.
+// than an export carries (15 MB of files, 500 files) is not versioned, and says so; restoring it to an older version
+// sends the files it changes to the Trash instead, so a space an agent overfilled can still go back. Nothing is read or
+// written through a symbolic link: a restore never writes outside the space.
 import CryptoKit
 import Foundation
 import SomethingCore
@@ -40,43 +42,43 @@ struct Versions {
 
     init(root: URL, keep: Int, limit: Int) { (self.root, self.keep, self.limit) = (root, keep, limit) }
 
-    /// The store of `places`, with the limits the person chose.
-    init(_ places: Places, _ preferences: Preferences) {
-        self.init(root: places.versions, keep: preferences.versionsKept, limit: preferences.storageLimit * 1_000_000)
-    }
-
     func folder(_ name: String) -> URL { root.appendingPathComponent(name, isDirectory: true) }
     private func index(_ name: String) -> URL { folder(name).appendingPathComponent("index.json") }
     private func blob(_ name: String, _ hash: String) -> URL { folder(name).appendingPathComponent("blobs/\(hash)") }
 
     /// The versions kept for the space `name`, newest first; none when it has none or its index does not read.
-    func list(_ name: String) -> [Version] {
-        guard let data = try? Data(contentsOf: index(name)) else { return [] }
+    func list(_ name: String) -> [Version] { (try? read(name)) ?? [] }
+
+    /// The versions of `name`, newest first; none when it has no index. Throws a `SpaceError` when its index is there
+    /// but does not read: a version saved over it would lose the whole history.
+    private func read(_ name: String) throws -> [Version] {
+        guard FileManager.default.fileExists(atPath: index(name).path) else { return [] }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([Version].self, from: data)) ?? []
+        do { return try decoder.decode([Version].self, from: Data(contentsOf: index(name))) } catch {
+            throw SpaceError("The versions of \(name) do not read in \(index(name).path), so no new one was kept: \(error.localizedDescription)")
+        }
     }
 
-    /// How many versions the space `name` keeps and what their files weigh, each content counted once.
-    func weight(_ name: String) -> (versions: Int, bytes: Int) {
-        let versions = list(name)
-        return (versions.count, Set(versions.flatMap(\.files.values)).reduce(0) { $0 + size(name, $1) })
-    }
-
-    /// Takes a version of `space` when its files differ from its latest version, and returns it; nil when nothing
-    /// changed. Throws a `SpaceError` when the space is too heavy to be versioned or the store cannot be written.
+    /// Takes a version of `space` when its files differ from its latest version, or for a restore, and returns it; nil
+    /// when nothing changed. Throws a `SpaceError` when the space is a link or too heavy to be versioned, or its store
+    /// does not read or cannot be written.
     @discardableResult
     func capture(_ space: Space, kind: Kind, sentence: String? = nil, who: String? = nil, restored: String? = nil,
                  at when: Date = Date()) throws -> Version? {
+        guard !Versions.isLink(space.location) else {
+            throw SpaceError("something keeps no versions of \(space.name): it is a link to somewhere else.")
+        }
         let size = space.size()
         guard size.bytes <= Versions.most, size.files <= Export.most else {
             throw SpaceError("something keeps no versions of \(space.name): it has \(size.files) files weighing \(Size.words(size.bytes)), and versions are kept up to 15 MB and \(Export.most) files.")
         }
         var contents: [String: Data] = [:]
         for file in space.files() { contents[file.path] = try Data(contentsOf: file.url) }
-        let files = contents.mapValues { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() }
-        var versions = list(space.name)
-        guard files != versions.first?.files else { return nil }
+        let files = contents.mapValues(Versions.hash)
+        var versions = try read(space.name)
+        // A restore is always said, even when the latest version already holds its files (a space too heavy had none).
+        guard kind == .restore || files != versions.first?.files else { return nil }
         do {
             try FileManager.default.createDirectory(at: folder(space.name).appendingPathComponent("blobs"), withIntermediateDirectories: true)
             for (path, hash) in files where !FileManager.default.fileExists(atPath: blob(space.name, hash).path) {
@@ -96,9 +98,11 @@ struct Versions {
     }
 
     /// Brings `space` back to its version `id`: what it is now is kept first when no version holds it, each file of
-    /// the version is written back, and the files it did not have go to the Trash through `recycle`. Returns the
-    /// restore's own version, nil when the space was already that version. Throws a `SpaceError` when the version is
-    /// gone or incomplete (nothing is written then), or a file cannot be written.
+    /// the version is written back, and the files it did not have go to the Trash through `recycle`. A space too heavy
+    /// to be versioned sends each file the restore changes or removes to the Trash first instead. Returns the restore's
+    /// own version, nil when the space was already that version. Throws a `SpaceError` when the version is gone,
+    /// incomplete, of the other form (a single page for a folder, or the reverse) or would write outside the space
+    /// (nothing is written then), or a file cannot be written.
     @discardableResult
     func restore(_ id: String, of space: Space, recycle: (URL) throws -> Void, at when: Date = Date()) throws -> Version? {
         guard let chosen = list(space.name).first(where: { $0.id == id }) else {
@@ -113,11 +117,28 @@ struct Versions {
             }
             contents[path] = data
         }
-        guard space.form == .folder || contents.count == 1 else {
-            throw SpaceError("This version of \(space.name) was a folder; the space is one file now, so nothing was restored.")
+        guard space.form == .file ? contents.count == 1 : contents["index.html"] != nil else {
+            throw SpaceError(space.form == .file
+                ? "This version of \(space.name) was a folder; the space is one file now, so nothing was restored."
+                : "This version of \(space.name) was a single page; the space is a folder now, so nothing was restored.")
         }
-        try capture(space, kind: .outside, at: when)
+        // A folder of the space replaced by a link would carry a write elsewhere on the Mac.
+        guard !Versions.isLink(space.location), space.form == .file || contents.keys.allSatisfy({ inside(space.location.appendingPathComponent($0), space) }) else {
+            throw SpaceError("\(space.name) holds a link to somewhere else where this version would write; nothing was restored.")
+        }
+        let wanted = { (file: (path: String, url: URL)) in space.form == .file ? contents.values.first : contents[file.path] }
+        let size = space.size()
+        let heavy = size.bytes > Versions.most || size.files > Export.most
+        if !heavy {
+            let now = try Dictionary(uniqueKeysWithValues: space.files().map { ($0.path, Versions.hash(try Data(contentsOf: $0.url))) })
+            if now == chosen.files { return nil }
+            try capture(space, kind: .outside, at: when)
+        }
         do {
+            if heavy {
+                // No version can hold it: each file the restore would overwrite or leave behind goes to the Trash.
+                for file in space.files() where wanted(file) != (try? Data(contentsOf: file.url)) { try recycle(file.url) }
+            }
             if space.form == .file, let data = contents.values.first {
                 try data.write(to: space.location, options: .atomic)
             } else {
@@ -140,10 +161,11 @@ struct Versions {
     }
 
     /// Keeps the person's limits: each space its newest `keep` versions, then, while the store is heavier than
-    /// `limit`, the oldest version of all goes, a space's latest never; then the contents no version holds.
+    /// `limit`, the oldest version of all goes, a space's latest never; then the contents no version holds. A space
+    /// whose index does not read is left whole.
     func prune() {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        var all = Dictionary(uniqueKeysWithValues: names.map { ($0, list($0)) }.filter { !$0.1.isEmpty })
+        var all = Dictionary(uniqueKeysWithValues: names.compactMap { name in (try? read(name)).map { (name, $0) } }.filter { !$0.1.isEmpty })
         if keep > 0 { all = all.mapValues { Array($0.prefix(keep)) } }
         func bytes(_ name: String) -> Int { Set(all[name, default: []].flatMap(\.files.values)).reduce(0) { $0 + size(name, $1) } }
         var weights = Dictionary(uniqueKeysWithValues: all.keys.map { ($0, bytes($0)) })
@@ -177,6 +199,19 @@ struct Versions {
         }
         return (said + (changed.count > 3 ? ["and \(changed.count - 3) more files"] : [])).joined(separator: "; ")
     }
+
+    /// Whether `url`'s nearest folder that exists is the space's folder or within it, links resolved.
+    private func inside(_ url: URL, _ space: Space) -> Bool {
+        let root = space.location.resolvingSymlinksInPath().path
+        var folder = url.deletingLastPathComponent()
+        while !FileManager.default.fileExists(atPath: folder.path), folder.pathComponents.count > 1 { folder.deleteLastPathComponent() }
+        let real = folder.resolvingSymlinksInPath().path
+        return real == root || real.hasPrefix(root + "/")
+    }
+
+    private static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    private static func isLink(_ url: URL) -> Bool { (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true }
 
     private func size(_ name: String, _ hash: String) -> Int {
         (try? blob(name, hash).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0

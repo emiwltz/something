@@ -178,23 +178,28 @@ import SomethingCore
     }
 
     /// Drops the grants and the assistant's conversation of every name whose file and folder are both gone from the
-    /// spaces folder (deleted, or renamed in Finder). A spaces folder that cannot be listed drops nothing. Throws a
-    /// `SpaceError` when the grants file does not read or cannot be written.
-    static func forgetGone(_ places: Places) throws {
+    /// spaces folder (deleted, or renamed in Finder), and sends its versions to the Trash through `recycle`, where the
+    /// person can still find them. A spaces folder that cannot be listed drops nothing. Throws a `SpaceError` when the
+    /// grants file does not read or cannot be written, or versions cannot be moved.
+    static func forgetGone(_ places: Places, recycle: (URL) throws -> Void) throws {
         guard let there = try? Set(FileManager.default.contentsOfDirectory(atPath: places.spaces.path)) else { return }
         let gone = { (name: String) in !there.contains(name) && !there.contains("\(name).html") }
         for file in (try? FileManager.default.contentsOfDirectory(at: places.assistants, includingPropertiesForKeys: nil)) ?? []
         where file.pathExtension == "json" && gone(file.deletingPathExtension().lastPathComponent) {
             try? FileManager.default.removeItem(at: file)
         }
+        let versioned = (try? FileManager.default.contentsOfDirectory(atPath: places.versions.path)) ?? []
+        for name in versioned where gone(name) { try Versions(root: places.versions, keep: 0, limit: 0).trash(name, recycle: recycle) }
         try Grants(places.grants).update { file in file.spaces = file.spaces.filter { !gone($0.key) } }
     }
 
-    /// Drops what the grants file kept for `name`, and its assistant's conversation: a new space of that name never
-    /// inherits the answers or the conversation a deleted one left. Throws a `SpaceError` when the grants file does not
-    /// read or cannot be written.
-    static func forget(_ name: String, in places: Places) throws {
+    /// Drops what the grants file kept for `name`, and its assistant's conversation, and sends the versions left under
+    /// that name to the Trash through `recycle`: a new space of that name never inherits the answers, the conversation
+    /// or the past a deleted one left. Throws a `SpaceError` when the grants file does not read or cannot be written,
+    /// or the versions cannot be moved.
+    static func forget(_ name: String, in places: Places, recycle: (URL) throws -> Void) throws {
         try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
+        try Versions(root: places.versions, keep: 0, limit: 0).trash(name, recycle: recycle)
         try Grants(places.grants).update { $0.spaces[name] = nil }
     }
 
@@ -217,9 +222,8 @@ import SomethingCore
         do {
             try recycle(entry.space.location)
             if FileManager.default.fileExists(atPath: memory.path) { try recycle(memory) }
-            try Versions(places, preferences).trash(name, recycle: recycle)
             preferences.forget(name)
-            try Library.forget(name, in: places)
+            try Library.forget(name, in: places, recycle: recycle)
         } catch {
             ask.tell("“\(entry.title)” was not moved to the Trash. \(error.sentence)")
         }
@@ -270,7 +274,7 @@ import SomethingCore
         let free = ([template.id] + (2...99).map { "\(template.id)-\($0)" }).first { spaces.named($0) == nil } ?? template.id
         do {
             let page = share.appendingPathComponent("templates/\(template.id).html")
-            let space = try Command.new(free, folder: false, places: places, template: page, following: folder)
+            let space = try Command.new(free, folder: false, places: places, template: page, following: folder, recycle: recycle)
             relist()
             used(space.name)
             select(.space(space.name))
@@ -296,7 +300,7 @@ import SomethingCore
             let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))
             let folder = Spaces(root: places.spaces)
             let name = try Export.freeName(received, in: folder, memory: places.data)
-            try Library.forget(name, in: places)
+            try Library.forget(name, in: places, recycle: recycle)
             try FileManager.default.createDirectory(at: places.spaces, withIntermediateDirectories: true)
             let space = try Export.place(received, as: name, in: folder, memory: places.data)
             relist()

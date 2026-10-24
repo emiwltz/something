@@ -37,12 +37,14 @@ assistant wakes on your next message and picks its conversation up, kept in
 resume a conversation (all but Claude Code for now) is never put to sleep on its own; put to sleep by you, it starts a
 new conversation, and says so.
 
-Each change to a space is kept as a **version** in `~/Library/Application Support/something/versions/`, never in the
-spaces folder: its files, each content stored once, named by the sentence that asked for it, or "Edited outside
-something" when no turn of its assistant made it. Restoring a version is itself a version, and the files it did not
+A space's past will be kept as **versions** in `~/Library/Application Support/something/versions/`, never in the
+spaces folder (History, which takes one after each change and shows them, is not there yet): its files, each content
+stored once, named by the sentence that asked for it, or "Edited outside something" when no turn of its assistant made
+it. Restoring a version is itself a version, and the files it did not
 have go to the Trash. 50 versions per space and 500 MB in all are kept by default; the oldest go first, never a space's
-latest, its files or its memory. A space heavier than 15 MB or 500 files keeps no versions. A space moved to the Trash
-takes its versions with it.
+latest, its files or its memory. A space heavier than 15 MB or 500 files keeps no versions; restoring it sends the files
+it changes to the Trash. A space moved to the Trash takes its versions with it, and a space deleted or renamed in Finder
+sends the versions left under its old name there too, so a new space of that name starts without them.
 
 Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
 
