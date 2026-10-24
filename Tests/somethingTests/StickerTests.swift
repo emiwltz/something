@@ -11,7 +11,7 @@ import Testing
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-sticker-"))
 struct StickerTests {
-    /// A window with Daily brief open and its assistant reduced to the sticker; `body` gets the shell and the page.
+    /// A window with Daily brief open, its assistant the sticker as a space opens; `body` gets the shell and the page.
     func brief(motion: Look.Motion = .reduced, _ body: (Shell, SpaceView) async throws -> Void) async throws {
         let stage = try Stage("sticker")
         defer { stage.remove() }
@@ -20,8 +20,7 @@ struct StickerTests {
         shell.glass.motion = { motion }
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.assistant.open = false
-        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing })
+        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
         try await body(shell, brief)
     }
 
@@ -171,6 +170,25 @@ struct StickerTests {
             #expect(await wait(5) { glass.grown == true && !glass.morphing })
             glass.card.cancelOperation(nil)
             #expect(shell.assistant.cardShown && shell.assistant.open)
+        }
+    }
+
+    @Test func aSpaceOpensAsTheSticker() async throws {
+        try await brief { shell, brief in
+            let glass = shell.glass, model = shell.assistant
+            // New Space, the card open with its conversation; then the space opens: the assistant is the sticker.
+            shell.show(nil)
+            model.place = .blank
+            (model.open, model.threadShown) = (true, true)
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            shell.show(brief)
+            model.place = AssistantModel.place(brief)
+            #expect(await wait(5) { glass.grown == false && !glass.morphing && glass.stickerShown })
+            // ⌘K still grows the card, and a new title for the same space keeps it grown.
+            model.focus()
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            model.place = .space(title: "Renamed", name: brief.space.name, page: brief.space.page.path)
+            #expect(model.open)
         }
     }
 

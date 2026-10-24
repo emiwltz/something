@@ -217,7 +217,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Says in the toolbar's chip that `count` requests wait, every space's (the chip goes away at 0), and on the
     /// sticker's badge that `mine` are the open space's.
-    func waiting(_ count: Int, mine: Int = 0) {
+    func waiting(_ count: Int, mine: Int) {
         glass.mine = mine
         guard chip.count != count else { return }
         chip.count = count

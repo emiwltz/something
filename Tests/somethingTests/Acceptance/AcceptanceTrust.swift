@@ -50,7 +50,7 @@ struct AcceptanceTrust {
     static func panels(_ source: FakePrompts, _ shell: Shell) -> Panels {
         let panels = Panels(source: source, shows: false)
         panels.now = { Stage.now }
-        panels.counted = { shell.waiting($0) }
+        panels.counted = { shell.waiting($0, mine: 0) }
         let agents = [("codex", "My agents", "/Users/example/something/spaces", true), ("claude", "Project watch", "/Users/example/code/watch", false),
                       ("pi", "Logbook", "/Users/example/notes", false)]
         panels.who = { request in
@@ -280,7 +280,7 @@ struct AcceptanceTrust {
         var time: TimeInterval = 100
         (panels.now, panels.clock) = ({ Stage.now }, { time })
         panels.who = { _ in App.who(Agent(id: "a1", kind: "claude", origin: "launched"), space: "Daily brief", home: "/Users/example", assistant: true) }
-        panels.counted = { shell.waiting($0) }
+        panels.counted = { shell.waiting($0, mine: 0) }
         panels.refresh()
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
@@ -506,7 +506,7 @@ struct AcceptanceTrust {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         // The requests that will be denied still wait: the chip counts them.
-        shell.waiting(leaving.requests.count)
+        shell.waiting(leaving.requests.count, mine: 0)
         let sheet = Ask.quit(leaving)
         #expect(sheet.isAlert && sheet.title == texts[0] && sheet.frame.width == Sheet.width)
         #expect(PanelsTests.texts(sheet.contentView) == texts)

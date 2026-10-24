@@ -40,7 +40,6 @@ struct AssistantCard: View {
             .padding(AssistantCard.margin)
             // While it grows or shrinks, the host is smaller than the card, which stays pinned to the sticker's corner.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .onExitCommand { model.escape() }
         }
     }
 

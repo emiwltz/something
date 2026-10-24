@@ -545,6 +545,7 @@ import WebKit
         let (home, model) = try assistant()
         defer { home.remove() }
         model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        model.open = true // a space opens with the sticker: ⌘K
         let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(center.frame.size)

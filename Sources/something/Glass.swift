@@ -112,6 +112,8 @@ final class Glass: WindowLayer {
         guard duration > 0 else {
             (moves, morphing) = (moves + 1, false)
             (card.isHidden, card.alphaValue, sticker.alphaValue, model.folding) = (!open, 1, open ? 0 : 1, false)
+            // A card that never grew has no height yet: it asks for one once drawn.
+            if open { card.layoutSubtreeIfNeeded() }
             hideSticker()
             return place()
         }
@@ -285,9 +287,10 @@ final class Sticker: NSView {
         if ["\r", "\u{3}", " "].contains(event.charactersIgnoringModifiers ?? "") { opened() } else { super.keyDown(with: event) }
     }
 
-    override var focusRingMaskBounds: NSRect { surface.insetBy(dx: -3, dy: -3) }
+    // The mockup's ring: 5 points off the sticker, at Look.card + 9.
+    override var focusRingMaskBounds: NSRect { surface.insetBy(dx: -5, dy: -5) }
     override func drawFocusRingMask() {
-        NSBezierPath(roundedRect: surface.insetBy(dx: -3, dy: -3), xRadius: Sticker.radius + 3, yRadius: Sticker.radius + 3).fill()
+        NSBezierPath(roundedRect: surface.insetBy(dx: -5, dy: -5), xRadius: Sticker.radius + 3, yRadius: Sticker.radius + 3).fill()
     }
 
     override func accessibilityLabel() -> String? { label }

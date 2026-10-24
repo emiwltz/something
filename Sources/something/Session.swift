@@ -17,7 +17,7 @@ import SomethingCore
     /// Its agent and the messages and tools of its thread, as the state shows them.
     private(set) var agent: Agent?
     private(set) var rows: [AssistantModel.Row] = []
-    @ObservationIgnored private(set) var turn: Turn?
+    private(set) var turn: Turn?
     /// Whether its agent asks before every change: how it was launched, whatever the menu says now.
     var asking = false
     var launching = false
@@ -45,6 +45,8 @@ import SomethingCore
         if let reported = agent?.thread, reported != self.thread { self.thread = reported }
         let rows = AssistantModel.rows(thread)
         if self.rows != rows { self.rows = rows }
-        turn = thread?.turns.last
+        // Its last step is the sticker's words, even while the card that draws the rows is closed.
+        let turn = thread?.turns.last
+        if self.turn != turn { self.turn = turn }
     }
 }

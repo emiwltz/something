@@ -46,7 +46,10 @@ import SomethingCore
     @ObservationIgnored var openReady: (String) -> Void = { _ in }
     @ObservationIgnored var ended: () -> Void = {}
 
-    var place = Place.blank
+    /// A space opens with the assistant as the sticker, as the mockup does; a new title for the same space keeps it.
+    var place = Place.blank {
+        didSet { if case .space(_, let name, _) = place, name != Self.name(oldValue) { open = false } }
+    }
     var draft = ""
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
     var open = true
@@ -406,6 +409,8 @@ import SomethingCore
     // MARK: Words
 
     /// Where the person is with `view` open: its title as its declaration gave it, else its name; the blank page for nil.
+    private static func name(_ place: Place) -> String? { if case .space(_, let name, _) = place { name } else { nil } }
+
     static func place(_ view: SpaceView?) -> Place {
         view.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
     }

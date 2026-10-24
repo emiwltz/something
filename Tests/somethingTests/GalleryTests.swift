@@ -387,6 +387,7 @@ struct GalleryTests {
         let center = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(NSSize(width: width, height: height))
+        model.open = true // a space opens with the sticker; these are the card's pictures
         let glass = Glass(over: center, model: model)
         await wait(1)
         try draw(center, name, fixture)

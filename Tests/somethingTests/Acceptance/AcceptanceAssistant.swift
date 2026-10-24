@@ -19,8 +19,8 @@ struct AcceptanceAssistant {
         defer { brief.close() }
         let model = shell.assistant, glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
-        shell.reduceAssistant(nil)
-        #expect(await wait(5) { glass.grown == false && glass.card.isHidden })
+        // A space opens with its assistant as the sticker, which follows its presence on the next turn of the main loop.
+        #expect(await wait(5) { glass.grown == false && glass.card.isHidden && glass.stickerShown && sticker.presence == model.presence })
         shell.waiting(1, mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
@@ -45,7 +45,8 @@ struct AcceptanceAssistant {
         let (shell, library, brief) = try await AcceptanceAssistant.atWork(stage)
         defer { brief.close() }
         let model = shell.assistant, engine = model.engine
-
+        // The space opened with the sticker; ⌘K opens the card.
+        model.focus()
         #expect(model.cardShown && !model.threadShown && model.title == "Daily brief" && model.presence.header == "Working")
         #expect(model.presence.state == .think && model.dot == .ok && model.notice == nil)
         #expect(model.name == "Claude Code" && model.modelWords.model == "Opus 5.5" && model.modelWords.effort == "High")
@@ -129,8 +130,8 @@ struct AcceptanceAssistant {
         defer { project.close() }
         let glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
-        shell.reduceAssistant(nil)
-        #expect(await wait(5) { glass.grown == false && glass.card.isHidden })
+        // A space opens with its assistant as the sticker.
+        #expect(await wait(5) { glass.grown == false && glass.card.isHidden && glass.stickerShown })
         shell.waiting(1, mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
