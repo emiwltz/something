@@ -1,7 +1,7 @@
 // The sheets that ask the person, on the main window: the rights a space declares, a mode that makes an agent ask less,
 // a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching the assistant's
-// builder, and how to get one. A space cannot draw them, so a space cannot answer them.
+// the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching
+// the assistant's builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window. The
 // sheets and the panels share two labels: a line that wraps at a width, and a path on one line.
 import AppKit

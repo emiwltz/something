@@ -2,8 +2,9 @@
 // Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the menu bar
 // (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the panel of the
 // agents' requests; the state pushed at most four times a second; and quitting, which asks first while a request waits
-// or an agent something launched works, then denies the requests and stops the agents. Closing the window keeps the app and its agents running, as a Mac app with one main
-// window does; the open space closes with it, and opens again when the window comes back.
+// or an agent something launched works, then denies the requests and stops the agents. Closing the window keeps the
+// app and its agents running, as a Mac app with one main window does; the open space closes with it, and opens again
+// when the window comes back.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -368,22 +369,22 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         return .terminateLater
     }
 
-    /// What quitting ends now: the requests waiting, oldest first, then the agents something launched that work and
-    /// wait for nothing, each by the title of its space.
+    /// What quitting ends now, from the app's own sources.
     func leaving() -> Leaving {
-        let title = { (name: String?) in name.map { self.library.entry($0)?.title ?? $0 } }
-        let agents = engine.state.agents
-        func program(_ id: String) -> String { agents.first { $0.id == id }.map { Registry.app.name(of: $0.kind) } ?? "An agent" }
-        let waiting = panels.queue.waiting
+        App.leaving(agents: engine.state.agents, waiting: panels.queue.waiting, who: who) { agent in
+            RequestQueue.space(of: agent.id, assistant: self.engine.assistants.contains(agent.id), place: self.assistant.place,
+                               launches: self.launches.ids).map { self.library.entry($0)?.title ?? $0 }
+        }
+    }
+
+    /// What quitting ends: the requests `waiting`, oldest first, each named as the panel names it (`who`); then the
+    /// agents something launched that are alive, work and wait for nothing, each by its space's title (`space`).
+    static func leaving(agents: [Agent], waiting: [Request], who: (Request) -> Asker, space: (Agent) -> String?) -> Leaving {
         let working = agents.filter { agent in
             agent.origin == "launched" && agent.alive == true && agent.state == "working" && !waiting.contains { $0.agent == agent.id }
         }
-        return Leaving(requests: waiting.map { Leaving.Row(id: $0.id, space: title(panels.queue.space($0)), program: program($0.agent)) },
-                       working: working.map { agent in
-                           let space = RequestQueue.space(of: agent.id, assistant: engine.assistants.contains(agent.id), place: assistant.place,
-                                                          launches: launches.ids)
-                           return Leaving.Row(id: agent.id, space: title(space), program: program(agent.id))
-                       })
+        return Leaving(requests: waiting.map { let who = who($0); return Leaving.Row(id: $0.id, space: who.space, program: who.program) },
+                       working: working.map { Leaving.Row(id: $0.id, space: space($0), program: Registry.app.name(of: $0.kind)) })
     }
 
     /// Quitting: when `leaving` holds anything, `confirm` asks the person first. Then each request waiting is denied,

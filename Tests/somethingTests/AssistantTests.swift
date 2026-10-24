@@ -182,9 +182,34 @@ import WebKit
         #expect(source.answers.map(\.0) == ["r1", "r2"] && source.answers.allSatisfy { $0.1 == .deny })
         // An answer that cannot reach its agent does not keep the app open: the agent is stopped anyway.
         source.lost = CodedError("AGENT_ERROR", "The agent stopped reading.")
+        source.answers = []
+        steps = []
+        App.quit(leaving, source: source, stop: stop, confirm: { asked += 1; $0(true) }, reply: { steps.append("reply \($0)") })
+        #expect(asked == 3 && steps == ["stop after 2 answers", "reply true"], "a deny that fails still stops the agents")
+        source.lost = nil
         steps = []
         App.quit(Leaving(working: leaving.working), source: source, stop: stop, confirm: { asked += 1; $0(true) }, reply: { steps.append("reply \($0)") })
-        #expect(asked == 3 && steps.last == "reply true", "an agent at work alone asks too")
+        #expect(asked == 4 && steps == ["stop after 2 answers", "reply true"], "an agent at work alone asks too")
+    }
+
+    /// Quitting lists every request waiting, then only the agents something launched that are alive, work and wait
+    /// for nothing: an idle one, a discovered one or a stopped one is not named, and one that waits is named once.
+    @Test func quittingNamesTheLaunchedAgentsAtWork() {
+        func agent(_ id: String, origin: String = "launched", alive: Bool? = true, state: String = "working") -> Agent {
+            var agent = Agent(id: id, kind: "claude", origin: origin)
+            (agent.alive, agent.state) = (alive, state)
+            return agent
+        }
+        let agents = [agent("idle", state: "idle"), agent("works"), agent("seen", origin: "discovered"),
+                      agent("gone", alive: false), agent("asks"), agent("also")]
+        let waiting = [Request(id: "r1", agent: "asks", kind: "permission", tool: "Bash", about: "make", at: "2026-10-17T09:00:01Z")]
+        let spaces = ["works": "Daily brief", "also": "My agents", "asks": "Morning review"]
+        let leaving = App.leaving(agents: agents, waiting: waiting, who: { Asker(program: "Codex", space: spaces[$0.agent]) },
+                                  space: { spaces[$0.id] })
+        #expect(leaving.requests == [.init(id: "r1", space: "Morning review", program: "Codex")])
+        #expect(leaving.working == [.init(id: "works", space: "Daily brief", program: "Claude Code"),
+                                    .init(id: "also", space: "My agents", program: "Claude Code")])
+        #expect(App.leaving(agents: [agent("idle", state: "idle")], waiting: [], who: { _ in Asker(program: "") }, space: { _ in nil }).isEmpty)
     }
 
     /// AGENTS.md and CLAUDE.md are written when missing, written again while they keep something's marker, and left
