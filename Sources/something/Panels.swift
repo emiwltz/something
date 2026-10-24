@@ -2,8 +2,8 @@
 // queue's request on screen and steps through the others, in the order they came. A permission is allowed once or
 // denied; a question is answered or left unanswered. The panel is not modal, so a request the agent withdraws leaves
 // it while the person still looks at it. A space sees the request in its state and can never answer it. One question
-// is left out: the one New Space's build asks while that page is shown, which the page answers (`inline`); its
-// permissions, and every other conversation's questions, still come here.
+// is left out of the panel: the one New Space's build asks while that page is shown, which the page answers (`inline`);
+// the Dock and the toolbar's chip still count it. Its permissions, and every other conversation's questions, come here.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -38,8 +38,10 @@ final class Panels {
     var attention: Attention?
     /// Told how many requests wait at each change: the toolbar's chip.
     var counted: (Int) -> Void = { _ in }
-    /// Whether a request is answered elsewhere, by something's own page: never queued, counted or shown here.
+    /// Whether a request is answered elsewhere, by something's own page: never queued or shown here, only counted.
     var inline: (Request) -> Bool = { _ in false }
+    /// The requests answered elsewhere, waiting: the Dock and the chip count them with the queue's.
+    private(set) var elsewhere: [Request] = []
     private(set) var panel: RequestPanel?
 
     init(source: PromptSource, shows: Bool = true) {
@@ -51,9 +53,12 @@ final class Panels {
     /// one on screen, or goes away when none waits. Called at each change of the state. A panel that says an answer
     /// was lost stays until the person puts it away.
     func refresh() {
-        queue.follow(source.requests.filter { !inline($0) })
-        attention?.follow(queue.waiting, who: who)
-        counted(queue.waiting.count)
+        let requests = source.requests
+        elsewhere = requests.filter(inline)
+        queue.follow(requests.filter { !inline($0) })
+        // A build that asks while the person is in another app is blocked until they come back: the Dock says so.
+        attention?.follow(queue.waiting + elsewhere, who: who)
+        counted(queue.waiting.count + elsewhere.count)
         guard panel?.told != true else { return }
         // Its details are gone: it closed, and cannot be shown.
         while let shown = queue.shown, source.prompt(shown.id) == nil { queue.drop(shown.id) }

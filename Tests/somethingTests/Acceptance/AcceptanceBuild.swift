@@ -498,12 +498,12 @@ struct AcceptanceBuild {
         #expect(await wait(until: { model.ladder?.steps[2].note == "Found problems · Fixing them…" || model.ladder?.steps[2].mark == .done }))
         #expect(await wait(until: { model.ladder?.steps[2].mark == .done && model.ladder?.say?.hasPrefix("Fixed both") == true }))
         let ladder = try #require(model.ladder)
-        #expect(ladder.done && ladder.eyes == .done && ladder.steps[2].note == "Passed after fixes")
+        #expect(ladder.done && ladder.eyes == .done && ladder.steps[2].note == "Passed after 2 fixes")
         #expect(ladder.steps.allSatisfy { Ladder.took($0, now: model.clock()) != nil })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d8" + suffix, root: stage.home.root)
             let words = await Self.read(host)
-            #expect(!words.contains("Stop") && words.contains { $0.hasPrefix("Check, done, Passed after fixes, ") }, "\(words)")
+            #expect(!words.contains("Stop") && words.contains { $0.hasPrefix("Check, done, Passed after 2 fixes, ") }, "\(words)")
         }
         await Self.finish(model)
     }

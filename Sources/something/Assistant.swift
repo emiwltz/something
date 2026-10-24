@@ -65,10 +65,10 @@ import SomethingCore
             if place.space != nil, oldValue.space == nil { open = false }
             // Leaving New Space stops its build, the words kept in its field, and says so.
             if oldValue == .blank, place != .blank, before?.session === session, let left = ladder {
-                stopBuild()
-                halted = nil
+                stop(before)
                 told(left.left)
             }
+            if oldValue == .blank, place != .blank { (halted, nudged) = (nil, false) }
             if place.key != oldValue.key {
                 // The assistant left stays awake for the whole delay from now: it was the open one until now.
                 session.active = clock()
@@ -124,6 +124,9 @@ import SomethingCore
     private(set) var before: Build?
     /// The ladder of the build the person stopped on the blank page, kept until they build again or leave.
     private(set) var halted: Ladder?
+    /// Whether Esc was just pressed while the blank page builds: its ladder says how to stop, for a moment.
+    private(set) var nudged = false
+    @ObservationIgnored private var nudges = 0
     /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
     struct Asked: Equatable { let request: String, question: Question }
     private(set) var asked: Asked?
@@ -474,27 +477,35 @@ import SomethingCore
         if place.space != nil { open = false }
     }
 
+    /// Esc while the blank page builds: never a stop, the ladder says for 2.6 s how to stop instead.
+    func nudge() {
+        guard place == .blank, building else { return }
+        nudges += 1
+        let mine = nudges
+        nudged = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { [weak self] in
+            if self?.nudges == mine { self?.nudged = false }
+        }
+    }
+
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
     /// The held messages go back into the field: nothing is sent behind the person's back.
     func stop() {
-        if place == .blank, before?.session === session { return stopBuild() }
-        takeBack()
-        if launching { return endLaunch(session) }
-        guard let id, working else { return }
-        if agent?.can.interrupt == false { return halt(session) }
-        _ = try? engine.interrupt(id)
+        stop(place == .blank && before?.session === session ? before : nil)
     }
 
-    /// Stops the build asked from the blank page: its turn ends (its agent, when it cannot pause), the ladder stays as
-    /// it was, saying what stays on disk, and the sentence goes back into the field, to change or build again. The
-    /// watch ends here: a space it began is not opened by itself.
-    private func stopBuild() {
-        guard let build = before, let ladder else { return }
-        (before, asked, halted) = (nil, nil, ladder.halted())
+    /// Stops the running turn, and `build`, asked from the blank page, with it: its ladder stays as it was, saying what
+    /// stays on disk, and the sentence goes back into the field, to change or build again. The watch ends here: a space
+    /// it began is not opened by itself.
+    private func stop(_ build: Build?) {
+        if build != nil {
+            halted = ladder?.halted()
+            (before, asked, nudged) = (nil, nil, false)
+        }
         takeBack()
         // A message never delivered may be back in the field already.
-        if !draft.contains(build.sentence) { draft = [build.sentence, draft].filter { !$0.isEmpty }.joined(separator: "\n") }
+        if let build, !draft.contains(build.sentence) { draft = [build.sentence, draft].filter { !$0.isEmpty }.joined(separator: "\n") }
         if launching { return endLaunch(session) }
         guard let id, working else { return }
         if agent?.can.interrupt == false { return halt(session) }

@@ -3,7 +3,7 @@
 // end, never what a page holds: Write begins with the first file written, Check with the first `something check`; a
 // check followed by a write found problems, which the writes after it fix; a check passed only when its command says
 // so (the lent tool reports a page with problems as done, so it says "Checked"). Above the steps, the agent's last
-// words in its own voice, or the question it asks while it builds, answered here (keys 1 to 9) while its permissions
+// words in its own voice, or the question it asks while it builds, answered here (keys 1 to 9 while no text is edited, Ladder.choice) while its permissions
 // still go to the panel (AssistantModel.inlineQuestion). Below, where it is built and Stop (⌘.), which says what stays
 // on disk. The times are when something saw each step: agents stamp theirs to the second.
 import AppKit
@@ -53,15 +53,16 @@ struct Ladder: Equatable {
             if let begun = checks.first { (write.to, write.mark) = (at(tools[begun]), .done) }
         }
         if let first = checks.first, let last = checks.last {
-            let item = tools[last], fixed = writes.contains { $0 > first }
+            let item = tools[last], fixes = writes.filter { $0 > first }.count
+            let after = "after \(fixes) fix\(fixes == 1 ? "" : "es")"
             let passed = item.tool?.name.hasSuffix("something_check") == true
-                ? (fixed ? "Checked again after fixes" : "Checked") : (fixed ? "Passed after fixes" : "Passed, no errors")
+                ? (fixes > 0 ? "Checked again \(after)" : "Checked") : (fixes > 0 ? "Passed \(after)" : "Passed, no errors")
             check.from = at(tools[first])
             switch item.tool?.status {
             case _ where writes.contains(where: { $0 > last }): (check.mark, check.note) = (.now, "Found problems · Fixing them…")
             case "failed": (check.mark, check.note) = (.failed, "Found problems")
             case "done": (check.mark, check.to, check.note) = (.done, at(item, "done"), passed)
-            default: (check.mark, check.note) = (.now, fixed ? "Checking again…" : check.note)
+            default: (check.mark, check.note) = (.now, fixes > 0 ? "Checking again…" : check.note)
             }
         }
         var ladder = Ladder(steps: [plan, write, check], eyes: .think, wrote: write.file)
@@ -106,6 +107,14 @@ struct Ladder: Equatable {
     /// The toast when leaving New Space stopped the build.
     var left: String {
         wrote.map { "Stopped building · \($0) stays unchecked" } ?? (ran ? "Stopped building · what it changed stays" : "Stopped building · nothing was saved")
+    }
+
+    /// The choice a key answers: a digit from 1 to 9 typed with no modifier while no text is edited, which keeps a
+    /// digit typed in Go to or a sheet's field from answering the agent; nil otherwise.
+    static func choice(_ characters: String?, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Int? {
+        guard !editing, modifiers.isDisjoint(with: [.command, .control, .option]), let digit = characters.flatMap(Int.init),
+              (1...9).contains(digit) else { return nil }
+        return digit - 1
     }
 
     /// The time a step took, or has taken by `now` while it runs; nil when it has none to say.
@@ -173,7 +182,6 @@ struct LadderView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [])
         .accessibilityLabel("\(label), \(index + 1)")
     }
 
@@ -215,21 +223,30 @@ struct LadderView: View {
         .accessibilityLabel([step.name, Self.word(step.mark), step.file ?? step.note, time].compactMap { $0 }.joined(separator: ", "))
     }
 
-    /// The step's mark: a ring to come, a turning arc now, a filled tick done, a dot waiting, "!" failed.
+    /// The step's mark: a ring to come, an arc turning smoothly once each 0.9 s now, a filled tick done, a dot
+    /// pulsing while it waits, "!" failed. Reduced motion keeps the arc on top and the dot still.
     @ViewBuilder private func dot(_ mark: Ladder.Mark, now: Date) -> some View {
+        let moves = motion != .reduced
         switch mark {
         case .later, .off: Circle().strokeBorder((mark == .off ? Look.Token.line : .line2).ui, lineWidth: 1.5)
         case .now:
             ZStack {
                 Circle().strokeBorder(Look.Token.line2.ui, lineWidth: 1.5)
                 Circle().inset(by: 0.75).trim(from: 0, to: 0.25).stroke(Look.Token.ink.ui, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .rotationEffect(.degrees(motion == .reduced ? -45 : now.timeIntervalSinceReferenceDate * 400))
+                    .keyframeAnimator(initialValue: -135.0, repeating: moves) { arc, angle in arc.rotationEffect(.degrees(angle)) } keyframes: { _ in
+                        LinearKeyframe(225.0, duration: 0.9)
+                    }
             }
         case .done:
             Circle().fill(Look.Token.ink.ui)
                 .overlay(Image(systemName: "checkmark").font(.system(size: 7.5, weight: .heavy)).foregroundStyle(Look.Token.bg2.ui))
         case .waits:
-            Circle().strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).overlay(Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6))
+            Circle().strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).overlay(
+                Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6)
+                    .keyframeAnimator(initialValue: 1.0, repeating: moves) { inner, alpha in inner.opacity(alpha) } keyframes: { _ in
+                        CubicKeyframe(0.35, duration: 0.8)
+                        CubicKeyframe(1.0, duration: 0.8)
+                    })
         case .failed:
             Circle().fill(Look.Token.bad.ui)
                 .overlay(Text("!").font(Look.font(.ui, size: 10.5, weight: .bold).ui).foregroundStyle(.white))
@@ -247,12 +264,16 @@ struct LadderView: View {
         }
     }
 
-    /// Where it is built and Stop; once stopped, what to do next and Build Again. Nothing once all is done.
+    /// Where it is built and Stop; once stopped, what to do next and Build Again. Nothing once all is done. Esc never
+    /// throws a build away: it says here, for a moment, how to stop instead.
     private var foot: some View {
-        HStack(spacing: 10) {
+        let nudged = model.nudged && !ladder.stopped && !ladder.done
+        return HStack(spacing: 10) {
             HStack(spacing: 6) {
-                Image(systemName: ladder.stopped ? "info.circle" : "lock").font(.system(size: 10)).accessibilityHidden(true)
-                Text(ladder.stopped ? "Change your words, or build again as it is." : "Built on this Mac, in \(model.folder)")
+                Image(systemName: ladder.stopped || nudged ? "info.circle" : "lock").font(.system(size: 10)).accessibilityHidden(true)
+                Text(ladder.stopped ? "Change your words, or build again as it is."
+                     : nudged ? "Still building. To stop, press \(Keys.shown("stop")) or Stop." : "Built on this Mac, in \(model.folder)")
+                    .foregroundStyle((nudged ? Look.Token.ink : .ink3).ui)
             }
             Spacer(minLength: 0)
             if ladder.stopped {
@@ -268,6 +289,8 @@ struct LadderView: View {
                         .font(Look.font(.ui, size: 12, weight: .medium).ui)
                 }
                 .buttonStyle(Secondary())
+                .overlay(RoundedRectangle(cornerRadius: Look.control + 1, style: .continuous).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5)
+                    .opacity(nudged ? 1 : 0).allowsHitTesting(false))
                 .help(model.presence.stopHelp)
                 .accessibilityLabel("Stop")
             }

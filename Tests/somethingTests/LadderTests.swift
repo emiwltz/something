@@ -48,7 +48,7 @@ import Testing
         items[items.count - 1].tool?.status = "done"
         times.merge(seen(["c2/done": 5.9])) { $1 }
         ladder = Ladder.read(items, seen: times, from: Self.start)
-        #expect(ladder.steps[2].mark == .done && ladder.steps[2].note == "Checked again after fixes")
+        #expect(ladder.steps[2].mark == .done && ladder.steps[2].note == "Checked again after 1 fix")
         #expect(Ladder.took(ladder.steps[2], now: Self.start) == "3.4 s")
     }
 
@@ -66,7 +66,7 @@ import Testing
         #expect(ladder.steps[2].mark == .now && ladder.steps[2].note == "Checking again…")
         items[4].tool?.status = "done"
         ladder = Ladder.read(items, seen: times, from: Self.start)
-        #expect(ladder.steps[2].mark == .done && ladder.steps[2].note == "Passed after fixes" && Ladder.took(ladder.steps[2], now: Self.start) == "3.4 s")
+        #expect(ladder.steps[2].mark == .done && ladder.steps[2].note == "Passed after 1 fix" && Ladder.took(ladder.steps[2], now: Self.start) == "3.4 s")
         // A check with no fix before it passed at once; a chained command is no check, and may have written anything.
         let once = Ladder.read([tool("w", "write", Self.room), tool("c", "bash", "something check waiting-room")], seen: times, from: Self.start)
         #expect(once.steps[2].note == "Passed, no errors")
@@ -111,11 +111,16 @@ import Testing
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now }))
         #expect(model.ladder?.say == "I’ll make “Waiting room”: one card per agent that waits for you, oldest first." && model.draft.isEmpty)
+        model.nudge()
+        #expect(model.nudged && model.building, "Esc only says how to stop")
         model.stop()
-        #expect(!model.building && model.draft == "Who is waiting for me" && model.halted?.stopped == true)
+        #expect(!model.building && !model.nudged && model.draft == "Who is waiting for me" && model.halted?.stopped == true)
         #expect(model.ladder?.say == "Stopped. waiting-room.html stays in your spaces folder, unchecked.")
         #expect(await wait(until: { !model.working && AssistantTests().input(home).contains { $0.contains("\"subtype\":\"interrupt\"") } }))
         #expect(model.ladder?.stopped == true, "the stopped ladder stays")
+        model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+        model.place = .blank
+        #expect(model.ladder == nil && model.draft == "Who is waiting for me", "leaving puts the stopped ladder away, not the words")
         model.send()
         #expect(model.building && model.halted == nil && model.ladder?.stopped == false && model.draft.isEmpty)
         await AssistantTests().finish(home, model)
@@ -140,8 +145,10 @@ import Testing
     /// which goes on writing.
     @Test func theBuildsQuestionIsAnsweredInline() async throws {
         let (home, model) = try await assistant("ask")
-        let panels = Panels(source: model.engine, shows: false)
+        let panels = Panels(source: model.engine, shows: false), dock = FakeDock(), chip = Counter()
         panels.inline = { [weak model] in model?.answersInline($0) == true }
+        panels.attention = Attention(dock: dock, notifier: FakeNotifier())
+        panels.counted = { chip.value = $0 }
         model.engine.changed = { [weak model] in
             panels.refresh()
             model?.refresh()
@@ -150,6 +157,8 @@ import Testing
         #expect(await wait(until: { model.asked != nil }))
         panels.refresh()
         #expect(model.engine.state.requests.count == 1 && panels.queue.waiting.isEmpty && panels.panel == nil)
+        // In another app the blocked build still bounces the Dock once, and the badge and the chip count it.
+        #expect(dock.badge == "1" && dock.bounces == 1 && chip.value == 1)
         #expect(model.ladder?.choices == ["One card per agent", "A single list, oldest first"] && model.ladder?.steps[1].mark == .waits)
         model.answer(0)
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now && model.ladder?.say == "One card per agent. Writing it now." }))
@@ -180,4 +189,15 @@ import Testing
         #expect(inSpace.asked == nil && !inSpace.building && others.queue.waiting.map(\.kind) == ["question"] && others.panel != nil)
         await AssistantTests().finish(other, inSpace)
     }
+
+    /// A digit answers the build's question only when typed alone while no text is edited.
+    @Test func onlyABareDigitOutsideTheFieldsAnswers() {
+        #expect(Ladder.choice("1", modifiers: [], editing: false) == 0 && Ladder.choice("9", modifiers: [.shift], editing: false) == 8)
+        #expect(Ladder.choice("1", modifiers: [], editing: true) == nil, "a digit typed in Go to stays there")
+        #expect(Ladder.choice("1", modifiers: [.command], editing: false) == nil && Ladder.choice("0", modifiers: [], editing: false) == nil)
+        #expect(Ladder.choice("a", modifiers: [], editing: false) == nil && Ladder.choice(nil, modifiers: [], editing: false) == nil)
+    }
 }
+
+/// What the toolbar's chip was last told.
+final class Counter { var value = 0 }

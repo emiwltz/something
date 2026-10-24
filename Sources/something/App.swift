@@ -46,6 +46,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         // WebKit hands a page the keys it has the focus for, ⌘P and ⌘1 included: something's own go to the menu first.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
+            // The build's question on New Space takes a digit only when no text is edited and it has that choice.
+            if shell.window.isKeyWindow, shell.window.attachedSheet == nil,
+               let index = Ladder.choice(event.charactersIgnoringModifiers, modifiers: event.modifierFlags, editing: shell.window.firstResponder is NSText),
+               assistant.asked?.question.options.indices.contains(index) == true {
+                assistant.answer(index)
+                return nil
+            }
+            if event.keyCode == 53, shell.window.isKeyWindow { assistant.nudge() } // Escape
             return menuBar.intercept(event, window: shell.window)
         }
         ask.window = { [weak self] in self?.shell.window }
@@ -252,7 +260,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// The requests waiting: all of them in the toolbar's chip, as in the Dock, and the open space's own on its sticker.
     func counted() {
-        shell.waiting(panels.queue.waiting.count, mine: current.map { panels.queue.count(in: $0.space.name) } ?? 0)
+        shell.waiting(panels.queue.waiting.count + panels.elsewhere.count, mine: current.map { panels.queue.count(in: $0.space.name) } ?? 0)
     }
 
     /// Who asks in the panel: the agent, and the title of the space its request belongs to.
