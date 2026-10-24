@@ -3,8 +3,8 @@
 // `granted` injected in that frame before its scripts, the something:// scheme as its only source, every navigation
 // away from it cancelled (a clicked http, https or mailto link goes to the link sheet), no new window, and a reload
 // when a file of the space changes. The rights are asked at the opening and at each reload, before the page runs. An
-// error the page does not catch is reported by its code alone, for the window's "This space has an error." A page
-// whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file no longer reloads it,
+// error the page does not catch is kept by its code, and the first one's line for the person's eyes only (ScriptError,
+// over the page). A page whose process ends is said stopped (Stopped.swift covers it); after two stops a changed file no longer reloads it,
 // so a page that crashes at once is not reloaded in a loop, until the person reloads it.
 // What the space's calls do is in SpaceBridge.swift.
 import AppKit
@@ -15,7 +15,8 @@ import WebKit
 final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     let space: Space, places: Places, engine: Engine, ask: Asking
     let web: WKWebView
-    /// The space's place in the window: the web view, and what covers it while the page is stopped.
+    /// The space's place in the window: the web view, the script error strip above it, and what covers it while the
+    /// page is stopped.
     let area = NSView()
     private(set) var title: String
     private(set) var granted = Granted()
@@ -30,8 +31,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
     let links = Links()
-    /// Called after each load, and when the page stopped: the title, the problems or the stop changed, and the window
-    /// shows them.
+    /// Called after each load, when the page stopped and at its first uncaught error: the title, the problems, the stop
+    /// or the strip changed, and the window shows them.
     var loaded: () -> Void = {}
     /// When the page's process ended since the space opened, oldest first; `stopped` from the last end to the next
     /// load; `paused`, after two, until a load the person asks for or Ask to Fix.
@@ -39,15 +40,17 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var stopped = false, paused = false
     /// The clock of the stops, the calendar and the 12 or 24 hours they are said in; a test sets them.
     var now: () -> Date = Date.init, calendar = Calendar.current, hours = Locale.current
-    private var covering: NSView?
+    private var covering: NSView?, strip: NSView?
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
     var unkept: () -> Void = {}
-    /// The codes of the errors the page did not catch since it loaded (SCRIPT_ERROR, PROMISE_REJECTED), never their
-    /// words, which the page writes; `faulted` is called at each new one.
+    /// The codes of the errors the page did not catch since it loaded (SCRIPT_ERROR, PROMISE_REJECTED): only these go
+    /// to the assistant. `firstError` is the first one's line, the page's own words (`ScriptError.line`), shown to the
+    /// person and never sent; `dismissed` once they closed its strip, until the next load.
     private(set) var faults: [String] = []
-    var faulted: () -> Void = {}
+    private(set) var firstError: String?
+    var dismissed = false
     private let bridge: String, scheme: Scheme
     private var stamp: Date?
     private var timer: Timer?
@@ -86,12 +89,18 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         web.configuration.userContentController.add(self, contentWorld: Lockdown.world, name: "fault")
     }
 
-    /// Reports each error the space's page leaves uncaught, by its code only, from something's own world, where the
-    /// page cannot reach the handler: a page can make an error happen, never choose what it says to the assistant.
+    /// Reports each error the space's page leaves uncaught, its code and its line (message, file and line number), from
+    /// something's own world, where the page cannot reach the handler: a page can make an error happen and word it, and
+    /// its words reach only the person's eyes, drawn as a quote; the assistant gets the code.
     static let faultScript = """
         if (window !== top && parent === top) {
-          addEventListener("error", (event) => { if (event.target === window) webkit.messageHandlers.fault.postMessage("SCRIPT_ERROR"); }, true);
-          addEventListener("unhandledrejection", () => webkit.messageHandlers.fault.postMessage("PROMISE_REJECTED"));
+          const said = (f) => { try { return String(f()); } catch (_) { return ""; } };
+          addEventListener("error", (event) => {
+            if (event.target === window) webkit.messageHandlers.fault.postMessage({code: "SCRIPT_ERROR", message: said(() => event.message),
+              file: said(() => event.filename.split("/").pop()), line: said(() => event.lineno)});
+          }, true);
+          addEventListener("unhandledrejection", (event) => webkit.messageHandlers.fault.postMessage({code: "PROMISE_REJECTED",
+            message: said(() => event.reason instanceof Error ? `${event.reason.name}: ${event.reason.message}` : event.reason)}));
         }
         """
 
@@ -215,7 +224,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         pushed = nil
         frame = nil
         links.reload()
-        faults = []
+        (faults, firstError, dismissed) = ([], nil, false)
         let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         self.reading = reading
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
@@ -381,16 +390,24 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     }
 
     /// A link the person clicked, from Lockdown's guard: it goes to the link sheet, unless one is open or links are
-    /// blocked until the next reload. A link of a frame inside the space goes nowhere. Or an error code (`faultScript`).
+    /// blocked until the next reload. A link of a frame inside the space goes nowhere. Or an error (`faultScript`).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let text = message.body as? String else { return }
+        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty else { return }
         if message.name == "fault" {
-            guard ["SCRIPT_ERROR", "PROMISE_REJECTED"].contains(text), !faults.contains(text) else { return }
-            faults.append(text)
-            return faulted()
+            guard let fault = message.body as? [String: Any], let code = fault["code"] as? String else { return }
+            return self.fault(code, message: fault["message"] as? String ?? "", file: fault["file"] as? String, line: fault["line"] as? String)
         }
-        guard let url = URL(string: text) else { return }
+        guard let text = message.body as? String, let url = URL(string: text) else { return }
         DispatchQueue.main.async { _ = try? self.open(url) }
+    }
+
+    /// An error the page did not catch, as `faultScript` reports it: its code is kept, and the first one's line shown.
+    func fault(_ code: String, message: String, file: String? = nil, line: String? = nil) {
+        guard ["SCRIPT_ERROR", "PROMISE_REJECTED"].contains(code) else { return }
+        if !faults.contains(code) { faults.append(code) }
+        guard firstError == nil else { return }
+        firstError = ScriptError.line(message, file: file, line: line) ?? code
+        loaded()
     }
 
     /// The page's process ended: WebKit shows nothing more, and the window says the space stopped. Reloading it at
@@ -409,8 +426,24 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         covering?.removeFromSuperview()
         covering = view
         guard let view else { return }
-        view.frame = area.bounds
+        view.frame = web.frame
         view.autoresizingMask = [.width, .height]
+        area.addSubview(view)
+    }
+
+    /// Puts `view` across the top of the area in place of the strip there, the page pushed down below it so nothing
+    /// of the page hides under it; nil gives the page the whole area again.
+    func show(strip view: NSView?) {
+        strip?.removeFromSuperview()
+        strip = view
+        // The area takes the center's size by constraints, which may not have run yet.
+        area.superview?.layoutSubtreeIfNeeded()
+        let height = view?.frame.height ?? 0
+        web.frame = NSRect(x: 0, y: 0, width: area.bounds.width, height: area.bounds.height - height)
+        covering?.frame = web.frame
+        guard let view else { return }
+        view.frame = NSRect(x: 0, y: area.bounds.height - height, width: area.bounds.width, height: height)
+        view.autoresizingMask = [.width, .minYMargin]
         area.addSubview(view)
     }
 
@@ -421,6 +454,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Stops watching, drops its cover and lets the web view go; its data store goes with it.
     func close() {
         cover(nil)
+        show(strip: nil)
         loads += 1
         watching(false)
         SpaceView.release(web)

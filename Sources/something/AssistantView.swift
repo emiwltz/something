@@ -1,7 +1,7 @@
 // The assistant in the window, floating at the bottom of the center: the capsule with the agent menu, the
 // input and the send or stop button (Composer, which the blank page shows bigger); the status line above it; the
-// drawer with the conversation; the open space's error banner; and, when no coding agent is found, a notice in the
-// capsule's place. Its state is AssistantModel's; the views keep only the input's focus.
+// drawer with the conversation; and, when no coding agent is found, a notice in the capsule's place. Its state is
+// AssistantModel's; the views keep only the input's focus.
 import SomethingAgents
 import SwiftUI
 
@@ -12,7 +12,6 @@ struct AssistantView: View {
         VStack(spacing: 6) {
             if !model.hidden {
                 if model.drawer { drawer }
-                if let fault = model.fault { banner(fault) }
                 if let status = model.status { statusLine(status) }
                 // The blank page has its own, bigger input.
                 if model.place != .blank {
@@ -62,21 +61,6 @@ struct AssistantView: View {
             .padding(.horizontal, 10).padding(.vertical, 3)
             .modifier(Floating(shape: Capsule(style: .circular)))
             .onTapGesture { if let ready { model.openReady(ready.id) } else if model.light == .waiting { model.showRequest() } }
-    }
-
-    private func banner(_ fault: AssistantModel.Fault) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            Text("This space has an error.")
-            Button("Ask to Fix") { model.fix(fault) }.disabled(model.kind == nil)
-            Button { model.fault = nil } label: { Image(systemName: "xmark") }
-                .buttonStyle(.borderless)
-                .help("Dismiss")
-        }
-        .font(.system(size: 12))
-        .controlSize(.small)
-        .padding(.horizontal, 12).padding(.vertical, 6)
-        .modifier(Floating(shape: Capsule(style: .circular)))
     }
 
     // MARK: The drawer

@@ -100,5 +100,33 @@ struct AcceptanceStopped {
         #expect(space == nil)
     }
 
-    @Test("e12: the script error strip", .disabled("not built yet: T11")) func e12() async throws {}
+    @Test("e12: the script error strip") func e12() async throws {
+        let stage = try Stage("stopped")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.brief(stage)
+        defer { brief.close() }
+        shell.show(brief)
+        #expect(!brief.area.subviews.contains { $0 is ScriptError })
+        // As faultScript reports them: only the first error's line is shown, every code is kept.
+        let said = "TypeError: Cannot read properties of undefined (reading 'temp')"
+        brief.fault("SCRIPT_ERROR", message: said, file: "brief.html", line: "142")
+        brief.fault("SCRIPT_ERROR", message: "Error: a second one", file: "brief.html", line: "150")
+        brief.fault("PROMISE_REJECTED", message: "Error: a rejection")
+        let strip = try #require(brief.area.subviews.last as? ScriptError)
+        #expect(brief.area.subviews.filter { $0 is ScriptError }.count == 1 && brief.faults == ["SCRIPT_ERROR", "PROMISE_REJECTED"])
+        #expect(PanelsTests.texts(strip) == ["Script error", "“\(said) · brief.html, line 142”"])
+        #expect(strip.fix.title == "Ask to Fix" && strip.fix.isEnabled && strip.close.toolTip == "Close")
+        #expect(strip.accessibilityLabel() == "Script error" && strip.quote.accessibilityLabel() == "The page's message: \(said) · brief.html, line 142")
+        // It pushes the page down: nothing of the page under it, and the page still runs (Point stays).
+        #expect(strip.frame.height == 40 && strip.frame.width == brief.area.bounds.width && strip.frame.maxY == brief.area.bounds.maxY)
+        #expect(brief.web.frame.maxY == strip.frame.minY && brief.web.frame.minY == 0 && !brief.stopped)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "e12" + suffix, root: stage.home.root)
+        }
+        // Ask to Fix goes once, in something's words, and the strip leaves until the next load.
+        strip.fixNow()
+        #expect(brief.dismissed && !brief.area.subviews.contains { $0 is ScriptError } && brief.web.frame == brief.area.bounds)
+        shell.show(brief)
+        #expect(!brief.area.subviews.contains { $0 is ScriptError })
+    }
 }

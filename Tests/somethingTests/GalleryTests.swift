@@ -267,8 +267,6 @@ struct GalleryTests {
         model.newConversation()
         model.drawer = false
         model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
-        model.fault = AssistantModel.Fault(title: "My agents", name: "agents", codes: ["SCRIPT_ERROR"])
-        try await draw(model, "assistant-space-error" + suffix, fixture)
         let none = AssistantModel(engine: Home(prefix: "something-gallery-").engine(), places: fixture.places)
         none.place = model.place
         none.engine.changed = { none.refresh() }

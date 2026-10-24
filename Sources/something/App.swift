@@ -199,7 +199,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         let closing = current != nil
         current?.close()
         current = nil
-        assistant.fault = nil
         assistant.unkept = false
         if assistant.ready?.id == name { assistant.ready = nil }
         defer {
@@ -236,10 +235,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             view.made = assistant.made.contains(name)
             view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
-            view.faulted = { [weak self, weak view] in
-                guard let self, let view, current === view else { return }
-                assistant.fault = AssistantModel.Fault(title: view.title, name: view.space.name, codes: view.faults)
-            }
             current = view
             // Blank behind the rights sheet, which the first load may show before the page runs.
             shell.show(view)

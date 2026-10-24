@@ -248,6 +248,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if space.blocked.isEmpty {
             put(space.area)
             space.cover(space.stopped ? Stopped(space, assistant: assistant, motion: library.preferences.motion) : nil)
+            space.show(strip: ScriptError(space, assistant: assistant))
         } else {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))

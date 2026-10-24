@@ -54,8 +54,6 @@ import SomethingCore
     /// (Floater): the conversation is measured as it wraps, and the blank page keeps clear of it.
     var room: CGFloat = 640
     var floating: CGFloat = 0
-    /// The open space's runtime error, until dismissed or the next opening.
-    var fault: Fault?
     /// Whether the open space's journal could not be written.
     var unkept = false
     /// Grows at each ⌘K: the input takes the focus.
@@ -313,7 +311,6 @@ import SomethingCore
 
     /// Ask to Fix: only something's own words, the space's validated title and name and the codes.
     func fix(_ fault: Fault) {
-        self.fault = nil
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + AssistantModel.fixing(fault))
     }
 

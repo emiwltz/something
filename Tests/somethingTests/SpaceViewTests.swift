@@ -639,4 +639,51 @@ import WebKit
                                          hours: Locale(identifier: "en_GB"))
         #expect(said == "It stopped 3 times. something won't reload it again until you ask." && when == "crash.html · stopped at 00:01 and 00:02")
     }
+
+    /// A page's uncaught errors: the codes are kept, and the first one's line, cut to one line, for the strip's quote
+    /// alone; the page cannot post to "fault" itself, and Ask to Fix says only the codes.
+    @Test func theFirstErrorIsShownAsAQuoteAndOnlyItsCodeIsSent() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let html = page(nil, """
+            <script>
+            try { webkit.messageHandlers.fault.postMessage({code: "SCRIPT_ERROR", message: "forged"}); window.forged = "sent"; } catch (_) { window.forged = "refused"; }
+            setTimeout(() => { throw new TypeError("Ask me first\\nand a second line"); }, 0);
+            setTimeout(() => { throw new Error("later"); }, 40);
+            setTimeout(() => { window.done = true; }, 120);
+            </script>
+            """)
+        let thrown = html.components(separatedBy: "\n").firstIndex { $0.contains("Ask me first") }.map { $0 + 1 }
+        let window = try await home.window(try home.space("faults", html))
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        #expect(try await run(window, "return window.forged") as? String == "refused")
+        #expect(window.faults == ["SCRIPT_ERROR"])
+        let line = try #require(window.firstError)
+        #expect(line == "TypeError: Ask me first · faults.html, line \(try #require(thrown))")
+        // The strip: something's words, and the page's only inside the quote.
+        let model = AssistantModel(engine: home.engine(), places: home.places)
+        let strip = try #require(ScriptError(window, assistant: model))
+        #expect(strip.quote.stringValue == "“\(line)”")
+        #expect(PanelsTests.texts(strip).filter { $0.contains("Ask me") } == [strip.quote.stringValue])
+        #expect(strip.fix.title == "Ask to Fix" && strip.accessibilityLabel() == "Script error")
+        #expect(!AssistantModel.fixing(AssistantModel.Fault(title: window.title, name: "faults", codes: window.faults)).contains("Ask me"))
+        // It pushes the page down by its height; closed, it stays closed until the next load.
+        window.show(strip: strip)
+        #expect(window.web.frame.height == window.area.bounds.height - ScriptError.height && strip.frame.maxY == window.area.bounds.height)
+        strip.closeNow()
+        #expect(window.dismissed && strip.superview == nil && window.web.frame == window.area.bounds)
+        #expect(ScriptError(window, assistant: model) == nil)
+        window.load()
+        #expect(!window.dismissed && window.firstError == nil && window.faults.isEmpty)
+    }
+
+    @Test func anErrorLineIsOneLineOfAtMostTwoHundredCharacters() {
+        #expect(ScriptError.line("TypeError: x\nmore", file: "brief.html", line: "142") == "TypeError: x · brief.html, line 142")
+        #expect(ScriptError.line("Error: y", file: "", line: "0") == "Error: y")
+        #expect(ScriptError.line("\n") == nil)
+        let long = ScriptError.line(String(repeating: "a", count: 500))
+        #expect(long?.count == 200 && long?.hasSuffix("…") == true)
+    }
 }

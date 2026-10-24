@@ -514,7 +514,7 @@ import WebKit
         withExtendedLifetime(offscreen) {}
     }
 
-    /// A page that throws an error written to steer the assistant: the banner's Ask to Fix sends the space's title,
+    /// A page that throws an error written to steer the assistant: the strip's Ask to Fix sends the space's title,
     /// name and codes in something's words, and none of the page's.
     @Test(.enabled(if: windowServer, windowServerMissing)) func askToFixSendsOnlySomethingsWords() async throws {
         let (home, model) = try assistant()
@@ -529,13 +529,13 @@ import WebKit
             """))
         let view = try await home.window(space)
         defer { view.close() }
-        var faulted = 0
-        view.faulted = { faulted += 1 }
         view.open()
         #expect(await wait(until: { view.faults.count == 2 }), "faults: \(view.faults)")
-        #expect(Set(view.faults) == ["SCRIPT_ERROR", "PROMISE_REJECTED"] && faulted == 2)
+        #expect(Set(view.faults) == ["SCRIPT_ERROR", "PROMISE_REJECTED"])
+        // The page's words reach the person's eyes only, in the strip's quote.
+        #expect(view.firstError?.contains(crafted) == true)
         model.place = .space(title: view.title, name: "shop", page: space.page.path)
-        model.fix(AssistantModel.Fault(title: view.title, name: "shop", codes: view.faults))
+        try #require(ScriptError(view, assistant: model)).fixNow()
         #expect(await wait(until: { model.light == .ready }))
         let sent = try #require(input(home).first { $0.contains(#""type":"user""#) })
         #expect(sent.contains("The space “Shop board” (shop) has problems: \(view.faults.joined(separator: ", ")). Run something check shop and fix what it reports."))
