@@ -110,13 +110,17 @@ public final class Engine {
     /// The agents the watch saw, but those something launched: the groups of its running children and the
     /// conversations its drivers reported are left out. An ended child's group is not: its pid may be
     /// reused by a program started by hand, and its conversation is still left out by its key. Every conversation in
-    /// `assistantFolder` is left out too, whoever started it and when: it holds the person's words to their assistant.
+    /// `assistantFolder` or below it is left out too, whoever started it and when: it holds the person's words to their
+    /// assistant, whether a space's own, woken again, or a Quick Change's, once the state forgot the launch.
     private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
         let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
         // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
         let keys = launched.compactMap(\.agent.agent.thread)
         let real = HeldFiles.remembered(), mine = assistantFolder.map(real)
-        let seen = Seen(sightings: seen.sightings.filter { mine == nil || $0.folder.map(real) != mine }, kinds: seen.kinds)
+        let seen = Seen(sightings: seen.sightings.filter { sighting in
+            guard let mine, let folder = sighting.folder.map(real) else { return true }
+            return folder != mine && !folder.hasPrefix(mine + "/")
+        }, kinds: seen.kinds)
         return Watch.elsewhere(seen, registry: registry, groups: groups, keys: Set(keys), now: Date())
     }
 
@@ -213,8 +217,8 @@ public final class Engine {
 
     /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
     public private(set) var assistants: Set<String> = []
-    /// The assistant's folder, the spaces folder, which the app sets once before any reading: no conversation there,
-    /// from this run, an earlier one or a terminal, is ever shown as seen elsewhere (`elsewhere`).
+    /// The assistant's folder, the spaces folder, which the app sets once before any reading: no conversation in or
+    /// below it, from this run, an earlier one or a terminal, is ever shown as seen elsewhere (`elsewhere`).
     public var assistantFolder: String?
 
     /// Starts the person's assistant, an agent of `kind` working in `folder` (the spaces folder, its links resolved,

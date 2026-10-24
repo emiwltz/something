@@ -249,9 +249,9 @@ import SomethingCore
             return (id, arguments)
         }
         for (model, effort, resume) in [("-x", nil, nil), (nil, "-x", nil), (nil, nil, "-x"), (nil, nil, "")] as [(String?, String?, String?)] {
-            #expect(throws: CodedError.self) {
+            #expect {
                 try engine.launchAssistant("claude", folder: spaces.path, model: model, effort: effort, resume: resume, askEverything: false)
-            }
+            } throws: { ($0 as? CodedError)?.code == "BAD_PARAMS" }
         }
         #expect(engine.assistants.isEmpty)
 
@@ -288,12 +288,15 @@ import SomethingCore
         now += Engine.endedKept
         engine.update()
         #expect(engine.state.agents.isEmpty && engine.assistants == ids, "assistants only grows")
-        let sightings = [thread, asking, quickThread].map { key in
+        func sighting(_ key: String, _ folder: URL) -> Sighting {
             Sighting(kind: "claude", key: key, facts: StateMap.Facts(alive: false, evidence: "registry", turnOpen: false, waiting: .nothing),
-                     folder: spaces.path, updated: Date())
+                     folder: folder.path, updated: Date())
         }
-        engine.saw(Seen(sightings: sightings))
-        #expect(engine.state.agents.isEmpty, "a woken assistant's conversation is never seen elsewhere")
+        let below = spaces.appendingPathComponent("a-space"), other = "c0ffee00-0000-4000-8000-0000000000a3"
+        try FileManager.default.createDirectory(at: below, withIntermediateDirectories: true)
+        engine.saw(Seen(sightings: [thread, asking, quickThread].flatMap { [sighting($0, spaces), sighting($0, below)] }
+            + [sighting(other, place.work)]))
+        #expect(engine.state.agents.map(\.thread) == [other], "a woken assistant's conversation is never seen elsewhere, in or below its folder")
     }
 
     /// One agent stops alone (the assistant's New Conversation), and its end is no failure; the others run on.
