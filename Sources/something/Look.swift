@@ -100,12 +100,35 @@ enum Look {
     static let titleL = Style(face: .title, size: 34, weight: .semibold, leading: 1.06)
     static let titleXL = Style(face: .title, size: 44, weight: .semibold, leading: 1.04)
 
-    /// The font of `face` at `size` and `weight`. Until the fonts are bundled, or when one fails to register, it is
-    /// the system's: New York for titles and the agent's voice (the mockup falls back to a serif), San Francisco for
-    /// the interface, SF Mono for code.
+    /// Registers the font files of `folder` (share/fonts) for this process only, so nothing is installed on the Mac.
+    /// Returns the files that did not register; one already registered counts as registered.
+    @discardableResult
+    static func register(fonts folder: URL) -> [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "ttf" }.filter { file in
+            var error: Unmanaged<CFError>?
+            if CTFontManagerRegisterFontsForURL(file as CFURL, .process, &error) { return false }
+            return CFErrorGetCode(error?.takeRetainedValue()) != CTFontManagerError.alreadyRegistered.rawValue
+        }
+    }
+
+    /// The CSS weight of `weight` (400 regular, 600 semibold…), the value of a variable font's wght axis.
+    static func css(_ weight: NSFont.Weight) -> CGFloat {
+        let steps: [(NSFont.Weight, CGFloat)] = [(.ultraLight, 200), (.thin, 100), (.light, 300), (.regular, 400),
+                                                 (.medium, 500), (.semibold, 600), (.bold, 700), (.heavy, 800), (.black, 900)]
+        return steps.first { $0.0 == weight }?.1 ?? 400
+    }
+
+    /// The font of `face` at `size` and `weight`. The bundled families are variable: the weight is set on their wght
+    /// axis exactly, and Fraunces's optical size follows the size as the mockup's `font-optical-sizing: auto` does.
+    /// When a family is not registered it is the system's: New York for titles and the agent's voice (the mockup falls
+    /// back to a serif), San Francisco for the interface, SF Mono for code.
     static func font(_ face: Face, size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         if let family = face.family {
-            let wanted = NSFontDescriptor(fontAttributes: [.family: family, .traits: [NSFontDescriptor.TraitKey.weight: weight]])
+            let wght = 0x7767_6874, opsz = 0x6F70_737A   // the axes' four-letter tags
+            let axes: [Int: CGFloat] = face == .title ? [wght: css(weight), opsz: size] : [wght: css(weight)]
+            let variation = NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
+            let wanted = NSFontDescriptor(fontAttributes: [.family: family, variation: axes])
             // AppKit answers a missing family with a substitute: only the family asked for counts.
             if let font = NSFont(descriptor: wanted, size: size), font.familyName == family { return font }
         }

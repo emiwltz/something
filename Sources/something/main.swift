@@ -6,6 +6,8 @@ import SomethingCore
 
 /// Runs the app until it quits. `opening` is a space named on the command line, nil for what the start chooses.
 func runApp(opening: String?) -> Never {
+    // Before any window: the titles, the interface and the agent's voice are drawn in the fonts share/ carries.
+    Look.register(fonts: Resources.share.appendingPathComponent("fonts"))
     let delegate = App(opening: opening)
     NSApplication.shared.delegate = delegate
     NSApplication.shared.setActivationPolicy(.regular)

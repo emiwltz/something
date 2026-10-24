@@ -1,6 +1,7 @@
 // The look holds the mockup's identity exactly: every colour resolves to its hex by day and by night, the inks keep
-// their contrast on the backgrounds they are read on, the sizes and curves are the mockup's, a missing font falls back
-// to the system's, and motion is reduced by the person's choice or the system's setting. No window is shown.
+// their contrast on the backgrounds they are read on, the sizes and curves are the mockup's, the bundled fonts register
+// for the process alone and draw their exact weight, a missing font falls back to the system's, and motion is reduced
+// by the person's choice or the system's setting. No window is shown.
 import AppKit
 import Testing
 @testable import something
@@ -93,6 +94,41 @@ import Testing
             }
         }
         #expect(Look.titleXL.font.pointSize == 44)
+    }
+
+    /// The value of each axis of `font`, by its four-letter tag; an axis at its default is left out by CoreText.
+    func axes(_ font: NSFont) -> [String: Double] {
+        var variation = CTFontCopyVariation(font) as? [Int: Double] ?? [:]
+        for axis in CTFontCopyVariationAxes(font) as? [[String: Any]] ?? [] {
+            if let tag = axis[kCTFontVariationAxisIdentifierKey as String] as? Int, variation[tag] == nil {
+                variation[tag] = axis[kCTFontVariationAxisDefaultValueKey as String] as? Double
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: variation.map { tag, value in
+            (String(decoding: (0..<4).map { UInt8(truncatingIfNeeded: tag >> (24 - 8 * $0)) }, as: UTF8.self), value)
+        })
+    }
+
+    @Test func theBundledFontsRegisterForThisProcessAndDrawTheirWeight() {
+        let fonts = Home.share.appendingPathComponent("fonts")
+        #expect(Look.register(fonts: fonts).isEmpty)
+        #expect(Look.register(fonts: fonts).isEmpty, "registering twice is harmless")
+        for (file, license) in [("Fraunces", "OFL-Fraunces"), ("Onest", "OFL-Onest"), ("YoungSerif-Regular", "OFL-YoungSerif")] {
+            #expect(FileManager.default.fileExists(atPath: fonts.appendingPathComponent(license + ".txt").path), "\(file) has its licence")
+        }
+        for name in ["Fraunces", "Onest", "Young Serif"] { #expect(NSFont(name: name, size: 13) != nil, "\(name)") }
+        for face in [Look.Face.title, .ui, .voice] { #expect(Look.font(face, size: 13).familyName == face.family) }
+        // The weight is the wght axis exactly, and it draws: semibold is wider than regular.
+        let words = "Ready to build something today?"
+        for face in [Look.Face.title, .ui] {
+            let regular = Look.font(face, size: 22), semibold = Look.font(face, size: 22, weight: .semibold)
+            #expect(axes(regular)["wght"] == 400 && axes(semibold)["wght"] == 600, "\(face)")
+            func width(_ font: NSFont) -> CGFloat { (words as NSString).size(withAttributes: [.font: font]).width }
+            #expect(width(semibold) > width(regular), "\(face): \(width(semibold)) against \(width(regular))")
+        }
+        // Fraunces's optical size follows the size, as font-optical-sizing: auto does.
+        #expect(axes(Look.titleXL.font)["opsz"] == 44 && axes(Look.titleS.font)["opsz"] == 17)
+        #expect(Look.css(.medium) == 500 && Look.css(.bold) == 700)
     }
 
     @Test func theFloatShadowAndTheCurvesAreTheMockups() {

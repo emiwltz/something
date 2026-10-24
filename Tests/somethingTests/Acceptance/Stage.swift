@@ -39,6 +39,7 @@ final class Stage {
     /// A home named `something-accept-<area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
     init(_ area: String) throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
+        Look.register(fonts: Home.share.appendingPathComponent("fonts"))   // as the app does at start
         home = Home(prefix: "something-accept-\(area)-")
         try Library.prepare(home.places)
         for (name, _) in Stage.templates {

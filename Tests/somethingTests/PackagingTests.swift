@@ -1,8 +1,8 @@
 // Packaging: tools/make-app.sh assembles something.app in a temporary prefix, from the program this suite built, and
 // the app is then run as Homebrew runs it, through the wrapper its write_exec_script writes: a symlink would break
-// Bundle.main. The bundle's version is read inside it, its program carries the SDK that compiled it, its ad-hoc
-// signature verifies, its program answers plan B's hook, and LaunchServices keeps no something.app from $TMPDIR. The
-// tap's formula builds with the very steps of the one CI installs.
+// Bundle.main. The bundle's version is read inside it, share/ holds the fonts and their licences, its program carries
+// the SDK that compiled it, its ad-hoc signature verifies, its program answers plan B's hook, and LaunchServices keeps
+// no something.app from $TMPDIR. The tap's formula builds with the very steps of the one CI installs.
 import Foundation
 import Testing
 @testable import something
@@ -50,6 +50,10 @@ import Testing
         #expect(info["CFBundleIdentifier"] as? String == "io.github.emiwltz.something")
         #expect(info["CFBundleShortVersionString"] as? String == "9.8.7" && info["CFBundleVersion"] as? String == "9.8.7")
         #expect(FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Resources/share/something.js").path))
+        // The fonts the windows are drawn in travel with their licences.
+        for name in ["Fraunces.ttf", "Onest.ttf", "YoungSerif-Regular.ttf", "OFL-Fraunces.txt", "OFL-Onest.txt", "OFL-YoungSerif.txt"] {
+            #expect(FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Resources/share/fonts/\(name)").path), "\(name)")
+        }
         // macOS gives its current look only to a program stamped with a recent SDK: the one that compiled it.
         let built = try await run("/usr/bin/xcrun", ["vtool", "-show-build", app.appendingPathComponent("Contents/MacOS/something").path]).out
         let stamped = built.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { $0.hasPrefix("sdk ") }?.dropFirst(4)

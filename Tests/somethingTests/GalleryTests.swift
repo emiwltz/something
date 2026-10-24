@@ -18,7 +18,10 @@ import WebKit
 @MainActor @Suite(.serialized, .enabled(if: gallery != nil, "SOMETHING_GALLERY does not name a folder, so the gallery of windows is not drawn."),
                   .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-gallery-"))
 struct GalleryTests {
-    init() { NSApplication.shared.setActivationPolicy(.prohibited) }
+    init() {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        Look.register(fonts: Home.share.appendingPathComponent("fonts"))
+    }
 
     /// A home with the space morning-review and a second one, a grant, ten journal lines of yesterday and today, and a
     /// share folder with the template and the templates; its temporary path is shown as /Users/example in the pictures.
