@@ -276,6 +276,12 @@ import SomethingCore
         wantsFocus = true
     }
 
+    /// Esc in the card: reduces it into the sticker over a space. Elsewhere there is no sticker to bring it back, so
+    /// Esc leaves it open.
+    func escape() {
+        if case .space = place { open = false }
+    }
+
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
     func stop() {

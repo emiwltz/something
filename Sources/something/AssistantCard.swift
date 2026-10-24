@@ -40,7 +40,7 @@ struct AssistantCard: View {
             .padding(AssistantCard.margin)
             // While it grows or shrinks, the host is smaller than the card, which stays pinned to the sticker's corner.
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .onExitCommand { model.open = false }
+            .onExitCommand { model.escape() }
         }
     }
 
@@ -569,7 +569,7 @@ final class CardHost: NSHostingView<AssistantCard> {
     }
 
     /// Esc in the card reduces it, as Reduce does.
-    override func cancelOperation(_ sender: Any?) { rootView.model.open = false }
+    override func cancelOperation(_ sender: Any?) { rootView.model.escape() }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let inside = convert(point, from: superview), card = bounds.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)

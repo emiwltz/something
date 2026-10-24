@@ -18,8 +18,11 @@ final class Glass: WindowLayer {
     var mine = 0 {
         didSet { if mine != oldValue { sticker.mine = mine; say() } }
     }
-    /// The person's Motion: Reduced, the card is in place at once.
-    var motion: () -> Look.Motion = { .calm }
+    /// The person's Motion: Reduced, the card is in place at once and the sticker's eyes hold still. `update` reads
+    /// it, so a change of the preference reaches the eyes.
+    var motion: () -> Look.Motion = { .calm } {
+        didSet { sticker.sign.motion = motion() }
+    }
     /// Where the focus goes when the card shrinks with it inside: the page.
     var page: () -> NSView? = { nil }
     /// Whether the card is grown, as last placed; nil before the first time.
@@ -64,12 +67,21 @@ final class Glass: WindowLayer {
 
     /// The sticker's eyes and words from the assistant's presence, and the card grown or shrunk as the model says.
     private func update() {
-        let presence = model.presence, onSpace = { if case .space = model.place { true } else { false } }()
+        let presence = model.presence
+        sticker.sign.motion = motion()
         sticker.show(presence, title: model.title)
-        sticker.isHidden = !onSpace
         let open = model.cardShown
         if open != grown { grow(open, animated: onSpace && grown != nil) }
+        hideSticker()
         say()
+    }
+
+    private var onSpace: Bool { if case .space = model.place { true } else { false } }
+
+    /// The sticker is there only over a space, and not under the grown card: hidden, neither a click on its badge
+    /// nor VoiceOver finds it. It shows while the card grows from it or shrinks into it.
+    private func hideSticker() {
+        sticker.isHidden = !onSpace || (grown == true && !morphing)
     }
 
     /// The label beside the sticker, shown while the pointer is over it or it has the focus, the card closed.
@@ -90,13 +102,17 @@ final class Glass: WindowLayer {
     /// card's bottom right corner held where the sticker's is; at once when not `animated` or under Reduced motion.
     private func grow(_ open: Bool, animated: Bool) {
         grown = open
-        if !open, let responder = window?.firstResponder as? NSView, responder.isDescendant(of: card) {
-            window?.makeFirstResponder(page())
+        // The focus in the card goes to the page; so does a focus SwiftUI already let go to the window as the card
+        // closed, which would leave the keys going nowhere.
+        if !open, let window, let responder = window.firstResponder,
+           responder === window || (responder as? NSView)?.isDescendant(of: card) == true {
+            window.makeFirstResponder(page())
         }
         let duration = animated ? Look.duration(0.5, Look.motion(motion())) : 0
         guard duration > 0 else {
             (moves, morphing) = (moves + 1, false)
             (card.isHidden, card.alphaValue, sticker.alphaValue, model.folding) = (!open, 1, open ? 0 : 1, false)
+            hideSticker()
             return place()
         }
         model.folding = !open
@@ -105,6 +121,7 @@ final class Glass: WindowLayer {
             card.layoutSubtreeIfNeeded()
         }
         morphing = true
+        hideSticker()
         moves += 1
         let move = moves
         say()
@@ -117,6 +134,7 @@ final class Glass: WindowLayer {
             guard let self, move == moves else { return }
             morphing = false
             if grown == false { (card.isHidden, model.folding) = (true, false) }
+            hideSticker()
             place()
             say()
         })
@@ -159,7 +177,7 @@ final class Glass: WindowLayer {
 /// its space's requests at its top right corner. A click, Return or Space opens the card; the badge shows the request.
 /// It is drawn `room` points inside its frame, which holds the shadow and the badge.
 final class Sticker: NSView {
-    static let room: CGFloat = 12, radius: CGFloat = Look.card + 4
+    static let room: CGFloat = 12, radius: CGFloat = Look.card + 6
     let sign = SignView(.unknown, side: 30), badge = Badge()
     /// Called to open the card, and when the pointer or the focus comes or goes.
     var opened: () -> Void = {}

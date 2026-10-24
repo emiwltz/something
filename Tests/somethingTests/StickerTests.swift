@@ -91,6 +91,8 @@ struct StickerTests {
             sticker.mouseDown(with: try event(.leftMouseDown, at: at, in: window))
             sticker.mouseUp(with: try event(.leftMouseUp, at: at, in: window))
             #expect(await grown() && model.open && glass.sticker.alphaValue == 0)
+            // Under the grown card the sticker is hidden: its badge takes no click, VoiceOver does not find it.
+            #expect(sticker.isHidden && !glass.stickerShown)
             let card = glass.card.frame
             #expect(card.maxX == glass.bounds.width && card.minY == 0, "the card's corner is the sticker's: \(card)")
             #expect(card.width == AssistantCard.width + 2 * AssistantCard.margin && model.floating == card.height)
@@ -164,6 +166,36 @@ struct StickerTests {
             #expect(await wait(5) { glass.sticker.isHidden })
             shell.assistant.place = .templates
             #expect(await wait(5) { glass.sticker.isHidden })
+            // Off a space there is no sticker to fold into: Esc leaves the card open.
+            shell.assistant.open = true
+            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            glass.card.cancelOperation(nil)
+            #expect(shell.assistant.cardShown && shell.assistant.open)
+        }
+    }
+
+    @Test func theStickersEyesFollowThePersonsMotion() async throws {
+        try await brief { shell, _ in
+            let sign = shell.glass.sticker.sign
+            sign.systemReduces = { false }
+            sign.state = .think
+            #expect(sign.motion == .reduced && !sign.animating, "Reduced: the eyes hold still")
+            shell.glass.motion = { .calm }
+            #expect(sign.motion == .calm && sign.animating)
+            shell.glass.motion = { .reduced }
+            #expect(!sign.animating)
+            // The preference, changed in Preferences, reaches the eyes: the glass follows it.
+            let preferences = shell.library.preferences
+            shell.glass.motion = { preferences.motion }
+            // A change of the model has the glass read the new source, as it does once a space opens in the app.
+            shell.assistant.open = true
+            #expect(await wait(5) { shell.glass.grown == true })
+            shell.assistant.open = false
+            #expect(await wait(5) { shell.glass.grown == false && shell.glass.stickerShown })
+            preferences.motion = .calm
+            #expect(await wait(5) { sign.animating })
+            preferences.motion = .reduced
+            #expect(await wait(5) { !sign.animating })
         }
     }
 }
