@@ -157,11 +157,11 @@ import Testing
         library.select(.space("invented"))
         library.select(.tour)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(shell.touring === tour && shell.window.title == "something" && shell.floating?.isHidden == true)
+        #expect(shell.touring === tour && shell.window.title == "something" && shell.glass.isHidden == true)
         #expect(shell.split.splitViewItems[0].isCollapsed)
         library.select(.newSpace)
         try await Task.sleep(for: .milliseconds(100))
-        #expect(shell.touring == nil && shell.window.title == "New Space" && shell.floating?.isHidden == false)
+        #expect(shell.touring == nil && shell.window.title == "New Space" && shell.glass.isHidden == false)
         #expect(!shell.split.splitViewItems[0].isCollapsed)
     }
 

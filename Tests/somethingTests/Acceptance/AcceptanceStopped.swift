@@ -17,7 +17,7 @@ struct AcceptanceStopped {
         brief.loaded = { [weak shell, weak brief] in
             brief.map { shell?.show($0) }
             // The composer goes with the sticker's slice: the mockup shows the page and the card alone.
-            shell?.floating?.isHidden = true
+            shell?.glass.isHidden = true
         }
         brief.calendar.timeZone = try #require(Stage.zone)
         brief.hours = Locale(identifier: "en_GB")

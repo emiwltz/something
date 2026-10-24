@@ -2,8 +2,8 @@
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
 // waiting requests, Point, Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
-// from being shown, the blank page, the templates or the tour, with the assistant's card over it at the bottom right
-// (not over the tour).
+// from being shown, the blank page, the templates or the tour, with the glass over it, which holds the assistant
+// (Glass.swift; not over the tour).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -16,9 +16,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let center = NSView()
     let inspector: NSSplitViewItem
     let assistant: AssistantModel, library: Library
-    /// What the center shows, and the assistant's card over it.
+    /// What the center shows, and the page in it when a space is open.
     private var shown: NSView?
-    private(set) var floating: NSView?
+    private weak var page: NSView?
+    /// The glass over the center, which holds the assistant: its sticker, or its card.
+    let glass: Glass
     /// What covers the whole window: the toast, and later the palette and the sheets of keys.
     let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
@@ -53,6 +55,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         layer = WindowLayer(over: split.view)
+        glass = Glass(over: center, model: assistant)
         super.init()
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
@@ -78,9 +81,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
-        let floating = CardHost(model: assistant)
-        floating.dock(in: center)
-        self.floating = floating
+        glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
+        glass.page = { [weak self] in self?.page }
         // The toolbar's lower edge, over the center only: the sidebar runs up to the window's top.
         let edge = NSBox()
         (edge.boxType, edge.borderWidth, edge.fillColor, edge.translatesAutoresizingMaskIntoConstraints) = (.custom, 0, Look.Token.line.color, false)
@@ -213,8 +215,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
     }
 
-    /// Says in the toolbar's chip that `count` requests wait, every space's; the chip goes away at 0.
-    func waiting(_ count: Int) {
+    /// Says in the toolbar's chip that `count` requests wait, every space's (the chip goes away at 0), and on the
+    /// sticker's badge that `mine` are the open space's.
+    func waiting(_ count: Int, mine: Int = 0) {
+        glass.mine = mine
         guard chip.count != count else { return }
         chip.count = count
         window.toolbar?.items.first { $0.itemIdentifier == Shell.chip }?.isHidden = count == 0
@@ -233,9 +237,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if touring != nil { split.splitViewItems[0].isCollapsed = false }
         touring = nil
         guard let space else {
+            page = nil
             put(templates ? Shell.hosted(GalleryView(library: library)) : Shell.hosted(BlankView(model: assistant, library: library)))
             return templates ? bare("Templates", "Start from one, then make it yours") : bare("New Space", "")
         }
+        page = space.blocked.isEmpty ? space.web : nil
         if space.blocked.isEmpty {
             put(space.area)
             space.cover(space.stopped ? Stopped(space, assistant: assistant, motion: library.preferences.motion) : nil)
@@ -251,7 +257,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func show(_ tour: Tour) {
         touring = tour
         put(Shell.hosted(TourView(tour: tour, assistant: assistant, templates: library.templates)))
-        floating?.isHidden = true
+        glass.isHidden = true
         split.splitViewItems[0].isCollapsed = true
         bare("something", "")
     }
@@ -265,9 +271,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Puts `shown` in the center in place of what was there, under the assistant.
     private func put(_ shown: NSView) {
         self.shown?.removeFromSuperview()
-        floating?.isHidden = false
+        glass.isHidden = false
         shown.translatesAutoresizingMaskIntoConstraints = false
-        center.addSubview(shown, positioned: .below, relativeTo: floating)
+        center.addSubview(shown, positioned: .below, relativeTo: glass)
         self.shown = shown
         // A space starts under the toolbar, never behind it.
         NSLayoutConstraint.activate([shown.topAnchor.constraint(equalTo: center.safeAreaLayoutGuide.topAnchor),

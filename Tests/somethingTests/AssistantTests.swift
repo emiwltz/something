@@ -540,24 +540,25 @@ import WebKit
     }
 
     /// The card sits 16 points from the center's right and bottom edges, 412 wide; its margin, where its shadow falls,
-    /// and the whole corner once it is reduced, let clicks through to the space under it.
+    /// and the card's place once it is reduced to the sticker, let clicks through to the space under it.
     @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheCardReachTheSpace() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
         model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
-        let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), host = CardHost(model: model)
+        let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(center.frame.size)
-        host.dock(in: center)
-        center.layoutSubtreeIfNeeded()
+        let glass = Glass(over: center, model: model), host = glass.card
+        glass.motion = { .reduced }
+        #expect(await wait(5) { glass.grown == true })
         let frame = host.frame, card = frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
         #expect(card.width == AssistantCard.width && card.maxX == 900 - 16 && card.minY == 16)
         #expect(center.hitTest(NSPoint(x: card.minX - 4, y: card.midY)) !== host)
         #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY - 4)) !== host)
         #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20))?.isDescendant(of: host) == true)
         model.open = false
-        center.layoutSubtreeIfNeeded()
-        #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20))?.isDescendant(of: host) != true, "a reduced card takes no click")
+        #expect(await wait(5) { glass.grown == false })
+        #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20)) === center, "a reduced card takes no click")
         withExtendedLifetime(offscreen) {}
     }
 

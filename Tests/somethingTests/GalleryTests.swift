@@ -382,15 +382,15 @@ struct GalleryTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
     }
 
-    /// The assistant alone at the bottom of a center `width` by `height` points, as the window floats it.
+    /// The assistant alone at the bottom of a center `width` by `height` points, on the glass as the window holds it.
     func draw(_ model: AssistantModel, _ name: String, width: CGFloat = 760, height: CGFloat = 150, _ fixture: Home) async throws {
         let center = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(NSSize(width: width, height: height))
-        CardHost(model: model).dock(in: center)
+        let glass = Glass(over: center, model: model)
         await wait(1)
         try draw(center, name, fixture)
-        withExtendedLifetime(offscreen) {}
+        withExtendedLifetime((offscreen, glass)) {}
     }
 
     /// The invented state, with agents started in a terminal as the readers show them: a Claude Code waiting for the

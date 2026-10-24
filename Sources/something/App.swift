@@ -66,7 +66,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         }
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent") }
         panels.beside = { [weak self] in self?.shell.window }
-        panels.counted = { [weak self] in self?.shell.waiting($0) }
+        panels.counted = { [weak self] _ in self?.counted() }
         panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] in
             self?.front()
             self?.showRequest(nil)
@@ -205,6 +205,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         defer {
             assistant.place = (destination ?? library.selection) == .templates ? .templates : AssistantModel.place(current)
             info.show(current?.space)
+            counted()
             // The readers look often while a space is open, and rarely when nobody is looking.
             engine.start(often: current != nil, visible: shown)
             current?.watching(shown)
@@ -244,6 +245,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             shell.show(nil)
             ask.tell(error.sentence)
         }
+    }
+
+    /// The requests waiting: all of them in the toolbar's chip, as in the Dock, and the open space's own on its sticker.
+    func counted() {
+        shell.waiting(panels.queue.waiting.count, mine: current.map { panels.queue.count(in: $0.space.name) } ?? 0)
     }
 
     /// Who asks in the panel: the agent, and the title of the space its request belongs to.

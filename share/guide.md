@@ -416,11 +416,12 @@ await something.store.set("seen", [...seen, "a1"]);
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
   exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
-- **The assistant.** The person's assistant floats at the bottom of the window, over the bottom of your space: keep
-  what matters out of the last 100 points, or let it scroll. The first error your page does not catch shows a 40-point
-  strip, "Script error", across the top of your space, which it pushes down: the error's first line, as a quote, and
-  Ask to Fix. The person reads your error's words there; their assistant is told only the codes (`SCRIPT_ERROR`,
-  `PROMISE_REJECTED`), never your page's words.
+- **The assistant.** The person's assistant rests over your space as a 44-point sticker, 16 points from its bottom
+  right corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
+  left or right edge. Keep what matters out of the 76 points along those two edges, or let it scroll. The first error
+  your page does not catch shows a 40-point strip, "Script error", across the top of your space, which it pushes
+  down: the error's first line, as a quote, and Ask to Fix. The person reads your error's words there; their
+  assistant is told only the codes (`SCRIPT_ERROR`, `PROMISE_REJECTED`), never your page's words.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
   ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
   `preventDefault()` cannot keep them. Every other key is your page's.

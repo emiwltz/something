@@ -4,7 +4,7 @@
 // stuck or waits for you, the present-tense line while it works, and the composer: the agent and model chips (views
 // New Space reuses), Point's slot, the conversation toggle and a flat field whose Send turns into Stop. Its words are
 // the model's and Presence's; the card keeps only the field's focus. A request is never answered here: the notice
-// leads to the native panel. CardHost puts it in the window and lets the clicks beside it reach the space.
+// leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it reach the space.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -18,7 +18,8 @@ struct AssistantCard: View {
     static let width: CGFloat = 412, margin: CGFloat = 16, thread: CGFloat = 288
 
     var body: some View {
-        if model.cardShown {
+        // Still drawn while it shrinks into the sticker (folding).
+        if model.cardShown || model.folding {
             VStack(spacing: 0) {
                 header
                 if model.threadShown { conversation }
@@ -37,6 +38,9 @@ struct AssistantCard: View {
                     .overlay(shape.strokeBorder(Look.Token.line2.ui, lineWidth: 1))
             }
             .padding(AssistantCard.margin)
+            // While it grows or shrinks, the host is smaller than the card, which stays pinned to the sticker's corner.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .onExitCommand { model.open = false }
         }
     }
 
@@ -544,36 +548,31 @@ extension AssistantModel {
     }
 }
 
-/// The card's hosting view, at the bottom right of the center. It takes only the clicks on the card: those in its
-/// margin, where the shadow falls, and while the card is closed reach the space under it.
+/// The card's hosting view in the glass, which gives it its frame: grown from the sticker's corner, shrunk back into it.
+/// It takes only the clicks on the card: those in its margin, where the shadow falls, reach the space under it.
 final class CardHost: NSHostingView<AssistantCard> {
+    /// Called when what the card shows asks for another size: the glass places it again.
+    var resized: () -> Void = {}
+
     convenience init(model: AssistantModel) {
         self.init(rootView: AssistantCard(model: model))
-    }
-
-    /// Puts the card in `center`: its right and bottom edges 16 points from the center's, as wide as the center
-    /// allows, below the toolbar.
-    func dock(in center: NSView) {
         sizingOptions = [.intrinsicContentSize]
-        translatesAutoresizingMaskIntoConstraints = false
-        center.addSubview(self)
-        let wide = widthAnchor.constraint(equalToConstant: AssistantCard.width + 2 * AssistantCard.margin)
-        wide.priority = .defaultLow
-        setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
-        setContentCompressionResistancePriority(.defaultLow - 1, for: .vertical)
-        NSLayoutConstraint.activate([wide, widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor),
-                                     trailingAnchor.constraint(equalTo: center.trailingAnchor),
-                                     bottomAnchor.constraint(equalTo: center.bottomAnchor),
-                                     topAnchor.constraint(greaterThanOrEqualTo: center.safeAreaLayoutGuide.topAnchor)])
+        // Clipped while it grows from the sticker, rounded wider than the card so the card itself is never cut.
+        wantsLayer = true
+        layer?.masksToBounds = true
+        layer?.cornerRadius = Look.card + 10
     }
 
-    override func setFrameSize(_ size: NSSize) {
-        super.setFrameSize(size)
-        if rootView.model.floating != size.height { rootView.model.floating = size.height }
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        resized()
     }
+
+    /// Esc in the card reduces it, as Reduce does.
+    override func cancelOperation(_ sender: Any?) { rootView.model.open = false }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let inside = convert(point, from: superview), card = bounds.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
-        return rootView.model.cardShown && card.contains(inside) ? super.hitTest(point) : nil
+        return rootView.model.cardShown && !isHidden && card.contains(inside) ? super.hitTest(point) : nil
     }
 }

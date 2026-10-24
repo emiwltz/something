@@ -35,8 +35,8 @@ struct AcceptanceShell {
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame" + suffix, root: stage.home.root)
             shell.layer.announce = { _ in }
             // The old composer goes until the sticker's slice: the mockup's toast sits over the page alone.
-            shell.floating?.isHidden = true
-            defer { shell.floating?.isHidden = false }
+            shell.glass.isHidden = true
+            defer { shell.glass.isHidden = false }
             let toast = shell.toast("Daily brief exported to Downloads, with its memory", action: Toast.Action(label: "Show") {}, seconds: 60)
             #expect(toast.shown && shell.window.firstResponder !== toast)
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame-toast" + suffix, root: stage.home.root)
