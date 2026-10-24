@@ -437,9 +437,9 @@ import WebKit
 
     /// The rights sheet says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
     @Test func theRightsSheetSaysThatPiNeverAsks() {
-        #expect(Ask.words(for: "launch:pi") == "Start pi in a folder you choose. pi runs commands and edits files without asking you first")
-        #expect(Ask.words(for: "launch") == "Start agents in a folder you choose. Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
-        #expect(!Ask.words(for: "launch:claude").contains("without asking"))
+        #expect(Ask.title(for: "launch:pi") == "Start pi in a folder you choose" && Info.words(for: "launch:pi").detail.hasSuffix("pi runs commands and edits files without asking you first."))
+        #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
+        #expect(Ask.warning(for: "launch:claude") == nil && !Info.words(for: "launch:claude").detail.contains("without asking"))
     }
 
     /// granted.limits is the guide's table "What each kind can do", as the contract's own fixtures give it.

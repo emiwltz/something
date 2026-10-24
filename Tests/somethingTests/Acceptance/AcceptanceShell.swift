@@ -129,7 +129,13 @@ struct AcceptanceShell {
         info.show(agents.space)
         model.send("Check that the counters match what the terminal says.")
         #expect(await wait(until: { model.presence.state == .wait }), "said: \(model.presence.word)")
-        shell.waiting(1, mine: 1)
+        // The count comes from the real queue, as the chip's does: the request belongs to My agents.
+        let source = FakePrompts()
+        AcceptanceTrust.request("r", [0], in: source)
+        let panels = AcceptanceTrust.panels(source, shell, open: "agents", assistant: "claude")
+        panels.clock = { 100 }
+        info.asks = { panels.queue.waiting.first { panels.queue.space($0) == "agents" }?.tool }
+        panels.refresh()
         let center = shell.center.frame.width
         #expect(center == 1200 - 236 && agents.web.frame.width == center)
         shell.showInfo(true)
@@ -137,22 +143,44 @@ struct AcceptanceShell {
         #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         #expect(shell.inspector.viewController.view.frame.width == 320 && shell.inspector.viewController.view.frame.height == 760, "full height")
         #expect(agents.web.frame.width == center - 320, "the page narrows beside Info: \(agents.web.frame.width)")
-        // Its assistant, waiting: Show Request, never Allow; what it may do; about it.
         #expect(info.space?.name == "agents" && info.waiting == 1 && model.place.space == "agents")
-        #expect(Info.sentence(model.presence.state).hasPrefix("It asked you something. Its request waits in a window of its own"))
         #expect(model.messageCount == 2 && model.resumes && !model.canSleep)
         #expect(info.rights.map(\.right) == ["state", "send"] && info.rights.allSatisfy { $0.standing == .allowed } && info.answered != nil)
-        #expect(Info.words(for: "state") == ("See your agents", "Their state, folder and last messages."))
         #expect(library.preferences.group(of: "agents") == "Agents" && info.size?.files == 1 && info.made != nil && info.changed != nil)
+        // As the panel is read: its assistant waiting, what its request asks, Show Request and never Allow (rule 2);
+        // what it may do, allowed; its group.
+        let panel = shell.inspector.viewController.view
+        let read = await AcceptanceBuild.read(panel)
+        #expect(read.contains { $0.hasPrefix("Show Request") } && !read.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(read)")
+        let waits = "Waiting for you. It wants to run a command. Its request waits in a window of its own, outside the space."
+        #expect(read.contains(waits), "\(read)")
+        for words in ["See your agents", "Write to your agents", "Allowed", "Group: Agents", "Export…"] {
+            #expect(read.contains { $0.contains(words) }, "the panel reads \(words): \(read)")
+        }
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: agents.web, "b4" + suffix, root: stage.home.root)
         }
-        // Esc with the focus in the panel closes it, and the page takes its width back; ⌘I opens it again, and closes it.
-        let controller = try #require(shell.inspector.viewController as? InfoController)
-        controller.cancelOperation(nil)
+        // Answered: Show Request goes, and Put to Sleep follows only what the assistant can do.
+        source.prompts = []
+        panels.refresh()
+        #expect(info.waiting == 0 && shell.chip.count == 0)
+        let after = await AcceptanceBuild.read(panel)
+        #expect(!after.contains { $0.hasPrefix("Show Request") } && after.contains("Put to Sleep"), "\(after)")
+        // Esc with the focus in the panel goes up the responder chain to it: it closes, the page takes its width back.
+        #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
+        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
         shell.window.layoutIfNeeded()
         #expect(!shell.infoShown && agents.web.frame.width == center && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
-        shell.showInfo(true)
+        // ⌘I opens it again, as the menu's command does, and closes it; ✕ closes it too.
+        let command = try #require(Keys.command("insp"))
+        #expect(command.action == #selector(App.toggleInfo(_:)) && command.key == "i")
+        shell.toggleInfo(spaceOpen: false)
+        #expect(!shell.infoShown, "⌘I opens nothing while no space is open")
+        shell.toggleInfo(spaceOpen: true)
+        #expect(shell.infoShown && info.content == .info)
+        shell.toggleInfo(spaceOpen: true)
+        #expect(!shell.infoShown)
+        shell.toggleInfo(spaceOpen: true)
         info.close()
         #expect(!shell.infoShown, "✕")
         var stopped = false

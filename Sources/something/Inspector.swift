@@ -29,6 +29,8 @@ import SwiftUI
     var content = Content.info
     /// How many requests of the open space's own wait: Show Request is offered while one does.
     var waiting = 0
+    /// The tool the first of them asks for, as the request panel names it; nil when none waits or the app does not say.
+    @ObservationIgnored var asks: () -> String? = { nil }
     private(set) var space: Space?
     private(set) var about: String?
     /// The declared rights and where each stands; empty until the person answered the space once.
@@ -77,8 +79,17 @@ import SwiftUI
             problem = error.sentence
         }
         made = try? space.location.resourceValues(forKeys: [.creationDateKey]).creationDate
-        changed = space.files().compactMap { try? $0.url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.max()
-        size = space.size()
+        // One walk of its files for both. They are read again at each opening; an edit while Info shows waits for
+        // the hook that hears the space's files change (T13).
+        let files = space.files().compactMap { try? $0.url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) }
+        changed = files.compactMap(\.contentModificationDate).max()
+        size = Size(bytes: files.compactMap(\.fileSize).reduce(0, +), files: files.count)
+        journaled()
+    }
+
+    /// Reads the space's journal again, newest first: what a new journal line changes, without walking its files.
+    func journaled() {
+        guard let space else { return }
         do {
             let names = Dictionary(agents().compactMap { agent in agent.name.map { (agent.id, $0) } }) { first, _ in first }
             activity = try Journal(folder: places.journals).last(100, space: space.name).reversed().map {
@@ -103,9 +114,8 @@ import SwiftUI
     /// A right as the panel names it, in the mockup's short words, and what it lets the space do, with the warning
     /// the rights sheet gives when it has one.
     static func words(for right: String) -> (name: String, detail: String) {
-        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        let kind = parts.count == 2 ? Registry.app.name(of: parts[1]) : nil
-        let (name, detail): (String, String) = switch parts[0] {
+        let (word, kind) = Ask.parts(of: right)
+        let (name, detail): (String, String) = switch word {
         case "state": ("See your agents", "Their state, folder and last messages.")
         case "send": ("Write to your \(kind.map { $0 + " " } ?? "")agents", "Send them a message you typed here.")
         case "launch": ("Start \(kind ?? "agents")", "Launch one in a folder you choose.")
@@ -116,10 +126,11 @@ import SwiftUI
     }
 
     /// What the assistant is doing, in one plain sentence after its state's word; the unknown is said as such.
-    static func sentence(_ state: Sign.State) -> String {
+    /// While it waits, `wants` says what its request asks ("run a command"), when known.
+    static func sentence(_ state: Sign.State, wants: String? = nil) -> String {
         switch state {
         case .think: "It is changing the space."
-        case .wait: "It asked you something. Its request waits in a window of its own, outside the space."
+        case .wait: "\(wants.map { "It wants to \($0)." } ?? "It asked you something.") Its request waits in a window of its own, outside the space."
         case .done: "It finished its last change a moment ago."
         case .listen: "It listens. Write to it and it changes the space with you."
         case .sleep: "It is asleep and wakes on your next message."
@@ -210,6 +221,9 @@ extension Shell {
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
     }
+
+    /// ⌘I and the toolbar's Info: opens Info while a space is open, else closes the panel.
+    func toggleInfo(spaceOpen: Bool) { showInfo(!infoShown && spaceOpen) }
 }
 
 struct InspectorView: View {
@@ -280,14 +294,16 @@ struct InspectorView: View {
         let words = assistant.modelWords
         return group("Its assistant") {
             VStack(alignment: .leading, spacing: 12) {
+                let sentence = Info.sentence(state, wants: info.waiting > 0 ? info.asks().map(Words.wants) : nil)
                 HStack(alignment: .top, spacing: 12) {
                     Image(nsImage: Sign.miniEyes(state, template: false)).resizable().interpolation(.high).frame(width: 30.6, height: 20.4)
                         .frame(width: 40, height: 34).background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: 9))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Look.Token.line.ui)).accessibilityLabel(state.word)
+                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Look.Token.line.ui))
                     (Text(state.word + ". ").font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui)
-                        + Text(Info.sentence(state)).font(Look.font(.voice, size: 13).ui).foregroundColor(Look.Token.ink2.ui))
+                        + Text(sentence).font(Look.font(.voice, size: 13).ui).foregroundColor(Look.Token.ink2.ui))
                         .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
                 }
+                .accessibilityElement(children: .ignore).accessibilityLabel(state.word + ". " + sentence)
                 if info.waiting > 0 {
                     Button { assistant.showRequest() } label: {
                         HStack(spacing: 7) {
@@ -367,6 +383,8 @@ struct InspectorView: View {
             }
         }
         .padding(.vertical, Look.row * 0.34)
+        // Read as one line, its switch with it: "See your agents, …, Allowed".
+        .accessibilityElement(children: .combine)
     }
 
     /// About: its description, group, made, size, last change, where; where its agents work, when a folder was chosen.
@@ -377,10 +395,13 @@ struct InspectorView: View {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.24) {
                 GridRow {
                     Text("Group").foregroundStyle(Look.Token.ink3.ui)
+                    // The groups as the sidebar's Show in Group has them: no "None", a space leaves a group only for
+                    // another one there too.
                     Menu {
-                        ForEach(groups, id: \.self) { name in
-                            Toggle(name, isOn: Binding(get: { name == group }, set: { _ in library.move(space.name, to: name) }))
+                        Picker("Group", selection: Binding(get: { group ?? "" }, set: { if $0 != group { library.move(space.name, to: $0) } })) {
+                            ForEach(groups, id: \.self) { Text($0).tag($0) }
                         }
+                        .pickerStyle(.inline).labelsHidden()
                     } label: {
                         HStack(spacing: 6) {
                             Text(group ?? "None").font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
@@ -390,7 +411,8 @@ struct InspectorView: View {
                         .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
                     }
-                    .plainMenu().disabled(groups.isEmpty).accessibilityLabel("Group: \(group ?? "None")")
+                    .plainMenu().disabled(groups.isEmpty)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("Group: \(group ?? "None")").accessibilityAddTraits(.isButton)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 row("Made", info.made.map { Info.day($0, now: now) } ?? "Unknown")
@@ -411,7 +433,7 @@ struct InspectorView: View {
     private func actions(_ space: Space) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             action("Show in Finder", "macwindow", key: "finder") { library.showInFinder(space.name) }
-            action("Export…", "square.and.arrow.up", key: "export") { library.export(space.name) }
+            action("Export…", "square.and.arrow.up", key: "export", shortcut: true) { library.export(space.name) }
             action("Move to Trash…", "trash", key: "trash", bad: true) {
                 if let entry = library.entry(space.name) { library.trashing(entry) }
             }
@@ -469,11 +491,12 @@ struct InspectorView: View {
         .buttonStyle(Secondary(height: 28, leading: 8, trailing: 8)).modifier(Dimmed())
     }
 
-    private func action(_ title: String, _ symbol: String, key: String, bad: Bool = false, _ run: @escaping () -> Void) -> some View {
+    private func action(_ title: String, _ symbol: String, key: String, shortcut: Bool = false, bad: Bool = false, _ run: @escaping () -> Void) -> some View {
         Button(action: run) {
             HStack(spacing: 7) {
                 Image(systemName: symbol).font(.system(size: 12)).foregroundStyle((bad ? Look.Token.bad : .ink2).ui).frame(width: 16)
                 Text(title).font(Look.font(.ui, size: 12.5, weight: .medium).ui).foregroundStyle((bad ? Look.Token.bad : .ink).ui)
+                if shortcut { Text(Keys.shown(key)).font(Look.font(.ui, size: 10, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui) }
             }
             .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading).contentShape(Rectangle())
         }

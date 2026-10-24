@@ -69,6 +69,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         library.used = { [weak self] name in self?.assistant.fromTemplate = name }
         info.current = { [weak self] in self?.current }
         info.agents = { [weak self] in self?.engine.state.agents ?? [] }
+        info.asks = { [weak self] in
+            guard let self, let name = current?.space.name else { return nil }
+            return panels.queue.waiting.first { self.panels.queue.space($0) == name }?.tool
+        }
         // The space stays selected, so that it opens again with the window.
         shell.closed = { [weak self] in self?.open(nil) }
         shell.visible = { [weak self] visible in
@@ -258,7 +262,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 library.relist()
             }
             view.made = assistant.made.contains(name)
-            view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
+            view.journaled = { [weak self] in self?.info.journaled() }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
             current = view
             // Blank behind the rights sheet, which the first load may show before the page runs. A space just made
@@ -316,7 +320,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func exportSpace(_ sender: Any?) { current.map { library.export($0.space.name) } }
     @objc func showInFinder(_ sender: Any?) { current.map { library.showInFinder($0.space.name) } }
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
-    @objc func toggleInfo(_ sender: Any?) { shell.showInfo(!shell.infoShown && current != nil) }
+    @objc func toggleInfo(_ sender: Any?) { shell.toggleInfo(spaceOpen: current != nil) }
     @objc func pointAtPart(_ sender: Any?) { shell.point() }
     @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }
     @objc func reduceAssistant(_ sender: Any?) { shell.reduceAssistant(sender) }

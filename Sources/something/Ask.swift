@@ -515,16 +515,16 @@ enum Ask {
         alert("What something does and doesn't", accessory: NSHostingView(rootView: Promise()))
     }
 
-    /// A right in plain words, with its warning when it has one: what Info says.
-    static func words(for right: String) -> String {
-        [title(for: right), warning(for: right)].compactMap { $0 }.joined(separator: ". ")
+    /// A right's word and the name of the agent kind it narrows to, nil for all of them: "launch:pi" is ("launch", "pi").
+    static func parts(of right: String) -> (word: String, kind: String?) {
+        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
+        return (parts.first ?? right, parts.count == 2 ? Registry.app.name(of: parts[1]) : nil)
     }
 
     /// What a right lets the space do, in plain words: the title of its box in the rights sheet.
     static func title(for right: String) -> String {
-        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        let kind = parts.count == 2 ? Registry.app.name(of: parts[1]) : nil
-        switch parts[0] {
+        let (word, kind) = parts(of: right)
+        switch word {
         case "state": return "See your agents and what they say"
         case "send": return "Write to your \(kind.map { $0 + " " } ?? "")agents, stop them, change their settings"
         case "launch": return "Start \(kind ?? "agents") in a folder you choose"
