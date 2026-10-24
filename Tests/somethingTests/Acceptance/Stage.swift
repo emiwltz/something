@@ -149,7 +149,12 @@ enum Picture {
                 place.fill()
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
-            if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
+            if let snapshot, let web {
+                // The window server applies a cover's background filters (Stopped's grey and blur), which no drawing
+                // here reaches: the page is filtered as they would.
+                let filters = covers.compactMap { $0.layer?.backgroundFilters as? [CIFilter] }.flatMap { $0 }.compactMap { $0.copy() as? CIFilter }
+                filtered(snapshot, filters).draw(in: web.convert(web.bounds, to: frame))
+            }
             for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
@@ -250,8 +255,22 @@ enum Picture {
         try #require(rep.representation(using: .png, properties: [:])).write(to: gallery.appendingPathComponent("\(name).png"))
     }
 
-    /// Shows the temporary home as /Users/example: the pictures say what a person would read.
+    /// `image` through `filters`, in order, at its own size.
+    static func filtered(_ image: NSImage, _ filters: [CIFilter]) -> NSImage {
+        guard !filters.isEmpty, let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
+        let start = CIImage(cgImage: cg)
+        let out = filters.reduce(start) { image, filter in
+            filter.setValue(image, forKey: kCIInputImageKey)
+            return filter.outputImage ?? image
+        }.cropped(to: start.extent)
+        guard let made = CIContext().createCGImage(out, from: start.extent) else { return image }
+        return NSImage(cgImage: made, size: image.size)
+    }
+
+    /// Shows the temporary home as /Users/example: the pictures say what a person would read. Each sign holds its pose
+    /// at rest, so that a picture never catches it mid-blink.
     static func disguise(_ view: NSView, _ root: String) {
+        (view as? SignView)?.systemReduces = { true }
         // Only what names the home is set again: setting a text view's string scrolls it to its end.
         if let field = view as? NSTextField, field.stringValue.contains(root) {
             field.stringValue = field.stringValue.replacingOccurrences(of: root, with: "/Users/example")

@@ -46,10 +46,11 @@ struct AcceptanceTrust {
         EOF
         """#
 
-    /// Panels on the Stage's clock, their requests asked by the agents `request` names.
-    static func panels(_ source: FakePrompts) -> Panels {
+    /// Panels on the Stage's clock, their requests asked by the agents `request` names, counted in `shell`'s chip.
+    static func panels(_ source: FakePrompts, _ shell: Shell) -> Panels {
         let panels = Panels(source: source, shows: false)
         panels.now = { Stage.now }
+        panels.counted = shell.waiting
         let agents = [("codex", "My agents", "/Users/example/something/spaces", true), ("claude", "Project watch", "/Users/example/code/watch", false),
                       ("pi", "Logbook", "/Users/example/notes", false)]
         panels.who = { request in
@@ -71,12 +72,14 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [0], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source)
+        let panels = Self.panels(source, shell)
         panels.clock = { time }
         panels.refresh()
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Codex wants to run a command" && panel.position == nil)
+        let chip = try #require(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.chip })
+        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.showRequest(_:)))
         #expect(PanelsTests.texts(panel.contentView).starts(with: ["something", "·  Permission", "", "Codex wants to run a command",
                                                                    "My agents · its assistant · just now", "It will run one command in the My agents space.",
                                                                    "Space", "My agents", "Folder", "~/something/spaces", "The exact command"]))
@@ -110,7 +113,7 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e1" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil)
+        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && chip.isHidden, "answered: the chip goes")
     }
     /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
     /// corner below the toolbar, its footer in sight.
@@ -124,7 +127,7 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [0], in: source, command: Self.long)
         var time: TimeInterval = 100
-        let panels = Self.panels(source)
+        let panels = Self.panels(source, shell)
         panels.clock = { time }
         panels.refresh()
         let panel = try #require(panels.panel), code = try #require(panel.code)
@@ -162,12 +165,12 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [34, 12, 2], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source)
+        let panels = Self.panels(source, shell)
         panels.clock = { time }
         panels.refresh()
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
-        #expect(panel.position == "1 of 3" && panel.header.of.stringValue == "1 of 3")
+        #expect(panel.position == "1 of 3" && panel.header.of.stringValue == "1 of 3" && shell.chip.accessibilityLabel() == "3 wait for you")
         #expect(PanelsTests.texts(panel.contentView).contains("My agents · its assistant · asked 34 min ago"))
         // The steps, as the header's arrows press them: on to the second, which arms again, and back.
         time += 1
@@ -185,7 +188,7 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e3" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2")
+        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2" && shell.chip.count == 2)
     }
     /// ⌥⌘P while My agents' assistant waits: the same panel in the same place, now holding the keys, ringed in ink2
     /// after one pulse, the main window's lights gray. Escape denies. That the keys really move to the panel and back
@@ -200,7 +203,7 @@ struct AcceptanceTrust {
         let source = FakePrompts()
         Self.request("r", [0], in: source)
         var time: TimeInterval = 100
-        let panels = Self.panels(source)
+        let panels = Self.panels(source, shell)
         panels.clock = { time }
         panels.queue.space = { _ in "agents" }
         panels.refresh()
@@ -237,7 +240,7 @@ struct AcceptanceTrust {
         defer { brief.close() }
         let source = FakePrompts()
         Self.request("r", [0], in: source)
-        let panels = Self.panels(source), dock = FakeDock(), notifier = FakeNotifier()
+        let panels = Self.panels(source, shell), dock = FakeDock(), notifier = FakeNotifier()
         var time: TimeInterval = 100
         panels.clock = { time }
         panels.queue.space = { _ in "agents" }
@@ -277,6 +280,7 @@ struct AcceptanceTrust {
         var time: TimeInterval = 100
         (panels.now, panels.clock) = ({ Stage.now }, { time })
         panels.who = { _ in App.who(Agent(id: "a1", kind: "claude", origin: "launched"), space: "Daily brief", home: "/Users/example", assistant: true) }
+        panels.counted = shell.waiting
         panels.refresh()
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
@@ -463,7 +467,7 @@ struct AcceptanceTrust {
         _ = await wait(1.5) // WebKit lays the page out again at its new size on the run loop.
         let source = FakePrompts()
         Self.request("r", [0], in: source)
-        let panels = Self.panels(source)
+        let panels = Self.panels(source, shell)
         var time: TimeInterval = 100
         panels.clock = { time }
         panels.refresh()
@@ -501,6 +505,8 @@ struct AcceptanceTrust {
         shell.window.setFrameOrigin(Self.large)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
+        // The requests that will be denied still wait: the chip counts them.
+        shell.waiting(leaving.requests.count)
         let sheet = Ask.quit(leaving)
         #expect(sheet.isAlert && sheet.title == texts[0] && sheet.frame.width == Sheet.width)
         #expect(PanelsTests.texts(sheet.contentView) == texts)

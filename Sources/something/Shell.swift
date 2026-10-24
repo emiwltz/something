@@ -30,6 +30,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// The title and the file, on one line: the system's title would put the file under it.
     let titleLine = TitleLine()
+    /// How many requests wait, all spaces together; hidden while none does.
+    let chip = WaitingChip()
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
@@ -174,7 +176,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return item
         case Shell.chip:
             let item = NSToolbarItem(itemIdentifier: id)
-            (item.view, item.isBordered, item.isHidden) = (NSView(), false, true)
+            (item.view, item.isBordered, item.isHidden, item.label) = (chip, false, chip.count == 0, "Waiting")
             return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
         case Shell.sidebar:
@@ -230,6 +232,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             // A borderless button with a tint draws the same enabled or not; the mockup's disabled .ib is at .32.
             control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
+    }
+
+    /// Says in the toolbar's chip that `count` requests wait, every space's; the chip goes away at 0.
+    func waiting(_ count: Int) {
+        guard chip.count != count else { return }
+        chip.count = count
+        window.toolbar?.items.first { $0.itemIdentifier == Shell.chip }?.isHidden = count == 0
+        titleLine.invalidateIntrinsicContentSize()
     }
 
     /// Shows `words` at the bottom of the center for a moment; see Toast.
@@ -337,6 +347,54 @@ final class TitleLine: NSView {
     }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
+}
+
+/// The toolbar's chip: the eyes of a request, how many wait and "wait for you", in a pill with a hairline and no
+/// shadow. One meaning only, the count of every request, as the Dock's; a click shows the request (W3 adds its menu).
+final class WaitingChip: NSButton {
+    var count = 0 {
+        didSet {
+            setAccessibilityLabel(words)
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
+        }
+    }
+    private var words: String { "\(count) \(count == 1 ? "waits" : "wait") for you" }
+    private var parts: (NSAttributedString, NSAttributedString) {
+        (NSAttributedString(string: "\(count)", attributes: [.font: Look.font(.ui, size: 12, weight: .semibold), .foregroundColor: Look.Token.ink.color]),
+         NSAttributedString(string: count == 1 ? "waits for you" : "wait for you",
+                            attributes: [.font: Look.font(.ui, size: 12, weight: .medium), .foregroundColor: Look.Token.ink.color]))
+    }
+
+    init() {
+        super.init(frame: .zero)
+        (isBordered, title, target, action) = (false, "", nil, #selector(App.showRequest(_:)))
+        toolTip = Keys.tooltip("showreq", "Show Request")
+    }
+    required init?(coder: NSCoder) { nil }
+
+    // The mockup's .wn-chip: 26 high, 8 before the eyes, 6 between the pieces, 10 after the words.
+    override var intrinsicContentSize: NSSize {
+        let (number, said) = parts
+        return NSSize(width: 8 + 16 + 6 + ceil(number.size().width) + 6 + ceil(said.size().width) + 10, height: 26)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let pill = bounds.insetBy(dx: 0.5, dy: (bounds.height - 26) / 2 + 0.5), path = NSBezierPath(roundedRect: pill, xRadius: 12.5, yRadius: 12.5)
+        Look.Token.bg2.color.setFill()
+        path.fill()
+        Look.Token.line2.color.setStroke()
+        path.lineWidth = 1
+        path.stroke()
+        Sign.miniEyes(.wait, template: false).draw(in: NSRect(x: 8, y: bounds.midY - 5, width: 16, height: 10))
+        let (number, said) = parts
+        var x: CGFloat = 8 + 16 + 6
+        for piece in [number, said] {
+            let size = piece.size()
+            piece.draw(at: NSPoint(x: x, y: bounds.midY - size.height / 2))
+            x += ceil(size.width) + 6
+        }
+    }
 }
 
 /// The center when a space cannot be shown: what keeps it from being displayed, one problem per line with its code,

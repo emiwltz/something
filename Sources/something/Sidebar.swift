@@ -25,10 +25,12 @@ struct SidebarView: View {
                 library.select(destination)
             }
         })) {
-            HStack {
-                Label { Text("New Space") } icon: { Image(systemName: "plus.circle.fill").foregroundStyle(.tint) }
-                Spacer()
-                Text(Keys.shown("new")).foregroundStyle(.tertiary)
+            // The identity's ink, never the system's accent: a rounded square of ink with its plus, as the mockup's.
+            Label {
+                Text("New Space")
+            } icon: {
+                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color(nsColor: Look.Token.actfg.color))
+                    .frame(width: 20, height: 20).background(Color(nsColor: Look.Token.act.color), in: RoundedRectangle(cornerRadius: 6))
             }
             .tag(Row.to(.newSpace))
             Section("Spaces") {
@@ -51,7 +53,7 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .safeAreaInset(edge: .bottom) {
             Button { library.select(.templates) } label: {
-                Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(.tint) }
+                Label { Text("Templates") } icon: { Image(systemName: "square.grid.2x2").foregroundStyle(Color(nsColor: Look.Token.ink2.color)) }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 8).padding(.vertical, 6)
                     .background(library.selection == .templates ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 6))

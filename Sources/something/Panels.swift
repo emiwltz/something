@@ -34,6 +34,8 @@ final class Panels {
     let queue = RequestQueue()
     /// The Dock and the notifications, which follow the queue; the app's.
     var attention: Attention?
+    /// Told how many requests wait at each change: the toolbar's chip.
+    var counted: (Int) -> Void = { _ in }
     private(set) var panel: RequestPanel?
 
     init(source: PromptSource, shows: Bool = true) {
@@ -47,6 +49,7 @@ final class Panels {
     func refresh() {
         queue.follow(source.requests)
         attention?.follow(queue.waiting, who: who)
+        counted(queue.waiting.count)
         guard panel?.told != true else { return }
         // Its details are gone: it closed, and cannot be shown.
         while let shown = queue.shown, source.prompt(shown.id) == nil { queue.drop(shown.id) }

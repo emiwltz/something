@@ -784,7 +784,8 @@ final class KeyRing: NSView {
             let spread = 1 - pow(1 - min(1, pulse / 0.6), 2)
             stroke(Look.Token.ink.color.withAlphaComponent(0.24 * (1 - spread)), 1.5 + 10 * spread)
         }
-        if lit { stroke(Look.Token.ink2.color, 1.5) }
+        // A hairline while it holds the keys: the pulse says where they went, the lights say they stay.
+        if lit { stroke(Look.Token.ink2.color, 1) }
     }
 }
 
