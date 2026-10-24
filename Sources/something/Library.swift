@@ -50,6 +50,10 @@ import SomethingCore
     @ObservationIgnored var opened: (Destination) -> Void = { _ in }
     /// What Move to Trash… does before it moves anything: the window asks the person.
     @ObservationIgnored var trashing: (Entry) -> Void = { _ in }
+    /// Told the name of a space renamed: the window titles it again when it is the open one.
+    @ObservationIgnored var renamed: (String) -> Void = { _ in }
+    /// Says a sentence for a moment: the window's toast, quiet.
+    @ObservationIgnored var told: (String) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
     /// Moves a file to the Trash; a test moves it into its own home, so that nothing reaches the person's Trash.

@@ -94,6 +94,8 @@ struct AcceptanceShell {
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
         library.sidebar.hovered = .space("project")
+        library.sidebar.menuOpened()
+        #expect(library.sidebar.menued == .space("project"), "the row its menu opened on stays lit and ringed")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b3" + suffix, root: stage.home.root)
         }
@@ -101,6 +103,11 @@ struct AcceptanceShell {
         if case let .submenu(_, _, picks) = library.menu(for: row)[3], case let .item(_, _, _, _, _, _, run) = picks[1] { run() }
         #expect(library.preferences.group(of: "project") == "Notes")
         #expect(FileManager.default.fileExists(atPath: stage.home.places.spaces.appendingPathComponent("project.html").path))
+        // Rename… of the open space: the toolbar and the window's title follow the name shown in the sidebar.
+        library.rename("brief", to: "Morning paper")
+        #expect(shell.window.title == "Morning paper" && shell.titleLine.line.string.hasPrefix("Morning paper"))
+        library.rename("oracle", to: "Seer")
+        #expect(shell.window.title == "Morning paper", "another space's name leaves the toolbar alone")
     }
     @Test("b4: Info docked full height", .disabled("not built yet: W4")) func b4() async throws {}
     @Test("b5: full screen", .disabled("not built yet: W5")) func b5() async throws {}

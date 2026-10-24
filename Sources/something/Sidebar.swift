@@ -24,11 +24,19 @@ import SwiftUI
 
     /// The row under the pointer.
     var hovered: Hover?
+    /// The row or header whose menu is open: it stays lit, a row ringed, while the pointer is in the menu.
+    var menued: Hover?
     /// The group header the keys rest on; nil while they rest on the selection.
     var cursor: String?
     /// What is being renamed in place, and the name typed so far.
     var renaming: Target?
     var draft = ""
+
+    /// A menu began: the row or header under the pointer is the one it was opened on (the menu bar's are over none).
+    func menuOpened() {
+        if case .nav = hovered { return }
+        menued = hovered
+    }
 }
 
 /// A context menu as data: the sidebar draws it, and the tests read it (a menu cannot be drawn offscreen).
@@ -63,17 +71,26 @@ extension Library {
     /// Folds the group, or unfolds it.
     func toggle(_ group: String) { preferences.fold(group, !folded(group)) }
 
-    /// Rename… of a space: `title` is shown in place of its declared one, in the sidebar, the Go menu and ⌘P. Blank,
-    /// or its declared title, gives it back its own. The file keeps its name.
+    /// Rename… of a space: `title` is shown in place of its declared one, in the sidebar, the toolbar, the Go menu and
+    /// ⌘P. Blank, or its declared title, gives it back its own. The file keeps its name.
     func rename(_ space: String, to title: String) {
         guard let entry = entry(space) else { return }
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         preferences.change { $0.names[space] = title.isEmpty || title == entry.declared ? nil : title }
         relist()
+        renamed(space)
     }
 
-    /// Starts renaming `target` in place, its group unfolded so its row shows.
+    /// Show in Group ▸ a group: the space moves there, and the toast says that only the view changed.
+    func move(_ space: String, to group: String) {
+        preferences.move(space, to: group)
+        told("\(entry(space)?.title ?? space) is in \(group) now · groups are only a view, the file stays where it is")
+    }
+
+    /// Starts renaming `target` in place, its group unfolded so its row shows. A rename already open is kept first:
+    /// its field, going away, would otherwise commit the new target with its untouched name.
     func beginRename(_ target: SidebarState.Target) {
+        if let open = sidebar.renaming, open != target { commitRename() }
         switch target {
         case .group(let name): sidebar.draft = name
         case .space(let name):
@@ -148,7 +165,7 @@ extension Library {
         let id = entry.id, mine = preferences.group(of: id)
         let groups: [SidebarMenu.Line] = preferences.groups.map { group in
             .item(group.name, symbol: "folder", checked: group.name == mine, enabled: group.name != mine) { [weak self] in
-                self?.preferences.move(id, to: group.name)
+                self?.move(id, to: group.name)
             }
         }
         return [
@@ -247,6 +264,9 @@ struct SidebarView: View {
         .onKeyPress(.upArrow) { step(-1) }
         .onKeyPress(.downArrow) { step(1) }
         .onKeyPress(.return) { library.enter() ? .handled : .ignored }
+        // A right click or "…" opens a menu over the row under the pointer; SwiftUI says neither, the menu's tracking does.
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in state.menuOpened() }
+        .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in state.menued = nil }
         // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through.
         .background(Look.Token.side.ui.ignoresSafeArea())
     }
@@ -341,10 +361,10 @@ struct SidebarView: View {
     /// A click folds it; a double click renames it in place.
     private func header(_ group: String, count: Int) -> some View {
         let folded = library.folded(group), key = SidebarState.Hover.group(group)
-        let lit = state.hovered == key || state.cursor == group
+        let lit = state.hovered == key || state.menued == key || state.cursor == group
         return HStack(spacing: 6) {
             if state.renaming == .group(group) {
-                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).frame(maxWidth: 160)
+                RenameField(state: state, target: .group(group), commit: library.commitRename, cancel: library.cancelRename).frame(maxWidth: 160)
             } else {
                 Text(group).lineLimit(1)
             }
@@ -375,7 +395,8 @@ struct SidebarView: View {
 
     /// A row of the list, 25 points in Emi's compact density: its symbol, its title, "…" under the pointer, its eyes.
     private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, hovered = state.hovered == .space(entry.id)
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, menued = state.menued == .space(entry.id),
+            hovered = state.hovered == .space(entry.id) || menued
         let now = eyes(entry.id), menu = library.menu(for: entry)
         return HStack(spacing: 9) {
             Image(systemName: Template.symbol(of: entry.id)).font(.system(size: 12)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui)
@@ -384,7 +405,7 @@ struct SidebarView: View {
                     if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
                 }
             if state.renaming == .space(entry.id) {
-                RenameField(state: state, commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
+                RenameField(state: state, target: .space(entry.id), commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
                 Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
                 Spacer(minLength: 4)
@@ -405,6 +426,9 @@ struct SidebarView: View {
         .lineLimit(1)
         .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
         .background(on ? Look.Token.sel.ui : hovered ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .overlay {
+            if menued { RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink2.ui, lineWidth: 1.5).allowsHitTesting(false) }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             state.cursor = nil
@@ -453,9 +477,10 @@ struct SidebarView: View {
 }
 
 /// The field of a name renamed in place, which takes the focus as it appears: Return keeps the name, Esc puts the
-/// old one back, leaving the field keeps it.
+/// old one back, leaving the field keeps it, unless another rename began meanwhile (it kept this one first).
 private struct RenameField: View {
     @Bindable var state: SidebarState
+    let target: SidebarState.Target
     let commit: () -> Void, cancel: () -> Void
     @FocusState private var typing: Bool
 
@@ -470,7 +495,7 @@ private struct RenameField: View {
             .accessibilityLabel("Name")
             .onSubmit(commit)
             .onExitCommand(perform: cancel)
-            .onChange(of: typing) { _, now in if !now { commit() } }
+            .onChange(of: typing) { _, now in if !now && state.renaming == target { commit() } }
             .onAppear { typing = true }
     }
 }

@@ -95,6 +95,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             split.splitView.autosaveName = "main"
         }
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
+        library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
+        library.told = { [weak self] words in self?.toast(words, quiet: true) }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
         // One place for the sticker over every space, kept for the next start unless the person asked otherwise.
@@ -298,7 +300,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
         }
-        heading(space.title, space.space.location.lastPathComponent, space: true, point: space.pointable)
+        heading(space)
     }
 
     /// ⌥⌘S, the toolbar's Point and the card's: starts point mode over the space shown, or stops it. Starting folds
@@ -369,6 +371,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private func pressPoint(_ on: Bool) {
         (controls[Shell.point] as? PressButton)?.pressed = on
         assistant.pointing = on
+    }
+
+    /// Heads the toolbar with `space`: the name the person gave it in the sidebar, else its declared title.
+    private func heading(_ space: SpaceView) {
+        heading(library.entry(space.space.name)?.title ?? space.title, space.space.location.lastPathComponent, space: true, point: space.pointable)
     }
 
     /// Opens `tour`'s welcome over this window, where Welcome.place puts it, and steps this window back as the mockup

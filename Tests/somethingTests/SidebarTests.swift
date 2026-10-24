@@ -46,8 +46,11 @@ import Testing
         defer { test.remove() }
         let library = try library(test)
         let before = try files(test)
+        var told: [String] = []
+        library.told = { told.append($0) }
         library.preferences.fold("Notes", true)
         run("Notes", in: library.menu(for: try #require(library.entry("brief"))))
+        #expect(told == ["Daily brief is in Notes now · groups are only a view, the file stays where it is"])
         #expect(library.preferences.groups.map(\.spaces) == [["agents"], ["logbook", "brief"], ["pet"]])
         #expect(!library.folded("Notes"), "the group it went to opens, so the space shows")
         #expect(try files(test) == before, "no file moved or changed")
@@ -135,6 +138,12 @@ import Testing
         library.sidebar.draft = "Journal"
         library.cancelRename()
         #expect(library.preferences.groups[1].name == "Notes")
+        // A second rename begun while one is open keeps the first name typed, then takes the keys.
+        library.beginRename(.space("brief"))
+        library.sidebar.draft = "Front page"
+        library.beginRename(.group("Notes"))
+        #expect(library.entry("brief")?.title == "Front page")
+        #expect(library.sidebar.renaming == .group("Notes") && library.sidebar.draft == "Notes")
     }
 
     @Test func aRowsMenuIsTheMockups() throws {
