@@ -109,7 +109,56 @@ struct AcceptanceShell {
         library.rename("oracle", to: "Seer")
         #expect(shell.window.title == "Morning paper", "another space's name leaves the toolbar alone")
     }
-    @Test("b4: Info docked full height", .disabled("not built yet: W4")) func b4() async throws {}
+    /// Info docked at full height beside My agents (W4), whose assistant waits for the request the chip counts: the
+    /// panel is 320 points wide and the page narrows beside it, nothing under it; ✕, ⌘I and Esc close it at once.
+    @Test("b4: Info docked full height") func b4() async throws {
+        let stage = try Stage("shell-b4")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, info) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try stage.moment(shell)
+        let model = shell.assistant, engine = model.engine
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        info.current = { agents }
+        info.show(agents.space)
+        model.send("Check that the counters match what the terminal says.")
+        #expect(await wait(until: { model.presence.state == .wait }), "said: \(model.presence.word)")
+        shell.waiting(1, mine: 1)
+        let center = shell.center.frame.width
+        #expect(center == 1200 - 236 && agents.web.frame.width == center)
+        shell.showInfo(true)
+        shell.window.layoutIfNeeded()
+        #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
+        #expect(shell.inspector.viewController.view.frame.width == 320 && shell.inspector.viewController.view.frame.height == 760, "full height")
+        #expect(agents.web.frame.width == center - 320, "the page narrows beside Info: \(agents.web.frame.width)")
+        // Its assistant, waiting: Show Request, never Allow; what it may do; about it.
+        #expect(info.space?.name == "agents" && info.waiting == 1 && model.place.space == "agents")
+        #expect(Info.sentence(model.presence.state).hasPrefix("It asked you something. Its request waits in a window of its own"))
+        #expect(model.messageCount == 2 && model.resumes && !model.canSleep)
+        #expect(info.rights.map(\.right) == ["state", "send"] && info.rights.allSatisfy { $0.standing == .allowed } && info.answered != nil)
+        #expect(Info.words(for: "state") == ("See your agents", "Their state, folder and last messages."))
+        #expect(library.preferences.group(of: "agents") == "Agents" && info.size?.files == 1 && info.made != nil && info.changed != nil)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: agents.web, "b4" + suffix, root: stage.home.root)
+        }
+        // Esc with the focus in the panel closes it, and the page takes its width back; ⌘I opens it again, and closes it.
+        let controller = try #require(shell.inspector.viewController as? InfoController)
+        controller.cancelOperation(nil)
+        shell.window.layoutIfNeeded()
+        #expect(!shell.infoShown && agents.web.frame.width == center && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        shell.showInfo(true)
+        info.close()
+        #expect(!shell.infoShown, "✕")
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     @Test("b5: full screen", .disabled("not built yet: W5")) func b5() async throws {}
     /// No space yet (W2, the center AB12's): the sidebar says only where the spaces will be, New Space selected.
     @Test("b6: no space yet") func b6() async throws {

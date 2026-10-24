@@ -93,7 +93,7 @@ enum Keys {
         Command(id: "paste", title: "Paste", key: "v", action: #selector(NSText.paste(_:)), owner: "F5"),
         Command(id: "selectAll", title: "Select All", key: "a", action: #selector(NSText.selectAll(_:)), owner: "F5"),
         Command(id: "history", title: "Show History…", owner: "T19", needsSpace: true),
-        Command(id: "rights", title: "What It May Do…", owner: "W4", needsSpace: true),
+        Command(id: "rights", title: "What It May Do…", action: #selector(App.showSpaceInfo(_:)), owner: "W4", needsSpace: true),
         Command(id: "versions", title: "Versions…", owner: "T19", needsSpace: true),
         // The menu item only holds the submenu; its selector is there so that the app can grey it.
         Command(id: "buildWith", title: "Build With", action: #selector(App.buildWith(_:)), owner: "AB11", needsSpace: true),

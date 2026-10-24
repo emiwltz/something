@@ -17,7 +17,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let split = NSSplitViewController()
     /// The center: one of its three states at a time.
     let center = NSView()
+    /// The docked panel at the right edge, Info or History (Inspector.swift), collapsed at first.
     let inspector: NSSplitViewItem
+    let info: Info
     let assistant: AssistantModel, library: Library
     /// What the center shows, and the page in it when a space is open.
     private(set) var shown: NSView?
@@ -56,13 +58,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
-        (self.assistant, self.library) = (assistant, library)
+        (self.assistant, self.library, self.info) = (assistant, library, info)
         let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
         let content = NSViewController()
         content.view = center
-        inspector = NSSplitViewItem(inspectorWithViewController: NSHostingController(rootView: InspectorView(info: info)))
+        inspector = NSSplitViewItem(inspectorWithViewController: InfoController(rootView: InspectorView(info: info, library: library, assistant: assistant)))
         (inspector.minimumThickness, inspector.maximumThickness) = (320, 320)
         [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
@@ -95,6 +97,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             split.splitView.autosaveName = "main"
         }
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
+        info.close = { [weak self] in self?.showInfo(false) }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
@@ -165,7 +168,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
             let item = NSToolbarItem(itemIdentifier: id)
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
-            let button = id == Shell.point ? PressButton(image: image, target: nil, action: action) : NSButton(image: image, target: nil, action: action)
+            let button = id == Shell.point ? PressButton(image: image, target: nil, action: action) : ToolButton(image: image, target: nil, action: action)
             (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, tip)
             button.symbolConfiguration = .init(pointSize: 13, weight: .medium)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
@@ -253,7 +256,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Says in the toolbar's chip that `count` requests wait, every space's (the chip goes away at 0), and on the
     /// sticker's badge that `mine` are the open space's.
     func waiting(_ count: Int, mine: Int) {
-        glass.mine = mine
+        (glass.mine, info.waiting) = (mine, mine)
         guard chip.count != count else { return }
         chip.count = count
         window.toolbar?.items.first { $0.itemIdentifier == Shell.chip }?.isHidden = count == 0
@@ -345,7 +348,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The answer waiting for the space shown, as a note, Info closed for it (the right edge holds one thing at a time).
     private func showNote() {
         guard let space, space.blocked.isEmpty, let waiting = unread.removeValue(forKey: space.space.name) else { return }
-        inspector.isCollapsed = true
+        showInfo(false)
         MarginNote.show(waiting.words, about: waiting.part, title: space.title, over: space)
     }
 
@@ -455,7 +458,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The toolbar's title and subtitle when no space is shown, its space's items greyed, and Info closed.
     private func bare(_ title: String, _ subtitle: String) {
         heading(title, subtitle, space: false)
-        inspector.isCollapsed = true
+        showInfo(false)
     }
 
     /// Puts `shown` in the center in place of what was there, under the assistant.
@@ -643,5 +646,20 @@ struct Unshown: View {
         .padding(28)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A toolbar button that shows itself pressed, as the mockup's .ib[aria-pressed]: the selection's fill under an ink icon.
+final class ToolButton: NSButton {
+    var pressed = false {
+        didSet { (contentTintColor, needsDisplay) = ((pressed ? Look.Token.ink : .ink2).color, true) }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if pressed {
+            Look.Token.sel.color.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: Look.control, yRadius: Look.control).fill()
+        }
+        super.draw(dirtyRect)
     }
 }

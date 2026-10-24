@@ -209,7 +209,7 @@ extension Library {
 extension App {
     /// Show Info from a row's menu: Info opens beside the space the menu just selected, and stays open when it was.
     @objc func showSpaceInfo(_ sender: Any?) {
-        if shell.inspector.isCollapsed { shell.split.toggleInspector(sender) }
+        shell.showInfo(true)
     }
 }
 

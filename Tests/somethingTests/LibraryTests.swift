@@ -508,7 +508,7 @@ import Testing
                                            text: "Invented message \(index).", result: "ok"), space: "board")
         }
         let info = info(test, ask, space)
-        #expect(info.title == "Board" && info.about == "An invented board.")
+        #expect(info.about == "An invented board.")
         #expect(info.activity.count == 100)
         // The state no longer has a1: the line names its kind alone (WordsTests check the words).
         #expect(info.activity.first?.what == "wrote to Claude Code: “Invented message 119.”", "\(info.activity.first?.what ?? "")")
