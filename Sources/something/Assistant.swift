@@ -58,32 +58,25 @@ import SomethingCore
     var unkept = false
     /// Grows at each ⌘K: the input takes the focus.
     private(set) var focusing = 0
-    /// The chosen builder; nil while none is found.
-    private(set) var kind: String?
+    /// The conversation, and what the window reads of it.
+    private(set) var session = Session(kind: nil)
+    var kind: String? { session.kind }
+    var id: String? { session.id }
+    var agent: Agent? { session.agent }
+    var rows: [Row] { session.rows }
+    var asking: Bool { session.asking }
+    var launching: Bool { session.launching }
+    var failure: String? { session.failure }
+    var idled: Bool { session.idled }
     private(set) var askEverything: Bool
     /// What the state says of each builder: installed or not; absent while not known.
     private(set) var installed: [String: Bool] = [:]
     private(set) var notes: [String: String] = [:]
     /// Why a builder that refused what something lends it is not offered, until the agents are looked for again.
     private(set) var refused: [String: String] = [:]
-    /// This conversation's agent, as the state shows it, and its thread as the drawer shows it.
-    private(set) var id: String?
-    private(set) var agent: Agent?
-    private(set) var rows: [Row] = []
-    /// Whether this conversation's agent asks before every change: how it was launched, whatever the menu says now.
-    private(set) var asking = false
-    private(set) var launching = false
-    /// Why the last launch or message failed, in the engine's words.
-    private(set) var failure: String?
-    /// Whether something stopped this conversation's agent, and whether for idleness.
-    private(set) var stopped = false
-    private(set) var idled = false
-    /// The last message delivered, its context line included: Try Again sends it again.
-    private(set) var last: String?
     /// The spaces there were and the conversation's last turn when the person asked from the blank page, until the
     /// turn that followed ends (answered, stopped, failed, or never started); the last turn now.
     private(set) var before: (spaces: Set<String>, turn: String?)?
-    @ObservationIgnored private var turn: Turn?
     var ready: Library.Entry?
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
     var fromTemplate: String?
@@ -95,10 +88,6 @@ import SomethingCore
     @ObservationIgnored private var active = Date()
     @ObservationIgnored private var told = false
     @ObservationIgnored private var timer: Timer?
-    /// The messages written while the agent starts, sent once it runs; and the number of the launch that may still
-    /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
-    @ObservationIgnored private var queued: [String] = []
-    @ObservationIgnored private var launch = 0
     /// Where the assistant's pieces are drawn, in its hosting view: the window takes the clicks there only (Floater).
     @ObservationIgnored var drawn: [CGRect] = []
 
@@ -143,18 +132,15 @@ import SomethingCore
         keep(\.installed, state.kinds.filter { builders.contains($0.key) }.compactMapValues(\.installed))
         keep(\.notes, state.kinds.compactMapValues(\.note))
         let offered = builders.filter { installed[$0] == true && refused[$0] == nil }
-        if !offered.contains(kind ?? "") { kind = offered.first { $0 == preferred } ?? offered.first }
-        keep(\.agent, state.agents.first { $0.id == id })
-        let thread = state.threads.first { $0.agent == id }
-        keep(\.rows, AssistantModel.rows(thread))
-        turn = thread?.turns.last
+        if !offered.contains(kind ?? "") { session.kind = offered.first { $0 == preferred } ?? offered.first }
+        session.read(state)
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
         // The drawer opens on a new problem: the person must see why nothing happened.
         if problem != nil, !told { drawer = true }
         told = problem != nil
         guard let before, !launching else { return }
-        let answered = turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
-        if answered || id == nil || stopped || light == .error || agent?.alive == false {
+        let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
+        if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
             ended()
             self.before = nil
         }
@@ -202,7 +188,7 @@ import SomethingCore
 
     var light: Light {
         if failure != nil { return .error }
-        guard let agent, !stopped else { return launching ? .working : .off }
+        guard let agent, !session.stopped else { return launching ? .working : .off }
         switch agent.state {
         case "working": return .working
         case "waiting": return .waiting
@@ -222,7 +208,7 @@ import SomethingCore
         default: break
         }
         if let ready { return "“\(ready.title)” is ready. Open" }
-        if agent?.alive == false, !stopped, agent?.error == nil { return "\(name) stopped." }
+        if agent?.alive == false, !session.stopped, agent?.error == nil { return "\(name) stopped." }
         return unkept ? "Couldn't keep this space's journal: its activity is not saved." : nil
     }
 
@@ -252,7 +238,7 @@ import SomethingCore
     /// What went wrong with the last message, for the red row; nil when nothing did.
     var problem: String? {
         if let failure { return failure }
-        guard light == .error, !stopped else { return nil }
+        guard light == .error, !session.stopped else { return nil }
         return agent?.error?.message
     }
 
@@ -304,7 +290,7 @@ import SomethingCore
         fromTemplate = nil
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
-            (before, drawer) = ((Set(Spaces(root: places.spaces).list().map(\.name)), turn?.id), true)
+            (before, drawer) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session.turn?.id), true)
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -331,15 +317,15 @@ import SomethingCore
     /// Ends the conversation: its agent stops, and the next message starts a new one.
     func newConversation() {
         halt()
-        (id, agent, rows, failure, idled, last, stopped) = (nil, nil, [], nil, false, nil, false)
+        session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         (before, ready) = (nil, nil)
     }
 
     /// Relaunches, then sends the last message again.
     func tryAgain() {
-        guard let last else { return }
+        guard let last = session.last else { return }
         halt()
-        id = nil
+        session.id = nil
         deliver(last)
     }
 
@@ -351,10 +337,10 @@ import SomethingCore
         guard chosen != kind, refused[chosen] == nil else { return }
         let switched = { [self] in
             newConversation()
-            (kind, preferred) = (chosen, chosen)
+            (session.kind, preferred) = (chosen, chosen)
             Preferences.at(places).assistant = chosen
         }
-        if id != nil, agent?.alive != false, !stopped {
+        if id != nil, agent?.alive != false, !session.stopped {
             confirmSwitch(name, Registry.app.name(of: chosen), switched)
         } else {
             switched()
@@ -373,7 +359,7 @@ import SomethingCore
     /// without the context line, which goes with every message.
     func cannotBuild(_ kind: String, _ because: String) {
         refused[kind] = because
-        if draft.isEmpty, agent?.thread == nil, let last, let line = last.firstIndex(of: "\n") { draft = String(last[last.index(after: line)...]) }
+        if draft.isEmpty, agent?.thread == nil, let last = session.last, let line = last.firstIndex(of: "\n") { draft = String(last[last.index(after: line)...]) }
         refresh()
     }
 
@@ -385,10 +371,10 @@ import SomethingCore
 
     /// Stops the agent after `idleLimit` without a turn: a Claude Code process holds a few hundred MB.
     func checkIdle() {
-        guard let agent, agent.alive == true, !stopped, !["working", "waiting"].contains(agent.state),
+        guard let agent, agent.alive == true, !session.stopped, !["working", "waiting"].contains(agent.state),
               clock().timeIntervalSince(active) >= AssistantModel.idleLimit else { return }
         halt()
-        idled = true
+        session.idled = true
     }
 
     /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
@@ -405,35 +391,37 @@ import SomethingCore
     private func halt() {
         endLaunch()
         if let id, agent?.alive != false { engine.stopAll(within: 5, only: id) {} }
-        stopped = true
+        session.stopped = true
     }
 
-    private func endLaunch() { (launching, queued, launch) = (false, [], launch + 1) }
+    private func endLaunch() { (session.launching, session.queued, session.launch) = (false, [], session.launch + 1) }
 
     /// Sends `message` to this conversation's agent; launches it first when there is none, once: what is written while
     /// it starts waits for it.
     private func deliver(_ message: String) {
-        guard let kind else { return }
-        (last, failure, active) = (message, nil, clock())
-        if launching { return queued.append(message) }
-        if let id, agent?.alive != false, !stopped {
-            do { _ = try engine.deliver(message, to: id, when: "next") } catch { failure = error.sentence }
+        let session = session
+        guard let kind = session.kind else { return }
+        (session.last, session.failure, active) = (message, nil, clock())
+        if session.launching { return session.queued.append(message) }
+        if let id = session.id, session.agent?.alive != false, !session.stopped {
+            do { _ = try engine.deliver(message, to: id, when: "next") } catch { session.failure = error.sentence }
             return refresh()
         }
-        (launching, queued) = (true, [message])
-        let number = launch
+        (session.launching, session.queued) = (true, [message])
+        let number = session.launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
-            guard let self, number == launch else { self?.refresh(); return }
-            let messages = queued
-            queued = []
+            guard let self, number == session.launch, session === self.session else { self?.refresh(); return }
+            let messages = session.queued
+            session.queued = []
             do {
-                let id = try engine.launchAssistant(kind, folder: places.spaces.path, askEverything: askEverything, lent: lent(for: kind))
-                (self.id, asking, stopped, idled) = (id, askEverything, false, false)
+                let id = try engine.launchAssistant(kind, folder: places.spaces.path, model: session.model, effort: session.effort,
+                                                    askEverything: askEverything, lent: lent(for: kind))
+                (session.id, session.asking, session.stopped, session.idled) = (id, askEverything, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
-            } catch { failure = error.sentence }
+            } catch { session.failure = error.sentence }
             // Only now: the launch changes the state, and a build watched must not see it ended with no agent yet.
-            launching = false
+            session.launching = false
             refresh()
         }
     }

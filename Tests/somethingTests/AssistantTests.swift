@@ -161,6 +161,30 @@ import WebKit
         #expect(AssistantModel.tool(tool("something_guide", "")) == .tool(symbol: "book", words: "Read guide", command: nil))
     }
 
+    /// A Session reads only its own agent and thread from a state that holds others, and keeps the thread its agent
+    /// reported once that agent is gone.
+    @Test func aSessionReadsOnlyItsOwnAgent() {
+        func agent(_ id: String, thread: String) -> Agent {
+            var agent = Agent(id: id, kind: "claude", origin: "launched")
+            (agent.state, agent.thread) = ("idle", thread)
+            return agent
+        }
+        func thread(_ id: String, agent: String, says text: String) -> AgentThread {
+            AgentThread(id: id, agent: agent, title: nil, started: nil, turns: [Turn(id: "1", state: "done", started: nil, ended: nil,
+                        items: [Item(id: "m", kind: "message", author: "agent", text: text, at: "2026-10-19T09:00:00Z")])])
+        }
+        let state = State(at: "2026-10-19T09:00:00Z", kinds: [:], agents: [agent("claude-1", thread: "s1"), agent("claude-2", thread: "s2")],
+                          threads: [thread("s1", agent: "claude-1", says: "Invented one."), thread("s2", agent: "claude-2", says: "Invented two.")])
+        let session = Session(kind: "claude", space: "agents")
+        session.read(state)
+        #expect(session.agent == nil && session.rows.isEmpty && session.thread == nil, "a session with no agent reads nobody's")
+        session.id = "claude-2"
+        session.read(state)
+        #expect(session.agent?.id == "claude-2" && session.thread == "s2" && session.rows == [.reply("Invented two.")])
+        session.read(State(at: "2026-10-19T09:01:00Z", kinds: [:], agents: [agent("claude-1", thread: "s1")]))
+        #expect(session.agent == nil && session.rows.isEmpty && session.thread == "s2")
+    }
+
     /// Quit asks nothing when no request waits and no agent works: idle agents are stopped without a word.
     @Test func quittingWithNothingWaitingOrWorkingAsksNothing() {
         let source = FakePrompts()
