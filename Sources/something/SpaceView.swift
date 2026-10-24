@@ -78,7 +78,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         self.places = places
         self.engine = engine
         self.ask = ask
-        title = space.name
+        // Its title before it loads: a space arriving (Arrival) says it in the toolbar before its rights are asked.
+        title = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration?.title ?? space.name
         scheme = Scheme(space: space)
         web = SpaceView.webView(scheme, rules: rules)
         super.init()

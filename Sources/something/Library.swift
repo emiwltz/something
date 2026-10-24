@@ -33,6 +33,8 @@ import SomethingCore
     private(set) var entries: [Entry] = []
     /// Where the window is, New Space at first.
     private(set) var selection = Destination.newSpace
+    /// The space that just arrived (Arrival): its row is ringed a moment in the sidebar.
+    var fresh: String?
     /// Told the name of each space made from a template: its assistant offers to make it yours.
     @ObservationIgnored var used: (String) -> Void = { _ in }
     /// What selecting does: the app shows the destination, closing the open space.

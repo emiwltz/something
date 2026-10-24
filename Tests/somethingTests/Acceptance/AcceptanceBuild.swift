@@ -328,7 +328,58 @@ struct AcceptanceBuild {
         model.engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
-    @Test("d3: the arrival", .disabled("not built yet: AB15")) func d3() async throws {}
+    /// The arrival after a build from New Space: the page written and the turn ended, the space appears and opens, and
+    /// the sign's frame grows from New Space's sign to the center's edges over a still of the page left; drawn at 0.6
+    /// of its time. Then it plays to its end: nothing left on the glass, the space selected and its row ringed, and only
+    /// then may its rights be asked.
+    @Test("d3: the arrival") func d3() async throws {
+        let (stage, shell, library, _) = try await Self.building("fail")
+        defer { stage.remove() }
+        let model = shell.assistant
+        #expect(await wait(until: { model.ladder?.done == true }))
+        // The page the fake says it wrote, then the end of its turn: the app's `ended` lists the spaces and opens the new one.
+        try stage.home.space("waiting-room", Self.waitingRoom)
+        var made: String?
+        model.ended = {
+            library.relist()
+            made = model.appeared(library.entries, open: nil)
+        }
+        try "".write(to: stage.home.root.appendingPathComponent("out/finish"), atomically: true, encoding: .utf8)
+        #expect(await wait(until: { made != nil }))
+        let name = try #require(made)
+        #expect(name == "waiting-room")
+        library.select(.space(name))
+        let room = try await stage.home.window(try #require(library.entry(name)?.space))
+        defer { room.close() }
+        room.made = true
+        // The still is taken once, in the appearance of the moment: the day's, for the picture.
+        NSApp.appearance = NSAppearance(named: .aqua)
+        await wait(0.5)
+        let arrival = try #require(Arrival.made(name, in: shell))
+        shell.show(room)
+        #expect(shell.window.title == "Waiting room")
+        model.place = AssistantModel.place(room)
+        // It starts on the sign of 76 points, its arm and stroke the sign's, its eyes on.
+        #expect(arrival.start.face && abs(arrival.start.arm - 76 * 0.31) < 0.01 && arrival.start.stroke == 35)
+        #expect(abs(arrival.start.rect.width - 76 * 0.88) < 0.5 && abs(arrival.start.rect.midX - arrival.room.midX) < 1, "\(arrival.start.rect)")
+        arrival.progress = 0.6
+        let shape = arrival.shape
+        #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)
+        try await stage.appearances { suffix in
+            // One picture: the still keeps the day it was taken in (the mockup has no night of this screen).
+            if suffix.isEmpty { try await Picture.window(shell, library: library, web: room.web, "d3", root: stage.home.root) }
+        }
+        var arrived = false
+        arrival.play(name, library: library, motion: .calm) { arrived = true }
+        #expect(arrival.playing)
+        #expect(await wait(until: { arrived }))
+        #expect(arrival.progress == 1 && arrival.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
+        #expect(library.selection == .space(name) && library.fresh == name && model.place.space == name)
+        // Back on New Space, a new page: opening the space again arrives from nowhere.
+        shell.show(nil)
+        #expect(Arrival.made(name, in: shell) == nil)
+        await Self.finish(model)
+    }
     /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right
     /// with its switch off, the fine print, Don't Allow holding the focus and Allow greyed until a switch is on.
     @Test("d4: the rights sheet") func d4() async throws {

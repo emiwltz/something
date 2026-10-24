@@ -249,9 +249,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             view.journaled = { [weak self] in self?.info.show(self?.current?.space) }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
             current = view
-            // Blank behind the rights sheet, which the first load may show before the page runs.
+            // Blank behind the rights sheet, which the first load may show before the page runs. A space just made
+            // arrives first, from what made it, and asks for its rights after.
+            let arrival = Arrival.made(name, in: shell)
             shell.show(view)
-            view.open()
+            guard let arrival else { return view.open() }
+            arrival.play(name, library: library, motion: library.preferences.motion) { [weak self, weak view] in
+                if let view, self?.current === view { view.open() }
+            }
         } catch {
             shell.show(nil)
             ask.tell(error.sentence)

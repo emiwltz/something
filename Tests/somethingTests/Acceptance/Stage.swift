@@ -150,7 +150,8 @@ enum Picture {
                 + "for (let node; (node = walk.nextNode());) if (node.data.includes(root)) node.data = node.data.split(root).join('/Users/example'); return 0; })()"
             _ = try? await web.callAsyncJavaScript("return \(script)", arguments: ["root": root.path], in: frame, contentWorld: .page)
         }
-        let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
+        // A page not loaded yet (a space arriving, its rights not asked) has nothing to take: its area is drawn empty.
+        let snapshot = web?.superview == nil || web?.url == nil ? nil : try await web?.takeSnapshot(configuration: nil)
         // What covers the page in its area (Stopped), then the assistant, float over the page, which was drawn over
         // them; the window layer (the toast) covers all.
         let covers = web?.superview?.subviews.filter { $0 !== web && !$0.isHidden } ?? []

@@ -5,7 +5,7 @@
 // of what a person grabs. All · Agents · Notes · Play filters the cards, by categories the app keeps (a declaration has
 // none: contract 1 is not changed for them). Preview is a state of the same view: the picture full width under a bar
 // that says nothing runs, with Close Preview (esc) and Use This Template. Use makes the template one of the person's
-// spaces (Library.use). New Space shows the first three cards.
+// spaces (Library.use), which arrives from its card (Arrival). New Space shows the first three cards.
 import SomethingAgents
 import SomethingCore
 import SwiftUI
@@ -87,6 +87,8 @@ struct Template: Identifiable {
     @ObservationIgnored let told: (String, String) -> Void
     /// Where each card was last drawn in the window, so that a test checks the columns the page shows.
     @ObservationIgnored var drawn: [Template.ID: CGRect] = [:]
+    /// The template whose card's Use was just pressed, until the space it made opened: the arrival grows from its card.
+    @ObservationIgnored var used: Template.ID?
     /// The toolbar's title and subtitle when no preview is open: the Templates page's, or New Space's.
     @ObservationIgnored let home: (String, String)
 
@@ -308,7 +310,13 @@ struct TemplateCard: View {
             }
             .buttonStyle(.plain).foregroundStyle(Look.Token.ink.ui)
             .help("Show in Finder").accessibilityLabel("Show \(template.title) in Finder")
-            Button("Use") { library.use(template) }.buttonStyle(Primary(height: 26, padding: 10))
+            Button("Use") {
+                // The opening is queued by Use; the card is forgotten after it, whether a space opened or not.
+                model.used = template.id
+                library.use(template)
+                DispatchQueue.main.async { model.used = nil }
+            }
+            .buttonStyle(Primary(height: 26, padding: 10))
         }
         .font(Look.font(.ui, size: 12, weight: .semibold).ui)
         .padding(4)

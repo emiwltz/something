@@ -1,7 +1,7 @@
 // The sidebar: New Space first, selected on the blank page; the spaces in the library's order (one click opens one),
 // with an italic "New Space" on top while the assistant makes one; and Templates pinned at the bottom. A page whose
 // declaration does not read is listed too, in secondary color: "not a space yet". A space the assistant made while
-// the person was elsewhere has a dot, and each space the eyes of its own assistant, which `eyes` gives (W3 adds the
+// the person was elsewhere has a dot, a space that just arrived a ring of ink fading out, and each space the eyes of its own assistant, which `eyes` gives (W3 adds the
 // ring, the folded groups and the preference). Each space has Show in Finder, Export… and Move to Trash… in its context
 // menu. Its rows are drawn here, not by a List: the mockup's 25-point rows and the identity's quiet selection, by day
 // and by night, which a sidebar List's own highlight would cover; ↑ and ↓ move through them.
@@ -108,7 +108,7 @@ struct SidebarView: View {
     }
 
     private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id)
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id
         return row(on: on, open: { library.select(.space(entry.id)) }) {
             Image(systemName: "doc").overlay(alignment: .topTrailing) {
                 if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
@@ -125,6 +125,14 @@ struct SidebarView: View {
                 Spacer(minLength: 4)
                 Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
             }
+        }
+        // The mockup's .fresh: the ring at once, then gone in 1.6 s on the "out" curve; a row it leaves goes 0 to 0.
+        .overlay {
+            RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).allowsHitTesting(false)
+                .keyframeAnimator(initialValue: 0.0, trigger: library.fresh) { ring, alpha in ring.opacity(alpha) } keyframes: { _ in
+                    MoveKeyframe(fresh ? 1.0 : 0)
+                    LinearKeyframe(0.0, duration: fresh ? 1.6 : 0.01, timingCurve: Look.out.unit)
+                }
         }
     }
 }
