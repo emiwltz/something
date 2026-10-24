@@ -36,7 +36,7 @@ import SomethingCore
     @MainActor @Test func itIsNotLaunched() throws {
         let antigravity = try #require(Registry.described.agent("antigravity"))
         #expect(antigravity.name == "Antigravity" && antigravity.install == nil && antigravity.driving == nil && antigravity.builder == nil)
-        let reason = "Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now."
+        let reason = "Antigravity needs its own Google sign-in, so something shows it but doesn't build with it."
         #expect(antigravity.unavailable == reason)
         #expect(throws: CodedError("NOT_SUPPORTED", reason)) {
             try Registry.described.checkLaunch("antigravity", model: nil, mode: nil, effort: nil)

@@ -52,9 +52,9 @@ Every agent something drives is also a builder.
 | OpenCode | yes | yes | yes |
 | pi | yes | yes | yes |
 | OMP | yes | yes | yes |
-| Antigravity | by its process | no: Antigravity's ACP server needs a Google sign-in of its own first; something only sees agy for now. | no |
+| Antigravity | by its process | no: Antigravity needs its own Google sign-in, so something shows it but doesn't build with it. | no |
 | Amp | by its process | yes | yes |
-| Cursor | by its process | no: Cursor asks you before each of something's own tools, so something only sees cursor-agent for now. | no |
+| Cursor | by its process | no: Cursor would ask you before every small step of a build, so something shows it but doesn't build with it. | no |
 | Auggie (`auggie`), Crush (`crush`), DeepSeek Harness (`dsh`), Factory Droid (`droid`), Gemini CLI (`gemini`), GitHub Copilot CLI (`copilot`), Goose (`goose`), Qwen Code (`qwen`), ZCode (`zcode`) | by its process | no: something has no extension for them. | no |
 
 Amp keeps its conversations on its own servers, so an Amp you started yourself is seen by its process only. An agent

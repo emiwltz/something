@@ -153,12 +153,12 @@ struct WelcomeView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "eye").font(.system(size: 10.5)).padding(.top, 2).accessibilityHidden(true)
                     (Text("Seen only: \(Self.list(seen.map(\.0), "and")). ").fontWeight(.semibold).foregroundColor(Look.Token.ink2.ui)
-                        + Text(seen.compactMap(\.1).joined(separator: " ")))
+                        + Text(Self.why(seen.compactMap(\.1))))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(Look.font(.ui, size: 12).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink3.ui).padding(.top, 12)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel((["Seen only: \(Self.list(seen.map(\.0), "and"))."] + seen.compactMap(\.1)).joined(separator: " "))
+                .accessibilityLabel("Seen only: \(Self.list(seen.map(\.0), "and")). \(Self.why(seen.compactMap(\.1)))")
             }
             if !missing.isEmpty {
                 Text("Not on this Mac: \(missing.joined(separator: ", ")).").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -200,6 +200,15 @@ struct WelcomeView: View {
     /// `names` as a sentence says them: "A, B and C".
     static func list(_ names: [String], _ last: String) -> String {
         names.count > 1 ? names.dropLast().joined(separator: ", ") + " \(last) " + (names.last ?? "") : names.first ?? ""
+    }
+
+    /// Why the agents seen only are not offered, in one sentence when their reasons end alike ("A, and B, so something
+    /// shows them but doesn't build with them."), else their sentences one after the other.
+    static func why(_ reasons: [String]) -> String {
+        let tail = ", so something shows it but doesn't build with it."
+        guard reasons.count > 1, reasons.allSatisfy({ $0.hasSuffix(tail) }) else { return reasons.joined(separator: " ") }
+        let heads = reasons.map { String($0.dropLast(tail.count)) }
+        return heads.dropLast().joined(separator: ", ") + ", and " + (heads.last ?? "") + ", so something shows them but doesn't build with them."
     }
 
     /// "Model · Effort", the effort only when known.

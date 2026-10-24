@@ -35,9 +35,15 @@ struct AcceptanceBuild {
         // Chosen is the radio's selected trait, which an offscreen SwiftUI view does not give (only descriptions): the
         // model's choice is read.
         #expect(scene.assistant.entries.filter(\.checked).map(\.id) == ["claude"])
-        let rows = ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"].map { "\($0), Default model" }
+        // A kind that picks its own model says so; the others, never run here, have their default.
+        let rows = ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"].map { name in
+            let kind = Registry.app.agents.first { $0.name == name }?.kind ?? ""
+            return "\(name), \(Registry.app.limits[kind]?.contains("model") == true ? "Its own model" : "Default model")"
+        }
+        #expect(rows.filter { $0.hasSuffix("Its own model") }.count >= 1)
         let why = Registry.app.agents.filter { $0.builder == nil }.compactMap(\.unavailable)
-        let seen = (["Seen only: Antigravity and Cursor."] + why).joined(separator: " ")
+        let seen = "Seen only: Antigravity and Cursor. Antigravity needs its own Google sign-in, and Cursor would ask you before every small step "
+            + "of a build, so something shows them but doesn't build with them."
         try await scene.draw("a3") { words in
             #expect(why.count == 2 && words == ["Choose your assistant"] + rows + [seen, "Skip Tour", "Choose", "Back", "Continue"], "\(words)")
         }

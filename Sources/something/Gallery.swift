@@ -270,11 +270,11 @@ struct TemplateCard: View {
                 .padding(.bottom, 7)
             Group {
                 Text(template.title).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                HStack(spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Image(systemName: "checkmark.shield").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-                    // One line, so every card of a row keeps the mockup's height.
+                    // Every right it asks for, wrapped rather than cut: a right never hides behind an ellipsis.
                     Text(template.needs).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
-                        .lineLimit(1).truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
                 Text(template.line).font(Look.font(.ui, size: 12).ui).lineSpacing(3.5).foregroundStyle(Look.Token.ink3.ui)

@@ -27,6 +27,15 @@ final class Stage {
     /// passes `now` and `zone` to it, so no picture depends on the calendar or on this Mac's time zone.
     static let now = Date(timeIntervalSince1970: 1_792_693_200)
     static let zone = TimeZone(secondsFromGMT: 0)
+    /// The mockup's moment in this Mac's own zone: 18:20 local, as the pages' fixed clock (the state's `at` says it).
+    static let local = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 22, hour: 18, minute: 20)) ?? now
+    /// Date, in a page, at Thursday 22 October 2026, 18:20 local time: `new Date()` and `Date.now()` give it, a date
+    /// built from its parts is as ever.
+    static let fixedClock = """
+        (() => { const Real = Date, fixed = new Real(2026, 9, 22, 18, 20).getTime();
+          class Fixed extends Real { constructor(...parts) { if (parts.length) super(...parts); else super(fixed); } static now() { return fixed; } }
+          globalThis.Date = Fixed; })();
+        """
     static let oracle = Home.share.deletingLastPathComponent().appendingPathComponent("Tests/Fixtures/spaces/oracle.html")
 
     /// The window sizes the mockup is shot at, in points; a slice adds the other sizes when it draws at them.
@@ -63,6 +72,11 @@ final class Stage {
     /// Opens the space `name` in `shell`'s center, loaded, its animations ended; the caller closes it.
     func open(_ name: String, in shell: Shell, _ library: Library) async throws -> SpaceView {
         let view = try await home.window(try #require(library.entry(name)?.space))
+        // The pages' clock stands at the mockup's moment, in this Mac's own zone, whatever the day of the run.
+        if gallery != nil {
+            view.staged = [WKUserScript(source: Stage.fixedClock, injectionTime: .atDocumentStart, forMainFrameOnly: false)]
+            view.stagedAt = iso8601.string(from: Stage.local)
+        }
         view.open()
         #expect(await wait(until: { !view.web.isLoading && view.frame != nil }), "\(name) did not load")
         library.select(.space(name))
@@ -129,6 +143,12 @@ enum Picture {
             var place = column.item.viewController.view.convert(column.item.viewController.view.bounds, to: frame)
             place.size.height -= top
             return (drawn, place)
+        }
+        // The page says the home as a person's would be, as disguise does for the window's own words.
+        if let web, web.superview != nil, let frame = (web.navigationDelegate as? SpaceView)?.frame {
+            let script = "(() => { const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); "
+                + "for (let node; (node = walk.nextNode());) if (node.data.includes(root)) node.data = node.data.split(root).join('/Users/example'); return 0; })()"
+            _ = try? await web.callAsyncJavaScript("return \(script)", arguments: ["root": root.path], in: frame, contentWorld: .page)
         }
         let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
         // What covers the page in its area (Stopped), then the assistant, float over the page, which was drawn over

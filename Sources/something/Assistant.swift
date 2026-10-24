@@ -791,16 +791,27 @@ import SomethingCore
                 defer { last = start }
                 return last.map { calendar.isDate($0, inSameDayAs: start) } == true ? [] : [.day(start)]
             } ?? []
-            return day + turn.items.compactMap { item in
+            var rows: [Row] = [], edit: Int?
+            for item in turn.items {
                 switch (item.kind, item.author) {
                 case ("message", "person"):
                     let shown = shown(item.text)
-                    return .mine(caption: shown.caption, text: shown.text)
-                case ("message", _): return .reply(item.text)
-                case ("tool", _), ("subagent", _): return item.tool?.status == "running" ? nil : tool(item)
-                default: return nil
+                    rows.append(.mine(caption: shown.caption, text: shown.text))
+                case ("message", _): rows.append(.reply(item.text))
+                case ("tool", _), ("subagent", _):
+                    guard item.tool?.status != "running" else { continue }
+                    // A check that passed after an edit is said on the edit's line ("· checked"), as the mockup's.
+                    if Presence.Step.of(item) == .check, item.tool?.status == "done", let at = edit,
+                       case .tool(false, let words, nil) = rows[at] {
+                        (rows[at], edit) = (.tool(failed: false, words: words + " · checked", command: nil), nil)
+                        continue
+                    }
+                    rows.append(tool(item))
+                    if Presence.Step.of(item) == .edit { edit = rows.count - 1 }
+                default: continue
                 }
             }
+            return day + rows
         }
     }
 

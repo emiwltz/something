@@ -242,6 +242,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         loaded()
     }
 
+    /// Scripts a test puts after the guards at each load, and the moment its state says (`at`): the acceptance stage's
+    /// fixed clock, so that no picture depends on the calendar. The app sets neither.
+    var staged: [WKUserScript] = [], stagedAt: String?
+
     /// Puts the guards and the bridge, with the `granted` in force, before the scripts of every page the space loads.
     /// Every frame gets the guards: a frame inside the space has links too. WebKit injects in the main frame or in
     /// every frame; the bridge goes to the space's frame only, the one whose parent is the app's page.
@@ -250,6 +254,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         controller.removeAllUserScripts()
         SpaceView.scripts(bridge, granted).forEach(controller.addUserScript)
         controller.addUserScript(WKUserScript(source: SpaceView.faultScript, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: Lockdown.world))
+        staged.forEach(controller.addUserScript)
     }
 
     /// The guards, then something.js holding `granted`, for every page that holds a space (the check's too).

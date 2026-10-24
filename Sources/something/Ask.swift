@@ -418,7 +418,7 @@ enum Ask {
         case "launch": return ("Start \(kind ?? "agents")",
                                "Launch \(kind == nil ? "one of your agents" : "it") in a folder." + (warning == nil ? " Anything that agent then needs still asks you." : ""),
                                warning, "play")
-        case "store": return ("Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.", nil, "note.text")
+        case "store": return ("Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.", nil, "note")
         default: return (right, "", nil, "shield")
         }
     }

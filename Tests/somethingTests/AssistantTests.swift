@@ -192,8 +192,8 @@ import WebKit
         #expect(AssistantModel.rows(thread.turns) == [
             day, .mine(caption: "about My agents", text: "Make the tiles wider."),
             .tool(failed: false, words: "Read guide", command: nil), .tool(failed: false, words: "Read agents.html", command: nil),
-            .tool(failed: false, words: "Edited agents.html", command: nil),
-            .tool(failed: false, words: "", command: "something check agents"),
+            // The check that passed after the edit is said on the edit's line.
+            .tool(failed: false, words: "Edited agents.html · checked", command: nil),
             .tool(failed: true, words: " · failed", command: "something check agents --refuse send"),
             .reply("Done: the tiles are wider."),
         ])
@@ -933,7 +933,7 @@ import WebKit
         #expect(model.entries.map(\.checked) == [true, false])
         let seen = AssistantModel.seenOnly
         #expect(seen.map(\.name) == ["Antigravity", "Cursor"])
-        #expect(seen.allSatisfy { !$0.why.isEmpty } && seen[1].why.hasPrefix("Cursor asks you before each of something's own tools"))
+        #expect(seen.allSatisfy { !$0.why.isEmpty } && seen[1].why.hasPrefix("Cursor would ask you before every small step of a build"))
         await finish(home, model)
     }
 

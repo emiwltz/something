@@ -29,7 +29,11 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
         return kind
     }
 
-    var state: State { engine.state }
+    var state: State {
+        var state = engine.state
+        if let stagedAt { state.at = stagedAt }
+        return state
+    }
 
     var assistants: Set<String> { engine.assistants }
 

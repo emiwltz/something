@@ -73,6 +73,11 @@ struct AcceptanceTrust {
         #expect(await wait(5) { glass.grown == false && glass.stickerShown })
         var agent = Agent(id: "a1", kind: "codex", origin: "launched")
         (agent.state, agent.alive) = ("waiting", true)
+        // Its own conversation says so too, which the sidebar's eyes read: the same light as the sticker's.
+        let session = shell.assistant.session(for: shell.assistant.place)
+        session.id = agent.id
+        session.read(State(at: iso8601.string(from: Stage.now), kinds: [:], agents: [agent]))
+        #expect(shell.assistant.eyes(of: "agents") == .wait || mine == 0)
         sticker.show(Presence(Presence.Facts(name: "Codex", installed: true), agent: agent, turn: nil, now: Stage.now), title: "My agents")
         #expect(sticker.sign.state == .wait && glass.mine == mine && sticker.badge.isHidden == (mine == 0) && sticker.badge.count == mine)
     }

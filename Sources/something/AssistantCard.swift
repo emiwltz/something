@@ -98,7 +98,8 @@ struct AssistantCard: View {
         // it when it fits, else its end, which stays in view while at the bottom.
         ScrollView {
             VStack(alignment: .leading, spacing: 6 * Look.density) {
-                ForEach(model.firstLines, id: \.self) {
+                // How it works here, said when the conversation begins, gone once it has rows, as the mockup's thread.
+                ForEach(model.rows.isEmpty ? model.firstLines : [], id: \.self) {
                     Text($0).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, 4)
@@ -128,6 +129,8 @@ struct AssistantCard: View {
         .defaultScrollAnchor(.bottom)
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: AssistantCard.thread)
+        // What scrolled up never shows under the header.
+        .clipped()
     }
 
     @ViewBuilder private func line(_ row: AssistantModel.Row) -> some View {
@@ -641,9 +644,12 @@ extension AssistantModel {
         return (model, effort)
     }
 
-    /// The model and effort `kind` would build with: modelWords for the kind chosen, "Default model" for another until
-    /// it has run, since something reads no agent's settings.
-    func modelWords(of kind: String) -> (model: String, effort: String?) { kind == self.kind ? modelWords : ("Default model", nil) }
+    /// The model and effort `kind` would build with: modelWords for the kind chosen; for another, "Its own model" when
+    /// it picks its own, else "Default model" until it has run, since something reads no agent's settings.
+    func modelWords(of kind: String) -> (model: String, effort: String?) {
+        if kind == self.kind { return modelWords }
+        return (Registry.app.limits[kind]?.contains("model") == true ? "Its own model" : "Default model", nil)
+    }
 
     /// The messages of the conversation, the person's and the agent's.
     var messageCount: Int { AssistantModel.messages(rows) }

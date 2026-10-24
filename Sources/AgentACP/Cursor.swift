@@ -10,7 +10,7 @@ extension AgentDescriptor {
     /// Seen while cursor-agent runs, in its folder; Cursor's installer links it as agent too.
     package static let cursor = AgentDescriptor(kind: "cursor", name: "Cursor",
                                                 reader: { _ in OtherReader(kind: "cursor", names: ["cursor-agent", "agent"]) },
-                                                unavailable: "Cursor asks you before each of something's own tools, so something only sees cursor-agent for now.")
+                                                unavailable: "Cursor would ask you before every small step of a build, so something shows it but doesn't build with it.")
 }
 
 extension ACPProfile {
