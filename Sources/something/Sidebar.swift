@@ -60,6 +60,9 @@ struct SidebarView: View {
             .buttonStyle(.plain)
             .padding(10)
         }
+        // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through.
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: Look.Token.side.color).ignoresSafeArea())
     }
 
     private func row(_ entry: Library.Entry) -> some View {

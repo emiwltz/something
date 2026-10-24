@@ -114,10 +114,11 @@ enum Keys {
     /// "⌘K" for `id`, "" when it has no key: for tooltips and sentences.
     static func shown(_ id: String) -> String { command(id)?.shown ?? "" }
 
-    /// A tooltip: the words, then the key in parentheses when there is one.
-    static func tooltip(_ id: String) -> String {
+    /// A tooltip: the command's words (or `words`, a toolbar's shorter ones), then its key in parentheses when it has one.
+    static func tooltip(_ id: String, _ words: String? = nil) -> String {
         guard let command = command(id) else { return "" }
-        return command.shown.isEmpty ? command.title : "\(command.title) (\(command.shown))"
+        let words = words ?? command.title
+        return command.shown.isEmpty ? words : "\(words) (\(command.shown))"
     }
 
     static func symbols(_ modifiers: NSEvent.ModifierFlags) -> String {

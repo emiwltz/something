@@ -62,7 +62,7 @@ enum Catalog {
 
     static let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 
-    /// The screen scenarios of `area`'s file, in order; functions that are not screen ids (a baseline) are left out.
+    /// The screen scenarios of `area`'s file, in order; functions that are not screen ids (b1's frame) are left out.
     static func scenarios(_ area: Area) throws -> [Scenario] {
         try scenarios(in: String(contentsOf: folder.appendingPathComponent("\(area.rawValue).swift"), encoding: .utf8))
     }

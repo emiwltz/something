@@ -330,21 +330,21 @@ struct GalleryTests {
         #expect(await wait(until: { model.kind == "claude" }))
         try await draw(shell, library: library, web: nil, "blank" + suffix, fixture)
         // The smallest window: the templates wrap, nothing is cut.
-        shell.window.setContentSize(NSSize(width: 820, height: 560))
+        shell.window.setContentSize(NSSize(width: 640, height: 480))
         try await draw(shell, library: library, web: nil, "blank-smallest" + suffix, fixture)
-        shell.window.setContentSize(NSSize(width: 1240, height: 800))
+        shell.window.setContentSize(NSSize(width: 1200, height: 760))
         model.draft = BlankView.chips[2].1
         model.send()
         #expect(await wait(until: { model.rows.count >= 4 && model.light == .working }), "the fake did not start building")
         try await draw(shell, library: library, web: nil, "blank-building" + suffix, fixture)
         // The smallest window: the page scrolls clear of the conversation; with Info open, the conversation wraps
         // narrower and still shows whole.
-        shell.window.setContentSize(NSSize(width: 820, height: 560))
+        shell.window.setContentSize(NSSize(width: 640, height: 480))
         try await draw(shell, library: library, web: nil, "blank-building-smallest" + suffix, fixture)
         shell.inspector.isCollapsed = false
         try await draw(shell, library: library, web: nil, "blank-building-smallest-info" + suffix, fixture)
         shell.inspector.isCollapsed = true
-        shell.window.setContentSize(NSSize(width: 1240, height: 800))
+        shell.window.setContentSize(NSSize(width: 1200, height: 760))
 
         // The space it made appeared while the person was on another one.
         try fixture.space("stack", page(#"{"contract": 1, "title": "Stack", "rights": ["store"]}"#, ""))
