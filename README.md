@@ -83,7 +83,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   them, remember things), each to allow or not. Info (⌘I) shows each right with a switch to revoke it, and what the
   space did.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There
-  is no "always". A space sees that the agent waits, and can never answer.
+  is no "always". A space sees that the agent waits, and can never answer. The Dock's badge counts the requests
+  waiting; while something is in the background, its icon bounces once for each new one. A notification of the Mac
+  says who waits and in which space only if you turn on "Notify me when a request waits", and never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.
 - **Links.** Each link a space opens asks you first.

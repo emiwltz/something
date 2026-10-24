@@ -65,6 +65,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         }
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent") }
         panels.beside = { [weak self] in self?.shell.window }
+        panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] in
+            self?.front()
+            self?.showRequest(nil)
+        })
+        panels.attention?.notify = { [weak self] in self?.library.preferences.notify == true }
         panels.queue.space = { [weak self] request in
             guard let self else { return nil }
             return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), place: assistant.place,

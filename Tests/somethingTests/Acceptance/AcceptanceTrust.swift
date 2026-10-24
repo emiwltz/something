@@ -223,7 +223,42 @@ struct AcceptanceTrust {
         panel.cancelOperation(nil)
         #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil && !panels.present(in: agents.space.name))
     }
-    @Test("e5: the Dock badge", .disabled("not built yet: T6")) func e5() async throws {}
+    /// something in the background while the Daily brief is open; My agents' assistant asks. The Dock's badge counts
+    /// it and the icon bounces once; "Notify me" is on, so a notification says who waits and in which space, never the
+    /// command. The window's lights are gray, and the panel, not taken, waits across its corner. The Dock and the
+    /// notification are checked by value: they are the system's to draw. That a real banner shows and its click is
+    /// Show Request is a hand trial with the built .app.
+    @Test("e5: the Dock badge") func e5() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let source = FakePrompts()
+        Self.request("r", [0], in: source)
+        let panels = Self.panels(source), dock = FakeDock(), notifier = FakeNotifier()
+        var time: TimeInterval = 100
+        panels.clock = { time }
+        panels.queue.space = { _ in "agents" }
+        panels.attention = Attention(dock: dock, notifier: notifier)
+        panels.attention?.notify = { true }
+        panels.refresh()
+        panels.refresh()
+        #expect(dock.badge == "1" && dock.bounces == 1, "one bounce")
+        #expect(notifier.posted.map(\.title) == ["Codex is waiting for you"] && notifier.posted.map(\.body) == ["My agents · wants to run a command"])
+        #expect(!notifier.posted.contains { $0.body.contains("something check") }, "the command stays in the panel")
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: Self.desk)
+        #expect(!panel.held && !panel.isKeyWindow && panel.title == "Codex wants to run a command")
+        time += 1
+        panel.tick()
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: brief.web, "e5" + suffix, root: stage.home.root, keyed: false)
+        }
+        panel.cancelOperation(nil)
+        #expect(source.answers.map(\.1) == [.deny] && dock.badge == nil && notifier.withdrawn == ["r1"], "answered: no badge, no notification left")
+    }
     /// Daily brief's assistant asks where the weather corner goes: the same panel, at the same place, its options
     /// numbered; a click on the second answers with it.
     @Test("e6: a question") func e6() async throws {
@@ -315,11 +350,11 @@ extension Picture {
     /// canvas is that screen, and the page fills it without the window's chrome, as the mockup's e13 shows it. A panel
     /// that holds the keys (Show Request) has its lights in their colors, and the main window's are gray.
     static func panel(_ panel: RequestPanel, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL,
-                      fullScreen: NSRect? = nil) async throws {
+                      fullScreen: NSRect? = nil, keyed: Bool? = nil) async throws {
         guard let gallery else { return }
         var page: NSImage?
         if fullScreen == nil {
-            try await window(shell, library: library, web: web, name + "-window", root: root, keyed: !panel.held)
+            try await window(shell, library: library, web: web, name + "-window", root: root, keyed: keyed ?? !panel.held)
             let file = gallery.appendingPathComponent(name + "-window.png")
             defer { try? FileManager.default.removeItem(at: file) }
             page = try #require(NSImage(contentsOf: file))

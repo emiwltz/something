@@ -32,6 +32,21 @@ final class FakePrompts: PromptSource {
     }
 }
 
+/// The Dock, played by the test: its badge, its bounces, and whether the app is in front.
+final class FakeDock: DockLike {
+    var isActive = false
+    var badge: String?, bounces = 0
+    func showBadge(_ label: String?) { badge = label }
+    func bounceOnce() { bounces += 1 }
+}
+
+/// The notification center, played by the test: what was posted and withdrawn, by request id.
+final class FakeNotifier: Notifier {
+    var posted: [(id: String, title: String, body: String)] = [], withdrawn: [String] = []
+    func post(_ id: String, title: String, body: String) { posted.append((id, title, body)) }
+    func withdraw(_ ids: [String]) { withdrawn += ids }
+}
+
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct PanelsTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
@@ -598,6 +613,53 @@ final class FakePrompts: PromptSource {
         #expect(queue.count(in: "agents") == 1 && queue.waiting.count == 4)
         launches["project", default: []].insert("a9")
         #expect(queue.count(in: "project") == 2, "an agent a space launches after its request came is counted there")
+    }
+
+    /// The Dock counts every request; in the background each new one bounces the icon once and, only with "Notify
+    /// me" on, is notified without its command; in front, nothing bounces. A request that left takes its notification.
+    @Test func theDockCountsAndBouncesOncePerNewRequest() throws {
+        let source = FakePrompts(), dock = FakeDock(), notifier = FakeNotifier()
+        let panels = Panels(source: source, shows: false)
+        panels.attention = Attention(dock: dock, notifier: notifier)
+        panels.who = { _ in Asker(program: "Codex", space: "My agents") }
+        source.prompts = [source.permission("r1", about: "rm -rf /tmp/something-check")]
+        panels.refresh()
+        #expect(dock.badge == "1" && dock.bounces == 1 && notifier.posted.isEmpty, "no notification unless asked")
+        panels.refresh()
+        #expect(dock.bounces == 1, "once per request")
+        var notify = true
+        panels.attention?.notify = { notify }
+        source.prompts.append(source.permission("r2", about: "rm -rf /tmp/something-check"))
+        source.prompts.append(Prompt(request: Request(id: "r3", agent: "a1", kind: "question", tool: nil, about: nil, at: "2026-10-17T09:00:02Z"),
+                                     input: nil))
+        panels.refresh()
+        #expect(dock.badge == "3" && dock.bounces == 3)
+        #expect(notifier.posted.map(\.id) == ["r2", "r3"])
+        #expect(notifier.posted.map(\.title) == ["Codex is waiting for you", "Codex is waiting for you"])
+        #expect(notifier.posted.map(\.body) == ["My agents · wants to run a command", "My agents · asks you a question"])
+        #expect(!notifier.posted.contains { $0.title.contains("rm ") || $0.body.contains("rm ") }, "never the command")
+        dock.isActive = true
+        source.prompts.append(source.permission("r4", about: "ls"))
+        panels.refresh()
+        #expect(dock.badge == "4" && dock.bounces == 3 && notifier.posted.count == 2, "in front, the panel is enough")
+        dock.isActive = false
+        panels.refresh()
+        #expect(dock.bounces == 3, "a request seen in front does not bounce later")
+        source.prompts.removeAll { $0.request.id == "r2" }
+        notify = false
+        panels.refresh()
+        #expect(dock.badge == "3" && notifier.withdrawn == ["r2"])
+        source.prompts = []
+        panels.refresh()
+        #expect(dock.badge == nil, "no badge when none waits")
+        #expect(Attention.banner(source.permission("r5", about: "ls").request, who: Asker(program: "pi")) == ("pi is waiting for you", "Wants to run a command"))
+    }
+
+    /// The notification center is never reached outside an app bundle: in swift test, as under swift run, it would
+    /// stop the process.
+    @Test func noNotifierWithoutAnAppBundle() {
+        #expect(SystemNotifier.make(bundle: .main) { } == nil)
+        #expect(SystemNotifier.make(bundle: Bundle(for: FakeDock.self)) { } == nil)
     }
 
     /// A request still in the state whose details are gone has closed: it gets no panel and is not counted.

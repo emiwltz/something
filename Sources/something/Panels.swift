@@ -32,6 +32,8 @@ final class Panels {
     var now: () -> Date = Date.init, clock: () -> TimeInterval = { CACurrentMediaTime() }
     /// The requests waiting; the panel shows the one on screen.
     let queue = RequestQueue()
+    /// The Dock and the notifications, which follow the queue; the app's.
+    var attention: Attention?
     private(set) var panel: RequestPanel?
 
     init(source: PromptSource, shows: Bool = true) {
@@ -44,6 +46,7 @@ final class Panels {
     /// was lost stays until the person puts it away.
     func refresh() {
         queue.follow(source.requests)
+        attention?.follow(queue.waiting, who: who)
         guard panel?.told != true else { return }
         // Its details are gone: it closed, and cannot be shown.
         while let shown = queue.shown, source.prompt(shown.id) == nil { queue.drop(shown.id) }
