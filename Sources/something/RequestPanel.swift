@@ -80,6 +80,13 @@ class RequestPanel: NSPanel {
         return NSPoint(x: max(screen.minX + 16, x), y: max(screen.minY, top - size.height))
     }
 
+    /// Brings the panel in beside `window`, in front but without the keys: a key typed in a page or in another app must
+    /// never reach it.
+    func arrive(beside window: NSWindow?) {
+        if let window { place(beside: window) }
+        orderFrontRegardless()
+    }
+
     /// Puts the panel in its place beside `window`, on `screen` (the window's own by default).
     func place(beside window: NSWindow, screen: NSRect? = nil) {
         let full = window.styleMask.contains(.fullScreen)
@@ -101,7 +108,7 @@ class RequestPanel: NSPanel {
         title = question ? "\(who.program) asks you a question" : "\(who.program) wants to \(Words.wants(prompt.request.tool))"
         header.kind = question ? "Question" : "Permission"
         (boxes, typed) = ([], [])
-        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age))]
+        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age), who.program)]
         if question {
             prompt.questions.forEach { views += ask($0) }
             denyButton = PanelButton("Don't Answer", hint: "esc")
@@ -121,10 +128,14 @@ class RequestPanel: NSPanel {
         tick()
         ticker?.invalidate()
         guard !question else { return }
-        ticker = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
-            guard let self, !armed else { return timer.invalidate() }
+        let ticker = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
+            // tick() stops it once armed, after enabling the button.
+            guard let self else { return timer.invalidate() }
             tick()
         }
+        // In every mode: it arms while a sheet waits in a modal loop, or a menu is open.
+        RunLoop.main.add(ticker, forMode: .common)
+        self.ticker = ticker
     }
 
     /// Whether Allow Once answers: 0.5 s after the request appeared, so that no click meant for something else lands on
@@ -222,9 +233,9 @@ class RequestPanel: NSPanel {
     // MARK: The parts
 
     /// The sign, the title in Fraunces, and under it the waiting eyes with the space, who asks and when.
-    private func whoRow(_ headline: String, _ line: String) -> NSView {
+    private func whoRow(_ headline: String, _ line: String, _ program: String) -> NSView {
         let sign = SignView(.listen, side: 36)
-        sign.name = ""
+        sign.name = "\(program) is waiting"
         let eyes = NSImageView(image: Sign.miniEyes(.wait, template: false))
         let sub = NSStackView(views: [eyes, Self.text(line, Look.small, .ink3)])
         sub.spacing = 6
@@ -243,7 +254,7 @@ class RequestPanel: NSPanel {
              text(value, Look.Style(face: .ui, size: 12, weight: .medium, leading: 1.45))]
         })
         (grid.columnSpacing, grid.rowSpacing) = (14, 4)
-        return Box(grid, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11), wide: true)
+        return Box(grid, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11), width: width - 32)
     }
 
     /// The exact text the agent sent, monospaced and selectable, on a sunk ground.
@@ -254,7 +265,7 @@ class RequestPanel: NSPanel {
         code.preferredMaxLayoutWidth = width - 54
         let stack = NSStackView(views: [caption, code])
         (stack.orientation, stack.alignment, stack.spacing) = (.vertical, .leading, 10)
-        return Box(stack, fill: .sunk, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11), wide: true)
+        return Box(stack, fill: .sunk, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11), width: width - 32)
     }
 
     private func ask(_ question: Question) -> [NSView] {
@@ -422,12 +433,13 @@ final class ArmedButton: PanelButton {
     override func accessibilityPerformPress() -> Bool { voice() }
 }
 
-/// A view around `content`, on a rounded `fill`, ringed in `ring`, drawn again in each appearance.
+/// A view around `content`, on a rounded `fill`, ringed in `ring`, drawn again in each appearance; `width` fixes its
+/// own, the content keeping its size inside.
 final class Box: NSView {
     let fill: Look.Token?, ring: Look.Token?, radius: CGFloat
 
     init(_ content: NSView, fill: Look.Token? = nil, ring: Look.Token? = nil, radius: CGFloat = 0, insets: NSEdgeInsets = NSEdgeInsets(),
-         wide: Bool = false) {
+         width: CGFloat? = nil) {
         (self.fill, self.ring, self.radius) = (fill, ring, radius)
         super.init(frame: .zero)
         content.translatesAutoresizingMaskIntoConstraints = false
@@ -435,9 +447,9 @@ final class Box: NSView {
         NSLayoutConstraint.activate([content.topAnchor.constraint(equalTo: topAnchor, constant: insets.top),
                                      content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: insets.left),
                                      content.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -insets.bottom),
-                                     wide ? content.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -insets.right)
+                                     width != nil ? content.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -insets.right)
                                          : content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -insets.right)])
-        if wide { widthAnchor.constraint(equalToConstant: RequestPanel.width - 32).isActive = true }
+        if let width { widthAnchor.constraint(equalToConstant: width).isActive = true }
     }
 
     required init?(coder: NSCoder) { nil }

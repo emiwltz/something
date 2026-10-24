@@ -3,7 +3,7 @@
 // on a panel the person took, Deny, Escape and the close button deny, its place across the window's corner, never
 // modal, left by a request the agent withdraws, and a question answered with the chosen and typed answers. The queue
 // behind it: arrival order, steps that wrap, and each space's own count. The sheets the app waits for mean what their
-// buttons say, one at a time. No panel is shown.
+// buttons say, one at a time. No panel is seen: the one that arrives is transparent.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -128,24 +128,44 @@ final class FakePrompts: PromptSource {
         #expect(!panel.held && !panel.voicePress(), "the keys gone, the person's hold goes too")
     }
 
-    /// Keys typed in the main window (a page's, or the person's in a page) never make the panel key, nor answer it.
+    /// The panel arrives in front without the keys: keys typed in the main window (a page's, or the person's in a
+    /// page) never make it key, nor answer it.
     @Test func keysInTheMainWindowNeverReachThePanel() throws {
-        let source = FakePrompts()
-        var time: TimeInterval = 100
-        let panels = Panels(source: source, shows: false)
-        panels.clock = { time }
-        source.prompts = [source.permission("r1", about: "npm test")]
-        panels.refresh()
-        let panel = try #require(panels.panel)
+        var time: TimeInterval = 100, answers: [Answer] = []
+        let panel = RequestPanel { answers.append($0) }
+        panel.clock = { time }
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        let main = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 900, height: 640), styleMask: .titled, backing: .buffered, defer: false)
+        let text = NSTextView()
+        (main.alphaValue, main.contentView) = (0, text)
+        defer { main.orderOut(nil) }
+        // The test's app is never active, so the main window cannot hold the keys; a panel that took them would still be
+        // key, as a nonactivating panel is.
+        main.makeKeyAndOrderFront(nil)
+        main.makeFirstResponder(text)
+        panel.arrive(beside: main)
         time += 1
-        let main = Offscreen(NSTextView())
-        main.window.makeFirstResponder(main.view)
         for (key, code) in [("\r", UInt16(36)), (" ", 49), ("\u{1b}", 53)] {
-            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: main.window.windowNumber,
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: main.windowNumber,
                                                       context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
-            main.window.sendEvent(event)
+            main.sendEvent(event)
         }
-        #expect(source.answers.isEmpty && !panel.held && !panel.isKeyWindow && panels.panel === panel)
+        #expect(panel.isVisible)
+        #expect(!panel.isKeyWindow && !panel.held && answers.isEmpty)
+    }
+
+    /// Allow Once arms while a sheet waits in a modal loop: its ticker runs in every mode of the run loop.
+    @Test func allowOnceArmsWhileASheetWaits() {
+        var time: TimeInterval = 100
+        let panel = RequestPanel { _ in }
+        panel.clock = { time }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        time += 1
+        let end = Date() + 0.1
+        while Date() < end { RunLoop.main.run(mode: .modalPanel, before: end) }
+        #expect(panel.allowButton.isEnabled)
     }
 
     /// The panel goes across the window's top-right corner, below its toolbar, kept inside the screen; at the screen's
@@ -298,6 +318,8 @@ final class FakePrompts: PromptSource {
         let panel = RequestPanel { _ in }
         panel.show(FakePrompts().permission("r1", about: "npm test"), who: assistant, age: "asked 3 min ago")
         #expect(panel.title == "Claude Code wants to run a command")
+        func sign(_ view: NSView) -> SignView? { view as? SignView ?? view.subviews.lazy.compactMap(sign).first }
+        #expect(panel.contentView.flatMap(sign)?.accessibilityLabel()?.hasPrefix("Claude Code is waiting, ") == true)
         #expect(Self.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
                                                   "Daily brief · its assistant · asked 3 min ago", "It will run one command in the Daily brief space.",
                                                   "Space", "Daily brief", "Folder", "~/something/spaces", "The exact command", "npm test"])

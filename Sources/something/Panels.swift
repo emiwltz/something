@@ -50,11 +50,9 @@ final class Panels {
         guard let shown = queue.shown, let prompt = source.prompt(shown.id) else { return dismiss() }
         let panel = panel ?? open()
         panel.position = queue.position
+        // The age it says is the one it had when it came on screen.
         if panel.request?.id != shown.id { panel.show(prompt, who: who(shown), age: Words.age(shown.at, now: now())) }
-        guard shows, !panel.isVisible else { return }
-        if let window = beside() { panel.place(beside: window) }
-        // In front, without the keys: a key typed in a page or in another app must never reach it.
-        panel.orderFrontRegardless()
+        if shows, !panel.isVisible { panel.arrive(beside: beside()) }
     }
 
     /// Show Request: the panel in front, with the keys.
