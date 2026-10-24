@@ -2,7 +2,8 @@
 // Return builds (⇧Return adds a line), who builds it and with which model, three suggestions that each send a whole
 // sentence, and the first three templates with See All. Without a coding agent, the notice takes the field's place.
 // While the assistant builds, the field holds the sentence sent and says what it does; the rest steps aside. The
-// assistant's card stays away here (the page is its own composer); a template's preview fills the page.
+// assistant's card stays away here (the page is its own composer), so when a turn ends without a new space, its reply
+// stays above the field, to be answered there; a template's preview fills the page.
 import AppKit
 import SwiftUI
 
@@ -36,7 +37,8 @@ struct BlankView: View {
                     if model.noAgent {
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 30) }
                     } else {
-                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 22 : 30)
+                        if let reply { answer(reply).frame(width: field).padding(.top, 30) }
+                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 22 : reply == nil ? 30 : 14)
                         if model.building { building.frame(width: field).padding(.top, 14) } else { meta.frame(width: field).padding(.top, 8) }
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
                     }
@@ -82,6 +84,30 @@ struct BlankView: View {
         return model.rows.reversed().lazy.compactMap { if case .mine(_, let text) = $0 { text } else { nil } }.first ?? ""
     }
 
+    /// The assistant's last words when its turn ended without a space (a question, an error): the last row of the
+    /// conversation started here, when it is a reply.
+    private var reply: String? { BlankView.reply(in: model) }
+
+    static func reply(in model: AssistantModel) -> String? {
+        guard !model.building, model.threadShown else { return nil }
+        return model.rows.reversed().lazy.compactMap { row -> String?? in
+            switch row { case .reply(let text): text; case .mine: .some(nil); default: nil }
+        }.first ?? nil
+    }
+
+    /// `text` in the agent's voice, read only, as the card draws a reply.
+    private func answer(_ text: String) -> some View {
+        Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
+            .font(Look.font(.voice, size: 14).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 8)
+            .accessibilityLabel("Your assistant: \(text)")
+    }
+
+    /// What a suggestion does: it sends its whole sentence, the draft kept.
+    static func suggest(_ chip: (String, String, String), to model: AssistantModel) { model.send(chip.1) }
+
     /// Who builds it, the model and its effort, and what Return does.
     private var meta: some View {
         HStack(spacing: 1) {
@@ -126,15 +152,15 @@ struct BlankView: View {
     private var suggestions: some View {
         HStack(spacing: 8) {
             ForEach(BlankView.chips, id: \.0) { chip in
-                Button { model.send(chip.1) } label: {
+                Button { BlankView.suggest(chip, to: model) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: chip.2).font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui)
                         Text(chip.0)
                     }
                     .font(Look.font(.ui, size: 12.5, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
                     .padding(.leading, 10).padding(.trailing, 13).frame(height: 32)
-                    .overlay(Capsule().strokeBorder(Look.Token.line2.ui))
-                    .contentShape(Capsule())
+                    .background(Capsule(style: .circular).strokeBorder(Look.Token.line2.ui))
+                    .contentShape(Capsule(style: .circular))
                 }
                 .buttonStyle(.plain)
                 .disabled(model.kind == nil || model.blocked)

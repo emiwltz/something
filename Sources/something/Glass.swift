@@ -5,8 +5,8 @@
 // motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for every space,
 // kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the sticker's corner;
 // ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the card stays open
-// and fades to that space's own conversation. The sticker is only over a space: on the blank page and the templates
-// the card stands alone, as the window shows it, and over the tour there is neither.
+// and fades to that space's own conversation. The glass is only over a space: off the spaces (New Space, the
+// templates, the tour) it is hidden, and New Space is its own composer.
 import AppKit
 import Observation
 
@@ -15,7 +15,7 @@ final class Glass: WindowLayer {
     static let side: CGFloat = 44, margin: CGFloat = 16
     /// How near the top or the bottom a sticker let go clings there; how far its eyes lean while it moves.
     static let magnet: CGFloat = 44, lean: CGFloat = 3
-    /// The sticker's first place, and its place off a space, where the card stands alone: the bottom trailing corner.
+    /// The sticker's first place, and its place when none is remembered or no space is open: the bottom trailing corner.
     static let first = Preferences.StickerPlace(trailing: true, bottom: true, offset: Double(margin))
     let model: AssistantModel
     let sticker = Sticker(), label = Tag()

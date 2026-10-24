@@ -45,11 +45,22 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1-smallest" + suffix, root: stage.home.root)
         }
+        // A turn that ends without a new space (the fake answers in words): its reply stays on the page above the field,
+        // to be answered there, since the assistant's card stays away. (A plain text is out of reach offscreen: the
+        // page's own choice is read, and d1-answer shows it.)
+        shell.window.setContentSize(Stage.Size.main)
+        model.send("A page for my mornings.")
+        #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
+        #expect(BlankView.reply(in: model) == "Invented reply." && model.draft.isEmpty && !model.blocked)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d1-answer" + suffix, root: stage.home.root)
+            let answered = await Self.read(host)
+            #expect(shell.glass.isHidden && answered.contains("Who is waiting for me"), "\(answered)")
+        }
         // A suggestion sends its whole sentence, the draft kept: the build starts (the fake keeps working on the game),
         // the field holds the sentence read only, the suggestions and templates step aside, the assistant stays away.
-        shell.window.setContentSize(Stage.Size.main)
         model.draft = "Half written"
-        model.send(BlankView.chips[2].1)
+        BlankView.suggest(BlankView.chips[2], to: model)
         #expect(model.building && model.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[2].1)) && model.light == .working }))
         try await stage.appearances { suffix in
@@ -155,7 +166,7 @@ struct AcceptanceBuild {
         """
     /// The Templates page in the window, the toolbar's chip at the mockup's one request, the assistant's glass hidden (the
     /// mockup shows the page alone); and the page's model.
-    static func templates(_ stage: Stage, _ size: NSSize = Stage.Size.main) throws -> (Shell, Library, Gallery, NSView) {
+    static func templates(_ stage: Stage) throws -> (Shell, Library, Gallery, NSView) {
         let (shell, library, _) = stage.window()
         library.select(.templates)
         shell.show(nil, templates: true)

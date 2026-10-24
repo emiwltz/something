@@ -247,7 +247,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             put(templates ? Shell.hosted(GalleryView(library: library, model: gallery))
                 : Shell.hosted(BlankView(model: assistant, library: library, gallery: gallery)))
             glass.isHidden = true
-            return templates ? bare(Gallery.page.0, Gallery.page.1) : bare("New Space", "")
+            return bare(gallery.home.0, gallery.home.1)
         }
         page = space.blocked.isEmpty ? space.web : nil
         if space.blocked.isEmpty {
