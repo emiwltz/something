@@ -33,8 +33,7 @@ final class WelcomeKeys: NSView {
     init(tour: Tour, assistant: AssistantModel, motion: Look.Motion) {
         (self.tour, self.assistant) = (tour, assistant)
         super.init(frame: NSRect(origin: .zero, size: Welcome.size))
-        let host = NSHostingView(rootView: WelcomeView(tour: tour, assistant: assistant, motion: motion))
-        host.sizingOptions = []
+        let host = Shell.hosted(WelcomeView(tour: tour, assistant: assistant, motion: motion))
         host.frame = bounds
         host.autoresizingMask = [.width, .height]
         addSubview(host)
@@ -110,7 +109,7 @@ struct WelcomeView: View {
 
     private var welcome: some View {
         VStack(spacing: 0) {
-            WelcomeSign(state: .listen, side: 96, lands: true, motion: motion)
+            PageSign(state: .listen, side: 96, lands: true, motion: motion)
             Text("something").font(Look.font(.title, size: 62, weight: .semibold).ui).kerning(-2.17).padding(.top, 14)
             Text("Ready to build something today?").font(Look.font(.ui, size: 17).ui).foregroundStyle(Look.Token.ink2.ui).padding(.top, 10)
         }
@@ -152,13 +151,13 @@ struct WelcomeView: View {
             if !seen.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "eye").font(.system(size: 10.5)).padding(.top, 2).accessibilityHidden(true)
-                    (Text("Seen only: \(Self.list(seen.map(\.0), "and")). ").fontWeight(.semibold).foregroundColor(Look.Token.ink2.ui)
+                    (Text("Seen only: \(Words.list(seen.map(\.0), "and")). ").fontWeight(.semibold).foregroundColor(Look.Token.ink2.ui)
                         + Text(Self.why(seen.compactMap(\.1))))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(Look.font(.ui, size: 12).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink3.ui).padding(.top, 12)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Seen only: \(Self.list(seen.map(\.0), "and")). \(Self.why(seen.compactMap(\.1)))")
+                .accessibilityLabel("Seen only: \(Words.list(seen.map(\.0), "and")). \(Self.why(seen.compactMap(\.1)))")
             }
             if !missing.isEmpty {
                 Text("Not on this Mac: \(missing.joined(separator: ", ")).").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -171,6 +170,7 @@ struct WelcomeView: View {
     /// One builder found, a radio: its name, then its model and effort as far as they are known before it ever ran.
     private func builder(_ entry: AssistantModel.Entry, compact: Bool) -> some View {
         let on = entry.checked, shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
+        let name = Registry.app.name(of: entry.id), words = Self.words(assistant.modelWords(of: entry.id))
         return Button { assistant.choose(entry.id) } label: {
             HStack(spacing: compact ? 11 : 13) {
                 ZStack {
@@ -180,8 +180,8 @@ struct WelcomeView: View {
                 }
                 .frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: compact ? 0 : 2) {
-                    Text(Registry.app.name(of: entry.id)).font(Look.font(.ui, size: 14, weight: .semibold).ui)
-                    Text(Self.words(assistant.modelWords(of: entry.id))).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+                    Text(name).font(Look.font(.ui, size: 14, weight: .semibold).ui)
+                    Text(words).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
                 }
                 Spacer(minLength: 0)
             }
@@ -193,13 +193,8 @@ struct WelcomeView: View {
         }
         .buttonStyle(.plain)
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("\(Registry.app.name(of: entry.id)), \(Self.words(assistant.modelWords(of: entry.id)))")
+        .accessibilityLabel("\(name), \(words)")
         .accessibilityAddTraits(on ? [.isSelected] : [])
-    }
-
-    /// `names` as a sentence says them: "A, B and C".
-    static func list(_ names: [String], _ last: String) -> String {
-        names.count > 1 ? names.dropLast().joined(separator: ", ") + " \(last) " + (names.last ?? "") : names.first ?? ""
     }
 
     /// Why the agents seen only are not offered, in one sentence when their reasons end alike ("A, and B, so something
@@ -217,7 +212,7 @@ struct WelcomeView: View {
     private var none: some View {
         let searching = tour.searching(assistant), rows = Array(InstallList.builders.prefix(2))
         return VStack(alignment: .leading, spacing: 0) {
-            WelcomeSign(state: searching ? .think : .listen, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 16)
+            PageSign(state: searching ? .think : .listen, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 16)
             heading(searching ? "Looking for a coding agent" : "No coding agent found")
             lead("something builds your spaces with a coding agent you install yourself. Install one in Terminal, then look again.")
             VStack(spacing: 8) {
@@ -237,8 +232,7 @@ struct WelcomeView: View {
                         .accessibilityLabel("Copy the command that installs \(row.name)")
                     }
                     .padding(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 8))
-                    .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line.ui))
+                    .plate()
                 }
             }
             .padding(.top, 20)
@@ -252,8 +246,7 @@ struct WelcomeView: View {
             }
             .buttonStyle(.plain).padding(.top, 14).padding(.leading, 2)
             if tour.explained {
-                let names = InstallList.builders.prefix(2).map(\.name)
-                Text("A program that reads and writes code in a folder when you ask it in plain words, like \(Self.list(names, "or")). It runs on your Mac, with your own account. something never installs one for you.")
+                Text("A program that reads and writes code in a folder when you ask it in plain words, like \(Words.list(rows.map(\.name), "or")). It runs on your Mac, with your own account. something never installs one for you.")
                     .font(Look.font(.ui, size: 12.5).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui).frame(maxWidth: 540, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
             }
@@ -271,8 +264,7 @@ struct WelcomeView: View {
                     self.comfort(comfort, current: index == tour.cursor)
                 }
             }
-            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line.ui))
+            .plate()
             .padding(.top, 24)
         }
     }
@@ -303,7 +295,8 @@ struct WelcomeView: View {
     }
 
     private var meet: some View {
-        HStack(spacing: 30) {
+        let bubble = UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 6, bottomTrailingRadius: 20, topTrailingRadius: 20)
+        return HStack(spacing: 30) {
             BigSticker(joy: tour.met, motion: motion).frame(width: 230, height: 300)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 7) {
@@ -320,8 +313,7 @@ struct WelcomeView: View {
                     Text("Hi. Tell me what you'd like to make, and I'll build it with you.")
                         .font(Look.font(.voice, size: 17).ui).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 17).padding(.vertical, 12).frame(maxWidth: 360, alignment: .leading)
-                        .background(Look.Token.bg2.ui, in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 6, bottomTrailingRadius: 20, topTrailingRadius: 20))
-                        .overlay(UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: 6, bottomTrailingRadius: 20, topTrailingRadius: 20).strokeBorder(Look.Token.line.ui))
+                        .background(Look.Token.bg2.ui, in: bubble).overlay(bubble.strokeBorder(Look.Token.line.ui))
                         .padding(.top, 24)
                         .accessibilityLabel("Your assistant: Hi. Tell me what you'd like to make, and I'll build it with you.")
                     Text("That's all it takes, in any space: \(Keys.shown("ask")), then your words.").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -345,11 +337,10 @@ struct WelcomeView: View {
     }
 
     private var ready: some View {
-        let folder = Words.path(assistant.places.spaces.path, home: assistant.places.home.path)
-        var code = AttributedString(folder)
+        var code = AttributedString(assistant.folder)
         code.font = Look.font(.code, size: 11.5).ui
         return VStack(alignment: .leading, spacing: 0) {
-            WelcomeSign(state: .listen, joy: true, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 12)
+            PageSign(state: .listen, joy: true, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 12)
             heading("Make your first space")
             Text(AttributedString("Describe a page in a few words. \(assistant.name) builds it in ") + code + AttributedString(", and nothing leaves your Mac."))
                 .font(Look.font(.ui, size: 14.5).ui).lineSpacing(5).foregroundStyle(Look.Token.ink2.ui).frame(maxWidth: 520, alignment: .leading)
@@ -380,8 +371,7 @@ struct WelcomeView: View {
             }
             .font(Look.font(.ui, size: 13).ui)
             .padding(EdgeInsets(top: 15, leading: 18, bottom: 15, trailing: 18)).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line.ui))
+            .plate()
             .padding(.top, 16)
             later(Text("All of this lives in Settings"), keys: ["⌘", ","])
         }
@@ -474,6 +464,14 @@ struct WelcomeView: View {
     }
 }
 
+extension View {
+    /// The welcome's plate: bg2 in a hairline, at the card's radius.
+    fileprivate func plate() -> some View {
+        let shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
+        return background(Look.Token.bg2.ui, in: shape).overlay(shape.strokeBorder(Look.Token.line.ui))
+    }
+}
+
 /// A key as the welcome draws it: Onest 11 semibold in ink2 on bg2, a hairline and a step below; on the primary
 /// button, actfg on its own faint fill. `small` is the one in a line of text.
 private struct Cap: View {
@@ -526,8 +524,9 @@ private struct Switch: View {
     }
 }
 
-/// The sign in the welcome, at `side` points, in `state`, smiling with `joy`; with `lands`, it lands as the step opens.
-private struct WelcomeSign: NSViewRepresentable {
+/// The sign on a page (New Space, the welcome), at `side` points, in `state`, smiling with `joy`; with `lands`, it lands
+/// as the page or the step opens.
+struct PageSign: NSViewRepresentable {
     let state: Sign.State, joy: Bool, side: CGFloat, lands: Bool, motion: Look.Motion
 
     init(state: Sign.State, joy: Bool = false, side: CGFloat, lands: Bool, motion: Look.Motion) {
@@ -543,6 +542,7 @@ private struct WelcomeSign: NSViewRepresentable {
 
     func updateNSView(_ sign: SignView, context: Context) {
         if sign.state != state { sign.state = state }
+        if sign.motion != motion { sign.motion = motion }
         sign.joy = joy
     }
 

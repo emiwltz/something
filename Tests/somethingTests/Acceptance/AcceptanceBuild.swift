@@ -191,14 +191,14 @@ struct AcceptanceBuild {
         let since = try #require((host as? NSHostingView<BlankView>)?.rootView.since)
         model.draft = "Half written"
         for chip in BlankView.chips.prefix(2) {
-            BlankView.suggest(chip, to: model)
+            model.send(chip.1)
             #expect(model.building && model.draft == "Half written")
             #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: chip.1), .reply("Invented reply.")] }))
             #expect(BlankView.reply(in: model, since: since) == "Invented reply.")
         }
-        #expect(BuildField.returned(shift: false, marked: true, model) == .ignored && !model.building && model.draft == "Half written")
+        #expect(Field.returned(shift: false, marked: true, model) == .ignored && !model.building && model.draft == "Half written")
         model.draft = "A page for my mornings."
-        #expect(BuildField.returned(shift: false, marked: false, model) == .handled && model.building && model.draft.isEmpty)
+        #expect(Field.returned(shift: false, marked: false, model) == .handled && model.building && model.draft.isEmpty)
         #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: "A page for my mornings."), .reply("Invented reply.")] }))
         #expect(BlankView.reply(in: model, since: since) == "Invented reply." && !model.blocked)
         try await stage.appearances { suffix in
@@ -216,7 +216,7 @@ struct AcceptanceBuild {
         // its reply shows, though the earlier one had more rows.
         model.newConversation()
         #expect(model.rows.isEmpty && fresh.rootView.start == 0 && fresh.rootView.since > 0)
-        BlankView.suggest(BlankView.chips[0], to: model)
+        model.send(BlankView.chips[0].1)
         #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
         #expect(BlankView.reply(in: model, since: fresh.rootView.start) == "Invented reply.")
         // A reply given in a space never comes to New Space: each place has its own conversation.
@@ -230,7 +230,7 @@ struct AcceptanceBuild {
         // The game: the build starts (the fake keeps working on it), the field holds the sentence read only, the
         // suggestions and templates step aside, Stop is offered, the assistant stays away.
         model.draft = "Half written"
-        BlankView.suggest(BlankView.chips[2], to: model)
+        model.send(BlankView.chips[2].1)
         #expect(model.building && model.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[2].1)) && model.light == .working }))
         try await stage.appearances { suffix in

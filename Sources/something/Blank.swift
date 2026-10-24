@@ -45,7 +45,7 @@ struct BlankView: View {
             ScrollView {
                 let inner = max(0, window.size.width - 80), field = min(BlankView.width, inner)
                 VStack(spacing: 0) {
-                    hero(path: Words.path(model.places.spaces.path, home: model.places.home.path))
+                    hero
                     if model.noAgent {
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 30) }
                     } else {
@@ -67,16 +67,16 @@ struct BlankView: View {
     }
 
     /// The sign landing, the question, and where the space is made (folded away while it builds).
-    private func hero(path: String) -> some View {
+    private var hero: some View {
         VStack(spacing: 10) {
-            Landing(motion: library.preferences.motion).frame(width: 76, height: 76).padding(.bottom, 10)
+            PageSign(state: .listen, side: 76, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
             Text("What do you want to make?").font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
                 .multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
                 // The mockup's line is 1.04 of the size; Fraunces's own leading is taller.
                 .padding(.vertical, -6)
             if !model.building {
                 // One text, so that a narrow window wraps it as a sentence; the path in code on the hover fill.
-                Text(BlankView.where(path)).font(Look.font(.ui, size: 14).ui).foregroundStyle(Look.Token.ink2.ui).multilineTextAlignment(.center)
+                Text(BlankView.where(model.folder)).font(Look.font(.ui, size: 14).ui).foregroundStyle(Look.Token.ink2.ui).multilineTextAlignment(.center)
             }
         }
     }
@@ -112,16 +112,13 @@ struct BlankView: View {
 
     /// `text` in the agent's voice, read only, as the card draws a reply.
     private func answer(_ text: String) -> some View {
-        Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
+        Text(AssistantCard.markdown(text))
             .font(Look.font(.voice, size: 14).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
             .accessibilityLabel("Your assistant: \(text)")
     }
-
-    /// What a suggestion does: it sends its whole sentence, the draft kept.
-    static func suggest(_ chip: (String, String, String), to model: AssistantModel) { model.send(chip.1) }
 
     /// Who builds it, the model and its effort, and what Return does.
     private var meta: some View {
@@ -132,13 +129,7 @@ struct BlankView: View {
                 Text(model.name)
             } items: { AgentMenu(model: model) }
             Text("·").padding(.horizontal, 3)
-            let words = model.modelWords
-            MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
-                Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-            } items: {
-                Text(words.model)
-                if let effort = words.effort { Text("Effort: \(effort)") }
-            }
+            ModelChip(model: model)
             Spacer(minLength: 8)
             HStack(spacing: 4) {
                 Key("↵"); Text("to build")
@@ -174,7 +165,8 @@ struct BlankView: View {
     private var suggestions: some View {
         HStack(spacing: 8) {
             ForEach(BlankView.chips, id: \.0) { chip in
-                Button { BlankView.suggest(chip, to: model) } label: {
+                // The whole sentence is sent, the draft kept.
+                Button { model.send(chip.1) } label: {
                     HStack(spacing: 8) {
                         Image(systemName: chip.2).font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui)
                         Text(chip.0)
@@ -233,18 +225,6 @@ struct BuildField: View {
     let sent: String?
     @FocusState private var typing: Bool
 
-    /// What Return does in the field: nothing while an input method composes (`marked`, ignored), a new line with
-    /// `shift`, else it builds; handled then.
-    static func returned(shift: Bool, marked: Bool, _ model: AssistantModel) -> KeyPress.Result {
-        switch Field.onReturn(shift: shift, marked: marked) {
-        case .compose: return .ignored
-        case .send: model.send()
-        case .newline:
-            if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
-        }
-        return .handled
-    }
-
     var body: some View {
         let busy = sent != nil, shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
         HStack(alignment: .bottom, spacing: 10) {
@@ -265,7 +245,7 @@ struct BuildField: View {
                         }
                         .onKeyPress(.return, phases: .down) { press in
                             let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
-                            return BuildField.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
+                            return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
                         }
                 }
             }
@@ -286,23 +266,5 @@ struct BuildField: View {
         .padding(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 12))
         .background(busy ? Color.clear : Look.Token.bg2.ui, in: shape)
         .overlay(shape.strokeBorder(busy ? Look.Token.line.ui : typing ? Look.Token.ink2.ui : Look.Token.line2.ui))
-    }
-}
-
-/// The sign of New Space, 76 points: it lands as the page opens (its corners one after the other, then its eyes),
-/// then listens. Under Reduced motion it is simply there.
-private struct Landing: NSViewRepresentable {
-    let motion: Look.Motion
-
-    func makeNSView(context: Context) -> SignView {
-        let sign = SignView(.listen, side: 76)
-        sign.name = "something"
-        sign.motion = motion
-        sign.arrive()
-        return sign
-    }
-
-    func updateNSView(_ sign: SignView, context: Context) {
-        if sign.motion != motion { sign.motion = motion }
     }
 }

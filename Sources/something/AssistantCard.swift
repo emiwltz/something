@@ -150,7 +150,7 @@ struct AssistantCard: View {
             .padding(.leading, 50)
             .frame(maxWidth: .infinity, alignment: .trailing)
         case .reply(let text):
-            Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
+            Text(AssistantCard.markdown(text))
                 .font(Look.font(.voice, size: 13).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink.ui)
                 .bubble()
                 .background(Look.Token.sunk.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18))
@@ -164,6 +164,12 @@ struct AssistantCard: View {
             .font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink2.ui)
             .padding(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 4))
         }
+    }
+
+    /// An agent's reply with its inline Markdown (bold, code, links), the line breaks kept; as written when it does not
+    /// parse.
+    static func markdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 
     /// A message of the person's, held or sent, and the shape of its bubble.
@@ -305,13 +311,7 @@ struct Field: View {
                 }
                 .onKeyPress(.return, phases: .down) { press in
                     let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
-                    switch Field.onReturn(shift: press.modifiers.contains(.shift), marked: marked) {
-                    case .compose: return .ignored
-                    case .send: model.send()
-                    case .newline:
-                        if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
-                    }
-                    return .handled
+                    return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
                 }
             let stop = model.stops
             Button { stop ? model.stop() : model.send() } label: {
@@ -345,6 +345,18 @@ struct Field: View {
     /// Return sends, ⇧Return adds a line; while an input method composes (Japanese, Chinese, Korean), Return is its.
     static func onReturn(shift: Bool, marked: Bool) -> Return {
         marked ? .compose : shift ? .newline : .send
+    }
+
+    /// What Return does in this field or New Space's: nothing while an input method composes (`marked`, ignored), a new
+    /// line with `shift`, else it sends; handled then.
+    static func returned(shift: Bool, marked: Bool, _ model: AssistantModel) -> KeyPress.Result {
+        switch onReturn(shift: shift, marked: marked) {
+        case .compose: return .ignored
+        case .send: model.send()
+        case .newline:
+            if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
+        }
+        return .handled
     }
 }
 

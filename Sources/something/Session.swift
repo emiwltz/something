@@ -133,9 +133,7 @@ import SomethingCore
         session.shown = saved.turns
         return session
     }
-}
 
-extension Session {
     /// What a space's conversation keeps on disk. `threadKind` missing reads as nil: its thread is never resumed.
     struct Saved: Codable {
         var kind: String?, model: String?, effort: String?, thread: String?, threadKind: String?

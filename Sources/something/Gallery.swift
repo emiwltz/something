@@ -5,7 +5,7 @@
 // of what a person grabs. All · Agents · Notes · Play filters the cards, by categories the app keeps (a declaration has
 // none: contract 1 is not changed for them). Preview is a state of the same view: the picture full width under a bar
 // that says nothing runs, with Close Preview (esc) and Use This Template. Use makes the template one of the person's
-// spaces (Library.use). New Space shows the first three cards, and the tour the same pictures smaller.
+// spaces (Library.use). New Space shows the first three cards.
 import SomethingAgents
 import SomethingCore
 import SwiftUI
@@ -64,7 +64,7 @@ struct Template: Identifiable {
         let verbs = [("state", "sees"), ("send", "writes to"), ("launch", "starts")].filter { has($0.0) }.map(\.1)
         var parts: [String] = []
         if !verbs.isEmpty {
-            let joined = verbs.count == 1 ? verbs[0] : verbs.dropLast().joined(separator: ", ") + " and " + verbs[verbs.count - 1]
+            let joined = Words.list(verbs, "and")
             // Seeing and writing reach the agents already at work, "your agents"; starting makes new ones.
             parts.append(joined.prefix(1).uppercased() + joined.dropFirst() + (verbs.contains("starts") ? " agents" : " your agents"))
         }
@@ -174,24 +174,6 @@ struct GalleryView: View {
         .accessibilityLabel("Show")
     }
 
-    /// A template's picture at `ratio`, its top kept and the rest cut, rounded with a hairline inside.
-    static func picture(_ template: Template, ratio: CGFloat, radius: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        return Look.Token.sunk.ui
-            .aspectRatio(ratio, contentMode: .fit)
-            .overlay(alignment: .top) {
-                // As wide as the box, so its top fills it and its bottom is cut.
-                if let preview = template.preview, preview.size.width > 0 {
-                    GeometryReader { box in
-                        Image(nsImage: preview).resizable().frame(width: box.size.width, height: box.size.width * preview.size.height / preview.size.width)
-                    }
-                }
-            }
-            .clipShape(shape)
-            .overlay(shape.strokeBorder(Color(nsColor: Look.srgb(0x121316, 0.10))))
-            .contentShape(shape)
-    }
-
     // MARK: The preview
 
     private func preview(_ template: Template) -> some View {
@@ -260,7 +242,7 @@ struct TemplateCard: View {
     var body: some View {
         let lifted = model.hovered == template.id || focused
         return VStack(alignment: .leading, spacing: 4) {
-            Button { model.preview(template) } label: { GalleryView.picture(template, ratio: 16 / 9, radius: 7) }
+            Button { model.preview(template) } label: { picture }
                 .buttonStyle(.plain)
                 .focused($focused)
                 .accessibilityLabel("Preview \(template.title)")
@@ -293,6 +275,24 @@ struct TemplateCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(template.title)
+    }
+
+    /// The template's picture at 16:9, its top kept and the rest cut, rounded with a hairline inside.
+    private var picture: some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        return Look.Token.sunk.ui
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay(alignment: .top) {
+                // As wide as the box, so its top fills it and its bottom is cut.
+                if let preview = template.preview, preview.size.width > 0 {
+                    GeometryReader { box in
+                        Image(nsImage: preview).resizable().frame(width: box.size.width, height: box.size.width * preview.size.height / preview.size.width)
+                    }
+                }
+            }
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Color(nsColor: Look.srgb(0x121316, 0.10))))
+            .contentShape(shape)
     }
 
     /// Preview, Show in Finder and Use, on glass at the picture's corner.

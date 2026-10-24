@@ -192,6 +192,11 @@ enum Words {
         return (title, [denies, stops].compactMap { $0 }.joined(separator: " "))
     }
 
+    /// `names` as a sentence says them, `last` before the last one: "A, B and C".
+    static func list(_ names: [String], _ last: String) -> String {
+        names.count > 1 ? names.dropLast().joined(separator: ", ") + " \(last) " + (names.last ?? "") : names.first ?? ""
+    }
+
     /// `text` on one line, its spaces and line breaks made one space, cut with "…" past `quoted` characters.
     static func oneLine(_ text: String) -> String {
         let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")

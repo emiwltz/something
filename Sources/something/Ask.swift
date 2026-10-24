@@ -401,7 +401,7 @@ enum Ask {
         let asked = Set((question.declared.isEmpty ? question.rights : question.declared).map { $0.split(separator: ":")[0] })
         let not = [("state", "see your agents"), ("send", "write to your agents"), ("launch", "start agents"), ("store", "remember things")]
             .filter { !asked.contains(Substring($0.0)) }.map(\.1)
-        let lead = not.isEmpty ? "" : "It does not ask to " + (not.count > 1 ? not.dropLast().joined(separator: ", ") + " or " + not[not.count - 1] : not[0]) + ". "
+        let lead = not.isEmpty ? "" : "It does not ask to " + Words.list(not, "or") + ". "
         return lead + "Each right starts off; change it later in its Info."
     }
 

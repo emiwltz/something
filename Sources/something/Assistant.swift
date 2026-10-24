@@ -338,11 +338,14 @@ import SomethingCore
         }
     }
 
+    /// The spaces folder as the person reads it: "~/something/spaces".
+    var folder: String { Words.path(places.spaces.path, home: places.home.path) }
+
     /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
     /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     var firstLines: [String] {
         guard session.kept.isEmpty else { return [] }
-        let folder = Words.path(places.spaces.path, home: places.home.path), agent = kind.flatMap(Registry.app.agent)
+        let agent = kind.flatMap(Registry.app.agent)
         let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
             else if agent?.asksNothingByDefault == true {
                 "\(name) works in \(folder). By default \(name) asks nothing: it can run any command on your Mac, unless your own \(name) settings say otherwise."
