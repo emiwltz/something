@@ -1,8 +1,9 @@
 // The acceptance stage: the one invented world every screen scenario starts from, and the drawing that turns a
 // window into a picture. The home holds the six templates as the mockup names them and Oracle (an invented page of
-// Tests/Fixtures), sorted into the mockup's groups; the clock is fixed; requests come from PanelsTests' fake source. Nothing is
-// shown: the app is .prohibited, and each window is drawn offscreen (drawing a view needs no permission of macOS, a
-// screenshot would need Screen Recording). Pictures are written only when SOMETHING_GALLERY names a folder.
+// Tests/Fixtures). Each scenario builds its own Stage, rather than one per area suite, so no scenario sees what another
+// left; the suites are serialized, so two never run at once. Nothing is shown: the app is .prohibited, and each window
+// is drawn offscreen (drawing a view needs no permission of macOS, a screenshot would need Screen Recording). Pictures
+// are written only when SOMETHING_GALLERY names a folder.
 import AppKit
 import SwiftUI
 @testable import SomethingAgents
@@ -18,23 +19,22 @@ final class Stage {
     /// The spaces made from share/templates: file name and title as the mockup shows them.
     static let templates = [("brief", "Daily brief"), ("agents", "My agents"), ("project", "Project watch"),
                             ("logbook", "Logbook"), ("pet", "Pebble"), ("stack", "Stack")]
-    /// The sidebar's groups in the mockup, by space name (groups are a view: the spaces stay flat on disk).
+    /// The sidebar's groups in the mockup, by space name (groups are a view: the spaces stay flat on disk). W2, which
+    /// builds the groups, is the first to read them.
     static let groups = [("Agents", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
-    /// The mockup's moment: Friday 23 October 2026, 18:20, in this Mac's time zone.
-    static let now = Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 18, minute: 20)) ?? Date()
+    /// The mockup's moment: Thursday 22 October 2026, 18:20, in UTC (`zone`), fixed so it cannot fall back to the real
+    /// time. Nothing reads it yet: the app has no clock seam, and the slice that adds one (the first to show a date)
+    /// passes `now` and `zone` to it, so no picture depends on the calendar or on this Mac's time zone.
+    static let now = Date(timeIntervalSince1970: 1_792_693_200)
+    static let zone = TimeZone(secondsFromGMT: 0)
     static let oracle = Home.share.deletingLastPathComponent().appendingPathComponent("Tests/Fixtures/spaces/oracle.html")
 
-    /// The window sizes the mockup is shot at, in points.
+    /// The window sizes the mockup is shot at, in points; a slice adds the other sizes when it draws at them.
     enum Size {
-        static let main = NSSize(width: 1200, height: 760), compact = NSSize(width: 1000, height: 660),
-                   narrow = NSSize(width: 760, height: 680), large = NSSize(width: 1440, height: 900),
-                   welcome = NSSize(width: 720, height: 480)
-        static let settingsWidth: CGFloat = 720
+        static let main = NSSize(width: 1200, height: 760)
     }
 
     let home: Home
-    /// The requests a scenario sets for the panels (PanelsTests' fake): answers are recorded, never sent.
-    let prompts = FakePrompts()
 
     /// A home named `something-accept-<area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
     init(_ area: String) throws {
@@ -83,15 +83,14 @@ final class Stage {
 }
 
 /// How a picture is drawn: the window's frame by cacheDisplay, the page by WebKit's snapshot (it draws in another
-/// process, which a view's drawing does not reach), then the views that float over the page, then floating panels.
+/// process, which a view's drawing does not reach), then the assistant that floats over the page. T2 adds the
+/// request panel, drawn on a canvas that holds the window and the panel together.
 /// The vibrant columns (sidebar, Info) are blended by the window server, which no drawing here reaches: the same
 /// views are drawn apart on a plain background and composed in their place.
 @MainActor
 enum Picture {
-    /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x; `overlays` are views
-    /// of the window drawn over the page in order, `panels` views drawn last at a rectangle of the window's frame.
-    static func window(_ shell: Shell, library: Library, web: WKWebView?, overlays: [NSView] = [], panels: [(NSView, NSRect)] = [],
-                       _ name: String, root: URL) async throws {
+    /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x.
+    static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL) async throws {
         // Below the title bar, as the columns' own contents start.
         let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
         let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
@@ -122,16 +121,10 @@ enum Picture {
         let snapshot = web?.superview == nil ? nil : try await web?.takeSnapshot(configuration: nil)
         // The assistant floats over the page, which was drawn over it.
         let floating = web == nil ? [] : [shell.floating].compactMap { $0 }
-        let over = try (floating + overlays).map { view in
+        let over = try floating.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, view.convert(view.bounds, to: frame))
-        }
-        let floated = try panels.map { view, place in
-            disguise(view, root.path)
-            let drawn = try bitmap(view.bounds.size)
-            view.cacheDisplay(in: view.bounds, to: drawn)
-            return (drawn, place)
         }
         try png(of: frame.bounds.size, name) {
             rep.draw(in: NSRect(origin: .zero, size: frame.bounds.size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
@@ -141,7 +134,7 @@ enum Picture {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
             if let snapshot, let web { snapshot.draw(in: web.convert(web.bounds, to: frame)) }
-            for (drawn, place) in over + floated {
+            for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
         }

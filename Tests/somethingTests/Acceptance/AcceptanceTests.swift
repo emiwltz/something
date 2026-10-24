@@ -1,7 +1,7 @@
 // The acceptance catalog, the interface's stop criterion: every screen id of the mockup Emi approved, with the one
 // slice that builds it. Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")`
-// until that slice lands and removes the trait; whether an id is built is read from that file, so this catalog is
-// only edited to bring back La page (b2 and the _p variants) or to mark f9–f11 shot. With SOMETHING_ACCEPT_STRICT=1
+// until that slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from
+// that file, so this catalog is only edited to bring back La page (b2 and the _p variants) or to mark f9–f11 shot. With SOMETHING_ACCEPT_STRICT=1
 // the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots.
 import Foundation
 import Testing
@@ -51,30 +51,44 @@ enum Catalog {
         }
     }
 
-    /// A scenario as its area file declares it: the screen id (its function's name) and the slice its
-    /// `.disabled("not built yet: <slice>")` names, nil once the trait is gone.
-    struct Scenario: Equatable { let id: String, unbuilt: String? }
+    /// A scenario as its area file declares it: the screen id (its function's name), the slice its
+    /// `.disabled("not built yet: <slice>")` names (nil once the trait is gone), and whether its text, up to the next
+    /// test, holds an `#expect` or a `#require`. An id is built only when it has no trait and asserts: removing the
+    /// trait from an empty body does not build it.
+    struct Scenario: Equatable {
+        let id: String, unbuilt: String?, asserts: Bool
+        var built: Bool { unbuilt == nil && asserts }
+    }
 
     static let folder = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 
     /// The screen scenarios of `area`'s file, in order; functions that are not screen ids (a baseline) are left out.
     static func scenarios(_ area: Area) throws -> [Scenario] {
-        let text = try String(contentsOf: folder.appendingPathComponent("\(area.rawValue).swift"), encoding: .utf8)
+        try scenarios(in: String(contentsOf: folder.appendingPathComponent("\(area.rawValue).swift"), encoding: .utf8))
+    }
+
+    /// The screen scenarios declared in `text`, a Swift file's source, in order.
+    static func scenarios(in text: String) throws -> [Scenario] {
         let test = try NSRegularExpression(pattern: #"@Test(?:\((.*?)\))?\s+func\s+(\w+)\("#, options: .dotMatchesLineSeparators)
         let unbuilt = try NSRegularExpression(pattern: #"\.disabled\("not built yet: ([A-Za-z0-9-]+)"\)"#)
         func part(_ match: NSTextCheckingResult, _ group: Int) -> String? { Range(match.range(at: group), in: text).map { String(text[$0]) } }
-        return test.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+        let matches = test.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        return matches.enumerated().compactMap { index, match in
             guard let id = part(match, 2), id.range(of: #"^[a-g][0-9]+(_p)?$"#, options: .regularExpression) != nil else { return nil }
             let traits = part(match, 1) ?? ""
             let slice = unbuilt.firstMatch(in: traits, range: NSRange(traits.startIndex..., in: traits)).flatMap { Range($0.range(at: 1), in: traits) }
-            return Scenario(id: id, unbuilt: slice.map { String(traits[$0]) })
+            // The body runs from the function's name to the next test, or to the end of the file.
+            let end = index + 1 < matches.count ? matches[index + 1].range.location : (text as NSString).length
+            let body = (text as NSString).substring(with: NSRange(location: match.range.upperBound, length: end - match.range.upperBound))
+            let asserts = body.contains("#expect") || body.contains("#require")
+            return Scenario(id: id, unbuilt: slice.map { String(traits[$0]) }, asserts: asserts)
         }
     }
 
     /// The ids the end gate still waits for, in the catalog's order: counted ones whose scenario is missing or
     /// disabled, and every one pending its shots.
     static func unfinished() throws -> [String] {
-        let built = Set(try Area.allCases.flatMap(scenarios).filter { $0.unbuilt == nil }.map(\.id))
+        let built = Set(try Area.allCases.flatMap(scenarios).filter(\.built).map(\.id))
         return owners.map(\.id).filter { status($0) == .pendingShots || (status($0) == .counted && !built.contains($0)) }
     }
 }
@@ -102,17 +116,34 @@ enum Catalog {
             #expect(scenarios.map(\.id) == mine, "\(area.rawValue) registers \(scenarios.map(\.id)), its ids are \(mine)")
             for scenario in scenarios {
                 if let slice = scenario.unbuilt { #expect(slice == Catalog.slice(scenario.id), "\(scenario.id) waits for \(slice)") }
+                #expect(scenario.unbuilt != nil || scenario.asserts, "\(scenario.id) is enabled but asserts nothing")
             }
         }
     }
 
-    /// The gate's list: every pending id is in it, no excluded one, and an id leaves it only when its trait is gone.
+    /// The gate's list: every pending id is in it, no excluded one, and an id leaves it only once built.
     @Test func theGateListsWhatIsLeft() throws {
         let left = try Catalog.unfinished()
         #expect(Catalog.pendingShots.isSubset(of: Set(left)))
         #expect(Catalog.excluded.isDisjoint(with: Set(left)))
-        let unbuilt = try Catalog.Area.allCases.flatMap(Catalog.scenarios).filter { $0.unbuilt != nil }.map(\.id)
+        let unbuilt = try Catalog.Area.allCases.flatMap(Catalog.scenarios).filter { !$0.built }.map(\.id)
         #expect(Set(unbuilt).isSubset(of: Set(left)))
+    }
+
+    /// An id whose trait is gone counts as built only when its body asserts something.
+    @Test func anEmptyEnabledScenarioIsNotBuilt() throws {
+        let text = """
+            @Test("b1: the window") func b1() async throws {}
+            /// A doc comment.
+            @Test("b3: sidebar groups") func b3() async throws {
+                #expect(true)
+            }
+            @Test("b4: Info", .disabled("not built yet: W4")) func b4() async throws {}
+            """
+        let scenarios = try Catalog.scenarios(in: text)
+        #expect(scenarios == [Catalog.Scenario(id: "b1", unbuilt: nil, asserts: false), Catalog.Scenario(id: "b3", unbuilt: nil, asserts: true),
+                              Catalog.Scenario(id: "b4", unbuilt: "W4", asserts: false)])
+        #expect(scenarios.map(\.built) == [false, true, false])
     }
 
     /// The end gate: zero ids left. It runs only when asked, since it fails until the last slice lands.

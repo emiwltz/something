@@ -4,10 +4,7 @@ import Foundation
 import Testing
 
 enum Budget {
-    static let core = 1_850, host = 2_750, driver = 650, agentsShared = 450, described = 40
-    /// The app's budget covers block 1 of the interface plan (Foundations and trust). It rises only on measured lines,
-    /// and never above `appCeiling`, the ceiling written for that block.
-    static let app = 5_500, appCeiling = 6_900
+    static let core = 1_850, host = 2_750, driver = 650, agentsShared = 450, app = 5_500, described = 40
 
     /// Whether a file describes an agent by data alone: it extends AgentDescriptor and gives it no driver.
     static func describesOnly(_ text: String) -> Bool { text.contains("extension AgentDescriptor") && !text.contains("driving:") }
@@ -81,12 +78,6 @@ enum Budget {
         #expect(described.contains("AgentACP/Antigravity.swift") && !described.contains("AgentACP/OMP.swift"), "\(described)")
         let problems = Budget.problems(under: root)
         #expect(problems.isEmpty, "\(problems)")
-    }
-
-    /// The app's budget stays under the ceiling of its block; the core's and the host's do not move with the interface.
-    @Test func theAppBudgetStaysUnderItsBlocksCeiling() {
-        #expect(Budget.app <= Budget.appCeiling, "the app's budget \(Budget.app) is above its block's ceiling \(Budget.appCeiling)")
-        #expect(Budget.core == 1_850 && Budget.host == 2_750)
     }
 
     @Test func filesInSubfoldersAreCounted() throws {
