@@ -385,6 +385,13 @@ import WebKit
         let journal = try Journal(folder: home.places.journals).last(10, space: "bridge")
         // The second call ends first, while the first one waits on the person.
         #expect(journal.map(\.result) == ["RIGHT_NOT_GRANTED", "BUSY", "ok", "ok", "ok", "ok"])
+        // A real reload asks again.
+        let before = try #require(window.frame)
+        window.load()
+        #expect(await wait(until: { window.frame != nil && window.frame !== before }))
+        try await ready(window)
+        #expect(try await run(window, "return await something.open('https://example.com/f')") as? Bool == false)
+        #expect(ask.links.count == 4)
     }
 
     @Test func aModeThatLowersAskingIsConfirmed() async throws {

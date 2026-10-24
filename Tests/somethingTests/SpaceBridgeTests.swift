@@ -54,4 +54,13 @@ import Testing
         #expect(try links.open(url) { _ in asked += 1; return true })
         #expect(asked == Links.cancels + 1)
     }
+
+    /// A sheet that could not be shown (no window, another sheet up) is no Cancel: the page keeps its links.
+    @Test func aSheetNotShownIsNoCancel() throws {
+        let links = Links(), url = try #require(URL(string: "https://example.com/a"))
+        var asked = 0
+        for _ in 0..<Links.cancels { #expect(try links.open(url) { _ in asked += 1; return nil } == false) }
+        #expect(try links.open(url) { _ in asked += 1; return false } == false)
+        #expect(asked == Links.cancels + 1)
+    }
 }

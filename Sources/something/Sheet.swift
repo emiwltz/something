@@ -2,7 +2,7 @@
 // Fraunces, its sentence (some words bold), rows, a block of its own (a link's address), a fine print, and the actions
 // at the bottom right, the safe one first. The alert variant (Quit) centres it all under the sign, its actions sharing
 // the width. It hangs from the toolbar over the space, beside the sidebar. A space cannot draw it, so a space cannot
-// answer it. Escape presses the cancel action; the safe action holds the focus at first, and Return presses the
+// answer it. Escape presses the cancel action, or the safe one when there is none; the safe action holds the focus at first, and Return presses the
 // focused action unless it is destructive: a key meant for something else never confirms what cannot be undone.
 import AppKit
 
@@ -28,7 +28,7 @@ final class Sheet: NSPanel {
         super.init(contentRect: NSRect(x: 0, y: 0, width: width, height: 100), styleMask: .borderless, backing: .buffered, defer: true)
         (isOpaque, backgroundColor, hasShadow, self.title) = (false, .clear, true, title)
         let tiled = icon.map { Self.tile($0, alert: alert) }
-        let text = width - 40 - (alert || tiled == nil ? 0 : 46)
+        let text = Self.column(width: width, alert: alert, tiled: tiled != nil)
         var parts: [NSView] = [Self.label([(title, false)], Look.titleS, width: text, kern: -0.3, centred: alert)]
         if !body.isEmpty { parts.append(Self.label(body, Look.body, color: .ink2, width: text, centred: alert)) }
         if !rows.isEmpty { parts.append(Self.list(rows, width: text)) }
@@ -58,6 +58,7 @@ final class Sheet: NSPanel {
         // The safe action: Cancel in a sheet; in an alert, its primary one, which the alert makes the safe one.
         initialFirstResponder = alert ? buttons.first { $0.role == .primary } : buttons.first { $0.role == .cancel }
         makeFirstResponder(initialFirstResponder)
+        (buttons.first { $0.role == .cancel } ?? initialFirstResponder as? SheetButton)?.keyEquivalent = "\u{1b}"
         setAccessibilitySubrole(.dialog)
     }
 
@@ -77,7 +78,12 @@ final class Sheet: NSPanel {
         }
     }
 
-    override func cancelOperation(_ sender: Any?) { buttons.first { $0.role == .cancel }?.performClick(nil) }
+    override func cancelOperation(_ sender: Any?) { buttons.first { $0.keyEquivalent == "\u{1b}" }?.performClick(nil) }
+
+    /// How wide a sheet `width` wide sets its text: its insets, and the tile beside the text unless `alert` centres it.
+    static func column(width: CGFloat = Sheet.width, alert: Bool = false, tiled: Bool = true) -> CGFloat {
+        width - 40 - (alert || !tiled ? 0 : 46)
+    }
 
     /// Where a sheet hangs in `window`, in its coordinates: under its toolbar, centred over the space beside a sidebar
     /// `sidebar` points wide (the system centres a sheet on the rectangle's width).
@@ -166,7 +172,6 @@ final class SheetButton: PanelButton {
         super.init(action.title, primary: [.primary, .destructive].contains(role), target: target, action: selector)
         least = 0
         if role == .destructive { fill = .bad }
-        if role == .cancel { keyEquivalent = "\u{1b}" }
         focusRingType = .none
     }
 

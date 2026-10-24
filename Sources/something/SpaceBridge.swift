@@ -72,7 +72,7 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
 }
 
 /// A space's links: one sheet at a time, and after three Cancels in one load no more sheets until the page reloads,
-/// so a page cannot keep asking. A class: the person's answer comes back while a second call may already be here.
+/// so a page cannot keep asking. A sheet that could not be shown is no Cancel: the person did not answer it. A class: the person's answer comes back while a second call may already be here.
 final class Links {
     static let cancels = 3
     private var waiting = false, cancelled = 0
@@ -80,15 +80,18 @@ final class Links {
     /// Asks again from the next load.
     func reload() { cancelled = 0 }
 
-    /// What `ask` answered for `url`, false without asking after three Cancels. Throws BUSY while another link waits.
-    func open(_ url: URL, ask: (URL) -> Bool) throws -> Bool {
+    /// What `ask` answered for `url`, false when it showed no sheet (nil), and false without asking after three
+    /// Cancels. Throws BUSY while another link waits.
+    func open(_ url: URL, ask: (URL) -> Bool?) throws -> Bool {
         guard !waiting else { throw CodedError("BUSY", "A link of this space already waits for the person's answer; try again after it.") }
         guard cancelled < Self.cancels else { return false }
         waiting = true
         defer { waiting = false }
-        if ask(url) { return true }
-        cancelled += 1
-        return false
+        switch ask(url) {
+        case true?: return true
+        case false?: cancelled += 1; return false
+        case nil: return false
+        }
     }
 }
 

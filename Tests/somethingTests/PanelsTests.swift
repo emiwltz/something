@@ -704,7 +704,7 @@ final class FakeNotifier: Notifier {
         first.beginSheetModal(for: offscreen.window) { _ in }
         defer { offscreen.window.endSheet(first.window) }
         #expect(ask.withData("board", keys: ["seen"], bytes: 12) == nil)
-        #expect(!ask.link(URL(string: "https://example.com")!, space: "board"))
+        #expect(ask.link(URL(string: "https://example.com")!, space: "board") == nil, "not shown, so no Cancel")
         #expect(offscreen.window.attachedSheet === first.window, "no second sheet began")
         #expect(!NSApp.isActive)
     }

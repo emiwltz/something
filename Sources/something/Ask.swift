@@ -44,8 +44,9 @@ protocol Asking: AnyObject {
     func rights(_ question: RightsQuestion) -> RightsAnswer?
     /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
-    /// true when the person chose to open `url`, which is then already open in their browser or mail app.
-    func link(_ url: URL, space: String) -> Bool
+    /// true when the person chose to open `url`, which is then already open in their browser or mail app; false when
+    /// they pressed Cancel; nil when the sheet could not be shown (no window, or another sheet up), which is no Cancel.
+    func link(_ url: URL, space: String) -> Bool?
     /// Whether the export of `space` carries its memory, shown with its keys and its size: false ("Without Data", the
     /// default) or true; nil when the person cancels.
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool?
@@ -88,7 +89,7 @@ final class NativeAsk: Asking {
     /// The role of the action the person pressed in `sheet`; nil when it was not shown.
     private func wait(_ sheet: Sheet) -> Sheet.Role? {
         _ = wait(sheet) { window, done in
-            sheet.ended = { [weak window] in window?.endSheet(sheet) }
+            sheet.ended = { [weak window, unowned sheet] in window?.endSheet(sheet) }
             window.beginSheet(sheet, completionHandler: done)
         }
         return sheet.chosen
@@ -103,8 +104,9 @@ final class NativeAsk: Asking {
         NativeAsk.agreed(wait(Ask.lowers(mode, kind: kind, folder: folder, space: space)))
     }
 
-    func link(_ url: URL, space: String) -> Bool {
-        guard wait(Ask.link(url, space: space)) == .primary else { return false }
+    func link(_ url: URL, space: String) -> Bool? {
+        guard let role = wait(Ask.link(url, space: space)) else { return nil }
+        guard role == .primary else { return false }
         NSWorkspace.shared.open(url)
         return true
     }
@@ -362,11 +364,20 @@ enum Ask {
     /// Cancel and Open in Browser (Open in Mail for an address).
     static func link(_ url: URL, space: String) -> Sheet {
         let whole = url.absoluteString, mail = url.scheme == "mailto", name = url.host ?? url.path
+        // The server where the link itself says it, not where its user part or its query repeats the name.
         var shown: Sheet.Words = [(whole, false)]
-        if !name.isEmpty, let at = whole.range(of: name) {
-            shown = [(String(whole[..<at.lowerBound]), false), (name, true), (String(whole[at.upperBound...]), false)]
+        if let parts = URLComponents(string: whole), let at = parts.rangeOfHost ?? parts.rangeOfPath, !at.isEmpty {
+            shown = [(String(whole[..<at.lowerBound]), false), (String(whole[at]), true), (String(whole[at.upperBound...]), false)]
         }
-        let address = Sheet.label(shown, Look.Style(face: .code, size: 12, weight: .regular, leading: 1.5), color: .ink2, width: Sheet.width - 108)
+        let address = Sheet.label(shown, Look.Style(face: .code, size: 12, weight: .regular, leading: 1.5), color: .ink2,
+                                  width: Sheet.column() - 22)
+        // The scheme is quieter than the rest, as the mockup sets it.
+        if let scheme = url.scheme {
+            let quiet = NSMutableAttributedString(attributedString: address.attributedStringValue)
+            let lead = scheme.count + (whole.hasPrefix(scheme + "://") ? 3 : 1)
+            quiet.addAttribute(.foregroundColor, value: Look.Token.ink3.color, range: NSRange(location: 0, length: min(lead, quiet.length)))
+            address.attributedStringValue = quiet
+        }
         // A page chooses the link: a very long one is cut, whole when the pointer rests on it.
         (address.lineBreakMode, address.maximumNumberOfLines, address.toolTip) = (.byCharWrapping, 6, whole)
         (address.cell as? NSTextFieldCell)?.truncatesLastVisibleLine = true

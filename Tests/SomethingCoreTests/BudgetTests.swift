@@ -5,7 +5,7 @@ import Testing
 
 enum Budget {
     // Emi agreed on 24 Oct 2026 to raise the app budget per block on measured lines, up to 10,000.
-    static let core = 1_850, host = 2_750, driver = 650, agentsShared = 450, app = 7_784, described = 40
+    static let core = 1_850, host = 2_750, driver = 650, agentsShared = 450, app = 7_803, described = 40
 
     /// Whether a file describes an agent by data alone: it extends AgentDescriptor and gives it no driver.
     static func describesOnly(_ text: String) -> Bool { text.contains("extension AgentDescriptor") && !text.contains("driving:") }

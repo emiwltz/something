@@ -317,6 +317,23 @@ struct AcceptanceTrust {
                                                          url.absoluteString, "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Open in Browser"] && sheet.buttons.map(\.role) == [.cancel, .primary])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
+        // The server is bold in the sentence and in the link, the rest plain; the scheme is quieter than the path.
+        let labels = Self.fields(sheet.contentView), host = "news.example.com"
+        for (label, style) in [(labels[1], Look.body), (labels[2], Look.Style(face: .code, size: 12, weight: .regular, leading: 1.5))] {
+            let text = label.attributedStringValue, at = (text.string as NSString).range(of: host)
+            #expect(at.location != NSNotFound)
+            #expect(text.attribute(.font, at: at.location, effectiveRange: nil) as? NSFont == Look.font(style.face, size: style.size, weight: .semibold))
+            #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == style.font)
+            #expect(text.attribute(.font, at: NSMaxRange(at), effectiveRange: nil) as? NSFont == style.font)
+        }
+        let link = labels[2].attributedStringValue
+        #expect(link.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == Look.Token.ink3.color)
+        #expect(link.attribute(.foregroundColor, at: link.length - 1, effectiveRange: nil) as? NSColor == Look.Token.ink2.color)
+        // A user part that repeats the server's name is not bolded as the server.
+        let spoof = Self.fields(Ask.link(try #require(URL(string: "https://good.example.com.x@good.example.com/")), space: "Daily brief").contentView)[2]
+        let bold = spoof.attributedStringValue
+        #expect(bold.attribute(.font, at: 8, effectiveRange: nil) as? NSFont != Look.font(.code, size: 12, weight: .semibold))
+        #expect(bold.attribute(.font, at: bold.length - 3, effectiveRange: nil) as? NSFont == Look.font(.code, size: 12, weight: .semibold))
         // Under the toolbar, centred over the space and not over the whole window.
         let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
         let side = shell.split.splitViewItems[0].viewController.view.frame.width
@@ -349,6 +366,16 @@ struct AcceptanceTrust {
         alert.contentView?.layoutSubtreeIfNeeded()
         #expect(alert.isAlert && alert.frame.width == 380 && alert.firstResponder === alert.buttons[1])
         #expect(alert.buttons[0].frame.width == alert.buttons[1].frame.width && alert.buttons[0].frame.width > 150)
+        // Escape presses the safe action when no action is Cancel.
+        #expect(alert.performKeyEquivalent(with: try Self.key("\u{1b}", 53)) && alert.chosen == .primary)
+        let other = Sheet(icon: .sign, title: "Quit something?", actions: [.init(title: "Quit", role: .secondary), .init(title: "Cancel", role: .primary)], alert: true)
+        other.cancelOperation(nil)
+        #expect(other.chosen == .primary)
+    }
+
+    /// The text fields under `view`, in order.
+    static func fields(_ view: NSView?) -> [NSTextField] {
+        (view?.subviews ?? []).flatMap { ($0 as? NSTextField).map { [$0] } ?? fields($0) }
     }
 
     /// A key pressed in a window.
