@@ -298,7 +298,64 @@ struct AcceptanceTrust {
         panel.boxes[0][1].performClick(nil)
         #expect(source.answers.map(\.0) == ["q1"] && source.answers[0].1 == .choice([[options[1]]]) && panels.panel == nil)
     }
-    @Test("e7: the link sheet", .disabled("not built yet: T7")) func e7() async throws {}
+    /// The link sheet hangs under the toolbar, centred over the space beside the sidebar: the server in bold in its
+    /// sentence and in the whole link, the fine print, Cancel holding the focus and Open in Browser. Escape cancels,
+    /// Return presses the focused action unless it is destructive. The modal loop itself is not run offscreen
+    /// (PanelsTests says why): the hand trial checks that the sheet takes the keys and gives them back.
+    @Test("e7: the link sheet") func e7() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let url = try #require(URL(string: "https://news.example.com/2026/10/23/agents-at-work?from=daily-brief"))
+        let sheet = Ask.link(url, space: "Daily brief")
+        #expect(sheet.title == "Open this link?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
+        #expect(sheet.accessibilitySubrole() == .dialog)
+        #expect(PanelsTests.texts(sheet.contentView) == ["Open this link?", "Daily brief wants to open news.example.com in your browser.",
+                                                         url.absoluteString, "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something."])
+        #expect(sheet.buttons.map(\.title) == ["Cancel", "Open in Browser"] && sheet.buttons.map(\.role) == [.cancel, .primary])
+        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
+        // Under the toolbar, centred over the space and not over the whole window.
+        let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
+        let side = shell.split.splitViewItems[0].viewController.view.frame.width
+        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == side && hang.maxX == shell.window.frame.width && side > 0)
+        try await stage.appearances { suffix in
+            try await Picture.sheet(sheet, over: shell, library: library, web: brief.web, "e7" + suffix, root: stage.home.root)
+        }
+        // Return presses Cancel, which holds the focus; Escape too; a click on Open in Browser opens.
+        sheet.keyDown(with: try Self.key("\r", 36))
+        #expect(sheet.chosen == .cancel)
+        let escaped = Ask.link(url, space: "Daily brief")
+        #expect(escaped.performKeyEquivalent(with: try Self.key("\u{1b}", 53)) && escaped.chosen == .cancel)
+        let opened = Ask.link(url, space: "Daily brief")
+        var ended = 0
+        opened.ended = { ended += 1 }
+        opened.buttons[1].performClick(nil)
+        opened.buttons[0].performClick(nil)
+        #expect(opened.chosen == .primary && ended == 1, "the first action pressed is the answer")
+        // A mail address says where it opens.
+        let mail = Ask.link(try #require(URL(string: "mailto:desk@example.com")), space: "Daily brief")
+        #expect(PanelsTests.texts(mail.contentView)[1] == "Daily brief wants to open desk@example.com in your mail app." && mail.buttons[1].title == "Open in Mail")
+        // A destructive action holding the focus never takes Return.
+        let trash = Sheet(icon: .symbol("trash"), title: "Move it?", actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
+        #expect(trash.makeFirstResponder(trash.buttons[1]))
+        trash.keyDown(with: try Self.key("\r", 36))
+        #expect(trash.chosen == nil)
+        // The alert variant: 380 wide, the sign, its two actions sharing the width, the primary one holding the focus.
+        let alert = Sheet(icon: .sign, title: "Quit something?", body: [("Your assistant is still working.", false)],
+                          actions: [.init(title: "Quit", role: .secondary), .init(title: "Cancel", role: .primary)], alert: true)
+        alert.contentView?.layoutSubtreeIfNeeded()
+        #expect(alert.isAlert && alert.frame.width == 380 && alert.firstResponder === alert.buttons[1])
+        #expect(alert.buttons[0].frame.width == alert.buttons[1].frame.width && alert.buttons[0].frame.width > 150)
+    }
+
+    /// A key pressed in a window.
+    static func key(_ characters: String, _ code: UInt16) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                      characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+    }
     @Test("e8: the trash sheet", .disabled("not built yet: T8")) func e8() async throws {}
     @Test("e9: quit while assistants work", .disabled("not built yet: T9")) func e9() async throws {}
     /// Full screen cannot be entered offscreen: the panel is placed as it is for a window in full screen, at the screen's
@@ -343,6 +400,40 @@ struct AcceptanceTrust {
 }
 
 extension Picture {
+    /// The main window with `sheet` hanging where the window puts it, its float shadow reconstructed below the toolbar.
+    static func sheet(_ sheet: Sheet, over shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL) async throws {
+        guard let gallery else { return }
+        try await window(shell, library: library, web: web, name + "-window", root: root)
+        let file = gallery.appendingPathComponent(name + "-window.png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let page = try #require(NSImage(contentsOf: file)), size = shell.window.frame.size
+        let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
+        let place = NSRect(x: (hang.midX - sheet.frame.width / 2).rounded(), y: hang.minY - sheet.frame.height, width: sheet.frame.width, height: sheet.frame.height)
+        let back = try #require(sheet.contentView)
+        disguise(back, root.path)
+        back.layoutSubtreeIfNeeded()
+        let drawn = try bitmap(back.bounds.size)
+        back.cacheDisplay(in: back.bounds, to: drawn)
+        try png(of: size, name) {
+            page.draw(in: NSRect(origin: .zero, size: size))
+            NSGraphicsContext.saveGraphicsState()
+            NSRect(x: 0, y: 0, width: size.width, height: hang.minY).clip()
+            let shape = NSBezierPath(roundedRect: NSRect(x: place.minX, y: place.minY, width: place.width, height: place.height + Sheet.corner),
+                                     xRadius: Sheet.corner, yRadius: Sheet.corner)
+            for shade in Look.float(NSAppearance.currentDrawing()) {
+                NSGraphicsContext.saveGraphicsState()
+                let shadow = NSShadow()
+                (shadow.shadowColor, shadow.shadowOffset, shadow.shadowBlurRadius) = (shade.color, NSSize(width: 0, height: -shade.y), shade.blur)
+                shadow.set()
+                Look.Token.bg2.color.setFill()
+                shape.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+    }
+
     /// The main window and the request panel on one canvas, as they stand on the screen, with 40 points of desk
     /// around them: the panel is a window of its own and overhangs the main one. The window is drawn as `window`
     /// draws it; the panel and the edges of the requests waiting behind it by their frames, their corners and the

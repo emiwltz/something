@@ -25,7 +25,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     }
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
-    var linkOpen = false, linksBlocked = false
+    let links = Links()
     /// Called after each load: the title or the problems may have changed, and the window shows them.
     var loaded: () -> Void = {}
     /// Called after each line the space adds to its journal: Info shows it.
@@ -198,7 +198,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         stamp = SpaceView.stamp(of: space)
         pushed = nil
         frame = nil
-        linksBlocked = false
+        links.reload()
         faults = []
         let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         self.reading = reading

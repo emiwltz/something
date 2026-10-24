@@ -683,17 +683,13 @@ final class FakeNotifier: Notifier {
         #expect(Ask.quit(3, assistant: true).informativeText == "Your assistant and 2 other agents something started are still running. Quitting stops them.")
     }
 
-    /// The sheets the app waits for (the rights, a link, an export) mean what their buttons say, the second of the
+    /// The sheets the app waits for (the rights, an export) mean what their buttons say, the second of the
     /// export being With Its Data. The modal loop itself is not run: in this process, which never ran NSApp, runModal
     /// and a modal session alike end the whole test run quietly (it still exits 0).
     @Test func theSheetsButtonsMeanWhatTheySay() {
         #expect(Ask.withData("board", keys: ["seen"], bytes: 12).buttons.map(\.title) == ["Without Data", "With Its Data", "Cancel"])
         #expect(NativeAsk.withDataChoice(.alertFirstButtonReturn) == false && NativeAsk.withDataChoice(.alertSecondButtonReturn) == true)
         #expect(NativeAsk.withDataChoice(.alertThirdButtonReturn) == nil && NativeAsk.withDataChoice(nil) == nil)
-        #expect(Ask.link(URL(string: "https://example.com")!, space: "board").buttons.map(\.title)
-                == ["Open", "Cancel", "Block Links Until Reload"])
-        #expect(NativeAsk.linkChoice(.alertFirstButtonReturn) == .open && NativeAsk.linkChoice(.alertSecondButtonReturn) == .cancel)
-        #expect(NativeAsk.linkChoice(.alertThirdButtonReturn) == .block && NativeAsk.linkChoice(nil) == .cancel)
         #expect(NativeAsk.agreed(.alertFirstButtonReturn) && !NativeAsk.agreed(.alertSecondButtonReturn) && !NativeAsk.agreed(nil))
     }
 
@@ -708,7 +704,7 @@ final class FakeNotifier: Notifier {
         first.beginSheetModal(for: offscreen.window) { _ in }
         defer { offscreen.window.endSheet(first.window) }
         #expect(ask.withData("board", keys: ["seen"], bytes: 12) == nil)
-        #expect(ask.link(URL(string: "https://example.com")!, space: "board") == .cancel)
+        #expect(!ask.link(URL(string: "https://example.com")!, space: "board"))
         #expect(offscreen.window.attachedSheet === first.window, "no second sheet began")
         #expect(!NSApp.isActive)
     }

@@ -63,25 +63,32 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
         return id
     }
 
-    /// One link sheet at a time for this space: a second call while one is open is BUSY. After "Block links until
-    /// reload", every link is answered false without a sheet.
-    func open(_ url: URL) throws -> Bool {
-        guard !linkOpen else { throw CodedError("BUSY", "A link of this space already waits for the person's answer; try again after it.") }
-        guard !linksBlocked else { return false }
-        linkOpen = true
-        defer { linkOpen = false }
-        switch ask.link(url, space: title) {
-        case .open: return true
-        case .cancel: return false
-        case .block:
-            linksBlocked = true
-            return false
-        }
-    }
+    func open(_ url: URL) throws -> Bool { try links.open(url) { ask.link($0, space: title) } }
 
     /// A mode that makes the agent ask less waits for the person's click (Registry.lowersAsking says which).
     func confirms(mode: String, kind: String, folder: String?) throws -> Bool {
         try Registry.app.lowersAsking(mode: mode, kind: kind) ? ask.lowers(mode, kind: kind, folder: folder, space: title) : true
+    }
+}
+
+/// A space's links: one sheet at a time, and after three Cancels in one load no more sheets until the page reloads,
+/// so a page cannot keep asking. A class: the person's answer comes back while a second call may already be here.
+final class Links {
+    static let cancels = 3
+    private var waiting = false, cancelled = 0
+
+    /// Asks again from the next load.
+    func reload() { cancelled = 0 }
+
+    /// What `ask` answered for `url`, false without asking after three Cancels. Throws BUSY while another link waits.
+    func open(_ url: URL, ask: (URL) -> Bool) throws -> Bool {
+        guard !waiting else { throw CodedError("BUSY", "A link of this space already waits for the person's answer; try again after it.") }
+        guard cancelled < Self.cancels else { return false }
+        waiting = true
+        defer { waiting = false }
+        if ask(url) { return true }
+        cancelled += 1
+        return false
     }
 }
 

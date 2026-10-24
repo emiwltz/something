@@ -1,5 +1,6 @@
 // Which calls of a space wait for a program lookup before they are answered: only a launch or a resume that may go
-// ahead. Any other call, and a launch the bridge refuses at once, never runs the person's login shell.
+// ahead. Any other call, and a launch the bridge refuses at once, never runs the person's login shell. And a space's
+// links: one sheet at a time, none after three Cancels until the page reloads.
 import Foundation
 import SomethingCore
 import Testing
@@ -31,5 +32,26 @@ import Testing
         #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "opencode"]], host: all) == nil, "not installed")
         #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "omp"]], host: all) == "omp", "launched by something")
         #expect(SpaceView.lookup(["method": "launch", "params": ["kind": "other"]], host: all) == nil, "not a kind")
+    }
+
+    @Test func aLinkWaitsForTheSheetAndASecondIsBusy() throws {
+        let links = Links(), url = try #require(URL(string: "https://example.com/a"))
+        var nested: Error?
+        let opened = try links.open(url) { _ in
+            do { _ = try links.open(url) { _ in true } } catch { nested = error }
+            return true
+        }
+        #expect(opened && (nested as? CodedError)?.code == "BUSY")
+        #expect(try links.open(url) { _ in false } == false, "Cancel answers false")
+    }
+
+    @Test func threeCancelsStopTheSheetsUntilTheReload() throws {
+        let links = Links(), url = try #require(URL(string: "https://example.com/a"))
+        var asked = 0
+        for _ in 0..<5 { #expect(try links.open(url) { _ in asked += 1; return false } == false) }
+        #expect(asked == Links.cancels)
+        links.reload()
+        #expect(try links.open(url) { _ in asked += 1; return true })
+        #expect(asked == Links.cancels + 1)
     }
 }

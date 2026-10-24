@@ -29,6 +29,8 @@ import WebKit
         #expect(await wait(until: { listener.hits.count == 1 }), "the control did not reach the listener: \(listener.hits)")
 
         let ask = FakeAsk()
+        // Every link is opened: three Cancels would stop its sheets before the last clicks.
+        ask.link = true
         let window = try await home.window(try home.space("lockdown", """
             <!doctype html><html><head>
             <meta http-equiv="refresh" content="0;url=\(base)/refresh">
@@ -154,7 +156,7 @@ import WebKit
         await wait(3)
         #expect(try await run(window, "return [window.innerClicked, window.freshClicked]") as? [Bool] == [true, true])
         #expect(listener.hits.count == 1, "reached: \(listener.hits.dropFirst().joined(separator: " | "))")
-        // A clicked link goes to the link window instead, which the person cancelled here, one in a closed shadow root
+        // A clicked link goes to the link window instead, which the person answered here, one in a closed shadow root
         // included: a script's shadow root is open to something's guard.
         #expect(ask.links.map(\.path) == ["/link", "/blank", "/dispatched", "/area", "/svg", "/top-link", "/parent-link", "/real-click",
                                          "/real-shadow"])
@@ -365,7 +367,7 @@ import WebKit
                 "the space cannot reach the app's page")
         #expect(try await run(window, "return typeof something") as? String == "object")
 
-        // Links: one window at a time, and none after "Block links until reload". Each one is journaled.
+        // Links: one window at a time, and none after three Cancels until the page reloads. Each one is journaled.
         // While the link window is open, its modal loop turns the run loop: the page's second call is answered then.
         ask.during = { _ in
             window.web.evaluateJavaScript("something.open('https://example.com/b').then((v) => window.nested = v, (e) => window.nested = e.code)",
@@ -376,13 +378,13 @@ import WebKit
         #expect(ask.links == [URL(string: "https://example.com/a")!])
         #expect(try await run(window, "return window.nested") as? String == "BUSY")
         ask.during = nil
-        ask.link = .block
-        #expect(try await run(window, "return await something.open('https://example.com/c')") as? Bool == false)
-        #expect(try await run(window, "return await something.open('https://example.com/d')") as? Bool == false)
-        #expect(ask.links.count == 2)
+        for link in ["c", "d", "e"] {
+            #expect(try await run(window, "return await something.open('https://example.com/\(link)')") as? Bool == false)
+        }
+        #expect(ask.links.count == 3)
         let journal = try Journal(folder: home.places.journals).last(10, space: "bridge")
         // The second call ends first, while the first one waits on the person.
-        #expect(journal.map(\.result) == ["RIGHT_NOT_GRANTED", "BUSY", "ok", "ok", "ok"])
+        #expect(journal.map(\.result) == ["RIGHT_NOT_GRANTED", "BUSY", "ok", "ok", "ok", "ok"])
     }
 
     @Test func aModeThatLowersAskingIsConfirmed() async throws {

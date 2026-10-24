@@ -165,7 +165,7 @@ returns a promise. A rejected promise carries an `Error` with `.code` (see "Ever
 | `something.resume(kind, threadId)` | The agent's `id`; it runs in the thread's own folder. | `launch` |
 | `something.store.get(path)` | The value at `path`, or `null` | `store` |
 | `something.store.set(path, value)` | `null`. A `null` value removes the key. | `store` |
-| `something.open(url)` | true if the person opened the link, false if they cancelled. `https:`, `http:` or `mailto:`. | none |
+| `something.open(url)` | true if the person opened the link, false if they cancelled; after three cancels, false without asking until the page reloads. `https:`, `http:` or `mailto:`. | none |
 
 `on` with another event throws `UNKNOWN_EVENT` at once.
 

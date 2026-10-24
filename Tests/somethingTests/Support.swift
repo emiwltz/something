@@ -63,7 +63,7 @@ final class FakeAsk: Asking {
     var questions: [RightsQuestion] = [], links: [URL] = [], modes: [String] = [], told: [String] = []
     /// nil answers "Not now"; otherwise the rights to allow (the others are refused), the folder and the remap.
     var answer: (([String]) -> RightsAnswer?)? = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
-    var link: LinkChoice = .cancel
+    var link = false
     /// Runs while the link window would be open.
     var during: ((URL) -> Void)?
     var lowers = false
@@ -83,7 +83,7 @@ final class FakeAsk: Asking {
         modes.append(mode)
         return lowers
     }
-    func link(_ url: URL, space: String) -> LinkChoice {
+    func link(_ url: URL, space: String) -> Bool {
         links.append(url)
         during?(url)
         return link

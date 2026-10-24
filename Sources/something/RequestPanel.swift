@@ -570,6 +570,9 @@ final class PanelHeader: NSView {
 class PanelButton: NSButton {
     let primary: Bool, hint: String?
     var height: CGFloat = 30
+    /// Its narrowest width, and the colour a primary one is filled with.
+    lazy var least: CGFloat = primary ? 112 : 96
+    var fill = Look.Token.act
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }
 
@@ -593,7 +596,7 @@ class PanelButton: NSButton {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: max(primary ? 112 : 96, (label.size().width + 26).rounded(.up)), height: height)
+        NSSize(width: max(least, (label.size().width + 26).rounded(.up)), height: height)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -601,7 +604,7 @@ class PanelButton: NSButton {
         Look.Token.bg2.color.setFill()
         shape.fill()
         if primary {
-            let act = Look.Token.act.color.usingColorSpace(.sRGB) ?? .black
+            let act = fill.color.usingColorSpace(.sRGB) ?? .black
             act.withAlphaComponent(progress < 1 ? 0.42 : 1).setFill()
             shape.fill()
             NSGraphicsContext.saveGraphicsState()

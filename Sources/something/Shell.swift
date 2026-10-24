@@ -127,6 +127,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The window changed size, which does not always move the columns: the title measures its room again.
     func windowDidResize(_ notification: Notification) { titleLine.invalidateIntrinsicContentSize() }
 
+    /// something's sheets hang under the toolbar, centred over the space beside the sidebar; the system's own where
+    /// it puts them.
+    func window(_ window: NSWindow, willPositionSheet sheet: NSWindow, using rect: NSRect) -> NSRect {
+        let side = split.splitViewItems.first.flatMap { $0.isCollapsed ? nil : $0.viewController.view.frame.width } ?? 0
+        return sheet is Sheet ? Sheet.place(in: window, sidebar: side) : rect
+    }
+
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
     /// Out of full screen, an assistant ⌘J hid comes back: a window offers no other way to find it.

@@ -39,15 +39,13 @@ struct RightsAnswer: Equatable {
     var allowed: [String], refused: [String], folder: String?, remap: [String: String]
 }
 
-enum LinkChoice { case open, cancel, block }
-
 protocol Asking: AnyObject {
     /// The person's answers, or nil when they chose "Not Now": nothing is remembered and the space gets nothing new.
     func rights(_ question: RightsQuestion) -> RightsAnswer?
     /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
-    /// What the person chose for `url`. "Open" has already opened it in their browser or mail app.
-    func link(_ url: URL, space: String) -> LinkChoice
+    /// true when the person chose to open `url`, which is then already open in their browser or mail app.
+    func link(_ url: URL, space: String) -> Bool
     /// Whether the export of `space` carries its memory, shown with its keys and its size: false ("Without Data", the
     /// default) or true; nil when the person cancels.
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool?
@@ -87,6 +85,15 @@ final class NativeAsk: Asking {
         wait(alert.window) { alert.beginSheetModal(for: $0, completionHandler: $1) }
     }
 
+    /// The role of the action the person pressed in `sheet`; nil when it was not shown.
+    private func wait(_ sheet: Sheet) -> Sheet.Role? {
+        _ = wait(sheet) { window, done in
+            sheet.ended = { [weak window] in window?.endSheet(sheet) }
+            window.beginSheet(sheet, completionHandler: done)
+        }
+        return sheet.chosen
+    }
+
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         let sheet = Ask.rights(question)
         return NativeAsk.agreed(wait(sheet.alert)) ? sheet.answer() : nil
@@ -96,10 +103,10 @@ final class NativeAsk: Asking {
         NativeAsk.agreed(wait(Ask.lowers(mode, kind: kind, folder: folder, space: space)))
     }
 
-    func link(_ url: URL, space: String) -> LinkChoice {
-        let choice = NativeAsk.linkChoice(wait(Ask.link(url, space: space)))
-        if choice == .open { NSWorkspace.shared.open(url) }
-        return choice
+    func link(_ url: URL, space: String) -> Bool {
+        guard wait(Ask.link(url, space: space)) == .primary else { return false }
+        NSWorkspace.shared.open(url)
+        return true
     }
 
     func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
@@ -110,15 +117,6 @@ final class NativeAsk: Asking {
 
     /// true when the sheet ended with its first button (Allow); false for any other, or none.
     static func agreed(_ response: NSApplication.ModalResponse?) -> Bool { response == .alertFirstButtonReturn }
-
-    /// Open for the link sheet's first button, Block for its third, Cancel for its second or none.
-    static func linkChoice(_ response: NSApplication.ModalResponse?) -> LinkChoice {
-        switch response {
-        case .alertFirstButtonReturn: return .open
-        case .alertThirdButtonReturn: return .block
-        default: return .cancel
-        }
-    }
 
     /// false for "Without Data" (the first button), true for "With Its Data" (the second), nil for Cancel or none.
     static func withDataChoice(_ response: NSApplication.ModalResponse?) -> Bool? {
@@ -360,9 +358,23 @@ enum Ask {
               buttons: ["Allow", "Don't Allow"], escape: 1)
     }
 
-    /// The link sheet: Open, Cancel, or Block Links Until Reload, in that order.
-    static func link(_ url: URL, space: String) -> NSAlert {
-        alert("“\(space)” wants to open a link", url.absoluteString, buttons: ["Open", "Cancel", "Block Links Until Reload"], escape: 1)
+    /// The link sheet: whose page asks, the server (or address) in bold, the whole link with it in bold too, then
+    /// Cancel and Open in Browser (Open in Mail for an address).
+    static func link(_ url: URL, space: String) -> Sheet {
+        let whole = url.absoluteString, mail = url.scheme == "mailto", name = url.host ?? url.path
+        var shown: Sheet.Words = [(whole, false)]
+        if !name.isEmpty, let at = whole.range(of: name) {
+            shown = [(String(whole[..<at.lowerBound]), false), (name, true), (String(whole[at.upperBound...]), false)]
+        }
+        let address = Sheet.label(shown, Look.Style(face: .code, size: 12, weight: .regular, leading: 1.5), color: .ink2, width: Sheet.width - 108)
+        // A page chooses the link: a very long one is cut, whole when the pointer rests on it.
+        (address.lineBreakMode, address.maximumNumberOfLines, address.toolTip) = (.byCharWrapping, 6, whole)
+        (address.cell as? NSTextFieldCell)?.truncatesLastVisibleLine = true
+        return Sheet(icon: .symbol("globe"), title: "Open this link?",
+                     body: [(space + " wants to open ", false), (name, true), (mail ? " in your mail app." : " in your browser.", false)],
+                     block: Box(address, fill: .sunk, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11)),
+                     fine: "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something.",
+                     actions: [.init(title: "Cancel", role: .cancel), .init(title: mail ? "Open in Mail" : "Open in Browser", role: .primary)])
     }
 
     /// The export sheet: Without Data, With Its Data, or Cancel, in that order.
