@@ -127,6 +127,12 @@ struct AcceptanceTrust {
         code.expand.performClick(nil)
         let window = shell.window.frame, toolbar = window.height - shell.window.contentLayoutRect.maxY
         #expect(panel.sized && panel.frame.width == RequestPanel.wide && code.shown >= code.full)
+        #expect(code.expand.accessibilityLabel() == "Fold the command")
+        // As in the picture: at 560 the 14 source lines stand on 14 lines, none wrapped.
+        let manager = try #require(code.text.layoutManager)
+        var fragments = 0
+        manager.enumerateLineFragments(forGlyphRange: NSRange(location: 0, length: manager.numberOfGlyphs)) { _, _, _, _, _ in fragments += 1 }
+        #expect(fragments == 14)
         #expect(panel.frame.minX < window.maxX && panel.frame.maxX > window.maxX && panel.frame.maxY == window.maxY - toolbar - 8)
         #expect(panel.frame.minY >= Self.desk.minY + 16 && panel.allowButton.isEnabled, "the footer stays in sight")
         try await stage.appearances { suffix in
@@ -134,6 +140,7 @@ struct AcceptanceTrust {
         }
         code.expand.performClick(nil)
         #expect(!panel.sized && panel.frame.width == RequestPanel.width && code.shown == CommandBox.folded)
+        #expect(code.expand.accessibilityLabel() == "Expand the command")
     }
     @Test("e3: the request queue") func e3() async throws {
         let stage = try Stage("trust")

@@ -342,10 +342,13 @@ final class FakePrompts: PromptSource {
         #expect(pasteboard.string(forType: .string) == Self.long && buttons[0].title == "Copied")
         let height = panel.frame.height
         buttons[1].performClick(nil)
-        #expect(Self.texts(panel.contentView).last?.hasPrefix("Codex is this space's assistant: it changes your spaces by itself") == true)
+        #expect(Self.texts(panel.contentView).last?.hasPrefix("Codex is this space's assistant: it may change your spaces and run something's own commands without asking; everything else it does asks you") == true)
         #expect(panel.frame.height > height && buttons[1].isAccessibilityExpanded())
         buttons[1].performClick(nil)
         #expect(panel.frame.height == height && !buttons[1].isAccessibilityExpanded())
+        // A trailing newline ends the one line; it does not make two.
+        let one = CommandBox("ls\n", target: panel, action: #selector(RequestPanel.expand))
+        #expect(Self.texts(one).contains("The exact command") && one.text.string == "ls\n")
     }
 
     /// ↕ makes the panel 560 wide and shows the whole command, within the screen, its footer in sight; again, it folds

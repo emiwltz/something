@@ -43,24 +43,23 @@ class RequestPanel: NSPanel {
     private var widthRule = NSLayoutConstraint()
     /// The window and screen it was last placed beside, to place it again once it changed size.
     private weak var beside: NSWindow?
+    /// The open "Why am I asked?" sentence, and Copy Command's presses: only the last one's reset puts its title back.
+    private weak var whyBox: Box?
+    private var copies = 0
     private var desk: NSRect?
 
     init(decide: @escaping (Answer) -> Void) {
         self.decide = decide
         super.init(contentRect: NSRect(x: 0, y: 0, width: Self.width, height: 300),
                    styleMask: [.titled, .closable, .utilityWindow, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: true)
-        isReleasedWhenClosed = false
-        hidesOnDeactivate = false
-        level = .floating
+        (isReleasedWhenClosed, hidesOnDeactivate, level) = (false, false, .floating)
         // Over a space in full screen too, and on the Space the person is on.
         collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
         // Answerable while a sheet of the main window waits: an agent's request does not wait for it.
         worksWhenModal = true
         // Moved by its header only, which says so by being the one place that drags.
         isMovable = false
-        titleVisibility = .hidden
-        titlebarAppearsTransparent = true
-        backgroundColor = Look.Token.bg2.color
+        (titleVisibility, titlebarAppearsTransparent, backgroundColor) = (.hidden, true, Look.Token.bg2.color)
         if let close = standardWindowButton(.closeButton) {
             (close.target, close.action) = (self, #selector(deny))
             close.setAccessibilityLabel("Close: deny")
@@ -68,15 +67,11 @@ class RequestPanel: NSPanel {
         header.step = { [weak self] in self?.step($0) }
         (allowButton.target, allowButton.action) = (self, #selector(allow))
         allowButton.voice = { [weak self] in self?.voicePress() ?? false }
-        body.orientation = .vertical
-        body.alignment = .leading
-        body.spacing = 11
+        (body.orientation, body.alignment, body.spacing) = (.vertical, .leading, 11)
         body.edgeInsets = NSEdgeInsets(top: 15, left: 16, bottom: 4, right: 16)
-        foot.spacing = 8
-        foot.edgeInsets = NSEdgeInsets(top: 12, left: 16, bottom: 14, right: 16)
+        (foot.spacing, foot.edgeInsets) = (8, NSEdgeInsets(top: 12, left: 16, bottom: 14, right: 16))
         let root = NSStackView(views: [header, body, foot])
-        root.orientation = .vertical
-        root.spacing = 0
+        (root.orientation, root.spacing) = (.vertical, 0)
         widthRule = root.widthAnchor.constraint(equalToConstant: Self.width)
         widthRule.isActive = true
         [header, body, foot].forEach { $0.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
@@ -192,6 +187,7 @@ class RequestPanel: NSPanel {
             let rest = frameRect(forContentRect: NSRect(origin: .zero, size: content.fittingSize)).height - code.shown
             let room = desk.map { frame.maxY - $0.minY - 16 } ?? .greatestFiniteMagnitude
             code.fold(height.map { min($0, room) - rest } ?? min(code.full, CommandBox.folded))
+            code.expand.setAccessibilityLabel(sized ? "Fold the command" : "Expand the command")
         }
         fit()
     }
@@ -218,24 +214,29 @@ class RequestPanel: NSPanel {
         pasteboard.clearContents()
         pasteboard.setString(code.exact, forType: .string)
         sender.title = "Copied"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { sender.title = "Copy Command" }
+        copies += 1
+        let press = copies
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in if self?.copies == press { sender.title = "Copy Command" } }
     }
 
     /// Why am I asked?: says, under the links, why this request waits here; a second press takes it away.
     @objc func why(_ sender: NSButton) {
-        if let shown = body.arrangedSubviews.last as? Box, shown.fill == .hover {
+        if let shown = whyBox {
             shown.removeFromSuperview()
+            whyBox = nil
         } else if let who {
-            let words = who.assistant ? "\(who.program) is this space's assistant: it changes your spaces by itself, and anything else it does"
-                : "\(who.program) asks before it acts, as its own settings decide; its request"
+            let words = who.assistant ? "\(who.program) is this space's assistant: it may change your spaces and run something's own commands "
+                + "without asking; everything else it does asks you, as its own settings decide, and"
+                : "\(who.program) asks you when its own settings decide; its request"
             let field = Self.text(words + " waits here, in a window of the Mac that no page can draw or click. Allow Once covers this one "
                                   + "request, this one time.", Look.small, .ink2)
             field.preferredMaxLayoutWidth = widthRule.constant - 52
             let box = Box(field, fill: .hover, radius: 8, insets: NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10))
             body.addArrangedSubview(box)
             stretch([box])
+            whyBox = box
         }
-        sender.setAccessibilityExpanded(body.arrangedSubviews.last is Box)
+        sender.setAccessibilityExpanded(whyBox != nil)
         size(width: widthRule.constant, height: sized ? frame.height : nil)
     }
 
@@ -609,7 +610,8 @@ final class CommandBox: Box, NSLayoutManagerDelegate {
 
     init(_ exact: String, target: AnyObject, action: Selector) {
         self.exact = exact
-        let lines = exact.split(separator: "\n", omittingEmptySubsequences: false).count
+        // A trailing newline ends the last line; it does not start another.
+        let lines = exact.split(separator: "\n", omittingEmptySubsequences: false).reversed().drop(while: \.isEmpty).count
         let caption = RequestPanel.text("The exact command" + (lines > 1 ? " · \(lines) lines" : ""),
                                         Look.Style(face: .ui, size: 10.5, weight: .medium, leading: 1), .ink3)
         expand = NSButton(image: NSImage(systemSymbolName: "arrow.up.and.down", accessibilityDescription: "Expand the command") ?? NSImage(),
