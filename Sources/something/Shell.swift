@@ -191,6 +191,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             NSLayoutConstraint.activate([line.widthAnchor.constraint(equalToConstant: 1), line.heightAnchor.constraint(equalToConstant: 18)])
             let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: [buttons[0], line] + buttons.dropFirst().map { $0 as NSView })
             tools.forEach { $0.view = nil }
+            // The mockup draws Reload's arrow smaller and Full Screen's corners heavier than the other icons.
+            buttons[1].symbolConfiguration = .init(pointSize: 11.5, weight: .semibold)
+            buttons[3].symbolConfiguration = .init(pointSize: 13, weight: .bold)
             self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
             row.spacing = 4
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.

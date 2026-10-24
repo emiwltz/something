@@ -359,9 +359,12 @@ struct Primary: ButtonStyle {
 
 /// The mockup's secondary button: bg2 inside a ring of line2.
 struct Secondary: ButtonStyle {
+    /// The mockup's .btn.sec is 30 points high, 13 in; the ladder's foot draws a smaller one (28, 9 and 10).
+    var height: CGFloat = 30, leading: CGFloat = 13, trailing: CGFloat = 13
+
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: Look.control + 1, style: .continuous)
-        return configuration.label.foregroundStyle(Look.Token.ink.ui).padding(.horizontal, 13).frame(height: 30)
+        return configuration.label.foregroundStyle(Look.Token.ink.ui).padding(.leading, leading).padding(.trailing, trailing).frame(height: height)
             .background(shape.fill((configuration.isPressed ? Look.Token.sunk : .bg2).ui))
             .overlay(shape.strokeBorder(Look.Token.line2.ui))
     }

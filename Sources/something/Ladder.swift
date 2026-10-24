@@ -139,7 +139,7 @@ struct LadderView: View {
                     Image(nsImage: Sign.miniEyes(ladder.eyes, joy: ladder.eyes == .done)).renderingMode(.template)
                         .foregroundStyle(Look.Token.eyes.ui).frame(width: 16, height: 10)
                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
-                    Text(AssistantCard.markdown(say)).font(Look.font(.voice, size: 17).ui).lineSpacing(1).foregroundStyle(Look.Token.ink.ui)
+                    Text(AssistantCard.markdown(say)).font(Look.font(.voice, size: 16.5).ui).lineSpacing(1).foregroundStyle(Look.Token.ink.ui)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 // The mockup's 4 points before the eyes; none after, so the line wraps where the mockup's does.
@@ -287,7 +287,7 @@ struct LadderView: View {
                     HStack(spacing: 6) { Image(systemName: "stop").font(.system(size: 9)).accessibilityHidden(true); Text("Stop"); Key(Keys.shown("stop")) }
                         .font(Look.font(.ui, size: 12, weight: .medium).ui)
                 }
-                .buttonStyle(Secondary())
+                .buttonStyle(Secondary(height: 28, leading: 9, trailing: 10))
                 .overlay(RoundedRectangle(cornerRadius: Look.control + 1, style: .continuous).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5)
                     .opacity(nudged ? 1 : 0).allowsHitTesting(false))
                 .help(model.presence.stopHelp)

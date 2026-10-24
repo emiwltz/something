@@ -174,6 +174,7 @@ struct AcceptanceBuild {
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         for kind in programs { try AssistantTests().install(kind, in: bin) }
         let (shell, library, _) = stage.window()
+        try stage.moment(shell)
         let model = shell.assistant
         model.engine.changed = { model.refresh() }
         model.engine.lookAgain()
@@ -300,6 +301,7 @@ struct AcceptanceBuild {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         }
         let (shell, library, _) = stage.window()
+        try stage.moment(shell)
         let model = shell.assistant
         model.engine.changed = { model.refresh() }
         model.engine.lookAgain()
@@ -449,6 +451,7 @@ struct AcceptanceBuild {
         let (shell, library, _) = stage.window()
         let room = try await stage.open("waiting-room", in: shell, library)
         defer { room.close() }
+        try stage.moment(shell)
         shell.waiting(1, mine: 0)
         // The build's conversation, handed to the space it made (AssistantModel.hand): its agent alive and listening, the
         // row's eyes awake until the Preferences' delay.
@@ -487,14 +490,14 @@ struct AcceptanceBuild {
         <!doctype html><html><head><meta charset="utf-8"><title>Waiting room</title>
         <script type="application/json" id="something">{"contract": 1, "title": "Waiting room", "rights": ["state", "store"]}</script><style>
         body{margin:0;padding:34px 46px;background:#F4F4F1;color:#121316;font:13.5px -apple-system,sans-serif}
-        @media (prefers-color-scheme:dark){body{background:#15171C;color:#F1F1EE}.w{background:#1F2126!important}}
-        h2{font:600 34px/1.05 Georgia,serif;letter-spacing:-.025em;margin:0}
+        @media (prefers-color-scheme:dark){body{background:#15171C;color:#F1F1EE}.w{background:#1F2126!important}button{background:rgba(241,241,238,.08)!important}}
+        h2{font:600 31px/1.1 Georgia,serif;letter-spacing:-.025em;margin:0}
         .lead{color:#5C5E66;margin:8px 0 22px}
         .w{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;background:#fff;border-radius:10px;
            box-shadow:0 0 0 1px rgba(18,19,22,.1);padding:14px 16px}
         .age{font:600 22px/1 -apple-system;width:64px}.age small{display:block;font-size:11px;font-weight:500;color:#8A8C92;margin-top:3px}
         b{display:block;font-size:13px}span{color:#5C5E66;font-size:12.5px}
-        button{font:500 12.5px -apple-system;padding:6px 11px;border-radius:7px;border:1px solid rgba(18,19,22,.17);background:#fff}
+        button{font:500 12px -apple-system;height:28px;padding:0 12px;border-radius:999px;border:0;box-shadow:inset 0 0 0 1px rgba(18,19,22,.17);background:rgba(18,19,22,.06);color:inherit}
         .none{color:#8A8C92;font-size:12.5px;margin:12px 2px}
         </style></head><body><h2>Waiting room</h2><p class="lead">Agents that wait for you in their own terminal, oldest first.</p>
         <div class="w"><div class="age">34<small>minutes</small></div><div><b>Amp · ~/code/shop</b><span>Asks to run the tests before touching the cart page.</span></div><button>Open Terminal</button></div>

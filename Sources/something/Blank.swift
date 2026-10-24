@@ -51,7 +51,7 @@ struct BlankView: View {
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 30) }
                     } else {
                         if let reply, ladder == nil { answer(reply).frame(width: field).padding(.top, 30) }
-                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 30 : 14)
+                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 33.5 : 14)
                         // While it builds, Built by keeps its place unseen, as the mockup's.
                         meta.frame(width: field).padding(.top, 8).opacity(model.building ? 0 : 1)
                             .allowsHitTesting(!model.building).accessibilityHidden(model.building)

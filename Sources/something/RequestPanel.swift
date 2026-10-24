@@ -414,7 +414,11 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         let eyes = NSImageView(image: Sign.miniEyes(.wait, template: false))
         let sub = NSStackView(views: [eyes, Self.text(line, Look.small, .ink3)])
         sub.spacing = 6
-        let lines = NSStackView(views: [Self.text(headline, Look.titleS), sub])
+        // The mockup's titles are drawn 0.02 em tighter.
+        let title = Self.text(headline, Look.titleS)
+        title.attributedStringValue = NSAttributedString(string: headline, attributes: [.font: Look.titleS.font, .foregroundColor: Look.Token.ink.color,
+                                                                                       .kern: -0.02 * Look.titleS.size])
+        let lines = NSStackView(views: [title, sub])
         (lines.orientation, lines.alignment, lines.spacing) = (.vertical, .leading, 4)
         let row = NSStackView(views: [sign, lines])
         row.spacing = 12

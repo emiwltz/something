@@ -59,6 +59,20 @@ final class Stage {
 
     func remove() { home.remove() }
 
+    /// The mockup's moment in the sidebar (core/data.js): Daily brief working, My agents waiting for the request the
+    /// chip counts, Project watch and Oracle listening, Pebble just done, Logbook and Stack asleep.
+    static let moment: [String: Sign.State] = ["brief": .think, "agents": .wait, "project": .listen, "oracle": .listen,
+                                               "pet": .done, "logbook": .sleep, "stack": .sleep]
+
+    /// Gives `shell`'s rows the eyes of `moment`; a space it does not name keeps its own assistant's. The rows' eyes are
+    /// a closure of the window (e14 and d4 show them following a session): a scenario whose engine runs the fake builder
+    /// would forget fake sessions of the others at its next refresh, so the moment is given here, as data.
+    func moment(_ shell: Shell) throws {
+        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+        let own = host.rootView.eyes
+        host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { Stage.moment[$0] ?? own($0) })
+    }
+
     /// The main window of the home, never shown, at `size`, its spaces listed.
     func window(_ size: NSSize = Size.main) -> (shell: Shell, library: Library, info: Info) {
         let ask = FakeAsk()
