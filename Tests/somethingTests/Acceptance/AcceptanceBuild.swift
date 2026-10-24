@@ -281,7 +281,53 @@ struct AcceptanceBuild {
         return (shell, library, host)
     }
 
-    @Test("d2: the build ladder", .disabled("not built yet: AB14")) func d2() async throws {}
+    /// The build ladder: the sentence held read only in the field, the agent's words in its voice, Plan done with its
+    /// time, Write writing waiting-room.html with its time running, Check to come, where it is built and Stop; Built by
+    /// keeps its place unseen and the suggestions and templates step aside. d2-stopped: after Stop.
+    @Test("d2: the build ladder") func d2() async throws {
+        let (stage, shell, library, host) = try await Self.building("")
+        defer { stage.remove() }
+        let model = shell.assistant
+        #expect(await wait(until: { model.ladder?.steps[1].mark == .now }))
+        let ladder = try #require(model.ladder)
+        #expect(ladder.steps.map(\.name) == ["Plan", "Write", "Check"] && ladder.steps.map(\.mark) == [.done, .now, .later])
+        #expect(ladder.steps[1].file == "waiting-room.html" && ladder.steps[2].note == "Opens it, reads it, looks for errors" && ladder.eyes == .think)
+        #expect(ladder.say == "I’ll make “Waiting room”: one card per agent that waits for you, oldest first.")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d2" + suffix, root: stage.home.root)
+            let words = await Self.read(host)
+            #expect(words.contains("Your assistant: \(ladder.say ?? "")") && words.contains("Stop") && !words.contains("Build")
+                    && !words.contains("Who is waiting for me") && words.contains { $0.hasPrefix("Write, now, waiting-room.html, ") }
+                    && words.contains("Check, to come, Opens it, reads it, looks for errors"), "\(words)")
+        }
+        // d2-stopped: Stop mid-Write leaves the ladder saying what stays on disk, the sentence back in the field.
+        model.stop()
+        #expect(!model.building && model.draft == "Who is waiting for me" && model.ladder?.steps.map(\.mark) == [.done, .off, .off])
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d2-stopped" + suffix, root: stage.home.root)
+            let words = await Self.read(host)
+            #expect(words.contains("Your assistant: Stopped. waiting-room.html stays in your spaces folder, unchecked.") && words.contains("Build Again")
+                    && !words.contains("Stop"), "\(words)")
+        }
+        await Self.finish(model)
+    }
+
+    /// A build that runs, in "Who is waiting for me" sent from New Space, the fake claude in `mode` (see AssistantTests).
+    static func building(_ mode: String) async throws -> (Stage, Shell, Library, NSView) {
+        let stage = try Stage("build")
+        let out = stage.home.root.appendingPathComponent("out")
+        try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        try mode.write(to: out.appendingPathComponent("ladder"), atomically: true, encoding: .utf8)
+        let (shell, library, host) = try await newSpace(stage, builder: true)
+        shell.assistant.send("Who is waiting for me")
+        return (stage, shell, library, host)
+    }
+
+    static func finish(_ model: AssistantModel) async {
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     @Test("d3: the arrival", .disabled("not built yet: AB15")) func d3() async throws {}
     /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right
     /// with its switch off, the fine print, Don't Allow holding the focus and Allow greyed until a switch is on.
@@ -423,8 +469,44 @@ struct AcceptanceBuild {
         #expect(gallery.previewing == nil && shell.window.title == "Templates")
     }
 
-    @Test("d7: inline choices", .disabled("not built yet: AB14")) func d7() async throws {}
-    @Test("d8: the check step", .disabled("not built yet: AB14")) func d8() async throws {}
+    /// The build's question on the page: what it asks in the agent's voice, its two labels numbered, Write waiting for
+    /// the answer; the choice goes back to the agent, which writes.
+    @Test("d7: inline choices") func d7() async throws {
+        let (stage, shell, library, host) = try await Self.building("ask")
+        defer { stage.remove() }
+        let model = shell.assistant
+        #expect(await wait(until: { model.asked != nil }))
+        let ladder = try #require(model.ladder)
+        #expect(ladder.say == "Before I write it: which way should it read?" && ladder.choices == ["One card per agent", "A single list, oldest first"])
+        #expect(ladder.steps.map(\.mark) == [.done, .waits, .later] && ladder.steps[1].note == "Waits for your answer" && ladder.eyes == .wait)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d7" + suffix, root: stage.home.root)
+            let words = await Self.read(host)
+            #expect(words.contains("One card per agent, 1") && words.contains("A single list, oldest first, 2")
+                    && words.contains("Write, waits for you, Waits for your answer"), "\(words)")
+        }
+        model.answer(1)
+        #expect(await wait(until: { model.asked == nil && model.ladder?.steps[1].mark == .now }))
+        await Self.finish(model)
+    }
+
+    /// The check step after a failed check: two edits fix it, the second check passes, and every step says its time.
+    @Test("d8: the check step") func d8() async throws {
+        let (stage, shell, library, host) = try await Self.building("fail")
+        defer { stage.remove() }
+        let model = shell.assistant
+        #expect(await wait(until: { model.ladder?.steps[2].note == "Found problems · Fixing them…" || model.ladder?.steps[2].mark == .done }))
+        #expect(await wait(until: { model.ladder?.steps[2].mark == .done && model.ladder?.say?.hasPrefix("Fixed both") == true }))
+        let ladder = try #require(model.ladder)
+        #expect(ladder.done && ladder.eyes == .done && ladder.steps[2].note == "Passed after fixes")
+        #expect(ladder.steps.allSatisfy { Ladder.took($0, now: model.clock()) != nil })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "d8" + suffix, root: stage.home.root)
+            let words = await Self.read(host)
+            #expect(!words.contains("Stop") && words.contains { $0.hasPrefix("Check, done, Passed after fixes, ") }, "\(words)")
+        }
+        await Self.finish(model)
+    }
 }
 
 extension Picture {

@@ -67,6 +67,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent") }
         panels.beside = { [weak self] in self?.shell.window }
         panels.counted = { [weak self] _ in self?.counted() }
+        panels.inline = { [weak self] in self?.assistant.answersInline($0) == true }
         panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] in
             self?.front()
             self?.showRequest(nil)
@@ -87,6 +88,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.assistant.lookAgain() }
         }
         assistant.showRequest = { [weak self] in self?.showRequest(nil) }
+        assistant.told = { [weak self] words in
+            _ = self?.shell.toast(words, action: Toast.Action(label: "Back to New Space") { self?.library.select(.newSpace) })
+        }
         assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
         assistant.ended = { [weak self] in
             guard let self else { return }

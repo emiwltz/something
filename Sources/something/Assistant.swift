@@ -63,6 +63,12 @@ import SomethingCore
     var place = Place.blank {
         didSet {
             if place.space != nil, oldValue.space == nil { open = false }
+            // Leaving New Space stops its build, the words kept in its field, and says so.
+            if oldValue == .blank, place != .blank, before?.session === session, let left = ladder {
+                stopBuild()
+                halted = nil
+                told(left.left)
+            }
             if place.key != oldValue.key {
                 // The assistant left stays awake for the whole delay from now: it was the open one until now.
                 session.active = clock()
@@ -107,9 +113,22 @@ import SomethingCore
     private(set) var notes: [String: String] = [:]
     /// Why a builder that refused what something lends it is not offered, until the agents are looked for again.
     private(set) var refused: [String: String] = [:]
-    /// The spaces there were, the conversation building and its last turn when the person asked from the blank page,
-    /// until the turn that followed ends (answered, stopped, failed, or never started).
-    private(set) var before: (spaces: Set<String>, session: Session, turn: String?)?
+    /// A build asked from the blank page: the spaces there were, the conversation building and its last turn then,
+    /// when it was asked and in which words, and when something first saw each of its items and their ends (the
+    /// agents stamp theirs to the second): the ladder's times.
+    struct Build {
+        let spaces: Set<String>, session: Session, turn: String?, at: Date, sentence: String
+        var seen: [String: Date] = [:]
+    }
+    /// The build watched until the turn that followed ends (answered, stopped, failed, or never started).
+    private(set) var before: Build?
+    /// The ladder of the build the person stopped on the blank page, kept until they build again or leave.
+    private(set) var halted: Ladder?
+    /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
+    struct Asked: Equatable { let request: String, question: Question }
+    private(set) var asked: Asked?
+    /// Says a sentence in a toast: the window's.
+    @ObservationIgnored var told: (String) -> Void = { _ in }
     var ready: Library.Entry?
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
     var fromTemplate: String?
@@ -189,6 +208,7 @@ import SomethingCore
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
         if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
+        follow()
         // A build watched is concluded on the refresh where its turn ends, before a held message starts the next, wherever
         // the person went meanwhile.
         if let before, !before.session.launching {
@@ -206,6 +226,49 @@ import SomethingCore
             each.releasedAfter = .some(each.turn?.id)
             deliver(next, to: each)
         }
+    }
+
+    /// Notes when something first saw each item of the build's turn and each end of its tools, and the question the
+    /// blank page answers.
+    private func follow() {
+        keep(\.asked, inlineQuestion())
+        guard var build = before, let turn = build.session.turn, turn.id != build.turn else { return }
+        let now = clock(), was = build.seen.count
+        for item in turn.items {
+            for key in [item.id] + ((item.tool?.status).map { ["\(item.id)/\($0)"] } ?? []) where build.seen[key] == nil { build.seen[key] = now }
+        }
+        if let asked, build.seen[asked.request] == nil { build.seen[asked.request] = now }
+        if build.seen.count != was { before = build }
+    }
+
+    /// The question of the build asked from the blank page while the page is shown, when it is one question with one
+    /// choice among at most nine labels, which keys 1 to 9 can answer. Any other request, of this build (a permission)
+    /// or of any other conversation, goes to the panel.
+    func inlineQuestion() -> Asked? {
+        guard place == .blank, let build = before, build.session === sessions[.new], let id = build.session.id else { return nil }
+        for request in engine.state.requests where request.kind == "question" && request.agent == id {
+            if let questions = engine.prompt(request.id)?.questions, questions.count == 1, let one = questions.first, !one.multiple,
+               (1...9).contains(one.options.count) { return Asked(request: request.id, question: one) }
+        }
+        return nil
+    }
+
+    /// Whether `request` is answered on the blank page rather than in the panel: Panels' filter.
+    func answersInline(_ request: Request) -> Bool { inlineQuestion()?.request == request.id }
+
+    /// The ladder New Space shows: the build's as it goes, or the one stopped there; nil when there is neither.
+    var ladder: Ladder? {
+        if let halted { return halted }
+        guard let build = before else { return nil }
+        let turn = build.session.turn.flatMap { $0.id == build.turn ? nil : $0 }
+        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] })
+    }
+
+    /// Answers the build's question with its choice `index`. An answer that did not reach the agent is its failure.
+    func answer(_ index: Int) {
+        guard let asked, asked.question.options.indices.contains(index) else { return }
+        self.asked = nil
+        do { try engine.answer(asked.request, .choice([[asked.question.options[index]]])) } catch { before?.session.failure = error.sentence }
     }
 
     /// Sets the one-shot timer for the next moment a presence changes by itself, the card's or a space's in the
@@ -380,6 +443,7 @@ import SomethingCore
         guard !text.isEmpty, kind != nil, !blocked else { return }
         if sentence == nil { draft = "" }
         fromTemplate = nil
+        halted = nil
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
         // Behind messages already held it waits too, so they leave in the order they were written.
         if session.id != nil, !launching, working || !session.held.isEmpty {
@@ -387,7 +451,8 @@ import SomethingCore
         }
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
-            (before, threadShown) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session, session.turn?.id), true)
+            let spaces = Set(Spaces(root: places.spaces).list().map(\.name))
+            (before, threadShown) = (Build(spaces: spaces, session: session, turn: session.turn?.id, at: clock(), sentence: text), true)
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -413,7 +478,23 @@ import SomethingCore
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
     /// The held messages go back into the field: nothing is sent behind the person's back.
     func stop() {
+        if place == .blank, before?.session === session { return stopBuild() }
         takeBack()
+        if launching { return endLaunch(session) }
+        guard let id, working else { return }
+        if agent?.can.interrupt == false { return halt(session) }
+        _ = try? engine.interrupt(id)
+    }
+
+    /// Stops the build asked from the blank page: its turn ends (its agent, when it cannot pause), the ladder stays as
+    /// it was, saying what stays on disk, and the sentence goes back into the field, to change or build again. The
+    /// watch ends here: a space it began is not opened by itself.
+    private func stopBuild() {
+        guard let build = before, let ladder else { return }
+        (before, asked, halted) = (nil, nil, ladder.halted())
+        takeBack()
+        // A message never delivered may be back in the field already.
+        if !draft.contains(build.sentence) { draft = [build.sentence, draft].filter { !$0.isEmpty }.joined(separator: "\n") }
         if launching { return endLaunch(session) }
         guard let id, working else { return }
         if agent?.can.interrupt == false { return halt(session) }
@@ -426,6 +507,7 @@ import SomethingCore
         takeBack()
         halt(session)
         if before?.session === session { before = nil }
+        halted = nil
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
         save(session)

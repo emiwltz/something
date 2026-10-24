@@ -23,7 +23,11 @@ import WebKit
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
     /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt ends the
-    /// running turn as Claude Code does. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
+    /// running turn as Claude Code does. For the ladder, "Who is waiting for me" reads the guide, says what it makes and
+    /// starts writing waiting-room.html 0.9 s later, never ending its turn; with "ask" in $HOME/out/ladder it asks
+    /// which way the page should read (AskUserQuestion, then another permission once "permission" is in that file too)
+    /// and writes once answered; with "fail" it writes, a check fails, two edits fix it and a second check passes, then
+    /// it says so and ends only once $HOME/out/finish appears. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
     /// effort is taken.
     static let fake = #"""
     #!/bin/sh
@@ -39,6 +43,18 @@ import WebKit
       ( while kill -0 $$ 2>/dev/null && [ ! -f "$HOME/out/finish" ]; do sleep 0.1; done
         if [ -f "$HOME/out/finish" ]; then rm -f "$HOME/out/finish"; printf '%s\n' "$@"; fi ) &
     }
+    # A tool begun and not ended; and the agent's words.
+    begin() {
+      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"opus\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_$1\",\"name\":\"$2\",\"input\":$3}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
+    }
+    ended() {
+      echo "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"toolu_$1\",\"type\":\"tool_result\",\"content\":\"Invented.\",\"is_error\":$2}]},\"parent_tool_use_id\":null,\"uuid\":\"r$1\",\"session_id\":\"s1\"}"
+    }
+    words() {
+      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"opus\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$2\"}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
+    }
+    room='{"file_path":"/Users/example/something/spaces/waiting-room.html"}'
+    check='{"command":"something check waiting-room"}'
     done='{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u9"}'
     idle='{"type":"system","subtype":"session_state_changed","state":"idle","uuid":"u10","session_id":"s1"}'
     while IFS= read -r line; do
@@ -100,6 +116,29 @@ import WebKit
           echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w0","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw0","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
           later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
+        *'Who is waiting for me'*'"type":"user"'*)
+          mode=$(cat "$HOME/out/ladder" 2>/dev/null)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          tool L1 Bash '{"command":"something guide --print"}'
+          words L2 'I’ll make “Waiting room”: one card per agent that waits for you, oldest first.'
+          case "$mode" in
+            *ask*) ( sleep 0.9
+              begin Lq AskUserQuestion '{"questions":[{"question":"Before I write it: which way should it read?","header":"Layout","multiSelect":false,"options":[{"label":"One card per agent","description":"Big and easy to scan."},{"label":"A single list, oldest first","description":"Compact."}]}]}'
+              echo '{"type":"control_request","request_id":"rq1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Before I write it: which way should it read?","header":"Layout","multiSelect":false,"options":[{"label":"One card per agent","description":"Big and easy to scan."},{"label":"A single list, oldest first","description":"Compact."}]}]},"tool_use_id":"toolu_Lq"}}'
+              case "$mode" in *permission*) echo '{"type":"control_request","request_id":"rp1","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_Lp"}}' ;; esac ) & ;;
+            *fail*) ( sleep 0.9; begin L3 Write "$room"; sleep 1.6; ended L3 false
+              begin L4 Bash "$check"; sleep 0.9; ended L4 true
+              words L5 'Check found 2 problems. Fixing them…'
+              begin L6 Edit "$room"; sleep 0.8; ended L6 false; begin L7 Edit "$room"; sleep 0.8; ended L7 false
+              begin L8 Bash "$check"; sleep 0.8; ended L8 false
+              words L9 'Fixed both, and the check passes. Ready. Opening Waiting room.'
+              later "$done" "$idle" ) & ;;
+            *) ( sleep 0.9; begin L3 Write "$room" ) & ;;
+          esac ;;
+        *'"answers"'*)
+          ended Lq false
+          words L10 'One card per agent. Writing it now.'
+          ( sleep 0.7; begin L3 Write "$room" ) & ;;
         *'"subtype":"initialize"'*)
           echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"sonnet","displayName":"Sonnet 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
         *'"subtype":"set_model"'*|*'"subtype":"apply_flag_settings"'*)
@@ -780,8 +819,9 @@ import WebKit
         await finish(home, model)
     }
 
-    /// A build from New Space goes on while the person opens a space: its request belongs to no space until the
-    /// hand-off, so the open space's own count stays 0; and what each place's field holds stays with that place.
+    /// A build from New Space: its request belongs to no space until the hand-off, so a space's own count stays 0;
+    /// leaving New Space stops the build (LadderTests), its sentence back in its field before what was half written
+    /// there; and what each place's field holds stays with that place.
     @Test func aBuildsRequestIsNoSpacesOwn() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -790,19 +830,19 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.presence.state == .wait }))
         let builder = try #require(model.id)
-        model.draft = "Half written for New Space"
-        model.place = .space(title: "Who waits", name: "waiting", page: "index.html")
-        #expect(model.draft.isEmpty && model.space(of: builder) == nil)
         let queue = RequestQueue()
         queue.space = { request in
             RequestQueue.space(of: request.agent, assistant: model.engine.assistants.contains(request.agent),
                                working: model.space(of: request.agent), launches: [:])
         }
         queue.follow(model.engine.requests)
-        #expect(queue.waiting.map(\.agent) == [builder] && queue.count(in: "waiting") == 0)
+        #expect(model.space(of: builder) == nil && queue.waiting.map(\.agent) == [builder] && queue.count(in: "waiting") == 0)
+        model.draft = "Half written for New Space"
+        model.place = .space(title: "Who waits", name: "waiting", page: "index.html")
+        #expect(model.draft.isEmpty && !model.building)
         model.draft = "For Who waits"
         model.place = .blank
-        #expect(model.draft == "Half written for New Space")
+        #expect(model.draft == "ask-first\nHalf written for New Space")
         await finish(home, model)
     }
 
