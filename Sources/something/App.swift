@@ -283,6 +283,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
     @objc func toggleInfo(_ sender: Any?) { shell.split.toggleInspector(sender) }
     @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }
+    @objc func reduceAssistant(_ sender: Any?) { shell.reduceAssistant(sender) }
 
     /// Go ▸ a space (⌘1 to ⌘9 for the first nine).
     @objc func goToSpace(_ sender: NSMenuItem) {

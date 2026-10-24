@@ -1,6 +1,8 @@
 // The tour, shown in the window at the first start and again from Help › Welcome Tour: Welcome, then who
 // builds with you, then the blank page itself, where it ends. It never starts an agent: choosing a builder only says
 // which one the first message will start. Its end is kept in the preferences, with whether it offered the launcher.
+// How to Get One's list of the builders and their install commands lives here too: the tour shows it first.
+import SomethingAgents
 import SwiftUI
 
 @Observable final class Tour {
@@ -154,5 +156,28 @@ struct TourView: View {
                 Button("Look Again") { assistant.lookAgain() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
+    }
+}
+
+/// How to Get One's list: each agent, the command that installs it, and a button that copies that command.
+struct InstallList: View {
+    let rows: [(name: String, command: String)], copy: (String) -> Void
+
+    /// The coding agents something builds with, each with its install command.
+    static var builders: [(name: String, command: String)] {
+        Registry.app.builders.compactMap { agent in agent.install.map { (agent.name, $0) } }
+    }
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            ForEach(rows, id: \.name) { row in
+                GridRow {
+                    Text(row.name).fontWeight(.medium)
+                    Text(row.command).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                    Button("Copy") { copy(row.command) }.controlSize(.small)
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 }

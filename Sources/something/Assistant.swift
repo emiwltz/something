@@ -14,8 +14,9 @@ import SomethingCore
     enum Place: Equatable { case space(title: String, name: String, page: String), blank, templates }
     /// The dot in front of the builder's name.
     enum Light: String { case off = "not started", ready, working, waiting = "waiting for you", error }
-    /// One line of the drawer: the person's message with what it was about, the agent's text, or one tool it ran.
-    enum Row: Equatable { case mine(caption: String?, text: String), reply(String), tool(symbol: String, words: String, command: String?) }
+    /// One line of the conversation: the day its turns start, the person's message with what it was about, the
+    /// agent's text, or one tool it ran.
+    enum Row: Equatable { case day(Date), mine(caption: String?, text: String), reply(String), tool(symbol: String, words: String, command: String?) }
     /// What the open space reported while it ran: its title, its name and the codes, never its text. A page that
     /// stopped is named by its file, with the app's own reason `stopped`, which is no code of the contract.
     struct Fault: Equatable {
@@ -47,12 +48,11 @@ import SomethingCore
 
     var place = Place.blank
     var draft = ""
-    var drawer = false
-    /// Whether ⌘J hid the whole assistant, in full screen.
-    var hidden = false
-    /// The width the center leaves the assistant, and the height it floats over there, both set by the window
-    /// (Floater): the conversation is measured as it wraps, and the blank page keeps clear of it.
-    var room: CGFloat = 640
+    /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
+    var open = true
+    var threadShown = false
+    /// The height the card takes at the bottom of the center, set by the window (CardHost): the blank page keeps
+    /// clear of it.
     var floating: CGFloat = 0
     /// Whether the open space's journal could not be written.
     var unkept = false
@@ -86,10 +86,7 @@ import SomethingCore
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
     @ObservationIgnored private var active = Date()
-    @ObservationIgnored private var told = false
     @ObservationIgnored private var timer: Timer?
-    /// Where the assistant's pieces are drawn, in its hosting view: the window takes the clicks there only (Floater).
-    @ObservationIgnored var drawn: [CGRect] = []
 
     init(engine: Engine, places: Places) {
         self.engine = engine
@@ -135,9 +132,6 @@ import SomethingCore
         if !offered.contains(kind ?? "") { session.kind = offered.first { $0 == preferred } ?? offered.first }
         session.read(state)
         if ["working", "waiting"].contains(agent?.state) { active = clock() }
-        // The drawer opens on a new problem: the person must see why nothing happened.
-        if problem != nil, !told { drawer = true }
-        told = problem != nil
         guard let before, !launching else { return }
         let answered = session.turn.map { $0.id != before.turn && $0.state != "working" } == true && !working
         if answered || id == nil || session.stopped || light == .error || agent?.alive == false {
@@ -169,8 +163,8 @@ import SomethingCore
     /// Whether every builder was looked for and none can build.
     var noAgent: Bool { kind == nil && !installed.isEmpty }
 
-    /// What the capsule says when no builder is offered.
-    var notice: String {
+    /// What the card says when no builder is offered.
+    var noBuilder: String {
         let found = builders.filter { installed[$0] == true }
         if found.count == 1, let because = refused[found[0]] { return because }
         return found.isEmpty ? "No coding agent found." : "\(found.map(Registry.app.name).joined(separator: ", ")) can't build spaces."
@@ -197,21 +191,6 @@ import SomethingCore
         }
     }
 
-    /// The status line above the capsule, only while it matters.
-    var status: String? {
-        if failure != nil { return "Couldn't reach \(name)." }
-        switch light {
-        case .working:
-            guard let retry else { return "Working…" }
-            return "\(name) can't reach its model (attempt \(retry)). It keeps trying."
-        case .waiting: return "Waiting for you: answer in the \(agent?.waiting == "answer" ? "question" : "permission") window."
-        default: break
-        }
-        if let ready { return "“\(ready.title)” is ready. Open" }
-        if agent?.alive == false, !session.stopped, agent?.error == nil { return "\(name) stopped." }
-        return unkept ? "Couldn't keep this space's journal: its activity is not saved." : nil
-    }
-
     /// What the agent reported while it could not reach its model (Claude Code's `detail.apiRetry`): its last retry,
     /// or, with no attempt, its sign-in refused before any request.
     private var apiRetry: [String: JSONValue] {
@@ -235,7 +214,7 @@ import SomethingCore
         return agent.flatMap { Registry.app.agent($0.kind) }?.refusesSignIn(status: status, error: error) ?? false
     }
 
-    /// What went wrong with the last message, for the red row; nil when nothing did.
+    /// What went wrong with the last message, in the agent's or the engine's words; nil when nothing did.
     var problem: String? {
         if let failure { return failure }
         guard light == .error, !session.stopped else { return nil }
@@ -245,13 +224,15 @@ import SomethingCore
     var placeholder: String {
         switch place {
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
-        case .space(let title, _, _): return "Ask \(name) to change \(title)…"
+        case .space(let title, _, _):
+            if working { return "Write your next request · it waits for this one" }
+            return presence.state == .sleep ? "Ask for a change · it wakes up" : "Ask \(AssistantModel.clean(title))'s assistant for a change…"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
         }
     }
 
-    /// The drawer's first lines: where the agent works and how it asks, then how long a conversation lasts.
+    /// The conversation's first lines: where the agent works and how it asks, then how long a conversation lasts.
     var firstLines: [String] {
         let folder = Words.path(places.spaces.path, home: places.home.path), agent = kind.flatMap(Registry.app.agent)
         let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
@@ -290,7 +271,7 @@ import SomethingCore
         fromTemplate = nil
         if place == .blank, before == nil {
             // The build is watched from its first message: the conversation shows what the agent does.
-            (before, drawer) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session.turn?.id), true)
+            (before, threadShown) = ((Set(Spaces(root: places.spaces).list().map(\.name)), session.turn?.id), true)
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -300,8 +281,9 @@ import SomethingCore
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + AssistantModel.fixing(fault))
     }
 
+    /// ⌘K: opens the card, its field taking the focus.
     func focus() {
-        hidden = false
+        open = true
         focusing += 1
     }
 
@@ -433,7 +415,7 @@ import SomethingCore
         view.map { .space(title: $0.title, name: $0.space.name, page: $0.space.page.path) } ?? .blank
     }
 
-    /// The line something puts before each message, which the drawer strips: which space is open, by the title and
+    /// The line something puts before each message, which the conversation strips: which space is open, by the title and
     /// name the declaration validated, the title kept on its line and out of brackets.
     static func context(_ place: Place, home: String) -> String {
         switch place {
@@ -451,7 +433,7 @@ import SomethingCore
         return "The space “\(clean(fault.title))” (\(fault.name)) has problems: \(fault.codes.joined(separator: ", ")). Run something check \(fault.name) and fix what it reports."
     }
 
-    /// A message as the drawer shows it: its context line taken off, said as a caption ("about My agents").
+    /// A message as the conversation shows it: its context line taken off, said as a caption ("about My agents").
     static func shown(_ text: String) -> (caption: String?, text: String) {
         guard text.hasPrefix("[something] ") else { return (nil, text) }
         let line = text.prefix { $0 != "\n" }, rest = String(text.dropFirst(line.count + 1))
@@ -462,16 +444,25 @@ import SomethingCore
         return ("about " + line[open.upperBound..<close.lowerBound], rest)
     }
 
-    /// The drawer's rows from the agent's thread: messages and tools, never thoughts.
-    static func rows(_ thread: AgentThread?) -> [Row] {
-        (thread?.turns ?? []).flatMap(\.items).compactMap { item in
-            switch (item.kind, item.author) {
-            case ("message", "person"):
-                let shown = shown(item.text)
-                return .mine(caption: shown.caption, text: shown.text)
-            case ("message", _): return .reply(item.text)
-            case ("tool", _), ("subagent", _): return tool(item)
-            default: return nil
+    /// The conversation's rows from the agent's thread: the day each turn starts when it is another than the last
+    /// one's, messages and finished tools, never thoughts; a running tool is the present-tense line's.
+    static func rows(_ thread: AgentThread?, calendar: Calendar = .current) -> [Row] {
+        var last: Date?
+        return (thread?.turns ?? []).flatMap { turn -> [Row] in
+            let start = (turn.started ?? turn.items.first?.at).flatMap(iso8601.date)
+            let day: [Row] = start.map { start in
+                defer { last = start }
+                return last.map { calendar.isDate($0, inSameDayAs: start) } == true ? [] : [.day(start)]
+            } ?? []
+            return day + turn.items.compactMap { item in
+                switch (item.kind, item.author) {
+                case ("message", "person"):
+                    let shown = shown(item.text)
+                    return .mine(caption: shown.caption, text: shown.text)
+                case ("message", _): return .reply(item.text)
+                case ("tool", _), ("subagent", _): return item.tool?.status == "running" ? nil : tool(item)
+                default: return nil
+                }
             }
         }
     }

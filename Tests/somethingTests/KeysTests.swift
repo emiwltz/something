@@ -147,9 +147,9 @@ enum Mockup {
         }
         for command in Keys.commands where command.needsSpace { #expect(greyedSomewhere.contains(command.id), "\(command.id)") }
         let open = Keys.Situation(space: true)
-        #expect(["insp", "reload", "finder", "export", "trash", "ask", "convo", "newconvo", "buildWith"].allSatisfy { Keys.enabled($0, open) })
+        #expect(["insp", "reload", "finder", "export", "trash", "ask", "convo", "newconvo", "reduce", "buildWith"].allSatisfy { Keys.enabled($0, open) })
         // Not wired yet: present and greyed, a space open or not.
-        #expect(!["palette", "settings", "keys", "reduce", "pointpart", "history", "rights", "versions", "askAll", "sleep"]
+        #expect(!["palette", "settings", "keys", "pointpart", "history", "rights", "versions", "askAll", "sleep"]
             .contains { Keys.enabled($0, open) })
         #expect(Keys.enabled("stop", Keys.Situation(working: true)), "a build on the New Space page can be stopped")
         #expect(!Keys.enabled("showreq", open) && Keys.enabled("showreq", Keys.Situation(waiting: true)), "Show Request while one waits")

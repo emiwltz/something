@@ -1,0 +1,562 @@
+// The assistant's card, 412 points at the bottom right of the center, over the space: its header (the eyes of its
+// state, the space's title as the conversation menu, the state word, Reduce and the grip), the conversation (⌘J: your
+// bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days), one notice when it is
+// stuck or waits for you, the present-tense line while it works, and the composer: the agent and model chips (views
+// New Space reuses), Point's slot, the conversation toggle and a flat field whose Send turns into Stop. Its words are
+// the model's and Presence's; the card keeps only the field's focus. A request is never answered here: the notice
+// leads to the native panel. CardHost puts it in the window and lets the clicks beside it reach the space.
+import AppKit
+import SomethingAgents
+import SomethingCore
+import SwiftUI
+
+struct AssistantCard: View {
+    @Bindable var model: AssistantModel
+    @Environment(\.colorScheme) private var scheme
+
+    /// The card's width, its distance from the center's edges, and the conversation's tallest.
+    static let width: CGFloat = 412, margin: CGFloat = 16, thread: CGFloat = 288
+
+    var body: some View {
+        if model.cardShown {
+            VStack(spacing: 0) {
+                header
+                if model.threadShown { conversation }
+                if let notice = model.notice { NoticeView(notice: notice).padding(EdgeInsets(top: 2, leading: 10, bottom: 8, trailing: 10)) }
+                if let now = model.presence.now { nowLine(now) }
+                if model.place != .blank { composer }
+            }
+            .frame(width: AssistantCard.width)
+            .background {
+                let shape = RoundedRectangle(cornerRadius: Look.card + 4, style: .continuous)
+                let dark = scheme == .dark
+                shape.fill(Look.Token.bg2.ui)
+                    // The float shadow, kept inside the card's 16-point margin, where the host draws.
+                    .shadow(color: .black.opacity(dark ? 0.35 : 0.06), radius: 1, y: 1)
+                    .shadow(color: .black.opacity(dark ? 0.5 : 0.12), radius: 7, y: 6)
+                    .overlay(shape.strokeBorder(Look.Token.line2.ui, lineWidth: 1))
+            }
+            .padding(AssistantCard.margin)
+        }
+    }
+
+    // MARK: The header
+
+    private var header: some View {
+        let presence = model.presence
+        return HStack(spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
+                Menu { ConversationMenu(model: model) } label: {
+                    HStack(spacing: 5) {
+                        Text(model.title).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                        Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+                    }
+                    .padding(.horizontal, 6).frame(height: 22).contentShape(Rectangle())
+                }
+                .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("Conversation menu")
+                Text(presence.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
+            }
+            Spacer(minLength: 0)
+            Button { model.open = false } label: {
+                Image(systemName: "minus").font(.system(size: 12, weight: .medium)).frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).help(Keys.tooltip("reduce", "Reduce")).accessibilityLabel("Reduce")
+            .padding(.trailing, 2)
+            // The grip: six dots, two by three (AB06 makes it drag the card).
+            Grid(horizontalSpacing: 2.5, verticalSpacing: 2.5) {
+                ForEach(0..<3, id: \.self) { _ in GridRow { ForEach(0..<2, id: \.self) { _ in Circle().frame(width: 2.5, height: 2.5) } } }
+            }
+            .foregroundStyle(Look.Token.ink3.ui).frame(width: 22, height: 28).accessibilityHidden(true)
+        }
+        .padding(.leading, 42).padding(.trailing, 8)
+        .frame(height: 54)
+        .overlay(alignment: .topLeading) {
+            Image(nsImage: Sign.miniEyes(presence.state, template: false)).frame(width: 16, height: 10).position(x: 27, y: 27)
+                .accessibilityLabel(presence.state.word)
+        }
+    }
+
+    // MARK: The conversation
+
+    private var conversation: some View {
+        // The scroll view asks for the whole conversation, and the card gives it what is left under 288 points: all of
+        // it when it fits, else its end, which stays in view while at the bottom.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6 * Look.density) {
+                ForEach(model.firstLines, id: \.self) {
+                    Text($0).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.bottom, 4)
+                ForEach(Array(model.rows.enumerated()), id: \.offset) { _, row in line(row) }
+            }
+            .padding(EdgeInsets(top: 2, leading: 14, bottom: 14, trailing: 14))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+        }
+        .defaultScrollAnchor(.bottom)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(maxHeight: AssistantCard.thread)
+    }
+
+    @ViewBuilder private func line(_ row: AssistantModel.Row) -> some View {
+        switch row {
+        case .day(let date):
+            HStack(spacing: 10) {
+                Rectangle().fill(Look.Token.line.ui).frame(height: 1)
+                Text(AssistantCard.day(date, now: model.clock())).font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize()
+                Rectangle().fill(Look.Token.line.ui).frame(height: 1)
+            }
+            .padding(EdgeInsets(top: 4, leading: 0, bottom: 2, trailing: 0))
+        case .mine(let caption, let text):
+            VStack(alignment: .trailing, spacing: 2) {
+                if let caption, caption != model.here { Text(caption).font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui) }
+                Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).foregroundStyle(Look.Token.bg.ui)
+                    .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
+                    .background(Look.Token.ink.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18))
+            }
+            .padding(.leading, 50)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        case .reply(let text):
+            Text((try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text))
+                .font(Look.font(.voice, size: 13).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink.ui)
+                .padding(.horizontal, 11).padding(.vertical, 8 * Look.density)
+                .background(Look.Token.sunk.ui, in: UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 4, bottomTrailingRadius: 18, topTrailingRadius: 18))
+                .padding(.trailing, 50)
+        case .tool(_, let words, let command):
+            let failed = words.hasSuffix("· failed") || words.hasSuffix("· denied")
+            HStack(spacing: 7) {
+                Image(systemName: failed ? "xmark" : "checkmark").font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(failed ? Look.Token.ink3.ui : Look.Token.ok.ui).frame(width: 12)
+                Text(command.map { "Ran \($0)\(words)" } ?? words).lineLimit(2).truncationMode(.middle)
+            }
+            .font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink2.ui)
+            .padding(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 4))
+        }
+    }
+
+    /// The words of a day line: "Today", "Yesterday", a weekday within the week, else the date ("3 October").
+    static func day(_ date: Date, now: Date, calendar: Calendar = .current) -> String {
+        if calendar.isDate(date, inSameDayAs: now) { return "Today" }
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        let format = DateFormatter()
+        (format.locale, format.calendar, format.timeZone) = (Locale(identifier: "en_GB"), calendar, calendar.timeZone)
+        format.dateFormat = days == 1 ? "'Yesterday'" : days > 1 && days < 7 ? "EEEE" : "d MMMM"
+        return format.string(from: date)
+    }
+
+    // MARK: The present-tense line
+
+    private func nowLine(_ now: Presence.Now) -> some View {
+        HStack(spacing: 8) {
+            switch now {
+            case .working(let step, let late):
+                Image(nsImage: Sign.miniEyes(.think, template: false)).frame(width: 18, height: 12)
+                Text(step).lineLimit(1).truncationMode(.tail)
+                if late {
+                    Spacer(minLength: 4)
+                    Text("Still working").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                    Button { model.stop() } label: {
+                        HStack(spacing: 6) { Text("Stop").fontWeight(.semibold); Text(Keys.shown("stop")).font(Look.font(.ui, size: 10).ui) }
+                            .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
+                            .overlay(RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.line2.ui))
+                    }
+                    .buttonStyle(.plain).help(model.presence.stopHelp)
+                }
+            case .waking:
+                Image(nsImage: Sign.miniEyes(.sleep, template: false)).frame(width: 18, height: 12)
+                Text("Waking up…")
+            case .changed(let file):
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Look.Token.ok.ui).frame(width: 13)
+                Text("Changed ") + Text(file).fontWeight(.semibold)
+                Spacer(minLength: 4)
+                Text("Just now").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
+            }
+            Spacer(minLength: 0)
+        }
+        .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink.ui)
+        .padding(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 4))
+        .frame(height: 30)
+        .padding(.horizontal, 10)
+    }
+
+    // MARK: The composer
+
+    private var composer: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 1) {
+                AgentChip(name: model.name, dot: model.dot) { AgentMenu(model: model) }
+                let words = model.modelWords
+                ModelChip(model: words.model, effort: words.effort) {
+                    Text(words.model)
+                    if let effort = words.effort { Text("Effort: \(effort)") }
+                }
+                PointChip()
+                Spacer(minLength: 0)
+                Button { model.threadShown.toggle() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.left").font(.system(size: 11.5))
+                        Text("\(model.messageCount)").foregroundStyle(Look.Token.ink.ui).monospacedDigit()
+                        Image(systemName: "chevron.up").font(.system(size: 8, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 180 : 0))
+                    }
+                    .chip(pressed: model.threadShown)
+                }
+                .buttonStyle(.plain)
+                .help(Keys.tooltip("convo", "Conversation")).accessibilityLabel("Conversation")
+                .accessibilityAddTraits(model.threadShown ? .isSelected : [])
+            }
+            .padding(.bottom, 4)
+            Field(model: model)
+        }
+        .padding(EdgeInsets(top: 2, leading: 8, bottom: 8, trailing: 8))
+    }
+}
+
+/// The flat field and its Send button, which turns into Stop while the agent works and nothing is written. Return
+/// sends, ⇧Return adds a line, and Return that confirms what an input method composes sends nothing.
+struct Field: View {
+    @Bindable var model: AssistantModel
+    @FocusState private var typing: Bool
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 4) {
+            TextField("", text: $model.draft, prompt: Text(model.placeholder).foregroundStyle(Look.Token.ink3.ui), axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(Look.font(.ui, size: 13.5).ui)
+                .foregroundStyle(Look.Token.ink.ui)
+                .lineLimit(1...5)
+                .padding(.horizontal, 2).padding(.vertical, 5)
+                .frame(minHeight: 30)
+                .focused($typing)
+                .accessibilityLabel("Message")
+                .onChange(of: model.focusing) { typing = true }
+                .onKeyPress(.return, phases: .down) { press in
+                    let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
+                    switch Field.onReturn(shift: press.modifiers.contains(.shift), marked: marked) {
+                    case .compose: return .ignored
+                    case .send: model.send()
+                    case .newline:
+                        if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
+                    }
+                    return .handled
+                }
+            let stop = model.stops
+            Button { stop ? model.stop() : model.send() } label: {
+                Group {
+                    if stop {
+                        RoundedRectangle(cornerRadius: 1.8).frame(width: 8, height: 8)
+                    } else {
+                        Image(systemName: "arrow.up").font(.system(size: 13, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(Look.Token.actfg.ui)
+                .frame(width: 30, height: 30)
+                .background(Look.Token.act.ui, in: Circle())
+                .opacity(model.canSend || stop ? 1 : 0.3)
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canSend && !stop)
+            .help(stop ? model.presence.stopHelp : "Send (Return)")
+            .accessibilityLabel(stop ? "Stop" : "Send")
+        }
+        .padding(EdgeInsets(top: 5, leading: 4, bottom: 5, trailing: 5))
+        .background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: Look.control + 5, style: .continuous))
+        // A calm 1.5-point line when it has the focus; no shadow, no ring.
+        .overlay(RoundedRectangle(cornerRadius: Look.control + 5, style: .continuous)
+            .strokeBorder(typing ? Look.Token.ink2.ui : Look.Token.line.ui, lineWidth: typing ? 1.5 : 1))
+    }
+
+    /// What Return does in the field.
+    enum Return: Equatable { case send, newline, compose }
+
+    /// Return sends, ⇧Return adds a line; while an input method composes (Japanese, Chinese, Korean), Return is its.
+    static func onReturn(shift: Bool, marked: Bool) -> Return {
+        marked ? .compose : shift ? .newline : .send
+    }
+}
+
+/// One notice above the composer: its title, its sentence and the one or two things that help. Never Allow.
+struct NoticeView: View {
+    let notice: AssistantModel.Notice
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: notice.symbol).font(.system(size: 12, weight: .medium))
+                .foregroundStyle(notice.bad ? Look.Token.bad.ui : Look.Token.ink.ui)
+                .frame(width: 24, height: 24)
+                .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.control))
+                .overlay(RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.line.ui))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(notice.title).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                if !notice.text.isEmpty {
+                    Text(notice.text).font(Look.font(.ui, size: 11.8).ui).lineSpacing(2).foregroundStyle(Look.Token.ink2.ui)
+                        .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                }
+                if !notice.actions.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(notice.actions, id: \.title) { action in
+                            Button(action: action.run) {
+                                Text(action.title).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                                    .padding(.horizontal, 11).frame(height: 27)
+                                    .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.control + 1))
+                                    .overlay(RoundedRectangle(cornerRadius: Look.control + 1).strokeBorder(Look.Token.line2.ui))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 6)
+                }
+            }
+            .padding(.top, 2)
+            Spacer(minLength: 0)
+        }
+        .padding(EdgeInsets(top: 11, leading: 12, bottom: 11, trailing: 12))
+        .background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: Look.card + 2, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Look.card + 2, style: .continuous).strokeBorder(Look.Token.line2.ui))
+    }
+}
+
+// MARK: Chips, also New Space's
+
+/// The agent that builds: a dot of its state's colour, its name and its menu.
+struct AgentChip<Items: View>: View {
+    let name: String, dot: Look.Token
+    @ViewBuilder let items: () -> Items
+
+    var body: some View {
+        Menu { items() } label: {
+            HStack(spacing: 6) {
+                Circle().fill(dot.ui).frame(width: 7, height: 7)
+                Text(name)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+            }
+            .chip()
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        .accessibilityLabel("Agent: \(name)")
+    }
+}
+
+/// The model and its effort, the effort lighter.
+struct ModelChip<Items: View>: View {
+    let model: String, effort: String?
+    @ViewBuilder let items: () -> Items
+
+    var body: some View {
+        Menu { items() } label: {
+            HStack(spacing: 6) {
+                (Text(model) + Text(effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+            }
+            .chip()
+        }
+        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
+        .accessibilityLabel("Model: \(model)\(effort.map { ", effort \($0)" } ?? "")")
+    }
+}
+
+/// Point's place in the composer row: greyed, as in the toolbar, until its slice (T14) gives it an action.
+struct PointChip: View {
+    var body: some View {
+        let enabled = Keys.command("pointpart")?.action != nil
+        return HStack(spacing: 6) {
+            Image(systemName: "scope").font(.system(size: 11.5))
+            Text("Point")
+        }
+        .chip()
+        .opacity(enabled ? 1 : 0.32)
+        .help(Keys.tooltip("pointpart", "Point"))
+        .accessibilityLabel("Point")
+    }
+}
+
+extension View {
+    /// The mockup's .chip: 26 points high, 9 on each side, Onest 12 medium in ink2; `pressed` has the selection's fill.
+    func chip(pressed: Bool = false) -> some View {
+        font(Look.font(.ui, size: 12, weight: .medium).ui)
+            .foregroundStyle(Look.Token.ink2.ui)
+            .padding(.horizontal, 9).frame(height: 26)
+            .background(pressed ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control + 1))
+            .contentShape(Rectangle())
+    }
+}
+
+extension Look.Token {
+    /// The token as SwiftUI draws it, following night and day.
+    var ui: Color { Color(nsColor: color) }
+}
+
+extension NSFont {
+    var ui: Font { Font(self as CTFont) }
+}
+
+// MARK: Menus
+
+/// The title's menu: the conversation and how it asks.
+struct ConversationMenu: View {
+    let model: AssistantModel
+
+    var body: some View {
+        Section("\(model.title) · its assistant") {
+            Button("New Conversation") { model.newConversation() }
+            Button("Stop") { model.stop() }.disabled(!model.working).help(model.presence.stopHelp)
+        }
+        if model.canAskEverything {
+            Divider()
+            Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
+        }
+        Divider()
+        Button("Look for Agents Again") { model.lookAgain() }
+    }
+}
+
+/// The agent chip's menu: the builders found, then the agents something only sees, greyed with their reason.
+struct AgentMenu: View {
+    let model: AssistantModel
+
+    var body: some View {
+        Section("Builds this space") {
+            ForEach(model.entries) { entry in
+                Toggle(entry.title, isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) }))
+                    .disabled(!entry.enabled).help(entry.note ?? "")
+            }
+        }
+        Section("Seen only") {
+            ForEach(AssistantModel.seenOnly, id: \.name) { seen in
+                Button("\(seen.name) · Can't build yet") {}.disabled(true).help(seen.why)
+            }
+        }
+    }
+}
+
+// MARK: What the card says
+
+extension AssistantModel {
+    /// One notice: a symbol, its title and sentence, red when something broke, and the actions that help.
+    struct Notice {
+        struct Action { let title: String, run: () -> Void }
+        let symbol: String, title: String, text: String, bad: Bool, actions: [Action]
+    }
+
+    /// The agents something sees but does not launch, each with why.
+    static var seenOnly: [(name: String, why: String)] {
+        Registry.app.agents.filter { $0.builder == nil }.map { ($0.name, $0.unavailable ?? "something only sees \($0.name).") }
+    }
+
+    /// The presence of this conversation's agent now.
+    var presence: Presence {
+        Presence(Presence.Facts(name: name, installed: kind.flatMap { installed[$0] }, waking: launching, failure: failure, stopped: session.stopped),
+                 agent: agent, turn: session.turn, now: clock())
+    }
+
+    /// Whether the card is drawn: open, and on the blank page (whose field is its own) only while it has a
+    /// conversation to show.
+    var cardShown: Bool { open && (place != .blank || threadShown || building) }
+
+    /// The card's title: the open space's, else where the person is.
+    var title: String {
+        switch place {
+        case .space(let title, _, _): AssistantModel.clean(title)
+        case .blank: "New Space"
+        case .templates: "Templates"
+        }
+    }
+
+    /// The caption of a message written here, which the conversation leaves out.
+    var here: String? { AssistantModel.shown(AssistantModel.context(place, home: places.home.path) + "\n").caption }
+
+    /// The colour of the agent chip's dot: ok while it can listen or works, red when stopped, ink3 asleep or unknown.
+    var dot: Look.Token {
+        switch presence.state {
+        case .limit: .bad
+        case .sleep, .unknown: .ink3
+        default: .ok
+        }
+    }
+
+    /// The model as the agent last reported it, by the name its options give, then the one asked for; and its effort.
+    var modelWords: (model: String, effort: String?) {
+        let options = agent?.options
+        let model = agent?.model.map { m in options?.model?.first { $0.value == m }?.label ?? m } ?? session.model ?? "Default model"
+        let effort = (agent?.effort ?? session.effort).map { e in options?.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
+        return (model, effort)
+    }
+
+    /// The messages of the conversation, the person's and the agent's.
+    var messageCount: Int {
+        rows.filter { if case .mine = $0 { true } else if case .reply = $0 { true } else { false } }.count
+    }
+
+    /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
+    var canSend: Bool { kind != nil && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var stops: Bool { working && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    /// The notice above the composer, the most pressing first; nil when nothing blocks or waits.
+    var notice: Notice? {
+        if noAgent {
+            return Notice(symbol: "powerplug", title: noBuilder, text: "something launches the coding agent you already use.", bad: true,
+                          actions: [.init(title: "How to Get One", run: howTo), .init(title: "Look Again", run: lookAgain)])
+        }
+        if signedOut {
+            return Notice(symbol: "exclamationmark.triangle", title: "\(name) isn't signed in to its model.",
+                          text: "Open Terminal, type \(command) and sign in, then click Try Again.", bad: true,
+                          actions: [.init(title: "Copy Command", run: copyCommand), .init(title: "Try Again", run: tryAgain)])
+        }
+        let presence = presence
+        if let said = presence.notice {
+            let again: [Notice.Action] = session.last == nil ? [] : [.init(title: presence.stuck == .crashed ? "Start Again" : "Try Again", run: tryAgain)]
+            let symbol = presence.stuck == .unknown ? "questionmark" : presence.stuck == .missing ? "powerplug" : "exclamationmark.triangle"
+            return Notice(symbol: symbol, title: said.title, text: said.text, bad: presence.stuck != .unknown,
+                          actions: presence.stuck == .unknown || presence.stuck == .missing ? [] : again)
+        }
+        if presence.state == .wait {
+            return Notice(symbol: "checkmark.shield", title: "\(name) is waiting for your answer",
+                          text: "The request is in its own window, outside the space. Only you can answer it there.", bad: false,
+                          actions: [.init(title: "Show Request \(Keys.shown("showreq"))", run: showRequest)])
+        }
+        if let ready, !working {
+            return Notice(symbol: "checkmark", title: "“\(ready.title)” is ready.", text: "", bad: false,
+                          actions: [.init(title: "Open", run: { [weak self] in self?.openReady(ready.id) })])
+        }
+        if unkept {
+            return Notice(symbol: "exclamationmark.triangle", title: "Couldn't keep this space's journal",
+                          text: "Its activity is not saved.", bad: true, actions: [])
+        }
+        return nil
+    }
+}
+
+/// The card's hosting view, at the bottom right of the center. It takes only the clicks on the card: those in its
+/// margin, where the shadow falls, and while the card is closed reach the space under it.
+final class CardHost: NSHostingView<AssistantCard> {
+    convenience init(model: AssistantModel) {
+        self.init(rootView: AssistantCard(model: model))
+    }
+
+    /// Puts the card in `center`: its right and bottom edges 16 points from the center's, as wide as the center
+    /// allows, below the toolbar.
+    func dock(in center: NSView) {
+        sizingOptions = [.intrinsicContentSize]
+        translatesAutoresizingMaskIntoConstraints = false
+        center.addSubview(self)
+        let wide = widthAnchor.constraint(equalToConstant: AssistantCard.width + 2 * AssistantCard.margin)
+        wide.priority = .defaultLow
+        setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
+        setContentCompressionResistancePriority(.defaultLow - 1, for: .vertical)
+        NSLayoutConstraint.activate([wide, widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor),
+                                     trailingAnchor.constraint(equalTo: center.trailingAnchor),
+                                     bottomAnchor.constraint(equalTo: center.bottomAnchor),
+                                     topAnchor.constraint(greaterThanOrEqualTo: center.safeAreaLayoutGuide.topAnchor)])
+    }
+
+    override func setFrameSize(_ size: NSSize) {
+        super.setFrameSize(size)
+        if rootView.model.floating != size.height { rootView.model.floating = size.height }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let inside = convert(point, from: superview), card = bounds.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
+        return rootView.model.cardShown && card.contains(inside) ? super.hitTest(point) : nil
+    }
+}

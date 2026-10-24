@@ -81,7 +81,7 @@ import Testing
         making = ("waiting", "Who waits")
         model.draft = "Half written"
         model.send(sentence)
-        #expect(model.building && model.drawer && model.draft == "Half written")
+        #expect(model.building && model.threadShown && model.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: sentence)) }))
         #expect(await wait(until: { !model.building }))
         #expect(opened == ["waiting"] && model.made == ["waiting"] && model.ready == nil)
@@ -99,7 +99,7 @@ import Testing
         #expect(await wait(until: { !model.building }))
         #expect(opened == ["waiting", nil, nil] && model.ready?.id == "second" && model.made.contains("second"))
         #expect(answers == [1, 2, 3])
-        #expect(model.status == "“Second” is ready. Open")
+        #expect(model.notice?.title == "“Second” is ready." && model.notice?.actions.map(\.title) == ["Open"])
         await assistants.finish(home, model)
 
         let question = RightsQuestion(space: "Second", description: "Invented.", rights: ["store"], scope: nil, missing: [], folder: nil, made: true)

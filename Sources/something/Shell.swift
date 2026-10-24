@@ -2,8 +2,8 @@
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
 // waiting requests, Point, Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
-// from being shown, the blank page, the templates or the tour, with the assistant floating over it at the bottom (not
-// over the tour).
+// from being shown, the blank page, the templates or the tour, with the assistant's card over it at the bottom right
+// (not over the tour).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -16,7 +16,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let center = NSView()
     let inspector: NSSplitViewItem
     let assistant: AssistantModel, library: Library
-    /// What the center shows, and the assistant over it.
+    /// What the center shows, and the assistant's card over it.
     private var shown: NSView?
     private(set) var floating: NSView?
     /// What covers the whole window: the toast, and later the palette and the sheets of keys.
@@ -78,8 +78,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
-        let floating = Floater(rootView: AssistantView(model: assistant))
-        Shell.float(floating, in: center)
+        let floating = CardHost(model: assistant)
+        floating.dock(in: center)
         self.floating = floating
         // The toolbar's lower edge, over the center only: the sidebar runs up to the window's top.
         let edge = NSBox()
@@ -91,32 +91,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         show(nil)
     }
 
-    /// Puts the assistant at the bottom of `center`, at most 640 points wide, its conversation at most 45% of the
-    /// center's height (plus the capsule's): it takes its own size, its shadows inside its margin.
-    static func float(_ host: Floater, in center: NSView) {
-        host.sizingOptions = [.intrinsicContentSize]
-        host.translatesAutoresizingMaskIntoConstraints = false
-        center.addSubview(host)
-        let margin = AssistantView.margin, wide = host.widthAnchor.constraint(equalToConstant: 640 + 2 * margin)
-        // Below the window's wish to keep its size (500): the assistant narrows, the window keeps its 640-point minimum.
-        wide.priority = .defaultLow
-        host.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
-        NSLayoutConstraint.activate([wide, host.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: 2 * margin - AssistantView.sides),
-                                     host.centerXAnchor.constraint(equalTo: center.centerXAnchor),
-                                     host.bottomAnchor.constraint(equalTo: center.bottomAnchor),
-                                     host.heightAnchor.constraint(lessThanOrEqualTo: center.heightAnchor, multiplier: 0.45, constant: 90 + 2 * margin)])
+    /// ⌘J: shows or hides the conversation, opening the card when it was closed.
+    @objc func toggleConversation(_ sender: Any?) {
+        assistant.threadShown = !(assistant.threadShown && assistant.open)
+        assistant.open = true
     }
 
-    /// ⌘J: shows or hides the conversation. In full screen it also hides the whole assistant, for a space alone.
-    @objc func toggleConversation(_ sender: Any?) {
-        if window.styleMask.contains(.fullScreen), assistant.drawer || assistant.hidden {
-            assistant.drawer = false
-            assistant.hidden.toggle()
-        } else {
-            assistant.drawer.toggle()
-            assistant.hidden = false
-        }
-    }
+    /// ⌘\: closes the card, or opens it.
+    @objc func reduceAssistant(_ sender: Any?) { assistant.open.toggle() }
 
     func windowWillClose(_ notification: Notification) {
         visible(false)
@@ -137,9 +119,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
-
-    /// Out of full screen, an assistant ⌘J hid comes back: a window offers no other way to find it.
-    func windowDidExitFullScreen(_ notification: Notification) { assistant.hidden = false }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace,
@@ -415,35 +394,5 @@ struct Unshown: View {
         .padding(28)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// The assistant's hosting view. It takes only the clicks on what it draws: those beside its pieces, between them and
-/// in its margin, where the shadows fall, reach the space under it.
-final class Floater: NSHostingView<AssistantView> {
-    override func viewDidMoveToSuperview() {
-        super.viewDidMoveToSuperview()
-        guard let superview else { return }
-        superview.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(self, selector: #selector(resized), name: NSView.frameDidChangeNotification, object: superview)
-        resized()
-    }
-
-    /// The center changed: the assistant is told the width it now has.
-    @objc private func resized() {
-        let room = min(640, max(0, (superview?.bounds.width ?? 0) - AssistantView.sides))
-        if rootView.model.room != room { rootView.model.room = room }
-    }
-
-    override func setFrameSize(_ size: NSSize) {
-        super.setFrameSize(size)
-        if rootView.model.floating != size.height { rootView.model.floating = size.height }
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let inside = convert(point, from: superview)
-        // SwiftUI's frames start at the top-left corner, like this view's own when it is flipped.
-        let flipped = isFlipped ? inside : NSPoint(x: inside.x, y: bounds.height - inside.y)
-        return rootView.model.drawn.contains { $0.contains(flipped) } ? super.hitTest(point) : nil
     }
 }

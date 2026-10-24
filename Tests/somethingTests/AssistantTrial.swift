@@ -144,7 +144,7 @@ struct AssistantTrial {
             model.draft = "Make the counters bigger."
             model.send()
             #expect(await wait(60) { model.problem != nil }, "rows: \(model.rows)")
-            #expect(model.light == .error && model.drawer && model.signedOut, "the same sign-in row as a refused key")
+            #expect(model.light == .error && model.notice?.title == "Claude Code isn't signed in to its model." && model.signedOut, "the same sign-in row as a refused key")
             #expect(model.problem?.contains("/login") == true, "the red row says what Claude Code said: \(model.problem ?? "nothing")")
 
             try trial.signIn()
@@ -154,25 +154,25 @@ struct AssistantTrial {
             let refused = "The model's server refused Claude Code's sign-in (error 401)."
             #expect(await wait(60) { model.problem == refused }, "problem: \(model.problem ?? "none"); rows: \(model.rows)")
             #expect(Date().timeIntervalSince(asked) < 30, "the refusal shows at the first retry")
-            #expect(model.light == .error && model.status == nil && model.signedOut)
+            #expect(model.light == .error && model.presence.stuck == .undelivered && model.signedOut)
             print("AssistantTrial: a refused key showed after \(Int(Date().timeIntervalSince(asked))) s.")
 
-            // A busy model server (529) is retried by Claude Code, and the status line says each retry.
+            // A busy model server (529) is retried by Claude Code, and the card says it cannot reach its model.
             (api.refusing, api.overloading) = (false, 3)
             let busy = Date()
             model.tryAgain()
-            #expect(await wait(30) { model.status?.hasPrefix("Claude Code can't reach its model (attempt ") == true }, "status: \(model.status ?? "none")")
-            #expect(Date().timeIntervalSince(busy) < 10, "the status line changes within a few seconds")
-            print("AssistantTrial: \(model.status ?? "") showed after \(Int(Date().timeIntervalSince(busy))) s.")
+            #expect(await wait(30) { model.presence.stuck == .cannotReachModel }, "said: \(model.presence.word)")
+            #expect(Date().timeIntervalSince(busy) < 10, "the card says it within a few seconds")
+            print("AssistantTrial: \(model.presence.word) showed after \(Int(Date().timeIntervalSince(busy))) s.")
             // Claude Code gives up after three 529s in a row (measured): the red row says what it said.
-            #expect(await wait(60) { model.problem != nil }, "status: \(model.status ?? "none")")
-            #expect(model.light == .error && model.status == nil && !model.signedOut)
+            #expect(await wait(60) { model.problem != nil }, "said: \(model.presence.word)")
+            #expect(model.light == .error && !model.signedOut)
             #expect(model.problem?.contains("529") == true, "problem: \(model.problem ?? "none")")
 
             model.tryAgain()
             let answered = { model.light == .ready && model.rows.contains { if case .reply(let text) = $0 { text.hasPrefix("Invented reply") } else { false } } }
             #expect(await wait(90, until: answered), "rows: \(model.rows); problem: \(model.problem ?? "none")")
-            #expect(model.problem == nil && model.status == nil)
+            #expect(model.problem == nil && model.notice == nil)
             let first = try #require(model.id)
 
             model.clock = { Date().addingTimeInterval(AssistantModel.idleLimit + 60) }

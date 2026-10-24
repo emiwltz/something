@@ -1,5 +1,5 @@
 // The blank page, the center when no space is open: New Space (⌘N), and where the tour ends. "What do you
-// want to make?", the assistant's input made big, three suggestions that each send a whole sentence, the templates,
+// want to make?", the assistant's field, three suggestions that each send a whole sentence, the templates,
 // each used by a click, and "Skip for now", which shows them all. Without a coding agent, the notice takes the input's
 // place.
 import SwiftUI
@@ -28,11 +28,11 @@ struct BlankView: View {
         // under the conversation, and while it is open the input shows, right above it.
         GeometryReader { window in
             ScrollViewReader { scroller in
-                ScrollView { page(window.size.width).frame(minHeight: max(0, window.size.height - model.floating), alignment: model.drawer ? .top : .center) }
+                ScrollView { page(window.size.width).frame(minHeight: max(0, window.size.height - model.floating), alignment: model.threadShown ? .top : .center) }
                     .contentMargins(.bottom, model.floating, for: .scrollContent)
                     .scrollBounceBehavior(.basedOnSize)
                     .onChange(of: window.size.height - model.floating, initial: true) {
-                        if model.drawer { scroller.scrollTo(BlankView.input, anchor: .bottom) }
+                        if model.threadShown { scroller.scrollTo(BlankView.input, anchor: .bottom) }
                     }
             }
         }
@@ -46,12 +46,12 @@ struct BlankView: View {
         VStack(spacing: 18) {
             Text("What do you want to make?").font(.system(size: 28, weight: .semibold))
             if model.noAgent {
-                NoAgent(model: model).frame(maxWidth: 620)
+                if let notice = model.notice { NoticeView(notice: notice).frame(maxWidth: 620) }
             } else {
                 Text("\(model.name) builds it with you, in \(Words.path(model.places.spaces.path, home: model.places.home.path)).")
                     .foregroundStyle(.secondary)
                 VStack(spacing: 18) {
-                    Composer(model: model, big: true).frame(maxWidth: 620).padding(.horizontal, 24)
+                    Field(model: model).frame(maxWidth: 620).padding(.horizontal, 24)
                     if model.building {
                         Text("It opens here when it is ready. You will be asked what it may do.").foregroundStyle(.secondary)
                     }
@@ -89,7 +89,7 @@ struct BlankView: View {
             }
         }
         // Up, out of the way of the conversation, once it is open.
-        .padding(model.drawer ? .top : .bottom, 40)
+        .padding(model.threadShown ? .top : .bottom, 40)
         .padding(.top, 20)
         .frame(maxWidth: .infinity)
     }

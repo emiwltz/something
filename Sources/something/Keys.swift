@@ -55,8 +55,8 @@ enum Keys {
                 line: "Show or hide the conversation", mine: true, needsSpace: true),
         Command(id: "newconvo", title: "New Conversation", key: "k", modifiers: [.command, .shift], action: #selector(App.newConversation(_:)),
                 owner: "AB09b", area: .assistant, line: "New conversation", mine: true, needsSpace: true),
-        Command(id: "reduce", title: "Reduce or Open", key: "\\", owner: "AB05", area: .assistant, line: "Reduce or open the assistant",
-                mine: true, needsSpace: true),
+        Command(id: "reduce", title: "Reduce or Open", key: "\\", action: #selector(App.reduceAssistant(_:)), owner: "AB04", area: .assistant,
+                line: "Reduce or open the assistant", mine: true, needsSpace: true),
         // Stop also works on the New Space page, where a build runs before its space exists.
         Command(id: "stop", title: "Stop", key: ".", action: #selector(App.stopAssistant(_:)), owner: "F5", area: .assistant,
                 line: "Stop the assistant", mine: true),

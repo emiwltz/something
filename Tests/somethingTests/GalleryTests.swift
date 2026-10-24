@@ -247,11 +247,11 @@ struct GalleryTests {
             model.light == .ready && model.rows.count > 5
         }
         try await draw(model, "assistant-ready" + suffix, fixture)
-        model.drawer = true
+        model.threadShown = true
         try await draw(model, "assistant-conversation" + suffix, height: 748, fixture)
         // As narrow as the center of the smallest window with the sidebar and Info open.
         try await draw(model, "assistant-conversation-narrow" + suffix, width: 340, height: 560, fixture)
-        model.drawer = false
+        model.threadShown = false
         model.newConversation()
         await say("go-slow") { model.light == .working }
         try await draw(model, "assistant-working" + suffix, fixture)
@@ -268,7 +268,7 @@ struct GalleryTests {
         await say("Add a clock in the corner.") { model.problem != nil }
         try await draw(model, "assistant-error" + suffix, height: 748, fixture)
         model.newConversation()
-        model.drawer = false
+        model.threadShown = false
         model.place = .space(title: "My agents", name: "agents", page: fixture.places.spaces.appendingPathComponent("agents.html").path)
         let none = AssistantModel(engine: Home(prefix: "something-gallery-").engine(), places: fixture.places)
         none.place = model.place
@@ -357,7 +357,7 @@ struct GalleryTests {
         library.relist()
         _ = model.appeared(library.entries, open: "garden-notes")
         model.newConversation()
-        (model.ready, model.drawer) = (library.entry("stack"), false)
+        (model.ready, model.threadShown) = (library.entry("stack"), false)
         model.place = .space(title: "Garden notes", name: "garden-notes", page: fixture.places.spaces.appendingPathComponent("garden-notes.html").path)
         try await draw(model, "assistant-space-ready" + suffix, fixture)
         let side = NSHostingView(rootView: SidebarView(library: library, assistant: model))
@@ -387,7 +387,7 @@ struct GalleryTests {
         let center = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(NSSize(width: width, height: height))
-        Shell.float(Floater(rootView: AssistantView(model: model)), in: center)
+        CardHost(model: model).dock(in: center)
         await wait(1)
         try draw(center, name, fixture)
         withExtendedLifetime(offscreen) {}

@@ -16,8 +16,10 @@ import WebKit
     /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" never ends its turn, "small game" starts building one and never ends its turn, "ask-first"
-    /// asks a permission, "counters bigger" retries its model twice and never ends its turn, and "darker header"
-    /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes).
+    /// asks a permission, "counters bigger" retries its model twice and never ends its turn, "darker header"
+    /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
+    /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, and "weather corner" starts
+    /// editing it and never ends its turn.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -55,8 +57,17 @@ import WebKit
           tool 4 Bash '{"command":"something check agents"}'
           echo '{"type":"assistant","message":{"id":"msg_5","model":"claude-example","role":"assistant","content":[{"type":"text","text":"Done. Waiting tiles now span the whole width, and a soft chime plays once when an agent starts waiting. The tone is made in the page with `AudioContext`, so it needs no file and no network."}]},"parent_tool_use_id":null,"uuid":"u5","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"u6"}' ;;
+        *'wait for me first'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"init","model":"opus","effort":"high","permissionMode":"default","uuid":"i1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_b1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_b1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"ab1","session_id":"s1"}'
+          echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_b1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rb1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_b2","model":"opus","role":"assistant","content":[{"type":"text","text":"Done. The two agents that wait for you now open the page, oldest first, with what each one asks."}]},"parent_tool_use_id":null,"uuid":"ab2","session_id":"s1"}'
+          echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"ub3"}' ;;
+        *'weather corner'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}' ;;
         *'"subtype":"initialize"'*)
-          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"}]}}}' ;;
+          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
         *'sign-in-please'*'"type":"user"'*)
           echo '{"type":"assistant","message":{"id":"msg_0","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Invalid API key · Please run /login"}]},"parent_tool_use_id":null,"error":"authentication_failed","is_api_error_message":true,"uuid":"u2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"Invalid API key · Please run /login","session_id":"s1","uuid":"u3"}' ;;
@@ -120,9 +131,9 @@ import WebKit
         #expect(AssistantModel.context(.templates, home: "/Users/example") == "[something] No space is open: the person is on the templates.")
     }
 
-    /// The drawer takes the context line off each message and says it as a caption; it shows tools in a few words and
-    /// never the agent's thoughts.
-    @Test func theDrawerShowsMessagesAndToolsWithoutTheContextLine() {
+    /// The conversation takes the context line off each message and says it as a caption; it shows finished tools in a
+    /// few words, never the agent's thoughts, and the day each turn starts when it changes.
+    @Test func theConversationShowsMessagesAndToolsWithoutTheContextLine() throws {
         let open = AssistantModel.context(.space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html"), home: "/Users/example")
         #expect(AssistantModel.shown(open + "\nMake the tiles wider.\nAnd blue.") == ("about My agents", "Make the tiles wider.\nAnd blue."))
         #expect(AssistantModel.shown(AssistantModel.context(.blank, home: "/") + "\nA board.") == ("on the blank page", "A board."))
@@ -139,8 +150,9 @@ import WebKit
                      Item(id: "m2", kind: "message", author: "agent", text: "Done: the tiles are wider.", at: "2026-10-19T09:00:00Z")]
         let thread = AgentThread(id: "s1", agent: "claude-1", title: nil, started: nil,
                                  turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: items)])
+        let day = AssistantModel.Row.day(try #require(iso8601.date(from: "2026-10-19T09:00:00Z")))
         #expect(AssistantModel.rows(thread) == [
-            .mine(caption: "about My agents", text: "Make the tiles wider."),
+            day, .mine(caption: "about My agents", text: "Make the tiles wider."),
             .tool(symbol: "book", words: "Read guide", command: nil), .tool(symbol: "eye", words: "Read agents.html", command: nil),
             .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
             .tool(symbol: "terminal", words: "", command: "something check agents"),
@@ -152,7 +164,7 @@ import WebKit
                    tool("code_exec", #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#)]
         #expect(AssistantModel.rows(AgentThread(id: "T-1", agent: "amp-1", title: nil, started: nil,
                                                 turns: [Turn(id: "1", state: "done", started: nil, ended: nil, items: amp)])) == [
-            .tool(symbol: "terminal", words: "", command: "cat agents.html"), .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
+            day, .tool(symbol: "terminal", words: "", command: "cat agents.html"), .tool(symbol: "pencil", words: "Edited agents.html", command: nil),
             .tool(symbol: "terminal", words: "", command: #"import { something_check } from "something"; text(await something_check({name:"agents"}));"#),
         ])
         // something's lent tools, by their name alone: the check shows the command something ran, the guide its words.
@@ -180,7 +192,7 @@ import WebKit
         #expect(session.agent == nil && session.rows.isEmpty && session.thread == nil, "a session with no agent reads nobody's")
         session.id = "claude-2"
         session.read(state)
-        #expect(session.agent?.id == "claude-2" && session.thread == "s2" && session.rows == [.reply("Invented two.")])
+        #expect(session.agent?.id == "claude-2" && session.thread == "s2" && session.rows.last == .reply("Invented two.") && session.rows.count == 2)
         session.read(State(at: "2026-10-19T09:01:00Z", kinds: [:], agents: [agent("claude-1", thread: "s1")]))
         #expect(session.agent == nil && session.rows.isEmpty && session.thread == "s2")
     }
@@ -299,7 +311,7 @@ import WebKit
         model.stop()
         #expect(model.draft == "Make an invented board.")
         #expect(model.kind == nil && model.noAgent)
-        #expect(model.notice == old)
+        #expect(model.noBuilder == old && model.notice?.title == old)
         #expect(model.entries.map(\.title) == ["Codex · can't build spaces"] && model.entries.map(\.note) == [old])
         #expect(model.entries.allSatisfy { !$0.enabled })
         model.choose("codex")
@@ -326,7 +338,8 @@ import WebKit
         #expect(await wait(until: { model.rows.contains(.reply("Invented reply.")) && model.light == .ready }))
         let id = try #require(model.id)
         #expect(model.engine.assistants == [id])
-        #expect(model.rows.first == .mine(caption: "about My agents", text: "Make the tiles wider."))
+        #expect(model.rows.dropFirst().first == .mine(caption: "about My agents", text: "Make the tiles wider."))
+        #expect(model.rows.first.map { if case .day = $0 { true } else { false } } == true, "a conversation starts with its day")
         #expect(input(home).contains { $0.contains(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nMake the tiles wider."#) })
         model.place = .blank
         model.draft = "And a second board."
@@ -337,7 +350,7 @@ import WebKit
         model.newConversation()
         #expect(model.id == nil && model.rows.isEmpty)
         #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))
-        #expect(model.status == nil && model.problem == nil)
+        #expect(model.notice == nil && model.problem == nil)
         await finish(home, model)
     }
 
@@ -386,7 +399,7 @@ import WebKit
         #expect(model.idled && model.light == .off)
         #expect(await wait(until: { model.engine.state.agents.first?.alive == false }))
         #expect(model.firstLines.last == "Claude Code was stopped to save memory. Your next message starts it again.")
-        #expect(model.status == nil, "a stop something asked for is not said as a failure")
+        #expect(model.notice == nil && model.presence.word == "Asleep · wakes on your next message", "a stop something asked for is not said as a failure")
         model.draft = "Hello again."
         model.send()
         #expect(await wait(until: { model.id != first && model.light == .ready }))
@@ -406,7 +419,8 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.problem != nil }))
         #expect(model.problem == "Invalid API key · Please run /login")
-        #expect(model.drawer && model.light == .error && model.signedOut, "a Claude Code never signed in gets the sign-in row")
+        #expect(model.light == .error && model.signedOut, "a Claude Code never signed in gets the sign-in notice")
+        #expect(model.notice?.title == "Claude Code isn't signed in to its model." && model.notice?.actions.map(\.title) == ["Copy Command", "Try Again"])
         model.copyCommand()
         #expect(copied == ["claude"])
         let first = model.id
@@ -416,9 +430,9 @@ import WebKit
         await finish(home, model)
     }
 
-    /// While Claude Code retries its model, the status line says so; a refused sign-in fails the turn at once,
-    /// and the red row says only that it isn't signed in, with Try Again and Copy Command.
-    @Test func theStatusLineSaysWhyTheAssistantWaits() async throws {
+    /// While Claude Code retries its model, the card's notice says it can't reach it; a refused sign-in fails the turn
+    /// at once, and the notice says only that it isn't signed in, with Copy Command and Try Again.
+    @Test func theCardSaysWhyTheAssistantWaits() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
         await look(model)
@@ -426,12 +440,12 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.retry == 2 }))
         #expect(model.light == .working && !model.signedOut)
-        #expect(model.status == "Claude Code can't reach its model (attempt 2). It keeps trying.")
+        #expect(model.presence.stuck == .cannotReachModel && model.notice?.title == "Stopped · can't reach its model")
         model.newConversation()
         model.draft = "Give it a darker header."
         model.send()
         #expect(await wait(until: { model.light == .error }))
-        #expect(model.signedOut && model.drawer && model.status == nil)
+        #expect(model.signedOut && model.notice?.title == "Claude Code isn't signed in to its model.")
         #expect(model.problem == "The model's server refused Claude Code's sign-in (error 401).")
         model.tryAgain()
         #expect(!model.signedOut, "Try Again starts a new agent, which has not retried")
@@ -524,38 +538,46 @@ import WebKit
         await finish(home, model)
     }
 
-    /// The margin around the assistant, where its shadows fall, and the room beside and between its pieces let clicks
-    /// through to the space under it.
-    @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheAssistantReachTheSpace() async throws {
+    /// The card sits 16 points from the center's right and bottom edges, 412 wide; its margin, where its shadow falls,
+    /// and the whole corner once it is reduced, let clicks through to the space under it.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func clicksBesideTheCardReachTheSpace() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
-        // Over a space: on the blank page the capsule is the page's own.
         model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
-        let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), floater = Floater(rootView: AssistantView(model: model))
+        let center = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), host = CardHost(model: model)
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(center.frame.size)
-        Shell.float(floater, in: center)
+        host.dock(in: center)
         center.layoutSubtreeIfNeeded()
-        let frame = floater.frame
-        #expect(frame.width == 640 + 2 * AssistantView.margin && frame.minY == 0)
-        #expect(center.hitTest(NSPoint(x: frame.minX + 4, y: frame.midY)) !== floater)
-        #expect(center.hitTest(NSPoint(x: frame.midX, y: frame.minY + 4)) !== floater)
-        #expect(center.hitTest(NSPoint(x: frame.midX, y: frame.minY + AssistantView.margin + 20))?.isDescendant(of: floater) == true)
-        // Beside the status line, and between it and the capsule, nothing is drawn: the space gets the click.
-        model.unkept = true
-        // SwiftUI reports the new piece's frame at its next update, which may come a little later on a busy runner.
-        #expect(await wait(until: {
-            center.layoutSubtreeIfNeeded()
-            offscreen.window.displayIfNeeded()
-            return model.drawn.count == 2
-        }), "drawn: \(model.drawn)")
-        let status = try #require(model.drawn.min { $0.width < $1.width }, "no piece was drawn")
-        let grown = floater.frame, y = { (top: CGFloat) in grown.maxY - top }
-        #expect(status.width < 400)
-        #expect(center.hitTest(NSPoint(x: grown.minX + AssistantView.margin + 6, y: y(status.midY))) !== floater)
-        #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.maxY + 3))) !== floater)
-        #expect(center.hitTest(NSPoint(x: grown.midX, y: y(status.midY)))?.isDescendant(of: floater) == true)
+        let frame = host.frame, card = frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
+        #expect(card.width == AssistantCard.width && card.maxX == 900 - 16 && card.minY == 16)
+        #expect(center.hitTest(NSPoint(x: card.minX - 4, y: card.midY)) !== host)
+        #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY - 4)) !== host)
+        #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20))?.isDescendant(of: host) == true)
+        model.open = false
+        center.layoutSubtreeIfNeeded()
+        #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20))?.isDescendant(of: host) != true, "a reduced card takes no click")
         withExtendedLifetime(offscreen) {}
+    }
+
+    /// Return sends, ⇧Return adds a line, and Return that confirms an input method's marked text sends nothing.
+    @Test func returnSendsAndShiftReturnAddsALine() {
+        #expect(Field.onReturn(shift: false, marked: false) == .send)
+        #expect(Field.onReturn(shift: true, marked: false) == .newline)
+        #expect(Field.onReturn(shift: false, marked: true) == .compose && Field.onReturn(shift: true, marked: true) == .compose)
+    }
+
+    /// The agent menu: the builders found, enabled, then the agents something only sees, greyed with their reason.
+    @Test func theAgentMenuSaysWhoCanBuild() async throws {
+        let (home, model) = try assistant(["claude", "pi"])
+        defer { home.remove() }
+        await look(model)
+        #expect(model.entries.map(\.title) == ["Claude Code", "pi · never asks before acting"] && model.entries.allSatisfy(\.enabled))
+        #expect(model.entries.map(\.checked) == [true, false])
+        let seen = AssistantModel.seenOnly
+        #expect(seen.map(\.name) == ["Antigravity", "Cursor"])
+        #expect(seen.allSatisfy { !$0.why.isEmpty } && seen[1].why.hasPrefix("Cursor asks you before each of something's own tools"))
+        await finish(home, model)
     }
 
     /// A page that throws an error written to steer the assistant: the strip's Ask to Fix sends the space's title,
