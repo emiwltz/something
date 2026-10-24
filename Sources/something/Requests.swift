@@ -34,7 +34,11 @@ import SomethingCore
     }
 
     /// Takes `id` out once the person answered it, for good.
-    func answer(_ id: String) {
+    func answer(_ id: String) { drop(id) }
+
+    /// Takes `id` out for good when its details are gone: it closed, though it may linger in the state. Held out
+    /// until it leaves the state, as an answered one.
+    func drop(_ id: String) {
         answered.insert(id)
         keep(waiting.filter { $0.id != id })
     }

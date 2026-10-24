@@ -44,7 +44,7 @@ final class Panels {
         while panel == nil, let first = queue.shown?.id {
             // Its details are gone: it closed, and cannot be shown.
             guard let prompt = source.prompt(first) else {
-                queue.answer(first)
+                queue.drop(first)
                 continue
             }
             let shown = PromptPanel(prompt, who: who(prompt.request)) { [weak self] answer in self?.decide(first, answer) }

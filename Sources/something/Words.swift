@@ -116,7 +116,7 @@ enum Words {
     /// the kinds of the Agent Client Protocol).
     static func wants(_ tool: String?) -> String {
         guard let tool else { return "do something that needs your permission" }
-        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
+        switch kinds[tool] {
         case .command?: return "run a command"
         case .file?: return "change a file"
         case .permissions?: return "change its permissions"
@@ -124,17 +124,21 @@ enum Words {
         }
     }
 
-    /// The effect of a request, said before its exact text: by its tool's kind, in `folder` from `home` when known.
-    static func effect(_ tool: String?, folder: String?, home: String) -> String {
-        let place = folder.map { " in " + Words.path($0, home: home) } ?? ""
+    /// The effect of a request, said before its exact text, in the mockup's words: by its tool's kind, in the space
+    /// titled `space` when known. Its folder has a row of its own in the panel, not a place in this sentence.
+    static func effect(_ tool: String?, space: String?) -> String {
+        let place = space.map { " in the \($0) space" } ?? ""
         guard let tool else { return "It needs your permission to go on." }
-        switch Registry.app.agents.lazy.compactMap({ $0.tools[tool] }).first {
+        switch kinds[tool] {
         case .command?: return "It will run one command\(place)."
         case .file?: return "It will change files\(place)."
         case .permissions?: return "It will change what it may do without asking you."
         case nil: return "It will use \(tool)\(place)."
         }
     }
+
+    /// What each tool does, by its name, as the first agent that names it says.
+    private static let kinds = Dictionary(Registry.app.agents.flatMap(\.tools).map { ($0.key, $0.value) }) { first, _ in first }
 
     /// How long ago `at`, an ISO 8601 date, was asked: "just now" in its first minute, then "asked 3 min ago", "asked
     /// 2 hours ago"; nil when the date does not read.

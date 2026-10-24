@@ -15,7 +15,9 @@ final class FakePrompts: PromptSource {
     var answers: [(String, Answer)] = []
     /// What `answer` throws, as the Engine does when the agent stopped reading.
     var lost: CodedError?
-    var requests: [Request] { prompts.map(\.request) }
+    /// Requests still listed whose details are gone: they closed.
+    var gone: [Request] = []
+    var requests: [Request] { gone + prompts.map(\.request) }
     func prompt(_ request: String) -> Prompt? { prompts.first { $0.request.id == request } }
     func answer(_ request: String, _ answer: Answer) throws {
         answers.append((request, answer))
@@ -196,7 +198,7 @@ final class FakePrompts: PromptSource {
     /// the agent, and for the assistant by the space it works on.
     @Test func eachSpaceCountsItsOwnRequests() {
         var place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/index.html")
-        let launches = ["agents": Set(["a1"]), "project": ["a2"]]
+        var launches = ["agents": Set(["a1"]), "project": ["a2"]]
         let queue = RequestQueue()
         queue.space = { RequestQueue.space(of: $0.agent, assistant: $0.agent == "assistant", place: place, launches: launches) }
         queue.follow([request("r1"), request("r2", agent: "a2"), request("r3", agent: "a1"), request("r4", agent: "assistant"),
@@ -209,6 +211,20 @@ final class FakePrompts: PromptSource {
         #expect(queue.count(in: "logbook") == 1, "the assistant's request follows where it works")
         queue.answer("r3")
         #expect(queue.count(in: "agents") == 1 && queue.waiting.count == 4)
+        launches["project", default: []].insert("a9")
+        #expect(queue.count(in: "project") == 2, "an agent a space launches after its request came is counted there")
+    }
+
+    /// A request still in the state whose details are gone has closed: it gets no panel and is not counted.
+    @Test func aRequestWithoutDetailsGetsNoPanel() {
+        let source = FakePrompts()
+        source.prompts = [source.permission("r1", about: "npm test")]
+        source.gone = [Request(id: "r0", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-17T09:00:00Z")]
+        let panels = Panels(source: source, shows: false)
+        panels.refresh()
+        #expect(panels.panel?.request.id == "r1" && panels.queue.waiting.map(\.id) == ["r1"])
+        panels.refresh()
+        #expect(panels.queue.waiting.map(\.id) == ["r1"] && source.answers.isEmpty, "never shown, never answered")
     }
 
     /// The quit sheet says how many agents stop, in the singular and the plural, the person's assistant first.

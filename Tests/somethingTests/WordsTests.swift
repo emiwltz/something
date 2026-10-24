@@ -92,16 +92,16 @@ import Testing
         #expect(shown.filter { $0.hasPrefix("~/code/project-") }.count == 6 && shown.contains("and 2 more"))
     }
 
-    /// A request in words: its effect by the tool's kind and the folder, how long ago it was asked by an injected
-    /// clock, its place in the queue, and who asks.
+    /// A request in words: its effect by the tool's kind and the space, in the mockup's words, how long ago it was
+    /// asked by an injected clock, its place in the queue, and who asks.
     @Test func aRequestSaysItsEffectAgeAndWho() {
-        let folder = "/Users/example/something/spaces"
-        #expect(Words.effect("Bash", folder: folder, home: home) == "It will run one command in ~/something/spaces.")
-        #expect(Words.effect("commandExecution", folder: nil, home: home) == "It will run one command.")
-        #expect(Words.effect("Edit", folder: folder + "/oracle", home: home) == "It will change files in ~/something/spaces/oracle.")
-        #expect(Words.effect("permissions", folder: folder, home: home) == "It will change what it may do without asking you.")
-        #expect(Words.effect("WebFetch", folder: folder, home: home) == "It will use WebFetch in ~/something/spaces.")
-        #expect(Words.effect(nil, folder: folder, home: home) == "It needs your permission to go on.")
+        #expect(Words.effect("Bash", space: "My agents") == "It will run one command in the My agents space.")
+        #expect(Words.effect("commandExecution", space: nil) == "It will run one command.")
+        #expect(Words.effect("Edit", space: "Oracle") == "It will change files in the Oracle space.")
+        #expect(Words.effect("Edit", space: nil) == "It will change files.")
+        #expect(Words.effect("permissions", space: "Oracle") == "It will change what it may do without asking you.")
+        #expect(Words.effect("WebFetch", space: "Oracle") == "It will use WebFetch in the Oracle space.")
+        #expect(Words.effect(nil, space: "Oracle") == "It needs your permission to go on.")
 
         let now = ISO8601DateFormatter().date(from: "2026-10-23T18:20:00Z")!
         #expect(Words.age("2026-10-23T18:19:30Z", now: now) == "just now")
