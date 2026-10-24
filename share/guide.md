@@ -392,7 +392,7 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
 - **The person's assistant is read-only too**: the agent something's own window talks to is listed as launched, but
   its `can` is all false and `because.send` says why; a write to it answers `READ_ONLY_AGENT`. Its conversation, its
   held messages and its requests are the person's: they are never in a space's state. Its `error` keeps its `code`
-  but not its words, and no conversation in the spaces folder is ever listed as seen elsewhere.
+  but not its words, and no conversation in or below the spaces folder is ever listed as seen elsewhere.
 - **`other` agents are seen by their process only**: no conversation, no state beyond `unknown`.
 
 ## Memory

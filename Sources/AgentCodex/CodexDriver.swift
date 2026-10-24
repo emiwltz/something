@@ -205,8 +205,8 @@ final class CodexDriver: Driver {
                 // nothing of Codex's own configuration. The dotted key replaces only that one entry, as `-c` would: the
                 // person's other servers stay, and a [mcp_servers.something] of theirs (disabled, filtered) is set
                 // aside whole. Codex asks before each MCP tool call: the lent tools, named one by one, are the
-                // assistant's building work, which does not ask (AGENTS.md, rule 2). Only a new thread: the app never
-                // resumes its assistant, and what Codex does with a resumed thread's config was not tried.
+                // assistant's building work, which does not ask (AGENTS.md, rule 2). Only a new thread: a resumed thread
+                // gets no lent tools, since what Codex does with a resumed thread's config was not tried.
                 if let lent = launch.lent, let server = lent.server, !launch.resume {
                     let approved = Dictionary(uniqueKeysWithValues: lent.tools.map { ($0.name, ["approval_mode": "approve"]) })
                     params["config"] = ["mcp_servers.\(CodexDriver.server)": ["command": server.words[0], "args": Array(server.words.dropFirst()),
