@@ -430,7 +430,19 @@ struct AcceptanceTrust {
         #expect(await wait(until: { library.entry("brief") == nil }) && shell.window.attachedSheet == nil)
         #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["brief.html", "brief.json"])
     }
-    @Test("e9: quit while assistants work", .disabled("not built yet: T9")) func e9() async throws {}
+    /// ⌘Q while two assistants work and Codex's request waits: the alert names each, the request first with "will be
+    /// denied", under the sign. Cancel is the default (focused, Escape, Return); Quit denies the request before any
+    /// agent is stopped.
+    @Test("e9: quit while assistants work") func e9() async throws {
+        let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex")],
+                              working: [.init(id: "a2", space: "Daily brief", program: "Claude Code"),
+                                        .init(id: "a3", space: "Project watch", program: "Claude Code")])
+        let sheet = try await quit(leaving, "e9", texts: ["1 request waits and 2 assistants are working. Quit anyway?",
+                                              "My agents · Codex", "will be denied", "Daily brief · Claude Code", "working",
+                                              "Project watch · Claude Code", "working",
+                                              "Quitting denies this request. It stops those working in the middle of a turn; what they already changed stays."])
+        #expect(sheet.title == "1 request waits and 2 assistants are working. Quit anyway?")
+    }
     /// Full screen cannot be entered offscreen: the panel is placed as it is for a window in full screen, at the screen's
     /// top right below the toolbar, over the page drawn at the screen's size, the sidebar folded and no chrome around
     /// (the toolbar that hides itself comes with W5).
@@ -469,7 +481,64 @@ struct AcceptanceTrust {
         }
     }
     @Test("e14: the panel over the welcome", .disabled("not built yet: AB17w")) func e14() async throws {}
-    @Test("e15: quit with requests", .disabled("not built yet: T9")) func e15() async throws {}
+    /// ⌘Q while two requests wait and one assistant works: each request is named, "will be denied"; Cancel is the default.
+    @Test("e15: quit with requests") func e15() async throws {
+        let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex"), .init(id: "r2", space: "Project watch", program: "Claude Code")],
+                              working: [.init(id: "a3", space: "Daily brief", program: "Claude Code")])
+        let sheet = try await quit(leaving, "e15", texts: ["2 requests wait and 1 assistant is working. Quit anyway?",
+                                               "My agents · Codex", "will be denied", "Project watch · Claude Code", "will be denied",
+                                               "Daily brief · Claude Code", "working",
+                                               "Quitting denies these requests. It stops the one working in the middle of a turn; what it already changed stays."])
+        #expect(sheet.title == "2 requests wait and 1 assistant is working. Quit anyway?")
+    }
+
+    /// The quit alert of `leaving` over Daily brief, as the app hangs it: its words, its eyes, Cancel the default (Return
+    /// and Escape), then Quit answering each request no before the agents stop.
+    func quit(_ leaving: Leaving, _ id: String, texts: [String]) async throws -> Sheet {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let sheet = Ask.quit(leaving)
+        #expect(sheet.isAlert && sheet.title == texts[0] && sheet.frame.width == Sheet.width)
+        #expect(PanelsTests.texts(sheet.contentView) == texts)
+        // The sign in its tile first, then each row's eyes.
+        let eyes = Self.images(sheet.contentView).compactMap { $0.accessibilityLabel() }.dropFirst()
+        #expect(Array(eyes) == leaving.requests.map { _ in "Waiting for you" } + leaving.working.map { _ in "Working" })
+        let denied = try #require(Self.fields(sheet.contentView).first { $0.stringValue == "will be denied" })
+        #expect(denied.textColor == Look.Token.bad.color)
+        #expect(sheet.buttons.map(\.title) == ["Quit", "Cancel"] && sheet.buttons.map(\.role) == [.secondary, .primary])
+        #expect(sheet.firstResponder === sheet.buttons[1] && sheet.buttons[1].keyEquivalent == "\u{1b}" && sheet.buttons[0].keyEquivalent.isEmpty,
+                "Cancel is the default: it holds the focus and Escape")
+        try await stage.appearances { suffix in
+            try await Picture.sheet(sheet, over: shell, library: library, web: brief.web, id + suffix, root: stage.home.root)
+        }
+        sheet.keyDown(with: try Self.key("\r", 36))
+        #expect(sheet.chosen == .primary, "Return presses Cancel")
+        // As the app does: the alert hangs from the window; Escape keeps the app, then a click on Quit quits.
+        let source = FakePrompts()
+        var steps: [String] = []
+        func ask(_ alert: Sheet, then: @escaping (Bool) -> Void) { alert.hang(on: shell.window) { then($0 == .secondary) } }
+        let kept = Ask.quit(leaving)
+        App.quit(leaving, source: source, stop: { steps.append("stop"); $0() }, confirm: { ask(kept, then: $0) }, reply: { steps.append("reply \($0)") })
+        kept.cancelOperation(nil)
+        #expect(await wait(until: { !steps.isEmpty }) && steps == ["reply false"] && source.answers.isEmpty, "Escape keeps the app")
+        steps = []
+        let quitting = Ask.quit(leaving)
+        App.quit(leaving, source: source, stop: { steps.append("stop after \(source.answers.count)"); $0() },
+                 confirm: { ask(quitting, then: $0) }, reply: { steps.append("reply \($0)") })
+        quitting.buttons[0].performClick(nil)
+        #expect(await wait(until: { steps.count == 2 }) && steps == ["stop after \(leaving.requests.count)", "reply true"])
+        #expect(source.answers.map(\.0) == leaving.requests.map(\.id) && source.answers.allSatisfy { $0.1 == .deny })
+        #expect(shell.window.attachedSheet == nil)
+        return sheet
+    }
+
+    static func images(_ view: NSView?) -> [NSImageView] {
+        (view?.subviews ?? []).flatMap { ($0 as? NSImageView).map { [$0] } ?? images($0) }
+    }
 }
 
 extension Picture {

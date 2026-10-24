@@ -1,6 +1,6 @@
 // The sheets that ask the person, on the main window: the rights a space declares, a mode that makes an agent ask less,
 // a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
-// the folder a template follows, moving a space to the Trash, quitting while agents run, switching the assistant's
+// the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching the assistant's
 // builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window. The
 // sheets and the panels share two labels: a line that wraps at a width, and a path on one line.
@@ -403,20 +403,23 @@ enum Ask {
         let page = entry.space.location.lastPathComponent + (entry.space.form == .folder ? "/" : "")
         let memory = remembers.map { $0 == 0 ? "nothing yet" : "\($0) entr\($0 == 1 ? "y" : "ies")" } ?? "does not read"
         return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
-                     rows: [("doc", "Its page", page), ("square.3.layers.3d", "What it remembers", memory)],
+                     rows: [.init(mark: .symbol("doc"), label: [("Its page", false)], meta: page),
+                            .init(mark: .symbol("square.3.layers.3d"), label: [("What it remembers", false)], meta: memory)],
                      fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
     }
 
-    /// The sheet that asks before quitting while `count` agents something launched run, the person's assistant among
-    /// them when `assistant`: Quit, then Cancel.
-    static func quit(_ count: Int, assistant: Bool = false) -> NSAlert {
-        let others = assistant ? count - 1 : count
-        let running = assistant && others == 0 ? "Your assistant is still running. Quitting stops it."
-            : assistant ? "Your assistant and \(others) other agent\(others == 1 ? "" : "s") something started are still running. Quitting stops them."
-            : count == 1 ? "An agent something started is still running. Quitting stops it."
-            : "\(count) agents something started are still running. Quitting stops them."
-        return alert("Quit something?", running, buttons: ["Quit", "Cancel"], escape: 1)
+    /// The alert before quitting while something waits or works: each request waiting, which quitting denies, then
+    /// each agent at work, which it stops, by space and program; Quit, then Cancel, the default.
+    static func quit(_ leaving: Leaving) -> Sheet {
+        func row(_ one: Leaving.Row, _ state: Sign.State, _ meta: String, bad: Bool) -> Sheet.Row {
+            Sheet.Row(mark: .eyes(state), label: one.space.map { [($0, true), (" · " + one.program, false)] } ?? [(one.program, true)],
+                      meta: meta, plain: true, bad: bad)
+        }
+        let words = Words.quit(requests: leaving.requests.count, working: leaving.working.count)
+        return Sheet(icon: .sign, title: words.title,
+                     rows: leaving.requests.map { row($0, .wait, "will be denied", bad: true) } + leaving.working.map { row($0, .think, "working", bad: false) },
+                     fine: words.fine, actions: [.init(title: "Quit", role: .secondary), .init(title: "Cancel", role: .primary)], alert: true)
     }
 
     /// The sheet before a switch of builder ends the conversation: Switch, then Cancel.

@@ -1,6 +1,6 @@
 // What the app's windows say about a path and a journal line, as a newcomer reads them: a path with ~ for the home
 // folder, cut between two names when it is too long, never inside one; a journal line as one short sentence in local
-// time; a request's title, effect, age, place in the queue and who asks. The words are made apart from the views, so
+// time; a request's title, effect, age, place in the queue and who asks; what quitting ends. The words are made apart from the views, so
 // that tests read exactly what Info, the rights sheet and the request panel show.
 import AppKit
 import SomethingAgents
@@ -161,6 +161,19 @@ enum Words {
     static func who(space: String?, assistant: Bool, name: String?, age: String?) -> String {
         let asker = assistant ? (space == nil ? "your assistant" : "its assistant") : name.map { "“\($0)”" }
         return [space, asker, age].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// The quit alert's title and its last line, given `requests` waiting and `working` agents at work: the four
+    /// titles of the mockup, each in the singular or the plural.
+    static func quit(requests: Int, working: Int) -> (title: String, fine: String) {
+        let waits = requests == 1 ? "1 request waits" : "\(requests) requests wait"
+        let work = working == 1 ? "1 assistant is working" : "\(working) assistants are working"
+        let title = requests > 0 && working > 0 ? "\(waits) and \(work). Quit anyway?"
+            : requests > 0 ? "\(waits) for you. Quit anyway?" : "\(work). Quit anyway?"
+        let denies = requests == 0 ? nil : "Quitting denies \(requests == 1 ? "this request" : "these requests")."
+        let stops = working == 0 ? nil : working == 1 ? "It stops the one working in the middle of a turn; what it already changed stays."
+            : "It stops those working in the middle of a turn; what they already changed stays."
+        return (title, [denies, stops].compactMap { $0 }.joined(separator: " "))
     }
 
     /// `text` on one line, its spaces and line breaks made one space, cut with "…" past `quoted` characters.

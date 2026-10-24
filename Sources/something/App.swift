@@ -1,8 +1,8 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
 // Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the menu bar
 // (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the panel of the
-// agents' requests; the state pushed at most four times a second; and quitting, which asks first while agents something
-// launched run, then stops them. Closing the window keeps the app and its agents running, as a Mac app with one main
+// agents' requests; the state pushed at most four times a second; and quitting, which asks first while a request waits
+// or an agent something launched works, then denies the requests and stops the agents. Closing the window keeps the app and its agents running, as a Mac app with one main
 // window does; the open space closes with it, and opens again when the window comes back.
 import AppKit
 import SomethingAgents
@@ -355,25 +355,49 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         return true
     }
 
-    /// Asks first in a sheet when agents something launched still run, then stops them all before quitting.
+    /// Asks first in an alert when a request waits or an agent something launched works, then denies the requests and
+    /// stops every agent before quitting.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        App.quit(engine, confirm: { [shell] running, assistant, answer in
+        let leaving = leaving()
+        App.quit(leaving, source: engine, stop: { [engine] done in engine.stopAll(within: 5, done: done) }, confirm: { [shell] answer in
             shell.front()
             // A question left open is answered as its Cancel would be: Quit always asks, never does nothing.
             Shell.endSheets(of: shell.window)
-            Ask.quit(running, assistant: assistant).beginSheetModal(for: shell.window) { answer($0 == .alertFirstButtonReturn) }
+            Ask.quit(leaving).hang(on: shell.window) { answer($0 == .secondary) }
         }, reply: { NSApp.reply(toApplicationShouldTerminate: $0) })
         return .terminateLater
     }
 
-    /// Quitting: when agents something launched still run, `confirm` asks the person, given their number and whether
-    /// the assistant is one of them. Then every agent is stopped and `reply` gets true, or it gets false at once when
-    /// the person keeps the app.
-    static func quit(_ engine: Engine, confirm: (Int, Bool, @escaping (Bool) -> Void) -> Void, reply: @escaping (Bool) -> Void) {
-        let alive = engine.state.agents.filter { $0.origin == "launched" && $0.alive == true }
-        let stop = { engine.stopAll(within: 5) { reply(true) } }
-        guard !alive.isEmpty else { return stop() }
-        confirm(alive.count, alive.contains { engine.assistants.contains($0.id) }) { $0 ? stop() : reply(false) }
+    /// What quitting ends now: the requests waiting, oldest first, then the agents something launched that work and
+    /// wait for nothing, each by the title of its space.
+    func leaving() -> Leaving {
+        let title = { (name: String?) in name.map { self.library.entry($0)?.title ?? $0 } }
+        let agents = engine.state.agents
+        func program(_ id: String) -> String { agents.first { $0.id == id }.map { Registry.app.name(of: $0.kind) } ?? "An agent" }
+        let waiting = panels.queue.waiting
+        let working = agents.filter { agent in
+            agent.origin == "launched" && agent.alive == true && agent.state == "working" && !waiting.contains { $0.agent == agent.id }
+        }
+        return Leaving(requests: waiting.map { Leaving.Row(id: $0.id, space: title(panels.queue.space($0)), program: program($0.agent)) },
+                       working: working.map { agent in
+                           let space = RequestQueue.space(of: agent.id, assistant: engine.assistants.contains(agent.id), place: assistant.place,
+                                                          launches: launches.ids)
+                           return Leaving.Row(id: agent.id, space: title(space), program: program(agent.id))
+                       })
+    }
+
+    /// Quitting: when `leaving` holds anything, `confirm` asks the person first. Then each request waiting is denied,
+    /// in so many words, before `stop` ends every agent, and `reply` gets true; or it gets false at once when the
+    /// person keeps the app. Nothing is asked when nothing waits or works: idle agents are stopped without a word.
+    static func quit(_ leaving: Leaving, source: PromptSource, stop: @escaping (@escaping () -> Void) -> Void,
+                     confirm: (@escaping (Bool) -> Void) -> Void, reply: @escaping (Bool) -> Void) {
+        let end = {
+            // An agent stopped while it waits would never hear the answer: it hears a no, never a yes.
+            for request in leaving.requests { try? source.answer(request.id, .deny) }
+            stop { reply(true) }
+        }
+        guard !leaving.isEmpty else { return end() }
+        confirm { $0 ? end() : reply(false) }
     }
 
     /// Ends the app at its start, before any agent was launched: in a sheet, which is all a person sees when the app
@@ -383,6 +407,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         ask.tell(message)
         exit(1)
     }
+}
+
+/// What quitting ends: the requests waiting, which it denies, and the agents at work, which it stops. A row is a
+/// request's id or an agent's, the title of its space (nil when none is known) and its program's name.
+struct Leaving: Equatable {
+    struct Row: Equatable { var id: String, space: String?, program: String }
+    var requests: [Row] = [], working: [Row] = []
+    var isEmpty: Bool { requests.isEmpty && working.isEmpty }
 }
 
 /// The agents each space launched or resumed, by space name, for the app's whole life: an agent outlives the opening

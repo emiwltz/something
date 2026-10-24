@@ -157,14 +157,34 @@ import WebKit
         ])
     }
 
-    /// Quit with no agent something launched asks nothing and quits. (With agents running: AssistantTrial.)
-    @Test func quittingWithNoAgentAsksNothing() async {
-        let home = Home(prefix: "something-assistant-")
-        defer { home.remove() }
-        var asked = false, replied: Bool?
-        App.quit(home.engine(), confirm: { _, _, _ in asked = true }, reply: { replied = $0 })
-        #expect(await wait(30) { replied != nil })
-        #expect(!asked && replied == true)
+    /// Quit asks nothing when no request waits and no agent works: idle agents are stopped without a word.
+    @Test func quittingWithNothingWaitingOrWorkingAsksNothing() {
+        let source = FakePrompts()
+        var asked = false, steps: [String] = []
+        App.quit(Leaving(), source: source, stop: { steps.append("stop"); $0() }, confirm: { _ in asked = true },
+                 reply: { steps.append("reply \($0)") })
+        #expect(!asked && steps == ["stop", "reply true"] && source.answers.isEmpty)
+    }
+
+    /// Quit asks while a request waits or an agent works. Cancel keeps everything; Quit denies each request waiting, in
+    /// so many words, before any agent is stopped.
+    @Test func quittingDeniesEachRequestBeforeStopping() {
+        let source = FakePrompts()
+        let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex"), .init(id: "r2", space: nil, program: "pi")],
+                              working: [.init(id: "a3", space: "Daily brief", program: "Claude Code")])
+        var asked = 0, steps: [String] = []
+        let stop = { (done: @escaping () -> Void) in steps.append("stop after \(source.answers.count) answers"); done() }
+        App.quit(leaving, source: source, stop: stop, confirm: { asked += 1; $0(false) }, reply: { steps.append("reply \($0)") })
+        #expect(asked == 1 && steps == ["reply false"] && source.answers.isEmpty, "Cancel denies nothing and stops nothing")
+        steps = []
+        App.quit(leaving, source: source, stop: stop, confirm: { asked += 1; $0(true) }, reply: { steps.append("reply \($0)") })
+        #expect(asked == 2 && steps == ["stop after 2 answers", "reply true"])
+        #expect(source.answers.map(\.0) == ["r1", "r2"] && source.answers.allSatisfy { $0.1 == .deny })
+        // An answer that cannot reach its agent does not keep the app open: the agent is stopped anyway.
+        source.lost = CodedError("AGENT_ERROR", "The agent stopped reading.")
+        steps = []
+        App.quit(Leaving(working: leaving.working), source: source, stop: stop, confirm: { asked += 1; $0(true) }, reply: { steps.append("reply \($0)") })
+        #expect(asked == 3 && steps.last == "reply true", "an agent at work alone asks too")
     }
 
     /// AGENTS.md and CLAUDE.md are written when missing, written again while they keep something's marker, and left

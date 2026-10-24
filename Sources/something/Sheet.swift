@@ -12,6 +12,12 @@ final class Sheet: NSPanel {
     enum Icon { case symbol(String), sign }
     /// A sentence in parts, each bold or not: the words a space chose are never read as markup.
     typealias Words = [(text: String, bold: Bool)]
+    /// A row of what a sheet is about: a symbol or an agent's eyes, a label on one line, and a detail at the right, in
+    /// code, or `plain` in the text's face; `bad` when it says what the person loses.
+    struct Row {
+        enum Mark { case symbol(String), eyes(Sign.State) }
+        var mark: Mark, label: Words, meta: String?, plain = false, bad = false
+    }
     static let width: CGFloat = 380, corner: CGFloat = 14
 
     let isAlert: Bool
@@ -22,7 +28,7 @@ final class Sheet: NSPanel {
     var ended: () -> Void = {}
 
     /// A sheet `width` wide of the parts given, in this order; `alert` centres them. Text the page gave is shown as is.
-    init(icon: Icon?, title: String, body: Words = [], rows: [(symbol: String, label: String, meta: String?)] = [],
+    init(icon: Icon?, title: String, body: Words = [], rows: [Row] = [],
          block: NSView? = nil, fine: String? = nil, actions: [Action], alert: Bool = false, width: CGFloat = Sheet.width) {
         isAlert = alert
         super.init(contentRect: NSRect(x: 0, y: 0, width: width, height: 100), styleMask: .borderless, backing: .buffered, defer: true)
@@ -150,22 +156,35 @@ final class Sheet: NSPanel {
         return field
     }
 
-    /// The rows of what a sheet is about, a symbol, a label and a quiet detail each, in a ringed list.
-    private static func list(_ rows: [(symbol: String, label: String, meta: String?)], width: CGFloat) -> NSView {
+    /// The rows of what a sheet is about, a mark, a label and a quiet detail each, in a ringed list.
+    private static func list(_ rows: [Row], width: CGFloat) -> NSView {
         let lines = NSStackView()
         (lines.orientation, lines.spacing) = (.vertical, 0)
         for (index, row) in rows.enumerated() {
             if index > 0 { lines.addArrangedSubview(Box(NSView(), fill: .line)) }
-            let image = NSImageView(image: NSImage(systemSymbolName: row.symbol, accessibilityDescription: nil) ?? NSImage())
-            (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink3.color)
-            // One line at its own height, centred with its symbol and its detail.
-            let label = label([(row.label, false)], Look.Style(face: Look.medium.face, size: Look.medium.size, weight: Look.medium.weight, leading: 1),
+            let image: NSImageView
+            switch row.mark {
+            case .symbol(let name):
+                image = NSImageView(image: NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage())
+                (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink3.color)
+                image.widthAnchor.constraint(equalToConstant: 14).isActive = true
+            case .eyes(let state):
+                image = NSImageView(image: Sign.miniEyes(state))
+                (image.contentTintColor, image.imageScaling) = (Look.Token.eyes.color, .scaleNone)
+                image.setAccessibilityLabel(state.word)
+                image.widthAnchor.constraint(equalToConstant: 16).isActive = true
+            }
+            // One line at its own height, centred with its mark and its detail; a long one ends in "…".
+            let label = label(row.label, Look.Style(face: Look.medium.face, size: Look.medium.size, weight: Look.medium.weight, leading: 1),
                               width: width - 80)
-            let meta = row.meta.map { RequestPanel.text($0, Look.Style(face: .code, size: 11, weight: .regular, leading: 1), .ink3) }
+            (label.maximumNumberOfLines, label.lineBreakMode) = (1, .byTruncatingTail)
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            let style = row.plain ? Look.small : Look.Style(face: .code, size: 11, weight: .regular, leading: 1)
+            let meta = row.meta.map { RequestPanel.text($0, style, row.bad ? .bad : .ink3) }
             // The label takes the room left, so that each detail stands at the right edge.
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-            image.widthAnchor.constraint(equalToConstant: 14).isActive = true
             meta?.setContentHuggingPriority(.required, for: .horizontal)
+            meta?.setContentCompressionResistancePriority(.required, for: .horizontal)
             let line = NSStackView(views: [image, label, meta].compactMap { $0 })
             (line.spacing, line.distribution, line.alignment) = (9, .fill, .centerY)
             line.heightAnchor.constraint(greaterThanOrEqualToConstant: Look.row + 3).isActive = true

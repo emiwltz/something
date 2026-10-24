@@ -119,6 +119,20 @@ import Testing
         #expect(Words.who(space: nil, assistant: false, name: nil, age: nil) == "")
     }
 
+    /// The quit alert's four titles, in the singular and the plural, and its last line saying what quitting does.
+    @Test func quittingSaysWhatWaitsAndWorks() {
+        #expect(Words.quit(requests: 1, working: 2).title == "1 request waits and 2 assistants are working. Quit anyway?")
+        #expect(Words.quit(requests: 2, working: 1).title == "2 requests wait and 1 assistant is working. Quit anyway?")
+        #expect(Words.quit(requests: 1, working: 0).title == "1 request waits for you. Quit anyway?")
+        #expect(Words.quit(requests: 3, working: 0).title == "3 requests wait for you. Quit anyway?")
+        #expect(Words.quit(requests: 0, working: 1).title == "1 assistant is working. Quit anyway?")
+        #expect(Words.quit(requests: 0, working: 2).title == "2 assistants are working. Quit anyway?")
+        #expect(Words.quit(requests: 1, working: 2).fine
+                == "Quitting denies this request. It stops those working in the middle of a turn; what they already changed stays.")
+        #expect(Words.quit(requests: 2, working: 0).fine == "Quitting denies these requests.")
+        #expect(Words.quit(requests: 0, working: 1).fine == "It stops the one working in the middle of a turn; what it already changed stays.")
+    }
+
     func labels(in view: NSView) -> [NSTextField] {
         ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(labels(in:))
     }

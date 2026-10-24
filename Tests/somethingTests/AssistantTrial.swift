@@ -188,7 +188,7 @@ struct AssistantTrial {
 
     /// Use Template makes a space and opens it; its rights are asked once, as a space the person chose; the
     /// drawer offers to make it theirs; the agent edits it and the open space reloads with the edit; Info shows the
-    /// rights as answered. Then Quit asks, says the assistant is running, and stops it.
+    /// rights as answered. Then Quit, the assistant ready, asks nothing and stops it.
     @Test func aTemplateIsMadeYoursThenQuitStopsTheAssistant() async throws {
         let api = try FakeMessagesAPI()
         defer { api.stop() }
@@ -232,12 +232,11 @@ struct AssistantTrial {
             #expect(info.problem == nil)
 
             let assistant = try #require(model.id)
-            var confirmed: (count: Int, assistant: Bool)?, replied: Bool?
-            App.quit(engine, confirm: { count, isAssistant, answer in
-                confirmed = (count, isAssistant)
-                answer(true)
-            }, reply: { replied = $0 })
-            #expect(confirmed?.count == 1 && confirmed?.assistant == true)
+            // Ready, it waits for nothing and works on nothing: Quit asks nothing and stops it.
+            var asked = false, replied: Bool?
+            App.quit(Leaving(), source: engine, stop: { engine.stopAll(within: 5, done: $0) }, confirm: { _ in asked = true },
+                     reply: { replied = $0 })
+            #expect(!asked)
             #expect(await wait(15) { replied != nil })
             #expect(replied == true && engine.state.agents.first { $0.id == assistant }?.alive == false)
         }

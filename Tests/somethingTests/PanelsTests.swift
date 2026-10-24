@@ -674,15 +674,6 @@ final class FakeNotifier: Notifier {
         #expect(panels.queue.waiting.map(\.id) == ["r1"] && source.answers.isEmpty, "never shown, never answered")
     }
 
-    /// The quit sheet says how many agents stop, in the singular and the plural, the person's assistant first.
-    @Test func theQuitSheetSaysWhoStops() {
-        #expect(Ask.quit(1).informativeText == "An agent something started is still running. Quitting stops it.")
-        #expect(Ask.quit(2).informativeText == "2 agents something started are still running. Quitting stops them.")
-        #expect(Ask.quit(1, assistant: true).informativeText == "Your assistant is still running. Quitting stops it.")
-        #expect(Ask.quit(2, assistant: true).informativeText == "Your assistant and 1 other agent something started are still running. Quitting stops them.")
-        #expect(Ask.quit(3, assistant: true).informativeText == "Your assistant and 2 other agents something started are still running. Quitting stops them.")
-    }
-
     /// The sheets the app waits for (the rights, an export) mean what their buttons say, the second of the
     /// export being With Its Data. The modal loop itself is not run: in this process, which never ran NSApp, runModal
     /// and a modal session alike end the whole test run quietly (it still exits 0).
@@ -700,7 +691,7 @@ final class FakeNotifier: Notifier {
         #expect(ask.withData("board", keys: [], bytes: 0) == nil, "no window")
         let offscreen = Offscreen(NSView())
         ask.window = { offscreen.window }
-        let first = Ask.quit(1)
+        let first = Ask.switching(from: "Codex", to: "Claude Code")
         first.beginSheetModal(for: offscreen.window) { _ in }
         defer { offscreen.window.endSheet(first.window) }
         #expect(ask.withData("board", keys: ["seen"], bytes: 12) == nil)
