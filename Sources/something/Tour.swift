@@ -1,19 +1,33 @@
-// The tour, shown in the window at the first start and again from Help › Welcome Tour: Welcome, then who
-// builds with you, then the blank page itself, where it ends. It never starts an agent: choosing a builder only says
-// which one the first message will start. Its end is kept in the preferences, with whether it offered the launcher.
-// How to Get One's list of the builders and their install commands lives here too: the tour shows it first.
+// The welcome tour's model: five steps done by keyboard (Return goes on, ⌘[ goes back, Escape skips it all), shown at
+// the first start and again from Help › Welcome Tour. It never starts an agent: choosing an assistant only says which
+// one the first message will start. Each comfort is asked and starts off: the launcher, offered only under a Homebrew
+// prefix, and the notifications. Its end is kept in the preferences, with whether it offered the launcher. Welcome.swift
+// draws it and takes its keys.
+import Foundation
 import SomethingAgents
-import SwiftUI
 
 @Observable final class Tour {
-    /// What the tour shows: the welcome, the builders found, none found, or the search still going on.
-    enum Screen: Equatable { case welcome, builders, none, looking }
+    enum Step: Int, CaseIterable { case welcome, assistant, comforts, meet, ready }
+    /// What the window shows: a step, or, at the assistant's step, no builder found (`none`, also while looking).
+    enum Screen: Equatable { case welcome, assistant, none, comforts, meet, ready }
+    /// A comfort the third step asks about.
+    enum Comfort: Equatable { case launcher, notify }
 
-    /// 0 for the welcome, 1 for who builds with you.
-    var step = 0
-    /// Whether the welcome offers to add something to Applications, and whether its box is ticked.
+    private(set) var step = Step.welcome
+    /// Whether the last move went forward, for the side the next step slides in from.
+    private(set) var forward = true
+    /// The comfort under the keys (↑ ↓ move it, Space turns it on or off).
+    private(set) var cursor = 0
     let offersLauncher: Bool
-    var addLauncher: Bool
+    private(set) var addLauncher = false
+    private(set) var notify: Bool
+    /// Whether ⌘K was tried at the fourth step, and whether Look Again is still looking.
+    private(set) var met = false
+    private(set) var looking = false
+    /// Whether "What is a coding agent?" is open.
+    var explained = false
+    /// The install command just copied, for a moment.
+    private(set) var copied: String?
     /// Called when the tour ended, with what went wrong when the launcher could not be made.
     @ObservationIgnored var finished: (_ problem: String?) -> Void = { _ in }
     let places: Places, app: URL
@@ -22,162 +36,121 @@ import SwiftUI
     init(places: Places, app: URL = Bundle.main.bundleURL) {
         (self.places, self.app) = (places, app)
         offersLauncher = Launcher.offered(app: app, places: places)
-        addLauncher = Preferences.at(places).addToApplications
+        notify = Preferences.at(places).notify
     }
 
-    /// Ends the tour: it is not shown again at the next start, nor the launcher offered again; the launcher is made
-    /// when the box was ticked.
-    func end() {
+    /// The comforts asked, in order: the launcher only when it is offered.
+    var comforts: [Comfort] { (offersLauncher ? [.launcher] : []) + [.notify] }
+
+    func screen(_ assistant: AssistantModel) -> Screen {
+        switch step {
+        case .welcome: .welcome
+        case .assistant: assistant.kind == nil ? .none : .assistant
+        case .comforts: .comforts
+        case .meet: .meet
+        case .ready: .ready
+        }
+    }
+
+    /// Whether Look Again is busy: it was just clicked, or the builders were never looked for yet.
+    func searching(_ assistant: AssistantModel) -> Bool { looking || (assistant.kind == nil && !assistant.noAgent) }
+
+    /// Return: Look Again when no builder was found, the end at the last step, else the next step.
+    func next(_ assistant: AssistantModel) {
+        switch screen(assistant) {
+        case .none: lookAgain(assistant)
+        case .ready: end()
+        default: move(Step(rawValue: step.rawValue + 1) ?? .ready, forward: true)
+        }
+    }
+
+    /// ⌘[: the step before, except while Look Again looks.
+    func back() {
+        guard !looking, let before = Step(rawValue: step.rawValue - 1) else { return }
+        move(before, forward: false)
+    }
+
+    /// Goes to `step` (a picture or a test starts there).
+    func move(_ to: Step, forward: Bool = true) {
+        (self.forward, step, cursor) = (forward, to, 0)
+    }
+
+    /// The arrows at the assistant's step: in a grid of two columns ↑ ↓ move by a row and ← → by one, in a list only
+    /// ↑ ↓ move; the choice wraps around. At the comforts, ↑ ↓ move the cursor. Returns whether the arrow was used.
+    @discardableResult
+    func arrow(_ dx: Int, _ dy: Int, _ assistant: AssistantModel) -> Bool {
+        switch screen(assistant) {
+        case .assistant:
+            let kinds = assistant.entries.filter(\.enabled).map(\.id), grid = kinds.count > 2
+            guard !kinds.isEmpty, dy != 0 || grid else { return false }
+            let at = kinds.firstIndex(of: assistant.kind ?? "") ?? 0, by = dy * (grid ? 2 : 1) + dx
+            assistant.choose(kinds[((at + by) % kinds.count + kinds.count) % kinds.count])
+            return true
+        case .comforts:
+            guard dy != 0 else { return false }
+            cursor = ((cursor + dy) % comforts.count + comforts.count) % comforts.count
+            return true
+        default: return false
+        }
+    }
+
+    /// Space at the comforts: turns the one under the cursor on or off.
+    func toggle() {
+        guard step == .comforts, comforts.indices.contains(cursor) else { return }
+        toggle(comforts[cursor])
+    }
+
+    /// Turns `comfort` on or off, and puts the cursor on it.
+    func toggle(_ comfort: Comfort) {
+        cursor = comforts.firstIndex(of: comfort) ?? cursor
+        switch comfort {
+        case .launcher: addLauncher.toggle()
+        case .notify: notify.toggle()
+        }
+    }
+
+    func isOn(_ comfort: Comfort) -> Bool { comfort == .launcher ? addLauncher : notify }
+
+    /// ⌘K at the fourth step: the assistant says hello. Nothing is sent to it.
+    func meet() { if step == .meet { met = true } }
+
+    /// Looks for the builders again; the step says so for a moment, then shows what was found.
+    func lookAgain(_ assistant: AssistantModel) {
+        guard !looking else { return }
+        looking = true
+        assistant.lookAgain()
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.2))
+            self?.looking = false
+        }
+    }
+
+    /// Copies an install command with `copy`; its button says Copied for a moment.
+    func copy(_ command: String, with copy: (String) -> Void) {
+        copy(command)
+        copied = command
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.6))
+            if self?.copied == command { self?.copied = nil }
+        }
+    }
+
+    /// Escape: ends the tour as it is, every comfort left as it was, and asks nothing more.
+    func skip() { end(applying: false) }
+
+    /// Ends the tour: it is not shown again at the next start, nor the launcher offered again. With `applying`, the
+    /// notifications follow their switch, and the launcher is made when its switch is on.
+    func end(applying: Bool = true) {
+        let notify = notify
         Preferences.at(places).change { [offersLauncher] in
             $0.toured = true
             if offersLauncher { $0.launcherOffered = true }
+            if applying { $0.notify = notify }
         }
-        guard offersLauncher, addLauncher, let prefix = Launcher.prefix(of: app) else { return finished(nil) }
+        guard applying, offersLauncher, addLauncher, let prefix = Launcher.prefix(of: app) else { return finished(nil) }
         do {
             try Launcher.make(prefix: prefix, places: places, icon: Bundle.main.url(forResource: "something", withExtension: "icns"))
             finished(nil)
         } catch { finished(error.sentence) }
-    }
-
-    func screen(_ assistant: AssistantModel) -> Screen {
-        if step == 0 { return .welcome }
-        if assistant.noAgent { return .none }
-        return assistant.kind == nil ? .looking : .builders
-    }
-}
-
-struct TourView: View {
-    @Bindable var tour: Tour
-    let assistant: AssistantModel, templates: [Template]
-
-    var body: some View {
-        VStack(spacing: 14) {
-            switch tour.screen(assistant) {
-            case .welcome: welcome
-            case .builders: builders
-            case .none: none
-            case .looking:
-                ProgressView().controlSize(.small)
-                Text("Looking for coding agents on your Mac…").foregroundStyle(.secondary)
-                buttons { Button("Back") { tour.step = 0 } }
-            }
-        }
-        .frame(width: 560)
-        .multilineTextAlignment(.center)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .bottom) {
-            HStack(spacing: 7) {
-                ForEach(0..<2) { Circle().fill(tour.step == $0 ? Color.secondary : Color.secondary.opacity(0.3)).frame(width: 7, height: 7) }
-            }
-            .padding(.bottom, 26)
-            .accessibilityElement()
-            .accessibilityLabel("Step \(tour.step + 1) of 2")
-        }
-    }
-
-    private func title(_ text: String) -> some View {
-        Text(text).font(.system(size: 30, weight: .bold)).padding(.top, 6)
-    }
-
-    private func buttons(@ViewBuilder _ content: () -> some View) -> some View {
-        HStack(spacing: 10) { content() }.controlSize(.large).padding(.top, 10)
-    }
-
-    private var welcome: some View {
-        Group {
-            Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 96, height: 96)
-            title("Welcome to something")
-            Text("Make your own spaces: pages built for you by your coding agent, shown safely here.")
-                .font(.system(size: 17, weight: .medium))
-            HStack(spacing: 12) {
-                ForEach(templates.filter { ["agents", "brief", "pet"].contains($0.id) }) { Preview(template: $0).frame(width: 150) }
-            }
-            .padding(.top, 8)
-            Grid(alignment: .leading, verticalSpacing: 8) {
-                ForEach([("text.bubble", "You describe it. Your agent builds it."), ("hand.raised", "something shows it, and asks you before anything sensitive."),
-                         ("lock", "Nothing leaves your Mac: no account, no tracking.")], id: \.0) { line in
-                    GridRow { Image(systemName: line.0).gridColumnAlignment(.center); Text(line.1) }
-                }
-                if tour.offersLauncher {
-                    GridRow { Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]); Toggle("Add something to Applications, so Spotlight finds it.", isOn: $tour.addLauncher) }
-                }
-            }
-            .multilineTextAlignment(.leading)
-            .foregroundStyle(.secondary)
-            .fixedSize().padding(.top, 6)
-            buttons { Button("Continue") { tour.step = 1 }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent) }
-        }
-    }
-
-    private var builders: some View {
-        Group {
-            title("Who builds with you?")
-            Text("These coding agents are on your Mac. Choose the one that builds your spaces.").foregroundStyle(.secondary)
-            VStack(spacing: 0) {
-                ForEach(assistant.entries) { entry in
-                    Button { assistant.choose(entry.id) } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: entry.checked ? "largecircle.fill.circle" : "circle")
-                                .foregroundStyle(entry.checked ? Color.accentColor : .secondary)
-                            Text(entry.title)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!entry.enabled)
-                    .help(entry.note ?? "")
-                    if entry.id != assistant.entries.last?.id { Divider() }
-                }
-            }
-            .multilineTextAlignment(.leading)
-            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .frame(width: 420)
-            Text(assistant.firstLines[0]).font(.system(size: 12.5)).foregroundStyle(.secondary).frame(width: 420)
-            Text("It uses your own account and settings, as in Terminal. Nothing starts until you send it a first message.")
-                .font(.system(size: 12.5)).foregroundStyle(.secondary).frame(width: 420).padding(.top, 6)
-            buttons {
-                Button("Back") { tour.step = 0 }
-                Button("Continue") { tour.end() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-            }
-        }
-    }
-
-    private var none: some View {
-        Group {
-            title("No coding agent yet")
-            let names = InstallList.builders.map(\.name)
-            Text("something builds spaces with \(names.dropLast().joined(separator: ", ")) or \(names.last ?? ""). Install one, sign it in once in Terminal, then click Look Again.")
-                .foregroundStyle(.secondary)
-            InstallList(rows: InstallList.builders, copy: assistant.copy).multilineTextAlignment(.leading).padding(.top, 6)
-            buttons {
-                Button("Continue Without an Agent") { tour.end() }
-                Button("Look Again") { assistant.lookAgain() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
-            }
-        }
-    }
-}
-
-/// How to Get One's list: each agent, the command that installs it, and a button that copies that command.
-struct InstallList: View {
-    let rows: [(name: String, command: String)], copy: (String) -> Void
-
-    /// The coding agents something builds with, each with its install command.
-    static var builders: [(name: String, command: String)] {
-        Registry.app.builders.compactMap { agent in agent.install.map { (agent.name, $0) } }
-    }
-
-    var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-            ForEach(rows, id: \.name) { row in
-                GridRow {
-                    Text(row.name).fontWeight(.medium)
-                    Text(row.command).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                    Button("Copy") { copy(row.command) }.controlSize(.small)
-                }
-            }
-        }
-        .padding(.vertical, 4)
     }
 }

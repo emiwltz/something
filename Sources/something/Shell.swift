@@ -261,10 +261,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         heading(space.title, space.space.location.lastPathComponent, space: true, point: !space.stopped)
     }
 
-    /// Shows the tour in the center, alone: the sidebar folded, Info and the assistant hidden.
+    /// Shows the tour's content in the center, alone, holding the keys: the sidebar folded, Info and the assistant
+    /// hidden. (Its own window, Welcome.window, takes its place when App opens it there.)
     func show(_ tour: Tour) {
         touring = tour
-        put(Shell.hosted(TourView(tour: tour, assistant: assistant, templates: library.templates)))
+        let keys = WelcomeKeys(tour: tour, assistant: assistant, motion: library.preferences.motion)
+        put(keys)
+        window.makeFirstResponder(keys)
         glass.isHidden = true
         split.splitViewItems[0].isCollapsed = true
         bare("something", "")

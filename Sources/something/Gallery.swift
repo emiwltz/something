@@ -359,19 +359,3 @@ struct Secondary: ButtonStyle {
     }
 }
 
-/// A template's picture at 16:10, rounded, with a hairline: the tour's.
-struct Preview: View {
-    let template: Template
-
-    var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
-        return Group {
-            if let preview = template.preview { Image(nsImage: preview).resizable().aspectRatio(contentMode: .fill) } else { Color.secondary.opacity(0.1) }
-        }
-        .aspectRatio(1.6, contentMode: .fit)
-        .clipShape(shape)
-        .overlay(shape.strokeBorder(.separator, lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
-        .accessibilityLabel(template.title)
-    }
-}

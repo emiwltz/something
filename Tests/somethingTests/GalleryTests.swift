@@ -314,13 +314,13 @@ struct GalleryTests {
         let welcome = Tour(places: every.home.places, app: every.home.root.appendingPathComponent("brew/Cellar/something/0.2.0/something.app"))
         every.shell.show(welcome)
         try await draw(every.shell, library: every.library, web: nil, "tour-welcome" + suffix, every.home)
-        welcome.step = 1
+        welcome.move(.assistant)
         try await draw(every.shell, library: every.library, web: nil, "tour-builders-every" + suffix, every.home)
         let one = try await onboarding(["claude"]), none = try await onboarding([])
         defer { one.home.remove(); none.home.remove() }
         for (window, name) in [(one, "tour-builders-one"), (none, "tour-none")] {
             let tour = Tour(places: window.home.places)
-            tour.step = 1
+            tour.move(.assistant)
             window.shell.show(tour)
             try await draw(window.shell, library: window.library, web: nil, name + suffix, window.home)
         }

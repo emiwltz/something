@@ -1,7 +1,7 @@
 // The launcher: a small something.app in ~/Applications that opens the one Homebrew installed, so that Spotlight finds
 // something (it indexes nothing under Homebrew's prefix). The tour offers it once, only when something runs from a
-// Homebrew prefix and no launcher is there; it is made only when the person ticks the box, and never registered by
-// something: Spotlight and Finder find it as they find any app put in Applications.
+// Homebrew prefix and no launcher is there; it is made only when the person turns its switch on, and never registered
+// by something: Spotlight and Finder find it as they find any app put in Applications. Settings can remove it again.
 import Foundation
 import SomethingCore
 
@@ -60,5 +60,17 @@ enum Launcher {
             try? FileManager.default.removeItem(at: app)
             throw SpaceError("something could not add itself to \(app.deletingLastPathComponent().path): \(error.localizedDescription)")
         }
+    }
+
+    /// Removes the launcher at `place(places)` when it is the one `make` made (its bundle identifier says so); anything
+    /// else there is left as it is. Returns whether it was removed. Throws when it could not be removed.
+    @discardableResult
+    static func remove(places: Places) throws -> Bool {
+        let app = place(places), info = app.appendingPathComponent("Contents/Info.plist")
+        guard let data = try? Data(contentsOf: info),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              plist["CFBundleIdentifier"] as? String == id else { return false }
+        try FileManager.default.removeItem(at: app)
+        return true
     }
 }

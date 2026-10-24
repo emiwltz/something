@@ -1,23 +1,138 @@
 // Acceptance scenarios of the first start and making a space: the welcome and the film (a1–a8), New Space, the build
-// ladder, the arrival, templates and the rights sheet (d1–d8).
+// ladder, the arrival, templates and the rights sheet (d1–d8). The welcome is drawn over a stated reconstruction of
+// the main window dimmed behind it, as the window server would compose them.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
 import SwiftUI
+import SomethingAgents
 import Testing
 @testable import something
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-build-"))
 struct AcceptanceBuild {
     @Test("a1: the film on the glass", .disabled("not built yet: AB18")) func a1() async throws {}
-    @Test("a2: welcome, step 1", .disabled("not built yet: AB17")) func a2() async throws {}
-    @Test("a3: welcome, the builders", .disabled("not built yet: AB17")) func a3() async throws {}
-    @Test("a4: welcome, launcher and notices", .disabled("not built yet: AB17")) func a4() async throws {}
-    @Test("a5: welcome, the sticker and its keys", .disabled("not built yet: AB17")) func a5() async throws {}
-    @Test("a6: welcome, the summary", .disabled("not built yet: AB17")) func a6() async throws {}
-    @Test("a7: welcome with no builder", .disabled("not built yet: AB17")) func a7() async throws {}
-    @Test("a8: welcome after the first hello", .disabled("not built yet: AB17")) func a8() async throws {}
+    /// The welcome's first step over the main window of a first start, dimmed: the sign, "something", the one sentence,
+    /// 1 of 5, Skip Tour and Continue. Escape and Return hold.
+    @Test("a2: welcome, step 1") func a2() async throws {
+        let scene = try await Self.welcome(.welcome)
+        defer { scene.remove() }
+        #expect(scene.window.title == "Welcome to something" && scene.window.contentView?.frame.size == Welcome.size)
+        try await scene.draw("a2") { words in
+            #expect(words == ["Skip Tour", "Continue"], "\(words)")
+        }
+    }
+
+    /// Choose your assistant: the six builders found in two columns, Claude Code chosen, the two seen only and why, and
+    /// ↑ ↓ Choose with Back.
+    @Test("a3: welcome, the builders") func a3() async throws {
+        let scene = try await Self.welcome(.assistant)
+        defer { scene.remove() }
+        #expect(scene.assistant.entries.filter(\.enabled).map(\.id) == ["claude", "codex", "opencode", "pi", "omp", "amp"])
+        try await scene.draw("a3") { words in
+            #expect(words == ["Choose your assistant", "Your assistant", "Skip Tour", "Choose", "Back", "Continue"], "\(words)")
+        }
+    }
+
+    /// A few comforts, under a Homebrew prefix: the launcher and the notifications, both off, the cursor on the first.
+    @Test("a4: welcome, launcher and notices") func a4() async throws {
+        let scene = try await Self.welcome(.comforts, homebrew: true)
+        defer { scene.remove() }
+        #expect(scene.tour.comforts == [.launcher, .notify] && !scene.tour.addLauncher && !scene.tour.notify && scene.tour.cursor == 0)
+        try await scene.draw("a4") { words in
+            #expect(words.contains("Add something to Applications") && words.contains("Tell me when an agent waits for me"), "\(words)")
+            #expect(words.suffix(3) == ["Turn On or Off", "Back", "Continue"], "\(words)")
+        }
+    }
+
+    /// Meet your assistant: the sticker, who it is, ⌘ and K.
+    @Test("a5: welcome, the sticker and its keys") func a5() async throws {
+        let scene = try await Self.welcome(.meet)
+        defer { scene.remove() }
+        try await scene.draw("a5") { words in
+            #expect(words == ["Ready", "Meet your assistant", "Skip Tour", "Back", "Continue"], "\(words)")
+        }
+    }
+
+    /// Ready: who builds, the comforts as chosen, the promise about requests, and Make Your First Space; no Skip Tour.
+    @Test("a6: welcome, the summary") func a6() async throws {
+        let scene = try await Self.welcome(.ready, homebrew: true)
+        defer { scene.remove() }
+        try await scene.draw("a6") { words in
+            #expect(words == ["Make your first space", "Ready", "Back", "Make Your First Space"], "\(words)")
+        }
+    }
+
+    /// No builder on this Mac: the install commands of the first two, Copy Command, What is a coding agent?, Look Again.
+    @Test("a7: welcome with no builder") func a7() async throws {
+        let scene = try await Self.welcome(.assistant, programs: [])
+        defer { scene.remove() }
+        #expect(scene.tour.screen(scene.assistant) == .none && !scene.tour.searching(scene.assistant))
+        try await scene.draw("a7") { words in
+            #expect(words.contains("No coding agent found") && words.contains("What is a coding agent?") && words.suffix(2) == ["Back", "Look Again"], "\(words)")
+            #expect(words.filter { $0.hasPrefix("Copy the command that installs") }.count == 2, "\(words)")
+        }
+        var copied: [String] = []
+        scene.assistant.copy = { copied.append($0) }
+        scene.tour.copy(InstallList.builders[0].command, with: scene.assistant.copy)
+        #expect(copied == [InstallList.builders[0].command] && scene.tour.copied == copied.first)
+    }
+
+    /// After ⌘K at the fourth step: the eyes smile and the assistant says hello in its own voice.
+    @Test("a8: welcome after the first hello") func a8() async throws {
+        let scene = try await Self.welcome(.meet)
+        defer { scene.remove() }
+        #expect(TourTests.command(scene.window, "k") && scene.tour.met)
+        try await scene.draw("a8") { words in
+            // Its eyes, beside its name, say Done: they smile.
+            #expect(words == ["Done", "Meet your assistant", "Skip Tour", "Back", "Continue"], "\(words)")
+        }
+        #expect(scene.assistant.engine.state.agents.isEmpty && scene.assistant.id == nil, "hello sends nothing to the agent")
+    }
+
+    /// A first start for the welcome: a home with no space, `programs` on its PATH (every agent's by default), the main
+    /// window on New Space, and the welcome window at `step`; under a Homebrew prefix with `homebrew`.
+    @MainActor struct WelcomeScene {
+        let stage: Stage, shell: Shell, library: Library, tour: Tour, window: NSWindow
+        var assistant: AssistantModel { shell.assistant }
+
+        func remove() {
+            window.close()
+            stage.remove()
+        }
+
+        /// Asserts what VoiceOver reads of the welcome with `words`, and draws `name` over the dimmed main window.
+        func draw(_ name: String, _ words: ([String]) -> Void) async throws {
+            try await stage.appearances { suffix in
+                try await Picture.welcome(window, over: shell, library: library, name + suffix, root: stage.home.root)
+                let host = try #require(window.contentView?.subviews.first)
+                words(await AcceptanceBuild.read(host))
+            }
+        }
+    }
+
+    static func welcome(_ step: Tour.Step, programs: [String] = Registry.app.agents.map(\.kind), homebrew: Bool = false) async throws -> WelcomeScene {
+        let stage = try Stage("build")
+        for file in try FileManager.default.contentsOfDirectory(at: stage.home.places.spaces, includingPropertiesForKeys: nil) {
+            try FileManager.default.removeItem(at: file)
+        }
+        let bin = stage.home.root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        for kind in programs { try AssistantTests().install(kind, in: bin) }
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { programs.isEmpty ? model.noAgent : model.kind == "claude" }))
+        library.select(.newSpace)
+        shell.show(nil)
+        let app = homebrew ? stage.home.root.appendingPathComponent("brew/Cellar/something/0.3.0/something.app") : URL(fileURLWithPath: "/Users/example/Applications/something.app")
+        let tour = Tour(places: stage.home.places, app: app)
+        tour.move(step)
+        return WelcomeScene(stage: stage, shell: shell, library: library, tour: tour, window: Welcome.window(tour, assistant: model, motion: .reduced))
+    }
+
     /// New Space with Claude Code as its builder: the sign, the question, the field with Build greyed until something
     /// is written, Built by and the model, the three suggestions, the first three templates and See All; the assistant
     /// away. d1-smallest in the smallest window; d1-no-agent: the notice in the field's place, no suggestion.
@@ -279,4 +394,59 @@ struct AcceptanceBuild {
 
     @Test("d7: inline choices", .disabled("not built yet: AB14")) func d7() async throws {}
     @Test("d8: the check step", .disabled("not built yet: AB14")) func d8() async throws {}
+}
+
+extension Picture {
+    /// The main window of a first start, stepped back as the mockup dims it (its center blurred and faded, its sidebar
+    /// faded, a veil of the background over it all), and the welcome window centred over it with its float shadow and
+    /// its lights in their colors. The dimming is the mockup's CSS, redrawn here: the real window is not filtered.
+    static func welcome(_ welcome: NSWindow, over shell: Shell, library: Library, _ name: String, root: URL) async throws {
+        guard let gallery else { return }
+        try await window(shell, library: library, web: nil, name + "-window", root: root, keyed: false)
+        let file = gallery.appendingPathComponent(name + "-window.png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let page = try #require(NSImage(contentsOf: file)), size = shell.window.frame.size
+        let frame = try #require(shell.window.contentView?.superview)
+        let side = shell.split.splitViewItems[0].viewController.view, top = size.height - shell.window.contentLayoutRect.maxY
+        let sidebar = side.convert(side.bounds, to: frame), center = NSRect(x: sidebar.maxX, y: 0, width: size.width - sidebar.maxX, height: size.height - top)
+        // The center, blurred 7 points and desaturated, as CSS filters it.
+        let cg = try #require(page.cgImage(forProposedRect: nil, context: nil, hints: nil)), scale = CGFloat(cg.width) / size.width
+        let blur = CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 7 * scale]), tone = CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])
+        let blurred = filtered(page, [blur, tone].compactMap { $0 })
+        let content = try #require(welcome.contentView?.superview)
+        disguise(content, root.path)
+        await wait(1.0)
+        content.layoutSubtreeIfNeeded()
+        let drawn = try bitmap(content.bounds.size)
+        content.cacheDisplay(in: content.bounds, to: drawn)
+        let place = NSRect(x: ((size.width - Welcome.size.width) / 2).rounded(), y: size.height - 152 - Welcome.size.height,
+                           width: Welcome.size.width, height: Welcome.size.height)
+        try png(of: size, name) {
+            page.draw(in: NSRect(origin: .zero, size: size))
+            Look.Token.bg.color.setFill()
+            center.fill()
+            blurred.draw(in: center, from: center.applying(CGAffineTransform(scaleX: 1, y: 1)), operation: .sourceOver, fraction: 0.35)
+            Look.Token.bg.color.withAlphaComponent(0.3).setFill()
+            sidebar.fill()
+            Look.Token.bg.color.withAlphaComponent(0.42).setFill()
+            NSRect(origin: .zero, size: size).fill()
+            let shape = NSBezierPath(roundedRect: place, xRadius: Look.window, yRadius: Look.window)
+            for shade in Look.float(NSAppearance.currentDrawing()) {
+                NSGraphicsContext.saveGraphicsState()
+                let shadow = NSShadow()
+                (shadow.shadowColor, shadow.shadowOffset, shadow.shadowBlurRadius) = (shade.color, NSSize(width: 0, height: -shade.y), shade.blur)
+                shadow.set()
+                Look.Token.bg.color.setFill()
+                shape.fill()
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            NSGraphicsContext.saveGraphicsState()
+            shape.addClip()
+            drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            NSGraphicsContext.restoreGraphicsState()
+            Look.Token.line2.color.setStroke()
+            shape.stroke()
+            paint(lights(of: welcome).map { ($0.0.offsetBy(dx: place.minX, dy: place.minY), $0.1) })
+        }
+    }
 }
