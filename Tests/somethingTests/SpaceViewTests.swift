@@ -752,4 +752,87 @@ import WebKit
         let long = ScriptError.line(String(repeating: "a", count: 500))
         #expect(long?.count == 200 && long?.hasSuffix("…") == true)
     }
+
+    /// Point mode asks the page from something's world only: a part is found where the page's own functions lie, by a
+    /// path of standard tags and :nth-of-type, a small thing grown to its first ancestor of 40x24, a custom element
+    /// passed over for its standard parent. The page's world sees no pointing function and hears no click of point
+    /// mode; the wheel scrolls the page and the frames follow.
+    @Test func pointingFindsStandardPartsAndKeepsThePageOut() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let body = """
+            <style>body { margin: 0 } td { width: 120px; height: 40px }</style>
+            <div class="hero" id="hero" style="position: relative; height: 100px"><span class="tiny" style="position: absolute; left: 300px; top: 40px">x</span></div>
+            <table class="data" style="margin: 20px"><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>
+            <section><my-card style="display: block; height: 80px"><p class="inner">inside</p></my-card></section>
+            <div style="height: 3000px"></div>
+            <script>
+              addEventListener("click", () => window.clicks = (window.clicks ?? 0) + 1, true);
+              Document.prototype.elementFromPoint = function () { window.spied = true; return null; };
+              Element.prototype.getBoundingClientRect = function () { window.spied = true; return new DOMRect(0, 0, 1, 1); };
+              window.done = true;
+            </script>
+            """
+        let space = try home.space("parts", page(nil, body))
+        let window = try await home.window(space)
+        defer { window.close() }
+        let offscreen = Offscreen(window.area)
+        window.open()
+        try await ready(window)
+        let frame = try #require(window.frame)
+        func center(_ selector: String) async throws -> CGPoint {
+            let box = try await window.web.callAsyncJavaScript("const b = document.querySelector(s).getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
+                                                               arguments: ["s": selector], in: frame, contentWorld: .defaultClient) as? [Double]
+            let point = try #require(box)
+            return CGPoint(x: point[0], y: point[1])
+        }
+
+        let tiny = try #require(await Pointing.part(at: try await center(".tiny"), in: window.web, frame: frame))
+        #expect(tiny.path == ":root > body:nth-of-type(1) > div:nth-of-type(1)" && tiny.tag == "div" && tiny.kind == "this block")
+        #expect(tiny.rect.size == CGSize(width: window.web.frame.width, height: 100))
+        let cell = try #require(await Pointing.part(at: try await center("td"), in: window.web, frame: frame))
+        #expect(cell.path == ":root > body:nth-of-type(1) > table:nth-of-type(1) > tbody:nth-of-type(1) > tr:nth-of-type(1) > td:nth-of-type(1)")
+        #expect(cell.kind == "this cell")
+        let card = try #require(await Pointing.part(at: try await center(".inner"), in: window.web, frame: frame))
+        #expect(card.path == ":root > body:nth-of-type(1) > section:nth-of-type(1)" && card.kind == "this section")
+        for part in [tiny, cell, card] { #expect(!part.path.contains(".") && !part.path.contains("#") && !part.path.contains("my-card")) }
+        #expect(await Pointing.rects([cell.path, ":root > body:nth-of-type(1) > aside:nth-of-type(1)"], in: window.web, frame: frame) == [cell.rect, nil])
+        #expect(try await run(window, "return [window.spied === undefined, typeof part, typeof paths, typeof tags]") as? [AnyHashable]
+                == [true, "undefined", "undefined", "undefined"])
+
+        // Point mode over the page: every click is the overlay's, and picks the part under it.
+        let overlay = PointOverlay(window, motion: .reduced)
+        window.point(overlay)
+        let at = NSPoint(x: cell.rect.midX, y: window.area.bounds.height - cell.rect.midY)
+        #expect(window.area.hitTest(at) === overlay && window.area.hitTest(NSPoint(x: 5, y: 5)) === overlay)
+        // As the window routes a press: to the view its content's hitTest finds.
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(NSEvent.mouseEvent(with: type, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                        windowNumber: offscreen.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            let target = try #require(offscreen.window.contentView?.hitTest(at))
+            type == .leftMouseDown ? target.mouseDown(with: event) : target.mouseUp(with: event)
+        }
+        #expect(await wait(10, until: { overlay.picks.first?.path == cell.path }))
+        #expect(overlay.banner == ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"])
+        await wait(0.3)
+        #expect(try await run(window, "return window.clicks ?? 0") as? Int == 0)
+        // ⌥ adds a part once a frame is drawn.
+        await overlay.click(at: try await center(".inner"), adding: true)
+        #expect(overlay.picks.map(\.path) == [cell.path, card.path])
+
+        // The wheel scrolls the page, from something's world, and the frames follow it.
+        let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -300, wheel2: 0, wheel3: 0)
+            .flatMap { NSEvent(cgEvent: $0) })
+        overlay.scrollWheel(with: wheel)
+        #expect(await wait(10, until: { overlay.picks.first?.rect.minY == cell.rect.minY - 300 }), "\(String(describing: overlay.picks.first))")
+        #expect(try await run(window, "return scrollY") as? Double == 300)
+
+        // Esc lets the picks go, then stops the mode.
+        var stopped = false
+        overlay.stopped = { stopped = true }
+        #expect(overlay.escape() && overlay.picks.isEmpty && !stopped && overlay.banner == ["Point at a part of the space", "Esc", "to stop"])
+        #expect(overlay.escape() && stopped)
+        window.point(nil)
+        #expect(overlay.superview == nil && window.pointer == nil)
+    }
 }

@@ -1,6 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), the window layer
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
-// waiting requests, Point, Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
+// waiting requests, Point (pressed while the person points at the space's parts: PointOverlay.swift), Reload, Info and
+// Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
 // from being shown, New Space or the templates; over a space, the glass, which holds the assistant (Glass.swift). Off
 // the spaces the assistant is away: New Space has its own field. While the welcome is open over it, the window steps
@@ -20,6 +21,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// What the center shows, and the page in it when a space is open.
     private(set) var shown: NSView?
     private weak var page: NSView?
+    /// The space shown in the center, when one is.
+    private(set) weak var space: SpaceView?
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
     /// What covers the whole window: the toast, and later the palette and the sheets of keys.
@@ -148,11 +151,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
 
     /// The mockup's toolbar items: plain icons in `ink2`, with the words of its tooltips and the keys of the command
-    /// table. Point waits for its slice (T14), greyed as its menu item is; the chip's slot stays hidden while empty.
+    /// table; the chip's slot stays hidden while empty.
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
             let item = NSToolbarItem(itemIdentifier: id)
-            let button = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage(), target: nil, action: action)
+            let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
+            let button = id == Shell.point ? PressButton(image: image, target: nil, action: action) : NSButton(image: image, target: nil, action: action)
             (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, tip)
             button.symbolConfiguration = .init(pointSize: 13, weight: .medium)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
@@ -226,7 +230,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         titleLine.line = line
         titleLine.setAccessibilityLabel(file.isEmpty ? title : "\(title), \(file)")
-        // Point stays greyed until its slice gives it an action, and while the page is stopped: nothing to point at.
+        // Point is greyed while the page is stopped or cannot be shown: nothing to point at.
+        assistant.pointable = space && point
         toolbarItems.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
             let control = controls[$0.itemIdentifier]
             $0.isEnabled = space && control?.action != nil && (point || $0.itemIdentifier != Shell.point)
@@ -256,6 +261,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// in the toolbar.
     func show(_ space: SpaceView?, templates: Bool = false) {
         library.previewing = false
+        self.space = space
+        if let space, !space.pointable { space.point(nil) }
+        pressPoint(space?.pointer != nil)
         guard let space else {
             page = nil
             let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] title, subtitle in
@@ -276,7 +284,33 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
         }
-        heading(space.title, space.space.location.lastPathComponent, space: true, point: !space.stopped)
+        heading(space.title, space.space.location.lastPathComponent, space: true, point: space.blocked.isEmpty && !space.stopped)
+    }
+
+    /// ⌥⌘S, the toolbar's Point and the card's: starts point mode over the space shown, or stops it. Starting folds
+    /// the card away, so that nothing of the assistant stands over the parts, and gives the overlay the keys (Esc).
+    func point() {
+        guard let space, space.pointable else { return }
+        guard space.pointer == nil else { return stopPointing() }
+        let overlay = PointOverlay(space, motion: library.preferences.motion)
+        overlay.stopped = { [weak self] in self?.stopPointing() }
+        assistant.open = false
+        space.point(overlay)
+        pressPoint(true)
+        window.makeFirstResponder(overlay)
+    }
+
+    /// Stops point mode, the page's keys back to it.
+    func stopPointing() {
+        guard let space, space.pointer != nil else { return }
+        space.point(nil)
+        pressPoint(false)
+        window.makeFirstResponder(space.web)
+    }
+
+    private func pressPoint(_ on: Bool) {
+        (controls[Shell.point] as? PressButton)?.pressed = on
+        assistant.pointing = on
     }
 
     /// Opens `tour`'s welcome over this window, where Welcome.place puts it, and steps this window back as the mockup
@@ -399,6 +433,28 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         visible(true)
+    }
+}
+
+/// Point in the toolbar: pressed, it is filled in the action's colours, as the mockup's pressed chip.
+final class PressButton: NSButton {
+    var pressed = false {
+        didSet {
+            contentTintColor = pressed ? Look.Token.actfg.color : Look.Token.ink2.color
+            attributedTitle = NSAttributedString(string: title, attributes: [.font: font ?? Look.font(.ui, size: 12, weight: .medium),
+                                                                             .foregroundColor: contentTintColor ?? Look.Token.ink2.color])
+            setAccessibilityValue(pressed ? "on" : "off")
+            needsDisplay = true
+        }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if pressed {
+            Look.Token.act.color.setFill()
+            // The mockup's chip is 26 high in the 28-point button.
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: (bounds.height - 26) / 2), xRadius: Look.control + 1, yRadius: Look.control + 1).fill()
+        }
+        super.draw(dirtyRect)
     }
 }
 

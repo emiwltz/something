@@ -266,7 +266,7 @@ struct AssistantCard: View {
             HStack(spacing: 1) {
                 AgentChip(model: model)
                 ModelChip(model: model)
-                PointChip()
+                PointChip(model: model)
                 Spacer(minLength: 0)
                 Button { model.threadShown.toggle() } label: {
                     HStack(spacing: 6) {
@@ -472,18 +472,25 @@ struct ModelChip: View {
     }
 }
 
-/// Point's place in the composer row: greyed, as in the toolbar, until its slice (T14) gives it an action.
+/// Point in the composer row: point mode, as the toolbar's Point and ⌥⌘S start it; greyed while the page cannot be
+/// pointed at.
 struct PointChip: View {
+    let model: AssistantModel
     var body: some View {
-        let enabled = Keys.command("pointpart")?.action != nil
-        return HStack(spacing: 6) {
-            Image(systemName: "scope").font(.system(size: 11.5))
-            Text("Point")
+        Button {
+            if let action = Keys.command("pointpart")?.action { NSApp.sendAction(action, to: nil, from: nil) }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "scope").font(.system(size: 11.5))
+                Text("Point")
+            }
+            .chip(pressed: model.pointing)
         }
-        .chip()
+        .buttonStyle(.plain)
         // Whole beside a long model name: the row's spacer gives way first.
         .fixedSize()
-        .opacity(enabled ? 1 : 0.32)
+        .disabled(!model.pointable)
+        .opacity(model.pointable ? 1 : 0.32)
         .help(Keys.tooltip("pointpart", "Point"))
         .accessibilityLabel("Point")
     }

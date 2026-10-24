@@ -30,7 +30,7 @@ struct AcceptanceShell {
         defer { brief.close() }
         #expect(shell.window.title == "Daily brief" && shell.window.subtitle == "brief.html" && library.selection == .space("brief"))
         #expect(items.filter { [Shell.reload, Shell.info].contains($0.itemIdentifier) }.allSatisfy { $0.isEnabled && !$0.isHidden })
-        #expect(items.first { $0.itemIdentifier == Shell.point }?.isEnabled == false, "Point waits for T14")
+        #expect(items.first { $0.itemIdentifier == Shell.point }?.isEnabled == true)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame" + suffix, root: stage.home.root)
             shell.layer.announce = { _ in }

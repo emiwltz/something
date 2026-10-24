@@ -9,7 +9,47 @@ import Testing
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-show-"))
 struct AcceptanceShow {
-    @Test("f1: pointing", .disabled("not built yet: T14")) func f1() async throws {}
+    /// Daily brief open, its card folded to the sticker; ⌥⌘S starts point mode: Point pressed in the toolbar, the space
+    /// dimmed but for the part under the pointer, the sign's corners around it with its kind, and the banner saying
+    /// the mode and Esc. The card's Point is greyed only when there is nothing to point at.
+    @Test("f1: pointing") func f1() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        let point = try #require(shell.controls[Shell.point] as? PressButton)
+        #expect(point.isEnabled && !point.pressed && shell.assistant.pointable && !shell.assistant.pointing)
+        #expect(Keys.enabled("pointpart", Keys.Situation(space: true)) && !Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)))
+        #expect(Keys.command("pointpart")?.shown == "⌥⌘S" && point.toolTip == "Point (⌥⌘S)")
+
+        shell.point()
+        let overlay = try #require(brief.pointer)
+        #expect(point.pressed && shell.assistant.pointing && !shell.assistant.open && overlay.frame == brief.web.frame)
+        #expect(overlay.accessibilityLabel() == "Point at a part of the space" && overlay.accessibilityHelp() == "Esc to stop")
+        // The pointer over the waiting box: its frame and kind.
+        let frame = try #require(brief.frame)
+        let box = try #require(try await brief.web.callAsyncJavaScript(
+            "const b = document.querySelector('.box').getBoundingClientRect(); return [b.right - 5, b.y + b.height / 2]",
+            in: frame, contentWorld: .defaultClient) as? [Double])
+        overlay.look(at: CGPoint(x: box[0], y: box[1]))
+        #expect(await wait(10, until: { overlay.hovered != nil }))
+        #expect(overlay.hovered?.kind == "this block" && overlay.accessibilityValue() as? String == "this block")
+        #expect(overlay.hovered?.tag == "div" && overlay.hovered?.path.contains("box") == false, "\(String(describing: overlay.hovered))")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f1" + suffix, root: stage.home.root)
+        }
+
+        // Esc stops it, the page's keys back; ⌥⌘S again starts it, and a stopped page cannot be pointed at.
+        #expect(overlay.escape() == true)
+        #expect(brief.pointer == nil && !point.pressed && !shell.assistant.pointing)
+        shell.point()
+        #expect(brief.pointer != nil)
+        shell.point()
+        #expect(brief.pointer == nil)
+    }
     @Test("f2: picked frames and the composer", .disabled("not built yet: T15")) func f2() async throws {}
     @Test("f3: a frame at work", .disabled("not built yet: T16")) func f3() async throws {}
     @Test("f4: the margin note", .disabled("not built yet: T17")) func f4() async throws {}

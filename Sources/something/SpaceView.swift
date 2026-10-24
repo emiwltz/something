@@ -43,6 +43,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// The clock of the stops, the calendar and the 12 or 24 hours they are said in; a test sets them.
     var now: () -> Date = Date.init, calendar = Calendar.current, hours = Locale.current
     private var covering: NSView?, strip: NSView?
+    /// Point mode's overlay over the page while the person points at its parts (PointOverlay.swift); nil otherwise.
+    private(set) var pointer: PointOverlay?
+    /// Whether there is a page to point at: displayed, loaded in its frame, and running.
+    var pointable: Bool { blocked.isEmpty && !stopped && frame != nil }
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
@@ -432,7 +436,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if message.name == "scrolled" {
             guard let place = message.body as? [Any], place.count == 3, let page = place[0] as? String,
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
-            return scrolled = (page, x, y)
+            scrolled = (page, x, y)
+            // The page scrolled by itself (a key, an anchor, its own script): the frames follow it.
+            if let pointer { Task { @MainActor in await pointer.follow() } }
+            return
         }
         if message.name == "fault" {
             guard let fault = message.body as? [String: Any], let code = fault["code"] as? String else { return }
@@ -472,6 +479,16 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         area.addSubview(view)
     }
 
+    /// Puts `overlay` over the page in place of the one there, nil to take point mode's overlay away.
+    func point(_ overlay: PointOverlay?) {
+        pointer?.removeFromSuperview()
+        pointer = overlay
+        guard let overlay else { return }
+        overlay.frame = web.frame
+        overlay.autoresizingMask = [.width, .height]
+        area.addSubview(overlay, positioned: .above, relativeTo: web)
+    }
+
     /// Puts `view` across the top of the area in place of the strip there, the page pushed down below it so nothing
     /// of the page hides under it; nil gives the page the whole area again.
     func show(strip view: NSView?) {
@@ -482,6 +499,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         let height = view?.frame.height ?? 0
         web.frame = NSRect(x: 0, y: 0, width: area.bounds.width, height: area.bounds.height - height)
         covering?.frame = web.frame
+        pointer?.frame = web.frame
         guard let view else { return }
         view.frame = NSRect(x: 0, y: area.bounds.height - height, width: area.bounds.width, height: height)
         view.autoresizingMask = [.width, .minYMargin]
@@ -494,6 +512,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// Stops watching, drops its cover and lets the web view go; its data store goes with it.
     func close() {
+        point(nil)
         cover(nil)
         show(strip: nil)
         loads += 1

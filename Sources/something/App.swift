@@ -55,7 +55,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 assistant.answer(index)
                 return nil
             }
-            if event.keyCode == 53, shell.window.isKeyWindow { assistant.nudge() } // Escape
+            // Escape: point mode's first, wherever the focus is in the window; else the assistant's nudge.
+            if event.keyCode == 53, shell.window.isKeyWindow, shell.window.attachedSheet == nil, let pointer = current?.pointer,
+               pointer.escape() { return nil }
+            if event.keyCode == 53, shell.window.isKeyWindow { assistant.nudge() }
             return menuBar.intercept(event, window: shell.window)
         }
         ask.window = { [weak self] in self?.shell.window }
@@ -311,6 +314,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func showInFinder(_ sender: Any?) { current.map { library.showInFinder($0.space.name) } }
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
     @objc func toggleInfo(_ sender: Any?) { shell.split.toggleInspector(sender) }
+    @objc func pointAtPart(_ sender: Any?) { shell.point() }
     @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }
     @objc func reduceAssistant(_ sender: Any?) { shell.reduceAssistant(sender) }
 
@@ -362,7 +366,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         guard let id = item.identifier?.rawValue else { return true }
         let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
                                        welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
-                                       waiting: !panels.queue.waiting.isEmpty)
+                                       waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
         return Keys.enabled(id, situation)
     }
 

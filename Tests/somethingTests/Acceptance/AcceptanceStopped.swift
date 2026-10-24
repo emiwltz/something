@@ -34,11 +34,9 @@ struct AcceptanceStopped {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.brief(stage)
         defer { brief.close() }
-        // Point as its slice will wire it: enabled on a page that runs, greyed only by the stop.
+        // Point: enabled on a page that runs, greyed only by the stop.
         let point = { shell.toolbarItems.first { $0.itemIdentifier == Shell.point }?.isEnabled }
-        shell.controls[Shell.point]?.action = #selector(NSResponder.cancelOperation(_:))
-        shell.show(brief)
-        #expect(point() == true)
+        #expect(point() == true && shell.assistant.pointable)
         Self.stop(brief, at: -1)
         let cover = try #require(brief.area.subviews.last as? Stopped)
         #expect(brief.stopped && !brief.paused && cover.frame == brief.web.frame)
@@ -49,10 +47,7 @@ struct AcceptanceStopped {
         #expect(cover.subviews.first?.accessibilityLabel() == "This space stopped")
         // Nothing to point at in a page that stopped; Reload and Info still act.
         let items = shell.toolbarItems
-        #expect(point() == false)
-        // Back to today's Point, with no action: the toolbar's own validation would light a stub up in the pictures.
-        shell.controls[Shell.point]?.action = nil
-        shell.heading(brief.title, "brief.html", space: true, point: false)
+        #expect(point() == false && !shell.assistant.pointable && !brief.pointable)
         #expect(items.filter { [Shell.reload, Shell.info].contains($0.itemIdentifier) }.allSatisfy { $0.isEnabled })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "e10" + suffix, root: stage.home.root)

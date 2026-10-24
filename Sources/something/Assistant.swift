@@ -93,6 +93,9 @@ import SomethingCore
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
     var open = true
     var threadShown = false
+    /// Whether the open space has a page to point at, and whether the person points at it now: the card's Point.
+    var pointable = false
+    var pointing = false
     /// The height the card takes at the bottom of the center, set by the glass: the blank page keeps clear of it.
     var floating: CGFloat = 0
     /// Whether the card, closed, is still shrinking into the sticker: it is drawn until it is there.
