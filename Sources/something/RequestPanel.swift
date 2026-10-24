@@ -575,6 +575,8 @@ final class PanelHeader: NSView {
 class PanelButton: NSButton {
     let primary: Bool, hint: String?, symbol: NSImage?
     var height: CGFloat = 30
+    /// Its title's size, its key hint's, and the room each side of its words: the point composer's are 12, 11 and 10.
+    var size: CGFloat = 12.5, hintSize: CGFloat = 10, pad: CGFloat = 13
     /// Its narrowest width, and the colour a primary one is filled with.
     lazy var least: CGFloat = primary ? 112 : 96
     var fill = Look.Token.act
@@ -598,16 +600,16 @@ class PanelButton: NSButton {
 
     private var label: NSAttributedString {
         let ink = (primary ? Look.Token.actfg : .ink).color
-        let words = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 12.5, weight: .semibold), .foregroundColor: ink])
+        let words = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: size, weight: .semibold), .foregroundColor: ink])
         if let hint {
-            words.append(NSAttributedString(string: "  " + hint, attributes: [.font: Look.font(.ui, size: 10, weight: .medium),
+            words.append(NSAttributedString(string: "  " + hint, attributes: [.font: Look.font(.ui, size: hintSize, weight: .medium),
                                                                              .foregroundColor: ink.withAlphaComponent(0.6)]))
         }
         return words
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: max(least, (label.size().width + 26 + lead).rounded(.up)), height: height)
+        NSSize(width: max(least, (label.size().width + 2 * pad + lead).rounded(.up)), height: height)
     }
 
     override func draw(_ dirtyRect: NSRect) {

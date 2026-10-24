@@ -56,7 +56,50 @@ struct AcceptanceShow {
         shell.point()
         #expect(brief.pointer == nil)
     }
-    @Test("f2: picked frames and the composer", .disabled("not built yet: T15")) func f2() async throws {}
+    /// Daily brief in point mode; a click picks the paragraph of the last column: its frame stays, the banner says
+    /// to say what should change and that ⌥ adds a part, and the composer attaches under it, on its side: the part's
+    /// name, the words being typed, to Daily brief's assistant with its eyes, Add Comment ⌘↵ and Quick Change ↵.
+    @Test("f2: picked frames and the composer") func f2() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.point()
+        let overlay = try #require(brief.pointer)
+        let frame = try #require(brief.frame)
+        let at = try #require(try await brief.web.callAsyncJavaScript(
+            "const b = document.querySelector('#paper > :last-child p').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
+            in: frame, contentWorld: .defaultClient) as? [Double])
+        // ⌥ alone picks nothing; a click does.
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: true)
+        #expect(overlay.picks.isEmpty && overlay.composer == nil)
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
+        let composer = try #require(overlay.composer)
+        let part = try #require(overlay.picks.first)
+        #expect(overlay.picks.count == 1 && part.kind == "this paragraph" && composer.names == "this paragraph")
+        #expect(overlay.banner == ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"])
+        #expect(overlay.accessibilityLabel() == "Say what should change" && overlay.accessibilityValue() as? String == "this paragraph")
+        #expect(composer.accessibilityLabel() == "What should change here?" && composer.accessibilityHelp() == "this paragraph. To Daily brief’s assistant")
+        #expect(composer.title == "Daily brief" && composer.eyes == shell.assistant.eyes(of: "brief"))
+        #expect(composer.quickButton.title == "Quick Change" && composer.quickButton.hint == "↵" && composer.quickButton.primary)
+        #expect(composer.commentButton.title == "Add Comment" && composer.commentButton.hint == "⌘↵" && !composer.commentButton.primary)
+        #expect(!composer.quickButton.isEnabled && !composer.commentButton.isEnabled)
+        // Under the part and on its side (the right half), its right edge with the frame's.
+        #expect(part.rect.midX > overlay.bounds.width / 2 && composer.frame.maxX == part.rect.maxX + PointOverlay.pad)
+        #expect(composer.frame.minY == part.rect.maxY + PointOverlay.pad + 12)
+        #expect(shell.window.firstResponder === composer.field)
+        composer.field.insertText("Make this shorter", replacementRange: composer.field.selectedRange())
+        #expect(composer.quickButton.isEnabled && composer.commentButton.isEnabled)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f2" + suffix, root: stage.home.root)
+        }
+        // Esc lets the part go with the composer; a second Esc leaves the mode.
+        #expect(overlay.escape() && overlay.composer == nil && brief.pointer != nil)
+        #expect(overlay.escape() && brief.pointer == nil)
+    }
     @Test("f3: a frame at work", .disabled("not built yet: T16")) func f3() async throws {}
     @Test("f4: the margin note", .disabled("not built yet: T17")) func f4() async throws {}
     /// Daily brief open; its assistant's turn, asked "Make the weather corner smaller", ends having changed the page:

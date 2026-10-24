@@ -1,8 +1,8 @@
 // Point mode's layer over the open space's page: it takes every click (none reaches the page) and hands the wheel on
 // as a scroll from something's world (Pointing.swift). It dims the space a little, with a hole around the part under
 // the pointer, draws the sign's four corners around that part with its kind in a pill ("this table"), and says the
-// mode and its way out in a banner at the top. A click picks a part; once a frame is drawn, ⌥-click adds one. Esc
-// lets go of the picked parts, then stops the mode. The frames follow the page when it scrolls or reloads. It is all
+// mode and its way out in a banner at the top. A click picks a part; once a frame is drawn, ⌥-click adds one, and the
+// composer (PointComposer.swift) attaches to the last one picked. Esc lets go of the picked parts, then stops the mode. The frames follow the page when it scrolls or reloads. It is all
 // drawn in draw(_:), so a picture of the window shows it as the screen does.
 import AppKit
 import WebKit
@@ -13,6 +13,13 @@ final class PointOverlay: NSView {
     var motion: Look.Motion
     /// Called when Esc stops the mode: the window takes the overlay away.
     var stopped: () -> Void = {}
+    /// What the composer's Quick Change (Return) and Add Comment (⌘↵) do with the words and the parts picked.
+    var quickChange: (String, [Pointing.Part]) -> Void = { _, _ in }
+    var addComment: (String, [Pointing.Part]) -> Void = { _, _ in }
+    /// The eyes of the space's assistant, which the composer shows beside the space's name.
+    var eyes: () -> Sign.State = { .unknown }
+    /// The composer, while parts are picked.
+    private(set) var composer: PointComposer?
     /// The part under the pointer, and the parts picked, in the page's viewport (the overlay's own points).
     private(set) var hovered: Pointing.Part?
     private(set) var picks: [Pointing.Part] = []
@@ -22,7 +29,7 @@ final class PointOverlay: NSView {
             : ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"]
     }
 
-    private var asking = false, pending: CGPoint?, pointer: CGPoint?
+    private var asking = false, pending: CGPoint?, pointer: CGPoint?, holding = false
     private var following = false, followAgain = false
     /// The hole's rectangle as drawn, moving towards its part; when it started and from where, while it moves.
     private var hole: CGRect?, from: CGRect?, began: TimeInterval = 0
@@ -45,8 +52,13 @@ final class PointOverlay: NSView {
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    /// Every click in its bounds is its own: the page under it hears none.
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
+    /// Every click in its bounds is its own, but for the composer's: the page under it hears none.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard frame.contains(point) else { return nil }
+        let local = convert(point, from: superview)
+        if let composer, composer.frame.contains(local) { return composer.hitTest(local) ?? self }
+        return self
+    }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
 
     override func updateTrackingAreas() {
@@ -56,7 +68,21 @@ final class PointOverlay: NSView {
         super.updateTrackingAreas()
     }
 
-    override func mouseMoved(with event: NSEvent) { look(at: convert(event.locationInWindow, from: nil)) }
+    override func mouseMoved(with event: NSEvent) {
+        let at = convert(event.locationInWindow, from: nil)
+        holding = event.modifierFlags.contains(.option)
+        // Over the composer, no part is under the pointer.
+        if let composer, composer.frame.contains(at) {
+            pointer = nil
+            return hover(nil)
+        }
+        look(at: at)
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        holding = event.modifierFlags.contains(.option)
+        if let pointer { look(at: pointer) } else { hover(nil) }
+    }
     override func mouseExited(with event: NSEvent) {
         pointer = nil
         hover(nil)
@@ -86,7 +112,10 @@ final class PointOverlay: NSView {
 
     /// Esc: lets go of the picked parts, or stops the mode. Returns true: the key is the overlay's.
     func escape() -> Bool {
-        if picks.isEmpty { stopped() } else { unpick() }
+        if picks.isEmpty { stopped() } else {
+            unpick()
+            window?.makeFirstResponder(self)
+        }
         return true
     }
 
@@ -109,10 +138,10 @@ final class PointOverlay: NSView {
         }
     }
 
-    /// A click at `point`: picks the part there, adds it with ⌥ once a frame is drawn, or lets the picks go when it
-    /// falls on nothing.
+    /// A click at `point`: picks the part there, adds it with ⌥ once a frame is drawn (⌥ alone does nothing), or lets
+    /// the picks go when it falls on nothing. The composer takes the keys.
     func click(at point: CGPoint, adding: Bool) async {
-        guard let space, let frame = space.frame else { return }
+        guard let space, let frame = space.frame, !adding || !picks.isEmpty else { return }
         guard let part = await Pointing.part(at: point, in: space.web, frame: frame) else {
             if !adding { unpick() }
             return
@@ -124,6 +153,7 @@ final class PointOverlay: NSView {
         }
         hover(nil)
         changed()
+        if let composer { window?.makeFirstResponder(composer.field) }
     }
 
     func unpick() {
@@ -132,8 +162,9 @@ final class PointOverlay: NSView {
     }
 
     private func hover(_ part: Pointing.Part?) {
-        // A picked part keeps its frame: the pointer over it draws no second one.
-        let part = part.flatMap { part in picks.contains { $0.path == part.path } ? nil : part }
+        // A picked part keeps its frame: the pointer over it draws no second one; once one is picked, the pointer
+        // frames another only while ⌥ is held, to add it.
+        let part = part.flatMap { part in picks.contains { $0.path == part.path } || (!picks.isEmpty && !holding) ? nil : part }
         guard part != hovered else { return }
         hovered = part
         changed()
@@ -189,11 +220,42 @@ final class PointOverlay: NSView {
             hole = target
             began = CACurrentMediaTime()
         }
+        compose()
         setAccessibilityLabel(banner[0])
         setAccessibilityHelp(banner.dropFirst().joined(separator: " "))
         setAccessibilityValue((picks.isEmpty ? [hovered?.kind].compactMap { $0 } : picks.map(\.kind)).joined(separator: ", "))
         tick()
         needsDisplay = true
+    }
+
+    /// Puts the composer by the last part picked, or takes it away when none is; its words stay while parts are added.
+    private func compose() {
+        guard let last = picks.last, let space else {
+            composer?.removeFromSuperview()
+            composer = nil
+            return
+        }
+        let names = PointComposer.sentence(picks.map(\.kind))
+        if let composer {
+            composer.names = names
+            composer.eyes = eyes()
+        } else {
+            let made = PointComposer(names: names, title: space.title, eyes: eyes())
+            made.quick = { [weak self] words in
+                guard let self else { return }
+                quickChange(words, picks)
+            }
+            made.comment = { [weak self] words in
+                guard let self else { return }
+                addComment(words, picks)
+                // The comment is kept; the mode stays, to point at another part.
+                _ = escape()
+            }
+            made.escape = { [weak self] in _ = self?.escape() }
+            addSubview(made)
+            composer = made
+        }
+        composer?.frame = PointComposer.place(PointComposer.size, by: last.rect, in: bounds.size)
     }
 
     /// Draws again while the hole moves or the banner arrives, at up to 60 frames a second.
@@ -238,17 +300,37 @@ final class PointOverlay: NSView {
         Look.Token.scrim.color.withAlphaComponent((Look.Token.scrim.color.usingColorSpace(.sRGB)?.alphaComponent ?? 0.18) * (night ? 0.5 : 0.8)).setFill()
         dim.fill()
         let lifted = drawnHole.map { $0 != hole } ?? false
-        for part in picks { frame(part, words: part.kind, ink: .ink, at: lifted && part == picks.first ? drawnHole : nil) }
+        // A picked part's name is the composer's to say: its frame has no pill.
+        for part in picks { frame(part, words: nil, ink: .ink, at: lifted && part == picks.first ? drawnHole : nil) }
         if let hovered {
             frame(hovered, words: (picks.isEmpty ? "" : "+ ") + hovered.kind, ink: picks.isEmpty ? .ink : .ink2,
                   at: lifted && picks.isEmpty ? drawnHole : nil)
         }
         drawBanner()
+        if let composer { drawFloat(composer.frame, radius: Look.card, fill: .bg2, ring: true) }
+    }
+
+    /// The float shadow under a card of `box`, cast by a shape of `fill`, with its ring when `ring`.
+    private func drawFloat(_ box: CGRect, radius: CGFloat, fill: Look.Token, ring: Bool) {
+        for shade in Look.float(effectiveAppearance) {
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
+            shadow.set()
+            fill.color.setFill()
+            NSBezierPath(roundedRect: box.insetBy(dx: -shade.spread, dy: -shade.spread), xRadius: radius, yRadius: radius).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        guard ring else { return }
+        Look.floatRing.token.color.setStroke()
+        let ring = NSBezierPath(roundedRect: box.insetBy(dx: -0.5, dy: -0.5), xRadius: radius + 0.5, yRadius: radius + 0.5)
+        ring.lineWidth = Look.floatRing.width
+        ring.stroke()
     }
 
     /// The sign's four corners around `part` (or in `box` while its hole moves), haloed in the background so they read
-    /// on any page, and its pill above it, or below it when the part starts within 36 points of the top.
-    private func frame(_ part: Pointing.Part, words: String, ink: Look.Token, at box: CGRect?) {
+    /// on any page, and the pill of `words` above it, or below it when the part starts within 36 points of the top.
+    private func frame(_ part: Pointing.Part, words: String?, ink: Look.Token, at box: CGRect?) {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
         let r = box ?? part.rect.insetBy(dx: -Self.pad, dy: -Self.pad), a = Self.arm
         c.saveGState()
@@ -270,6 +352,7 @@ final class PointOverlay: NSView {
         }
         c.restoreGState()
         // The pill: 21 high, 8 points each side, rounded 6, in the action's colours.
+        guard let words else { return }
         let text = NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 11, weight: .semibold), .foregroundColor: Look.Token.actfg.color])
         let size = text.size(), pill = CGRect(x: r.minX, y: part.rect.minY < 36 ? r.maxY + 6 : r.minY - 6 - 21, width: ceil(size.width) + 16, height: 21)
         Look.Token.act.color.setFill()
@@ -280,63 +363,72 @@ final class PointOverlay: NSView {
     /// The banner: 34 high, centred 14 points under the top, on the glass with the float shadow; it slides down as
     /// the mode starts.
     private func drawBanner() {
-        let words = banner, font = Look.font(.ui, size: 12.5, weight: .medium)
-        let first = NSAttributedString(string: words[0], attributes: [.font: font, .foregroundColor: Look.Token.ink.color])
+        let words = banner
         let quiet: [NSAttributedString.Key: Any] = [.font: Look.font(.ui, size: 12.5), .foregroundColor: Look.Token.ink2.color]
-        let hint = words.count == 4 ? NSAttributedString(string: words[1], attributes: quiet) : nil
-        let key = NSAttributedString(string: words[words.count - 2], attributes: [.font: Look.font(.ui, size: 10.5, weight: .medium),
-                                                                               .foregroundColor: Look.Token.ink.color])
-        let after = NSAttributedString(string: words[words.count - 1], attributes: quiet)
-        let icon = NSImage(systemSymbolName: "scope", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium)) ?? NSImage()
-        let keyBox = CGSize(width: ceil(key.size().width) + 10, height: ceil(key.size().height) + 6)
-        var widths: [CGFloat] = [13, ceil(first.size().width)]
-        if let hint { widths += [3, ceil(hint.size().width)] }
-        widths += [3, keyBox.width + 2 + ceil(after.size().width)]
-        let width = 12 + widths.reduce(0, +) + 9 * CGFloat(widths.count - 1) + 14
+        let keyFace: [NSAttributedString.Key: Any] = [.font: Look.font(.ui, size: 10.5, weight: .medium), .foregroundColor: Look.Token.ink.color]
+        /// A piece of the banner: words, a key in its cap, or the dot between two.
+        enum Piece { case words(NSAttributedString), key(NSAttributedString), dot }
+        // The mode in ink; a hint whose ⌥ is a key; the way out, its key first.
+        var pieces: [Piece] = [.words(NSAttributedString(string: words[0], attributes: [.font: Look.font(.ui, size: 12.5, weight: .medium),
+                                                                                        .foregroundColor: Look.Token.ink.color]))]
+        if words.count == 4 {
+            pieces.append(.dot)
+            let parts = words[1].components(separatedBy: "⌥")
+            for (index, part) in parts.enumerated() {
+                if index > 0 { pieces.append(.key(NSAttributedString(string: "⌥", attributes: keyFace))) }
+                pieces.append(.words(NSAttributedString(string: part.trimmingCharacters(in: .whitespaces), attributes: quiet)))
+            }
+        }
+        pieces += [.dot, .key(NSAttributedString(string: words[words.count - 2], attributes: keyFace)),
+                   .words(NSAttributedString(string: words[words.count - 1], attributes: quiet))]
+        // A key and the words around it in one span sit a space apart (4 points); spans and dots sit 9 apart.
+        func width(_ piece: Piece) -> CGFloat {
+            switch piece {
+            case .words(let text): ceil(text.size().width)
+            case .key(let text): ceil(text.size().width) + 10
+            case .dot: 3
+            }
+        }
+        func space(after piece: Piece, before next: Piece) -> CGFloat {
+            switch (piece, next) {
+            case (.key, .words), (.words, .key): 4
+            default: 9
+            }
+        }
+        var total: CGFloat = 13 + 9
+        for (index, piece) in pieces.enumerated() {
+            total += width(piece) + (index + 1 < pieces.count ? space(after: piece, before: pieces[index + 1]) : 0)
+        }
+        let boxWidth = 12 + total + 14
         let p = progress(0.45, since: arrived, Look.out)
-        let box = CGRect(x: (bounds.width - width) / 2, y: 14 - 56 * (1 - p), width: width, height: 34)
+        let box = CGRect(x: (bounds.width - boxWidth) / 2, y: 14 - 56 * (1 - p), width: boxWidth, height: 34)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current?.cgContext.setAlpha(min(1, p * 1.5))
-        let shape = NSBezierPath(roundedRect: box, xRadius: 17, yRadius: 17)
-        for shade in Look.float(effectiveAppearance) {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
-            shadow.set()
-            Look.Token.glass.color.setFill()
-            NSBezierPath(roundedRect: box.insetBy(dx: -shade.spread, dy: -shade.spread), xRadius: 17, yRadius: 17).fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
+        drawFloat(box, radius: 17, fill: .glass, ring: false)
         Look.Token.glass.color.setFill()
-        shape.fill()
+        NSBezierPath(roundedRect: box, xRadius: 17, yRadius: 17).fill()
         var x = box.minX + 12
         let mid = box.midY
+        let icon = NSImage(systemSymbolName: "scope", accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium)) ?? NSImage()
         Self.tinted(icon, Look.Token.ink.color).draw(in: CGRect(x: x, y: mid - 6.5, width: 13, height: 13), from: .zero,
                                                      operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         x += 13 + 9
-        func put(_ text: NSAttributedString) {
-            let size = text.size()
-            text.draw(at: CGPoint(x: x, y: mid - size.height / 2))
-            x += ceil(size.width) + 9
+        for (index, piece) in pieces.enumerated() {
+            switch piece {
+            case .words(let text):
+                text.draw(at: CGPoint(x: x, y: mid - text.size().height / 2))
+            case .key(let text):
+                let size = text.size(), cap = CGRect(x: x, y: mid - (ceil(size.height) + 6) / 2, width: width(piece), height: ceil(size.height) + 6)
+                Look.Token.sel.color.setFill()
+                NSBezierPath(roundedRect: cap, xRadius: 5, yRadius: 5).fill()
+                text.draw(at: CGPoint(x: cap.minX + (cap.width - size.width) / 2, y: cap.minY + 3))
+            case .dot:
+                Look.Token.ink3.color.setFill()
+                NSBezierPath(ovalIn: CGRect(x: x, y: mid - 1.5, width: 3, height: 3)).fill()
+            }
+            x += width(piece) + (index + 1 < pieces.count ? space(after: piece, before: pieces[index + 1]) : 0)
         }
-        func dot() {
-            Look.Token.ink3.color.setFill()
-            NSBezierPath(ovalIn: CGRect(x: x, y: mid - 1.5, width: 3, height: 3)).fill()
-            x += 3 + 9
-        }
-        put(first)
-        if let hint {
-            dot()
-            put(hint)
-        }
-        dot()
-        let keyRect = CGRect(x: x, y: mid - keyBox.height / 2, width: keyBox.width, height: keyBox.height)
-        Look.Token.sel.color.setFill()
-        NSBezierPath(roundedRect: keyRect, xRadius: 5, yRadius: 5).fill()
-        key.draw(at: CGPoint(x: keyRect.minX + 5, y: keyRect.minY + 3))
-        x += keyBox.width + 2 + 3
-        put(after)
         NSGraphicsContext.restoreGraphicsState()
     }
 

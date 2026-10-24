@@ -854,4 +854,91 @@ import WebKit
         window.point(nil)
         #expect(overlay.superview == nil && window.pointer == nil)
     }
+
+    /// A picked part gets the composer: ⌥-click adds a part only once one is picked, Return makes a Quick Change and
+    /// ⌘↵ adds a comment with the words and the parts, Shift-Return breaks the line; Esc lets the parts go (the
+    /// composer with them), a second Esc stops the mode.
+    @Test func aPickedPartGetsTheComposer() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let body = """
+            <style>body { margin: 0 } td { width: 120px; height: 40px }</style>
+            <table style="margin: 20px"><tr><td>a</td><td>b</td></tr></table>
+            <section style="height: 80px; margin-left: 600px"><p>inside</p></section>
+            <script>window.done = true</script>
+            """
+        let space = try home.space("parts", page(nil, body))
+        let window = try await home.window(space)
+        defer { window.close() }
+        let offscreen = Offscreen(window.area)
+        window.open()
+        try await ready(window)
+        let overlay = PointOverlay(window, motion: .reduced)
+        var stopped = false, quick: [(String, [String])] = [], comments: [(String, [String])] = []
+        overlay.stopped = { stopped = true }
+        overlay.quickChange = { quick.append(($0, $1.map(\.kind))) }
+        overlay.addComment = { comments.append(($0, $1.map(\.kind))) }
+        overlay.eyes = { .listen }
+        window.point(overlay)
+        let cell = CGPoint(x: 80, y: 40), section = CGPoint(x: 700, y: 120)
+
+        // ⌥ alone does nothing: there is no frame to add to.
+        await overlay.click(at: cell, adding: true)
+        #expect(overlay.picks.isEmpty && overlay.composer == nil)
+        await overlay.click(at: cell, adding: false)
+        let composer = try #require(overlay.composer)
+        #expect(composer.names == "this cell" && composer.title == window.title && composer.to == "To parts’ assistant")
+        #expect(composer.frame == PointComposer.place(PointComposer.size, by: try #require(overlay.picks.last).rect, in: overlay.bounds.size))
+        #expect(offscreen.window.firstResponder === composer.field && overlay.banner[1] == "Hold ⌥ and click to add a part")
+        #expect(!composer.quickButton.isEnabled && !composer.commentButton.isEnabled)
+        await overlay.click(at: section, adding: true)
+        #expect(overlay.composer === composer && composer.names == "this cell and this section")
+        #expect(composer.frame.minX == PointComposer.place(PointComposer.size, by: try #require(overlay.picks.last).rect, in: overlay.bounds.size).minX)
+        // Over the composer, clicks are its own.
+        let inside = NSPoint(x: composer.frame.midX, y: overlay.bounds.height - composer.frame.midY)
+        #expect(window.area.hitTest(inside).map { $0.isDescendant(of: composer) } == true)
+
+        // Return: a Quick Change; nothing while the words are only spaces; Shift-Return is the field's.
+        composer.field.insertText("  ", replacementRange: composer.field.selectedRange())
+        #expect(composer.textView(composer.field, doCommandBy: #selector(NSResponder.insertNewline(_:))) && quick.isEmpty)
+        composer.field.insertText("Make it smaller", replacementRange: composer.field.selectedRange())
+        #expect(composer.quickButton.isEnabled && composer.commentButton.isEnabled)
+        #expect(composer.textView(composer.field, doCommandBy: #selector(NSResponder.insertNewline(_:))))
+        #expect(quick.map(\.0) == ["Make it smaller"] && quick.first?.1 == ["this cell", "this section"])
+
+        // ⌘↵: a comment; the parts go, the mode stays.
+        let command = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                                    windowNumber: offscreen.window.windowNumber, context: nil, characters: "\r",
+                                                    charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        #expect(composer.field.performKeyEquivalent(with: command))
+        #expect(comments.map(\.0) == ["Make it smaller"] && comments.first?.1 == ["this cell", "this section"])
+        #expect(overlay.picks.isEmpty && overlay.composer == nil && composer.superview == nil && !stopped)
+
+        // Esc: the parts and the composer go, then the mode.
+        await overlay.click(at: cell, adding: false)
+        #expect(overlay.composer != nil)
+        #expect(overlay.escape() && overlay.composer == nil && !stopped && offscreen.window.firstResponder === overlay)
+        #expect(overlay.escape() && stopped)
+        window.point(nil)
+    }
+
+    /// The composer goes under the last part, or over it when there is no room below, on the part's side, 12 points
+    /// off every edge.
+    @Test func theComposerIsPlacedByItsPart() {
+        let size = PointComposer.size, bounds = CGSize(width: 1000, height: 700)
+        // Left half: its left edge with the frame's (7 points off the part), 12 under it.
+        #expect(PointComposer.place(size, by: CGRect(x: 100, y: 100, width: 200, height: 50), in: bounds)
+                == CGRect(x: 93, y: 169, width: 368, height: 118))
+        // Right half: its right edge with the frame's.
+        #expect(PointComposer.place(size, by: CGRect(x: 700, y: 100, width: 200, height: 50), in: bounds)
+                == CGRect(x: 907 - 368, y: 169, width: 368, height: 118))
+        // No room below: over the part.
+        #expect(PointComposer.place(size, by: CGRect(x: 100, y: 560, width: 200, height: 50), in: bounds)
+                == CGRect(x: 93, y: 560 - 7 - 12 - 118, width: 368, height: 118))
+        // Never past an edge.
+        #expect(PointComposer.place(size, by: CGRect(x: 0, y: 0, width: 990, height: 690), in: bounds)
+                == CGRect(x: 12, y: 12, width: 368, height: 118))
+        #expect(PointComposer.sentence(["a"]) == "a" && PointComposer.sentence(["a", "b"]) == "a and b"
+                && PointComposer.sentence(["a", "b", "c"]) == "a, b and c" && PointComposer.sentence([]).isEmpty)
+    }
 }

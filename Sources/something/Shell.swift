@@ -296,6 +296,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         guard space.pointer == nil else { return stopPointing() }
         let overlay = PointOverlay(space, motion: library.preferences.motion)
         overlay.stopped = { [weak self] in self?.stopPointing() }
+        let name = space.space.name
+        overlay.eyes = { [weak self] in self?.assistant.eyes(of: name) ?? .unknown }
         assistant.open = false
         space.point(overlay)
         pressPoint(true)
