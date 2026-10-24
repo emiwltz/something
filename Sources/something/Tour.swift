@@ -64,9 +64,9 @@ import SomethingAgents
         }
     }
 
-    /// ⌘[: the step before, except while Look Again looks.
-    func back() {
-        guard !looking, let before = Step(rawValue: step.rawValue - 1) else { return }
+    /// ⌘[ and Back: the step before, except while the builders are looked for, as the disabled Back button says.
+    func back(_ assistant: AssistantModel) {
+        guard !searching(assistant), let before = Step(rawValue: step.rawValue - 1) else { return }
         move(before, forward: false)
     }
 

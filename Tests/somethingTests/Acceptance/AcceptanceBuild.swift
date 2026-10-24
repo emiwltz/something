@@ -20,7 +20,7 @@ struct AcceptanceBuild {
         defer { scene.remove() }
         #expect(scene.window.title == "Welcome to something" && scene.window.contentView?.frame.size == Welcome.size)
         try await scene.draw("a2") { words in
-            #expect(words == ["Skip Tour", "Continue"], "\(words)")
+            #expect(words == ["something. Ready to build something today?", "Skip Tour", "Continue"], "\(words)")
         }
     }
 
@@ -51,17 +51,24 @@ struct AcceptanceBuild {
         let scene = try await Self.welcome(.meet)
         defer { scene.remove() }
         try await scene.draw("a5") { words in
-            #expect(words == ["Ready", "Meet your assistant", "Skip Tour", "Back", "Continue"], "\(words)")
+            #expect(words == ["Ready", "Meet your assistant", "Press ⌘K to talk to it", "Skip Tour", "Back", "Continue"], "\(words)")
         }
     }
 
     /// Ready: who builds, the comforts as chosen, the promise about requests, and Make Your First Space; no Skip Tour.
+    /// Not under a Homebrew prefix, no Applications row: the launcher was never offered.
     @Test("a6: welcome, the summary") func a6() async throws {
+        let promise = "Requests: When an agent asks for something, a small window of your Mac asks you. Only you answer."
         let scene = try await Self.welcome(.ready, homebrew: true)
         defer { scene.remove() }
         try await scene.draw("a6") { words in
-            #expect(words == ["Make your first space", "Ready", "Back", "Make Your First Space"], "\(words)")
+            #expect(words == ["Make your first space", "Assistant: Claude Code · Default model", "Applications: Not added", "Notifications: Off",
+                              promise, "Back", "Make Your First Space"], "\(words)")
         }
+        let elsewhere = try await Self.welcome(.ready)
+        defer { elsewhere.remove() }
+        let words = await Self.read(try #require(elsewhere.window.contentView?.subviews.first))
+        #expect(!words.contains { $0.hasPrefix("Applications") } && words.contains("Notifications: Off") && words.contains(promise), "\(words)")
     }
 
     /// No builder on this Mac: the install commands of the first two, Copy Command, What is a coding agent?, Look Again.
@@ -85,8 +92,8 @@ struct AcceptanceBuild {
         defer { scene.remove() }
         #expect(TourTests.command(scene.window, "k") && scene.tour.met)
         try await scene.draw("a8") { words in
-            // Its eyes, beside its name, say Done: they smile.
-            #expect(words == ["Done", "Meet your assistant", "Skip Tour", "Back", "Continue"], "\(words)")
+            // Its eyes, beside its name, smile; the state they say is still Ready, never Done: nothing ran.
+            #expect(words == ["Ready, smiling", "Meet your assistant", "Skip Tour", "Back", "Continue"], "\(words)")
         }
         #expect(scene.assistant.engine.state.agents.isEmpty && scene.assistant.id == nil, "hello sends nothing to the agent")
     }
@@ -425,7 +432,7 @@ extension Picture {
             page.draw(in: NSRect(origin: .zero, size: size))
             Look.Token.bg.color.setFill()
             center.fill()
-            blurred.draw(in: center, from: center.applying(CGAffineTransform(scaleX: 1, y: 1)), operation: .sourceOver, fraction: 0.35)
+            blurred.draw(in: center, from: center, operation: .sourceOver, fraction: 0.35)
             Look.Token.bg.color.withAlphaComponent(0.3).setFill()
             sidebar.fill()
             Look.Token.bg.color.withAlphaComponent(0.42).setFill()

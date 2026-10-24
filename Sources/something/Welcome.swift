@@ -2,8 +2,7 @@
 // assistant (the builders found, the agents only seen and why, those not on this Mac), A few comforts (each off until
 // turned on), Meet your assistant (the sticker, ⌘K, its hello), and Ready; with no builder found, the install commands
 // and Look Again. The footer says where the person is and what the keys do: Escape skips, ⌘[ goes back, Return goes on.
-// While it is open the window takes every key, so no shortcut of the window behind it runs. Tour.swift holds its model;
-// How to Get One's list of install commands lives here too.
+// While it is open the window takes every key, so no shortcut of the window behind it runs. Tour.swift holds its model.
 import AppKit
 import SomethingAgents
 import SwiftUI
@@ -52,7 +51,7 @@ final class WelcomeKeys: NSView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command else { return false }
         switch event.charactersIgnoringModifiers?.lowercased() {
-        case "[": tour.back()
+        case "[": tour.back(assistant)
         case "k": tour.meet()
         default: return false
         }
@@ -115,6 +114,7 @@ struct WelcomeView: View {
             Text("something").font(Look.font(.title, size: 62, weight: .semibold).ui).kerning(-2.17).padding(.top, 14)
             Text("Ready to build something today?").font(Look.font(.ui, size: 17).ui).foregroundStyle(Look.Token.ink2.ui).padding(.top, 10)
         }
+        .accessibilityElement(children: .combine).accessibilityLabel("something. Ready to build something today?")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.top, 18)
     }
@@ -172,7 +172,7 @@ struct WelcomeView: View {
                 .frame(width: 16, height: 16)
                 VStack(alignment: .leading, spacing: compact ? 0 : 2) {
                     Text(Registry.app.name(of: entry.id)).font(Look.font(.ui, size: 14, weight: .semibold).ui)
-                    Text(on ? Self.words(assistant.modelWords) : "Default model").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+                    Text(Self.words(assistant.modelWords(of: entry.id))).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
                 }
                 Spacer(minLength: 0)
             }
@@ -205,7 +205,7 @@ struct WelcomeView: View {
                 ForEach(rows, id: \.name) { row in
                     HStack(spacing: 12) {
                         Text(row.name).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).frame(width: 96, alignment: .leading)
-                        Text(row.command).font(Look.font(.code, size: 11.5).ui).lineLimit(1).truncationMode(.tail).textSelection(.enabled)
+                        Text(row.command).font(Look.font(.code, size: 11.5).ui).lineLimit(1).truncationMode(.tail)
                             .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                             .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         Button { tour.copy(row.command, with: assistant.copy) } label: {
@@ -284,10 +284,10 @@ struct WelcomeView: View {
 
     private var meet: some View {
         HStack(spacing: 30) {
-            BigSticker(state: tour.met ? .done : .listen, motion: motion).frame(width: 230, height: 300)
+            BigSticker(joy: tour.met, motion: motion).frame(width: 230, height: 300)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 7) {
-                    Image(nsImage: Sign.miniEyes(tour.met ? .done : .listen)).renderingMode(.template).frame(width: 16, height: 10)
+                    Image(nsImage: Sign.miniEyes(.listen, joy: tour.met)).renderingMode(.template).frame(width: 16, height: 10)
                     Text("\(assistant.name) · \(assistant.modelWords.model)")
                 }
                 .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
@@ -313,6 +313,7 @@ struct WelcomeView: View {
                         Text("Press \(Keys.shown("ask")) to talk to it").font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.leading, 6)
                         HStack(spacing: 3) { ForEach(0..<3) { _ in Circle().fill(Look.Token.ink3.ui).frame(width: 4, height: 4) } }
                     }
+                    .accessibilityElement(children: .ignore).accessibilityLabel("Press \(Keys.shown("ask")) to talk to it")
                     .padding(.top, 26)
                 }
             }
@@ -328,30 +329,33 @@ struct WelcomeView: View {
         var code = AttributedString(folder)
         code.font = Look.font(.code, size: 11.5).ui
         return VStack(alignment: .leading, spacing: 0) {
-            WelcomeSign(state: .done, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 12)
+            WelcomeSign(state: .listen, joy: true, side: 52, lands: false, motion: motion).padding(.leading, -6).padding(.bottom, 12)
             heading("Make your first space")
             Text(AttributedString("Describe a page in a few words. \(assistant.name) builds it in ") + code + AttributedString(", and nothing leaves your Mac."))
                 .font(Look.font(.ui, size: 14.5).ui).lineSpacing(5).foregroundStyle(Look.Token.ink2.ui).frame(maxWidth: 520, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true).padding(.top, 10)
             Grid(alignment: .topLeading, horizontalSpacing: 28, verticalSpacing: 9) {
+                let who = "\(assistant.name) · \(Self.words(assistant.modelWords))"
                 GridRow {
-                    Text("Assistant").foregroundStyle(Look.Token.ink3.ui)
+                    Text("Assistant").foregroundStyle(Look.Token.ink3.ui).accessibilityHidden(true)
                     HStack(spacing: 7) {
                         Image(nsImage: Sign.miniEyes(.listen)).renderingMode(.template).frame(width: 16, height: 10)
-                        Text("\(assistant.name) · \(Self.words(assistant.modelWords))")
+                        Text(who)
                     }
                     .fontWeight(.medium)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("Assistant: \(who)")
                 }
                 if tour.offersLauncher { summary("Applications", tour.addLauncher ? "Added" : "Not added", on: tour.addLauncher) }
                 summary("Notifications", tour.notify ? "On" : "Off", on: tour.notify)
+                let promise = "When an agent asks for something, a small window of your Mac asks you. Only you answer."
                 GridRow {
-                    Text("Requests").foregroundStyle(Look.Token.ink3.ui)
+                    Text("Requests").foregroundStyle(Look.Token.ink3.ui).accessibilityHidden(true)
                     HStack(alignment: .top, spacing: 7) {
                         Image(systemName: "checkmark.shield").font(.system(size: 11)).foregroundStyle(Look.Token.ink.ui).padding(.top, 2).accessibilityHidden(true)
-                        Text("When an agent asks for something, a small window of your Mac asks you. Only you answer.").lineSpacing(2.5)
-                            .foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                        Text(promise).lineSpacing(2.5).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("Requests: \(promise)")
                 }
             }
             .font(Look.font(.ui, size: 13).ui)
@@ -364,13 +368,15 @@ struct WelcomeView: View {
     }
 
     private func summary(_ term: String, _ value: String, on: Bool) -> some View {
+        // The term is said with its value, in one label: a row reads as "Notifications: Off".
         GridRow {
-            Text(term).foregroundStyle(Look.Token.ink3.ui)
+            Text(term).foregroundStyle(Look.Token.ink3.ui).accessibilityHidden(true)
             HStack(spacing: 7) {
                 if on { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)) }
                 Text(value)
             }
             .fontWeight(on ? .medium : .regular).foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+            .accessibilityElement(children: .ignore).accessibilityLabel("\(term): \(value)")
         }
     }
 
@@ -419,7 +425,7 @@ struct WelcomeView: View {
                     .accessibilityElement(children: .ignore).accessibilityLabel(hint.words)
             }
             if step > 0 {
-                Button { tour.back() } label: {
+                Button { tour.back(assistant) } label: {
                     HStack(spacing: 4) { Image(systemName: "chevron.left").font(.system(size: 10.5, weight: .semibold)).frame(width: 15); Text("Back") }
                 }
                 .buttonStyle(Ghost(leading: 6, trailing: 12)).disabled(searching)
@@ -500,28 +506,34 @@ private struct Switch: View {
     }
 }
 
-/// The sign in the welcome, at `side` points, in `state`; with `lands`, it lands as the step opens.
+/// The sign in the welcome, at `side` points, in `state`, smiling with `joy`; with `lands`, it lands as the step opens.
 private struct WelcomeSign: NSViewRepresentable {
-    let state: Sign.State, side: CGFloat, lands: Bool, motion: Look.Motion
+    let state: Sign.State, joy: Bool, side: CGFloat, lands: Bool, motion: Look.Motion
+
+    init(state: Sign.State, joy: Bool = false, side: CGFloat, lands: Bool, motion: Look.Motion) {
+        (self.state, self.joy, self.side, self.lands, self.motion) = (state, joy, side, lands, motion)
+    }
 
     func makeNSView(context: Context) -> SignView {
         let sign = SignView(state, side: side)
-        (sign.name, sign.motion) = ("something", motion)
+        (sign.name, sign.motion, sign.joy) = ("something", motion, joy)
         if lands { sign.arrive() }
         return sign
     }
 
     func updateNSView(_ sign: SignView, context: Context) {
         if sign.state != state { sign.state = state }
+        sign.joy = joy
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: SignView, context: Context) -> CGSize? { CGSize(width: side, height: side) }
 }
 
 /// The sticker at the fourth step, 150 points: the sign of 118 on its surface with the hard shadow (it is the thing
-/// the person will grab in every space). Its eyes smile once it said hello.
+/// the person will grab in every space), Ready. Its eyes smile once it said hello, wider and finer than the small
+/// sign's smile, as the mockup's .ob-stk draws them.
 private struct BigSticker: NSViewRepresentable {
-    let state: Sign.State, motion: Look.Motion
+    let joy: Bool, motion: Look.Motion
 
     final class Face: NSView {
         let sign = SignView(.listen, side: 118)
@@ -538,34 +550,10 @@ private struct BigSticker: NSViewRepresentable {
     func makeNSView(context: Context) -> Face {
         let face = Face()
         face.addSubview(face.sign)
-        (face.sign.name, face.sign.motion, face.sign.state) = ("Your assistant", motion, state)
+        (face.sign.name, face.sign.motion, face.sign.joy) = ("Your assistant", motion, joy)
+        (face.sign.geometry.joy, face.sign.geometry.joyStroke) = (1.5, 0.34)
         return face
     }
 
-    func updateNSView(_ face: Face, context: Context) {
-        if face.sign.state != state { face.sign.state = state }
-    }
-}
-
-/// How to Get One's list: each agent, the command that installs it, and a button that copies that command.
-struct InstallList: View {
-    let rows: [(name: String, command: String)], copy: (String) -> Void
-
-    /// The coding agents something builds with, each with its install command.
-    static var builders: [(name: String, command: String)] {
-        Registry.app.builders.compactMap { agent in agent.install.map { (agent.name, $0) } }
-    }
-
-    var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-            ForEach(rows, id: \.name) { row in
-                GridRow {
-                    Text(row.name).fontWeight(.medium)
-                    Text(row.command).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                    Button("Copy") { copy(row.command) }.controlSize(.small)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
+    func updateNSView(_ face: Face, context: Context) { face.sign.joy = joy }
 }

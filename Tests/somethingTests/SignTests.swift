@@ -75,6 +75,10 @@ import Testing
             #expect(eye.redComponent > 0.7 && eye.greenComponent < 0.55, "\(appearance.name.rawValue): \(eye)")
         }
         #expect(Sign.image(.done, side: 30).accessibilityDescription == "Done")
+        // A smile is an expression, not a state: the state is still said, never as Done.
+        let smiling = SignView(.listen)
+        (smiling.name, smiling.joy) = ("something", true)
+        #expect(smiling.accessibilityLabel() == "something, Ready, smiling" && Sign.miniEyes(.listen, joy: true).accessibilityDescription == "Ready, smiling")
     }
 
     @Test func calmMotionMovesAndReducedHoldsItAtRest() throws {

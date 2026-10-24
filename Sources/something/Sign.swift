@@ -26,6 +26,10 @@ enum Sign {
         var moves: Bool { self != .limit && self != .unknown }
     }
 
+    /// What VoiceOver reads of a sign in `state`, smiling with `joy`: the smile is an expression, not a state, so the
+    /// state is still said as it is ("Ready, smiling"), never as Done.
+    static func words(_ state: State, joy: Bool) -> String { joy ? "\(state.word), smiling" : state.word }
+
     /// The proportions, as fractions of the sign's side: the corner's arm, the stroke (in a 100-unit corner, as the
     /// mockup's SVG has it), the eye unit, and the frame's inset. Emi's defaults: arm .31, stroke 35, eye .125. The
     /// joy eye's width and stroke are in eye units; the welcome's big sticker draws them 1.5 and .34.
@@ -110,8 +114,9 @@ enum Sign {
     }
 
     /// Draws the sign of `state` in `rect` (square, centered when it is not), in the current graphics context,
-    /// whose y grows downward when `flipped`. Colours resolve in the current drawing appearance.
-    static func draw(_ state: State, pose: Pose = .rest, geometry g: Geometry = Geometry(), in rect: CGRect, flipped: Bool) {
+    /// whose y grows downward when `flipped`; with `joy`, its eyes smile (the mockup's x-joy) whatever the state.
+    /// Colours resolve in the current drawing appearance.
+    static func draw(_ state: State, joy: Bool = false, pose: Pose = .rest, geometry g: Geometry = Geometry(), in rect: CGRect, flipped: Bool) {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
         let s = min(rect.width, rect.height), e = g.eye * s
         func out(_ p: Double) -> CGFloat { let q = 1 - min(max(p, 0), 1); return CGFloat(1 - q * q * q) }
@@ -145,12 +150,12 @@ enum Sign {
         }
         c.restoreGState()
         // The face: two eyes, popping in after the corners when the sign arrives.
-        let pop = out((pose.arrived - 0.55) / 0.5), eyes = g.eyes(state, side: s)
+        let face = joy ? State.done : state, pop = out((pose.arrived - 0.55) / 0.5), eyes = g.eyes(face, side: s)
         c.setAlpha(pop)
         c.translateBy(x: s / 2 + pose.lean.width, y: eyes[0].midY + pose.lean.height)
         c.scaleBy(x: 0.3 + 0.7 * pop, y: (0.3 + 0.7 * pop) * pose.open)
         c.translateBy(x: -s / 2 + pose.look * e, y: -eyes[0].midY)
-        for eye in eyes { drawEye(state, eye, e: e, stroke: g.joyStroke, in: c) }
+        for eye in eyes { drawEye(face, eye, e: e, stroke: g.joyStroke, in: c) }
         if state == .sleep, pose.z < 1 {
             // The z drifts up and right from the face's corner, appearing then fading, as the mockup's does.
             let size = 1.5 * e, p = pose.z, faceTop = eyes[0].midY - 0.45 * e - eyes[0].height / 2
@@ -162,23 +167,19 @@ enum Sign {
         c.restoreGState()
     }
 
-    /// One eye of `state` in `r`: filled, hollow when unknown, an arc when done, red when stopped.
+    /// One eye of `state` in `r`: filled, hollow when unknown, an arc when done (the smile), red when stopped.
     static func drawEye(_ state: State, _ r: CGRect, e: CGFloat, stroke: CGFloat, in c: CGContext) {
         switch state {
         case .done:
-            // The joy eye, as the mockup's .x-joy: the top and right borders of its box, turned 45° into a ^, the box
-            // moved down 30% of its height; the border at least 2 points, so it reads at the sticker's size.
-            let side = r.width, thick = min(max(2, stroke * e), side / 2), edge = side / 2 - thick / 2
+            // The joy eye, as the mockup's .x-joy: a round eye's top and right borders, turned 45°, which is a soft arc
+            // over the eye, the box moved down 30% of its height; the border at least 2 points, so it reads at the
+            // sticker's size. In this context y grows downward, so the arc from π to 2π is the upper half.
+            let side = r.width, thick = min(max(2, stroke * e), side / 2)
             c.saveGState()
-            c.translateBy(x: r.midX, y: r.midY + 0.3 * side)
-            c.rotate(by: -CGFloat.pi / 4)
             c.setStrokeColor(color(.eyes))
             c.setLineWidth(thick)
             c.setLineCap(.butt)
-            c.setLineJoin(.miter)
-            c.move(to: CGPoint(x: -side / 2, y: -edge))
-            c.addLine(to: CGPoint(x: edge, y: -edge))
-            c.addLine(to: CGPoint(x: edge, y: side / 2))
+            c.addArc(center: CGPoint(x: r.midX, y: r.midY + 0.3 * side), radius: (side - thick) / 2, startAngle: CGFloat.pi, endAngle: 2 * CGFloat.pi, clockwise: false)
             c.strokePath()
             c.restoreGState()
         case .unknown:
@@ -224,9 +225,11 @@ enum Sign {
     }
 
     /// The mini eyes of `state`, 16x10 points, for menus and the rail: still (menus cannot animate), a template image
-    /// by default so the menu colours it; with `template` false, in the identity's colours (red when stopped).
-    static func miniEyes(_ state: State, template: Bool = true) -> NSImage {
+    /// by default so the menu colours it; with `template` false, in the identity's colours (red when stopped); with
+    /// `joy`, the arcs of a smile, VoiceOver still saying the state.
+    static func miniEyes(_ state: State, template: Bool = true, joy: Bool = false) -> NSImage {
         let image = NSImage(size: NSSize(width: 16, height: 10), flipped: true) { _ in
+            let state = joy ? State.done : state
             guard let c = NSGraphicsContext.current?.cgContext else { return false }
             let ink = template ? CGColor(gray: 0, alpha: 1) : color(state == .limit ? .bad : .eyes)
             var eyes = [CGRect(x: 3, y: 1.9, width: 3.5, height: 6.2), CGRect(x: 9.5, y: 1.9, width: 3.5, height: 6.2)]
@@ -275,7 +278,7 @@ enum Sign {
             return true
         }
         image.isTemplate = template
-        image.accessibilityDescription = state.word
+        image.accessibilityDescription = words(state, joy: joy)
         return image
     }
 
@@ -305,6 +308,8 @@ enum Sign {
 final class SignView: NSView {
     /// The state its eyes say; setting it restarts that state's motion.
     var state: Sign.State { didSet { began = clock(); refresh() } }
+    /// Whether its eyes smile (the mockup's x-joy): an expression over the state, which it does not change.
+    var joy = false { didSet { if joy != oldValue { began = clock(); refresh() } } }
     var geometry = Sign.Geometry() { didSet { needsDisplay = true } }
     /// How far the eyes lean, in points, while a drag moves the sticker.
     var lean = CGSize.zero { didSet { if lean != oldValue { needsDisplay = true } } }
@@ -336,7 +341,7 @@ final class SignView: NSView {
     /// The pose it draws now.
     var pose: Sign.Pose {
         let now = clock()
-        var pose = Sign.pose(state, at: now - began, arrived: arrival.map { now - $0 }, motion: playing)
+        var pose = Sign.pose(joy ? .done : state, at: now - began, arrived: arrival.map { now - $0 }, motion: playing)
         pose.lean = lean
         return pose
     }
@@ -354,7 +359,7 @@ final class SignView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        Sign.draw(state, pose: pose, geometry: geometry, in: bounds, flipped: true)
+        Sign.draw(state, joy: joy, pose: pose, geometry: geometry, in: bounds, flipped: true)
     }
 
     override func viewDidMoveToWindow() {
@@ -363,7 +368,8 @@ final class SignView: NSView {
     }
 
     override func accessibilityLabel() -> String? {
-        name.map { $0.isEmpty ? state.word : "\($0), \(state.word)" } ?? state.word
+        let word = Sign.words(state, joy: joy)
+        return name.map { $0.isEmpty ? word : "\($0), \(word)" } ?? word
     }
 
     private func refresh() {

@@ -556,3 +556,26 @@ enum Ask {
         Registry.app.agents.lazy.compactMap { $0.modeWords[mode] }.first ?? "asks you less"
     }
 }
+
+/// How to Get One's list: each agent, the command that installs it, and a button that copies that command.
+struct InstallList: View {
+    let rows: [(name: String, command: String)], copy: (String) -> Void
+
+    /// The coding agents something builds with, each with its install command.
+    static var builders: [(name: String, command: String)] {
+        Registry.app.builders.compactMap { agent in agent.install.map { (agent.name, $0) } }
+    }
+
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+            ForEach(rows, id: \.name) { row in
+                GridRow {
+                    Text(row.name).fontWeight(.medium)
+                    Text(row.command).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                    Button("Copy") { copy(row.command) }.controlSize(.small)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}

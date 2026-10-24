@@ -641,6 +641,10 @@ extension AssistantModel {
         return (model, effort)
     }
 
+    /// The model and effort `kind` would build with: modelWords for the kind chosen, "Default model" for another until
+    /// it has run, since something reads no agent's settings.
+    func modelWords(of kind: String) -> (model: String, effort: String?) { kind == self.kind ? modelWords : ("Default model", nil) }
+
     /// The messages of the conversation, the person's and the agent's.
     var messageCount: Int { AssistantModel.messages(rows) }
 

@@ -93,6 +93,73 @@ import Testing
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty && model.id == nil)
     }
 
+    /// A click inside the welcome, on a builder's row or on the install commands, leaves the keys to the welcome:
+    /// Return still goes on, sent as the window server sends it, through the window. ⌘[ and Back agree: neither goes
+    /// back while the builders are looked for.
+    @Test func aClickLeavesTheKeysToTheWelcome() async throws {
+        let (home, model) = try assistants.assistant(["claude", "codex"], prefix: "something-tour-")
+        defer { home.remove() }
+        let tour = Tour(places: home.places)
+        let window = Self.shown(Welcome.window(tour, assistant: model, motion: .reduced))
+        defer { window.orderOut(nil) }
+        await assistants.look(model)
+        tour.move(.assistant)
+        await wait(0.6)
+        // The second builder's row: the click chooses it, and the keys stay with the welcome.
+        // SwiftUI places the rows when it is ready, later under load: the click is repeated until one lands, as a
+        // second click on the same row chooses the same builder.
+        #expect(await wait(10, until: {
+            Self.click(window, at: NSPoint(x: 200, y: Welcome.size.height - 208))
+            return model.kind == "codex"
+        }), "the click reached the row")
+        #expect(window.firstResponder is WelcomeKeys)
+        Self.send(window, .return)
+        #expect(tour.step == .comforts)
+
+        let (bare, none) = try assistants.assistant([], prefix: "something-tour-")
+        defer { bare.remove() }
+        let looking = Tour(places: bare.places), alone = Self.shown(Welcome.window(looking, assistant: none, motion: .reduced))
+        defer { alone.orderOut(nil) }
+        looking.move(.assistant)
+        #expect(looking.searching(none))
+        #expect(Self.command(alone, "["))
+        #expect(looking.step == .assistant, "no going back while the builders are looked for")
+        none.engine.lookAgain()
+        #expect(await wait(until: { none.noAgent }))
+        await wait(0.6)
+        // The first install command.
+        Self.click(alone, at: NSPoint(x: 300, y: Welcome.size.height - 196))
+        #expect(alone.firstResponder is WelcomeKeys)
+        Self.send(alone, .return)
+        #expect(looking.looking, "Return looks again")
+        #expect(await wait(until: { !looking.looking }))
+    }
+
+    /// `window` in front but out of sight, far off the screens and transparent, so the window server's events reach it.
+    static func shown(_ window: NSWindow) -> NSWindow {
+        window.alphaValue = 0
+        window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
+        window.orderFront(nil)
+        return window
+    }
+
+    /// A click of the mouse at `point` in `window`'s content, through the window, as the window server sends it.
+    static func click(_ window: NSWindow, at point: NSPoint) {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                 context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { continue }
+            window.sendEvent(event)
+        }
+    }
+
+    /// Sends `key` through `window`, which gives it to whatever is its first responder.
+    static func send(_ window: NSWindow, _ key: Key) {
+        guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                           context: nil, characters: key == .return ? "\r" : "\u{1b}", charactersIgnoringModifiers: key == .return ? "\r" : "\u{1b}",
+                                           isARepeat: false, keyCode: key.rawValue) else { return }
+        window.sendEvent(event)
+    }
+
     enum Key: UInt16 { case `return` = 36, escape = 53, space = 49, left = 123, right = 124, down = 125, up = 126 }
 
     /// Sends `key` to `window`, as the window server would, to its first responder.
