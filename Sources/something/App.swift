@@ -1,7 +1,7 @@
 // The Mac app: one Engine and one window (Shell.swift) with the spaces (Library.swift), the open space (SpaceView.swift),
 // Info (Inspector.swift) and the assistant (Assistant.swift); the tour at the first start (Tour.swift); the menu bar
-// (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the permission and
-// question panels; the state pushed at most four times a second; and quitting, which asks first while agents something
+// (Keys.swift) and the keys it keeps from a page; the spaces and exports LaunchServices hands it; the panel of the
+// agents' requests; the state pushed at most four times a second; and quitting, which asks first while agents something
 // launched run, then stops them. Closing the window keeps the app and its agents running, as a Mac app with one main
 // window does; the open space closes with it, and opens again when the window comes back.
 import AppKit
@@ -63,7 +63,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             library.watching(visible)
             current?.watching(visible)
         }
-        panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent", line: "") }
+        panels.who = { [weak self] request in self?.who(request) ?? Asker(program: "An agent") }
+        panels.beside = { [weak self] in self?.shell.window }
         panels.queue.space = { [weak self] request in
             guard let self else { return nil }
             return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), place: assistant.place,
@@ -78,7 +79,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             guard let self else { return }
             sheet(Ask.howToGetOne(copy: assistant.copy)) { [weak self] in self?.assistant.lookAgain() }
         }
-        assistant.showRequest = { [weak self] in self?.panels.panel?.orderFrontRegardless() }
+        assistant.showRequest = { [weak self] in self?.panels.present() }
         assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
         assistant.ended = { [weak self] in
             guard let self else { return }
@@ -243,25 +244,19 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         }
     }
 
-    /// Who asks in a panel: the agent's program, its name, the space that started it when one did, and its folder.
+    /// Who asks in the panel: the agent, and the title of the space its request belongs to.
     func who(_ request: Request) -> Asker {
-        let starter = launches.ids.first { $0.value.contains(request.agent) }.map { library.entry($0.key)?.title ?? $0.key }
-        return App.who(engine.state.agents.first { $0.id == request.agent }, startedBy: starter, home: places.home.path,
+        let space = panels.queue.space(request).map { library.entry($0)?.title ?? $0 }
+        return App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
                        assistant: engine.assistants.contains(request.agent))
     }
 
-    /// `agent` in a panel's words ("Claude Code" / "“shop”, started by “My agents”, working in ~/code/shop"), with the
-    /// title of the space that started it when one did; "Your assistant, working in ~/something/spaces" for the
-    /// person's assistant; "An agent" when the state no longer holds it.
-    static func who(_ agent: Agent?, startedBy space: String?, home: String, assistant: Bool = false) -> Asker {
-        guard let agent else { return Asker(program: "An agent", line: "") }
-        if assistant {
-            return Asker(program: Registry.app.name(of: agent.kind), line: "Your assistant, working in " + Words.path(agent.folder ?? "", home: home))
-        }
-        let parts = [agent.name.map { "“\($0)”" }, space.map { "started by “\($0)”" },
-                     agent.folder.map { "working in " + Words.path($0, home: home) }].compactMap { $0 }
-        let line = parts.joined(separator: ", ")
-        return Asker(program: Registry.app.name(of: agent.kind), line: line.prefix(1).uppercased() + line.dropFirst())
+    /// `agent` in the panel's words: its program, `space`, its own name unless it is the person's assistant, and its
+    /// folder with ~ for `home`; "An agent" when the state no longer holds it.
+    static func who(_ agent: Agent?, space: String?, home: String, assistant: Bool = false) -> Asker {
+        guard let agent else { return Asker(program: "An agent", space: space) }
+        return Asker(program: Registry.app.name(of: agent.kind), space: space, assistant: assistant, name: assistant ? nil : agent.name,
+                     folder: agent.folder.map { Words.path($0, home: home) })
     }
 
     /// The engine may change many times a second; the open space hears of it at most every quarter of a second.

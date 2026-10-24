@@ -1,8 +1,9 @@
-// The permission and question panels against a fake prompt source shaped like the Engine's: one panel at a time in
-// the order the requests came, Allow Once and Deny, Escape denies, never modal, closed when the agent withdraws its
-// request, and a question answered with the chosen and typed answers. The queue behind them: arrival order, steps that
-// wrap, and each space's own count. The sheets the app waits for mean what their buttons say, one at a time. No panel
-// is shown.
+// The request panel against a fake prompt source shaped like the Engine's: one panel that shows the requests in the
+// order they came and steps through them, Allow Once armed after 0.5 s and pressed by no key, VoiceOver's press only
+// on a panel the person took, Deny, Escape and the close button deny, its place across the window's corner, never
+// modal, left by a request the agent withdraws, and a question answered with the chosen and typed answers. The queue
+// behind it: arrival order, steps that wrap, and each space's own count. The sheets the app waits for mean what their
+// buttons say, one at a time. No panel is shown.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -33,29 +34,145 @@ final class FakePrompts: PromptSource {
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing)) struct PanelsTests {
     init() { NSApplication.shared.setActivationPolicy(.prohibited) }
 
+    /// Every text the panel shows, top to bottom.
+    static func texts(_ view: NSView?) -> [String] {
+        guard let view else { return [] }
+        return ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+    }
+
     @Test func permissionsAreQueuedAndAnswered() throws {
         let source = FakePrompts()
+        var time: TimeInterval = 100
         let panels = Panels(source: source, shows: false)
-        panels.who = { _ in Asker(program: "Claude Code", line: "“shop”, working in ~/code/shop") }
+        panels.clock = { time }
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "rm -rf build")]
         panels.refresh()
-        #expect(panels.queue.waiting.map(\.id) == ["r1", "r2"] && panels.panel?.request.id == "r1")
+        #expect(panels.queue.waiting.map(\.id) == ["r1", "r2"] && panels.panel?.request?.id == "r1")
         panels.refresh()
-        #expect(panels.panel?.request.id == "r1", "a refresh with nothing new changes nothing")
+        #expect(panels.panel?.request?.id == "r1", "a refresh with nothing new changes nothing")
 
-        let first = try #require(panels.panel)
-        first.allow()
-        #expect(first.dismissed)
+        let panel = try #require(panels.panel)
+        panel.allow()
+        #expect(source.answers.isEmpty, "Allow Once is not armed yet")
+        time += 0.6
+        panel.allow()
         #expect(source.answers.map(\.0) == ["r1"] && source.answers[0].1 == .once)
-        #expect(panels.panel?.request.id == "r2", "the next request has its panel")
+        #expect(panels.panel === panel && panel.request?.id == "r2" && !panel.dismissed, "the next request takes its place")
+        panel.allow()
+        #expect(source.answers.count == 1, "a new request arms again")
         // The agent has not taken the answer yet: r1 stays in the state, and is not shown again.
         panels.refresh()
-        #expect(panels.panel?.request.id == "r2" && panels.queue.waiting.map(\.id) == ["r2"])
+        #expect(panel.request?.id == "r2" && panels.queue.waiting.map(\.id) == ["r2"])
 
-        // Escape denies.
-        try #require(panels.panel).cancelOperation(nil)
+        // Escape denies, before the arming too.
+        panel.cancelOperation(nil)
         #expect(source.answers.map(\.0) == ["r1", "r2"] && source.answers[1].1 == .deny)
-        #expect(panels.panel == nil)
+        #expect(panels.panel == nil && panel.dismissed)
+    }
+
+    /// Allow Once answers a click only once armed; no key ever presses it; the close button denies.
+    @Test func allowOnceArmsAndTakesNoKey() throws {
+        var time: TimeInterval = 100, answers: [Answer] = []
+        let panel = RequestPanel { answers.append($0) }
+        panel.clock = { time }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        #expect(!panel.armed && !panel.allowButton.isEnabled && panel.allowButton.progress == 0)
+        time += 0.25
+        panel.tick()
+        #expect(panel.allowButton.progress == 0.5 && !panel.allowButton.isEnabled)
+        panel.allow()
+        time += 0.25
+        panel.tick()
+        #expect(panel.armed && panel.allowButton.isEnabled && panel.allowButton.progress == 1 && answers.isEmpty)
+        for (key, code) in [("\r", UInt16(36)), (" ", 49), ("\u{3}", 76)] {
+            for modifiers in [NSEvent.ModifierFlags(), .command, .option] {
+                let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0,
+                                                          context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
+                #expect(!panel.allowButton.performKeyEquivalent(with: event))
+                panel.allowButton.keyDown(with: event)
+                _ = panel.performKeyEquivalent(with: event)
+            }
+        }
+        #expect(answers.isEmpty && !panel.allowButton.acceptsFirstResponder && panel.allowButton.keyEquivalent.isEmpty,
+                "Return, Space, Enter and key equivalents never answer")
+        panel.allow()
+        #expect(answers == [.once])
+        panel.standardWindowButton(.closeButton)?.performClick(nil)
+        #expect(answers == [.once, .deny] && panel.standardWindowButton(.closeButton)?.accessibilityLabel() == "Close: deny")
+    }
+
+    /// The panel as VoiceOver finds it: key or not as a test says.
+    final class KeyPanel: RequestPanel {
+        var key = false
+        override var isKeyWindow: Bool { key }
+    }
+
+    /// VoiceOver's press answers only once armed, and only while the person made the panel key, by a click on it.
+    @Test func voiceOverPressesOnlyAnArmedPanelThePersonTook() throws {
+        var time: TimeInterval = 100, answers: [Answer] = []
+        let panel = KeyPanel { answers.append($0) }
+        panel.clock = { time }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        panel.key = true
+        #expect(!panel.allowButton.accessibilityPerformPress() && answers.isEmpty, "refused before the arming")
+        time += 1
+        #expect(!panel.allowButton.accessibilityPerformPress() && answers.isEmpty, "refused when the person did not take the panel")
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 330, y: panel.frame.height - 12), modifierFlags: [],
+                                                    timestamp: 0, windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        panel.sendEvent(click)
+        panel.key = false
+        #expect(panel.held && !panel.allowButton.accessibilityPerformPress() && answers.isEmpty, "refused when the panel lost the keys")
+        panel.key = true
+        #expect(panel.allowButton.accessibilityPerformPress() && answers == [.once])
+        panel.resignKey()
+        #expect(!panel.held && !panel.voicePress(), "the keys gone, the person's hold goes too")
+    }
+
+    /// Keys typed in the main window (a page's, or the person's in a page) never make the panel key, nor answer it.
+    @Test func keysInTheMainWindowNeverReachThePanel() throws {
+        let source = FakePrompts()
+        var time: TimeInterval = 100
+        let panels = Panels(source: source, shows: false)
+        panels.clock = { time }
+        source.prompts = [source.permission("r1", about: "npm test")]
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        time += 1
+        let main = Offscreen(NSTextView())
+        main.window.makeFirstResponder(main.view)
+        for (key, code) in [("\r", UInt16(36)), (" ", 49), ("\u{1b}", 53)] {
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: main.window.windowNumber,
+                                                      context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
+            main.window.sendEvent(event)
+        }
+        #expect(source.answers.isEmpty && !panel.held && !panel.isKeyWindow && panels.panel === panel)
+    }
+
+    /// The panel goes across the window's top-right corner, below its toolbar, kept inside the screen; at the screen's
+    /// top right in full screen. Its header moves it.
+    @Test func thePanelSitsAcrossTheWindowsCorner() throws {
+        let size = NSSize(width: 392, height: 440), screen = NSRect(x: 0, y: 0, width: 1440, height: 875)
+        func place(_ window: NSRect, full: Bool = false) -> NSPoint {
+            RequestPanel.place(size, window: window, toolbar: 50, screen: full ? NSRect(x: 0, y: 0, width: 1440, height: 900) : screen, fullScreen: full)
+        }
+        #expect(place(NSRect(x: 120, y: 102, width: 1200, height: 760)) == NSPoint(x: 1032, y: 364), "large: kept 16 points inside the screen")
+        #expect(place(NSRect(x: 220, y: 180, width: 1000, height: 660)) == NSPoint(x: 1024, y: 342), "medium: half outside the window")
+        #expect(place(NSRect(x: 340, y: 160, width: 760, height: 680)) == NSPoint(x: 904, y: 342), "narrow")
+        #expect(place(NSRect(x: 0, y: 0, width: 1440, height: 900), full: true) == NSPoint(x: 1032, y: 402), "full screen")
+        #expect(place(NSRect(x: -900, y: -500, width: 1000, height: 600)) == NSPoint(x: 16, y: 0), "a window mostly off the screen")
+
+        let panel = RequestPanel { _ in }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        panel.setFrameOrigin(NSPoint(x: 100, y: 100))
+        let height = panel.frame.height
+        func mouse(_ type: NSEvent.EventType, _ x: Double, _ y: Double) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: height - y), modifierFlags: [], timestamp: 0,
+                                            windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        panel.header.mouseDown(with: try mouse(.leftMouseDown, 300, 12))
+        panel.header.mouseDragged(with: try mouse(.leftMouseDragged, 340, 32))
+        panel.header.mouseUp(with: try mouse(.leftMouseUp, 340, 32))
+        #expect(panel.frame.origin == NSPoint(x: 140, y: 80))
     }
 
     /// An answer the agent no longer reads is said in the panel, which stays, even once the request left the state,
@@ -63,15 +180,17 @@ final class FakePrompts: PromptSource {
     @Test func aLostAnswerIsSaidInThePanel() throws {
         let source = FakePrompts()
         let panels = Panels(source: source, shows: false)
+        panels.clock = { 100 }
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "git push")]
         source.lost = CodedError("AGENT_STOPPED", "Claude Code did not receive your answer: it stopped listening.")
         panels.refresh()
         let first = try #require(panels.panel)
+        first.setFrameOrigin(NSPoint(x: 100, y: 300))
         let top = first.frame.maxY
-        first.allow()
-        let texts = (first.contentView?.subviews ?? []).compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(texts == ["An agent wants to run a command", "Claude Code did not receive your answer: it stopped listening."],
-                "who asked stays above the sentence")
+        first.deny()
+        #expect(Self.texts(first.contentView).contains("Claude Code did not receive your answer: it stopped listening."))
+        #expect(Self.texts(first.contentView).contains("An agent wants to run a command"), "who asked stays above the sentence")
+        #expect(!Self.texts(first.contentView).contains("npm test"))
         #expect(first.frame.maxY == top, "the panel keeps its top")
         #expect(first.told && !first.dismissed && panels.panel === first)
         source.prompts.removeFirst()
@@ -79,26 +198,47 @@ final class FakePrompts: PromptSource {
         #expect(panels.panel === first && !first.dismissed, "the sentence stays when the request leaves the state")
         first.cancelOperation(nil)
         #expect(first.dismissed && source.answers.count == 1, "putting it away answers nothing")
-        #expect(panels.panel?.request.id == "r2")
+        #expect(panels.panel?.request?.id == "r2")
     }
 
-    @Test func aWithdrawnRequestClosesItsPanel() throws {
+    @Test func aWithdrawnRequestLeavesThePanel() throws {
         let source = FakePrompts()
         let panels = Panels(source: source, shows: false)
         source.prompts = [source.permission("r1", about: "npm test"), source.permission("r2", about: "git push")]
         panels.refresh()
-        let first = try #require(panels.panel)
+        let panel = try #require(panels.panel)
+        #expect(panel.position == "1 of 2")
         source.prompts.removeFirst()
         panels.refresh()
-        #expect(first.dismissed && panels.panel !== first && panels.panel?.request.id == "r2")
+        #expect(panel.request?.id == "r2" && panel.position == nil && !panel.dismissed)
         #expect(source.answers.isEmpty, "nothing is answered for the person")
         // A request whose details are already gone is passed over.
         source.prompts = [Prompt(request: Request(id: "r3", agent: "a1", kind: "permission", tool: nil, about: nil, at: "2026-10-17T09:00:02Z"))]
         panels.refresh()
-        #expect(panels.panel?.request.id == "r3")
+        #expect(panels.panel?.request?.id == "r3")
         source.prompts = []
         panels.refresh()
-        #expect(panels.panel == nil && panels.queue.waiting.isEmpty)
+        #expect(panels.panel == nil && panel.dismissed && panels.queue.waiting.isEmpty)
+    }
+
+    /// Several requests: the header's steps walk them, wrapping, and each one arms again.
+    @Test func theStepsWalkTheQueue() throws {
+        let source = FakePrompts()
+        var time: TimeInterval = 100
+        let panels = Panels(source: source, shows: false)
+        panels.clock = { time }
+        source.prompts = ["r1", "r2", "r3"].map { source.permission($0, about: "npm test") }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        time += 1
+        #expect(panel.armed && panel.position == "1 of 3")
+        panel.step(-1)
+        #expect(panel.request?.id == "r3" && panel.position == "3 of 3" && !panel.armed)
+        panel.step(1)
+        #expect(panel.request?.id == "r1" && panel.position == "1 of 3")
+        time += 1
+        panel.allow()
+        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2")
     }
 
     @Test func aQuestionIsAnsweredWithTheChoices() throws {
@@ -112,6 +252,7 @@ final class FakePrompts: PromptSource {
         ])]
         panels.refresh()
         let panel = try #require(panels.panel)
+        #expect(panel.title == "An agent asks you a question")
         #expect(panel.boxes.map { $0.map(\.title) } == [["Blue", "Green"], ["Cart", "Home", "Help"], []])
         panel.boxes[0][1].state = .on
         panel.boxes[1][0].state = .on
@@ -128,18 +269,19 @@ final class FakePrompts: PromptSource {
         #expect(source.answers.last?.0 == "q2" && source.answers.last?.1 == .deny, "Escape leaves a question unanswered")
     }
 
-    /// A long sentence of who asks and a long command wrap: the panel keeps its width instead of growing past the screen.
+    /// A long name, folder and command wrap: the panel keeps its width instead of growing past the screen.
     @Test func aLongRequestKeepsThePanelsWidth() throws {
-        let who = Asker(program: "Claude Code", line: "“an-invented-agent-name-that-goes-on”, started by “Morning review”, working in "
-            + "~/code/clients/example-agency/" + String(repeating: "a-very-deep-folder/", count: 10) + "website")
+        let who = Asker(program: "Claude Code", space: "Morning review", name: "an-invented-agent-name-that-goes-on",
+                        folder: "~/code/clients/example-agency/" + String(repeating: "a-very-deep-folder/", count: 10) + "website")
         let input = "npm test -- " + String(repeating: "--an-invented-flag ", count: 20)
-        let panel = PromptPanel(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil,
-                                                        at: "2026-10-17T09:00:01Z"), input: input), who: who) { _ in }
-        #expect(panel.frame.width <= PromptPanel.width)
+        let panel = RequestPanel { _ in }
+        panel.show(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-17T09:00:01Z"),
+                          input: input), who: who, age: "asked 2 hours ago")
+        #expect(panel.frame.width == RequestPanel.width)
     }
 
-    /// The panel's title says what the agent wants, by its tool, and who asks: its name, the space that started it,
-    /// and its folder, from the home folder.
+    /// The panel's title says what the agent wants, by its tool; under it, the space, who asks and when; then where it
+    /// acts: the space and the folder, from the home folder.
     @Test func thePanelSaysWhatAndWho() throws {
         let cases: [(String?, String)] = [("Bash", "run a command"), ("commandExecution", "run a command"), ("execute", "run a command"),
                                           ("Edit", "change a file"), ("fileChange", "change a file"), ("permissions", "change its permissions"),
@@ -147,17 +289,18 @@ final class FakePrompts: PromptSource {
         for (tool, words) in cases { #expect(Words.wants(tool) == words, "\(tool ?? "nil")") }
         var agent = Agent(id: "a1", kind: "claude", origin: "launched")
         (agent.name, agent.folder) = ("shop", "/Users/example/code/shop")
-        #expect(App.who(agent, startedBy: "My agents", home: "/Users/example")
-                == Asker(program: "Claude Code", line: "“shop”, started by “My agents”, working in ~/code/shop"))
-        agent.name = nil
-        #expect(App.who(agent, startedBy: nil, home: "/Users/example").line == "Working in ~/code/shop")
-        #expect(App.who(nil, startedBy: nil, home: "/Users/example") == Asker(program: "An agent", line: ""))
+        let shop = App.who(agent, space: "My agents", home: "/Users/example")
+        #expect(shop == Asker(program: "Claude Code", space: "My agents", name: "shop", folder: "~/code/shop"))
+        #expect(App.who(nil, space: nil, home: "/Users/example") == Asker(program: "An agent"))
         agent.folder = "/Users/example/something/spaces"
-        #expect(App.who(agent, startedBy: nil, home: "/Users/example", assistant: true)
-                == Asker(program: "Claude Code", line: "Your assistant, working in ~/something/spaces"))
-        let question = PromptPanel(Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil,
-                                                           at: "2026-10-17T09:00:01Z")), who: Asker(program: "Codex", line: "")) { _ in }
-        #expect((question.contentView?.subviews.first as? NSTextField)?.stringValue == "Codex asks you")
+        let assistant = App.who(agent, space: "Daily brief", home: "/Users/example", assistant: true)
+        #expect(assistant == Asker(program: "Claude Code", space: "Daily brief", assistant: true, folder: "~/something/spaces"))
+        let panel = RequestPanel { _ in }
+        panel.show(FakePrompts().permission("r1", about: "npm test"), who: assistant, age: "asked 3 min ago")
+        #expect(panel.title == "Claude Code wants to run a command")
+        #expect(Self.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
+                                                  "Daily brief · its assistant · asked 3 min ago", "It will run one command in the Daily brief space.",
+                                                  "Space", "Daily brief", "Folder", "~/something/spaces", "The exact command", "npm test"])
     }
 
     func request(_ id: String, agent: String = "a1", at: String = "2026-10-23T18:00:00Z") -> Request {
@@ -222,7 +365,7 @@ final class FakePrompts: PromptSource {
         source.gone = [Request(id: "r0", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-17T09:00:00Z")]
         let panels = Panels(source: source, shows: false)
         panels.refresh()
-        #expect(panels.panel?.request.id == "r1" && panels.queue.waiting.map(\.id) == ["r1"])
+        #expect(panels.panel?.request?.id == "r1" && panels.queue.waiting.map(\.id) == ["r1"])
         panels.refresh()
         #expect(panels.queue.waiting.map(\.id) == ["r1"] && source.answers.isEmpty, "never shown, never answered")
     }

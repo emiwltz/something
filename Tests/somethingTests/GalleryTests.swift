@@ -166,11 +166,19 @@ struct GalleryTests {
         try draw(Ask.quit(3, assistant: true), "quit-assistant-and-others" + suffix, fixture)
         try draw(Ask.quit(1, assistant: true), "quit-assistant" + suffix, fixture)
 
-        let who = App.who(agents()[0], startedBy: "Morning review", home: "/Users/example")
+        let who = App.who(agents()[0], space: "Morning review", home: "/Users/example")
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
                                                  at: "2026-10-17T09:00:01Z"), input: "npm test -- --runInBand src/cart")
-        try draw(try #require(PromptPanel(permission, who: who) { _ in }.contentView), "permission-panel" + suffix, fixture)
-        let lost = PromptPanel(permission, who: who) { _ in }
+        func panel(_ prompt: Prompt) -> RequestPanel {
+            let panel = RequestPanel { _ in }
+            panel.clock = { 100 }
+            panel.show(prompt, who: who, age: "asked 3 min ago")
+            panel.clock = { 101 }
+            panel.tick()
+            return panel
+        }
+        try draw(try #require(panel(permission).contentView), "permission-panel" + suffix, fixture)
+        let lost = panel(permission)
         lost.tell("Claude Code did not receive your answer: it stopped listening.")
         try draw(try #require(lost.contentView), "permission-panel-lost" + suffix, fixture)
         let question = Prompt(request: Request(id: "r2", agent: "a1", kind: "question", tool: nil, about: "Which test runner?",
@@ -179,7 +187,7 @@ struct GalleryTests {
                                                    options: ["Jest", "Vitest", "Node's own"], multiple: false),
                                           Question(header: "Scope", text: "Which folders should it cover?",
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
-        try draw(try #require(PromptPanel(question, who: who) { _ in }.contentView), "question-panel" + suffix, fixture)
+        try draw(try #require(panel(question).contentView), "question-panel" + suffix, fixture)
 
         try await drawAssistant(suffix: suffix, fixture)
         try await drawOnboarding(suffix: suffix, fixture)
