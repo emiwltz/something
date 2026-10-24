@@ -878,7 +878,9 @@ import WebKit
         overlay.stopped = { stopped = true }
         overlay.quickChange = { quick.append(($0, $1.map(\.kind))) }
         overlay.addComment = { comments.append(($0, $1.map(\.kind))) }
-        overlay.eyes = { .listen }
+        // The eyes follow the assistant's real state while the composer is open.
+        let session = Session(kind: "claude")
+        overlay.eyes = { session.launching ? .think : .listen }
         window.point(overlay)
         let cell = CGPoint(x: 80, y: 40), section = CGPoint(x: 700, y: 120)
 
@@ -897,10 +899,36 @@ import WebKit
         // Over the composer, clicks are its own.
         let inside = NSPoint(x: composer.frame.midX, y: overlay.bounds.height - composer.frame.midY)
         #expect(window.area.hitTest(inside).map { $0.isDescendant(of: composer) } == true)
+        // A click on its header or margin stays with it: the picks, the composer and its words stay, the field has
+        // the focus.
+        composer.field.insertText("kept", replacementRange: composer.field.selectedRange())
+        let picked = overlay.picks.map(\.path)
+        offscreen.window.makeFirstResponder(overlay)
+        let header = NSPoint(x: composer.frame.minX + 4, y: overlay.bounds.height - composer.frame.minY - 6)
+        let press = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: window.area.convert(header, to: nil), modifierFlags: [],
+                                                    timestamp: 0, windowNumber: offscreen.window.windowNumber, context: nil,
+                                                    eventNumber: 0, clickCount: 1, pressure: 1))
+        let target = try #require(window.area.hitTest(header))
+        #expect(target === composer)
+        target.mouseDown(with: press)
+        for _ in 0..<5 { await Task.yield() }
+        #expect(overlay.picks.map(\.path) == picked && overlay.composer === composer && composer.words == "kept")
+        #expect(offscreen.window.firstResponder === composer.field)
+        composer.clear()
+        #expect(composer.eyes == .listen)
+        session.launching = true
+        for _ in 0..<5 { await Task.yield() }
+        #expect(composer.eyes == .think)
+        session.launching = false
 
-        // Return: a Quick Change; nothing while the words are only spaces; Shift-Return is the field's.
+        // Return: a Quick Change; nothing while the words are only spaces; Shift-Return breaks the line.
         composer.field.insertText("  ", replacementRange: composer.field.selectedRange())
         #expect(composer.textView(composer.field, doCommandBy: #selector(NSResponder.insertNewline(_:))) && quick.isEmpty)
+        let shiftReturn = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0,
+                                                        windowNumber: offscreen.window.windowNumber, context: nil, characters: "\r",
+                                                        charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        composer.field.keyDown(with: shiftReturn)
+        #expect(composer.field.string == "  \n" && quick.isEmpty)
         composer.field.insertText("Make it smaller", replacementRange: composer.field.selectedRange())
         #expect(composer.quickButton.isEnabled && composer.commentButton.isEnabled)
         #expect(composer.textView(composer.field, doCommandBy: #selector(NSResponder.insertNewline(_:))))
@@ -914,8 +942,16 @@ import WebKit
         #expect(comments.map(\.0) == ["Make it smaller"] && comments.first?.1 == ["this cell", "this section"])
         #expect(overlay.picks.isEmpty && overlay.composer == nil && composer.superview == nil && !stopped)
 
-        // Esc: the parts and the composer go, then the mode.
+        // A plain click on another part starts its words afresh; on the same part, they stay.
         await overlay.click(at: cell, adding: false)
+        let again = try #require(overlay.composer)
+        again.field.insertText("Bigger", replacementRange: again.field.selectedRange())
+        await overlay.click(at: cell, adding: false)
+        #expect(again.words == "Bigger")
+        await overlay.click(at: section, adding: false)
+        #expect(overlay.composer === again && again.names == "this section" && again.words == nil && !again.quickButton.isEnabled)
+
+        // Esc: the parts and the composer go, then the mode.
         #expect(overlay.composer != nil)
         #expect(overlay.escape() && overlay.composer == nil && !stopped && offscreen.window.firstResponder === overlay)
         #expect(overlay.escape() && stopped)

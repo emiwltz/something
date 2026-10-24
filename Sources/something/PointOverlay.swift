@@ -2,8 +2,9 @@
 // as a scroll from something's world (Pointing.swift). It dims the space a little, with a hole around the part under
 // the pointer, draws the sign's four corners around that part with its kind in a pill ("this table"), and says the
 // mode and its way out in a banner at the top. A click picks a part; once a frame is drawn, ⌥-click adds one, and the
-// composer (PointComposer.swift) attaches to the last one picked. Esc lets go of the picked parts, then stops the mode. The frames follow the page when it scrolls or reloads. It is all
-// drawn in draw(_:), so a picture of the window shows it as the screen does.
+// composer (PointComposer.swift) attaches to the last one picked. Esc lets go of the picked parts, then stops the
+// mode. The frames follow the page when it scrolls or reloads. It is all drawn in draw(_:), so a picture of the
+// window shows it as the screen does.
 import AppKit
 import WebKit
 
@@ -149,6 +150,8 @@ final class PointOverlay: NSView {
         if adding, !picks.isEmpty {
             if !picks.contains(where: { $0.path == part.path }) { picks.append(part) }
         } else {
+            // Words written about other parts do not go with this one: only an ⌥-add keeps them.
+            if picks.map(\.path) != [part.path] { composer?.clear() }
             picks = [part]
         }
         hover(nil)
@@ -238,7 +241,6 @@ final class PointOverlay: NSView {
         let names = PointComposer.sentence(picks.map(\.kind))
         if let composer {
             composer.names = names
-            composer.eyes = eyes()
         } else {
             let made = PointComposer(names: names, title: space.title, eyes: eyes())
             made.quick = { [weak self] words in
@@ -254,8 +256,18 @@ final class PointOverlay: NSView {
             made.escape = { [weak self] in _ = self?.escape() }
             addSubview(made)
             composer = made
+            watchEyes(made)
         }
         composer?.frame = PointComposer.place(PointComposer.size, by: last.rect, in: bounds.size)
+    }
+
+    /// Keeps `composer`'s eyes on its assistant's real state while it is open: each change eyes() reads (an
+    /// observable model in the app) draws them again, on the next turn of the main loop.
+    private func watchEyes(_ composer: PointComposer) {
+        guard self.composer === composer else { return }
+        composer.eyes = withObservationTracking { eyes() } onChange: { [weak self, weak composer] in
+            DispatchQueue.main.async { if let composer { self?.watchEyes(composer) } }
+        }
     }
 
     /// Draws again while the hole moves or the banner arrives, at up to 60 frames a second.

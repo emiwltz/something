@@ -49,6 +49,10 @@ final class PointComposer: NSView, NSTextViewDelegate {
 
     override var isFlipped: Bool { true }
 
+    /// A click on the composer's own ground (its header, its margins, a greyed button) stays with it and puts the
+    /// focus in the field: passed on, it would reach the overlay and pick the page part under the composer.
+    override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(field) }
+
     /// The words, trimmed: nil while there are none.
     var words: String? {
         let words = field.string.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -74,6 +78,12 @@ final class PointComposer: NSView, NSTextViewDelegate {
         names.count > 1 ? names.dropLast().joined(separator: ", ") + " and " + (names.last ?? "") : names.first ?? ""
     }
 
+    /// Empties the field, for words written about other parts.
+    func clear() {
+        field.string = ""
+        textDidChange(Notification(name: NSText.didChangeNotification))
+    }
+
     func textDidChange(_ notification: Notification) {
         // Greyed at the mockup's .35 while there is nothing to send.
         for button in [quickButton, commentButton] { (button.isEnabled, button.alphaValue) = (words != nil, words != nil ? 1 : 0.35) }
@@ -84,7 +94,7 @@ final class PointComposer: NSView, NSTextViewDelegate {
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):
-            if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { return false }
+            if field.shifted { return false }
             sendQuick()
             return true
         case #selector(NSResponder.cancelOperation(_:)):
@@ -138,6 +148,8 @@ final class PointComposer: NSView, NSTextViewDelegate {
 /// The composer's field: Onest 14 on 1.4 lines, its placeholder in ink3, and ⌘↵ taken before any menu sees it.
 final class ComposerText: NSTextView {
     weak var composer: PointComposer?
+    /// Whether the key being handled was pressed with Shift: Shift-Return breaks the line.
+    private(set) var shifted = false
     static let placeholder = "What should change here?"
 
     override init(frame: NSRect) {
@@ -156,6 +168,12 @@ final class ComposerText: NSTextView {
 
     override init(frame: NSRect, textContainer: NSTextContainer?) { super.init(frame: frame, textContainer: textContainer) }
     required init?(coder: NSCoder) { nil }
+
+    override func keyDown(with event: NSEvent) {
+        shifted = event.modifierFlags.contains(.shift)
+        defer { shifted = false }
+        super.keyDown(with: event)
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
