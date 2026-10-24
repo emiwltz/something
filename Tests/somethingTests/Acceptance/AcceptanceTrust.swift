@@ -18,14 +18,32 @@ struct AcceptanceTrust {
 
     /// The panel's requests, asked by the mockup's agents: Codex for My agents' assistant, then Claude Code for Project
     /// watch and pi for Logbook; `ago` minutes ago each.
-    static func request(_ id: String, _ ago: [Int], in source: FakePrompts) {
-        let command = "cd ~/something/spaces && something check agents --strict --report /tmp/something-check/agents.json && python3 -c \"import json; print(1)\""
+    static func request(_ id: String, _ ago: [Int], in source: FakePrompts, command: String = short) {
         for (index, minutes) in ago.enumerated() {
             let at = iso8601.string(from: Stage.now.addingTimeInterval(-60 * Double(minutes)))
             source.prompts.append(Prompt(request: Request(id: "\(id)\(index + 1)", agent: "a\(index + 1)", kind: "permission", tool: "Bash",
                                                           about: nil, at: at), input: command))
         }
     }
+
+    static let short = "cd ~/something/spaces && something check agents --strict --report /tmp/something-check/agents.json && python3 -c \"import json; print(1)\""
+    /// The mockup's long command, fourteen lines.
+    static let long = #"""
+        cd ~/something/spaces && \
+          something check agents --strict \
+            --report /tmp/something-check/agents.json && \
+          python3 - <<'EOF'
+        import json, pathlib
+        r = json.load(open('/tmp/something-check/agents.json'))
+        counts = {k: len(v) for k, v in r['agents'].items()}
+        herdr = json.load(open(pathlib.Path.home() / '.herdr/state.json'))
+        for kind, n in counts.items():
+            seen = sum(1 for a in herdr['agents'] if a['kind'] == kind)
+            flag = 'ok' if seen == n else 'DIFF'
+            print(f"{kind:<12} page={n:<3} herdr={seen:<3} {flag}")
+        print(len(r['errors']), 'errors')
+        EOF
+        """#
 
     /// Panels on the Stage's clock, their requests asked by the agents `request` names.
     static func panels(_ source: FakePrompts) -> Panels {
@@ -84,7 +102,39 @@ struct AcceptanceTrust {
         panel.allow()
         #expect(source.answers.map(\.1) == [.once] && panels.panel == nil)
     }
-    @Test("e2: the command box", .disabled("not built yet: T3")) func e2() async throws {}
+    /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
+    /// corner below the toolbar, its footer in sight.
+    @Test("e2: the command box") func e2() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        let source = FakePrompts()
+        Self.request("r", [0], in: source, command: Self.long)
+        var time: TimeInterval = 100
+        let panels = Self.panels(source)
+        panels.clock = { time }
+        panels.refresh()
+        let panel = try #require(panels.panel), code = try #require(panel.code)
+        panel.place(beside: shell.window, screen: Self.desk)
+        time += 1
+        panel.tick()
+        #expect(PanelsTests.texts(panel.contentView).contains("The exact command · 14 lines") && code.text.string == Self.long)
+        #expect(code.shown == CommandBox.folded && code.full > code.shown, "folded to four lines, the last one fading")
+        #expect(code.expand.image?.accessibilityDescription == "Expand the command")
+        code.expand.performClick(nil)
+        let window = shell.window.frame, toolbar = window.height - shell.window.contentLayoutRect.maxY
+        #expect(panel.sized && panel.frame.width == RequestPanel.wide && code.shown >= code.full)
+        #expect(panel.frame.minX < window.maxX && panel.frame.maxX > window.maxX && panel.frame.maxY == window.maxY - toolbar - 8)
+        #expect(panel.frame.minY >= Self.desk.minY + 16 && panel.allowButton.isEnabled, "the footer stays in sight")
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e2" + suffix, root: stage.home.root)
+        }
+        code.expand.performClick(nil)
+        #expect(!panel.sized && panel.frame.width == RequestPanel.width && code.shown == CommandBox.folded)
+    }
     @Test("e3: the request queue") func e3() async throws {
         let stage = try Stage("trust")
         defer { stage.remove() }

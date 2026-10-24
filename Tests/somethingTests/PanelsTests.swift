@@ -37,7 +37,7 @@ final class FakePrompts: PromptSource {
     /// Every text the panel shows, top to bottom.
     static func texts(_ view: NSView?) -> [String] {
         guard let view else { return [] }
-        return ((view as? NSTextField).map { [$0.stringValue] } ?? []) + view.subviews.flatMap(texts)
+        return ((view as? NSTextField).map { [$0.stringValue] } ?? (view as? NSTextView).map { [$0.string] } ?? []) + view.subviews.flatMap(texts)
     }
 
     @Test func permissionsAreQueuedAndAnswered() throws {
@@ -287,6 +287,106 @@ final class FakePrompts: PromptSource {
         panels.refresh()
         try #require(panels.panel).cancelOperation(nil)
         #expect(source.answers.last?.0 == "q2" && source.answers.last?.1 == .deny, "Escape leaves a question unanswered")
+    }
+
+    /// An invented command of several lines, as long as the mockup's.
+    static let long = """
+        cd ~/something/spaces && \\
+          something check agents --strict --report /tmp/something-check/agents.json && \\
+          python3 - <<'EOF'
+        import json
+        r = json.load(open('/tmp/check/agents.json'))
+        print(len(r['errors']), 'errors', sorted(r['agents']), [a['kind'] for a in r['agents'].values()])
+        EOF
+        """
+
+    func commandPanel(_ input: String = long) throws -> (RequestPanel, CommandBox) {
+        let panel = RequestPanel { _ in }
+        panel.show(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-23T18:00:00Z"),
+                          input: input), who: Asker(program: "Codex", space: "My agents", assistant: true), age: nil)
+        return (panel, try #require(panel.code))
+    }
+
+    /// The command breaks only at spaces, never inside `--strict` or a path, at every width; its caption counts its
+    /// lines, and its text is what the agent sent. (A word longer than a whole line has to be cut: none is here.)
+    @Test func theCommandBreaksOnlyAtSpaces() throws {
+        let (panel, code) = try commandPanel()
+        #expect(Self.texts(panel.contentView).contains("The exact command · 7 lines") && code.text.string == Self.long)
+        for width in [360.0, 392, 560] {
+            panel.size(width: width)
+            let manager = try #require(code.text.layoutManager), string = code.text.string as NSString
+            var starts: [Int] = []
+            manager.enumerateLineFragments(forGlyphRange: manager.glyphRange(for: try #require(code.text.textContainer))) { _, _, _, glyphs, _ in
+                starts.append(manager.characterIndexForGlyph(at: glyphs.location))
+            }
+            #expect(starts.count > 7, "at \(width), the long lines wrap")
+            for start in starts where start > 0 {
+                let before = Character(UnicodeScalar(string.character(at: start - 1)) ?? " ")
+                #expect(before.isWhitespace, "at \(width), a line starts inside a word: \(string.substring(from: start).prefix(20))")
+            }
+        }
+        let (short, box) = try commandPanel("npm test")
+        #expect(Self.texts(short.contentView).contains("The exact command") && box.shown == CommandBox.line + 2 * CommandBox.inset)
+    }
+
+    /// Copy Command writes the exact text, newlines and all; Why am I asked? opens and closes its sentence.
+    @Test func copyAndWhy() throws {
+        let (panel, _) = try commandPanel()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("something-test-\(UUID().uuidString)"))
+        defer { pasteboard.releaseGlobally() }
+        panel.pasteboard = pasteboard
+        func links(_ view: NSView) -> [NSButton] { ((view as? NSButton).map { [$0] } ?? []) + view.subviews.flatMap(links) }
+        let buttons = links(try #require(panel.contentView)).filter { ["Copy Command", "Why am I asked?"].contains($0.title) }
+        #expect(buttons.count == 2)
+        buttons[0].performClick(nil)
+        #expect(pasteboard.string(forType: .string) == Self.long && buttons[0].title == "Copied")
+        let height = panel.frame.height
+        buttons[1].performClick(nil)
+        #expect(Self.texts(panel.contentView).last?.hasPrefix("Codex is this space's assistant: it changes your spaces by itself") == true)
+        #expect(panel.frame.height > height && buttons[1].isAccessibilityExpanded())
+        buttons[1].performClick(nil)
+        #expect(panel.frame.height == height && !buttons[1].isAccessibilityExpanded())
+    }
+
+    /// ↕ makes the panel 560 wide and shows the whole command, within the screen, its footer in sight; again, it folds
+    /// back to 392 and four lines. The grip sizes it between 360 and 720 points wide, its top-left corner staying put.
+    @Test func expandAndTheGrip() throws {
+        let (panel, code) = try commandPanel()
+        #expect(panel.frame.width == RequestPanel.width && code.shown == CommandBox.folded && code.full > CommandBox.folded)
+        let folded = panel.frame
+        code.expand.performClick(nil)
+        #expect(panel.sized && panel.frame.width == RequestPanel.wide && code.shown >= code.full && panel.frame.maxY == folded.maxY)
+        code.expand.performClick(nil)
+        #expect(!panel.sized && panel.frame == folded && code.shown == CommandBox.folded)
+
+        // A longer command than the screen holds: the panel stops 16 points above the screen's bottom.
+        let window = NSWindow(contentRect: NSRect(x: 120, y: 102, width: 1200, height: 760), styleMask: [.titled], backing: .buffered, defer: true)
+        let (tall, box) = try commandPanel(String(repeating: "echo one line of an invented script\n", count: 80))
+        let desk = NSRect(x: 0, y: 0, width: 1440, height: 875)
+        tall.place(beside: window, screen: desk)
+        box.expand.performClick(nil)
+        #expect(tall.frame.minY == desk.minY + 16 && box.shown < box.full && tall.frame.maxX > window.frame.maxX)
+
+        let grip = try #require(panel.contentView?.subviews.compactMap { $0 as? Grip }.first)
+        panel.setFrameOrigin(NSPoint(x: 100, y: 100))
+        let top = panel.frame.maxY
+        func drag(by x: Double, _ y: Double) throws {
+            let frame = panel.frame
+            func mouse(_ type: NSEvent.EventType, _ dx: Double, _ dy: Double) throws -> NSEvent {
+                try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: frame.width - 4 + dx, y: 4 - dy), modifierFlags: [], timestamp: 0,
+                                                windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+            }
+            grip.mouseDown(with: try mouse(.leftMouseDown, 0, 0))
+            grip.mouseDragged(with: try mouse(.leftMouseDragged, x, y))
+            grip.mouseUp(with: try mouse(.leftMouseUp, x, y))
+        }
+        try drag(by: 1000, 200)
+        #expect(panel.sized && panel.frame.width == 720 && panel.frame.maxY == top && panel.frame.minX == 100)
+        try drag(by: -1000, 0)
+        #expect(panel.frame.width == 360 && panel.frame.maxY == top)
+        // A new request keeps the size the person gave the panel.
+        panel.show(FakePrompts().permission("r2", about: "npm test"), who: Asker(program: "Codex"), age: nil)
+        #expect(panel.frame.width == 360 && panel.sized)
     }
 
     /// A long name, folder and command wrap: the panel keeps its width instead of growing past the screen.
