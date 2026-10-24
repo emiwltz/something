@@ -127,8 +127,18 @@ import Testing
         none.engine.lookAgain()
         #expect(await wait(until: { none.noAgent }))
         await wait(0.6)
-        // The first install command.
-        Self.click(alone, at: NSPoint(x: 300, y: Welcome.size.height - 196))
+        // The first install command. Its line is found by its Copy Command, whose click is seen; the click on the
+        // command itself, on that line, must leave the keys with the welcome.
+        var copied: [String] = []
+        none.copy = { copied.append($0) }
+        var line: CGFloat?
+        for y in stride(from: 150.0, to: 320, by: 4) where line == nil {
+            Self.click(alone, at: NSPoint(x: 595, y: Welcome.size.height - y))
+            await wait(0.02)
+            if copied.last == InstallList.builders[0].command { line = y }
+        }
+        let y = try #require(line, "a click reached the first Copy Command")
+        Self.click(alone, at: NSPoint(x: 300, y: Welcome.size.height - y))
         #expect(alone.firstResponder is WelcomeKeys)
         Self.send(alone, .return)
         #expect(looking.looking, "Return looks again")

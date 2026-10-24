@@ -137,11 +137,18 @@ struct WelcomeView: View {
                 Text("Where each one lives: Settings › Agents")
             }
             .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 16)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: grid ? 2 : 1), spacing: 6) {
-                ForEach(found) { entry in builder(entry, compact: grid) }
+            // Rows of plain stacks, not a lazy grid: a lazy grid gives VoiceOver none of its radios.
+            let columns = grid ? 2 : 1
+            VStack(spacing: 6) {
+                ForEach(Array(stride(from: 0, to: found.count, by: columns)), id: \.self) { start in
+                    HStack(spacing: 8) {
+                        ForEach(start..<start + columns, id: \.self) { index in
+                            if index < found.count { builder(found[index], compact: grid) } else { Color.clear.frame(maxWidth: .infinity, maxHeight: 0) }
+                        }
+                    }
+                }
             }
             .padding(.top, 8)
-            .accessibilityElement(children: .contain).accessibilityLabel("Your assistant")
             if !seen.isEmpty {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "eye").font(.system(size: 10.5)).padding(.top, 2).accessibilityHidden(true)
@@ -150,6 +157,8 @@ struct WelcomeView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(Look.font(.ui, size: 12).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink3.ui).padding(.top, 12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel((["Seen only: \(Self.list(seen.map(\.0), "and"))."] + seen.compactMap(\.1)).joined(separator: " "))
             }
             if !missing.isEmpty {
                 Text("Not on this Mac: \(missing.joined(separator: ", ")).").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -183,7 +192,8 @@ struct WelcomeView: View {
             .contentShape(shape)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Registry.app.name(of: entry.id))
+        .frame(maxWidth: .infinity)
+        .accessibilityLabel("\(Registry.app.name(of: entry.id)), \(Self.words(assistant.modelWords(of: entry.id)))")
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
@@ -204,8 +214,9 @@ struct WelcomeView: View {
             VStack(spacing: 8) {
                 ForEach(rows, id: \.name) { row in
                     HStack(spacing: 12) {
-                        Text(row.name).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).frame(width: 96, alignment: .leading)
+                        Text(row.name).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).frame(width: 96, alignment: .leading).accessibilityHidden(true)
                         Text(row.command).font(Look.font(.code, size: 11.5).ui).lineLimit(1).truncationMode(.tail)
+                            .accessibilityElement(children: .ignore).accessibilityLabel("\(row.name): \(row.command)")
                             .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                             .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         Button { tour.copy(row.command, with: assistant.copy) } label: {

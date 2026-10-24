@@ -14,7 +14,7 @@ import Testing
 struct AcceptanceBuild {
     @Test("a1: the film on the glass", .disabled("not built yet: AB18")) func a1() async throws {}
     /// The welcome's first step over the main window of a first start, dimmed: the sign, "something", the one sentence,
-    /// 1 of 5, Skip Tour and Continue. Escape and Return hold.
+    /// 1 of 5, Skip Tour and Continue; Return goes on to the builders (Escape is TourTests').
     @Test("a2: welcome, step 1") func a2() async throws {
         let scene = try await Self.welcome(.welcome)
         defer { scene.remove() }
@@ -22,16 +22,24 @@ struct AcceptanceBuild {
         try await scene.draw("a2") { words in
             #expect(words == ["something. Ready to build something today?", "Skip Tour", "Continue"], "\(words)")
         }
+        TourTests.press(scene.window, .return)
+        #expect(scene.tour.step == .assistant)
     }
 
-    /// Choose your assistant: the six builders found in two columns, Claude Code chosen, the two seen only and why, and
-    /// ↑ ↓ Choose with Back.
+    /// Choose your assistant: the six builders found in two columns, each with its model, Claude Code chosen, the two seen
+    /// only and why, and ↑ ↓ Choose with Back.
     @Test("a3: welcome, the builders") func a3() async throws {
         let scene = try await Self.welcome(.assistant)
         defer { scene.remove() }
         #expect(scene.assistant.entries.filter(\.enabled).map(\.id) == ["claude", "codex", "opencode", "pi", "omp", "amp"])
+        // Chosen is the radio's selected trait, which an offscreen SwiftUI view does not give (only descriptions): the
+        // model's choice is read.
+        #expect(scene.assistant.entries.filter(\.checked).map(\.id) == ["claude"])
+        let rows = ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"].map { "\($0), Default model" }
+        let why = Registry.app.agents.filter { $0.builder == nil }.compactMap(\.unavailable)
+        let seen = (["Seen only: Antigravity and Cursor."] + why).joined(separator: " ")
         try await scene.draw("a3") { words in
-            #expect(words == ["Choose your assistant", "Your assistant", "Skip Tour", "Choose", "Back", "Continue"], "\(words)")
+            #expect(why.count == 2 && words == ["Choose your assistant"] + rows + [seen, "Skip Tour", "Choose", "Back", "Continue"], "\(words)")
         }
     }
 
@@ -71,7 +79,7 @@ struct AcceptanceBuild {
         #expect(!words.contains { $0.hasPrefix("Applications") } && words.contains("Notifications: Off") && words.contains(promise), "\(words)")
     }
 
-    /// No builder on this Mac: the install commands of the first two, Copy Command, What is a coding agent?, Look Again.
+    /// No builder on this Mac: the install commands of the first two, each read with its agent's name, Copy Command, What is a coding agent?, Look Again.
     @Test("a7: welcome with no builder") func a7() async throws {
         let scene = try await Self.welcome(.assistant, programs: [])
         defer { scene.remove() }
@@ -79,6 +87,7 @@ struct AcceptanceBuild {
         try await scene.draw("a7") { words in
             #expect(words.contains("No coding agent found") && words.contains("What is a coding agent?") && words.suffix(2) == ["Back", "Look Again"], "\(words)")
             #expect(words.filter { $0.hasPrefix("Copy the command that installs") }.count == 2, "\(words)")
+            #expect(words.contains("Claude Code: brew install --cask claude-code") && words.contains("Codex: brew install --cask codex"), "\(words)")
         }
         var copied: [String] = []
         scene.assistant.copy = { copied.append($0) }
