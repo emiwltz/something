@@ -600,7 +600,7 @@ final class FakeNotifier: Notifier {
         var place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/index.html")
         var launches = ["agents": Set(["a1"]), "project": ["a2"]]
         let queue = RequestQueue()
-        queue.space = { RequestQueue.space(of: $0.agent, assistant: $0.agent == "assistant", place: place, launches: launches) }
+        queue.space = { RequestQueue.space(of: $0.agent, assistant: $0.agent == "assistant", working: place.space, launches: launches) }
         queue.follow([request("r1"), request("r2", agent: "a2"), request("r3", agent: "a1"), request("r4", agent: "assistant"),
                       request("r5", agent: "a9")])
         #expect(queue.waiting.count == 5, "an agent started by hand is counted in all")

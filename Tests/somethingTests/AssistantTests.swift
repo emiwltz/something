@@ -225,6 +225,45 @@ import WebKit
         #expect(session.agent == nil && session.rows.isEmpty && session.thread == "s2")
     }
 
+    /// Each place has its own conversation, made at its first use and launching nothing: two spaces make two Sessions,
+    /// the blank page and the templates share New Space's, which the card still shows. Every one is read, counted when
+    /// quitting with its own space, and stopped when idle.
+    @Test func eachPlaceHasItsOwnSession() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        var now = Date()
+        model.clock = { now }
+        await look(model)
+        let place = { (title: String, name: String) in
+            AssistantModel.Place.space(title: title, name: name, page: home.places.spaces.appendingPathComponent("\(name).html").path)
+        }
+        let agents = model.session(for: place("My agents", "agents")), brief = model.session(for: place("Daily brief", "brief"))
+        #expect(agents !== brief && model.session(for: place("My agents", "agents")) === agents)
+        #expect(model.session(for: .blank) === model.session && model.session(for: .templates) === model.session)
+        #expect(agents.space == "agents" && brief.space == "brief" && agents.kind == "claude" && model.session.space == nil)
+        #expect(model.sessions.count == 3 && model.engine.state.agents.isEmpty, "a conversation launches nothing before a message")
+        model.place = place("My agents", "agents")
+        model.deliver("go-slow, agents.", to: agents)
+        model.deliver("go-slow, brief.", to: brief)
+        #expect(await wait(until: { agents.agent?.state == "working" && brief.agent?.state == "working" }))
+        let (first, second) = (try #require(agents.id), try #require(brief.id))
+        #expect(first != second && model.engine.assistants == [first, second])
+        #expect(model.id == nil && model.rows.isEmpty && model.light == .off, "the card still shows New Space's conversation")
+        #expect(model.session(of: second) === brief && model.session(of: "nobody") == nil)
+        // Quitting counts both, each by its own space.
+        let leaving = App.leaving(agents: model.engine.state.agents, waiting: [], who: { _ in Asker(program: "") }) { model.space(of: $0.id) }
+        #expect(leaving.working.map(\.id).sorted() == [first, second].sorted() && Set(leaving.working.map(\.space)) == ["agents", "brief"])
+        // Both turns stopped, the idle stop takes every conversation's agent, not only the one the card shows.
+        _ = try model.engine.interrupt(first)
+        _ = try model.engine.interrupt(second)
+        #expect(await wait(until: { !["working", "waiting"].contains(agents.agent?.state) && !["working", "waiting"].contains(brief.agent?.state) }))
+        now += AssistantModel.idleLimit
+        model.checkIdle()
+        #expect(agents.idled && brief.idled && !model.idled)
+        #expect(await wait(until: { model.engine.state.agents.allSatisfy { $0.alive == false } }))
+        await finish(home, model)
+    }
+
     /// Quit asks nothing when no request waits and no agent works: idle agents are stopped without a word.
     @Test func quittingWithNothingWaitingOrWorkingAsksNothing() {
         let source = FakePrompts()

@@ -1,6 +1,7 @@
 // The person's assistant as the window shows it: the coding agent that builds spaces with them in
 // ~/something/spaces. The builder chosen among the installed ones, kept in the preferences with Ask Before Every Change;
-// the knowledge files written into the spaces folder; the agent launched at the first message, never before, and told
+// the knowledge files written into the spaces folder; one conversation per place, each space's and New Space's, of which
+// the card shows New Space's until each space's is bound to its own; the agent launched at the first message, never before, and told
 // at each message which space is open; a message written while a turn runs held until it ends, and Take Back; Stop, New
 // Conversation, the stop after 30 idle minutes, the switch to another builder, and what went wrong. The engine keeps
 // every space away from this agent (Bridge.visible); the only words something writes to it on its own are its context
@@ -14,8 +15,11 @@ import SomethingCore
     /// Where the person is when they write: what each message's context line says.
     enum Place: Equatable {
         case space(title: String, name: String, page: String), blank, templates
+        /// Which conversation a place has: a space's own, or New Space's, which the blank page and the templates share.
+        enum Key: Hashable { case space(String), new }
         /// The open space's name; nil off a space.
         var space: String? { if case .space(_, let name, _) = self { name } else { nil } }
+        var key: Key { space.map(Key.space) ?? .new }
     }
     /// Where the conversation's agent is.
     enum Light { case off, ready, working, waiting, error }
@@ -68,7 +72,9 @@ import SomethingCore
     var unkept = false
     /// Set by ⌘K until the field takes the focus, which it may do only once it is drawn.
     var wantsFocus = false
-    /// The conversation, and what the window reads of it.
+    /// Each place's conversation, made at its first use; and the one the card shows and the messages go to, with what
+    /// the window reads of it: New Space's, which serves every place until each space's card is bound to its own.
+    private(set) var sessions: [Place.Key: Session] = [:]
     private(set) var session = Session(kind: nil)
     var kind: String? { session.kind }
     var id: String? { session.id }
@@ -95,7 +101,6 @@ import SomethingCore
     @ObservationIgnored private var preferred: String?
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
-    @ObservationIgnored private var active = Date()
     @ObservationIgnored private var timer: Timer?
     /// The presence changes with time alone twice: Stop is offered 10 s into a turn, and "Changed …" leaves 3.6 s after
     /// it. A one-shot timer moves `beat` then, which the presence reads, so the card and the sticker ask again; no timer
@@ -110,6 +115,7 @@ import SomethingCore
         let kept = Preferences.at(places)
         preferred = kept.assistant
         askEverything = kept.askEverything
+        sessions[.new] = session
         refresh()
         // Once a minute: has the agent been idle for `idleLimit`?
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.checkIdle() }
@@ -145,11 +151,14 @@ import SomethingCore
         keep(\.installed, state.kinds.filter { builders.contains($0.key) }.compactMapValues(\.installed))
         keep(\.notes, state.kinds.compactMapValues(\.note))
         let offered = builders.filter { installed[$0] == true && refused[$0] == nil }
-        // A conversation whose program left the Mac keeps its builder: the card says it is missing rather than another
-        // agent taking the conversation over unasked.
-        if !offered.contains(kind ?? ""), session.last == nil || installed[kind ?? ""] != false { session.kind = offered.first { $0 == preferred } ?? offered.first }
-        session.read(state)
-        if ["working", "waiting"].contains(agent?.state) { active = clock() }
+        for each in sessions.values {
+            // A conversation whose program left the Mac keeps its builder: the card says it is missing rather than another
+            // agent taking the conversation over unasked.
+            let kind = each.kind ?? ""
+            if !offered.contains(kind), each.last == nil || installed[kind] != false { each.kind = offered.first { $0 == preferred } ?? offered.first }
+            each.read(state)
+            if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
+        }
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
         if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
@@ -353,9 +362,9 @@ import SomethingCore
     /// The held messages go back into the field: nothing is sent behind the person's back.
     func stop() {
         takeBack()
-        if launching { return endLaunch() }
+        if launching { return endLaunch(session) }
         guard let id, working else { return }
-        if agent?.can.interrupt == false { return halt() }
+        if agent?.can.interrupt == false { return halt(session) }
         _ = try? engine.interrupt(id)
     }
 
@@ -363,10 +372,27 @@ import SomethingCore
     /// new one.
     func newConversation() {
         takeBack()
-        halt()
+        halt(session)
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
+        sessions[session.space.map(Place.Key.space) ?? .new] = session
         (before, ready) = (nil, nil)
     }
+
+    /// The conversation of `place`, made at its first use with the builder chosen now, launching nothing.
+    func session(for place: Place) -> Session {
+        if let kept = sessions[place.key] { return kept }
+        let made = Session(kind: kind, space: place.space)
+        made.active = clock()
+        sessions[place.key] = made
+        return made
+    }
+
+    /// The conversation whose agent is `agent`, of any place; nil when none of them launched it.
+    func session(of agent: String) -> Session? { sessions.values.first { $0.id == agent } }
+
+    /// The space the assistant `agent` works on: its conversation's space, or the open one for New Space's, which serves
+    /// every place.
+    func space(of agent: String) -> String? { session(of: agent)?.space ?? place.space }
 
     /// The messages held for the end of the turn, as the person wrote them.
     var held: [String] { session.held.map { AssistantModel.shown($0).text } }
@@ -382,7 +408,7 @@ import SomethingCore
     /// Relaunches, then sends the last message again.
     func tryAgain() {
         guard let last = session.last else { return }
-        halt()
+        halt(session)
         session.id = nil
         deliver(last)
     }
@@ -393,7 +419,7 @@ import SomethingCore
     func startAgain() {
         guard session.thread != nil else { return session.last == nil ? start([]) : tryAgain() }
         let thread = resumes ? session.thread : nil
-        halt()
+        halt(session)
         if thread != nil {
             session.kept += engine.state.threads.first { $0.agent == session.id }?.turns ?? []
             // The dead agent's turns are kept now: its thread, still in the state, must not show them a second time.
@@ -445,12 +471,14 @@ import SomethingCore
         Preferences.at(places).askEverything = askEverything
     }
 
-    /// Stops the agent after `idleLimit` without a turn: a Claude Code process holds a few hundred MB.
+    /// Stops each conversation's agent after `idleLimit` without a turn: a Claude Code process holds a few hundred MB.
     func checkIdle() {
-        guard let agent, agent.alive == true, !session.stopped, !["working", "waiting"].contains(agent.state),
-              clock().timeIntervalSince(active) >= AssistantModel.idleLimit else { return }
-        halt()
-        session.idled = true
+        for each in sessions.values {
+            guard let agent = each.agent, agent.alive == true, !each.stopped, !["working", "waiting"].contains(agent.state),
+                  clock().timeIntervalSince(each.active) >= AssistantModel.idleLimit else { continue }
+            halt(each)
+            each.idled = true
+        }
     }
 
     /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
@@ -464,38 +492,39 @@ import SomethingCore
         return nil
     }
 
-    private func halt() {
-        endLaunch()
-        if let id, agent?.alive != false { engine.stopAll(within: 5, only: id) {} }
+    private func halt(_ session: Session) {
+        endLaunch(session)
+        if let id = session.id, session.agent?.alive != false { engine.stopAll(within: 5, only: id) {} }
         session.stopped = true
     }
 
-    private func endLaunch() { (session.launching, session.queued, session.launch) = (false, [], session.launch + 1) }
+    private func endLaunch(_ session: Session) { (session.launching, session.queued, session.launch) = (false, [], session.launch + 1) }
 
-    /// Sends `message` to this conversation's agent; launches it first when there is none, once: what is written while
-    /// it starts waits for it.
-    private func deliver(_ message: String) {
-        let session = session
+    private func deliver(_ message: String) { deliver(message, to: session) }
+
+    /// Sends `message` to the agent of `session`; launches it first when there is none, once: what is written while it
+    /// starts waits for it.
+    func deliver(_ message: String, to session: Session) {
         guard session.kind != nil else { return }
-        (session.last, session.failure, active) = (message, nil, clock())
+        (session.last, session.failure, session.active) = (message, nil, clock())
         if session.launching { return session.queued.append(message) }
         if let id = session.id, session.agent?.alive != false, !session.stopped {
             do { _ = try engine.deliver(message, to: id, when: "next") } catch { session.failure = error.sentence }
             return refresh()
         }
-        start([message])
+        start([message], in: session)
     }
 
     /// Launches this conversation's agent, continuing the thread `resume` when given, and sends `messages` once it runs,
     /// with what is written meanwhile.
-    private func start(_ messages: [String], resume: String? = nil) {
-        let session = session
+    private func start(_ messages: [String], in session: Session? = nil, resume: String? = nil) {
+        let session = session ?? self.session
         guard let kind = session.kind else { return }
         (session.launching, session.queued, session.failure) = (true, messages, nil)
         let number = session.launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
-            guard let self, number == session.launch, session === self.session else { self?.refresh(); return }
+            guard let self, number == session.launch, sessions.values.contains(where: { $0 === session }) else { self?.refresh(); return }
             let messages = session.queued
             session.queued = []
             do {

@@ -2,6 +2,7 @@
 // engine's state shows them, what went wrong, the messages waiting for its launch or for its turn to end, and the space
 // it is about; the turns of its earlier agent that a resumed one continues, and whether it began because the last one
 // could not be picked up. A class, so a launch that ends after a new conversation began can tell it was for another one.
+import Foundation
 import Observation
 import SomethingCore
 
@@ -10,7 +11,8 @@ import SomethingCore
     var kind: String?
     /// What the agent is launched with; nil leaves its own default.
     let model: String?, effort: String?
-    /// The space this conversation is about; nil while one conversation serves every place.
+    /// The space this conversation is about; nil for New Space's, which serves every place until each space's card is
+    /// bound to its own.
     let space: String?
     /// Its agent, once launched, and the thread that agent last reported: what a later launch may resume.
     var id: String?
@@ -33,6 +35,8 @@ import SomethingCore
     /// start it: Stop, New Conversation and a switch end a pending launch by moving this number on.
     @ObservationIgnored var queued: [String] = []
     @ObservationIgnored var launch = 0
+    /// When its agent last worked or was written to, by the assistant's clock: the idle stop counts from it.
+    @ObservationIgnored var active = Date()
     /// The messages written while its turn runs, context line included: the app holds them, not the agent, so Take
     /// Back and Stop can give them back; one leaves each time a turn ends. And the turn after which one last left, so
     /// a state read again before the next turn starts sends no second one.

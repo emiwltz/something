@@ -61,9 +61,9 @@ import SomethingCore
         current = ((current + by) % waiting.count + waiting.count) % waiting.count
     }
 
-    /// The space a request of `agent` belongs to: the person's assistant's is the space it works on (`place`), any
+    /// The space a request of `agent` belongs to: the person's assistant's is the space it works on (`working`), any
     /// other agent's is the space that launched it (`launches`, by space name); nil when none did.
-    static func space(of agent: String, assistant: Bool, place: AssistantModel.Place, launches: [String: Set<String>]) -> String? {
-        assistant ? place.space : launches.first { $0.value.contains(agent) }?.key
+    static func space(of agent: String, assistant: Bool, working: String?, launches: [String: Set<String>]) -> String? {
+        assistant ? working : launches.first { $0.value.contains(agent) }?.key
     }
 }

@@ -74,7 +74,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         panels.attention?.notify = { [weak self] in self?.library.preferences.notify == true }
         panels.queue.space = { [weak self] request in
             guard let self else { return nil }
-            return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), place: assistant.place,
+            return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), working: assistant.space(of: request.agent),
                                       launches: launches.ids)
         }
         engine.changed = { [weak self] in self?.schedulePush() }
@@ -256,7 +256,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func who(_ request: Request) -> Asker {
         let space = panels.queue.space(request).map { library.entry($0)?.title ?? $0 }
         return App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
-                       assistant: engine.assistants.contains(request.agent), building: assistant.id == request.agent && !assistant.asking)
+                       assistant: engine.assistants.contains(request.agent), building: assistant.session(of: request.agent).map { !$0.asking } ?? false)
     }
 
     /// `agent` in the panel's words, "An agent" when the state no longer holds it: pre-allowed only as an assistant launched
@@ -370,7 +370,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// What quitting ends now, from the app's own sources.
     func leaving() -> Leaving {
         App.leaving(agents: engine.state.agents, threads: engine.state.threads, waiting: panels.queue.waiting, who: who) { agent in
-            RequestQueue.space(of: agent.id, assistant: self.engine.assistants.contains(agent.id), place: self.assistant.place,
+            RequestQueue.space(of: agent.id, assistant: self.engine.assistants.contains(agent.id), working: self.assistant.space(of: agent.id),
                                launches: self.launches.ids).map { self.library.entry($0)?.title ?? $0 }
         }
     }
