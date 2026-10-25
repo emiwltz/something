@@ -1264,6 +1264,32 @@ import WebKit
         await finish(home, model)
     }
 
+    /// A Quick Change that never ends its turn is the person's to stop: Stop, from the space's card or ⌘., ends it,
+    /// its agent stopped, and the message held for it leaves to the main session.
+    @Test func stopEndsAQuickChangeThatNeverEnds() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        model.place = place
+        let main = model.session
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1)", tag: "body", rect: CGRect(x: 0, y: 0, width: 300, height: 100))
+        let users = { self.input(home).filter { $0.contains(#""type":"user""#) } }
+        #expect(model.quickChange("small game, quick.", parts: [part], at: place) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(await wait(until: { quick.session.agent?.state == "working" }), "the quick session did not start")
+        let id = try #require(quick.session.id)
+        model.send("Invented, held for the quick one.")
+        #expect(model.held == ["Invented, held for the quick one."] && model.stoppable && !model.working)
+        model.stop()
+        #expect(quick.phase == .ended && !model.quickWorks(on: "brief"))
+        #expect(await wait(until: { model.engine.state.agents.first { $0.id == id }?.alive == false }), "the quick session was not stopped")
+        #expect(await wait(until: { users().filter { $0.contains("Invented, held for the quick one.") }.count == 1 && main.id != nil }), "\(users())")
+        #expect(model.held.isEmpty && main.id != id)
+        await finish(home, model)
+    }
+
     /// A builder that picks its own model gets no model for its Quick Change, and the chip says so.
     @Test func aQuickChangeOfAKindWithItsOwnModelGetsNone() async throws {
         let (home, model) = try assistant(["amp"])

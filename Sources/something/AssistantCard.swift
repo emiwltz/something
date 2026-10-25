@@ -526,7 +526,7 @@ struct ConversationMenu: View {
     var body: some View {
         Section("\(model.title) · its assistant") {
             Button("New Conversation") { model.newConversation() }
-            Button("Stop") { model.stop() }.disabled(!model.working).help(model.presence.stopHelp)
+            Button("Stop") { model.stop() }.disabled(!model.stoppable).help(model.presence.stopHelp)
             Button("Put to Sleep") { model.putToSleep() }.disabled(!model.canSleep)
         }
         if model.canAskEverything {
@@ -686,7 +686,7 @@ extension AssistantModel {
     var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     /// Not while its model does not answer: the card says Stopped, and Try Again is the way on; nor while it waits for
     /// an answer, which its request's window gives.
-    var stops: Bool { light == .working && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var stops: Bool { (light == .working || quickWorks(on: place.space)) && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     /// The notice above the composer, the most pressing first; nil when nothing blocks or waits.
     var notice: Notice? {

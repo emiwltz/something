@@ -372,6 +372,9 @@ import SomethingCore
 
     var working: Bool { light == .working || light == .waiting }
 
+    /// Whether Stop has something to stop here: this conversation's turn, or a Quick Change on this space.
+    var stoppable: Bool { working || quickWorks(on: place.space) }
+
     /// Whether nothing can be sent until the person acts on the notice: its program left the Mac, or it quit.
     var blocked: Bool { kind != nil && [.missing, .crashed].contains(presence.stuck) }
 
@@ -529,8 +532,10 @@ import SomethingCore
 
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
-    /// The held messages go back into the field: nothing is sent behind the person's back.
+    /// The held messages go back into the field: nothing is sent behind the person's back. While a Quick Change works
+    /// on this space, Stop ends it instead, keeping what it changed, and the messages held for it leave.
     func stop() {
+        if let space = place.space, let quick = quicks[space], quick.phase == .working { return end(quick) }
         stop(place == .blank && before?.session === session ? before : nil)
     }
 
@@ -919,7 +924,7 @@ import SomethingCore
 
     /// How long a frame says Done before it leaves, and the chip says the session ended: the mockup's; a test lengthens
     /// them to draw each moment.
-    @ObservationIgnored var lingers: (done: TimeInterval, ended: TimeInterval) = (1.4, 2.2)
+    @ObservationIgnored var lingers: (done: TimeInterval, ended: TimeInterval) = (0.9, 2.2)
 
     /// Whether a Quick Change works on the space `name` now.
     func quickWorks(on name: String?) -> Bool { name.flatMap { quicks[$0] }?.phase == .working }
@@ -939,9 +944,10 @@ import SomethingCore
         if works(on: name) { return "\(AssistantModel.clean(title))’s assistant is working · try once it’s done" }
         let own = Registry.app.limits[kind]?.contains("model") == true
         let options = main.agent?.alive != false ? main.agent?.options : nil
-        let label = (main.model ?? main.agent?.model).map { m in (options ?? Preferences.at(places).listed[kind])?.model?.first { $0.value == m }?.label ?? m }
+        let model = own ? nil : main.model ?? main.agent?.model
+        let label = model.map { m in (options ?? Preferences.at(places).listed[kind])?.model?.first { $0.value == m }?.label ?? m }
         let chip = ["Quick session", Registry.app.name(of: kind), own ? "its own model" : label].compactMap { $0 }.joined(separator: " · ")
-        let temporary = Session(kind: kind, model: own ? nil : main.model, effort: main.effort)
+        let temporary = Session(kind: kind, model: model, effort: main.effort)
         quicks[name] = Quick(space: name, sentence: text, session: temporary, chip: chip, parts: parts)
         turnStarts(name)
         deliver(([AssistantModel.context(place, home: places.home.path)] + AssistantModel.pointing(parts) + [text]).joined(separator: "\n"), to: temporary)

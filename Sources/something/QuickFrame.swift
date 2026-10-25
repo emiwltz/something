@@ -66,8 +66,9 @@ final class QuickFrame: NSView {
             timer = nil
         } else if timer == nil {
             timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
-                // A space closed with its frame takes it along: the timer stops with it.
+                // A space closed with its frame takes it along: the timer stops with it. Off screen, nothing is asked.
                 guard let self, superview != nil else { return timer.invalidate() }
+                guard window != nil else { return }
                 follow()
             }
         }
@@ -145,8 +146,6 @@ final class QuickFrame: NSView {
             ring.stroke()
         } else {
             PointOverlay.float(box, radius: 12, fill: .bg2, ring: true, appearance: effectiveAppearance)
-            Look.Token.bg2.color.setFill()
-            NSBezierPath(roundedRect: box, xRadius: 12, yRadius: 12).fill()
         }
         let symbol = NSImage(systemSymbolName: ended ? "checkmark" : "bolt", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) ?? NSImage()

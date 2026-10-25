@@ -366,7 +366,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Greyed, never hidden: Keys says when each command can act.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
-        let situation = Keys.Situation(space: current != nil, working: assistant.working, agent: !assistant.noAgent,
+        let situation = Keys.Situation(space: current != nil, working: assistant.stoppable, agent: !assistant.noAgent,
                                        welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
                                        waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
         return Keys.enabled(id, situation)
