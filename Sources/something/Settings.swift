@@ -88,16 +88,17 @@ struct SettingsSection: Identifiable {
     @ObservationIgnored var asking: (Bool) -> Void = { _ in }
     /// Looks for the agents again (AssistantModel.lookAgain, then Engine.lookAgain).
     @ObservationIgnored var lookAgain: () -> Void = {}
-    /// Where the program of a kind is, by its files alone; called off the main queue, as a login shell may be read.
-    @ObservationIgnored var locate: (String) -> String? = Found.path
+    /// Where the program of a kind is, or why it is not known to be there (Found.outcome); called off the main queue,
+    /// as a login shell may be read.
+    @ObservationIgnored var locate: (String) -> Result<String, CodedError> = Found.outcome
     /// The newest version each kind's files on this Mac name (the state's `seen`).
     @ObservationIgnored var versions: () -> [String: String] = { [:] }
     @ObservationIgnored var clock: () -> Date = Date.init
-    /// Where each agent was found, by kind; nil until the first look ends.
-    private(set) var paths: [String: String]?
+    /// Where each agent was found, or why not, by kind; nil while a look runs.
+    private(set) var found: [String: Result<String, CodedError>]?
     private(set) var seen: [String: String] = [:]
-    /// When Look Again was last clicked; nil when the only look was the one at the start.
-    var looked: Date? = Settings.looked
+    /// When the last look ended, by `clock`; nil while none has.
+    private(set) var looked: Date?
 
     init(preferences: Preferences, places: Places, app: URL = Bundle.main.bundleURL, version: String = Resources.version) {
         (self.preferences, self.places, self.app, self.version) = (preferences, places, app, version)
@@ -110,22 +111,28 @@ struct SettingsSection: Identifiable {
         seen = versions()
     }
 
-    /// Look Again: the engine looks for the programs again, and so does this window, at `clock`'s time.
+    /// Look Again: the engine looks for the programs again, and so does this window, which says it is looking meanwhile.
     func again() {
-        looked = clock()
-        Settings.looked = looked
         lookAgain()
         find()
     }
 
-    /// Finds where each agent is off the main queue, then shows it with the versions known by then.
+    /// Finds where each agent is off the main queue, then shows it with the versions known by then and when it ended.
     func find() {
+        found = nil
         let kinds = Registry.app.agents.map(\.kind), locate = locate
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let found = kinds.reduce(into: [String: String]()) { $0[$1] = locate($1) }
-            DispatchQueue.main.async { self?.paths = found; self?.look() }
+            let found = kinds.reduce(into: [String: Result<String, CodedError>]()) { $0[$1] = locate($1) }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                (self.found, self.looked) = (found, self.clock())
+                self.look()
+            }
         }
     }
+
+    /// Where the program of `kind` was found; nil while a look runs and when it was not found.
+    func path(_ kind: String) -> String? { try? found?[kind]?.get() }
 
     /// The version line under General: Homebrew is named only when something runs from its Cellar.
     var versionLine: (name: String, rest: String) {
@@ -255,10 +262,10 @@ struct SettingsSection: Identifiable {
     var agents: [AgentLine] {
         let preferred = preferences.assistant ?? offered().first, all = Registry.app.agents
         return (all.filter { $0.builder != nil } + all.filter { $0.builder == nil }).map { agent in
-            let path = paths?[agent.kind], builds = agent.builder != nil
+            let path = path(agent.kind), builds = agent.builder != nil
             let note: String
             if !builds { note = agent.unavailable ?? "something only sees \(agent.name)." }
-            else if paths != nil, path == nil { note = "Not found on this Mac. To install it, type in Terminal: \(agent.install ?? agent.kind)" }
+            else if case .failure(let error) = found?[agent.kind] { note = Found.note(error, install: agent.install ?? agent.kind) }
             else { note = Registry.resumesAsBuilt.contains(agent.kind) ? "Resumes each space’s conversation" : "Starts each conversation fresh, and says so" }
             return AgentLine(id: agent.kind, name: agent.name, builds: builds, isDefault: builds && agent.kind == preferred && path != nil,
                              path: path.map { ($0 as NSString).abbreviatingWithTildeInPath },
@@ -268,9 +275,8 @@ struct SettingsSection: Identifiable {
 
     /// The footer of Agents: when something last looked, and how many agents it found.
     var lookedLine: String {
-        guard let paths else { return "Looking for agents on this Mac…" }
-        let count = paths.count, agents = "\(count) agent\(count == 1 ? "" : "s")"
-        guard let looked else { return "Looked when something opened · \(agents)" }
+        guard let found, let looked else { return "Looking for agents on this Mac…" }
+        let count = found.values.filter { (try? $0.get()) != nil }.count, agents = "\(count) agent\(count == 1 ? "" : "s")"
         let day = Info.day(looked, now: clock()), format = DateFormatter()
         (format.locale, format.dateFormat) = (Locale(identifier: "en_US_POSIX"), "HH:mm")
         let when = ["Today", "Yesterday"].contains(day) ? day.lowercased() : "on " + day
@@ -311,10 +317,16 @@ struct SettingsSection: Identifiable {
 /// The Settings window and its one copy.
 @MainActor enum Settings {
     static var shown: SettingsWindow?
-    /// When Look Again, in Agents or the Assistant menu, was last clicked in this run of the app.
-    static var looked: Date?
-    /// The tab a menu item opens Settings at, by its command.
-    static let opens: [String: SettingsTab] = ["askAll": .permissions, "defaults": .assistant]
+
+    /// Shows the one Settings window, made by `make` the first time, at `tab` when given, else where it was left.
+    @discardableResult static func open(_ tab: SettingsTab?, make: () -> SettingsWindow) -> SettingsWindow {
+        let window = shown ?? make()
+        shown = window
+        if let tab { window.select(tab) }
+        window.model.look()
+        window.window.makeKeyAndOrderFront(nil)
+        return window
+    }
 
     /// Applies the person's appearance and motion to the whole app: at the start, and as Interface changes them.
     static func apply(_ appearance: Preferences.Appearance, _ motion: Look.Motion) {
@@ -332,7 +344,7 @@ extension App {
     @MainActor @objc func showSettings(_ sender: Any?) { settings(nil) }
 
     @MainActor func settings(_ tab: SettingsTab?) {
-        let window = Settings.shown ?? {
+        Settings.open(tab) {
             let model = SettingsModel(preferences: library.preferences, places: places)
             model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
             model.tour = { [weak self] in self?.showTour(nil) }
@@ -345,37 +357,44 @@ extension App {
             model.find()
             let made = SettingsWindow(model)
             made.window.center()
-            Settings.shown = made
             return made
-        }()
-        if let tab { window.select(tab) }
-        window.model.look()
-        window.window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Assistant › Ask Before Every Change…: Settings › Permissions, where the switch and what it means are.
-    @MainActor @objc func showPermissions(_ sender: Any?) { settings(Settings.opens["askAll"]) }
+    @MainActor @objc func showPermissions(_ sender: Any?) { settings(.permissions) }
 
     /// Defaults for New Spaces…, under the agent chip and Build With ▸: Settings › Assistant.
-    @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(Settings.opens["defaults"]) }
+    @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(.assistant) }
 
-    /// Look for Agents Again, from the assistant's menu: as Agents' Look Again, which then shows when it looked.
+    /// Look for Agents Again, from the assistant's menu: as Agents' Look Again; a Settings window made later looks itself.
     @MainActor @objc func lookForAgentsAgain(_ sender: Any?) {
         if let model = Settings.shown?.model { return model.again() }
-        Settings.looked = Date()
         assistant.lookAgain()
     }
 }
 
-/// Where an agent's program is: the file the engine would launch (Programs.find, which only looks at files and may
-/// read the login shell's PATH), else, for an agent something only sees, its app in /Applications. Nothing is run.
+/// Where an agent's program is: for a builder, the file the engine would launch (Programs.find), or why it is not known
+/// to be there; for an agent something only sees, that file or its app in /Applications. Never runs an agent; like the
+/// engine's Programs, it may run the login shell once to read its PATH.
 enum Found {
+    /// A second Programs, apart from the engine's: Engine.programs is internal to the host, which only AB01 changes.
     static let programs = Programs(environment: ProcessInfo.processInfo.environment, registry: .app)
 
-    static func path(_ kind: String) -> String? {
-        if let program = try? programs.find(kind) { return program.path }
+    /// The program's path, or Programs.find's error: not installed, the login shell's PATH unread (so not known), or
+    /// what it runs on missing. An app bundle stands only for an agent something only sees, which is never launched.
+    static func outcome(_ kind: String) -> Result<String, CodedError> {
+        let found = Result { try programs.find(kind).path }.mapError { $0 as? CodedError ?? CodedError("NOT_INSTALLED", $0.localizedDescription) }
+        guard case .failure = found, Registry.app.agent(kind)?.builder == nil else { return found }
         let app = "/Applications/\(Registry.app.name(of: kind)).app"
-        return FileManager.default.fileExists(atPath: app) ? app : nil
+        return FileManager.default.fileExists(atPath: app) ? .success(app) : found
+    }
+
+    /// What a builder's row says when it was not found: the short sentence for a plain absence, else Programs' own,
+    /// which says what is not known or what is missing.
+    static func note(_ error: CodedError, install: String) -> String {
+        error.code == "NOT_INSTALLED" && error.message.contains("was not found on this Mac")
+            ? "Not found on this Mac. To install it, type in Terminal: \(install)" : error.message
     }
 }
 
@@ -624,7 +643,7 @@ private struct AgentsList: View {
         HStack(spacing: 10) {
             Text(model.lookedLine).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).frame(maxWidth: .infinity, alignment: .leading)
             Button { model.again() } label: { Label("Look Again", systemImage: "arrow.clockwise") }
-                .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).disabled(model.paths == nil)
+                .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).disabled(model.found == nil)
         }
         .padding(.horizontal, 4)
     }

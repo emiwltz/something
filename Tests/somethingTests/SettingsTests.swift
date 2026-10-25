@@ -26,7 +26,10 @@ import Testing
         model.asking = { effects.asking.append($0) }
         model.lookAgain = { effects.looks += 1 }
         // Invented places; no program is looked for, let alone run.
-        model.locate = { ["claude": "/opt/homebrew/bin/claude", "codex": "/Users/example/.local/bin/codex", "cursor": "/Applications/Cursor.app"][$0] }
+        let found = ["claude": "/opt/homebrew/bin/claude", "codex": "/Users/example/.local/bin/codex", "cursor": "/Applications/Cursor.app"]
+        model.locate = { kind in
+            found[kind].map { .success($0) } ?? .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac. To install it, type in Terminal: x"))
+        }
         model.versions = { ["claude": "2.1.4", "cursor": "1.8"] }
         return (model, effects)
     }
@@ -218,8 +221,12 @@ import Testing
         defer { home.remove() }
         let (model, effects) = model(home)
         #expect(model.lookedLine == "Looking for agents on this Mac…" && model.agents.allSatisfy { $0.path == nil })
+        let calendar = Calendar.current
+        let start = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 17, minute: 40)))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 18, minute: 2)))
+        model.clock = { start }
         model.find()
-        _ = await wait(3, until: { model.paths != nil })
+        _ = await wait(3, until: { model.found != nil })
         let agents = model.agents
         #expect(agents.filter(\.builds).map(\.id) == Registry.app.builders.map(\.kind))
         #expect(agents.filter { !$0.builds }.map(\.id) == Registry.app.agents.filter { $0.builder == nil }.map(\.kind))
@@ -231,27 +238,85 @@ import Testing
         #expect(pi.path == nil && pi.version == nil && pi.note.hasPrefix("Not found on this Mac. To install it, type in Terminal: "))
         let cursor = try #require(agents.first { $0.id == "cursor" })
         #expect(!cursor.builds && cursor.path == "/Applications/Cursor.app" && cursor.note == Registry.app.agent("cursor")?.unavailable)
-        #expect(model.lookedLine == "Looked when something opened · 3 agents")
+        #expect(model.lookedLine == "Looked today at 17:40 · 3 agents", "the time the look ended")
         // Choosing Codex as the default marks it.
         model.preferences.assistant = "codex"
         #expect(model.agents.filter(\.isDefault).map(\.id) == ["codex"])
-        let calendar = Calendar.current
-        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 18, minute: 2)))
         model.clock = { now }
         model.again()
         #expect(effects.looks == 1, "Look Again asks the engine once")
-        _ = await wait(3, until: { model.paths != nil && model.looked != nil })
+        #expect(model.lookedLine == "Looking for agents on this Mac…", "while the new look runs")
+        _ = await wait(3, until: { model.found != nil })
         #expect(model.lookedLine == "Looked today at 18:02 · 3 agents")
-        Settings.looked = nil
     }
 
-    /// The Assistant menu's Ask Before Every Change… and the assistant's Defaults for New Spaces… open their tabs.
-    @Test func theMenuItemsOpenTheirTabs() {
-        #expect(Keys.command("askAll")?.action == #selector(App.showPermissions(_:)) && Settings.opens["askAll"] == .permissions)
-        #expect(Keys.command("defaults")?.action == #selector(App.showNewSpaceDefaults(_:)) && Settings.opens["defaults"] == .assistant)
+    /// A builder not found says why as Programs does: a plain absence briefly, an unread PATH as not known, a missing
+    /// interpreter as such; an app bundle never stands for a builder, so it is neither counted nor the default.
+    @Test func aBuilderNotFoundSaysWhy() async throws {
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let (model, _) = model(home)
+        let unread = "something could not read the PATH of your login shell (/bin/zsh), so it cannot tell whether Codex is on this Mac."
+        let interpreter = "Pi needs node, which was not found on this Mac. To install it, type in Terminal: brew install node"
+        model.locate = { kind in
+            switch kind {
+            case "codex": .failure(CodedError("NOT_INSTALLED", unread))
+            case "pi": .failure(CodedError("INTERPRETER_NOT_FOUND", interpreter))
+            case "cursor": .success("/Applications/Cursor.app")
+            default: .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac. To install it, type in Terminal: x"))
+            }
+        }
+        model.find()
+        _ = await wait(3, until: { model.found != nil })
+        let agents = model.agents
+        let claude = try #require(agents.first { $0.id == "claude" }), codex = try #require(agents.first { $0.id == "codex" })
+        let pi = try #require(agents.first { $0.id == "pi" })
+        #expect(claude.path == nil && !claude.isDefault && claude.note.hasPrefix("Not found on this Mac. To install it, type in Terminal: "))
+        #expect(codex.path == nil && codex.note == unread)
+        #expect(pi.path == nil && pi.note == interpreter)
+        #expect(model.lookedLine.hasSuffix("· 1 agent"))
+    }
+
+    /// Found: a builder's program is the engine's alone, never its app bundle, which stands only for an agent seen.
+    @Test func anAppBundleNeverStandsForABuilder() throws {
+        let codex = try #require(Registry.app.agent("codex")), cursor = try #require(Registry.app.agent("cursor"))
+        #expect(codex.builder != nil && cursor.builder == nil)
+        let plain = CodedError("NOT_INSTALLED", "Codex was not found on this Mac. To install it, type in Terminal: npm i -g @openai/codex")
+        #expect(Found.note(plain, install: "npm i -g @openai/codex") == "Not found on this Mac. To install it, type in Terminal: npm i -g @openai/codex")
+        let unread = CodedError("NOT_INSTALLED", "something could not read the PATH of your login shell (/bin/zsh), so it cannot tell whether Codex is on this Mac.")
+        #expect(Found.note(unread, install: "x") == unread.message)
+    }
+
+    /// The Assistant menu's Ask Before Every Change… and the assistant's Defaults for New Spaces… send their actions,
+    /// and opening Settings at a tab shows the one window at that tab.
+    @Test func theMenuItemsOpenTheirTabs() async throws {
+        #expect(Keys.command("askAll")?.action == #selector(App.showPermissions(_:)))
+        #expect(Keys.command("defaults")?.action == #selector(App.showNewSpaceDefaults(_:)))
         #expect(Keys.command("defaults")?.title == AssistantModel.defaultsTitle)
         #expect(Keys.command("lookAgain")?.action == #selector(App.lookForAgentsAgain(_:)))
         #expect(Keys.enabled("askAll", Keys.Situation()))
+    }
+
+    /// Settings.open, which showPermissions and showNewSpaceDefaults go through: one window, made once, at the tab given.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func openingAtATabShowsThatTab() throws {
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let (model, _) = model(home)
+        var made = 0
+        func make() -> SettingsWindow {
+            made += 1
+            let settings = SettingsWindow(model)
+            settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
+            settings.window.alphaValue = 0
+            return settings
+        }
+        defer { Settings.shown?.window.close(); Settings.shown = nil }
+        Settings.open(.permissions, make: make)
+        #expect(Settings.shown?.tab == .permissions)
+        Settings.open(.assistant, make: make)
+        #expect(Settings.shown?.tab == .assistant && made == 1)
+        Settings.open(nil, make: make)
+        #expect(Settings.shown?.tab == .assistant, "where it was left")
     }
 
     /// The window: the preference toolbar with the three tabs, 720 points wide, as high as each tab, titled by it.

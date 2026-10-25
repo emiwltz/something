@@ -99,16 +99,17 @@ struct AcceptanceCommand {
                      "opencode": ("~/.opencode/bin/opencode", "0.15.2"), "pi": ("/opt/homebrew/bin/pi", "0.9.1"), "omp": ("~/.local/bin/omp", "1.3.0"),
                      "amp": ("/opt/homebrew/bin/amp", "0.0.1761"), "cursor": ("/Applications/Cursor.app", "1.8"),
                      "antigravity": ("/Applications/Antigravity.app", "1.2")]
-        model.locate = { found[$0]?.0 }
+        model.locate = { kind in found[kind].map { .success($0.0) } ?? .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac.")) }
         model.versions = { found.mapValues(\.1) }
-        model.clock = { Stage.local }
-        model.looked = Stage.local.addingTimeInterval(-18 * 60)
+        // The look ended 18 minutes before the picture.
+        model.clock = { Stage.local.addingTimeInterval(-18 * 60) }
         var listed = Options()
         listed.model = [Option(value: "opus", label: "Opus 5.5"), Option(value: "sonnet", label: "Sonnet 5.5")]
         listed.effort = [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")]
         library.preferences.change { ($0.listed["claude"], $0.model, $0.effort) = (listed, "opus", "high") }
         model.find()
-        _ = await wait(3, until: { model.paths != nil })
+        _ = await wait(3, until: { model.found != nil })
+        model.clock = { Stage.local }
         if tab == .interface { model.choose(.light) }
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))

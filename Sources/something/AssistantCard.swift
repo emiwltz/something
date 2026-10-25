@@ -534,7 +534,8 @@ struct ConversationMenu: View {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
         Divider()
-        Button("Look for Agents Again") { _ = NSApp.sendAction(#selector(App.lookForAgentsAgain(_:)), to: nil, from: nil) }
+        let again = Keys.command("lookAgain")
+        Button(again?.title ?? "") { again?.action.map { _ = NSApp.sendAction($0, to: nil, from: nil) } }.disabled(again?.action == nil)
     }
 }
 
