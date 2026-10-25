@@ -198,6 +198,9 @@ final class MarginNote: NSView {
         }
         required init?(coder: NSCoder) { nil }
 
+        /// The answer's font: the agent's voice.
+        var voice: NSFont? { words.length == 0 ? nil : words.attribute(.font, at: 0, effectiveRange: nil) as? NSFont }
+
         override var isFlipped: Bool { true }
 
         private var textHeight: CGFloat {

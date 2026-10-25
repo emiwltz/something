@@ -389,7 +389,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             guard $0 == .destructive else { return }
             self?.library.trash(entry.id)
             // Its conversation goes only with the space: one that stayed, its move refused, keeps its assistant.
-            if self?.library.entry(entry.id) == nil { self?.assistant.forget(entry.id) }
+            if self?.library.entry(entry.id) == nil {
+                self?.assistant.forget(entry.id)
+                self?.shell.forget(entry.id)
+            }
         }
     }
 

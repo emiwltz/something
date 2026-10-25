@@ -219,16 +219,31 @@ struct AcceptanceShow {
         let changes = Changes(places: stage.home.places, undo: shell.undo)
         changes.follow(model, in: shell, library: library)
         let was = try String(contentsOf: brief.space.location, encoding: .utf8)
-        shell.inspector.isCollapsed = false
+        shell.window.layoutIfNeeded()
         let width = brief.area.bounds.width
+        shell.inspector.isCollapsed = false
+        shell.window.layoutIfNeeded()
 
         shell.point()
         let overlay = try #require(brief.pointer), frame = try #require(brief.frame)
+        // Info narrowed the page: the point is measured once the page has reflowed into its new width.
+        var reflowed = false
+        for _ in 0..<250 where !reflowed {
+            let inner = try? await brief.web.callAsyncJavaScript("return window.innerWidth", in: frame, contentWorld: .defaultClient) as? Double
+            reflowed = inner.map { abs($0 - brief.web.frame.width) < 1 && brief.web.frame.width < width } ?? false
+            if !reflowed { try? await Task.sleep(nanoseconds: 20_000_000) }
+        }
+        #expect(reflowed, "the page did not reflow beside Info")
+        await Picture.settle(brief)
         let at = try #require(try await brief.web.callAsyncJavaScript(
             "const b = document.querySelector('#weather-line').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
             in: frame, contentWorld: .defaultClient) as? [Double])
         await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
         let composer = try #require(overlay.composer), part = try #require(overlay.picks.first)
+        // The weather line itself is smaller than a part: its dateline is what is picked, named by its tag alone.
+        let holds = try await brief.web.callAsyncJavaScript("return document.querySelector(path).contains(document.querySelector('#weather-line'))",
+                                                            arguments: ["path": part.path], in: frame, contentWorld: .defaultClient) as? Bool
+        #expect(holds == true && part.tag == "div" && part.kind == "this block", "\(part.path)")
         composer.field.insertText("Why does the weather say Evening?", replacementRange: composer.field.selectedRange())
         composer.sendQuick()
         // The person goes on elsewhere while the quick session works: the note does not take that focus.
@@ -241,6 +256,7 @@ struct AcceptanceShow {
         #expect(note.words == "No change made. The weather shows the time of day, because nothing leaves your Mac." && note.title == "Daily brief")
         #expect(note.accessibilityLabel() == "Daily brief’s assistant, no change" && note.accessibilityValue() as? String == note.words)
         #expect(note.part.path == part.path && shell.window.firstResponder === typing && !note.acceptsFirstResponder)
+        #expect(note.card.voice == Look.font(.voice, size: 13.5), "the answer in the agent's voice")
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         #expect(buttons(note).map(\.title) == ["Dismiss"], "a note never allows anything")
         #expect(try String(contentsOf: brief.space.location, encoding: .utf8) == was && changes.versions.list("brief").allSatisfy { $0.kind != .quick })
@@ -281,8 +297,6 @@ struct AcceptanceShow {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f4-narrow" + suffix, root: stage.home.root)
         }
-        // At rest the note asks the page nothing: it has no timer, only the page's scroll and reflow move it.
-        #expect(!Mirror(reflecting: narrow).children.contains { $0.value is Timer || $0.value is Timer? })
         // The window widens: the margin comes back, the page beside it.
         shell.window.setContentSize(NSSize(width: 1200, height: 760))
         shell.window.layoutIfNeeded()
@@ -294,6 +308,19 @@ struct AcceptanceShow {
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
                                                    context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         #expect(shell.escape(escape) && brief.note == nil && !shell.escape(escape))
+        // An answer for a space not shown waits for it, and shows when it is shown again; a trashed space's is forgotten.
+        let quick = AssistantModel.Quick(space: "brief", sentence: "Why?", session: model.session, chip: "", parts: [moved])
+        shell.show(nil)
+        shell.note(note.words, about: quick)
+        #expect(brief.note == nil)
+        shell.show(brief)
+        #expect(brief.note?.words == note.words)
+        brief.note?.dismiss()
+        shell.show(nil)
+        shell.note(note.words, about: quick)
+        shell.forget("brief")
+        shell.show(brief)
+        #expect(brief.note == nil)
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })

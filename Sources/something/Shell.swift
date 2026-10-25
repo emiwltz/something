@@ -347,6 +347,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         MarginNote.show(waiting.words, about: waiting.part, title: space.title, over: space)
     }
 
+    /// The space `name` left (trashed): an answer still waiting for it never shows for a later space of that name.
+    func forget(_ name: String) { unread[name] = nil }
+
     /// Esc typed in this window, wherever the focus is: a margin note leaves, the top thing over the page. Returns
     /// whether it did, the key then used up.
     func escape(_ event: NSEvent) -> Bool {
