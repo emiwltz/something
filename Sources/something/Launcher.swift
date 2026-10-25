@@ -62,15 +62,20 @@ enum Launcher {
         }
     }
 
-    /// Removes the launcher at `place(places)` when it is the one `make` made (its bundle identifier says so); anything
-    /// else there is left as it is. Returns whether it was removed. Throws when it could not be removed.
+    /// Whether the launcher at `place(places)` is the one `make` made: its bundle identifier says so.
+    static func made(places: Places) -> Bool {
+        let info = place(places).appendingPathComponent("Contents/Info.plist")
+        guard let data = try? Data(contentsOf: info),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return false }
+        return plist["CFBundleIdentifier"] as? String == id
+    }
+
+    /// Removes the launcher at `place(places)` when `made` says it is something's; anything else there is left as it
+    /// is. Returns whether it was removed. Throws when it could not be removed.
     @discardableResult
     static func remove(places: Places) throws -> Bool {
-        let app = place(places), info = app.appendingPathComponent("Contents/Info.plist")
-        guard let data = try? Data(contentsOf: info),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              plist["CFBundleIdentifier"] as? String == id else { return false }
-        try FileManager.default.removeItem(at: app)
+        guard made(places: places) else { return false }
+        try FileManager.default.removeItem(at: place(places))
         return true
     }
 }

@@ -181,9 +181,13 @@ import SomethingCore
         }
     }
 
-    /// The space to open at the start: the last one open, when it is still listed. 1.0 kept a default space in
-    /// app.json instead; it is read once, as the last one open.
-    func last() -> String? {
+    /// The space to open at the start, as Settings' "When something opens" says: nil for New Space; the space it
+    /// names, when it is still listed; else the last one open, when it is. 1.0 kept a default space in app.json
+    /// instead; it is read once, as the last one open.
+    func atStart() -> String? {
+        let chosen = preferences.openAtStart
+        if chosen == "new" { return nil }
+        if chosen != "last", entries.contains(where: { $0.id == chosen }) { return chosen }
         var name: String?
         if FileManager.default.fileExists(atPath: places.window.path) {
             name = preferences.lastOpen

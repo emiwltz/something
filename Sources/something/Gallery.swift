@@ -378,3 +378,23 @@ struct Secondary: ButtonStyle {
     }
 }
 
+/// The mockup's .popb, the label of a choice's menu: its value and an up-down chevron, bg2 inside a ring of line2, 24
+/// points high at a radius of 6. Settings and Info draw their menus with it, never the system's grey pill. Settings'
+/// are at least 96 points wide, their chevron at the trailing end (.cm-popb).
+struct PopButton: View {
+    let label: String
+    var minWidth: CGFloat = 0
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // The paddings, the gap and the chevron take 29 points of the width.
+            Text(label).font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
+                .frame(minWidth: max(0, minWidth - 29), alignment: .leading)
+            Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+        }
+        .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
+        .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
+    }
+}
+

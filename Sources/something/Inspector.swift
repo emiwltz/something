@@ -379,7 +379,7 @@ struct InspectorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if standing == .allowed || standing == .refused {
                 Toggle(words.name, isOn: Binding(get: { standing == .allowed }, set: { info.set(right, allowed: $0) }))
-                    .toggleStyle(Switch()).labelsHidden()
+                    .toggleStyle(SwitchStyle()).labelsHidden()
             }
         }
         .padding(.vertical, Look.row * 0.34)
@@ -403,13 +403,7 @@ struct InspectorView: View {
                         }
                         .pickerStyle(.inline).labelsHidden()
                     } label: {
-                        HStack(spacing: 6) {
-                            Text(group ?? "None").font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
-                            Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
-                        }
-                        .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
-                        .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
+                        PopButton(label: group ?? "None")
                     }
                     .plainMenu().disabled(groups.isEmpty)
                     .accessibilityElement(children: .ignore).accessibilityLabel("Group: \(group ?? "None")").accessibilityAddTraits(.isButton)
@@ -505,7 +499,7 @@ struct InspectorView: View {
 }
 
 /// The mockup's switch: 30 by 18, ink when on, mist when off, its knob bg2.
-private struct Switch: ToggleStyle {
+struct SwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             Capsule().fill((configuration.isOn ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)

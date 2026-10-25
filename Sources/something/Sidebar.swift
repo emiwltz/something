@@ -417,7 +417,8 @@ struct SidebarView: View {
                     .accessibilityLabel("More for \(entry.title)")
                 }
                 if entry.isSpace {
-                    Image(nsImage: Sign.miniEyes(now, template: false)).frame(width: 22).help(now.word)
+                    // Settings › Interface may hide the eyes; the row's label still says the state.
+                    if library.preferences.sidebarEyes { Image(nsImage: Sign.miniEyes(now, template: false)).frame(width: 22).help(now.word) }
                 } else {
                     Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
                 }

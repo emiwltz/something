@@ -199,6 +199,19 @@ enum Look {
         case calm, reduced
     }
 
+    /// The motion the person chose in Settings, as the app last applied it (Settings.apply): what a view with no
+    /// preferences at hand plays, such as the request panel and a sheet's switch.
+    static var chosen = Motion.calm
+
+    /// The appearance the app draws in for the person's choice: nil follows the Mac's (Auto).
+    static func appearance(_ choice: Preferences.Appearance) -> NSAppearance? {
+        switch choice {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+
     /// The motion to play: Reduced when the person chose it or when the system's Reduce Motion is on.
     /// `systemReduces` is the seam tests replace.
     static func motion(_ chosen: Motion,

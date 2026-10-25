@@ -317,7 +317,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     func present(onScreen: Bool = true) {
         if !isKeyWindow { previous = NSApp.keyWindow ?? NSApp.mainWindow }
         (held, ring.lit) = (true, true)
-        ring.pulseOnce(Look.motion(.calm))
+        ring.pulseOnce(Look.motion(Look.chosen))
         guard onScreen else { return }
         orderFrontRegardless()
         makeKey()

@@ -290,7 +290,7 @@ final class SheetSwitch: NSButton {
     @objc private func flip() {
         let on = state == .on
         NSAnimationContext.runAnimationGroup { context in
-            (context.duration, context.timingFunction) = (Look.duration(0.2, Look.motion(.calm)), Look.out.timing)
+            (context.duration, context.timingFunction) = (Look.duration(0.2, Look.motion(Look.chosen)), Look.out.timing)
             animator().knob = on ? 1 : 0
         }
         changed()

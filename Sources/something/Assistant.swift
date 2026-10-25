@@ -73,11 +73,12 @@ import SomethingCore
     /// A Quick Change ended having changed nothing, its agent's last words an answer: the window shows them as a note.
     @ObservationIgnored var answered: (_ quick: Quick, _ words: String) -> Void = { _, _ in }
 
-    /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
-    /// card stays as it was, only its content changing: each place shows its own conversation.
+    /// Arriving at the spaces shows the assistant as Settings' "When a space opens, its assistant is" says: the sticker
+    /// (Reduced, the mockup's default) or the open card; from one space to another the card stays as it was, only its
+    /// content changing: each place shows its own conversation.
     var place = Place.blank {
         didSet {
-            if place.space != nil, oldValue.space == nil { open = false }
+            if place.space != nil, oldValue.space == nil { open = Preferences.at(places).assistantAtOpening == .open }
             // Leaving New Space stops its build, the words kept in its field, and says so.
             if oldValue == .blank, place != .blank {
                 if before?.session === session, let left = ladder { stop(before); told(left.left) }

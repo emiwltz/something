@@ -139,7 +139,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 library.select(.space(opening))
             } else if !early.isEmpty {
                 early.forEach(receive)
-            } else if let last = library.last() {
+            } else if let last = library.atStart() {
                 library.select(.space(last))
             } else if App.welcomes(library) {
                 showTour(nil)

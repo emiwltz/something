@@ -5,6 +5,7 @@
 import AppKit
 import Foundation
 import SomethingCore
+import SwiftUI
 import Testing
 @testable import something
 
@@ -161,5 +162,39 @@ import Testing
         #expect(asked == ["agents"], "Move to Trash… asks first")
         #expect(Template.symbol(of: "agents-2") == "square.3.layers.3d" && Template.symbol(of: "oracle") == "doc")
         #expect(Library.label(try #require(library.entry("pet")), .sleep) == "Pebble, \(Sign.State.sleep.word)")
+    }
+
+    /// Settings' "Show each assistant’s eyes in the sidebar": off, the rows draw no eyes at their trailing end.
+    @Test func theEyesFollowTheSetting() async throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        let side = NSHostingView(rootView: SidebarView(library: library, assistant: AssistantModel(engine: test.engine(), places: test.places),
+                                                       eyes: { _ in .listen }))
+        side.appearance = NSAppearance(named: .aqua)
+        let offscreen = Offscreen(side)
+        offscreen.window.setContentSize(NSSize(width: 232, height: 420))
+        side.frame.size = NSSize(width: 232, height: 420)
+        /// The dark pixels in the rows' trailing 26 points, where the eyes are.
+        func inked() async throws -> Int {
+            await wait(0.5)
+            side.layoutSubtreeIfNeeded()
+            let rep = try #require(side.bitmapImageRepForCachingDisplay(in: side.bounds))
+            side.cacheDisplay(in: side.bounds, to: rep)
+            var count = 0
+            for x in Int(Double(rep.pixelsWide) * 200 / 232)..<rep.pixelsWide - 8 {
+                for y in 0..<rep.pixelsHigh {
+                    if let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5, color.brightnessComponent < 0.4 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+        library.preferences.sidebarEyes = true
+        let on = try await inked()
+        library.preferences.sidebarEyes = false
+        let off = try await inked()
+        #expect(on > off + 40, "eyes drawn: \(on) dark pixels, hidden: \(off)")
     }
 }

@@ -135,14 +135,14 @@ import Testing
         try test.space("today", page(nil, ""))
         try FileManager.default.createDirectory(at: test.places.support, withIntermediateDirectories: true)
         try #"{"app": 1, "default": "today", "spaces": {}}"#.write(to: test.places.grants, atomically: true, encoding: .utf8)
-        #expect(library(test, FakeAsk()).last() == "today", "1.0's default, read once")
+        #expect(library(test, FakeAsk()).atStart() == "today", "1.0's default, read once")
         try #"{"app": 1, "default": "shop", "spaces": {}}"#.write(to: test.places.grants, atomically: true, encoding: .utf8)
         let library = library(test, FakeAsk())
-        #expect(library.last() == "today", "window.json now says it")
+        #expect(library.atStart() == "today", "window.json now says it")
         library.select(.space("shop"))
-        #expect(self.library(test, FakeAsk()).last() == "shop")
+        #expect(self.library(test, FakeAsk()).atStart() == "shop")
         try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("shop.html"))
-        #expect(self.library(test, FakeAsk()).last() == nil, "a space gone is passed over")
+        #expect(self.library(test, FakeAsk()).atStart() == nil, "a space gone is passed over")
         #expect(try AppFile.read(test.places.grants) == AppFile(), "app.json is read, never written for the window")
     }
 
@@ -185,7 +185,7 @@ import Testing
         #expect(await wait(10, until: { opened == [.templates, .space("shop"), .newSpace] }), "\(opened)")
         await wait(0.05)
         #expect(opened.count == 3 && library.selection == .newSpace)
-        #expect(library.preferences.lastOpen == "shop" && library.last() == "shop", "New Space and the templates are not remembered")
+        #expect(library.preferences.lastOpen == "shop" && library.atStart() == "shop", "New Space and the templates are not remembered")
         #expect(library.preferences.recents == ["shop", "pond"])
     }
 

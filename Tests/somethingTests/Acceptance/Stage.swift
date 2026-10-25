@@ -83,11 +83,7 @@ final class Stage {
         offscreen.view.layoutSubtreeIfNeeded()
         let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
         offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
-        let read = VNRecognizeTextRequest()
-        read.recognitionLevel = .accurate
-        read.usesLanguageCorrection = false
-        try VNImageRequestHandler(cgImage: try #require(rep.cgImage)).perform([read])
-        return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        return try Picture.text(rep)
     }
 
     /// The main window of the home, never shown, at `size`, its spaces listed.
@@ -283,6 +279,15 @@ enum Picture {
         }
         draw()
         zip(layers, before).forEach { $0.backgroundColor = $1 }
+    }
+
+    /// The lines of text `rep` shows, read by Vision.
+    static func text(_ rep: NSBitmapImageRep) throws -> [String] {
+        let read = VNRecognizeTextRequest()
+        read.recognitionLevel = .accurate
+        read.usesLanguageCorrection = false
+        try VNImageRequestHandler(cgImage: try #require(rep.cgImage)).perform([read])
+        return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
     }
 
     static func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {
