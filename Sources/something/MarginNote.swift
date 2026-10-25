@@ -3,9 +3,11 @@
 // narrowed by 284 points as a narrower window would be, and a leader line ties the note to the part; without it, the
 // note sits under the part, over the page. The part keeps the sign's corners. The note says whose assistant answered,
 // "Answered · nothing changed", the answer in the agent's voice (Young Serif), the part, and Dismiss; Esc does the
-// same. A note never holds a button that allows anything: a permission is decided in something's own panel. A note and
-// Info exclude each other: the right edge holds one thing at a time (Shell). Drawn in draw(_:), so a picture of the
-// window shows it as the screen does.
+// same, wherever the focus is (Shell.escape): the note never takes the keys, so that typing to the main assistant
+// goes on while a Quick Change ends. A note never holds a button that allows anything: a permission is decided in
+// something's own panel. A note and Info exclude each other: the right edge holds one thing at a time (Shell). At rest
+// it asks the page nothing: it follows its part when the page scrolls or reflows (SpaceView). Drawn in draw(_:), so a
+// picture of the window shows it as the screen does.
 import AppKit
 
 final class MarginNote: NSView {
@@ -45,17 +47,19 @@ final class MarginNote: NSView {
         }
     }
 
-    let words: String, title: String, side: Side
+    let words: String, title: String
+    /// Margin or under, again each time the window changes width.
+    private(set) var side: Side
     private(set) var part: Pointing.Part
     private weak var space: SpaceView?
     let card: Card
     /// Called once the note leaves, by Dismiss, Esc or the window.
     var dismissed: () -> Void = {}
-    private var timer: Timer?, asking = false
+    private var asking = false, askAgain = false
 
     private init(_ words: String, about part: Pointing.Part, title: String, side: Side, over space: SpaceView) {
         (self.words, self.part, self.title, self.side, self.space) = (words, part, title, side, space)
-        card = Card(words: words, title: title, part: part.kind)
+        card = Card(words: words, title: title, part: part.kind, width: side == .margin ? Self.margin - 32 : Self.narrow)
         super.init(frame: .zero)
         addSubview(card)
         card.dismiss.target = self
@@ -76,28 +80,31 @@ final class MarginNote: NSView {
         let note = MarginNote(words, about: part, title: title, side: side(for: space.area.bounds.width), over: space)
         note.autoresizingMask = [.width, .height]
         space.area.addSubview(note)
-        // One page resize, no animation: the page reflows once into its narrower width.
+        // One page resize, no animation: the page reflows once into its narrower width, and the note asks where its
+        // part went (SpaceView.place).
         space.margin = note.side == .margin ? margin : 0
         note.place()
-        note.follow()
-        note.timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak note] timer in
-            guard let note, note.superview != nil else { return timer.invalidate() }
-            if note.window != nil { note.follow() }
-        }
         return note
     }
 
     override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
     /// Only the card takes clicks: the page around it is the person's.
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         return card.frame.contains(local) ? card.hitTest(local) ?? card : nil
     }
-    override func cancelOperation(_ sender: Any?) { dismiss() }
+    /// The window changed width: a margin that would leave the page under 440 points becomes a note under the part,
+    /// and the margin comes back once there is room; the page reflows, so the note asks where its part went.
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         super.resizeSubviews(withOldSize: oldSize)
+        let fits = Self.side(for: bounds.width)
+        if fits != side {
+            side = fits
+            card.width = fits == .margin ? Self.margin - 32 : Self.narrow
+            space?.margin = fits == .margin ? Self.margin : 0
+        }
         place()
+        follow()
     }
 
     /// Dismiss and Esc: the note leaves, and the page takes its width back.
@@ -108,14 +115,6 @@ final class MarginNote: NSView {
         dismissed()
     }
 
-    override func removeFromSuperview() {
-        timer?.invalidate()
-        timer = nil
-        let window = window, focused = window?.firstResponder === self
-        super.removeFromSuperview()
-        if focused, let web = space?.web { window?.makeFirstResponder(web) }
-    }
-
     /// Where everything goes now.
     var layout: Layout { Self.layout(part: part.rect, side: side, size: bounds.size, height: card.height) }
 
@@ -124,17 +123,22 @@ final class MarginNote: NSView {
         needsDisplay = true
     }
 
-    /// Asks the page where the part is now, one question at a time: the page reflows into its new width, and scrolls.
+    /// Asks the page where the part is now, one question at a time, once more if asked meanwhile: the page reflows
+    /// into its new width, and scrolls.
     func follow() {
-        guard !asking, let space, let frame = space.frame else { return }
+        guard !asking else { return askAgain = true }
+        guard superview != nil, let space, let frame = space.frame else { return }
         asking = true
         Task { @MainActor in
-            let found = await Pointing.rects([part.path], in: space.web, frame: frame)
+            repeat {
+                askAgain = false
+                let found = await Pointing.rects([part.path], in: space.web, frame: frame)
+                if superview != nil, let rect = found.first ?? nil, rect != part.rect {
+                    part.rect = rect
+                    place()
+                }
+            } while askAgain && superview != nil
             asking = false
-            if let rect = found.first ?? nil, rect != part.rect {
-                part.rect = rect
-                place()
-            }
         }
     }
 
@@ -171,10 +175,12 @@ final class MarginNote: NSView {
     final class Card: NSView {
         let dismiss = NSButton(title: "Dismiss", target: nil, action: nil)
         private let words: NSAttributedString, name: NSAttributedString, said: NSAttributedString, part: NSAttributedString
+        /// The card's width, which the answer is measured at: the margin's, or the narrower note's under the part.
         /// The mockup's .sw-note: 12 above, 14 each side, 9 below; header, answer and footer 9 apart.
-        static let width = MarginNote.margin - 32
+        var width: CGFloat
 
-        init(words: String, title: String, part: String) {
+        init(words: String, title: String, part: String, width: CGFloat) {
+            self.width = width
             let leading = NSMutableParagraphStyle()
             (leading.minimumLineHeight, leading.maximumLineHeight) = (13.5 * 1.5, 13.5 * 1.5)
             self.words = NSAttributedString(string: words, attributes: [.font: Look.font(.voice, size: 13.5), .foregroundColor: Look.Token.ink.color,
@@ -183,7 +189,7 @@ final class MarginNote: NSView {
                                                                                     .foregroundColor: Look.Token.ink.color])
             said = NSAttributedString(string: "Answered · nothing changed", attributes: [.font: Look.font(.ui, size: 11), .foregroundColor: Look.Token.ink3.color])
             self.part = NSAttributedString(string: part, attributes: [.font: Look.font(.ui, size: 11), .foregroundColor: Look.Token.ink3.color])
-            super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: 100))
+            super.init(frame: NSRect(x: 0, y: 0, width: width, height: 100))
             dismiss.isBordered = false
             dismiss.attributedTitle = NSAttributedString(string: "Dismiss", attributes: [.font: Look.font(.ui, size: 12, weight: .medium),
                                                                                          .foregroundColor: Look.Token.ink2.color])
@@ -195,7 +201,7 @@ final class MarginNote: NSView {
         override var isFlipped: Bool { true }
 
         private var textHeight: CGFloat {
-            ceil(words.boundingRect(with: NSSize(width: Self.width - 28, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin]).height)
+            ceil(words.boundingRect(with: NSSize(width: width - 28, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin]).height)
         }
         /// The header's height: the sign, 24, beside two lines.
         private static let header: CGFloat = 32
@@ -208,6 +214,7 @@ final class MarginNote: NSView {
         }
 
         override func draw(_ dirtyRect: NSRect) {
+            // The paper again over the note's float, whose shadow would otherwise show through inside the card.
             Look.Token.bg2.color.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: Look.card, yRadius: Look.card).fill()
             let top: CGFloat = 12, mid = top + Self.header / 2

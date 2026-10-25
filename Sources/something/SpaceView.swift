@@ -442,6 +442,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             scrolled = (page, x, y)
             // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
             pointer?.followSoon()
+            note?.follow()
             return
         }
         if message.name == "fault" {
@@ -521,6 +522,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             view.frame = view is MarginNote ? NSRect(x: 0, y: 0, width: area.bounds.width, height: web.frame.height) : web.frame
         }
         strip?.frame = NSRect(x: 0, y: area.bounds.height - height, width: area.bounds.width, height: height)
+        // The page reflowed into its new width.
+        note?.follow()
     }
 
     /// window.open and target="_blank": no new window, ever.

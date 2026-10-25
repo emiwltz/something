@@ -231,6 +231,8 @@ struct AcceptanceShow {
         let composer = try #require(overlay.composer), part = try #require(overlay.picks.first)
         composer.field.insertText("Why does the weather say Evening?", replacementRange: composer.field.selectedRange())
         composer.sendQuick()
+        // The person goes on elsewhere while the quick session works: the note does not take that focus.
+        let typing = shell.window.firstResponder
 
         // The answer, nothing changed: Info closed, the margin opened, the note in it.
         #expect(await wait(until: { brief.note != nil }), "no note")
@@ -238,7 +240,7 @@ struct AcceptanceShow {
         #expect(shell.inspector.isCollapsed && note.side == .margin && brief.web.frame.width == width - MarginNote.margin)
         #expect(note.words == "No change made. The weather shows the time of day, because nothing leaves your Mac." && note.title == "Daily brief")
         #expect(note.accessibilityLabel() == "Daily brief’s assistant, no change" && note.accessibilityValue() as? String == note.words)
-        #expect(note.part.path == part.path && shell.window.firstResponder === note)
+        #expect(note.part.path == part.path && shell.window.firstResponder === typing && !note.acceptsFirstResponder)
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         #expect(buttons(note).map(\.title) == ["Dismiss"], "a note never allows anything")
         #expect(try String(contentsOf: brief.space.location, encoding: .utf8) == was && changes.versions.list("brief").allSatisfy { $0.kind != .quick })
@@ -279,8 +281,19 @@ struct AcceptanceShow {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f4-narrow" + suffix, root: stage.home.root)
         }
-        narrow.cancelOperation(nil)
-        #expect(brief.note == nil)
+        // At rest the note asks the page nothing: it has no timer, only the page's scroll and reflow move it.
+        #expect(!Mirror(reflecting: narrow).children.contains { $0.value is Timer || $0.value is Timer? })
+        // The window widens: the margin comes back, the page beside it.
+        shell.window.setContentSize(NSSize(width: 1200, height: 760))
+        shell.window.layoutIfNeeded()
+        #expect(narrow.side == .margin && brief.web.frame.width == brief.area.bounds.width - MarginNote.margin && narrow.card.frame.width == 252)
+        shell.window.setContentSize(NSSize(width: 760, height: 680))
+        shell.window.layoutIfNeeded()
+        #expect(narrow.side == .under && brief.web.frame.width == brief.area.bounds.width && narrow.card.frame.width == 268)
+        // Esc through the window's key handling, wherever the focus is.
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape) && brief.note == nil && !shell.escape(escape))
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })

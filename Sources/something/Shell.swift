@@ -24,6 +24,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private weak var page: NSView?
     /// The space shown in the center, when one is.
     private(set) weak var space: SpaceView?
+    /// Quick Change answers without a change, by space name, waiting for their space to be shown (showNote).
+    private var unread: [String: (words: String, part: Pointing.Part)] = [:]
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
     /// What covers the whole window: the toast, and later the palette and the sheets of keys.
@@ -291,6 +293,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             if let quick = assistant.quicks[space.space.name], !space.area.subviews.contains(where: { $0 is QuickFrame }) {
                 QuickFrame.show(quick, over: space)
             }
+            showNote()
         } else {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
@@ -329,12 +332,27 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if let quick = assistant.quicks[space.space.name] { QuickFrame.show(quick, over: space) }
     }
 
-    /// A Quick Change that changed nothing answered `words`: a note beside its first part, on the space shown, Info
-    /// closed for it (the right edge holds one thing at a time). The note takes the keys, for Esc.
+    /// A Quick Change that changed nothing answered `words`: a note beside its first part, now on the space shown, or
+    /// when its space is shown again. The focus stays where it is: the person may be typing to the main assistant.
     func note(_ words: String, about quick: AssistantModel.Quick) {
-        guard let space, space.space.name == quick.space, space.frame != nil, let part = quick.parts.first else { return }
+        guard let part = quick.parts.first else { return }
+        unread[quick.space] = (words, part)
+        showNote()
+    }
+
+    /// The answer waiting for the space shown, as a note, Info closed for it (the right edge holds one thing at a time).
+    private func showNote() {
+        guard let space, space.blocked.isEmpty, let waiting = unread.removeValue(forKey: space.space.name) else { return }
         inspector.isCollapsed = true
-        window.makeFirstResponder(MarginNote.show(words, about: part, title: space.title, over: space))
+        MarginNote.show(waiting.words, about: waiting.part, title: space.title, over: space)
+    }
+
+    /// Esc typed in this window, wherever the focus is: a margin note leaves, the top thing over the page. Returns
+    /// whether it did, the key then used up.
+    func escape(_ event: NSEvent) -> Bool {
+        guard event.keyCode == 53, event.windowNumber == window.windowNumber, window.attachedSheet == nil, let note = space?.note else { return false }
+        note.dismiss()
+        return true
     }
 
     /// Stops point mode, the page's keys back to it.
