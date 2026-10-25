@@ -1290,6 +1290,26 @@ import WebKit
         await finish(home, model)
     }
 
+    /// Stop during a Quick Change whose request waits denies that request before its agent stops: no dead request
+    /// stays in the panel.
+    @Test func stopDeniesAQuickChangesWaitingRequest() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        model.place = place
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1)", tag: "body", rect: CGRect(x: 0, y: 0, width: 300, height: 100))
+        #expect(model.quickChange("quick-ask, check it.", parts: [part], at: place) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(await wait(until: { model.engine.state.requests.contains { $0.agent == quick.session.id } }), "no request")
+        let id = try #require(quick.session.id)
+        model.stop()
+        #expect(quick.phase != .working)
+        #expect(await wait(until: { !model.engine.state.requests.contains { $0.agent == id } }), "the request stayed")
+        await finish(home, model)
+    }
+
     /// A builder that picks its own model gets no model for its Quick Change, and the chip says so.
     @Test func aQuickChangeOfAKindWithItsOwnModelGetsNone() async throws {
         let (home, model) = try assistant(["amp"])

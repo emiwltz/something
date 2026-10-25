@@ -532,10 +532,16 @@ import SomethingCore
 
     /// Stops the running turn, the agent staying for the next message; or, while the agent starts, ends its launch. An
     /// agent that cannot pause mid-task is ended: the conversation stays shown, and the next message starts it again.
-    /// The held messages go back into the field: nothing is sent behind the person's back. While a Quick Change works
-    /// on this space, Stop ends it instead, keeping what it changed, and the messages held for it leave.
+    /// The held messages go back into the field, except while a Quick Change works on this space: Stop then ends the
+    /// Quick Change, keeps what it changed, and the messages held for it leave as they would at its end.
     func stop() {
-        if let space = place.space, let quick = quicks[space], quick.phase == .working { return end(quick) }
+        if let space = place.space, let quick = quicks[space], quick.phase == .working {
+            // An agent stopped while it waits would never hear the answer: it hears a no, never a yes (as at quit).
+            if let id = quick.session.id {
+                for request in engine.state.requests where request.agent == id { try? engine.answer(request.id, .deny) }
+            }
+            return end(quick)
+        }
         stop(place == .blank && before?.session === session ? before : nil)
     }
 

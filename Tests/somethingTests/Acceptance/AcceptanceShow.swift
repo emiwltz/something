@@ -165,7 +165,7 @@ struct AcceptanceShow {
         }
 
         // The quick session changes the page and ends its turn: Done, the change kept with its named undo.
-        var loads = brief.loads
+        let loads = brief.loads
         try was.replacingCharacters(in: style, with: "  .dateline b { font-size: 80%; }\n</style>").write(to: page, atomically: true, encoding: .utf8)
         try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
         #expect(await wait(until: { quick.phase == .done }), "\(quick.phase)")
@@ -182,7 +182,6 @@ struct AcceptanceShow {
         // Then only the chip, which says the session ended.
         #expect(await wait(15) { quick.phase == .ended })
         #expect(drawn.badge == nil && drawn.chip == "Quick session ended" && drawn.superview != nil)
-        loads = brief.loads
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f3" + suffix, root: stage.home.root)
         }
