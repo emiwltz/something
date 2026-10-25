@@ -2,7 +2,8 @@
 // the Mac choose the appearance and Dark sets darkAqua, the launcher switch removes only the launcher something made,
 // Homebrew is named only under a Cellar, the shortcuts are Keys' own, the window takes each tab's height, and "When
 // something opens" decides the space opened at the start. Permissions holds the README's promise and no Always Allow;
-// Agents splits the registry by builder and looks again once; the menu items open their tabs.
+// Agents splits the registry by builder and looks again once; the menu items open their tabs. Versions & Storage's
+// parts add up to what the folders weigh, and nothing is cleared before the alert's Clear Versions.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -25,6 +26,8 @@ import Testing
         model.chose = { effects.chosen.append($0) }
         model.asking = { effects.asking.append($0) }
         model.lookAgain = { effects.looks += 1 }
+        model.reveal = { effects.revealed.append($0) }
+        model.confirm = { old, then in effects.confirms.append((old, then)) }
         // Invented places; no program is looked for, let alone run.
         let found = ["claude": "/opt/homebrew/bin/claude", "codex": "/Users/example/.local/bin/codex", "cursor": "/Applications/Cursor.app"]
         model.locate = { kind in
@@ -36,7 +39,8 @@ import Testing
 
     final class Effects {
         var applied: [(Preferences.Appearance, Look.Motion)] = [], tours = 0, keyboards = 0, told: [String] = []
-        var chosen: [String] = [], asking: [Bool] = [], looks = 0
+        var chosen: [String] = [], asking: [Bool] = [], looks = 0, revealed: [URL] = []
+        var confirms: [(Versions.Old, () -> Void)] = []
     }
 
     /// The values as the file would hold them, key by key.
@@ -60,7 +64,8 @@ import Testing
                         "Notify me when a request waits": "notify",
                         "Motion": "motion", "When a space opens, its assistant is": "assistantAtOpening",
                         "Remember where I put the assistant": "rememberSticker", "Show each assistant’s eyes in the sidebar": "sidebarEyes",
-                        "Hold ⌥ to point inside a drawn frame": "holdOption"]
+                        "Hold ⌥ to point inside a drawn frame": "holdOption", "Keep": "versionsKept", "Storage limit": "storageLimit",
+                        "When it is full": nil, "Where": nil]
         var seen: Set<String> = []
         for tab in SettingsTab.allCases {
             for row in model.sections(tab).flatMap(\.rows) {
@@ -75,10 +80,12 @@ import Testing
                     let was = get()
                     set(!was)
                     #expect(get() == !was, "\(row.title)")
-                case .button(let title, let run):
-                    #expect(title == "Show Again")
+                case .button(let title, _, let enabled, let run):
+                    #expect(["Show Again", "Clear Old Versions…", "Show in Finder"].contains(title))
+                    // Nothing measured yet, so nothing to clear: the button is greyed, and does nothing.
+                    #expect(enabled == (title != "Clear Old Versions…"), "\(title)")
                     run()
-                    #expect(effects.tours == 1)
+                    #expect(effects.confirms.isEmpty)
                 case .locked(let word):
                     #expect(word == "Always")
                 }
@@ -90,6 +97,7 @@ import Testing
             }
         }
         #expect(seen == Set(expected.keys).union(["Welcome tour"]))
+        #expect(effects.tours == 1 && effects.revealed == [home.places.spaces])
         #expect(effects.applied.map(\.1) == [.reduced], "Motion applies at once")
         #expect(effects.chosen == ["codex"] && effects.asking == [true], "the assistant takes the default agent and Ask Before Every Change")
         // Appearance, drawn apart from the rows, writes only its key too.
@@ -113,7 +121,7 @@ import Testing
             switch row.control {
             case .choice(let options, let get, _): shown[row.title] = options.first { $0.value == get() }?.label
             case .toggle(let get, _, _): shown[row.title] = get() ? "on" : "off"
-            case .button(let title, _): shown[row.title] = title
+            case .button(let title, _, _, _): shown[row.title] = title
             case .locked(let word): shown[row.title] = word
             }
         }
@@ -126,7 +134,9 @@ import Testing
                           // Claude Code ever listed its models, its own (cannot_native: no settings file is read).
                           "Agent": "Claude Code", "Model": "Default model", "Effort": "Default effort", "Resume each space’s conversation": "on",
                           "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3", "Ask Before Every Change": "off",
-                          "Requests always wait for your click": "Always", "Notify me when a request waits": "off"])
+                          "Requests always wait for your click": "Always", "Notify me when a request waits": "off",
+                          // versions:'50', limit:'500 MB'.
+                          "Keep": "50", "Storage limit": "500 MB", "When it is full": "Clear Old Versions…", "Where": "Show in Finder"])
         #expect(model.preferences.appearance == .system, "appearance:'System'")
         let opening = model.sections(.general)[0].rows[0]
         guard case .choice(let options, _, _) = opening.control else { Issue.record("not a choice"); return }
@@ -205,7 +215,7 @@ import Testing
             words += [row.title, row.note.replacingOccurrences(of: "There is no Always Allow.", with: "")]
             switch row.control {
             case .choice(let options, _, _): words += options.map(\.label)
-            case .button(let title, _), .locked(let title): words.append(title)
+            case .button(let title, _, _, _), .locked(let title): words.append(title)
             case .toggle: break
             }
         }
@@ -328,7 +338,7 @@ import Testing
         settings.window.alphaValue = 0
         defer { settings.window.close() }
         #expect(settings.window.toolbarStyle == .preference)
-        #expect(settings.window.toolbar?.items.map(\.label) == ["General", "Assistant", "Permissions", "Interface", "Shortcuts", "Agents"])
+        #expect(settings.window.toolbar?.items.map(\.label) == ["General", "Assistant", "Permissions", "Interface", "Shortcuts", "Versions & Storage", "Agents"])
         var heights: [CGFloat] = []
         for tab in SettingsTab.allCases {
             settings.select(tab)
@@ -386,5 +396,77 @@ import Testing
         model.open = false
         model.place = logbook
         #expect(!model.open, "from one space to another the card stays as it was")
+    }
+
+    /// A folder space `name` of `home` holding `text`, a version of it taken at `when`.
+    func version(_ home: Home, _ name: String, _ text: String, at when: Date) throws {
+        let page = home.places.spaces.appendingPathComponent("\(name)/index.html")
+        try FileManager.default.createDirectory(at: page.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try text.write(to: page, atomically: true, encoding: .utf8)
+        let space = try #require(Spaces(root: home.places.spaces).named(name))
+        try Versions(root: home.places.versions, keep: 0, limit: 0).capture(space, kind: .turn, sentence: "An invented change", who: "Claude Code", at: when)
+    }
+
+    /// The three parts are what their folders weigh, file by file, and the used weight is their sum.
+    @Test func theStoresPartsAddUpToWhatTheFoldersWeigh() throws {
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let now = Date(timeIntervalSince1970: 1_792_000_000)
+        try version(home, "board", String(repeating: "a", count: 1_000), at: now)
+        try FileManager.default.createDirectory(at: home.places.data, withIntermediateDirectories: true)
+        try Data(count: 300).write(to: home.places.data.appendingPathComponent("board.json"))
+        try Data(count: 50).write(to: home.places.spaces.appendingPathComponent(".hidden"))
+        let storage = Storage.weigh(home.places, now: now)
+        let index = try #require(try home.places.versions.appendingPathComponent("board/index.json").resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        #expect(storage.spaces == 1_050 && storage.memory == 300 && storage.versions == 1_000 + index)
+        #expect(storage.used == storage.versions + storage.memory + storage.spaces)
+        #expect(storage.old == Versions.Old(), "one version, today: nothing to clear")
+        #expect(Storage.bytes(home.root.appendingPathComponent("nowhere")) == 0)
+        #expect(Storage.megabytes(312_400_000) == "312 MB" && Storage.megabytes(0) == "0 MB" && Storage.megabytes(1_000) == "less than 1 MB")
+    }
+
+    /// Clear Old Versions asks first; nothing changes until the alert's Clear Versions, then each space keeps its ten
+    /// latest and the versions of the last 30 days, and the window says what was freed.
+    @Test func nothingIsClearedBeforeTheAlertsClearVersions() async throws {
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let now = Date(timeIntervalSince1970: 1_792_000_000), day = 86_400.0
+        // Twelve versions 49 days old or more, then two of yesterday: the ten latest stay, the four oldest go.
+        for index in 0..<14 {
+            try version(home, "board", "<p>An invented board, take \(index).</p>", at: now.addingTimeInterval(index < 12 ? -Double(60 - index) * day : -day))
+        }
+        try version(home, "notes", "<p>Invented notes.</p>", at: now.addingTimeInterval(-90 * day))
+        let (model, effects) = model(home)
+        model.clock = { now }
+        model.measure()
+        #expect(await wait(5, until: { model.storage != nil }))
+        let store = Versions(root: home.places.versions, keep: 0, limit: 0)
+        let old = try #require(model.storage?.old)
+        #expect(old.spaces == 1 && old.bytes == 4 * "<p>An invented board, take 0.</p>".utf8.count, "notes keeps its only version")
+        let row = try #require(model.sections(.storage)[1].rows.first { $0.title == "When it is full" })
+        guard case .button(_, _, let enabled, let run) = row.control else { Issue.record("not a button"); return }
+        #expect(enabled)
+        let before = (store.list("board"), try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).sorted())
+        run()
+        #expect(effects.confirms.count == 1 && effects.confirms.first?.0 == old)
+        #expect(store.list("board") == before.0 && model.cleared == nil, "the alert is up: nothing changed")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).sorted() == before.1)
+        effects.confirms[0].1()
+        #expect(store.list("board") == Array(before.0.prefix(10)) && store.list("notes").count == 1)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).count == 10)
+        #expect(model.cleared == "Cleared less than 1 MB of versions older than 30 days.")
+        #expect(model.sections(.storage)[1].foot == model.cleared)
+        #expect(await wait(5, until: { model.storage?.old == Versions.Old() }))
+    }
+
+    /// The alert: the sign, its question, what goes and what stays, Cancel focused and Escape's, Clear Versions in bad.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theAlertSaysWhatGoesAndCancelIsTheSafeOne() {
+        let sheet = Storage.alert(Versions.Old(bytes: 214_000_000, spaces: 7))
+        defer { sheet.close() }
+        #expect(sheet.isAlert && sheet.title == "Clear versions older than 30 days?")
+        #expect(sheet.buttons.map(\.title) == ["Cancel", "Clear Versions"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
+        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}")
+        let words = PanelsTests.texts(sheet.contentView)
+        #expect(words.contains("This removes 214 MB of versions from 7 spaces. Each space keeps its 10 latest versions. This can’t be undone."))
     }
 }

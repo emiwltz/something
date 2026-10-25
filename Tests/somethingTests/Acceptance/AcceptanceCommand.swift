@@ -111,6 +111,11 @@ struct AcceptanceCommand {
         _ = await wait(3, until: { model.found != nil })
         model.clock = { Stage.local }
         if tab == .interface { model.choose(.light) }
+        if tab == .storage {
+            model.weigh = { _, _ in AcceptanceCommand.weights }
+            model.measure()
+            _ = await wait(3, until: { model.storage != nil })
+        }
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
         settings.window.alphaValue = 0
@@ -138,7 +143,25 @@ struct AcceptanceCommand {
             }
         }
     }
-    @Test("g8: Settings, Versions and Storage", .disabled("not built yet: G6")) func g8() async throws {}
+    /// Versions & Storage: Keep 50, the store's weight in three parts against 500 MB (invented weights, CM_PREFS'
+    /// used:312), Clear Old Versions armed, and where the spaces are.
+    @Test("g8: Settings, Versions and Storage") func g8() async throws {
+        let shows = ["Versions", "Keep", "versions per space", "Storage", "312 MB", "used of 500 MB", "Memory", "Spaces", "23 MB",
+                     "Free", "188 MB", "When it is full", "Clear Old Versions...", "Where", "~/something/spaces", "Show in Finder"]
+        try await settings(.storage, "g8", shows: shows) { settings, stage in
+            let sections = settings.model.sections(.storage)
+            #expect(sections.map(\.title) == ["Versions", "Storage"] && sections[1].storage && sections[1].foot == nil)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Keep", "Storage limit", "When it is full", "Where"])
+            #expect(sections[0].rows[0].trail == "versions per space" && sections[1].rows[2].code)
+            #expect(settings.model.storage == Self.weights && settings.model.storage?.used == 312_000_000)
+            guard case .button(let title, _, let enabled, _) = sections[1].rows[1].control else { Issue.record("not a button"); return }
+            #expect(title == "Clear Old Versions…" && enabled)
+            #expect(sections[1].rows[2].note == "~/something/spaces")
+        }
+    }
+
+    /// The mockup's store: 248 MB of versions, 41 of memory, 23 of spaces; 214 MB of old versions in 7 spaces.
+    nonisolated static let weights = Storage(versions: 248_000_000, memory: 41_000_000, spaces: 23_000_000, old: Versions.Old(bytes: 214_000_000, spaces: 7))
     /// The menu bar is drawn by the window server, which no offscreen drawing reaches: g9 is checked as text, the
     /// menus against the mockup's table with no space open, then Go, the headers and the greyed items with Daily brief
     /// open. g9-menus.txt is the dump of both states.

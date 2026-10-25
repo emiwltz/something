@@ -1,8 +1,9 @@
 // Settings (⌘,): a window of its own whose toolbar holds the tabs, as the Mac's own settings do, sized to each tab.
-// General, Assistant, Permissions, Interface, Shortcuts and Agents are here; each settings tab is a list of rows given
-// as data (a title, a note, and a choice, a switch, a button or a lock), so that a test can work every control and see
-// which key it wrote. The Shortcuts tab reads Keys, the one list of the commands; Agents reads the registry and where
-// each program is, found by a look at files that never runs one. Appearance and Motion apply at once, to every window.
+// General, Assistant, Permissions, Interface, Shortcuts, Versions & Storage and Agents are here; each settings tab is a
+// list of rows given as data (a title, a note, and a choice, a switch, a button or a lock), so that a test can work
+// every control and see which key it wrote. The Shortcuts tab reads Keys, the one list of the commands; Versions &
+// Storage weighs the store off the main queue (Storage.swift); Agents reads the registry and where each program is,
+// found by a look at files that never runs one. Appearance and Motion apply at once, to every window.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -10,7 +11,7 @@ import SwiftUI
 
 /// The tabs, in the toolbar's order.
 enum SettingsTab: String, CaseIterable {
-    case general, assistant, permissions, interface, shortcuts, agents
+    case general, assistant, permissions, interface, shortcuts, storage, agents
 
     var label: String {
         switch self {
@@ -19,6 +20,7 @@ enum SettingsTab: String, CaseIterable {
         case .permissions: "Permissions"
         case .interface: "Interface"
         case .shortcuts: "Shortcuts"
+        case .storage: "Versions & Storage"
         case .agents: "Agents"
         }
     }
@@ -30,6 +32,7 @@ enum SettingsTab: String, CaseIterable {
         case .permissions: "checkmark.shield"
         case .interface: "eye"
         case .shortcuts: "keyboard"
+        case .storage: "square.3.layers.3d"
         case .agents: "powerplug"
         }
     }
@@ -43,7 +46,8 @@ struct SettingsRow: Identifiable {
     enum Control {
         case choice([Option], get: () -> String, set: (String) -> Void)
         case toggle(get: () -> Bool, set: (Bool) -> Void, enabled: Bool)
-        case button(String, () -> Void)
+        /// A button, its symbol before its title, greyed when not `enabled`.
+        case button(String, symbol: String? = nil, enabled: Bool = true, () -> Void)
         /// A rule nobody can change, said with a lock and a word.
         case locked(String)
     }
@@ -51,13 +55,18 @@ struct SettingsRow: Identifiable {
     let title: String, note: String, control: Control
     /// The words after the control when it stands inside the title's sentence: "Keep at most [3] assistants awake".
     var trail: String?
+    /// The note is a path, in code.
+    var code = false
     var id: String { title }
 }
 
-/// A titled group of rows; the Interface tab's first one also holds the three appearances.
+/// A titled group of rows; the Interface tab's first one also holds the three appearances, and Storage the store's
+/// weight, its first row (the limit's choice) drawn in that block's header.
 struct SettingsSection: Identifiable {
     let title: String, rows: [SettingsRow]
-    var appearance = false
+    var appearance = false, storage = false
+    /// A line under the group that says what was just done.
+    var foot: String?
     var id: String { title }
 }
 
@@ -99,6 +108,16 @@ struct SettingsSection: Identifiable {
     private(set) var seen: [String: String] = [:]
     /// When the last look ended, by `clock`; nil while none has.
     private(set) var looked: Date?
+    /// What the store weighs (Storage.swift); nil until it was first measured.
+    var storage: Storage?
+    /// What the last Clear Old Versions freed, said under Storage; nil until one ran.
+    var cleared: String?
+    /// Weighs the store at a date, off the main queue; tests give invented weights.
+    @ObservationIgnored var weigh: @Sendable (Places, Date) -> Storage = Storage.weigh
+    /// Asks before Clear Old Versions, then runs the closure only on the alert's Clear Versions; tests record it.
+    @ObservationIgnored var confirm: (Versions.Old, @escaping () -> Void) -> Void = Storage.confirm
+    /// Show in Finder; tests record it.
+    @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
 
     init(preferences: Preferences, places: Places, app: URL = Bundle.main.bundleURL, version: String = Resources.version) {
         (self.preferences, self.places, self.app, self.version) = (preferences, places, app, version)
@@ -201,6 +220,8 @@ struct SettingsSection: Identifiable {
                                 note: "Showing a part of a space stays a visible mode; ⌥ only works once a frame is drawn.", control: toggle(\.holdOption)),
                 ]),
             ]
+        case .storage:
+            return storageSections()
         case .shortcuts, .agents:
             return []
         }
@@ -222,11 +243,6 @@ struct SettingsSection: Identifiable {
         let resuming = registry.builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let fresh = registry.builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
-        func number(_ key: WritableKeyPath<Preferences.Values, Int>, _ options: [(Int, String)]) -> SettingsRow.Control {
-            .choice(options.map { SettingsRow.Option(value: String($0.0), label: $0.1) }, get: { String(preferences.values[keyPath: key]) }, set: { raw in
-                if let value = Int(raw) { preferences.change { $0[keyPath: key] = value } }
-            })
-        }
         return [
             SettingsSection(title: "Defaults for new spaces", rows: [
                 SettingsRow(title: "Agent", note: "Each space can change its own, from its assistant.",
@@ -250,6 +266,14 @@ struct SettingsSection: Identifiable {
                             control: number(\.awakeAtMost, (1...5).map { ($0, String($0)) }), trail: "assistants awake"),
             ]),
         ]
+    }
+
+    /// A choice among numbers, written to `key`.
+    func number(_ key: WritableKeyPath<Preferences.Values, Int>, _ options: [(Int, String)]) -> SettingsRow.Control {
+        let preferences = preferences
+        return .choice(options.map { SettingsRow.Option(value: String($0.0), label: $0.1) }, get: { String(preferences.values[keyPath: key]) }, set: { raw in
+            if let value = Int(raw) { preferences.change { $0[keyPath: key] = value } }
+        })
     }
 
     /// One agent of the Agents tab: where it was found and the version its files name, or why something only sees it.
@@ -324,6 +348,7 @@ struct SettingsSection: Identifiable {
         shown = window
         if let tab { window.select(tab) }
         window.model.look()
+        window.model.measure()
         window.window.makeKeyAndOrderFront(nil)
         return window
     }
@@ -466,12 +491,16 @@ struct SettingsPage: View {
                         .padding(.horizontal, 2).padding(.top, 2)
                     VStack(spacing: 0) {
                         if section.appearance { Appearances(model: model) }
-                        ForEach(Array(section.rows.enumerated()), id: \.element.id) { index, row in
-                            if index > 0 || section.appearance { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+                        if section.storage, let limit = section.rows.first { StorageBlock(storage: model.storage, limit: limit) }
+                        ForEach(Array(section.rows.dropFirst(section.storage ? 1 : 0).enumerated()), id: \.element.id) { index, row in
+                            if index > 0 || section.appearance || section.storage { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
                             RowView(row: row)
                         }
                     }
                     .card()
+                    if let foot = section.foot {
+                        Label(foot, systemImage: "checkmark").font(Look.small.font.ui).foregroundStyle(Look.Token.ok.ui).padding(.horizontal, 4)
+                    }
                 }
             }
             if tab == .general {
@@ -500,22 +529,29 @@ private struct RowView: View {
             VStack(alignment: .leading, spacing: 1) {
                 if let trail = row.trail {
                     // The control inside the sentence, as the mockup's .cm-inl.
-                    HStack(spacing: 7) { Text(row.title); control; Text(trail) }.font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
+                    HStack(spacing: 7) { Text(row.title); RowControl(row: row); Text(trail) }.font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
                 } else {
                     Text(row.title).font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
                 }
-                if !row.note.isEmpty {
+                if row.code {
+                    Text(row.note).font(Look.font(.code, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
+                } else if !row.note.isEmpty {
                     Text(row.note).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            if row.trail == nil { control }
+            if row.trail == nil { RowControl(row: row) }
         }
         .padding(.horizontal, 14).padding(.vertical, 9 * Look.density).frame(minHeight: Look.row + 17)
         .accessibilityElement(children: .contain)
     }
+}
 
-    @ViewBuilder private var control: some View {
+/// A row's control: a choice in the mockup's popup button, a switch, a button or a lock.
+struct RowControl: View {
+    let row: SettingsRow
+
+    var body: some View {
         switch row.control {
         case .choice(let options, let get, let set):
             // The mockup's .popb, not the system's grey pill; the menu itself is the system's, a heading as a section.
@@ -537,8 +573,11 @@ private struct RowView: View {
         case .toggle(let get, let set, let enabled):
             Toggle(row.title, isOn: Binding(get: get, set: set)).toggleStyle(SwitchStyle()).labelsHidden().disabled(!enabled)
                 .opacity(enabled ? 1 : 0.45)
-        case .button(let title, let run):
-            Button(title, action: run).buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
+        case .button(let title, let symbol, let enabled, let run):
+            Button(action: run) {
+                if let symbol { Label(title, systemImage: symbol) } else { Text(title) }
+            }
+            .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).disabled(!enabled).opacity(enabled ? 1 : 0.45)
         case .locked(let word):
             Label(word, systemImage: "lock").labelStyle(Locked()).accessibilityLabel("\(row.title): \(word), cannot be changed")
         }
