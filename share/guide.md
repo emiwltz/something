@@ -393,7 +393,9 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   something's own window talks to, each as launched, but with its `can` all false and `because.send` saying why; a
   write to one answers `READ_ONLY_AGENT`. Their conversations, their held messages and their requests are the
   person's: they are never in a space's state. Each one's `error` keeps its `code` but not its words, and no
-  conversation in or below the spaces folder is ever listed as seen elsewhere.
+  conversation in or below the spaces folder is ever listed as seen elsewhere. A Quick Change (the person points at a
+  part and asks for a change) is a short-lived assistant of the same kind: a space may see it briefly in
+  `state.agents`, read-only like the others, until something stops it at the end of its turn.
 - **`other` agents are seen by their process only**: no conversation, no state beyond `unknown`.
 
 ## Memory

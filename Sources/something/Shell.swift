@@ -1,7 +1,7 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), the window layer
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
-// waiting requests, Point (pressed while the person points at the space's parts: PointOverlay.swift), Reload, Info and
-// Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
+// waiting requests, Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change
+// leaves its frames at work, QuickFrame.swift), Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
 // the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
 // from being shown, New Space or the templates; over a space, the glass, which holds the assistant (Glass.swift). Off
 // the spaces the assistant is away: New Space has its own field. While the welcome is open over it, the window steps
@@ -282,6 +282,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             put(space.area)
             space.cover(space.stopped ? Stopped(space, assistant: assistant, motion: library.preferences.motion) : nil)
             space.show(strip: ScriptError(space, assistant: assistant))
+            // Back on a space whose Quick Change still shows, its frames come back with it.
+            if let quick = assistant.quicks[space.space.name], !space.area.subviews.contains(where: { $0 is QuickFrame }) {
+                QuickFrame.show(quick, over: space)
+            }
         } else {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
             put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
@@ -298,10 +302,25 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         overlay.stopped = { [weak self] in self?.stopPointing() }
         let name = space.space.name
         overlay.eyes = { [weak self] in self?.assistant.eyes(of: name) ?? .unknown }
+        overlay.quickChange = { [weak self, weak space] words, parts in
+            guard let self, let space else { return }
+            quickChange(words, parts: parts, on: space)
+        }
         assistant.open = false
         space.point(overlay)
         pressPoint(true)
         window.makeFirstResponder(overlay)
+    }
+
+    /// Quick Change from the composer: a temporary session of the space's assistant takes `words` about `parts`; point
+    /// mode closes and the parts keep their frames, at work (QuickFrame). A refusal is said, and the mode stays.
+    func quickChange(_ words: String, parts: [Pointing.Part], on space: SpaceView) {
+        if let refused = assistant.quickChange(words, parts: parts, at: AssistantModel.place(space)) {
+            _ = toast(refused, quiet: true, seconds: 4)
+            return
+        }
+        stopPointing()
+        if let quick = assistant.quicks[space.space.name] { QuickFrame.show(quick, over: space) }
     }
 
     /// Stops point mode, the page's keys back to it.

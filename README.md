@@ -37,6 +37,12 @@ assistant wakes on your next message and picks its conversation up, kept in
 resume a conversation (all but Claude Code for now) is never put to sleep on its own; put to sleep by you, it starts a
 new conversation, and says so.
 
+**Quick Change**: point at a part of a space (⌥⌘S), say what should change, and press Return. A temporary session of
+that space's assistant, the same agent with the same model and effort, makes the change while the space's own
+conversation stays as it was; a message you write to it meanwhile waits until the Quick Change ends. something stops
+the temporary session once its turn ends, never while one of its requests waits for you. Each Quick Change leaves a
+new conversation in your agent's own history, which something does not clean.
+
 A space's past will be kept as **versions** in `~/Library/Application Support/something/versions/`, never in the
 spaces folder (History, which takes one after each change and shows them, is not there yet): its files, each content
 stored once, named by the sentence that asked for it, or "Edited outside something" when no turn of its assistant made

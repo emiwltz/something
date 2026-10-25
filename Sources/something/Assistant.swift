@@ -6,9 +6,12 @@
 // it ends, and Take Back; Stop, New Conversation, the switch to another builder, and what went wrong; sleep (after the
 // Preferences' delay, past the cap of awake assistants, or when the person asks), and the wake on the next message,
 // which resumes the conversation a space keeps when its kind can. Each turn of a space's conversation is said when it
-// begins and when it ends, so that the window keeps the space as each turn found and left it. The engine keeps every
-// space away from this agent (Bridge.visible); something writes to it on its own only its context line and Ask to Fix,
-// never a page's text.
+// begins and when it ends, so that the window keeps the space as each turn found and left it. A Quick Change is a
+// temporary session of a space's assistant, the same kind with the same model and effort, told the parts pointed at; it
+// is stopped once its turn ends (never while one of its requests waits), its change kept as a quick version, and the
+// space's own conversation, untouched, holds what the person writes to it meanwhile. The engine keeps every space away
+// from this agent (Bridge.visible); something writes to it on its own only its context line, its pointing lines and
+// Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -64,6 +67,9 @@ import SomethingCore
     /// person went meanwhile.
     @ObservationIgnored var turnStarts: (_ space: String) -> Void = { _ in }
     @ObservationIgnored var turnEnded: (_ space: String, _ sentence: String, _ who: String) -> Void = { _, _, _ in }
+    /// A Quick Change on a space ended, with what went wrong if anything did: the window keeps what it made (Changes).
+    /// Returns whether it changed the space.
+    @ObservationIgnored var quickEnded: (_ space: String, _ sentence: String, _ who: String, _ problem: String?) -> Bool = { _, _, _, _ in false }
 
     /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
     /// card stays as it was, only its content changing: each place shows its own conversation.
@@ -108,6 +114,8 @@ import SomethingCore
     /// place's, with what the window reads of it.
     private(set) var sessions: [Place.Key: Session] = [:]
     private(set) var session = Session(kind: nil)
+    /// The Quick Change of each space, by its name: at work, or just ended while its frame and chip still show.
+    private(set) var quicks: [String: Quick] = [:]
     var kind: String? { session.kind }
     var id: String? { session.id }
     var agent: Agent? { session.agent }
@@ -222,8 +230,9 @@ import SomethingCore
         rest()
         keepTime()
         // No turn will end to release them: the held messages go back into the field rather than wait for ever.
-        if !session.held.isEmpty, light == .error || (light == .off && id != nil) { takeBack() }
+        if !session.held.isEmpty, !quickWorks(on: place.space), light == .error || (light == .off && id != nil) { takeBack() }
         follow()
+        followQuicks()
         // A build watched is concluded on the refresh where its turn ends, before a held message starts the next, wherever
         // the person went meanwhile.
         if let before, !before.session.launching {
@@ -245,7 +254,8 @@ import SomethingCore
         }
         // A turn ended: the oldest held message of its conversation leaves, one per turn, as the mockup sends them.
         for each in sessions.values {
-            guard let next = each.held.first, light(each) == .ready, !each.launching, each.releasedAfter != .some(each.turn?.id) else { continue }
+            guard let next = each.held.first, light(each) == .ready, !each.launching, !quickWorks(on: each.space),
+                  each.releasedAfter != .some(each.turn?.id) else { continue }
             each.held.removeFirst()
             each.releasedAfter = .some(each.turn?.id)
             deliver(next, to: each)
@@ -476,8 +486,9 @@ import SomethingCore
         fromTemplate = nil
         halted = nil
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
-        // Behind messages already held it waits too, so they leave in the order they were written.
-        if session.id != nil, !launching, working || !session.held.isEmpty {
+        // Behind messages already held it waits too, so they leave in the order they were written; and while a Quick
+        // Change works on this space, until it ends.
+        if quickWorks(on: place.space) || (session.id != nil && !launching && (working || !session.held.isEmpty)) {
             return session.held.append(AssistantModel.context(place, home: places.home.path) + "\n" + text)
         }
         if place == .blank, before == nil {
@@ -565,12 +576,18 @@ import SomethingCore
         return made
     }
 
-    /// The conversation whose agent is `agent`, of any place; nil when none of them launched it.
-    func session(of agent: String) -> Session? { sessions.values.first { $0.id == agent } }
+    /// The conversation whose agent is `agent`, of any place or a Quick Change's; nil when none of them launched it.
+    func session(of agent: String) -> Session? {
+        sessions.values.first { $0.id == agent } ?? quicks.values.first { $0.session.id == agent }?.session
+    }
 
-    /// The space the assistant `agent` works on: its conversation's space; nil for New Space's, which has none until
-    /// the hand-off, whichever space is open meanwhile, so its requests are never counted as that space's own.
-    func space(of agent: String) -> String? { session(of: agent)?.space }
+    /// The space the assistant `agent` works on: its conversation's space, or its Quick Change's; nil for New Space's,
+    /// which has none until the hand-off, whichever space is open meanwhile, so its requests are never counted as that
+    /// space's own.
+    func space(of agent: String) -> String? { quicks.values.first { $0.session.id == agent }?.space ?? session(of: agent)?.space }
+
+    /// Whether `agent` is a Quick Change's temporary session: the request panel says so.
+    func quick(_ agent: String) -> Bool { quicks.values.contains { $0.session.id == agent } }
 
     /// The messages held for the end of the turn, as the person wrote them.
     var held: [String] { session.held.map { AssistantModel.shown($0).text } }
@@ -711,7 +728,7 @@ import SomethingCore
     /// Whether an assistant works on the space `name` now: starting, in a turn, or waiting for the person. Its change
     /// cannot be undone meanwhile: the restore would mix with what it writes.
     func works(on name: String) -> Bool {
-        sessions.values.contains { $0.space == name && ($0.launching || $0.changing != nil || [.working, .waiting].contains(light($0))) }
+        quickWorks(on: name) || sessions.values.contains { $0.space == name && ($0.launching || $0.changing != nil || [.working, .waiting].contains(light($0))) }
     }
 
     /// Awake with nothing under way: no turn running or waiting, no message held, not starting, not the build watched.
@@ -798,6 +815,10 @@ import SomethingCore
         // Halted first, as halting saves: the file goes after, before the open space's conversation is made again.
         let gone = sessions.removeValue(forKey: .space(name))
         gone.map(halt)
+        if let quick = quicks.removeValue(forKey: name) {
+            halt(quick.session)
+            quick.phase = .gone
+        }
         try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
         if let gone, gone === session { session = session(for: place) }
     }
@@ -865,7 +886,8 @@ import SomethingCore
         let number = session.launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
-            guard let self, number == session.launch, sessions.values.contains(where: { $0 === session }) else { self?.refresh(); return }
+            guard let self, number == session.launch,
+                  sessions.values.contains(where: { $0 === session }) || quicks.values.contains(where: { $0.session === session }) else { self?.refresh(); return }
             let messages = session.queued
             session.queued = []
             do {
@@ -877,6 +899,104 @@ import SomethingCore
             // Only now: the launch changes the state, and a build watched must not see it ended with no agent yet.
             session.launching = false
             refresh()
+        }
+    }
+
+    // MARK: Quick Change
+
+    /// A Quick Change on a space: its temporary session, the parts pointed at, the person's words and the chip's, and
+    /// where it is: at work, done with a change (its frame says Done), ended (only the chip, which says so), or gone.
+    @Observable final class Quick {
+        enum Phase { case working, done, ended, gone }
+        let space: String, sentence: String, session: Session, chip: String
+        let parts: [Pointing.Part]
+        var phase = Phase.working
+
+        init(space: String, sentence: String, session: Session, chip: String, parts: [Pointing.Part]) {
+            (self.space, self.sentence, self.session, self.chip, self.parts) = (space, sentence, session, chip, parts)
+        }
+    }
+
+    /// How long a frame says Done before it leaves, and the chip says the session ended: the mockup's; a test lengthens
+    /// them to draw each moment.
+    @ObservationIgnored var lingers: (done: TimeInterval, ended: TimeInterval) = (1.4, 2.2)
+
+    /// Whether a Quick Change works on the space `name` now.
+    func quickWorks(on name: String?) -> Bool { name.flatMap { quicks[$0] }?.phase == .working }
+
+    /// Quick Change: `words` about `parts` of the space `place` go to a temporary session of that space's assistant,
+    /// launched now with the same kind, model and effort (none for a kind that picks its own model), Ask Before Every
+    /// Change as it is set, in the spaces folder; the space's conversation is not touched. Its message holds the context
+    /// line, one pointing line per part and the words. Returns why it is refused (another assistant works on this
+    /// space, or it has no builder to ask); nil once it started.
+    func quickChange(_ words: String, parts: [Pointing.Part], at place: Place) -> String? {
+        let text = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard case .space(let title, let name, _) = place, !text.isEmpty, !parts.isEmpty else { return "Point at a part and say what should change." }
+        let main = session(for: place)
+        guard let kind = main.kind, installed[kind] != false, ![.missing, .crashed].contains(presence(of: main).stuck) else {
+            return "\(AssistantModel.clean(title))’s assistant can’t start · open its card to see why"
+        }
+        if works(on: name) { return "\(AssistantModel.clean(title))’s assistant is working · try once it’s done" }
+        let own = Registry.app.limits[kind]?.contains("model") == true
+        let options = main.agent?.alive != false ? main.agent?.options : nil
+        let label = (main.model ?? main.agent?.model).map { m in (options ?? Preferences.at(places).listed[kind])?.model?.first { $0.value == m }?.label ?? m }
+        let chip = ["Quick session", Registry.app.name(of: kind), own ? "its own model" : label].compactMap { $0 }.joined(separator: " · ")
+        let temporary = Session(kind: kind, model: own ? nil : main.model, effort: main.effort)
+        quicks[name] = Quick(space: name, sentence: text, session: temporary, chip: chip, parts: parts)
+        turnStarts(name)
+        deliver(([AssistantModel.context(place, home: places.home.path)] + AssistantModel.pointing(parts) + [text]).joined(separator: "\n"), to: temporary)
+        return nil
+    }
+
+    /// One line per part: its name and its path, which holds only standard tags and their order (Pointing), nothing
+    /// the page chose.
+    static func pointing(_ parts: [Pointing.Part]) -> [String] { parts.map { "[something] Pointing at \($0.kind): \($0.path)" } }
+
+    /// Ends each Quick Change whose turn ended (answered, failed, or its agent gone), once none of its requests waits.
+    private func followQuicks() {
+        let state = engine.state
+        for quick in quicks.values where quick.phase == .working {
+            let each = quick.session
+            each.read(state)
+            guard !each.launching else { continue }
+            let light = light(each), asks = each.id.map { id in state.requests.contains { $0.agent == id } } == true
+            let answered = each.turn.map { $0.state != "working" } == true && ![.working, .waiting].contains(light)
+            guard !asks, answered || each.id == nil || each.stopped || light == .error || each.agent?.alive == false else { continue }
+            end(quick)
+        }
+    }
+
+    /// Stops the Quick Change's agent, keeps what it made, says Done on its frame when it changed the space, then that
+    /// the session ended; the space's conversation sends the first message it held meanwhile.
+    private func end(_ quick: Quick) {
+        let each = quick.session
+        let problem = each.failure ?? (light(each) == .error ? each.agent?.error?.message ?? "\(name(of: each)) stopped before it was done." : nil)
+        halt(each)
+        let changed = quickEnded(quick.space, quick.sentence, name(of: each), problem)
+        quick.phase = changed ? .done : .ended
+        // Each moment waits its time, then moves on while this Quick Change is still the space's.
+        let lingers = lingers, space = quick.space
+        let after = { [weak self, weak quick] (seconds: TimeInterval, then: @escaping (Quick) -> Void) in
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { if let quick, self?.quicks[space] === quick { then(quick) } }
+        }
+        let leave = { [weak self] in
+            after(lingers.ended) {
+                $0.phase = .gone
+                self?.quicks[space] = nil
+            }
+        }
+        if changed {
+            after(lingers.done) {
+                $0.phase = .ended
+                leave()
+            }
+        } else {
+            leave()
+        }
+        if let main = sessions[.space(quick.space)], let next = main.held.first, !main.launching, ![.working, .waiting].contains(light(main)) {
+            main.held.removeFirst()
+            main.releasedAfter = .some(main.turn?.id)
+            deliver(next, to: main)
         }
     }
 

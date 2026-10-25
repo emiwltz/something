@@ -16,7 +16,7 @@ import WebKit
     /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "go-wrong" likewise but
-    /// fails it, "small game" starts building one and never ends its turn, "ask-first"
+    /// fails it, "quick-ask" asks a permission and ends its turn once it is answered, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "line per hour" starts answering and quits mid-turn (code 3), "counters bigger" (or "slides
     /// milestone") retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
@@ -66,6 +66,12 @@ import WebKit
         *'go-wrong'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           later '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' "$idle" ;;
+        *'quick-ask'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          echo '{"type":"control_request","request_id":"rq9","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"npm test"},"tool_use_id":"toolu_q9"}}' ;;
+        *'"request_id":"rq9"'*)
+          echo "$done"
+          echo "$idle" ;;
         *'masthead smaller'*'"type":"user"'*)
           tool m1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
           tool m2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
@@ -1171,6 +1177,106 @@ import WebKit
         #expect(undo.undoActionName == "“go-slow, make it blue.”" && undo.redoActionName != undo.undoActionName)
         #expect(try String(contentsOf: agents.location, encoding: .utf8) == "<p>tiles</p>")
         withExtendedLifetime(owner) {}
+        await finish(home, model)
+    }
+
+    /// Quick Change: a temporary session of Daily brief's assistant, the same kind launched with the main session's
+    /// model and effort, is told only something's lines (the context, one pointing line per part) and the person's
+    /// words; the main conversation is untouched. Another is refused while it works, and a message to the main session
+    /// waits for it. Its turn ends: what it changed is a quick version with the named undo, its agent is stopped, and
+    /// the held message leaves; its frame says Done, then the chip that the session ended, then it is gone.
+    @Test func aQuickChangeIsATemporarySessionWithTheSameModel() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        let changes = Changes(places: home.places, undo: WindowUndo())
+        var toasts: [(words: String, action: String?)] = []
+        changes.find = { Spaces(root: home.places.spaces).named($0) }
+        changes.title = { _ in "Daily brief" }
+        changes.toast = { words, action, _, _ in toasts.append((words, action?.label)) }
+        model.turnStarts = { changes.before($0) }
+        model.quickEnded = { changes.quick($0, sentence: $1, who: $2, problem: $3) }
+        model.place = place
+        model.choose(model: "opus")
+        model.choose(effort: "high")
+        let main = model.session
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1) > p:nth-of-type(1)", tag: "p", rect: CGRect(x: 20, y: 30, width: 200, height: 40))
+        let users = { self.input(home).filter { $0.contains(#""type":"user""#) } }
+        let arguments = { (try? String(contentsOf: home.root.appendingPathComponent("out/arguments"), encoding: .utf8))?.split(separator: "\n") ?? [] }
+
+        #expect(model.quickChange("go-slow, make it blue.", parts: [part], at: place) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(quick.chip == "Quick session · Claude Code · opus" && quick.phase == .working && model.works(on: "brief"))
+        #expect(await wait(until: { quick.session.agent?.state == "working" && !users().isEmpty }), "the quick session did not start")
+        let id = try #require(quick.session.id)
+        #expect(arguments().contains("--model=opus") && arguments().contains("--effort=high"), "\(arguments())")
+        let message = #"[something] Open space: “Daily brief” (brief, ~/something/spaces/brief.html).\n[something] Pointing at this paragraph: "#
+            + #":root > body:nth-of-type(1) > p:nth-of-type(1)\ngo-slow, make it blue."#
+        #expect(users().count == 1 && users().first?.contains(#""content":""# + message + #"""#) == true, "\(users())")
+        #expect(model.session(of: id) === quick.session && model.space(of: id) == "brief" && model.quick(id) && !model.quick("other"))
+        #expect(main.id == nil && main.last == nil && main.rows.isEmpty && model.session === main)
+        #expect(changes.versions.list("brief").map(\.kind) == [.outside])
+
+        // Refused while it works; the person's message to the main session waits.
+        #expect(model.quickChange("go-slow, again.", parts: [part], at: place) == "Daily brief’s assistant is working · try once it’s done")
+        model.send("Invented, after the quick one.")
+        #expect(model.held == ["Invented, after the quick one."] && main.id == nil)
+
+        // The turn ends having changed the page.
+        try "<p>blue</p>".write(to: brief.location, atomically: true, encoding: .utf8)
+        try Data().write(to: home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { quick.phase == .done }), "\(quick.phase)")
+        let made = changes.versions.list("brief")
+        #expect(made.map(\.kind) == [.quick, .outside] && made.first?.sentence == "go-slow, make it blue." && made.first?.who == "Claude Code")
+        #expect(toasts.last?.words == "Changed Daily brief" && toasts.last?.action == "Undo “go-slow, make it blue.” ⌘Z")
+        #expect(await wait(until: { model.engine.state.agents.first { $0.id == id }?.alive == false }), "the quick session was not stopped")
+        // The held message leaves now, to the main session, once.
+        #expect(await wait(until: { users().filter { $0.contains("Invented, after the quick one.") }.count == 1 && main.id != nil }), "\(users())")
+        #expect(model.held.isEmpty && main.id != id)
+        #expect(await wait(until: { quick.phase == .ended }) && model.quicks["brief"] != nil)
+        #expect(await wait(5, until: { model.quicks["brief"] == nil && quick.phase == .gone }))
+        await finish(home, model)
+    }
+
+    /// A Quick Change whose agent asks a permission mid-turn is not stopped while the request waits: answered, its turn
+    /// ends and only then is it stopped. A space's quick requests are that space's, said as a Quick Change's.
+    @Test func aQuickChangeIsNotStoppedWhileItsRequestWaits() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1)", tag: "body", rect: CGRect(x: 0, y: 0, width: 300, height: 100))
+        #expect(model.quickChange("quick-ask, check it.", parts: [part], at: place) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(await wait(until: { model.engine.state.requests.contains { $0.agent == quick.session.id } }), "no request")
+        let request = try #require(model.engine.state.requests.first { $0.agent == quick.session.id })
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(quick.phase == .working && quick.session.agent?.alive == true && model.works(on: "brief"))
+        #expect(Words.who(space: "Daily brief", assistant: true, name: nil, age: nil, quick: true) == "Daily brief · its assistant · Quick Change")
+        try model.engine.answer(request.id, .once)
+        #expect(await wait(until: { quick.phase != .working }), "\(quick.phase)")
+        // Nothing changed: no Done, the chip says the session ended.
+        #expect(quick.phase == .ended && !model.works(on: "brief"))
+        #expect(await wait(until: { model.engine.state.agents.first { $0.id == request.agent }?.alive == false }))
+        await finish(home, model)
+    }
+
+    /// A builder that picks its own model gets no model for its Quick Change, and the chip says so.
+    @Test func aQuickChangeOfAKindWithItsOwnModelGetsNone() async throws {
+        let (home, model) = try assistant(["amp"])
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        model.session(for: place).model = "anything"
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1)", tag: "body", rect: CGRect(x: 0, y: 0, width: 300, height: 100))
+        #expect(model.quickChange("Make it calmer.", parts: [part], at: place) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(quick.chip == "Quick session · Amp · its own model" && quick.session.model == nil && quick.session.kind == "amp")
+        #expect(await wait(until: { quick.phase != .working }))
         await finish(home, model)
     }
 }

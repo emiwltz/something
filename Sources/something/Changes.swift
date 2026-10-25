@@ -2,9 +2,9 @@
 // the space is kept as it is (a change no turn made is its own version first); when the turn ends, what it made is a
 // version named by the sentence that asked for it, the toast says "Changed …" with Undo “…” ⌘Z, and the window's undo
 // manager carries the same name, so the Edit menu and ⌘Z undo that sentence, after whatever typing the focused field
-// undoes first. Undo and Redo restore a version, each itself a version; both wait while an assistant works on that
-// space, whose next write would mix with the restore. The space is the turn's, never only the open one: a turn goes on
-// after the person opens another space.
+// undoes first. A Quick Change's turn is kept the same way, as a quick version. Undo and Redo restore a version, each
+// itself a version; both wait while an assistant works on that space, whose next write would mix with the restore.
+// The space is the turn's, never only the open one: a turn goes on after the person opens another space.
 import AppKit
 import SomethingCore
 
@@ -41,6 +41,7 @@ final class Changes {
         toast = { [weak shell] words, action, quiet, seconds in _ = shell?.toast(words, action: action, quiet: quiet, seconds: seconds) }
         assistant.turnStarts = { [weak self] in self?.before($0) }
         assistant.turnEnded = { [weak self] in self?.after($0, sentence: $1, who: $2) }
+        assistant.quickEnded = { [weak self] in self?.quick($0, sentence: $1, who: $2, problem: $3) ?? false }
     }
 
     /// The store, with the person's limits as Settings has them now.
@@ -60,15 +61,24 @@ final class Changes {
         }
     }
 
+    /// A Quick Change on `name` asked by `sentence` ended, `problem` saying what went wrong if anything did: what it
+    /// changed is a quick version, offered to undo as a turn's is; a problem is said only when nothing changed, the
+    /// change's own toast saying the rest. Returns whether the space changed.
+    func quick(_ name: String, sentence: String, who: String, problem: String?) -> Bool {
+        let made = after(name, sentence: sentence, who: who, kind: .quick)
+        if made == nil, let problem { toast(problem, nil, true, 6) }
+        return made != nil
+    }
+
     /// The turn on `name` asked by `sentence` ended: when it changed the space, its version is kept, named by the
     /// sentence and `who` made it, and offered to undo. Returns that version; nil when nothing changed or nothing could
     /// be kept, which the toast then says.
     @discardableResult
-    func after(_ name: String, sentence: String, who: String) -> Versions.Version? {
+    func after(_ name: String, sentence: String, who: String, kind: Versions.Kind = .turn) -> Versions.Version? {
         let from = started.removeValue(forKey: name)
         guard let space = find(name) else { return nil }
         let made: Versions.Version?
-        do { made = try versions.capture(space, kind: .turn, sentence: sentence, who: who) } catch {
+        do { made = try versions.capture(space, kind: kind, sentence: sentence, who: who) } catch {
             toast(error.sentence, nil, true, 6)
             return nil
         }

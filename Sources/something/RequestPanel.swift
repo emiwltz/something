@@ -14,9 +14,11 @@ import SomethingAgents
 import SomethingCore
 
 /// Who asks, in the panel's words: the program, its space, whether it is that space's assistant and its building is
-/// pre-allowed now (rule 2's exception), the agent's own name, and its folder with ~. What is not known is left out.
+/// pre-allowed now (rule 2's exception), the agent's own name, its folder with ~, and whether it is a Quick Change's
+/// temporary session. What is not known is left out.
 struct Asker: Equatable {
     var program: String, space: String? = nil, assistant = false, preAllowed = false, name: String? = nil, folder: String? = nil
+    var quick = false
 }
 
 class RequestPanel: NSPanel, NSTextFieldDelegate {
@@ -166,7 +168,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         title = question ? "\(who.program) asks you a question" : "\(who.program) wants to \(Words.wants(prompt.request.tool))"
         header.kind = question ? "Question" : "Permission"
         (boxes, typed) = ([], [])
-        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age), who.program)]
+        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age, quick: who.quick), who.program)]
         if question {
             denyButton = LinkButton("Don't Answer", nil, size: 12, weight: .semibold, target: self, action: #selector(deny))
             views += ask(prompt.questions)

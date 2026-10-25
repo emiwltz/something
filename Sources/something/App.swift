@@ -281,8 +281,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Who asks in the panel: the agent, and the title of the space its request belongs to.
     func who(_ request: Request) -> Asker {
         let space = panels.queue.space(request).map { library.entry($0)?.title ?? $0 }
-        return App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
-                       assistant: engine.assistants.contains(request.agent), building: assistant.session(of: request.agent).map { !$0.asking } ?? false)
+        var who = App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
+                          assistant: engine.assistants.contains(request.agent), building: assistant.session(of: request.agent).map { !$0.asking } ?? false)
+        who.quick = assistant.quick(request.agent)
+        return who
     }
 
     /// `agent` in the panel's words, "An agent" when the state no longer holds it: pre-allowed only as an assistant launched

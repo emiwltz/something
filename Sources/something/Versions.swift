@@ -13,8 +13,9 @@ import Foundation
 import SomethingCore
 
 struct Versions {
-    /// What made a version: a turn of the assistant, an edit no turn claims, or the person restoring an older one.
-    enum Kind: String, Codable { case turn, outside, restore }
+    /// What made a version: a turn of the assistant, a Quick Change (its temporary session's turn), an edit no turn
+    /// claims, or the person restoring an older one.
+    enum Kind: String, Codable { case turn, quick, outside, restore }
 
     struct Version: Codable, Equatable, Identifiable {
         let id: String, kind: Kind

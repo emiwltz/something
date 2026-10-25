@@ -173,10 +173,11 @@ enum Words {
     }
 
     /// The line under a request's title, as the mockup's "My agents · its assistant · asked 3 min ago": the space's
-    /// title, who asks (the space's assistant, or the agent by its name), and the age; what is not known is left out.
-    static func who(space: String?, assistant: Bool, name: String?, age: String?) -> String {
+    /// title, who asks (the space's assistant, or the agent by its name), "Quick Change" for its temporary session, and
+    /// the age; what is not known is left out.
+    static func who(space: String?, assistant: Bool, name: String?, age: String?, quick: Bool = false) -> String {
         let asker = assistant ? (space == nil ? "your assistant" : "its assistant") : name.map { "“\($0)”" }
-        return [space, asker, age].compactMap { $0 }.joined(separator: " · ")
+        return [space, asker, quick ? "Quick Change" : nil, age].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// The quit alert's title and its last line, given `requests` waiting and `working` agents at work: the four

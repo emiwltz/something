@@ -4,6 +4,7 @@
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
+import SomethingCore
 import Testing
 @testable import something
 
@@ -100,7 +101,96 @@ struct AcceptanceShow {
         #expect(overlay.escape() && overlay.composer == nil && brief.pointer != nil)
         #expect(overlay.escape() && brief.pointer == nil)
     }
-    @Test("f3: a frame at work", .disabled("not built yet: T16")) func f3() async throws {}
+    /// Daily brief in point mode, the dateline picked and "Make the weather corner smaller" written: Quick Change (↵)
+    /// closes the mode, and the part keeps its frame, its top-right corner become the assistant's eyes at work, and
+    /// under it the chip "Quick session · Claude Code · Opus 5.5" (f3-working): a temporary session of the space's
+    /// assistant, the fake claude, with the same model. It changes the page; its frame says Done and the toast offers
+    /// to undo it by the sentence (f3-done); then the chip says the session ended (f3, the mockup's last moment).
+    @Test("f3: a frame at work") func f3() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        Preferences.at(stage.home.places).listed["claude"] = {
+            var options = Options()
+            options.model = [Option(value: "opus", label: "Opus 5.5")]
+            return options
+        }()
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.layer.announce = { _ in }
+        model.choose(model: "opus")
+        // Long enough to draw Done and the end in both appearances.
+        model.lingers = (12, 60)
+        // A never-shown window's animations run only while this Mac's display is awake: under reduced motion the toast
+        // is drawn where it lands, whatever the display does during the run.
+        library.preferences.motion = .reduced
+        let changes = Changes(places: stage.home.places, undo: shell.undo)
+        changes.follow(model, in: shell, library: library)
+        changes.toast = { words, action, quiet, _ in _ = shell.toast(words, action: action, quiet: quiet, seconds: 60) }
+        let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), style = try #require(was.range(of: "</style>"))
+        let users = { ((try? String(contentsOf: stage.home.root.appendingPathComponent("out/input"), encoding: .utf8)) ?? "")
+            .split(separator: "\n").filter { $0.contains(#""type":"user""#) } }
+
+        shell.point()
+        let overlay = try #require(brief.pointer), frame = try #require(brief.frame)
+        let at = try #require(try await brief.web.callAsyncJavaScript(
+            "const b = document.querySelector('#weather-line').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
+            in: frame, contentWorld: .defaultClient) as? [Double])
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
+        let composer = try #require(overlay.composer), part = try #require(overlay.picks.first)
+        composer.field.insertText("Make the weather corner smaller", replacementRange: composer.field.selectedRange())
+        composer.sendQuick()
+
+        // The mode closed; the frame stays, at work, and takes no click.
+        let point = try #require(shell.controls[Shell.point] as? PressButton)
+        #expect(brief.pointer == nil && !point.pressed && !model.pointing)
+        let quick = try #require(model.quicks["brief"])
+        let drawn = try #require(brief.area.subviews.compactMap { $0 as? QuickFrame }.first)
+        #expect(drawn.quick === quick && quick.parts == [part] && drawn.hitTest(NSPoint(x: 50, y: 50)) == nil && drawn.frame == brief.web.frame)
+        #expect(drawn.chip == "Quick session · Claude Code · Opus 5.5" && drawn.badge == "Working")
+        #expect(drawn.accessibilityLabel() == "Quick session · Claude Code · Opus 5.5" && drawn.accessibilityValue() as? String == "Working")
+        #expect(await wait(until: { !users().isEmpty }), "the quick session did not start")
+        #expect(users().count == 1 && users()[0].contains("Pointing at \(part.kind): \(part.path)") && users()[0].contains("Make the weather corner smaller"))
+        #expect(model.session.id == nil && model.session.rows.isEmpty, "the main conversation is untouched")
+        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f3-working" + suffix, root: stage.home.root)
+        }
+
+        // The quick session changes the page and ends its turn: Done, the change kept with its named undo.
+        var loads = brief.loads
+        try was.replacingCharacters(in: style, with: "  .dateline b { font-size: 80%; }\n</style>").write(to: page, atomically: true, encoding: .utf8)
+        try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { quick.phase == .done }), "\(quick.phase)")
+        #expect(drawn.badge == "Done" && drawn.chip == "Quick session · Claude Code · Opus 5.5")
+        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
+        #expect(toast.words == "Changed Daily brief" && toast.bottom?.constant == -22)
+        #expect(changes.versions.list("brief").first?.kind == .quick && shell.undo.undoMenuItemTitle == "Undo “Make the weather corner smaller”")
+        #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
+        await Picture.settle(brief)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f3-done" + suffix, root: stage.home.root)
+        }
+
+        // Then only the chip, which says the session ended.
+        #expect(await wait(15) { quick.phase == .ended })
+        #expect(drawn.badge == nil && drawn.chip == "Quick session ended" && drawn.superview != nil)
+        loads = brief.loads
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f3" + suffix, root: stage.home.root)
+        }
+        shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     @Test("f4: the margin note", .disabled("not built yet: T17")) func f4() async throws {}
     /// Daily brief open; its assistant's turn, asked "Make the weather corner smaller", ends having changed the page:
     /// the toast names the change and offers to undo it by that sentence (f5-changed). ⌘Z, through the window's undo

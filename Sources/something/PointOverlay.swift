@@ -324,7 +324,12 @@ final class PointOverlay: NSView {
 
     /// The float shadow under a card of `box`, cast by a shape of `fill`, with its ring when `ring`.
     private func drawFloat(_ box: CGRect, radius: CGFloat, fill: Look.Token, ring: Bool) {
-        for shade in Look.float(effectiveAppearance) {
+        Self.float(box, radius: radius, fill: fill, ring: ring, appearance: effectiveAppearance)
+    }
+
+    /// The float shadow under a card of `box` in `appearance`, cast by a shape of `fill`, with its ring when `ring`.
+    static func float(_ box: CGRect, radius: CGFloat, fill: Look.Token, ring: Bool, appearance: NSAppearance) {
+        for shade in Look.float(appearance) {
             NSGraphicsContext.saveGraphicsState()
             let shadow = NSShadow()
             (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
@@ -343,8 +348,22 @@ final class PointOverlay: NSView {
     /// The sign's four corners around `part` (or in `box` while its hole moves), haloed in the background so they read
     /// on any page, and the pill of `words` above it, or below it when the part starts within 36 points of the top.
     private func frame(_ part: Pointing.Part, words: String?, ink: Look.Token, at box: CGRect?) {
+        let r = box ?? part.rect.insetBy(dx: -Self.pad, dy: -Self.pad)
+        Self.corners(r, ink: ink)
+        // The pill: 21 high, 8 points each side, rounded 6, in the action's colours.
+        guard let words else { return }
+        let text = NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 11, weight: .semibold), .foregroundColor: Look.Token.actfg.color])
+        let size = text.size(), pill = CGRect(x: r.minX, y: part.rect.minY < 36 ? r.maxY + 6 : r.minY - 6 - 21, width: ceil(size.width) + 16, height: 21)
+        Look.Token.act.color.setFill()
+        NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
+        text.draw(at: CGPoint(x: pill.minX + 8, y: pill.midY - size.height / 2))
+    }
+
+    /// The sign's four corners in `r`, in `ink`, haloed in the background; the corner `skipping` (0 top left, then
+    /// clockwise) is left out, for the eyes of a frame at work to take its place.
+    static func corners(_ r: CGRect, ink: Look.Token, skipping: Int? = nil) {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
-        let r = box ?? part.rect.insetBy(dx: -Self.pad, dy: -Self.pad), a = Self.arm
+        let a = Self.arm
         c.saveGState()
         c.setShadow(offset: .zero, blur: 2.5, color: Look.Token.bg.color.cgColor)
         c.setStrokeColor(ink.color.cgColor)
@@ -352,7 +371,7 @@ final class PointOverlay: NSView {
         c.setLineCap(.round)
         c.setLineJoin(.round)
         let corners = [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX - a, y: r.minY), CGPoint(x: r.maxX - a, y: r.maxY - a), CGPoint(x: r.minX, y: r.maxY - a)]
-        for (index, at) in corners.enumerated() {
+        for (index, at) in corners.enumerated() where index != skipping {
             c.saveGState()
             c.translateBy(x: at.x + a / 2, y: at.y + a / 2)
             c.rotate(by: CGFloat(index) * CGFloat.pi / 2)
@@ -363,13 +382,6 @@ final class PointOverlay: NSView {
             c.restoreGState()
         }
         c.restoreGState()
-        // The pill: 21 high, 8 points each side, rounded 6, in the action's colours.
-        guard let words else { return }
-        let text = NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 11, weight: .semibold), .foregroundColor: Look.Token.actfg.color])
-        let size = text.size(), pill = CGRect(x: r.minX, y: part.rect.minY < 36 ? r.maxY + 6 : r.minY - 6 - 21, width: ceil(size.width) + 16, height: 21)
-        Look.Token.act.color.setFill()
-        NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
-        text.draw(at: CGPoint(x: pill.minX + 8, y: pill.midY - size.height / 2))
     }
 
     /// The banner: 34 high, centred 14 points under the top, on the glass with the float shadow; it slides down as
