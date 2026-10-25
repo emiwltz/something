@@ -350,10 +350,11 @@ final class PointOverlay: NSView {
     private func frame(_ part: Pointing.Part, words: String?, ink: Look.Token, at box: CGRect?) {
         let r = box ?? part.rect.insetBy(dx: -Self.pad, dy: -Self.pad)
         Self.corners(r, ink: ink)
-        // The pill: 21 high, 8 points each side, rounded 6, in the action's colours.
+        // The pill: 21 high, 8 points each side, rounded 6, in the action's colours, under the frame's bottom left
+        // corner as the mockup puts it; above it only where the page has no room below.
         guard let words else { return }
         let text = NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 11, weight: .semibold), .foregroundColor: Look.Token.actfg.color])
-        let size = text.size(), pill = CGRect(x: r.minX, y: part.rect.minY < 36 ? r.maxY + 6 : r.minY - 6 - 21, width: ceil(size.width) + 16, height: 21)
+        let size = text.size(), pill = CGRect(x: r.minX, y: r.maxY + 6 + 21 <= bounds.height ? r.maxY + 6 : r.minY - 6 - 21, width: ceil(size.width) + 16, height: 21)
         Look.Token.act.color.setFill()
         NSBezierPath(roundedRect: pill, xRadius: 6, yRadius: 6).fill()
         text.draw(at: CGPoint(x: pill.minX + 8, y: pill.midY - size.height / 2))

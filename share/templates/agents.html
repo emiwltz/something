@@ -56,8 +56,9 @@
 
   /* Four counters: waiting first, because waiting is what needs the person. */
   /* Each counter is a numeral with its label on the same baseline: an instrument, not an empty box. */
-  .counters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  .counter { flex: 1 1 0; min-width: 140px; max-width: 220px; display: flex; align-items: baseline; gap: 14px; background: var(--panel); border: 1px solid var(--edge);
+  /* Two by two in a narrow window, one row of four in a wide one. */
+  .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+  .counter { min-width: 0; display: flex; align-items: baseline; gap: 14px; background: var(--panel); border: 1px solid var(--edge);
              border-radius: 6px; padding: 10px 18px 12px; }
   .counter b { font-size: 56px; line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums; }
   .counter.zero b { opacity: .35; }
@@ -153,10 +154,10 @@
     <span class="label clock" id="clock"></span>
   </header>
   <section class="counters" aria-label="Counts">
-    <div class="counter" data-count="waiting"><b class="t-waiting">–</b><span class="label">Waiting</span></div>
+    <div class="counter" data-count="waiting"><b class="t-waiting">–</b><span class="label">Waiting in a terminal</span></div>
     <div class="counter" data-count="working"><b class="t-working">–</b><span class="label">Working</span></div>
     <div class="counter" data-count="idle"><b class="t-idle">–</b><span class="label">Idle</span></div>
-    <div class="counter" data-count="done"><b class="t-done">–</b><span class="label">Done</span></div>
+    <div class="counter" data-count="unknown"><b class="t-unknown">–</b><span class="label">Unknown</span></div>
     <div class="label" id="others" hidden></div>
   </section>
   <p id="problem" role="alert" hidden></p>
@@ -289,7 +290,7 @@
       node.querySelector("b").textContent = n;
       node.classList.toggle("zero", n === 0);
     });
-    const others = ["error", "interrupted", "unknown"].filter((w) => counts[w]).map((w) => `${counts[w]} ${w}`);
+    const others = ["error", "interrupted", "done"].filter((w) => counts[w]).map((w) => `${counts[w]} ${w}`);
     $("others").hidden = !others.length;
     $("others").textContent = "Also " + others.join(" · ");
 

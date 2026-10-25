@@ -349,10 +349,12 @@ struct AcceptanceShow {
             func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
             return (toast.words, buttons(toast).first?.title)
         }
-        /// Waits for the page to load again after a change of its file.
+        /// Waits for the page to load again after a change of its file, and for the last toast to have risen in place.
         func reloaded(after loads: Int) async {
             #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
             await Picture.settle(brief)
+            #expect(await wait(5) { shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown }?.bottom?.constant == -22 },
+                    "the toast rose")
         }
 
         // The turn, as the assistant says it begins and ends: Daily brief kept as it was, then as the turn left it.

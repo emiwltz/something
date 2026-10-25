@@ -199,10 +199,7 @@ final class Arrival: NSView {
 
     /// Fades it out in `duration`, then takes it off its layer and calls `arrived`.
     func fade(_ duration: TimeInterval, _ arrived: @escaping () -> Void) {
-        NSAnimationContext.runAnimationGroup({ context in
-            (context.duration, context.timingFunction) = (duration, Look.douce.timing)
-            animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
+        Look.animate(duration, Look.douce, { [weak self] in self?.animator().alphaValue = 0 }, done: { [weak self] in
             self?.removeFromSuperview()
             arrived()
         })

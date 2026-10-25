@@ -14,7 +14,7 @@ final class QuickFrame: NSView {
     private(set) var rects: [CGRect]
     private var timer: Timer?, asking = false
 
-    /// The chip: 24 high, rounded 12, 8 points before its symbol and 10 after its words; 10 under the part's frame.
+    /// The chip: 24 high, rounded 12, 8 points before its symbol and 10 after its words; centred on the part's bottom edge.
     static let chipHeight: CGFloat = 24
 
     init(_ quick: AssistantModel.Quick, over space: SpaceView) {
@@ -127,13 +127,13 @@ final class QuickFrame: NSView {
         text.draw(at: CGPoint(x: box.minX + 7 + 13 + 6, y: box.midY - text.size().height / 2))
     }
 
-    /// Where the chip goes under the frame `r`: its right edge with the frame's, 10 points under it, 10 points off the
-    /// page's sides and 34 off its bottom.
+    /// Where the chip goes on the frame `r`, as the mockup pins it: centred on the frame's bottom edge, 10 points off
+    /// the page's sides and 34 off its bottom.
     func chipBox(under r: CGRect) -> CGRect {
         let text = NSAttributedString(string: chip, attributes: [.font: Look.font(.ui, size: 11.5, weight: .medium)])
         let width = 8 + 12 + 6 + ceil(text.size().width) + 10
-        return CGRect(x: max(10, min(bounds.width - width - 10, r.maxX - width)), y: min(bounds.height - 34, r.maxY + 10),
-                      width: width, height: Self.chipHeight)
+        return CGRect(x: max(10, min(bounds.width - width - 10, r.midX - width / 2)),
+                      y: min(bounds.height - 34, r.maxY - Self.chipHeight / 2), width: width, height: Self.chipHeight)
     }
 
     private func drawChip(under r: CGRect) {
@@ -149,7 +149,7 @@ final class QuickFrame: NSView {
         }
         let symbol = NSImage(systemSymbolName: ended ? "checkmark" : "bolt", accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) ?? NSImage()
-        PointOverlay.tinted(symbol, (ended ? Look.Token.ok : Look.Token.ink2).color)
+        PointOverlay.tinted(symbol, (ended ? Look.Token.ink3 : Look.Token.ink2).color)
             .draw(in: CGRect(x: box.minX + 8, y: box.midY - 6, width: 12, height: 12), from: .zero, operation: .sourceOver, fraction: 1,
                   respectFlipped: true, hints: nil)
         let text = NSAttributedString(string: chip, attributes: [.font: Look.font(.ui, size: 11.5, weight: .medium),

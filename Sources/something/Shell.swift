@@ -66,6 +66,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         content.view = center
         inspector = NSSplitViewItem(inspectorWithViewController: InfoController(rootView: InspectorView(info: info, library: library, assistant: assistant)))
         (inspector.minimumThickness, inspector.maximumThickness) = (320, 320)
+        // The toolbar stays one band across the window: the panel begins under it, as the mockup draws it.
+        inspector.allowsFullHeightLayout = false
         [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -429,13 +431,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             Self.blur(page, true)
             veil?.alphaValue = 0
         }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = Look.duration(0.5, Look.motion(library.preferences.motion))
-            context.timingFunction = Look.douce.timing
+        Look.animate(Look.duration(0.5, Look.motion(library.preferences.motion)), Look.douce, {
             page?.animator().alphaValue = back ? 0.35 : 1
             sidebar.animator().alphaValue = back ? 0.7 : 1
             veil?.animator().alphaValue = back ? 1 : 0
-        }, completionHandler: back ? nil : { [weak self] in
+        }, done: back ? nil : { [weak self] in
             // The blur goes once the page is back in full, so that it never snaps off a page still faded.
             if self?.welcoming == nil { Self.blur(page, false) }
             guard let veil else { return }

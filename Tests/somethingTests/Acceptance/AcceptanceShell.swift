@@ -141,7 +141,9 @@ struct AcceptanceShell {
         shell.showInfo(true)
         shell.window.layoutIfNeeded()
         #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
-        #expect(shell.inspector.viewController.view.frame.width == 320 && shell.inspector.viewController.view.frame.height == 760, "full height")
+        // Full height under the toolbar, which stays one band across the window, as the mockup draws it.
+        let under = shell.window.contentLayoutRect.height, docked = shell.inspector.viewController.view.frame
+        #expect(docked.width == 320 && docked.height == under && under > 700, "full height under the toolbar: \(docked.height) of \(under)")
         #expect(agents.web.frame.width == center - 320, "the page narrows beside Info: \(agents.web.frame.width)")
         #expect(info.space?.name == "agents" && info.waiting == 1 && model.place.space == "agents")
         #expect(model.messageCount == 2 && model.resumes && !model.canSleep)
@@ -195,7 +197,16 @@ struct AcceptanceShell {
         for file in try FileManager.default.contentsOfDirectory(at: stage.home.places.spaces, includingPropertiesForKeys: nil) {
             try FileManager.default.removeItem(at: file)
         }
+        // The mockup's newcomer has an agent to build with: the suggestions are live, in their normal ink.
+        let bin = stage.home.root.appendingPathComponent("bin"), claude = bin.appendingPathComponent("claude")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try AssistantTests.fake.write(to: claude, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
         let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
         library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: []) }
         #expect(library.entries.isEmpty && library.selection == .newSpace)
         #expect(library.stops() == [.newSpace], "no header shows while no space is listed")

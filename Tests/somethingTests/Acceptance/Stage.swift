@@ -45,12 +45,19 @@ final class Stage {
     }
 
     let home: Home
+    /// Whether the window lists the spaces in the mockup's groups: the screens of a space at work (show, assistant,
+    /// build, trust) are drawn with the sidebar the mockup shows them with.
+    let grouped: Bool
+    /// Whether the other rows show the mockup's moment while the open space's row follows its live assistant.
+    let lively: Bool
 
     /// A home named `something-accept-<area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
     init(_ area: String) throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         Look.register(fonts: Home.share.appendingPathComponent("fonts"))   // as the app does at start
         home = Home(prefix: "something-accept-\(area)-")
+        grouped = ["show", "assistant", "build", "trust"].contains(area)
+        lively = area == "assistant"
         try Library.prepare(home.places)
         for (name, _) in Stage.templates {
             try home.space(name, try String(contentsOf: Home.share.appendingPathComponent("templates/\(name).html"), encoding: .utf8))
@@ -90,9 +97,16 @@ final class Stage {
     func window(_ size: NSSize = Size.main) -> (shell: Shell, library: Library, info: Info) {
         let ask = FakeAsk()
         let library = Library(places: home.places, ask: ask, share: Home.share), info = Info(places: home.places, ask: ask)
+        if grouped { library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) } }
         library.relist()
         let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
         shell.window.setContentSize(size)
+        if lively, let host = shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView> {
+            let own = host.rootView.eyes
+            host.rootView = SidebarView(library: library, assistant: host.rootView.assistant, eyes: { [unowned library] in
+                library.selection == .space($0) ? own($0) : Stage.moment[$0] ?? own($0)
+            })
+        }
         return (shell, library, info)
     }
 
@@ -143,17 +157,21 @@ enum Picture {
     /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x; its lights gray when
     /// it lost the keys (`keyed` false).
     static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL, keyed: Bool = true) async throws {
-        // Below the title bar, as the columns' own contents start.
-        let top = shell.window.frame.height - shell.window.contentLayoutRect.maxY
         let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
         let sidebar = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
         let columns: [(item: NSSplitViewItem, view: NSView)] = [
             (shell.split.splitViewItems[0], NSHostingView(rootView: sidebar.rootView)),
             (shell.inspector, NSHostingView(rootView: inspector.rootView)),
         ].filter { !$0.0.isCollapsed }
+        // A column's part below the title bar: all of a full-height one but the bar, all of one that starts under it.
+        func shown(_ column: NSView) -> NSRect {
+            var place = column.convert(column.bounds, to: nil)
+            place.size.height = min(place.maxY, shell.window.contentLayoutRect.maxY) - place.minY
+            return place
+        }
         let offscreens = columns.map { column in
-            let offscreen = Offscreen(column.view), bounds = column.item.viewController.view.bounds
-            offscreen.window.setContentSize(NSSize(width: max(bounds.width, 232), height: max(bounds.height - top, 100)))
+            let offscreen = Offscreen(column.view), place = shown(column.item.viewController.view)
+            offscreen.window.setContentSize(NSSize(width: max(place.width, 232), height: max(place.height, 100)))
             return offscreen
         }
         // SwiftUI and WebKit draw on the run loop.
@@ -167,8 +185,7 @@ enum Picture {
             disguise(column.view, root.path)
             let drawn = try bitmap(column.view.bounds.size)
             selected(column.view) { column.view.cacheDisplay(in: column.view.bounds, to: drawn) }
-            var place = column.item.viewController.view.convert(column.item.viewController.view.bounds, to: frame)
-            place.size.height -= top
+            let place = frame.convert(shown(column.item.viewController.view), from: nil)
             return (drawn, place)
         }
         // The page says the home as a person's would be, as disguise does for the window's own words.

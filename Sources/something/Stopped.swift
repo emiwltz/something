@@ -52,10 +52,7 @@ final class Stopped: NSView {
         let calm = Look.duration(0.45, Look.motion(motion))
         guard calm > 0 else { return }
         alphaValue = 0
-        NSAnimationContext.runAnimationGroup { context in
-            (context.duration, context.timingFunction) = (calm, Look.out.timing)
-            animator().alphaValue = 1
-        }
+        Look.animate(calm, Look.out, { [weak self] in self?.animator().alphaValue = 1 })
     }
 
     required init?(coder: NSCoder) { nil }

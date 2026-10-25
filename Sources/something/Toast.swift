@@ -67,7 +67,7 @@ final class Toast: NSView {
             button.isBordered = false
             // A click acts; no key reaches it, and it never draws the focus away from where the person types.
             button.refusesFirstResponder = true
-            (button.font, button.contentTintColor) = (Look.font(.ui, size: 12.5, weight: .semibold), Look.Token.bg.color)
+            (button.font, button.contentTintColor) = (Look.font(.ui, size: 12.5, weight: .medium), Look.Token.bg.color)
             (button.target, button.action) = (self, #selector(act))
             button.heightAnchor.constraint(equalToConstant: 26).isActive = true
         }
@@ -110,10 +110,7 @@ final class Toast: NSView {
             done?()
             return
         }
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = duration
-            context.timingFunction = Look.out.timing
-            bottom?.animator().constant = constant
-        }, completionHandler: done)
+        let bottom = bottom
+        Look.animate(duration, Look.out, { bottom?.animator().constant = constant }, done: done)
     }
 }

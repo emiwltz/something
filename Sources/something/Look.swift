@@ -224,6 +224,34 @@ enum Look {
     static func duration(_ calm: TimeInterval, _ motion: Motion) -> TimeInterval {
         motion == .reduced ? 0 : calm
     }
+
+    /// Plays `changes` (made through `animator()`) in `duration` on `curve`, then calls `done` once. AppKit moves a
+    /// view's frame and alpha on the display's refresh, which stops while the display sleeps or the window is hidden:
+    /// a quarter second after the end, whatever has not landed lands at once, so no state waits for a screen.
+    /// `settle` are the views whose stalled animations are taken off when it lands that way.
+    static func animate(_ duration: TimeInterval, _ curve: Curve, implicit: Bool = false, settle: [NSView] = [],
+                        _ changes: @escaping () -> Void, done: (() -> Void)? = nil) {
+        final class Once { var over = false }
+        let once = Once()
+        let finish = {
+            guard !once.over else { return }
+            once.over = true
+            done?()
+        }
+        NSAnimationContext.runAnimationGroup({ context in
+            (context.duration, context.timingFunction, context.allowsImplicitAnimation) = (duration, curve.timing, implicit)
+            changes()
+        }, completionHandler: finish)
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.25) {
+            guard !once.over else { return }
+            settle.forEach { $0.layer?.removeAllAnimations() }
+            NSAnimationContext.runAnimationGroup { context in
+                (context.duration, context.allowsImplicitAnimation) = (0, false)
+                changes()
+            }
+            finish()
+        }
+    }
 }
 
 extension Look.Token {

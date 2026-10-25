@@ -382,7 +382,7 @@ struct InspectorView: View {
                     .toggleStyle(SwitchStyle()).labelsHidden()
             }
         }
-        .padding(.vertical, Look.row * 0.34)
+        .padding(.vertical, Look.row * 0.4)
         // Read as one line, its switch with it: "See your agents, …, Allowed".
         .accessibilityElement(children: .combine)
     }
@@ -392,7 +392,7 @@ struct InspectorView: View {
         let now = info.clock(), group = library.preferences.group(of: space.name), groups = library.preferences.groups.map(\.name)
         return VStack(alignment: .leading, spacing: 9) {
             if let about = info.about { Text(about).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true) }
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.24) {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.32) {
                 GridRow {
                     Text("Group").foregroundStyle(Look.Token.ink3.ui)
                     // The groups as the sidebar's Show in Group has them: no "None", a space leaves a group only for
@@ -462,7 +462,7 @@ struct InspectorView: View {
     }
 
     private func pairs(_ lines: [(String, String)]) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.24) {
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.32) {
             ForEach(lines, id: \.0) { row($0.0, $0.1) }
         }
     }

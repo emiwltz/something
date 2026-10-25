@@ -427,8 +427,19 @@ enum Found {
 /// height the window takes.
 @MainActor final class SettingsWindow {
     let model: SettingsModel
-    let tabs = NSTabViewController()
+    let tabs = Tabs()
     let window: NSWindow
+
+    /// The tab view controller whose toolbar items are plain, as the mockup draws them: a 14-point symbol and its label,
+    /// no box around each; the preference toolbar marks only the selected one.
+    final class Tabs: NSTabViewController {
+        override func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+                              willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+            let item = super.toolbar(toolbar, itemForItemIdentifier: itemIdentifier, willBeInsertedIntoToolbar: flag)
+            item?.isBordered = false
+            return item
+        }
+    }
 
     init(_ model: SettingsModel) {
         self.model = model
@@ -440,7 +451,8 @@ enum Found {
             page.title = tab.label
             let item = NSTabViewItem(viewController: page)
             (item.label, item.identifier) = (tab.label, tab.rawValue)
-            item.image = NSImage(systemSymbolName: tab.symbol, accessibilityDescription: tab.label)
+            item.image = NSImage(systemSymbolName: tab.symbol, accessibilityDescription: tab.label)?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular))
             tabs.addTabViewItem(item)
         }
         window = NSWindow(contentViewController: tabs)
@@ -471,7 +483,7 @@ struct SettingsPage: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle").font(.system(size: 11))
                     Text("To change a menu’s key, use System Settings › Keyboard › App Shortcuts.").frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Open Keyboard Settings…", action: model.keyboard).buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
+                    Button("Open Keyboard Settings…", action: model.keyboard).buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui)
                 }
                 .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 4)
             }
@@ -577,7 +589,7 @@ struct RowControl: View {
             Button(action: run) {
                 if let symbol { Label(title, systemImage: symbol) } else { Text(title) }
             }
-            .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).disabled(!enabled).opacity(enabled ? 1 : 0.45)
+            .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui).disabled(!enabled).opacity(enabled ? 1 : 0.45)
         case .locked(let word):
             Label(word, systemImage: "lock").labelStyle(Locked()).accessibilityLabel("\(row.title): \(word), cannot be changed")
         }
@@ -682,7 +694,7 @@ private struct AgentsList: View {
         HStack(spacing: 10) {
             Text(model.lookedLine).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).frame(maxWidth: .infinity, alignment: .leading)
             Button { model.again() } label: { Label("Look Again", systemImage: "arrow.clockwise") }
-                .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).disabled(model.found == nil)
+                .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui).disabled(model.found == nil)
         }
         .padding(.horizontal, 4)
     }
