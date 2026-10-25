@@ -168,6 +168,9 @@ final class NativeAsk: Asking {
 
 /// What something does, and what it never does, side by side.
 struct Promise: View {
+    /// The README's promise, word for word (AGENTS.md rule 2): here, and in Settings › Permissions.
+    static let sentence = "something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 18) {
@@ -177,8 +180,7 @@ struct Promise: View {
                 column("something never", "xmark.circle.fill", .red, ["Writes into your agents' sessions or settings.", "Lets a space reach the Internet.",
                                                                       "Answers for you."])
             }
-            // The promise, in the README's words.
-            Text("something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide.")
+            Text(Self.sentence)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

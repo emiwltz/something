@@ -3,6 +3,8 @@
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
+import SomethingAgents
+import SomethingCore
 import Testing
 @testable import something
 
@@ -31,8 +33,32 @@ struct AcceptanceCommand {
             }
         }
     }
-    @Test("g4: Settings, Assistant", .disabled("not built yet: G5")) func g4() async throws {}
-    @Test("g5: Settings, Permissions", .disabled("not built yet: G5")) func g5() async throws {}
+    /// Assistant: the defaults for new spaces (Claude Code with the models it last listed), resume, and rest.
+    @Test("g4: Settings, Assistant") func g4() async throws {
+        let shows = ["Defaults for new spaces", "Agent", "Claude Code", "Model", "Opus 5.5", "Effort", "High", "Conversations",
+                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes", "Keep at most", "assistants awake"]
+        try await settings(.assistant, "g4", shows: shows) { settings, _ in
+            let sections = settings.model.sections(.assistant)
+            #expect(sections.map(\.title) == ["Defaults for new spaces", "Conversations", "Rest"])
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Agent", "Model", "Effort", "Resume each space’s conversation",
+                                                              "Put idle assistants to sleep after", "Keep at most"])
+            #expect(sections[2].rows[1].trail == "assistants awake")
+            #expect(sections[1].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
+            guard case .choice(let agents, let get, _) = sections[0].rows[0].control else { Issue.record("not a choice"); return }
+            #expect(get() == "claude" && agents.map(\.label) == Registry.app.builders.map(\.name))
+        }
+    }
+    /// Permissions: the README's promise, Ask Before Every Change off, the lock, and Notify me off.
+    @Test("g5: Settings, Permissions") func g5() async throws {
+        let shows = ["something never answers for you", "Your assistant", "Ask Before Every Change", "Requests from agents",
+                     "Requests always wait for your click", "Always", "Notify me when a request waits"]
+        try await settings(.permissions, "g5", shows: shows) { settings, _ in
+            let rows = settings.model.sections(.permissions).flatMap(\.rows)
+            #expect(rows.map(\.title) == ["Ask Before Every Change", "Requests always wait for your click", "Notify me when a request waits"])
+            if case .toggle(let on, _, _) = rows[0].control { #expect(!on()) } else { Issue.record("not a switch") }
+            if case .toggle(let on, _, _) = rows[2].control { #expect(!on()) } else { Issue.record("not a switch") }
+        }
+    }
     /// Interface: Auto, Light and Dark (Light chosen, as in the mockup's picture), Motion, the assistant, the sidebar.
     @Test("g6: Settings, Interface") func g6() async throws {
         let shows = ["Auto", "Light", "Dark", "Calm", "Reduced", "Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
@@ -68,6 +94,21 @@ struct AcceptanceCommand {
                                   app: URL(fileURLWithPath: "/opt/homebrew/Cellar/something/0.3.0/something.app"), version: "0.3.0")
         model.spaces = { library.order().filter(\.isSpace).map { ($0.id, $0.title) } }
         model.apply = { _, _ in }
+        // Where each agent was found and what its files name, invented (CM_FOUND); the models Claude Code last listed.
+        let found = ["claude": ("/opt/homebrew/bin/claude", "2.1.4"), "codex": ("/opt/homebrew/bin/codex", "0.48.0"),
+                     "opencode": ("~/.opencode/bin/opencode", "0.15.2"), "pi": ("/opt/homebrew/bin/pi", "0.9.1"), "omp": ("~/.local/bin/omp", "1.3.0"),
+                     "amp": ("/opt/homebrew/bin/amp", "0.0.1761"), "cursor": ("/Applications/Cursor.app", "1.8"),
+                     "antigravity": ("/Applications/Antigravity.app", "1.2")]
+        model.locate = { found[$0]?.0 }
+        model.versions = { found.mapValues(\.1) }
+        model.clock = { Stage.local }
+        model.looked = Stage.local.addingTimeInterval(-18 * 60)
+        var listed = Options()
+        listed.model = [Option(value: "opus", label: "Opus 5.5"), Option(value: "sonnet", label: "Sonnet 5.5")]
+        listed.effort = [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")]
+        library.preferences.change { ($0.listed["claude"], $0.model, $0.effort) = (listed, "opus", "high") }
+        model.find()
+        _ = await wait(3, until: { model.paths != nil })
         if tab == .interface { model.choose(.light) }
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
@@ -136,5 +177,17 @@ struct AcceptanceCommand {
         }
     }
     @Test("g10: the shortcuts card", .disabled("not built yet: G1")) func g10() async throws {}
-    @Test("g11: Settings, Agents", .disabled("not built yet: G5")) func g11() async throws {}
+    /// Agents: the six builders found, Claude Code the default, the two agents something only sees with their
+    /// reasons, and when it last looked, by the Stage's clock.
+    @Test("g11: Settings, Agents") func g11() async throws {
+        let shows = ["The coding agents found on this Mac", "Can build spaces", "Claude Code", "Default", "/opt/homebrew/bin/claude", "2.1.4",
+                     "Seen only", "Cursor", "Antigravity", "Looked today at 18:02", "8 agents", "Look Again"]
+        try await settings(.agents, "g11", shows: shows) { settings, _ in
+            let agents = settings.model.agents
+            #expect(agents.filter(\.builds).map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
+            #expect(agents.filter { !$0.builds }.map(\.name) == ["Antigravity", "Cursor"])
+            #expect(agents.filter(\.isDefault).map(\.id) == ["claude"] && agents.allSatisfy { $0.path != nil && $0.version != nil })
+            #expect(settings.model.sections(.agents).isEmpty && settings.model.lookedLine == "Looked today at 18:02 · 8 agents")
+        }
+    }
 }

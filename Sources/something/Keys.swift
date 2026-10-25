@@ -97,7 +97,10 @@ enum Keys {
         Command(id: "versions", title: "Versions…", owner: "T19", needsSpace: true),
         // The menu item only holds the submenu; its selector is there so that the app can grey it.
         Command(id: "buildWith", title: "Build With", action: #selector(App.buildWith(_:)), owner: "AB11", needsSpace: true),
-        Command(id: "askAll", title: "Ask Before Every Change…", owner: "G5"),
+        Command(id: "askAll", title: "Ask Before Every Change…", action: #selector(App.showPermissions(_:)), owner: "G5"),
+        // Only in the assistant's own menus: the agent chip's and Build With ▸, and its title's.
+        Command(id: "defaults", title: "Defaults for New Spaces…", action: #selector(App.showNewSpaceDefaults(_:)), owner: "G5"),
+        Command(id: "lookAgain", title: "Look for Agents Again", action: #selector(App.lookForAgentsAgain(_:)), owner: "G5"),
         Command(id: "sleep", title: "Put Idle Assistants to Sleep", action: #selector(App.putIdleToSleep(_:)), owner: "AB10"),
         Command(id: "minimize", title: "Minimize", key: "m", action: #selector(NSWindow.performMiniaturize(_:)), owner: "F5"),
         Command(id: "zoom", title: "Zoom", action: #selector(NSWindow.performZoom(_:)), owner: "W1"),

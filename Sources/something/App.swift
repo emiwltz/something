@@ -365,7 +365,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         menu.items = AssistantModel.builderItems(assistant.entries, action: #selector(buildNewWith(_:)), checked: assistant.newKind)
         if menu.items.isEmpty { menu.addItem(NSMenuItem(title: "No coding agent found", action: nil, keyEquivalent: "")) }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: AssistantModel.defaultsTitle, action: Keys.command("settings")?.action, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: AssistantModel.defaultsTitle, action: Keys.command("defaults")?.action, keyEquivalent: ""))
     }
 
     /// Greyed, never hidden: Keys says when each command can act.

@@ -534,7 +534,7 @@ struct ConversationMenu: View {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
         Divider()
-        Button("Look for Agents Again") { model.lookAgain() }
+        Button("Look for Agents Again") { _ = NSApp.sendAction(#selector(App.lookForAgentsAgain(_:)), to: nil, from: nil) }
     }
 }
 
@@ -555,7 +555,7 @@ struct AgentMenu: View {
             }
         }
         Divider()
-        let settings = Keys.command("settings")?.action
+        let settings = Keys.command("defaults")?.action
         Button(AssistantModel.defaultsTitle) { settings.map { _ = NSApp.sendAction($0, to: nil, from: nil) } }.disabled(settings == nil)
     }
 }
