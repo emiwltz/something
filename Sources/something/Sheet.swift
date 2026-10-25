@@ -68,8 +68,9 @@ final class Sheet: NSPanel {
         back.widthAnchor.constraint(equalToConstant: width).isActive = true
         contentView = back
         setContentSize(back.fittingSize)
-        // The safe action: Cancel in a sheet; in an alert, its primary one, which the alert makes the safe one.
-        initialFirstResponder = alert ? buttons.first { $0.role == .primary } : buttons.first { $0.role == .cancel }
+        // The safe action: Cancel in a sheet; in an alert, its primary one, which the alert makes the safe one, or its
+        // Cancel when it has none (a destructive question).
+        initialFirstResponder = (alert ? buttons.first { $0.role == .primary } : nil) ?? buttons.first { $0.role == .cancel }
         makeFirstResponder(initialFirstResponder)
         (buttons.first { $0.role == .cancel } ?? initialFirstResponder as? SheetButton)?.keyEquivalent = "\u{1b}"
         setAccessibilitySubrole(.dialog)

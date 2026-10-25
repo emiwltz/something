@@ -447,6 +447,8 @@ import Testing
         guard case .button(_, _, let enabled, let run) = row.control else { Issue.record("not a button"); return }
         #expect(enabled)
         let before = (store.list("board"), try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).sorted())
+        // A weight measured long ago says nothing is old: the click reads the indexes again.
+        model.storage?.old = Versions.Old()
         run()
         #expect(effects.confirms.count == 1 && effects.confirms.first?.0 == old)
         #expect(store.list("board") == before.0 && model.cleared == nil, "the alert is up: nothing changed")

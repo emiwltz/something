@@ -491,7 +491,7 @@ struct SettingsPage: View {
                         .padding(.horizontal, 2).padding(.top, 2)
                     VStack(spacing: 0) {
                         if section.appearance { Appearances(model: model) }
-                        if section.storage, let limit = section.rows.first { StorageBlock(storage: model.storage, limit: limit) }
+                        if section.storage, let limit = section.rows.first { StorageBlock(storage: model.storage, megabytes: model.preferences.values.storageLimit, limit: limit) }
                         ForEach(Array(section.rows.dropFirst(section.storage ? 1 : 0).enumerated()), id: \.element.id) { index, row in
                             if index > 0 || section.appearance || section.storage { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
                             RowView(row: row)

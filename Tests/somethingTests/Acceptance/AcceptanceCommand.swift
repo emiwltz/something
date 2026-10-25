@@ -146,7 +146,9 @@ struct AcceptanceCommand {
     /// Versions & Storage: Keep 50, the store's weight in three parts against 500 MB (invented weights, CM_PREFS'
     /// used:312), Clear Old Versions armed, and where the spaces are.
     @Test("g8: Settings, Versions and Storage") func g8() async throws {
-        let shows = ["Versions", "Keep", "versions per space", "Storage", "312 MB", "used of 500 MB", "Memory", "Spaces", "23 MB",
+        // Every value of the legend is read off the picture but Memory's "41 MB", which Vision misreads in the light
+        // picture; an offscreen window gives VoiceOver nothing to hear, so that one is not read at all.
+        let shows = ["Versions", "Keep", "versions per space", "Storage", "312 MB", "used of 500 MB", "Versions", "248 MB", "Memory", "Spaces", "23 MB",
                      "Free", "188 MB", "When it is full", "Clear Old Versions...", "Where", "~/something/spaces", "Show in Finder"]
         try await settings(.storage, "g8", shows: shows) { settings, stage in
             let sections = settings.model.sections(.storage)

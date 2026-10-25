@@ -17,6 +17,12 @@ struct Storage: Equatable {
     /// Clear Old Versions takes the versions older than `days`, each space keeping its `latest` newest.
     static let days = 30, latest = 10
 
+    /// The storage limits one may choose, in megabytes, and how each is said.
+    static let limits = [(250, "250 MB"), (500, "500 MB"), (1_000, "1 GB"), (2_000, "2 GB")]
+
+    /// How a limit of `megabytes` is said: as its choice says it.
+    static func label(_ megabytes: Int) -> String { limits.first { $0.0 == megabytes }?.1 ?? "\(megabytes) MB" }
+
     /// The versions Clear Old Versions takes are those before this date.
     static func cutoff(_ now: Date) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
 
@@ -49,8 +55,6 @@ struct Storage: Equatable {
         let sheet = Sheet(icon: .sign, title: "Clear versions older than \(days) days?",
                           body: [("This removes \(megabytes(old.bytes)) of versions from \(spaces). Each space keeps its \(latest) latest versions. This can’t be undone.", false)],
                           actions: [.init(title: "Cancel", role: .cancel), .init(title: "Clear Versions", role: .destructive)], alert: true, width: 280)
-        sheet.initialFirstResponder = sheet.buttons.first
-        sheet.makeFirstResponder(sheet.initialFirstResponder)
         return sheet
     }
 
@@ -72,13 +76,17 @@ extension SettingsModel {
     }
 
     /// Clear Old Versions…: asks first; on Clear Versions, drops them, says what was freed and weighs again. On the
-    /// main queue, as a version is taken there: none can be written between the read and the write of an index.
+    /// main queue, as a version is taken there: none can be written between the read and the write of an index. What
+    /// the alert says is read again at the click, as Settings may have stayed open for days since it was weighed; one
+    /// cutoff serves the alert and the clearing, and the line says what was really dropped.
     func clearOld() {
-        guard let old = storage?.old, old.bytes > 0 else { return }
+        let store = Versions(root: places.versions, keep: 0, limit: 0), cutoff = Storage.cutoff(clock())
+        let old = store.old(before: cutoff, keeping: Storage.latest)
+        guard old.bytes > 0 else { return measure() }
         confirm(old) { [weak self] in
             guard let self else { return }
-            Versions(root: places.versions, keep: 0, limit: 0).clear(before: Storage.cutoff(clock()), keeping: Storage.latest)
-            cleared = "Cleared \(Storage.megabytes(old.bytes)) of versions older than \(Storage.days) days."
+            let dropped = store.clear(before: cutoff, keeping: Storage.latest)
+            cleared = "Cleared \(Storage.megabytes(dropped.bytes)) of versions older than \(Storage.days) days."
             measure()
         }
     }
@@ -94,7 +102,7 @@ extension SettingsModel {
                             control: number(\.versionsKept, [(20, "20"), (50, "50"), (100, "100"), (0, "All of them")]), trail: "versions per space"),
             ]),
             SettingsSection(title: "Storage", rows: [
-                SettingsRow(title: "Storage limit", note: "", control: number(\.storageLimit, [(250, "250 MB"), (500, "500 MB"), (1_000, "1 GB"), (2_000, "2 GB")])),
+                SettingsRow(title: "Storage limit", note: "", control: number(\.storageLimit, Storage.limits)),
                 SettingsRow(title: "When it is full", note: "The oldest versions go first. Your spaces and their memory are never removed.",
                             control: .button("Clear Old Versions…", enabled: old > 0) { [weak self] in self?.clearOld() }),
                 // The places' home is the person's: ~ stands for it, whatever home a trial gives.
@@ -109,10 +117,12 @@ extension SettingsModel {
 /// limit, and their legend with what is free.
 struct StorageBlock: View {
     let storage: Storage?
+    /// The limit in megabytes, and its row, which only draws the menu that changes it.
+    let megabytes: Int
     let limit: SettingsRow
 
     var body: some View {
-        let total = limitBytes
+        let total = megabytes * 1_000_000
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 7) {
                 if let storage {
@@ -141,16 +151,7 @@ struct StorageBlock: View {
         [("Versions", storage?.versions), ("Memory", storage?.memory), ("Spaces", storage?.spaces)]
     }
 
-    /// The limit chosen, in bytes.
-    private var limitBytes: Int {
-        guard case .choice(_, let get, _) = limit.control else { return 0 }
-        return (Int(get()) ?? 0) * 1_000_000
-    }
-
-    private var limitLabel: String {
-        guard case .choice(let options, let get, _) = limit.control else { return "" }
-        return options.first { $0.value == get() }?.label ?? ""
-    }
+    private var limitLabel: String { Storage.label(megabytes) }
 
     /// Ten points high in sunk inside a ring of line, each part's width its share of the limit (of what is used, when
     /// more than the limit is), two points between them.
@@ -181,5 +182,6 @@ struct StorageBlock: View {
             Text(bytes.map(Storage.megabytes) ?? "—").foregroundStyle(Look.Token.ink3.ui)
         }
         .font(Look.small.font.ui)
+        .accessibilityElement(children: .ignore).accessibilityLabel("\(name) \(bytes.map(Storage.megabytes) ?? "unknown")")
     }
 }

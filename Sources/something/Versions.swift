@@ -183,17 +183,25 @@ struct Versions {
     struct Old: Equatable { var bytes = 0, spaces = 0 }
 
     /// What `clear(before:keeping:)` would drop, measured without changing anything.
-    func old(before date: Date, keeping latest: Int) -> Old {
-        trimmed(before: date, keeping: latest).reduce(into: Old()) { old, space in
+    func old(before date: Date, keeping latest: Int) -> Old { weigh(trimmed(before: date, keeping: latest)) }
+
+    /// Drops the versions older than `date`, each space keeping its `latest` newest, then the contents no version
+    /// holds. A space whose index does not read is left whole. Returns what it dropped, weighed from the same read.
+    @discardableResult func clear(before date: Date, keeping latest: Int) -> Old {
+        let trimmed = trimmed(before: date, keeping: latest)
+        let dropped = weigh(trimmed)
+        keep(trimmed.mapValues(\.kept))
+        return dropped
+    }
+
+    /// The bytes no kept version holds any more, and in how many spaces.
+    private func weigh(_ trimmed: [String: (was: [Version], kept: [Version])]) -> Old {
+        trimmed.reduce(into: Old()) { old, space in
             let held = Set(space.value.kept.flatMap(\.files.values))
             old.bytes += Set(space.value.was.flatMap(\.files.values)).subtracting(held).reduce(0) { $0 + size(space.key, $1) }
             old.spaces += 1
         }
     }
-
-    /// Drops the versions older than `date`, each space keeping its `latest` newest, then the contents no version
-    /// holds. A space whose index does not read is left whole.
-    func clear(before date: Date, keeping latest: Int) { keep(trimmed(before: date, keeping: latest).mapValues(\.kept)) }
 
     /// Each space that has versions older than `date` beyond its `latest` newest: all its versions, and those kept.
     private func trimmed(before date: Date, keeping latest: Int) -> [String: (was: [Version], kept: [Version])] {
