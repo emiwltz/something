@@ -319,30 +319,7 @@ final class PointOverlay: NSView {
                   at: lifted && picks.isEmpty ? drawnHole : nil)
         }
         drawBanner()
-        if let composer { drawFloat(composer.frame, radius: Look.card, fill: .bg2, ring: true) }
-    }
-
-    /// The float shadow under a card of `box`, cast by a shape of `fill`, with its ring when `ring`.
-    private func drawFloat(_ box: CGRect, radius: CGFloat, fill: Look.Token, ring: Bool) {
-        Self.float(box, radius: radius, fill: fill, ring: ring, appearance: effectiveAppearance)
-    }
-
-    /// The float shadow under a card of `box` in `appearance`, cast by a shape of `fill`, with its ring when `ring`.
-    static func float(_ box: CGRect, radius: CGFloat, fill: Look.Token, ring: Bool, appearance: NSAppearance) {
-        for shade in Look.float(appearance) {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
-            shadow.set()
-            fill.color.setFill()
-            NSBezierPath(roundedRect: box.insetBy(dx: -shade.spread, dy: -shade.spread), xRadius: radius, yRadius: radius).fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-        guard ring else { return }
-        Look.floatRing.token.color.setStroke()
-        let ring = NSBezierPath(roundedRect: box.insetBy(dx: -0.5, dy: -0.5), xRadius: radius + 0.5, yRadius: radius + 0.5)
-        ring.lineWidth = Look.floatRing.width
-        ring.stroke()
+        if let composer { Look.drawFloat(composer.frame, radius: Look.card, fill: .bg2, ring: true, appearance: effectiveAppearance) }
     }
 
     /// The sign's four corners around `part` (or in `box` while its hole moves), haloed in the background so they read
@@ -429,15 +406,12 @@ final class PointOverlay: NSView {
         let box = CGRect(x: (bounds.width - boxWidth) / 2, y: 14 - 56 * (1 - p), width: boxWidth, height: 34)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current?.cgContext.setAlpha(min(1, p * 1.5))
-        drawFloat(box, radius: 17, fill: .glass, ring: false)
+        Look.drawFloat(box, radius: 17, fill: .glass, ring: false, appearance: effectiveAppearance)
         Look.Token.glass.color.setFill()
         NSBezierPath(roundedRect: box, xRadius: 17, yRadius: 17).fill()
         var x = box.minX + 12
         let mid = box.midY
-        let icon = NSImage(systemSymbolName: "scope", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 12, weight: .medium)) ?? NSImage()
-        Self.tinted(icon, Look.Token.ink.color).draw(in: CGRect(x: x, y: mid - 6.5, width: 13, height: 13), from: .zero,
-                                                     operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        Self.draw(Self.symbol("scope", 12, .medium), Look.Token.ink.color, in: CGRect(x: x, y: mid - 6.5, width: 13, height: 13))
         x += 13 + 9
         for (index, piece) in pieces.enumerated() {
             switch piece {
@@ -457,14 +431,19 @@ final class PointOverlay: NSView {
         NSGraphicsContext.restoreGraphicsState()
     }
 
-    /// `image` drawn in `color`: a symbol's template image takes no tint when drawn by hand.
-    static func tinted(_ image: NSImage, _ color: NSColor) -> NSImage {
+    /// Draws `image` in `color` into `box` of a flipped view: a symbol's template image takes no tint when drawn by hand.
+    static func draw(_ image: NSImage, _ color: NSColor, in box: CGRect) {
         NSImage(size: image.size, flipped: false) { rect in
             image.draw(in: rect)
             color.set()
             rect.fill(using: .sourceAtop)
             return true
-        }
+        }.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+    }
+
+    /// The system symbol `name` at `size` points and `weight`.
+    static func symbol(_ name: String, _ size: CGFloat, _ weight: NSFont.Weight) -> NSImage {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: weight)) ?? NSImage()
     }
 
     override func removeFromSuperview() {

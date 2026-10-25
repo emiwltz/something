@@ -126,15 +126,11 @@ final class PointComposer: NSView, NSTextViewDelegate {
         shape.fill()
         // The header, 16 high: the target, the parts' names, and to the right the eyes and the space.
         let mid: CGFloat = 18, small = Look.font(.ui, size: 11.5)
-        let icon = NSImage(systemSymbolName: "scope", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 11, weight: .medium)) ?? NSImage()
-        PointOverlay.tinted(icon, Look.Token.ink2.color).draw(in: CGRect(x: 12, y: mid - 6.5, width: 13, height: 13), from: .zero,
-                                                             operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        PointOverlay.draw(PointOverlay.symbol("scope", 11, .medium), Look.Token.ink2.color, in: CGRect(x: 12, y: mid - 6.5, width: 13, height: 13))
         let space = NSAttributedString(string: title, attributes: [.font: small, .foregroundColor: Look.Token.ink3.color])
         let spaceSize = space.size(), spaceX = bounds.width - 12 - ceil(spaceSize.width)
         space.draw(at: CGPoint(x: spaceX, y: mid - spaceSize.height / 2))
-        PointOverlay.tinted(Sign.miniEyes(eyes), Look.Token.eyes.color).draw(in: CGRect(x: spaceX - 6 - 13, y: mid - 4, width: 13, height: 8),
-                                                                             from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        PointOverlay.draw(Sign.miniEyes(eyes), Look.Token.eyes.color, in: CGRect(x: spaceX - 6 - 13, y: mid - 4, width: 13, height: 8))
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         let name = NSAttributedString(string: names, attributes: [.font: Look.font(.ui, size: 11.5, weight: .semibold),

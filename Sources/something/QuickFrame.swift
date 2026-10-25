@@ -120,9 +120,8 @@ final class QuickFrame: NSView {
     private func drawBadge(_ words: String, in box: CGRect) {
         Look.Token.act.color.setFill()
         NSBezierPath(roundedRect: box, xRadius: 12, yRadius: 12).fill()
-        let eyes = Sign.miniEyes(quick.phase == .done ? .done : .think)
-        PointOverlay.tinted(eyes, Look.Token.actfg.color).draw(in: CGRect(x: box.minX + 7, y: box.midY - 4, width: 13, height: 8), from: .zero,
-                                                               operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        PointOverlay.draw(Sign.miniEyes(quick.phase == .done ? .done : .think), Look.Token.actfg.color,
+                          in: CGRect(x: box.minX + 7, y: box.midY - 4, width: 13, height: 8))
         let text = NSAttributedString(string: words, attributes: badgeFace)
         text.draw(at: CGPoint(x: box.minX + 7 + 13 + 6, y: box.midY - text.size().height / 2))
     }
@@ -145,13 +144,10 @@ final class QuickFrame: NSView {
             let ring = NSBezierPath(roundedRect: box.insetBy(dx: -0.5, dy: -0.5), xRadius: 12.5, yRadius: 12.5)
             ring.stroke()
         } else {
-            PointOverlay.float(box, radius: 12, fill: .bg2, ring: true, appearance: effectiveAppearance)
+            Look.drawFloat(box, radius: 12, fill: .bg2, ring: true, appearance: effectiveAppearance)
         }
-        let symbol = NSImage(systemSymbolName: ended ? "checkmark" : "bolt", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 10, weight: .semibold)) ?? NSImage()
-        PointOverlay.tinted(symbol, (ended ? Look.Token.ink3 : Look.Token.ink2).color)
-            .draw(in: CGRect(x: box.minX + 8, y: box.midY - 6, width: 12, height: 12), from: .zero, operation: .sourceOver, fraction: 1,
-                  respectFlipped: true, hints: nil)
+        PointOverlay.draw(PointOverlay.symbol(ended ? "checkmark" : "bolt", 10, .semibold), (ended ? Look.Token.ink3 : Look.Token.ink2).color,
+                          in: CGRect(x: box.minX + 8, y: box.midY - 6, width: 12, height: 12))
         let text = NSAttributedString(string: chip, attributes: [.font: Look.font(.ui, size: 11.5, weight: .medium),
                                                                  .foregroundColor: (ended ? Look.Token.ink3 : Look.Token.ink).color])
         text.draw(at: CGPoint(x: box.minX + 8 + 12 + 6, y: box.midY - text.size().height / 2))

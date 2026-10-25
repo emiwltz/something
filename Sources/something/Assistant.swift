@@ -257,12 +257,17 @@ import SomethingCore
         }
         // A turn ended: the oldest held message of its conversation leaves, one per turn, as the mockup sends them.
         for each in sessions.values {
-            guard let next = each.held.first, light(each) == .ready, !each.launching, !quickWorks(on: each.space),
+            guard !each.held.isEmpty, light(each) == .ready, !each.launching, !quickWorks(on: each.space),
                   each.releasedAfter != .some(each.turn?.id) else { continue }
-            each.held.removeFirst()
-            each.releasedAfter = .some(each.turn?.id)
-            deliver(next, to: each)
+            release(each)
         }
+    }
+
+    /// Sends the oldest message held for `session`, noting the turn it leaves after.
+    private func release(_ session: Session) {
+        let next = session.held.removeFirst()
+        session.releasedAfter = .some(session.turn?.id)
+        deliver(next, to: session)
     }
 
     /// Notes when something first saw each item of the build's turn and each end of its tools, and the question the
@@ -1010,11 +1015,7 @@ import SomethingCore
         } else {
             leave()
         }
-        if let main = sessions[.space(quick.space)], let next = main.held.first, !main.launching, ![.working, .waiting].contains(light(main)) {
-            main.held.removeFirst()
-            main.releasedAfter = .some(main.turn?.id)
-            deliver(next, to: main)
-        }
+        if let main = sessions[.space(quick.space)], !main.held.isEmpty, !main.launching, ![.working, .waiting].contains(light(main)) { release(main) }
     }
 
     // MARK: Words

@@ -318,7 +318,11 @@ struct InspectorView: View {
                 }
                 VStack(spacing: 0) {
                     Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.bottom, 10)
-                    pairs([("Agent", name), ("Model", words.model + (words.effort.map { " · " + $0 } ?? "")), ("Conversation", conversation)])
+                    Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.32) {
+                        row("Agent", name)
+                        row("Model", words.model + (words.effort.map { " · " + $0 } ?? ""))
+                        row("Conversation", conversation)
+                    }
                 }
                 HStack(spacing: 6) {
                     // The first takes the room its words need, as the mockup's grid gives it; the second the rest.
@@ -458,12 +462,6 @@ struct InspectorView: View {
             Text(title.uppercased()).font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.525)
                 .foregroundStyle(Look.Token.ink3.ui).accessibilityAddTraits(.isHeader)
             content()
-        }
-    }
-
-    private func pairs(_ lines: [(String, String)]) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.32) {
-            ForEach(lines, id: \.0) { row($0.0, $0.1) }
         }
     }
 

@@ -114,6 +114,11 @@ enum Keys {
 
     static func command(_ id: String) -> Command? { commands.first { $0.id == id } }
 
+    /// Sends the command `id`'s action along the responder chain, as its menu item would; nothing while it has none.
+    @MainActor static func send(_ id: String) {
+        if let action = command(id)?.action { NSApp.sendAction(action, to: nil, from: nil) }
+    }
+
     /// "⌘K" for `id`, "" when it has no key: for tooltips and sentences.
     static func shown(_ id: String) -> String { command(id)?.shown ?? "" }
 

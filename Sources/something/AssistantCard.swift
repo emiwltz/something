@@ -477,9 +477,7 @@ struct ModelChip: View {
 struct PointChip: View {
     let model: AssistantModel
     var body: some View {
-        Button {
-            if let action = Keys.command("pointpart")?.action { NSApp.sendAction(action, to: nil, from: nil) }
-        } label: {
+        Button { Keys.send("pointpart") } label: {
             HStack(spacing: 6) {
                 Image(systemName: "scope").font(.system(size: 11.5))
                 Text("Point")
@@ -534,8 +532,7 @@ struct ConversationMenu: View {
             Toggle("Ask Before Every Change", isOn: Binding(get: { model.askEverything }, set: { _ in model.toggleAsking() }))
         }
         Divider()
-        let again = Keys.command("lookAgain")
-        Button(again?.title ?? "") { again?.action.map { _ = NSApp.sendAction($0, to: nil, from: nil) } }.disabled(again?.action == nil)
+        Button(Keys.command("lookAgain")?.title ?? "") { Keys.send("lookAgain") }
     }
 }
 
@@ -556,8 +553,7 @@ struct AgentMenu: View {
             }
         }
         Divider()
-        let settings = Keys.command("defaults")?.action
-        Button(AssistantModel.defaultsTitle) { settings.map { _ = NSApp.sendAction($0, to: nil, from: nil) } }.disabled(settings == nil)
+        Button(AssistantModel.defaultsTitle) { Keys.send("defaults") }
     }
 }
 

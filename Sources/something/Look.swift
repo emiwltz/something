@@ -160,6 +160,24 @@ enum Look {
     /// The ring that goes with the float shadow.
     static let floatRing = (token: Token.line2, width: CGFloat(1))
 
+    /// The float shadow under a card of `box` in `appearance`, cast by a shape of `fill`, with its ring when `ring`.
+    static func drawFloat(_ box: CGRect, radius: CGFloat, fill: Token, ring: Bool, appearance: NSAppearance) {
+        for shade in float(appearance) {
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
+            shadow.set()
+            fill.color.setFill()
+            NSBezierPath(roundedRect: box.insetBy(dx: -shade.spread, dy: -shade.spread), xRadius: radius, yRadius: radius).fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
+        guard ring else { return }
+        floatRing.token.color.setStroke()
+        let ring = NSBezierPath(roundedRect: box.insetBy(dx: -0.5, dy: -0.5), xRadius: radius + 0.5, yRadius: radius + 0.5)
+        ring.lineWidth = floatRing.width
+        ring.stroke()
+    }
+
     // MARK: Motion
 
     /// A cubic Bézier curve, by its two control points.

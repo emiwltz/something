@@ -84,7 +84,9 @@ struct SettingsSection: Identifiable {
     /// Plays the welcome tour again (App.showTour).
     @ObservationIgnored var tour: () -> Void = {}
     /// Opens System Settings › Keyboard; tests record it instead.
-    @ObservationIgnored var keyboard: () -> Void = Settings.openKeyboard
+    @ObservationIgnored var keyboard: () -> Void = {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") { NSWorkspace.shared.open(url) }
+    }
     /// Says what went wrong, in a sentence.
     @ObservationIgnored var told: (String) -> Void = { _ in }
     /// Whether something's launcher stands in ~/Applications: the disk says it, read again as the window shows.
@@ -357,10 +359,6 @@ struct SettingsSection: Identifiable {
     static func apply(_ appearance: Preferences.Appearance, _ motion: Look.Motion) {
         NSApp.appearance = Look.appearance(appearance)
         Look.chosen = motion
-    }
-
-    static func openKeyboard() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") { NSWorkspace.shared.open(url) }
     }
 }
 

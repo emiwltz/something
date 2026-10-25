@@ -20,9 +20,6 @@ struct Storage: Equatable {
     /// The storage limits one may choose, in megabytes, and how each is said.
     static let limits = [(250, "250 MB"), (500, "500 MB"), (1_000, "1 GB"), (2_000, "2 GB")]
 
-    /// How a limit of `megabytes` is said: as its choice says it.
-    static func label(_ megabytes: Int) -> String { limits.first { $0.0 == megabytes }?.1 ?? "\(megabytes) MB" }
-
     /// The versions Clear Old Versions takes are those before this date.
     static func cutoff(_ now: Date) -> Date { now.addingTimeInterval(-Double(days) * 86_400) }
 
@@ -52,10 +49,9 @@ struct Storage: Equatable {
     /// The alert before Clear Old Versions: Cancel holds the focus and Escape; Clear Versions is never pressed by Return.
     static func alert(_ old: Versions.Old) -> Sheet {
         let spaces = old.spaces == 1 ? "1 space" : "\(old.spaces) spaces"
-        let sheet = Sheet(icon: .sign, title: "Clear versions older than \(days) days?",
-                          body: [("This removes \(megabytes(old.bytes)) of versions from \(spaces). Each space keeps its \(latest) latest versions. This can’t be undone.", false)],
-                          actions: [.init(title: "Cancel", role: .cancel), .init(title: "Clear Versions", role: .destructive)], alert: true, width: 280)
-        return sheet
+        return Sheet(icon: .sign, title: "Clear versions older than \(days) days?",
+                     body: [("This removes \(megabytes(old.bytes)) of versions from \(spaces). Each space keeps its \(latest) latest versions. This can’t be undone.", false)],
+                     actions: [.init(title: "Cancel", role: .cancel), .init(title: "Clear Versions", role: .destructive)], alert: true, width: 280)
     }
 
     /// Hangs the alert from the Settings window and runs `then` only on Clear Versions.
@@ -151,7 +147,8 @@ struct StorageBlock: View {
         [("Versions", storage?.versions), ("Memory", storage?.memory), ("Spaces", storage?.spaces)]
     }
 
-    private var limitLabel: String { Storage.label(megabytes) }
+    /// The limit as its choice says it.
+    private var limitLabel: String { Storage.limits.first { $0.0 == megabytes }?.1 ?? "\(megabytes) MB" }
 
     /// Ten points high in sunk inside a ring of line, each part's width its share of the limit (of what is used, when
     /// more than the limit is), two points between them.

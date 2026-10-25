@@ -103,16 +103,7 @@ final class Stopped: NSView {
         Look.Token.bg.color.withAlphaComponent(0.88).setFill()
         bounds.fill()
         let shape = NSBezierPath(roundedRect: card.frame, xRadius: Look.card, yRadius: Look.card)
-        for shade in Look.float(effectiveAppearance) {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            (shadow.shadowColor, shadow.shadowBlurRadius) = (shade.color, shade.blur / 2)
-            shadow.shadowOffset = NSSize(width: 0, height: -shade.y)
-            shadow.set()
-            Look.Token.bg2.color.setFill()
-            NSBezierPath(roundedRect: card.frame.insetBy(dx: -shade.spread, dy: -shade.spread), xRadius: Look.card, yRadius: Look.card).fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
+        Look.drawFloat(card.frame, radius: Look.card, fill: .bg2, ring: false, appearance: effectiveAppearance)
         Look.Token.bg2.color.setFill()
         shape.fill()
         Look.floatRing.token.color.setStroke()

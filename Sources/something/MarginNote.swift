@@ -165,7 +165,7 @@ final class MarginNote: NSView {
             Look.Token.ink.color.setFill()
             NSBezierPath(ovalIn: CGRect(x: from.x - 3.5, y: from.y - 3.5, width: 7, height: 7)).fill()
         }
-        PointOverlay.float(layout.note, radius: Look.card, fill: .bg2, ring: false, appearance: effectiveAppearance)
+        Look.drawFloat(layout.note, radius: Look.card, fill: .bg2, ring: false, appearance: effectiveAppearance)
         Look.Token.line.color.setStroke()
         let ring = NSBezierPath(roundedRect: layout.note.insetBy(dx: -0.5, dy: -0.5), xRadius: Look.card + 0.5, yRadius: Look.card + 0.5)
         ring.stroke()
@@ -231,9 +231,7 @@ final class MarginNote: NSView {
             let text = top + Self.header + 9 + 1 + 9
             words.draw(with: CGRect(x: 14, y: text, width: bounds.width - 28, height: textHeight), options: [.usesLineFragmentOrigin])
             let foot = bounds.height - 9 - 13
-            let icon = NSImage(systemSymbolName: "scope", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 10, weight: .medium)) ?? NSImage()
-            PointOverlay.tinted(icon, Look.Token.ink3.color).draw(in: CGRect(x: 14, y: foot - 5.5, width: 11, height: 11), from: .zero,
-                                                                   operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            PointOverlay.draw(PointOverlay.symbol("scope", 10, .medium), Look.Token.ink3.color, in: CGRect(x: 14, y: foot - 5.5, width: 11, height: 11))
             part.draw(at: CGPoint(x: 14 + 11 + 5, y: foot - part.size().height / 2))
         }
     }

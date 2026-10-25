@@ -230,8 +230,8 @@ struct SidebarView: View {
                 Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
                     .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
             }
-            // Go to… and Settings send their commands, and stay greyed until a command has its action (G2, G4).
-            nav("palette", label: "Go to…", on: false, open: Self.send("palette")) {
+            // Go to… sends its command, and stays greyed until the command has its action (G2).
+            nav("palette", label: "Go to…", on: false, open: { Keys.send("palette") }) {
                 Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
             }
             .disabled(Keys.command("palette")?.action == nil)
@@ -305,21 +305,15 @@ struct SidebarView: View {
                 Image(nsImage: Sign.image(.listen, side: 20)).accessibilityHidden(true)
                 Text("something").font(Look.font(.title, size: 15, weight: .bold).ui).kerning(-0.375)
                 Spacer(minLength: 0)
-                Button(action: Self.send("settings")) {
+                Button { Keys.send("settings") } label: {
                     Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
-                .disabled(Keys.command("settings")?.action == nil)
             }
             .padding(EdgeInsets(top: 10, leading: 8, bottom: 0, trailing: 4))
         }
         .padding(.top, 8)
-    }
-
-    /// Sends the command `id`'s action along the responder chain, as its menu item would.
-    private static func send(_ id: String) -> () -> Void {
-        { if let action = Keys.command(id)?.action { NSApp.sendAction(action, to: nil, from: nil) } }
     }
 
     private func newSpace() {
