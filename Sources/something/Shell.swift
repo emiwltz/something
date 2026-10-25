@@ -1,11 +1,12 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), the window layer
 // over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
 // waiting requests, Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change
-// leaves its frames at work, QuickFrame.swift), Reload, Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets
-// the desktop through. The center holds the open space's web view edge to edge under the toolbar, what keeps a space
-// from being shown, New Space or the templates; over a space, the glass, which holds the assistant (Glass.swift). Off
-// the spaces the assistant is away: New Space has its own field. While the welcome is open over it, the window steps
-// back under a veil that takes every click.
+// leaves its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Reload,
+// Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
+// holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
+// the templates; over a space, the glass, which holds the assistant (Glass.swift). Off the spaces the assistant is
+// away: New Space has its own field. While the welcome is open over it, the window steps back under a veil that takes
+// every click.
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -91,6 +92,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
+        assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
         // One place for the sticker over every space, kept for the next start unless the person asked otherwise.
@@ -121,8 +123,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         closed()
     }
 
-    /// The sidebar changed width: the title measures the room it has again.
-    @objc private func columnsMoved() { titleLine.invalidateIntrinsicContentSize() }
+    /// The columns moved: the title measures the room it has again; Info shown, a note leaves the right edge to it.
+    @objc private func columnsMoved() {
+        titleLine.invalidateIntrinsicContentSize()
+        if !inspector.isCollapsed { space?.note?.dismiss() }
+    }
 
     /// The window changed size, which does not always move the columns: the title measures its room again.
     func windowDidResize(_ notification: Notification) {
@@ -298,6 +303,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func point() {
         guard let space, space.pointable else { return }
         guard space.pointer == nil else { return stopPointing() }
+        space.note?.dismiss()
         let overlay = PointOverlay(space, motion: library.preferences.motion)
         overlay.stopped = { [weak self] in self?.stopPointing() }
         let name = space.space.name
@@ -321,6 +327,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         stopPointing()
         if let quick = assistant.quicks[space.space.name] { QuickFrame.show(quick, over: space) }
+    }
+
+    /// A Quick Change that changed nothing answered `words`: a note beside its first part, on the space shown, Info
+    /// closed for it (the right edge holds one thing at a time). The note takes the keys, for Esc.
+    func note(_ words: String, about quick: AssistantModel.Quick) {
+        guard let space, space.space.name == quick.space, space.frame != nil, let part = quick.parts.first else { return }
+        inspector.isCollapsed = true
+        window.makeFirstResponder(MarginNote.show(words, about: part, title: space.title, over: space))
     }
 
     /// Stops point mode, the page's keys back to it.

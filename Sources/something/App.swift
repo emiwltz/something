@@ -58,6 +58,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             // Escape: point mode's first, wherever the focus is in the window; else the assistant's nudge.
             if event.keyCode == 53, shell.window.isKeyWindow, shell.window.attachedSheet == nil, let pointer = current?.pointer,
                pointer.escape() { return nil }
+            // Then a margin note's, the top thing over the page.
+            if event.keyCode == 53, shell.window.isKeyWindow, shell.window.attachedSheet == nil, let note = current?.note {
+                note.dismiss()
+                return nil
+            }
             if event.keyCode == 53, shell.window.isKeyWindow { assistant.nudge() }
             return menuBar.intercept(event, window: shell.window)
         }

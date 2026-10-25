@@ -117,6 +117,12 @@ import WebKit
           echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_b1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rb1","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_b2","model":"opus","role":"assistant","content":[{"type":"text","text":"Done. The two agents that wait for you now open the page, oldest first, with what each one asks."}]},"parent_tool_use_id":null,"uuid":"ab2","session_id":"s1"}'
           echo '{"type":"result","subtype":"success","is_error":false,"terminal_reason":"completed","result":"Done.","session_id":"s1","uuid":"ub3"}' ;;
+        *'say Evening'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          tool e1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          words e2 'No change made. The weather shows the time of day, because nothing leaves your Mac.'
+          echo "$done"
+          echo "$idle" ;;
         *'weather corner'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_w0","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w0","name":"Read","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw0","session_id":"s1"}'

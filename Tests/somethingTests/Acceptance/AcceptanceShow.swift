@@ -190,7 +190,101 @@ struct AcceptanceShow {
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
-    @Test("f4: the margin note", .disabled("not built yet: T17")) func f4() async throws {}
+    /// Daily brief open with Info shown; the weather corner picked and "Why does the weather say Evening?" asked as a
+    /// Quick Change. Its temporary session answers without changing the page: Info closes, the page narrows by 284
+    /// points and the margin holds the note, tied to the part by a leader line: the assistant, "Answered · nothing
+    /// changed", the answer in the agent's voice, the part and Dismiss, never a button that allows anything (f4). In a
+    /// window too narrow for a margin, the note sits under its part and the page keeps its width (f4-narrow). Dismiss
+    /// and Esc each give the page its width back.
+    @Test("f4: the margin note") func f4() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        Preferences.at(stage.home.places).listed["claude"] = {
+            var options = Options()
+            options.model = [Option(value: "opus", label: "Opus 5.5")]
+            return options
+        }()
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.layer.announce = { _ in }
+        model.choose(model: "opus")
+        let changes = Changes(places: stage.home.places, undo: shell.undo)
+        changes.follow(model, in: shell, library: library)
+        let was = try String(contentsOf: brief.space.location, encoding: .utf8)
+        shell.inspector.isCollapsed = false
+        let width = brief.area.bounds.width
+
+        shell.point()
+        let overlay = try #require(brief.pointer), frame = try #require(brief.frame)
+        let at = try #require(try await brief.web.callAsyncJavaScript(
+            "const b = document.querySelector('#weather-line').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
+            in: frame, contentWorld: .defaultClient) as? [Double])
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
+        let composer = try #require(overlay.composer), part = try #require(overlay.picks.first)
+        composer.field.insertText("Why does the weather say Evening?", replacementRange: composer.field.selectedRange())
+        composer.sendQuick()
+
+        // The answer, nothing changed: Info closed, the margin opened, the note in it.
+        #expect(await wait(until: { brief.note != nil }), "no note")
+        let note = try #require(brief.note)
+        #expect(shell.inspector.isCollapsed && note.side == .margin && brief.web.frame.width == width - MarginNote.margin)
+        #expect(note.words == "No change made. The weather shows the time of day, because nothing leaves your Mac." && note.title == "Daily brief")
+        #expect(note.accessibilityLabel() == "Daily brief’s assistant, no change" && note.accessibilityValue() as? String == note.words)
+        #expect(note.part.path == part.path && shell.window.firstResponder === note)
+        func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
+        #expect(buttons(note).map(\.title) == ["Dismiss"], "a note never allows anything")
+        #expect(try String(contentsOf: brief.space.location, encoding: .utf8) == was && changes.versions.list("brief").allSatisfy { $0.kind != .quick })
+        #expect(model.session.id == nil && model.session.rows.isEmpty, "the main conversation is untouched")
+        // The page reflowed into its width: the part found again, the note level with it in the margin.
+        #expect(await wait(until: { note.part.rect != part.rect && note.part.rect.maxX <= brief.web.frame.width }), "\(note.part.rect)")
+        let layout = note.layout
+        #expect(note.card.frame == layout.note && layout.note.minX == brief.web.frame.width + 16 && layout.note.width == 252)
+        #expect(layout.lead?.first?.x == min(note.part.rect.maxX + PointOverlay.pad, brief.web.frame.width - 6))
+        // The quick session's chip has left: only the note stays.
+        #expect(await wait(until: { model.quicks["brief"] == nil }))
+        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing })
+        await Picture.settle(brief)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f4" + suffix, root: stage.home.root)
+        }
+
+        // Dismiss: the page takes its width back. Info shown later closes a note too.
+        note.card.dismiss.performClick(nil)
+        #expect(brief.note == nil && brief.web.frame.width == width)
+        let again = MarginNote.show(note.words, about: note.part, title: "Daily brief", over: brief)
+        #expect(brief.web.frame.width == width - MarginNote.margin)
+        shell.inspector.isCollapsed = false
+        #expect(await wait(until: { brief.note == nil }) && brief.web.frame.width == brief.area.bounds.width && again.superview == nil)
+        shell.inspector.isCollapsed = true
+
+        // A narrow window: under the part, the page whole; Esc dismisses it.
+        shell.window.setContentSize(NSSize(width: 760, height: 680))
+        shell.window.layoutIfNeeded()
+        await Picture.settle(brief)
+        let found = await Pointing.rects([part.path], in: brief.web, frame: try #require(brief.frame))
+        var moved = part
+        moved.rect = try #require(found.first ?? nil)
+        let narrow = MarginNote.show(note.words, about: moved, title: "Daily brief", over: brief)
+        #expect(narrow.side == .under && brief.web.frame.width == brief.area.bounds.width && narrow.card.frame.width == 268)
+        #expect(narrow.card.frame.minY > moved.rect.maxY || narrow.card.frame.maxY < moved.rect.minY, "never over its part")
+        await Picture.settle(brief)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f4-narrow" + suffix, root: stage.home.root)
+        }
+        narrow.cancelOperation(nil)
+        #expect(brief.note == nil)
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
     /// Daily brief open; its assistant's turn, asked "Make the weather corner smaller", ends having changed the page:
     /// the toast names the change and offers to undo it by that sentence (f5-changed). ⌘Z, through the window's undo
     /// manager, brings the page back, and the toast says Undone with Redo ⇧⌘Z (f5, the mockup's last moment).

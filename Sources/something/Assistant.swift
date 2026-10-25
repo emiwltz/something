@@ -8,10 +8,10 @@
 // which resumes the conversation a space keeps when its kind can. Each turn of a space's conversation is said when it
 // begins and when it ends, so that the window keeps the space as each turn found and left it. A Quick Change is a
 // temporary session of a space's assistant, the same kind with the same model and effort, told the parts pointed at; it
-// is stopped once its turn ends (never while one of its requests waits), its change kept as a quick version, and the
-// space's own conversation, untouched, holds what the person writes to it meanwhile. The engine keeps every space away
-// from this agent (Bridge.visible); something writes to it on its own only its context line, its pointing lines and
-// Ask to Fix, never a page's text.
+// is stopped once its turn ends (never while one of its requests waits), its change kept as a quick version (its
+// answer a margin note when it changed nothing), and the space's own conversation, untouched, holds what the person
+// writes to it meanwhile. The engine keeps every space away from this agent (Bridge.visible); something writes to it
+// on its own only its context line, its pointing lines and Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -70,6 +70,8 @@ import SomethingCore
     /// A Quick Change on a space ended, with what went wrong if anything did: the window keeps what it made (Changes).
     /// Returns whether it changed the space.
     @ObservationIgnored var quickEnded: (_ space: String, _ sentence: String, _ who: String, _ problem: String?) -> Bool = { _, _, _, _ in false }
+    /// A Quick Change ended having changed nothing, its agent's last words an answer: the window shows them as a note.
+    @ObservationIgnored var answered: (_ quick: Quick, _ words: String) -> Void = { _, _ in }
 
     /// Arriving at the spaces shows the assistant as the sticker, as the mockup does; from one space to another the
     /// card stays as it was, only its content changing: each place shows its own conversation.
@@ -983,9 +985,11 @@ import SomethingCore
     private func end(_ quick: Quick) {
         let each = quick.session
         let problem = each.failure ?? (light(each) == .error ? each.agent?.error?.message ?? "\(name(of: each)) stopped before it was done." : nil)
+        let reply = each.rows.reversed().lazy.compactMap { row -> String? in if case .reply(let words) = row { words } else { nil } }.first
         halt(each)
         let changed = quickEnded(quick.space, quick.sentence, name(of: each), problem)
         quick.phase = changed ? .done : .ended
+        if !changed, problem == nil, let reply { answered(quick, reply) }
         // Each moment waits its time, then moves on while this Quick Change is still the space's.
         let lingers = lingers, space = quick.space
         let after = { [weak self, weak quick] (seconds: TimeInterval, then: @escaping (Quick) -> Void) in

@@ -497,16 +497,30 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     func show(strip view: NSView?) {
         strip?.removeFromSuperview()
         strip = view
+        if let view {
+            view.autoresizingMask = [.width, .minYMargin]
+            area.addSubview(view)
+        }
+        place()
+    }
+
+    /// The width a margin note takes at the page's right (MarginNote): the page narrows beside it, as in a narrower
+    /// window; 0 gives it the whole width.
+    var margin: CGFloat = 0 {
+        didSet { place() }
+    }
+
+    /// Lays the area out: the strip across its top, the page under it beside the margin, what covers the page over
+    /// it, and a margin note over both.
+    private func place() {
         // The area takes the center's size by constraints, which may not have run yet.
         area.superview?.layoutSubtreeIfNeeded()
-        let height = view?.frame.height ?? 0
-        web.frame = NSRect(x: 0, y: 0, width: area.bounds.width, height: area.bounds.height - height)
-        covering?.frame = web.frame
-        pointer?.frame = web.frame
-        guard let view else { return }
-        view.frame = NSRect(x: 0, y: area.bounds.height - height, width: area.bounds.width, height: height)
-        view.autoresizingMask = [.width, .minYMargin]
-        area.addSubview(view)
+        let height = strip?.frame.height ?? 0
+        web.frame = NSRect(x: 0, y: 0, width: area.bounds.width - margin, height: area.bounds.height - height)
+        for view in area.subviews where view !== web && view !== strip {
+            view.frame = view is MarginNote ? NSRect(x: 0, y: 0, width: area.bounds.width, height: web.frame.height) : web.frame
+        }
+        strip?.frame = NSRect(x: 0, y: area.bounds.height - height, width: area.bounds.width, height: height)
     }
 
     /// window.open and target="_blank": no new window, ever.
@@ -515,6 +529,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
 
     /// Stops watching, drops its cover and lets the web view go; its data store goes with it.
     func close() {
+        note?.dismiss()
         point(nil)
         cover(nil)
         show(strip: nil)

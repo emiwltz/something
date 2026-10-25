@@ -977,4 +977,23 @@ import WebKit
         #expect(PointComposer.sentence(["a"]) == "a" && PointComposer.sentence(["a", "b"]) == "a and b"
                 && PointComposer.sentence(["a", "b", "c"]) == "a, b and c" && PointComposer.sentence([]).isEmpty)
     }
+
+    /// A note goes into a 284-point margin when 440 points of page remain, level with its part and tied to it by a
+    /// leader line; else under its part, 268 wide, or over it when there is no room below; never past an edge.
+    @Test func aNoteIsPlacedByItsPart() {
+        let part = CGRect(x: 400, y: 80, width: 200, height: 70)
+        #expect(MarginNote.side(for: 724) == .margin && MarginNote.side(for: 723) == .under)
+        let wide = MarginNote.layout(part: part, side: .margin, size: CGSize(width: 964, height: 710), height: 170)
+        // The page is 680 wide; the note 16 into the margin, 252 wide; the line at the part's top plus 22.
+        #expect(wide.note == CGRect(x: 696, y: 82, width: 252, height: 170) && wide.about == part.insetBy(dx: -7, dy: -7))
+        #expect(wide.lead == [CGPoint(x: 607, y: 102), CGPoint(x: 696, y: 102)])
+        // A part across the page: the line starts 6 points before the margin; near the bottom, the note stays 14 off it.
+        let across = MarginNote.layout(part: CGRect(x: 0, y: 650, width: 700, height: 40), side: .margin, size: CGSize(width: 964, height: 710), height: 170)
+        #expect(across.lead == [CGPoint(x: 674, y: 670), CGPoint(x: 696, y: 670)] && across.note.maxY == 696)
+        let under = MarginNote.layout(part: part, side: .under, size: CGSize(width: 700, height: 630), height: 170)
+        #expect(under.note == CGRect(x: 332, y: 169, width: 268, height: 170) && under.lead == nil)
+        // No room below: over the part; at the left edge: 12 off it.
+        let over = MarginNote.layout(part: CGRect(x: 0, y: 500, width: 100, height: 60), side: .under, size: CGSize(width: 524, height: 630), height: 170)
+        #expect(over.note == CGRect(x: 12, y: 500 - 7 - 12 - 170, width: 268, height: 170))
+    }
 }
