@@ -6,6 +6,10 @@
 // itself a version; both wait while an assistant works on that space, whose next write would mix with the restore.
 // History's Restore This Version goes the same way: a version, a toast "Restored …" with Undo ⌘Z, refused meanwhile.
 // The space is the turn's, never only the open one: a turn goes on after the person opens another space.
+// A change the open space's watch sees while no assistant works on that space (no turn of its session, open or not, no
+// Quick Change; a restore runs whole before the watch looks again, and leaves the space as its newest version) is kept
+// as an edit outside something, said by a toast whose Show What Changed opens History on the version before. Nothing
+// is undone by itself: the person decides.
 import AppKit
 import SomethingCore
 
@@ -26,6 +30,10 @@ final class Changes {
     var toast: (_ words: String, _ action: Toast.Action?, _ quiet: Bool, _ seconds: TimeInterval) -> Void = { _, _, _, _ in }
     /// Called once a version of a space was kept or restored: History reads them again.
     var kept: (String) -> Void = { _ in }
+    /// Opens History on the space `name`, on the version before its newest.
+    var show: (String) -> Void = { _ in }
+    /// The clock an edit outside something is kept by; a test sets it.
+    var clock: () -> Date = Date.init
     /// The version each turn under way started from, by space.
     private var started: [String: String] = [:]
 
@@ -47,6 +55,13 @@ final class Changes {
         assistant.quickEnded = { [weak self] in self?.quick($0, sentence: $1, who: $2, problem: $3) ?? false }
         shell.info.history.restoring = { [weak self] in self?.bringBack($0, to: $1, words: $2) }
         kept = { [weak shell] in shell?.info.history.kept($0) }
+        show = { [weak shell, weak library] name in
+            guard let shell, let library else { return }
+            guard library.selection.space != name else { return shell.showHistory() }
+            // The space opens on the next turn of the main queue (Library.select); History after it.
+            library.select(.space(name))
+            DispatchQueue.main.async { [weak shell] in shell?.showHistory() }
+        }
     }
 
     /// The store, with the person's limits as Settings has them now.
@@ -64,6 +79,19 @@ final class Changes {
         } catch {
             started[name] = nil
         }
+    }
+
+    /// The watch saw the files of `name` change. When no assistant works on it and it has versions already (the state
+    /// before the change is known), what changed is kept as an edit outside something, History reads it, and the toast
+    /// says so with Show What Changed. Returns that version; nil when the change was a turn's, nothing changed since the
+    /// newest version, or the space cannot be versioned, which Info's Versions already says.
+    @discardableResult
+    func seen(_ name: String) -> Versions.Version? {
+        guard !working(name), let space = find(name), !versions.list(name).isEmpty,
+              let made = try? versions.capture(space, kind: .outside, at: clock()) else { return nil }
+        kept(name)
+        toast("\(title(name)) changed outside something", Toast.Action(label: "Show What Changed") { [weak self] in self?.show(name) }, true, 9)
+        return made
     }
 
     /// A Quick Change on `name` asked by `sentence` ended, `problem` saying what went wrong if anything did: what it

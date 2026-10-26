@@ -263,6 +263,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             view.made = assistant.made.contains(name)
             view.journaled = { [weak self] in self?.info.journaled() }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
+            view.changed = { [weak self] in self?.changes.seen(name) }
             current = view
             // Blank behind the rights sheet, which the first load may show before the page runs. A space just made
             // arrives first, from what made it, and asks for its rights after.

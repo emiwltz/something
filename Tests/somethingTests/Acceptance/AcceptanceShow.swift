@@ -578,7 +578,73 @@ struct AcceptanceShow {
         shell.showInfo(false)
         #expect(!FileManager.default.fileExists(atPath: copy.path))
     }
-    @Test("f8: changed outside something", .disabled("not built yet: T21")) func f8() async throws {}
+    /// Daily brief open with its twelve versions, nothing running on it: its page changes on disk, a line added by
+    /// hand. The folder's watch sees it, the page reloads with it, and it is kept as an edit outside something; a quiet
+    /// toast says "Daily brief changed outside something" with Show What Changed (f8-toast). Nothing is undone: the
+    /// file keeps the line. Show What Changed opens History on the version before, ready to compare or restore; the
+    /// newest row, with its pencil, says what changed in its files and that something kept the version before it.
+    @Test("f8: changed outside something") func f8() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, info) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        var announced: [String] = []
+        shell.layer.announce = { announced.append($0) }
+        info.clock = { Stage.local }
+        info.current = { brief }
+        let changes = Changes(places: stage.home.places, undo: shell.undo)
+        changes.follow(shell.assistant, in: shell, library: library)
+        changes.clock = { Stage.local.addingTimeInterval(60) }
+        changes.toast = { words, action, quiet, _ in _ = shell.toast(words, action: action, quiet: quiet, seconds: 60) }
+        let all = try await Self.keepVersions(of: brief, info)
+        // As the app wires each open space's watch (App.open).
+        brief.changed = { changes.seen("brief") }
+        let loads = brief.loads, page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8)
+        let mark = #"<div id="paper" class="cols"></div>"#
+        #expect(was.contains(mark))
+        let edited = was.replacingOccurrences(of: mark, with: #"<div class="ears caps"><span>Late edition, set by hand</span></div>"# + "\n  " + mark)
+        try edited.write(to: page, atomically: true, encoding: .utf8)
+
+        // The watch, which looks each second, keeps it and reloads the page.
+        #expect(await wait(10, until: { info.history.versions.count == 13 && brief.loads > loads }), "the watch did not keep the edit")
+        #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
+        let newest = try #require(info.history.versions.first)
+        #expect(newest.kind == .outside && newest.who == nil && newest.summary == "brief.html · one line added" && newest.first == nil)
+        #expect(try String(contentsOf: page, encoding: .utf8) == edited, "nothing is undone by itself")
+        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
+        #expect(toast.words == "Daily brief changed outside something" && announced.last == toast.words)
+        let toastRead = await AcceptanceBuild.read(toast)
+        #expect(toastRead.contains("Show What Changed") && !toastRead.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(toastRead)")
+        await Picture.settle(brief)
+        NSApp.appearance = NSAppearance(named: .aqua)
+        #expect(await info.history.picture(of: brief), "the picture of the edit")
+        NSApp.appearance = nil
+        info.show(brief.space)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f8-toast" + suffix, root: stage.home.root)
+        }
+
+        // Show What Changed: History, on the version before the edit.
+        toast.act()
+        shell.window.layoutIfNeeded()
+        let history = info.history
+        #expect(shell.infoShown && info.content == .history && history.chosen == all[0].id && history.restorable)
+        #expect(history.versions.count == 13 && history.versions[1].id == all[0].id)
+        let read = await AcceptanceBuild.read(shell.inspector.viewController.view)
+        for words in ["History", "Edited outside something, Today 18:21 · Changed on disk, not by its assistant, brief.html · one line added. something kept the version before it., now",
+                      "“Add a weather corner, top right”, Today 18:12 · Claude Code",
+                      "Edited outside something, Today 16:40 · Changed on disk, not by its assistant", "Hold Space to compare", "Restore This Version"] {
+            #expect(read.contains(words), "History reads \(words): \(read)")
+        }
+        #expect(await wait(until: { toast.superview == nil }), "the toast left")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f8" + suffix, root: stage.home.root)
+        }
+        shell.showInfo(false)
+    }
     /// The mockup's comments: a selector of Daily brief's page, where in it to click, and the words.
     static let comments: [(String, Double, String)] = [
         (".dateline", 0.5, "Make it smaller, one line"), (".mast h1", 0.5, "Add the week number after the date"),

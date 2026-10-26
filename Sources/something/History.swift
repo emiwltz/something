@@ -1,8 +1,9 @@
 // History: the open space's versions in the docked panel, in Info's place (Inspector.swift), at the same width and
 // under the same header. Each row is a version: the page's picture, the sentence that made it, when and who; the
-// newest says Now. A change no turn claims reads "Edited outside something", with a pencil; the first capture of the
-// space, while it is still kept, is the space as something first kept it, never an edit on disk. Six rows show, then a
-// row that unfolds the older ones. History opens on the version before the newest. Restore This Version brings the chosen one back through Changes, where the restore
+// newest says Now. A change no turn claims reads "Edited outside something", with a pencil, and the newest such edit
+// also says what it changed in its files; the first capture of the space, while it is still kept, is the space as
+// something first kept it, never an edit on disk. Six rows show, then a row that unfolds the older ones. History opens
+// on the version before the newest. Restore This Version brings the chosen one back through Changes, where the restore
 // is itself a version, undone by ⌘Z, and refused while an assistant works on that space. ↑ and ↓ move the choice while
 // the focus is in the panel. A version's picture is taken once its page settled, when the page shows exactly its files.
 // Holding a row 260 ms, or Space, shows that version over the page until it is let go (Glimpse.swift).
@@ -160,6 +161,14 @@ import WebKit
         return History.when(version.when, now: clock()) + " · " + who
     }
 
+    /// What the newest version changed, when it is an edit outside something: "brief.html · one line added.
+    /// something kept the version before it."; nil for any other row. The page's own column cannot be named: only its
+    /// files are compared.
+    func detail(_ version: Versions.Version) -> String? {
+        guard version.kind == .outside, version.first != true, version.id == versions.first?.id, !version.summary.isEmpty else { return nil }
+        return version.summary + ". something kept the version before it."
+    }
+
     /// The fold's words: "6 older versions, back to 12 October"; nil when nothing folds.
     var older: String? {
         guard !unfolded, versions.count > History.first, let oldest = versions.last else { return nil }
@@ -264,6 +273,9 @@ struct HistoryView: View {
                         .font(outside ? Font(Look.oblique(Look.font(.ui, size: 12.5, weight: .medium))) : Look.font(.ui, size: 12.5, weight: .semibold).ui)
                         .foregroundStyle((outside ? Look.Token.ink2 : .ink).ui).lineLimit(2).lineSpacing(0.5)
                     Text(history.byline(version)).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(2)
+                    if let detail = history.detail(version) {
+                        Text(detail).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink2.ui).lineSpacing(1.5).padding(.top, 2)
+                    }
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -282,7 +294,7 @@ struct HistoryView: View {
         .buttonStyle(.plain)
         .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in history.press(version.id) }.onEnded { _ in history.lift() })
         .onHover { history.hovered = $0 ? version.id : history.hovered == version.id ? nil : history.hovered }
-        .accessibilityLabel(history.title(version) + ", " + history.byline(version) + (version.id == history.versions.first?.id ? ", now" : ""))
+        .accessibilityLabel(history.title(version) + ", " + history.byline(version) + (history.detail(version).map { ", " + $0 } ?? "") + (version.id == history.versions.first?.id ? ", now" : ""))
         .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 

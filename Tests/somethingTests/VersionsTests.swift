@@ -5,7 +5,8 @@
 // anything is written, an index that does not read never written over, and the summaries of what changed. Nothing
 // reaches the person's Trash. History: the choice, its moves and the fold, the rows' words (the oldest kept state never
 // an edit on disk), the days as it says them, a picture kept beside its version and dropped with it, and Restore This
-// Version refused while the assistant works, then itself a version undone by ⌘Z.
+// Version refused while the assistant works, then itself a version undone by ⌘Z. An edit outside something: what the
+// watch sees while nothing runs is kept and said, never during a turn, a Quick Change or after a restore.
 import Foundation
 import SomethingCore
 import Testing
@@ -370,5 +371,89 @@ import Testing
         undo.undo()
         #expect(try String(contentsOf: space.location, encoding: .utf8) == "<p>2</p>\n")
         #expect(history.versions.count == 5 && history.chosen == history.versions[0].id)
+    }
+
+    /// The watch sees a change: with nothing running on that space it is an edit outside something, kept with its
+    /// summary and said by a quiet toast whose Show What Changed opens History, the file left as it is; during a turn of
+    /// the space's session (another space open) or a Quick Change it is the turn's, and a restore leaves nothing to
+    /// claim. A turn on Daily brief does not mask an edit of My agents. A space with no version yet is not claimed.
+    @MainActor @Test func aChangeNoTurnMadeIsKeptAsAnEditOutsideSomething() async throws {
+        let assistants = AssistantTests()
+        let (home, model) = try assistants.assistant(prefix: "something-versions-")
+        await assistants.look(model)
+        let brief = try home.space("brief", "<p>white</p>\n"), agents = try home.space("agents", "<p>tiles</p>\n")
+        let place = { (name: String) in AssistantModel.Place.space(title: name, name: name, page: home.places.spaces.appendingPathComponent("\(name).html").path) }
+        let changes = Changes(places: home.places, undo: WindowUndo())
+        var toasts: [(words: String, action: Toast.Action?, quiet: Bool)] = [], shown: [String] = []
+        let at = Date(timeIntervalSince1970: 1_792_000_000)
+        changes.find = { Spaces(root: home.places.spaces).named($0) }
+        changes.title = { ["brief": "Daily brief", "agents": "My agents"][$0] ?? $0 }
+        changes.working = { model.works(on: $0) }
+        changes.recycle = { try FileManager.default.removeItem(at: $0) }
+        changes.toast = { words, action, quiet, _ in toasts.append((words, action, quiet)) }
+        changes.show = { shown.append($0) }
+        changes.clock = { at }
+        model.turnStarts = { changes.before($0) }
+        model.turnEnded = { changes.after($0, sentence: $1, who: $2) }
+        model.quickEnded = { changes.quick($0, sentence: $1, who: $2, problem: $3) }
+        let finishing = home.root.appendingPathComponent("out/finish")
+        func finish(_ working: @escaping () -> Bool) async throws {
+            try FileManager.default.createDirectory(at: finishing.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: finishing)
+            #expect(await wait(until: { !working() }), "the turn did not end")
+        }
+
+        // No version yet: nothing is known of the state before, nothing is claimed.
+        try "<p>blue</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        #expect(changes.seen("brief") == nil && toasts.isEmpty && changes.versions.list("brief").isEmpty)
+        try changes.versions.capture(brief, kind: .outside)
+        try changes.versions.capture(agents, kind: .outside)
+
+        // Nothing runs: kept, said, nothing undone; Show What Changed opens History on Daily brief.
+        try "<p>blue</p>\n<p>sky</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        let outside = try #require(changes.seen("brief"))
+        #expect(outside.kind == .outside && outside.who == nil && outside.sentence == nil && outside.when == at && outside.summary == "brief.html · one line added")
+        #expect(toasts.last?.words == "Daily brief changed outside something" && toasts.last?.quiet == true && toasts.last?.action?.label == "Show What Changed")
+        #expect(try String(contentsOf: brief.location, encoding: .utf8) == "<p>blue</p>\n<p>sky</p>\n")
+        toasts.last?.action?.act()
+        #expect(shown == ["brief"])
+        let history = History(places: home.places)
+        history.show(brief)
+        #expect(history.chosen == history.versions[1].id && history.detail(outside) == "brief.html · one line added. something kept the version before it.")
+        #expect(history.detail(history.versions[1]) == nil)
+        // Seen again with nothing new: nothing more.
+        #expect(changes.seen("brief") == nil && toasts.count == 1)
+
+        // A turn of Daily brief's session, while My agents is open: its writes are the turn's; an edit of My agents
+        // meanwhile is outside something.
+        model.place = place("brief")
+        model.send("go-slow, make it blue.")
+        let session = model.session(for: place("brief"))
+        #expect(await wait(until: { session.agent?.state == "working" }), "the turn did not start")
+        model.place = place("agents")
+        try "<p>navy</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        #expect(changes.seen("brief") == nil && model.works(on: "brief"))
+        try "<p>tiles</p>\n<p>rows</p>\n".write(to: agents.location, atomically: true, encoding: .utf8)
+        #expect(changes.seen("agents")?.kind == .outside && toasts.last?.words == "My agents changed outside something")
+        try await finish { model.works(on: "brief") }
+        #expect(changes.versions.list("brief").map(\.kind) == [.turn, .outside, .outside])
+        #expect(changes.seen("brief") == nil)
+
+        // A Quick Change: its writes are its own.
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1)", tag: "body", rect: CGRect(x: 0, y: 0, width: 300, height: 100))
+        #expect(model.quickChange("go-slow, make it teal.", parts: [part], at: place("brief")) == nil)
+        let quick = try #require(model.quicks["brief"])
+        #expect(await wait(until: { quick.session.agent?.state == "working" }), "the quick session did not start")
+        try "<p>teal</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        #expect(changes.seen("brief") == nil)
+        try await finish { quick.phase == .working }
+        #expect(changes.versions.list("brief").first?.kind == .quick)
+
+        // A restore: the space is its newest version once it is done; the watch has nothing to claim.
+        let back = try #require(changes.versions.list("brief").dropFirst().first)
+        changes.bringBack("brief", to: back, words: "the version before")
+        #expect(changes.versions.list("brief").first?.kind == .restore && changes.seen("brief") == nil)
+        #expect(await wait(until: { model.engine.state.agents.first { $0.id == quick.session.id }?.alive == false }))
+        await assistants.finish(home, model)
     }
 }

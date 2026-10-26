@@ -48,6 +48,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Whether point mode may stand over the page: it is shown and runs. A page still loading may be pointed at;
     /// the overlay asks it once its frame says it loaded.
     var pointable: Bool { blocked.isEmpty && !stopped }
+    /// Called when the watch saw a file of the space change, before the reload: Changes keeps what no turn made.
+    var changed: () -> Void = {}
     /// Called after each line the space adds to its journal: Info shows it.
     var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
@@ -238,7 +240,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.looking = false
-                if self.timer != nil, !self.paused, self.loads == loads, now != self.stamp { self.load() }
+                if self.timer != nil, !self.paused, self.loads == loads, now != self.stamp {
+                    self.changed()
+                    self.load()
+                }
             }
         }
     }
