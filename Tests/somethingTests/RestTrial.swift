@@ -1,5 +1,9 @@
 // What the app's own timers cost at rest, measured and never asserted: numbers for a commit message, read on this
-// Mac, in an offscreen window. It runs only when asked:
+// Mac, in a window never shown. The window is the app's, at rest as a person leaves it: Stack open with the sticker
+// over it, three assistants asleep (kept conversations, no process), two messages held in Stack's queue, a toast come
+// and gone; the watch (on a throwaway home), the spaces folder's poller and the open space's run. The sign's breath
+// moves no frame off screen (PerformanceTests), so what the sticker costs on the screen is not in these numbers. It
+// runs only when asked:
 //
 //   SOMETHING_TRIAL_REST=1 swift test --filter RestTrial
 import AppKit
@@ -11,26 +15,31 @@ import Testing
 @testable import something
 
 @MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["SOMETHING_TRIAL_REST"] == "1", "The rest trial is asked for with SOMETHING_TRIAL_REST=1."),
-                  .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-rest-"))
+                  .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-rest-"))
 struct RestTrial {
-    init() { NSApplication.shared.setActivationPolicy(.prohibited) }
-
-    /// The app's own timers with the window shown, then hidden: the watch (on a throwaway home), the spaces folder's
-    /// poller and the open space's, with the six templates as spaces and Stack open (it moves nothing by itself).
+    /// The app's own timers with the window shown, then hidden.
     @Test func theTimersShownThenHidden() async throws {
-        let home = Home(prefix: "something-rest-")
-        defer { home.remove() }
-        for name in TemplatesTests.names {
-            try home.space(name, try String(contentsOf: TemplatesTests.folder.appendingPathComponent("\(name).html"), encoding: .utf8))
+        let stage = try Stage("rest")
+        defer { stage.remove() }
+        try FileManager.default.createDirectory(at: stage.home.places.assistants, withIntermediateDirectories: true)
+        let names = ["logbook", "pet", "stack"]
+        for name in names {
+            let kept = Session.Saved(kind: "claude", model: nil, effort: nil, thread: "thread-\(name)", threadKind: "claude", asking: false, turns: [])
+            try JSONEncoder().encode(kept).write(to: Session.file(name, in: stage.home.places.assistants))
         }
-        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share), engine = home.engine()
+        let (shell, library, _) = stage.window()
+        let assistant = shell.assistant, engine = assistant.engine
         library.watch()
-        let view = try await home.window(try #require(library.entry("stack")?.space))
-        let offscreen = Offscreen(view.web)
+        let view = try await stage.open("stack", in: shell, library)
         defer { view.close(); library.stop(); engine.start(often: false, visible: false) }
-        view.open()
+        let sessions = names.map { name in
+            assistant.session(for: .space(title: name, name: name, page: stage.home.places.spaces.appendingPathComponent("\(name).html").path))
+        }
+        sessions.last?.held = ["Invented message, held.", "Another one."]
+        _ = shell.toast("Invented toast.", seconds: 1)
         engine.start(often: true)
         await wait(3)
+        #expect(sessions.allSatisfy(\.asleep) && !shell.glass.isHidden && assistant.beatAt == nil)
         for shown in [true, false] {
             engine.start(often: true, visible: shown)
             library.watching(shown)
@@ -43,7 +52,6 @@ struct RestTrial {
             print(String(format: "Rest timers, window %@: this process %.2f %% and %.1f idle wakeups/s", shown ? "shown" : "hidden",
                          (end.cpu - start.cpu) / seconds * 100, Double(end.wakeups - start.wakeups) / seconds))
         }
-        withExtendedLifetime(offscreen) {}
     }
 
     /// The CPU seconds `pid` used since it started, and its idle wakeups; nil when the system does not say.

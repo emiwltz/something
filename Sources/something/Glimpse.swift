@@ -76,7 +76,8 @@ final class Glimpse {
         guard let view else { return }
         (self.view, shown) = (nil, false)
         view.close()
-        Look.animate(0.4, Look.douce, { [cover] in cover.moving.alphaValue = 0 }, done: { [cover] in cover.removeFromSuperview() })
+        // The open space keeps the cover until the next glimpse: the web view leaves it, and its process ends with it.
+        Look.animate(0.4, Look.douce, { [cover] in cover.moving.alphaValue = 0 }, done: { [cover, web = view.web] in web.removeFromSuperview(); cover.removeFromSuperview() })
     }
 
     /// The label at the top of the space: which version shows, when it was made, and that letting go shows now.
