@@ -42,7 +42,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var stopped = false, paused = false
     /// The clock of the stops, the calendar and the 12 or 24 hours they are said in; a test sets them.
     var now: () -> Date = Date.init, calendar = Calendar.current, hours = Locale.current
-    private var covering: NSView?, strip: NSView?, glimpsed: NSView?
+    private var covering: NSView?, strip: NSView?
+    /// An older version over the page while it is held (Glimpse.swift).
+    private(set) var glimpsed: NSView?
     /// Point mode's overlay over the page while the person points at its parts (PointOverlay.swift); nil otherwise.
     private(set) var pointer: PointOverlay?
     /// Whether point mode may stand over the page: it is shown and runs. A page still loading may be pointed at;

@@ -22,6 +22,8 @@ final class Glimpse {
     private(set) var view: SpaceView?
     /// Whether it shows: it fades in once its page loaded and scrolled.
     private(set) var shown = false
+    /// The space it lies over, to take the cover back once released.
+    private weak var open: SpaceView?
 
     /// The folder of the copies of `name`'s versions, in the store, outside the spaces folder.
     static func folder(_ store: Versions, _ name: String) -> URL { store.folder(name).appendingPathComponent(Versions.glimpse, isDirectory: true) }
@@ -48,7 +50,7 @@ final class Glimpse {
         guard let copy = Spaces(root: root).named(name) else { throw SpaceError("This version of \(name) has no page to show.") }
         self.version = version
         let view = SpaceView(glimpse: copy, of: open), label = Glimpse.label(words, when)
-        self.view = view
+        (self.view, self.open) = (view, open)
         view.web.frame = cover.bounds
         view.web.autoresizingMask = [.width, .height]
         cover.addSubview(view.web)
@@ -76,8 +78,12 @@ final class Glimpse {
         guard let view else { return }
         (self.view, shown) = (nil, false)
         view.close()
-        // The open space keeps the cover until the next glimpse: the web view leaves it, and its process ends with it.
-        Look.animate(0.4, Look.douce, { [cover] in cover.moving.alphaValue = 0 }, done: { [cover, web = view.web] in web.removeFromSuperview(); cover.removeFromSuperview() })
+        // Faded out, the web view leaves the cover, and its process ends with it; the open space lets the cover go unless
+        // a newer glimpse took its place.
+        Look.animate(0.4, Look.douce, { [cover] in cover.moving.alphaValue = 0 }, done: { [cover, weak open, web = view.web] in
+            web.removeFromSuperview()
+            if open?.glimpsed === cover { open?.glimpse(nil) } else { cover.removeFromSuperview() }
+        })
     }
 
     /// The label at the top of the space: which version shows, when it was made, and that letting go shows now.
