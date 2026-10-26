@@ -349,8 +349,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func comments(on space: SpaceView) -> Comments {
         if let kept = Comments.of(space) { return kept }
         let made = Comments.show(over: space), name = space.space.name
-        made.working = { [weak self] in self?.assistant.works(on: name) == true }
-        made.failed = { [weak self] in self?.assistant.failed(on: name) == true }
+        made.outcome = { [weak self] in self?.assistant.commented(on: name) ?? .back }
         made.pointing = { [weak space] in space?.pointer != nil }
         made.send = { [weak self, weak space] list in
             guard let self, let space else { return false }
@@ -368,7 +367,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     /// ⌘↵ in this window: the open space's comments leave together, unless the composer is open (its ⌘↵ adds one).
-    /// Returns whether they did, the key then used up.
+    /// Returns whether they did, the key then used up. Keys' "send" command names this key; this is where it is handled.
     func sendComments(_ event: NSEvent) -> Bool {
         guard [36, 76].contains(event.keyCode), event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
               event.windowNumber == window.windowNumber, window.attachedSheet == nil, let space, space.pointer?.composer == nil,

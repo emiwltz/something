@@ -16,7 +16,7 @@ import WebKit
     /// signed in gives (the shape Claude Code 2.1.296 writes). For the gallery, "clock in the corner" fails for
     /// another reason, "waiting tiles" runs four tools before its
     /// reply, "go-slow" ends its turn only once $HOME/out/finish appears (which it removes), "go-wrong" likewise but
-    /// fails it, "quick-ask" asks a permission and ends its turn once it is answered, "small game" starts building one and never ends its turn, "ask-first"
+    /// fails it (comments holding "go-wrong" too), "quick-ask" asks a permission and ends its turn once it is answered, "small game" starts building one and never ends its turn, "ask-first"
     /// asks a permission, "line per hour" starts answering and quits mid-turn (code 3), "counters bigger" (or "slides
     /// milestone") retries its model twice and never ends its turn, "darker header"
     /// retries a refused sign-in once, then fails its turn (the shapes Claude Code 2.1.296 writes). For the card,
@@ -60,7 +60,10 @@ import WebKit
     while IFS= read -r line; do
       printf '%s\n' "$line" >> "$HOME/out/input"
       case "$line" in
-        *'comments on this page'*'"type":"user"'*)
+        *'on this page:'*'go-wrong'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          later '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' "$idle" ;;
+        *'on this page:'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           tool k1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
           tool k2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
@@ -1272,8 +1275,7 @@ import WebKit
         }
         let holder = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), comments = Comments(frame: holder.bounds)
         holder.addSubview(comments)
-        comments.working = { model.works(on: "brief") }
-        comments.failed = { model.failed(on: "brief") }
+        comments.outcome = { model.commented(on: "brief") }
         comments.send = { list in model.comment(list.map { ($0.part, $0.words) }, at: place) == nil }
 
         comments.add("  Make it smaller, one line ", [part("p", 1), part("table", 1)])
@@ -1315,12 +1317,85 @@ import WebKit
         #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "2 comments" && made.first?.who == "Claude Code")
         #expect(changes.versions.list("agents").isEmpty && comments.tray.footer == ["2 comments", "All done"])
         #expect(comments.pins == ["Comment 1 on this paragraph, done", "Comment 2 on this heading, done"])
-        #expect(AssistantModel.sentence("1 comment on this page:\n1. This table: Wider") == "1 comment" && AssistantModel.sentence("Make it 3 comments") == "Make it 3 comments")
+        // Only something's own lines are taken off what the conversation shows; one the person wrote stays.
+        let context = "[something] Open space: “Daily brief” (brief, ~/something/spaces/brief.html).\n"
+        #expect(AssistantModel.shown(context + "[something] Comment 1 is on this table: table\n1 comment on this page:").text == "1 comment on this page:")
+        #expect(AssistantModel.shown(context + "[something] Comment ten\n[something] is mine").text == "[something] Comment ten\n[something] is mine")
         // A new comment after them starts a new list; the last one taken out takes the layer away.
         comments.add("Bolder", [part("p", 2)])
         #expect(comments.phase == .writing && comments.pins == ["Comment 1 on this paragraph"])
         comments.remove(0)
         #expect(comments.superview == nil)
+        await finish(home, model)
+    }
+
+    /// Comments come back to their tray, to send again, whenever their own message was not answered: a turn that
+    /// failed, a turn stopped (whose agent then says it is ready), and comments held behind a turn and taken back,
+    /// which never go into the field. Only their own answered turn makes them done.
+    @Test func commentsComeBackWhenTheirTurnIsNotAnswered() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        model.place = place
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), end = home.root.appendingPathComponent("out/finish")
+        let part = Pointing.Part(path: ":root > body:nth-of-type(1) > p:nth-of-type(1)", tag: "p", rect: CGRect(x: 20, y: 40, width: 200, height: 30))
+        let sent = { (text: String) in self.input(home).filter { $0.contains(#""type":"user""#) && $0.contains(text) }.count }
+        let made = { (words: String) -> Comments in
+            let comments = Comments(frame: holder.bounds)
+            holder.addSubview(comments)
+            comments.outcome = { model.commented(on: "brief") }
+            comments.send = { list in model.comment(list.map { ($0.part, $0.words) }, at: place) == nil }
+            comments.add(words, [part])
+            return comments
+        }
+        // The turn's waiter takes its finish; its late lines are read before the next turn starts.
+        let settle = {
+            try Data().write(to: end)
+            #expect(await wait(until: { !FileManager.default.fileExists(atPath: end.path) && model.light == .ready }), "\(model.light)")
+            try await Task.sleep(for: .seconds(1))
+        }
+
+        // Stopped mid-turn: the agent reads ready after its interrupt, but the comments were not done.
+        let stopped = made("Wider")
+        stopped.sendAll()
+        #expect(stopped.phase == .sending)
+        #expect(await wait(until: { sent("Wider") == 1 && model.agent?.state == "working" }), "\(self.input(home)) \(String(describing: model.agent?.state)) \(model.light)")
+        model.stop()
+        #expect(await wait(until: { stopped.phase == .writing }), "\(stopped.phase)")
+        #expect(await wait(until: { model.agent?.state == "interrupted" }))
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(stopped.phase == .writing && !stopped.pins.contains { $0.hasSuffix(", done") } && model.draft.isEmpty)
+        stopped.clear()
+        try await settle()
+
+        // Held behind a turn, then taken back: back to the tray, never into the field, never sent.
+        model.draft = "go-slow, first."
+        model.send()
+        #expect(await wait(until: { model.agent?.state == "working" }))
+        let held = made("Bolder title")
+        held.sendAll()
+        #expect(held.phase == .sending && model.held == ["1 comment on this page:\n1. This paragraph: Bolder title"])
+        model.draft = "Mine"
+        model.takeBack()
+        #expect(model.held.isEmpty && model.draft == "Mine")
+        #expect(await wait(until: { held.phase == .writing }), "\(held.phase)")
+        try await settle()
+        #expect(held.phase == .writing && sent("Bolder title") == 0 && model.draft == "Mine")
+        held.clear()
+
+        // A turn that fails (the last: its agent stays in error): back, the list as it was, Send shown again.
+        let failed = made("Smaller, go-wrong")
+        failed.sendAll()
+        #expect(failed.phase == .sending && model.commented(on: "brief") == .pending)
+        #expect(await wait(until: { sent("go-wrong") == 1 && model.agent?.state == "working" }))
+        try Data().write(to: end)
+        #expect(await wait(until: { failed.phase == .writing }), "\(failed.phase) \(model.light)")
+        #expect(failed.list.map(\.words) == ["Smaller, go-wrong"] && !failed.tray.sendButton.isHidden && !failed.pins.contains { $0.hasSuffix(", done") })
+        #expect(model.draft == "Mine", "nothing of the comments in the field")
+        failed.clear()
+
         await finish(home, model)
     }
 

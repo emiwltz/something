@@ -4,8 +4,9 @@
 // banner leaves and the tray says the way on: point at another part, Esc, Clear, Send to Assistant ⌘↵. Send passes
 // them all in one message to the space's main assistant (AssistantModel.comment); the tray moves aside for the card
 // and says the assistant works through them; when that turn ends every pin becomes a check, the tray says All done,
-// then both leave. A turn that failed gives the comments back, to send again. Nothing here allows anything: a
-// permission is always the native panel's. Pins and tray are drawn in draw(_:), so a picture of the window shows them.
+// then both leave. A turn stopped or failed, or comments taken back before they left, come back, to send again. Nothing
+// here allows anything: a permission is always the native panel's. Pins and tray are drawn in draw(_:), so a picture
+// of the window shows them. The pins follow their parts when the page scrolls, reloads or is resized, never by a timer.
 import AppKit
 
 final class Comments: NSView, NSTextFieldDelegate {
@@ -23,26 +24,22 @@ final class Comments: NSView, NSTextFieldDelegate {
     private weak var space: SpaceView?
     /// Sends the comments: true once they left (or wait for the turn under way); a refusal is the window's to say.
     var send: ([Comment]) -> Bool = { _ in false }
-    /// Whether the space's assistant works now, whether its last turn failed, and whether point mode is on.
-    var working: () -> Bool = { false }, failed: () -> Bool = { false }, pointing: () -> Bool = { false }
+    /// What became of the comments sent (AssistantModel.commented(on:)), and whether point mode is on.
+    var outcome: () -> AssistantModel.Commented = { .back }, pointing: () -> Bool = { false }
     /// How long the checks stay once all is done, as the mockup's; a test lengthens it.
     var linger: TimeInterval = 2.6
     let tray = CommentTray()
-    private var timer: Timer?, asking = false
+    /// Asks after the comments sent a few times a second, only while they are at work.
+    private var timer: Timer?, asking = false, askAgain = false
 
     /// The comments over `space`'s page, if any wait or are at work.
     static func of(_ space: SpaceView) -> Comments? { space.area.subviews.lazy.compactMap { $0 as? Comments }.first }
 
-    /// An empty layer of comments, which follows its parts and its turn a few times a second while it is in a view.
+    /// An empty layer of comments.
     override init(frame: NSRect) {
         super.init(frame: frame)
         addSubview(tray)
         tray.owner = self
-        timer = .scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
-            // It leaves with its space, or once its comments are done; the timer with it.
-            guard let self else { return timer.invalidate() }
-            if superview != nil { tick() }
-        }
     }
     required init?(coder: NSCoder) { nil }
 
@@ -99,6 +96,11 @@ final class Comments: NSView, NSTextFieldDelegate {
         if send(list) {
             phase = .sending
             changed()
+            timer = .scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] timer in
+                // It stops once the comments are done or back, or with its space.
+                guard let self, phase == .sending else { return timer.invalidate() }
+                if superview != nil { tick() }
+            }
         }
     }
 
@@ -120,6 +122,7 @@ final class Comments: NSView, NSTextFieldDelegate {
     override func resizeSubviews(withOldSize size: NSSize) {
         super.resizeSubviews(withOldSize: size)
         changed()
+        follow()
     }
 
     /// The words of a row changed: kept as typed.
@@ -128,15 +131,16 @@ final class Comments: NSView, NSTextFieldDelegate {
         list[index].words = field.stringValue
     }
 
-    /// Follows the parts, and the turn the comments went with: once it is over, done, or back to send again.
+    /// Follows the turn the comments went with: once it is over, done, or back to send again.
     private func tick() {
-        if window != nil { follow() }
-        guard phase == .sending, !working() else { return }
-        guard !failed() else {
+        guard phase == .sending else { return }
+        switch outcome() {
+        case .pending: return
+        case .back:
             phase = .writing
             return changed()
+        case .done: phase = .done
         }
-        phase = .done
         changed()
         DispatchQueue.main.asyncAfter(deadline: .now() + linger) { [weak self] in
             guard let self, phase == .done else { return }
@@ -146,19 +150,26 @@ final class Comments: NSView, NSTextFieldDelegate {
         }
     }
 
-    /// Asks the page where the parts are now, one question at a time.
-    private func follow() {
-        guard !asking, let space, let frame = space.frame, !list.isEmpty else { return }
+    /// Asks the page where the parts are now, after a scroll, a reload or a resize: one question at a time, the
+    /// running one asking once more at its end for all that came meanwhile.
+    func follow() {
+        guard !asking else { return askAgain = true }
+        guard window != nil, let space, let frame = space.frame, !list.isEmpty else { return }
         asking = true
         let paths = list.map(\.part.path)
         Task { @MainActor in
             let found = await Pointing.rects(paths, in: space.web, frame: frame)
             asking = false
-            guard found.count == rects.count, paths == list.map(\.part.path) else { return }
-            let moved = zip(rects, found).map { $1 ?? $0 }
-            if moved != rects {
-                rects = moved
-                needsDisplay = true
+            if found.count == rects.count, paths == list.map(\.part.path) {
+                let moved = zip(rects, found).map { $1 ?? $0 }
+                if moved != rects {
+                    rects = moved
+                    needsDisplay = true
+                }
+            }
+            if askAgain {
+                askAgain = false
+                follow()
             }
         }
     }

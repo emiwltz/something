@@ -443,6 +443,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
             pointer?.followSoon()
             note?.follow()
+            Comments.of(self)?.follow()
             return
         }
         if message.name == "fault" {

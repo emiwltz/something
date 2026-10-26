@@ -156,6 +156,10 @@ import SomethingCore
     /// The question of a build the person stopped or left, until its agent withdraws it, which comes later: kept out of
     /// the panel meanwhile, as nobody should be asked what they just stopped.
     @ObservationIgnored private var dropped: String?
+    /// Add Comment's message on each space until its turn ends: its sentence, the turn it followed once it left the
+    /// hold (nil while held), and whether the person stopped it.
+    struct Commenting { let message: String, sentence: String; var after: String??, stopped = false }
+    @ObservationIgnored private var commenting: [String: Commenting] = [:]
     /// Says a sentence in a toast: the window's.
     @ObservationIgnored var told: (String) -> Void = { _ in }
     var ready: Library.Entry?
@@ -567,6 +571,8 @@ import SomethingCore
             (before, asked, nudged) = (nil, nil, false)
         }
         takeBack()
+        // Comments at work come back to their tray: a stopped turn did not do them, whatever the agent's state says.
+        if let space = session.space, commenting[space]?.after != nil { commenting[space]?.stopped = true }
         // A message never delivered may be back in the field already.
         if let build, !draft.contains(build.sentence) { draft = [build.sentence, draft].filter { !$0.isEmpty }.joined(separator: "\n") }
         if launching { return endLaunch(session) }
@@ -616,9 +622,12 @@ import SomethingCore
     var held: [String] { session.held.map { AssistantModel.shown($0).text } }
 
     /// Take Back: the held messages go back into the field, after what it holds, and are never sent.
+    /// Held comments go back to their tray instead (`commented(on:)`), never twice into the field.
     func takeBack() {
         guard !session.held.isEmpty else { return }
-        draft = ([draft.trimmingCharacters(in: .whitespacesAndNewlines)] + held).filter { !$0.isEmpty }.joined(separator: "\n")
+        let comments = session.space.flatMap { commenting[$0]?.message }
+        let words = session.held.filter { $0 != comments }.map { AssistantModel.shown($0).text }
+        draft = ([draft.trimmingCharacters(in: .whitespacesAndNewlines)] + words).filter { !$0.isEmpty }.joined(separator: "\n")
         session.held = []
         wantsFocus = true
     }
@@ -873,8 +882,10 @@ import SomethingCore
     func deliver(_ message: String, to session: Session) {
         guard session.kind != nil else { return }
         (session.last, session.failure, session.active) = (message, nil, clock())
+        let comments = session.space.flatMap { commenting[$0] }.flatMap { $0.message == message ? $0 : nil }
+        if let space = session.space, comments != nil { commenting[space]?.after = .some(session.turn?.id) }
         if let space = session.space, session.changing == nil {
-            session.changing = (AssistantModel.sentence(AssistantModel.shown(message).text), session.turn?.id)
+            session.changing = (comments?.sentence ?? AssistantModel.shown(message).text, session.turn?.id)
             turnStarts(space)
         }
         if session.launching { return session.queued.append(message) }
@@ -1030,7 +1041,8 @@ import SomethingCore
         guard let kind = main.kind, installed[kind] != false, ![.missing, .crashed].contains(presence(of: main).stuck) else {
             return "\(AssistantModel.clean(title))’s assistant can’t start · open its card to see why"
         }
-        let message = ([AssistantModel.context(place, home: places.home.path)] + AssistantModel.comments(list)).joined(separator: "\n")
+        let lines = AssistantModel.comments(list), message = ([AssistantModel.context(place, home: places.home.path)] + lines).joined(separator: "\n")
+        commenting[name] = Commenting(message: message, sentence: "\(list.count) comment\(list.count == 1 ? "" : "s")", after: nil)
         if quickWorks(on: name) || (main.id != nil && !main.launching && ([.working, .waiting].contains(light(main)) || !main.held.isEmpty)) {
             main.held.append(message)
             refresh()
@@ -1051,16 +1063,21 @@ import SomethingCore
             }
     }
 
-    /// The sentence a turn is kept and undone by: the person's words, or "3 comments" for comments sent together.
-    static func sentence(_ text: String) -> String {
-        let first = text.prefix { $0 != "\n" }, suffix = " on this page:"
-        guard first.hasSuffix(suffix), let count = Int(first.prefix { $0.isNumber }),
-              ["\(count) comment\(suffix)", "\(count) comments\(suffix)"].contains(first) else { return text }
-        return String(first.dropLast(suffix.count))
-    }
+    /// What became of the comments sent on a space: on their way, done, or back to send again.
+    enum Commented { case pending, done, back }
 
-    /// Whether the last turn of the space `name`'s conversation failed: the comments sent with it come back to send.
-    func failed(on name: String) -> Bool { sessions[.space(name)].map { $0.failure != nil || light($0) == .error } ?? false }
+    /// What became of the last comments sent on the space `name`: done only once their own message was delivered and
+    /// its turn answered; back when that turn was stopped or failed, or the message left the hold unsent (Take Back,
+    /// Stop, New Conversation); pending until then. Back when none were sent: never a guess.
+    func commented(on name: String) -> Commented {
+        guard let comments = commenting[name], let session = sessions[.space(name)] else { return .back }
+        guard let after = comments.after else { return session.held.contains(comments.message) ? .pending : .back }
+        if comments.stopped { return .back }
+        if session.launching || !over(session, after: after) { return .pending }
+        let answered = session.last == comments.message && session.id != nil && !session.stopped && session.failure == nil
+            && light(session) != .error && session.agent?.alive != false
+        return answered ? .done : .back
+    }
 
     // MARK: Words
 
@@ -1093,7 +1110,13 @@ import SomethingCore
         guard text.hasPrefix("[something] ") else { return (nil, text) }
         let line = text.prefix { $0 != "\n" }
         var after = text.dropFirst(line.count + 1)
-        while after.hasPrefix("[something] ") { after = after.drop { $0 != "\n" }.dropFirst() }
+        // Only something's own forms: a line the person wrote stays, whatever it starts with.
+        let ours = { (line: Substring) in
+            let number = line.dropFirst("[something] Comment ".count)
+            return line.hasPrefix("[something] Pointing at ")
+                || (line.hasPrefix("[something] Comment ") && number.first?.isNumber == true && number.drop { $0.isNumber }.hasPrefix(" is on "))
+        }
+        while ours(after) { after = after.drop { $0 != "\n" }.dropFirst() }
         let rest = String(after)
         if line.hasSuffix("on the blank page.") { return ("on the blank page", rest) }
         if line.hasSuffix("on the templates.") { return ("on the templates", rest) }
