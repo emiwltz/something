@@ -10,7 +10,49 @@ import Testing
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-command-"))
 struct AcceptanceCommand {
-    @Test("g1: the palette", .disabled("not built yet: G2")) func g1() async throws {}
+    /// ⌘P over Daily brief, the mockup's moment around it: the scrim over the window, the card 84 points down,
+    /// the three recent spaces, the others with Daily brief marked open, the actions and the footer. Its words are
+    /// read off its picture.
+    @Test("g1: the palette") func g1() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try stage.moment(shell)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        // The mockup's recent spaces (CM_RECENT): Daily brief, open, is left out of Recent.
+        library.preferences.change { $0.recents = ["brief", "agents", "pet", "logbook", "project", "oracle", "stack"] }
+        #expect(Keys.command("palette")?.action == #selector(App.showPalette(_:)) && Keys.enabled("palette", Keys.Situation(space: true)))
+        let model = PaletteModel(library: library, eyes: { Stage.moment[$0] ?? .unknown }, enabled: { Keys.enabled($0, Keys.Situation(space: true)) })
+        let palette = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
+        #expect((shell.window.firstResponder as? NSTextView)?.delegate === palette.field && palette.accessibilityLabel() == "Go to or ask")
+        let rows = model.rows
+        #expect(rows.prefix(7).map(\.title) == ["My agents", "Pebble", "Logbook", "Daily brief", "Project watch", "Oracle", "Stack"])
+        #expect(rows.prefix(3).map(\.kind) == [.space(.wait, open: false), .space(.done, open: false), .space(.sleep, open: false)])
+        #expect(rows[3].kind == .space(.think, open: true) && rows[7].title == "New Space" && model.selected == 0 && model.enter == "Open")
+        let card = palette.card
+        let shows = ["Go to a space, or ask its assistant", "RECENT", "My agents", "Waiting for you", "Pebble", "Breaks", "Done", "Logbook",
+                     "Asleep", "SPACES", "Daily brief", "Open", "Working", "Project watch", "Ready", "ACTIONS", "New Space", "something", "Move", "Close"]
+        try await stage.appearances { suffix in
+            shell.window.layoutIfNeeded()
+            await wait(10) { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 }
+            #expect(card.frame.size == NSSize(width: 640, height: 500) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
+            let rep = try Picture.bitmap(card.bounds.size)
+            card.cacheDisplay(in: card.bounds, to: rep)
+            let read = try Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "…", with: "...")
+            for line in shows { #expect(read.contains(line), "g1\(suffix) shows “\(line)”; read: \(read)") }
+            try await Picture.window(shell, library: library, web: brief.web, "g1" + suffix, root: stage.home.root)
+        }
+        #expect(Palette.toggle(in: shell.layer, model: model) == nil && shell.layer.isHidden, "⌘P again closes it")
+        // Esc in the window closes it first, as it does the shortcut sheet.
+        _ = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape) && Palette.shown(in: shell.layer) == nil)
+    }
     @Test("g2: the palette's ask row", .disabled("not built yet: G3")) func g2() async throws {}
     /// General: the three rows of Start and the version line; the open menu of "When something opens" is a menu the
     /// window server draws, so its items are checked as text (g3-menu.txt).
@@ -179,7 +221,7 @@ struct AcceptanceCommand {
         let (fixture, _) = try Mockup.menus()
         #expect(bar.menu.items.compactMap(\.submenu).map { Mockup.lines($0) } == fixture.map(\.lines))
         let closed = Mockup.dump(bar.menu, Keys.Situation())
-        for line in ["  # No space open", "  Space Info  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P  (greyed)",
+        for line in ["  # No space open", "  Space Info  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P",
                      "  New Space  ⌘N", "  Daily brief  ⌘1"] {
             #expect(closed.contains(line + "\n"), "\(line)")
         }

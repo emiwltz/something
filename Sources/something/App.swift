@@ -49,8 +49,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             // The build's question on New Space takes a digit only when no text is edited and it has that choice,
-            // and the shortcut sheet does not cover it.
-            if shell.window.isKeyWindow, shell.window.attachedSheet == nil, KeysSheet.shown(in: shell.layer) == nil,
+            // and no card (the shortcut sheet, the palette) covers it.
+            if shell.window.isKeyWindow, shell.window.attachedSheet == nil, ScrimCard.shown(in: shell.layer) == nil,
                let index = Ladder.choice(event.charactersIgnoringModifiers, modifiers: event.modifierFlags, editing: shell.window.firstResponder is NSText),
                assistant.asked?.question.options.indices.contains(index) == true {
                 assistant.answer(index)
@@ -370,10 +370,14 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Greyed, never hidden: Keys says when each command can act.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
-        let situation = Keys.Situation(space: current != nil, working: assistant.stoppable, agent: !assistant.noAgent,
-                                       welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
-                                       waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
         return Keys.enabled(id, situation)
+    }
+
+    /// What the menu items' and ⌘P's actions depend on, now.
+    var situation: Keys.Situation {
+        Keys.Situation(space: current != nil, working: assistant.stoppable, agent: !assistant.noAgent,
+                       welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
+                       waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
     }
 
     /// Shows `alert` as a sheet on the window; `then` runs when its first button is clicked.

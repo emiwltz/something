@@ -41,6 +41,8 @@ import SomethingCore
     var fresh: String?
     /// Whether a template's preview fills the Templates page: the sidebar's Templates is not highlighted then.
     var previewing = false
+    /// The template ⌘P asked to see: the Templates page opens on its preview.
+    var asked: String?
     /// What the sidebar holds besides the spaces: the row under the pointer, where the keyboard rests, a name being
     /// typed (Sidebar.swift).
     @ObservationIgnored let sidebar = SidebarState()

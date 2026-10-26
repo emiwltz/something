@@ -1,6 +1,6 @@
 // The one list of the app's commands, and the menu bar made from it. Each command has its menu words, its key, the
 // action it sends, the slice that wires it, and its line in the shortcut sheet; the menus, the tooltips and Settings ›
-// Shortcuts and the ⌘/ sheet read it, and ⌘P is to (G2), so a key cannot say two things. The table and the menus
+// Shortcuts, the ⌘/ sheet and ⌘P's actions read it, so a key cannot say two things. The table and the menus
 // are the mockup's (Tests/Fixtures/mockup), checked both ways. A command not wired yet has no action: its item is present and
 // greyed, never hidden. The keys marked `mine` are something's even while a page has the focus: WebKit would hand them
 // to the page first, so the app's key monitor gives them to the menu before it (share/guide.md says so).
@@ -38,7 +38,7 @@ enum Keys {
     /// Every command, the shortcut sheet's in its order first. The actions are App's or AppKit's responders', found
     /// through the responder chain; undo: and redo: are declared by no class Swift sees.
     static let commands: [Command] = [
-        Command(id: "palette", title: "Go to…", key: "p", owner: "G2", area: .spaces, line: "Go to a space, or ask", mine: true),
+        Command(id: "palette", title: "Go to…", key: "p", action: #selector(App.showPalette(_:)), owner: "G2", area: .spaces, line: "Go to a space, or ask", mine: true),
         Command(id: "new", title: "New Space", key: "n", action: #selector(App.newSpace(_:)), owner: "F5",
                 area: .spaces, line: "New Space", mine: true),
         Command(id: "tpls", title: "Templates", key: "t", modifiers: [.command, .shift], action: #selector(App.showTemplates(_:)), owner: "F5",
@@ -328,7 +328,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
     /// Brings Go, the headers and ⌘⌫ up to date.
     func refresh() {
         let open = open()
-        let possessive = open.map { $0.title + ($0.title.lowercased().hasSuffix("s") ? "’" : "’s") + " assistant" }
+        let possessive = open.map { Words.possessive($0.title) + " assistant" }
         for (menu, title) in [("Space", open?.title), ("Assistant", possessive)] {
             submenu(menu)?.items.first { $0.identifier?.rawValue == "header.\(menu.lowercased())" }?.title = title ?? "No space open"
         }

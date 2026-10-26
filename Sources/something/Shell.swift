@@ -30,7 +30,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private var unread: [String: (words: String, part: Pointing.Part)] = [:]
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
-    /// What covers the whole window: the toast, and later the palette and the sheets of keys.
+    /// What covers the whole window: the toast, the palette and the shortcut sheet.
     let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
                chip = NSToolbarItem.Identifier("chip"), tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
@@ -395,12 +395,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The space `name` left (trashed): an answer still waiting for it never shows for a later space of that name.
     func forget(_ name: String) { unread[name] = nil }
 
-    /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet, over all; else point
-    /// mode's step back; else a margin note, the top thing over the page. Returns whether one closed, the key then used
+    /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
+    /// all; else point mode's step back; else a margin note, the top thing over the page. Returns whether one closed, the key then used
     /// up (the assistant's nudge waits for an Esc nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
-        if KeysSheet.close(in: layer) { return true }
+        if ScrimCard.close(in: layer) { return true }
         guard window.attachedSheet == nil, let space else { return false }
         if let pointer = space.pointer, pointer.escape() { return true }
         guard let note = space.note else { return false }

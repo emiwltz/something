@@ -123,6 +123,11 @@ struct GalleryView: View {
             if let template = model.previewing { preview(template) } else { page }
         }
         .background(Look.Token.bg.ui)
+        .onChange(of: library.asked, initial: true) { _, asked in
+            guard let asked else { return }
+            library.asked = nil
+            library.templates.first { $0.id == asked }.map(model.preview)
+        }
     }
 
     // MARK: The cards

@@ -1,54 +1,31 @@
-// The shortcut sheet (⌘/): a card on a scrim in the window layer, "Keyboard Shortcuts" and ✕, Keys' lines in the two
-// columns Settings › Shortcuts draws too, and a footer that says where the menu keys are changed. Esc, ✕, a click on
-// the scrim or ⌘/ again closes it. It takes the focus while it is up, so no key reaches the page under it, and gives
-// it back to where it was. The toolbar draws above the window layer, so a click on one of its controls closes the
-// sheet instead of acting, as a click on the scrim does.
+// The shortcut sheet (⌘/): a card on a scrim in the window layer (ScrimCard, WindowLayer.swift), "Keyboard Shortcuts"
+// and ✕, Keys' lines in the two columns Settings › Shortcuts draws too, and a footer that says where the menu keys are
+// changed. Esc, ✕, a click on the scrim or ⌘/ again closes it.
 import AppKit
 import SwiftUI
 
-final class KeysSheet: NSView {
-    private let card: NSHostingView<KeysCard>
+final class KeysSheet: ScrimCard {
     /// The card's distance below the window's middle: 9 points while it arrives, as the mockup's -48 % does.
     private var rise: NSLayoutConstraint?
-    /// What had the focus before the sheet took it.
-    private weak var before: NSResponder?
-    /// The watch on the window's clicks while the sheet is in one, for the toolbar it cannot cover.
-    private var clicks: Any?
 
     private init() {
-        card = NSHostingView(rootView: KeysCard())
-        super.init(frame: .zero)
-        card.rootView = KeysCard { [weak self] in self?.close() }
-        card.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(card)
-        let rise = card.centerYAnchor.constraint(equalTo: centerYAnchor)
-        NSLayoutConstraint.activate([rise, card.centerXAnchor.constraint(equalTo: centerXAnchor)])
+        let host = NSHostingView(rootView: KeysCard())
+        super.init(card: host, radius: KeysCard.radius, label: "Keyboard shortcuts")
+        host.rootView = KeysCard { [weak self] in self?.close() }
+        let rise = host.centerYAnchor.constraint(equalTo: centerYAnchor)
+        NSLayoutConstraint.activate([rise, host.centerXAnchor.constraint(equalTo: centerXAnchor)])
         self.rise = rise
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityRoleDescription("dialog")
-        setAccessibilityLabel("Keyboard shortcuts")
     }
 
     required init?(coder: NSCoder) { nil }
-
-    /// The sheet `layer` holds, nil while none is up.
-    static func shown(in layer: WindowLayer) -> KeysSheet? { layer.subviews.lazy.compactMap { $0 as? KeysSheet }.first }
 
     /// Shows the sheet over all of `layer`, or closes it when it is up, as ⌘/ does; returns the sheet when it shows.
     /// It fades in and rises under Calm `motion`.
     @discardableResult
     static func toggle(in layer: WindowLayer, motion: Look.Motion = .calm) -> KeysSheet? {
-        if let sheet = shown(in: layer) {
-            sheet.close()
-            return nil
-        }
+        if close(in: layer) { return nil }
         let sheet = KeysSheet()
-        sheet.frame = layer.bounds
-        sheet.autoresizingMask = [.width, .height]
-        layer.hold(sheet)
-        sheet.before = layer.window?.firstResponder
-        layer.window?.makeFirstResponder(sheet)
+        sheet.present(in: layer)
         let calm = Look.duration(0.26, Look.motion(motion))
         guard calm > 0, let rise = sheet.rise else { return sheet }
         (sheet.alphaValue, rise.constant) = (0, 9)
@@ -58,69 +35,6 @@ final class KeysSheet: NSView {
             rise.animator().constant = 0
         }
         return sheet
-    }
-
-    /// Closes the sheet `layer` holds; false when none is up, so Esc goes on to what else it closes.
-    static func close(in layer: WindowLayer) -> Bool {
-        guard let sheet = shown(in: layer) else { return false }
-        sheet.close()
-        return true
-    }
-
-    /// Takes the sheet away at once, the focus back where it was when that is still in the window.
-    func close() {
-        let window = window
-        let focused = window?.firstResponder
-        removeFromSuperview()
-        guard let window, focused === self || (focused as? NSView)?.isDescendant(of: self) == true else { return }
-        // A view that left the window since cannot take it back: the window's content does.
-        let back = (before as? NSView)?.window === window || before is NSWindow ? before : nil
-        window.makeFirstResponder(back ?? window.contentView)
-    }
-
-    /// A click in the sheet's window that lands outside it (the toolbar draws above the layer) closes it. Returns nil,
-    /// the click used up, when it would have worked a toolbar control; else `event`, so the lights and the window's
-    /// drag still answer it.
-    func covers(_ event: NSEvent) -> NSEvent? {
-        guard let window, event.window === window, let frame = window.contentView?.superview,
-              let hit = frame.hitTest(event.locationInWindow), !hit.isDescendant(of: self) else { return event }
-        close()
-        let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap(window.standardWindowButton)
-        let control = sequence(first: hit, next: \.superview).contains { view in view is NSControl && !lights.contains { $0 === view } }
-        return control ? nil : event
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if let clicks { NSEvent.removeMonitor(clicks) }
-        clicks = window == nil ? nil : NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
-            self?.covers(event) ?? event
-        }
-    }
-
-    /// The card moves by constraint while it rises, which does not redraw the scrim: its float shadow and ring follow.
-    override func layout() {
-        super.layout()
-        needsDisplay = true
-    }
-
-    override var acceptsFirstResponder: Bool { true }
-    override func cancelOperation(_ sender: Any?) { close() }
-    override func keyDown(with event: NSEvent) { event.keyCode == 53 ? close() : super.keyDown(with: event) }
-    /// A click on the scrim closes it; a click on the card is the card's.
-    override func mouseDown(with event: NSEvent) { close() }
-    /// The scrim takes the wheel too: the page under it stays where it is.
-    override func scrollWheel(with event: NSEvent) {}
-
-    /// Where the card's shadow and ring were last drawn.
-    private(set) var drawn = NSRect.zero
-
-    /// The scrim, then the card's float shadow and ring; drawn here so a picture made with cacheDisplay shows them.
-    override func draw(_ dirtyRect: NSRect) {
-        Look.Token.scrim.color.setFill()
-        bounds.fill()
-        drawn = card.frame
-        Look.drawFloat(card.frame, radius: KeysCard.radius, fill: .bg2, ring: true, appearance: effectiveAppearance)
     }
 }
 
