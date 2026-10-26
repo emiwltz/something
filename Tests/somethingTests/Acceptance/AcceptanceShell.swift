@@ -375,9 +375,15 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b7" + suffix, root: stage.home.root)
         }
-        // ⌃⌘S, and the rail's toggle, lay the whole sidebar over the space, under the toolbar; Esc takes it away.
-        shell.split.toggleSidebar(nil)
+        // ⌃⌘S, and the rail's toggle, lay the whole sidebar over the space, under the toolbar; Esc takes it away. The
+        // menu item stays on beside the rail, whose column cannot collapse, and goes the person's way: the responder
+        // chain from the window, to its delegate.
+        let action = try #require(Keys.command("sidebar")?.action)
+        let item = NSMenuItem(title: "Show Sidebar", action: action, keyEquivalent: "s")
+        #expect(shell.split.validateUserInterfaceItem(item) && item.title == "Show Sidebar")
+        #expect(shell.window.tryToPerform(action, with: item))
         let laid = try #require(SidebarOver.shown(in: shell.layer))
+        #expect(shell.split.validateUserInterfaceItem(item) && item.title == "Hide Sidebar")
         _ = await wait(until: { laid.alphaValue == 1 })
         laid.layoutSubtreeIfNeeded()
         let band = shell.window.frame.height - shell.window.contentLayoutRect.maxY

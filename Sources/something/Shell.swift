@@ -69,13 +69,16 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Whether the sidebar column is the rail; the column's own state before, given back after.
     private(set) var rail = false
     private var sideBefore: (hidden: Bool, width: CGFloat) = (false, 236)
+    /// Whether the columns' widths are kept in the defaults (`init`'s `autosave`), given back to the split view when
+    /// the rail goes.
+    private let autosave: Bool
     /// Below `narrow` points the window takes the rail; it gives it up at `narrow + hysteresis`.
     static let narrow: CGFloat = 860, hysteresis: CGFloat = 20
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
-        (self.assistant, self.library, self.info) = (assistant, library, info)
+        (self.assistant, self.library, self.info, self.autosave) = (assistant, library, info, autosave)
         let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
         (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
@@ -86,12 +89,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         // The toolbar stays one band across the window: the panel begins under it, as the mockup draws it.
         inspector.allowsFullHeightLayout = false
         [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
+        window = MainWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         layer = WindowLayer(over: split.view)
         glass = Glass(over: center, model: assistant)
         super.init()
         split.over = { [unowned self] in sidebarOver() }
+        split.laid = { [unowned self] in full || rail ? SidebarOver.shown(in: layer) != nil : nil }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
@@ -213,7 +217,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     /// Turns the sidebar column into the rail (`on`), shown whatever the column was, or back into the sidebar as it
-    /// was before; the toolbar follows.
+    /// was before; the toolbar follows. The split view stops keeping its widths meanwhile: the rail's 64 points must
+    /// never become the person's saved width, nor its shown column a sidebar they had hidden.
     private func railed(_ on: Bool) {
         guard on != rail else { return }
         rail = on
@@ -223,6 +228,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         library.sidebar.rail = on
         if on {
             sideBefore = (side.isCollapsed, side.isCollapsed ? sideBefore.width : side.viewController.view.frame.width)
+            split.splitView.autosaveName = nil
             (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Rail.width, Rail.width, false)
             side.isCollapsed = false
             split.splitView.setPosition(Rail.width, ofDividerAt: 0)
@@ -230,11 +236,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             (side.minimumThickness, side.maximumThickness, side.canCollapse) = (190, 320, true)
             split.splitView.setPosition(sideBefore.width, ofDividerAt: 0)
             side.isCollapsed = sideBefore.hidden
+            split.splitView.autosaveName = autosave ? "main" : nil
         }
         // The toggle goes with the separator that follows the sidebar's edge, removed: even hidden, the separator would
         // keep the title well past the lights.
         if let toolbar = window.toolbar {
-            if on { Shell.head.forEach { _ in toolbar.removeItem(at: 0) } } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
+            if on {
+                for id in Shell.head { if let at = toolbar.items.firstIndex(where: { $0.itemIdentifier == id }) { toolbar.removeItem(at: at) } }
+            } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
         }
         (titleLine.bare, chip.compact) = (on, on)
     }
@@ -252,10 +261,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         return true
     }
-
-    /// ⌃⌘S and the rail's toggle while nothing in the split view has the focus: the window's delegate is the last in
-    /// line for it.
-    @objc func toggleSidebar(_ sender: Any?) { split.toggleSidebar(sender) }
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
@@ -344,7 +349,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         (window.title, window.subtitle) = (title, file)
         let line = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
                                                                          .foregroundColor: Look.Token.ink.color, .kern: -0.135])
-        titleLine.title = line.length
+        titleLine.titleLength = line.length
         if !file.isEmpty {
             line.append(NSAttributedString(string: "  " + file, attributes: [.font: Look.font(.ui, size: 11.5),
                                                                               .foregroundColor: Look.Token.ink3.color]))
@@ -662,12 +667,26 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 }
 
 /// The split view of the window: ⌃⌘S and the toolbar's toggle ask `over` first, which lays the sidebar over the space
-/// in full screen instead of showing its column.
+/// in full screen or beside the rail instead of showing its column.
 final class Split: NSSplitViewController {
     var over: () -> Bool = { false }
+    /// Whether the sidebar is laid over the space, nil where it is not laid over but shown as a column.
+    var laid: () -> Bool? = { nil }
     override func toggleSidebar(_ sender: Any?) {
         if !over() { super.toggleSidebar(sender) }
     }
+    /// ⌃⌘S stays on beside the rail, whose column cannot collapse, and says what it does to the sidebar laid over.
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard item.action == #selector(toggleSidebar(_:)), let laid = laid() else { return super.validateUserInterfaceItem(item) }
+        (item as? NSMenuItem)?.title = laid ? "Hide Sidebar" : "Show Sidebar"
+        return true
+    }
+}
+
+/// The main window. NSWindow answers toggleSidebar: itself, without the split view's override, whenever nothing in the
+/// split view has the focus: ⌃⌘S and the rail's toggle would then never lay the sidebar over the space.
+final class MainWindow: NSWindow {
+    @objc func toggleSidebar(_ sender: Any?) { (contentViewController as? Split)?.toggleSidebar(sender) }
 }
 
 /// A borderless, clear window laid over the whole of the main window, toolbar and lights included: the welcome's veil,
@@ -703,12 +722,12 @@ final class TitleLine: NSView {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
     /// How much of `line` is the title: beside the rail, `bare`, only the title is drawn.
-    var title = 0
+    var titleLength = 0
     var bare = false {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
     /// What is drawn: the line, or its title alone.
-    var shown: NSAttributedString { bare && title < line.length ? line.attributedSubstring(from: NSRange(location: 0, length: title)) : line }
+    var shown: NSAttributedString { bare && titleLength < line.length ? line.attributedSubstring(from: NSRange(location: 0, length: titleLength)) : line }
 
     /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
     /// menu than narrow a view that asks for more.
