@@ -157,7 +157,12 @@ header of each `*Trial.swift` says what it proves.
   by hand from a terminal; record only a throwaway session whose text is invented.
 - `SOMETHING_TRIAL_REAL_<KIND>=1` (CLAUDE, CODEX, OPENCODE, PI, OMP) and `SOMETHING_TRIAL_COST=1` read this Mac's
   own sessions, read-only, and print counts only. `SOMETHING_TRIAL_REST=1` measures the app's timers at rest.
-- `SOMETHING_GALLERY=<folder> swift test --filter GalleryTests` draws every window to PNGs, to look at.
+- **The screens are the approved mockup's.** `Tests/somethingTests/Acceptance/` holds one scenario per screen id
+  (its catalog in `AcceptanceTests.swift`, the invented home in `Stage.swift`): each asserts structure, words, counts
+  and VoiceOver labels at every run. `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
+  screen, day and night (`<id>.png`, `<id>-dark.png`), to set beside the mockup's; `SOMETHING_ACCEPT_STRICT=1` fails
+  while a screen that counts is still unbuilt. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what
+  the mockup has no screen for (alerts, the rights sheets' variants, the assistant's rarer states, the templates).
   After changing a template, run `tools/previews.sh` and commit its pictures.
 
 **Tests leave nothing behind.**

@@ -208,9 +208,18 @@ enum Mockup {
         let left: [(String, NSEvent.ModifierFlags)] = [("z", .command), ("Z", [.command, .shift]), ("c", .command), ("v", .command),
             ("a", .command), ("w", .command), ("0", .command), ("P", [.command, .shift]), ("p", []), ("1", [.command, .option])]
         for (key, modifiers) in left { #expect(Keys.claim(try Self.event(key, modifiers)) == nil, "\(Keys.symbols(modifiers))\(key)") }
-        // The guide tells a page which keys it cannot keep.
+        // The guide tells a page which keys it cannot keep: exactly those, no more, no fewer.
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
-        for command in Keys.commands where command.mine { #expect(guide.contains(command.shown), "\(command.shown)") }
+        let listed = try Self.guideKeys(guide), mine = Set(Keys.commands.filter(\.mine).map(\.shown))
+        #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
+    }
+
+    /// The keys the guide's Keys item lists, from "has the focus: " to the sentence's end ("⌘, and ⌘/.").
+    static func guideKeys(_ guide: String) throws -> Set<String> {
+        let flat = guide.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let start = try #require(flat.range(of: "even while your page has the focus: ")), end = try #require(flat.range(of: ". They go to something's menus"))
+        // "⌘, and ⌘/" becomes "⌘,, ⌘/", whose last ", " is the separator.
+        return Set(flat[start.upperBound..<end.lowerBound].replacingOccurrences(of: " and ", with: ", ").components(separatedBy: ", "))
     }
 
     /// On a layout that needs ⇧ for a character (French AZERTY: . is ⇧;, / is ⇧:, the digits are the shifted top row),

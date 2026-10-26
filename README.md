@@ -19,22 +19,25 @@ something
 
 ## The first minutes
 
-`something` opens its window. A short tour says what something is and asks which of your installed coding agents
-builds your spaces with you (it starts none of them). It also offers a small launcher in `~/Applications`, so that
-Spotlight finds something.
+`something` opens its window. A short welcome, "Ready to build something today?", asks which of your installed coding
+agents builds your spaces with you (it starts none of them). It also offers two comforts, each off until you turn it
+on: a small launcher in `~/Applications`, so that Spotlight finds something, and a notification when a request waits.
 
-The tour ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a suggestion,
-and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Ask for changes in the bar
-at the bottom of the window: the space reloads as your agent saves it. ⌘K types to the agent, ⌘J shows the
-conversation, ⌘. stops it. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks:
-type a space's name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this
-space, a New Space built from it, or another space), Tab changes it, and nothing is sent before Return.
+The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a
+suggestion, and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Each space's
+assistant rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is
+in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. ⌘J shows the conversation,
+⌘\ makes it small again, ⌘. stops the assistant. Templates (⇧⌘T) are six finished spaces to start from, and need no
+agent. ⌘P goes or asks: type a space's name to go there, or a sentence for an assistant. The line "Goes to" says once
+where it goes (this space, a New Space built from it, or another space), Tab changes it, and nothing is sent before
+Return. ⌘/ lists every shortcut.
 
-Each space has its own assistant. **something stops idle assistants on its own** to save memory: one idle for 10
-minutes falls asleep, and at most 3 stay awake (the open space's, and any that works or waits for you, are never put to
-sleep). The Settings window will show both, Put idle assistants to sleep after and Awake at most; Put Idle Assistants
-to Sleep (Assistant menu) does it at once. A sleeping
-assistant wakes on your next message and picks its conversation up, kept in
+**One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
+its own space. The sidebar shows each one's eyes; the toolbar counts the requests that wait for you. **something stops
+idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
+space's, and any that works or waits for you, are never put to sleep). Settings (⌘,), Assistant, changes both: Put
+idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
+sleeping assistant wakes on your next message and picks its conversation up, kept in
 `~/Library/Application Support/something/assistants/`: its agent, model, effort and last 60 items. An agent that cannot
 resume a conversation (all but Claude Code for now) is never put to sleep on its own; put to sleep by you, it starts a
 new conversation, and says so.
@@ -45,11 +48,18 @@ conversation stays as it was; a message you write to it meanwhile waits until th
 the temporary session once its turn ends, never while one of its requests waits for you. Each Quick Change leaves a
 new conversation in your agent's own history, which something does not clean.
 
-A space's past will be kept as **versions** in `~/Library/Application Support/something/versions/`, never in the
-spaces folder (History, which takes one after each change and shows them, is not there yet): its files, each content
-stored once, named by the sentence that asked for it, or "Edited outside something" when no turn of its assistant made
-it. Restoring a version is itself a version, and the files it did not
-have go to the Trash. 50 versions per space and 500 MB in all are kept by default; the oldest go first, never a space's
+**Comments**: while you point, Add Comment (⌘↵) keeps what you say about a part as a numbered pin instead. Point at
+other parts, comment on each, then Send to Assistant (⌘↵): they go together, in one message, to the space's own
+assistant, which works through them. A comment stays editable until it leaves, and comes back if that turn is stopped.
+
+A Quick Change that changes nothing leaves its answer as a note beside the part. After each change a short note names
+it, with Undo (⌘Z); Redo (⇧⌘Z) puts it back.
+
+A space's past is kept as **versions** in `~/Library/Application Support/something/versions/`, never in the spaces
+folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
+outside something" when no turn of its assistant made it. History (in Info, ⌘I, or the Space menu) lists them with a
+picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is itself
+a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all are kept by default; the oldest go first, never a space's
 latest, its files or its memory. A space heavier than 15 MB or 500 files keeps no versions; restoring it sends the files
 it changes to the Trash. A space moved to the Trash takes its versions with it, and a space deleted or renamed in Finder
 sends the versions left under its old name there too, so a new space of that name starts without them.
@@ -108,17 +118,20 @@ alone.
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
 - **Rights.** At the first opening of a space, a sheet lists what it declares (see your agents, write to them, start
-  them, remember things), each to allow or not. Info (⌘I) shows each right with a switch to revoke it, and what the
-  space did.
+  them, remember things), each to allow or not. Info (⌘I), a panel beside the space, shows its assistant, each right
+  with a switch to revoke it, its versions, and what the space did.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
-  panel. The Dock's badge counts the requests waiting; while something is in the background, its icon bounces once for
-  each new one. A notification of the Mac says who waits and in which space only if you turn on "Notify me when a
+  panel, across the window's top right corner. The Dock's badge and the toolbar count every request waiting, a
+  space's sticker only its own; while something is in the background, its icon bounces once for each new one. A notification of the Mac says who waits and in which space only if you turn on "Notify me when a
   request waits", and never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.
 - **Links.** Each link a space opens asks you first.
+- **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others [the guide](share/guide.md#what-the-person-sees-of-your-space)
+  lists) reach its menus even while a space has the focus: a page cannot keep them, so it cannot stop you from
+  stopping your assistant.
 - **Export.** An exported space carries its memory only if you choose so.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
@@ -192,4 +205,6 @@ the Security tab of the repository.
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). The app bundles three fonts under the SIL Open Font License 1.1, each with its license in
+[share/fonts](share/fonts): Fraunces (The Fraunces Project Authors), Onest (The Onest Project Authors) and Young
+Serif (The Young Serif Project Authors).

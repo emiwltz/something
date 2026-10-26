@@ -72,6 +72,16 @@ so before you run anything outside this folder. A space you make while the perso
 itself; otherwise something shows it as ready in the sidebar. Never run `something open` after `something new`. No
 space can write to you or read what the person tells you.
 
+Each space has its own assistant: you are the one of the space your first line names, and other spaces' assistants may
+work at the same time, each on its own. When you are idle, something may put you to sleep and resume your conversation
+at the person's next message; an agent that cannot resume starts fresh, and something tells the person. When the person
+points at parts of a space, lines `[something] Pointing at <part>: <path>` say which ones, before their words: change
+those parts. That is a Quick Change, made by a short-lived session of the same agent and model, stopped at the end of
+its turn. Comments come to the space's own assistant in one message: a line `[something] Comment <n> is on <part>:
+<path>` for each, then "<n> comments on this page:" and each one numbered; work through all of them. A path holds only
+standard tags and their order, a CSS selector such as `:root > body:nth-of-type(1) > main:nth-of-type(1) >
+section:nth-of-type(2)`, never what the page chose.
+
 ## Where a space lives
 
 - A single file: `~/something/spaces/<name>.html`.
@@ -432,7 +442,13 @@ await something.store.set("seen", [...seen, "a1"]);
   still scrolls it. A part is an element at least 40x24 points, named by its tags and their order (`table`, the second
   `section`), never by a class, an id or a custom element: inside a custom element, its nearest standard parent is the
   part, so a custom element placed directly in `body` cannot be pointed at. Plain, standard elements around what a
-  person may want changed make it easy to point at.
+  person may want changed make it easy to point at. A comment shows as a numbered pin at its part's top-left corner
+  and a tray along the bottom of your space; neither is your page's, and both follow the part as it scrolls.
+- **Info and History.** Info (⌘I) and History open in one panel, 320 points wide, docked at the window's right edge:
+  your space narrows beside it and gets a `resize`, nothing hides under it: lay your page out for narrow widths too.
+  While the person holds a version in History, that version of your files shows over your page in a
+  second, read-only view: it reads today's state, and every write it tries is refused before the bridge, so your
+  journal gets no line from it. Do not count on how many times your page loads.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
   ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
   `preventDefault()` cannot keep them. Every other key is your page's.
