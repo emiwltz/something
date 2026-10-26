@@ -786,8 +786,7 @@ final class WaitingChip: NSButton {
     /// `assistants` (id, title, state) in `listed`, by state then in the sidebar's order, or the panel when none is.
     static func goes(_ spaces: [String?], open: String?, assistants: [(String, String, Sign.State)]) -> Go {
         if spaces.count == 1 { return spaces[0].map { $0 == open ? .request : .space($0) } ?? .request }
-        let rows = assistants.filter { listed.contains($0.2) }.enumerated()
-            .sorted { (listed.firstIndex(of: $0.element.2) ?? 0, $0.offset) < (listed.firstIndex(of: $1.element.2) ?? 0, $1.offset) }.map(\.element)
+        let rows = listed.flatMap { state in assistants.filter { $0.2 == state } }
         guard !rows.isEmpty else { return .request }
         let menu = NSMenu(title: "Assistants"), tab = NSMenuItem.tab(rows.map { ($0.1, $0.2) })
         menu.addItem(.sectionHeader(title: "Assistants"))

@@ -141,8 +141,7 @@ class ScrimCard: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         faded.forEach { $0.alphaValue = 1 }
-        let items = window?.toolbar?.items.flatMap { ($0 as? NSToolbarItemGroup)?.subitems ?? [$0] } ?? []
-        faded = dims ? items.compactMap(\.view) : []
+        faded = dims ? ((window?.delegate as? Shell)?.toolbarItems ?? []).compactMap(\.view) : []
         faded.forEach { $0.alphaValue = 0.45 }
         if let clicks { NSEvent.removeMonitor(clicks) }
         clicks = window == nil ? nil : NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in

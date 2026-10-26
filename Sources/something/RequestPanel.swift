@@ -563,9 +563,17 @@ final class PanelHeader: NSView {
     override func mouseUp(with event: NSEvent) { grabbed = nil }
 }
 
+/// A button that Tab reaches, once `keyable`, even without the system's full keyboard access, where it is the only way
+/// to its action by keys.
+class KeyableButton: NSButton {
+    var keyable = false
+    override var acceptsFirstResponder: Bool { keyable || super.acceptsFirstResponder }
+    override var canBecomeKeyView: Bool { keyable && !isHidden || super.canBecomeKeyView }
+}
+
 /// A button of the panel, drawn in the identity: secondary (a ring on bg2) or primary (act), with a key hint ("esc")
 /// after its title. A primary button arming fills from the left on a pale ground.
-class PanelButton: NSButton {
+class PanelButton: KeyableButton {
     let primary: Bool, hint: String?, symbol: NSImage?
     var height: CGFloat = 30
     /// Its title's size, its key hint's, and the room each side of its words: the point composer's are 12, 11 and 10.
@@ -573,10 +581,6 @@ class PanelButton: NSButton {
     /// Its narrowest width, and the colour a primary one is filled with.
     lazy var least: CGFloat = primary ? 112 : 96
     var fill = Look.Token.act
-    /// Tab reaches it even without the system's full keyboard access, where it is the only way to its action by keys.
-    var keyable = false
-    override var acceptsFirstResponder: Bool { keyable || super.acceptsFirstResponder }
-    override var canBecomeKeyView: Bool { keyable && !isHidden || super.canBecomeKeyView }
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }
 
@@ -638,12 +642,8 @@ class PanelButton: NSButton {
 
 /// A quiet link of the panel: a symbol, 5 points, then its words in ink2, drawn here because NSButton measures itself
 /// by the system's font and clips Onest.
-final class LinkButton: NSButton {
+final class LinkButton: KeyableButton {
     private let symbol: NSImage?, face: NSFont, lead: CGFloat
-    /// Tab reaches it even without the system's full keyboard access, where it is the only way to its action by keys.
-    var keyable = false
-    override var acceptsFirstResponder: Bool { keyable || super.acceptsFirstResponder }
-    override var canBecomeKeyView: Bool { keyable && !isHidden || super.canBecomeKeyView }
 
     init(_ title: String, _ symbol: String?, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
         self.symbol = symbol.map { NSImage.symbol($0, 10, .medium) }

@@ -288,7 +288,7 @@ final class CommentTray: NSView {
             }
             removes = list.indices.map { _ in
                 let button = RowRemove(image: NSImage.symbol("xmark", 10, .medium).tinted(Look.Token.ink3.color), target: self, action: #selector(remove(_:)))
-                (button.isBordered, button.alphaValue) = (false, 0)
+                (button.isBordered, button.alphaValue, button.keyable) = (false, 0, true)
                 addSubview(button)
                 return button
             }
@@ -387,10 +387,8 @@ final class CommentTray: NSView {
 
 /// A tray row's ✕: Tab reaches it, with or without the system's full keyboard access, and it shows while it has the
 /// keys, as under the pointer.
-final class RowRemove: NSButton {
+final class RowRemove: KeyableButton {
     private(set) var focused = false
-    override var acceptsFirstResponder: Bool { !isHidden }
-    override var canBecomeKeyView: Bool { !isHidden }
     override func becomeFirstResponder() -> Bool { lit(super.becomeFirstResponder(), true) }
     override func resignFirstResponder() -> Bool { lit(super.resignFirstResponder(), false) }
 

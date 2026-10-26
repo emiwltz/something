@@ -7,14 +7,14 @@ import AppKit
 import SwiftUI
 
 struct Rail: View {
-    let library: Library
-    let assistant: AssistantModel
-    let eyes: (String) -> Sign.State
+    /// The sidebar it stands in for: its library, its eyes, and its ways to New Space, the keys and the pointer.
+    let side: SidebarView
 
     /// The rail's width, the mockup's 64 points: its 40-point buttons with 12 on each side.
     static let width: CGFloat = 64
 
-    private var state: SidebarState { library.sidebar }
+    private var library: Library { side.library }
+    private var state: SidebarState { side.state }
 
     /// What a space's icon says under the pointer.
     static func tip(_ entry: Library.Entry, _ state: Sign.State) -> String {
@@ -26,7 +26,7 @@ struct Rail: View {
             nav("Show Sidebar", tip: Keys.tooltip("sidebar", "Show Sidebar"), on: false, open: { Keys.send("sidebar") }) {
                 Image(systemName: "sidebar.left").font(.system(size: 13, weight: .medium)).foregroundStyle(Look.Token.ink2.ui)
             }
-            nav("New Space", tip: tip("new", "New Space"), on: library.selection == .newSpace, open: newSpace) {
+            nav("New Space", tip: tip("new", "New Space"), on: library.selection == .newSpace, open: side.newSpace) {
                 Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
                     .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
             }
@@ -69,8 +69,8 @@ struct Rail: View {
         .foregroundStyle(Look.Token.ink.ui)
         .focusable()
         .focusEffectDisabled()
-        .onKeyPress(.upArrow) { step(-1) }
-        .onKeyPress(.downArrow) { step(1) }
+        .onKeyPress(.upArrow) { side.step(-1) }
+        .onKeyPress(.downArrow) { side.step(1) }
         .background(Look.Token.side.ui.ignoresSafeArea())
     }
 
@@ -83,18 +83,6 @@ struct Rail: View {
         return shown.isEmpty ? words : "\(words)  \(shown)"
     }
 
-    private func newSpace() {
-        state.cursor = nil
-        library.select(.newSpace)
-        assistant.focus()
-    }
-
-    private func step(_ by: Int) -> KeyPress.Result {
-        guard let stop = library.step(by) else { return .ignored }
-        if stop == .newSpace { assistant.focus() }
-        return .handled
-    }
-
     /// A button of the head or foot: 40 by 34, its icon alone, filled while it is the page shown or under the pointer.
     private func nav(_ label: String, tip: String, on: Bool, open: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
         let key = SidebarState.Hover.nav("rail." + label)
@@ -105,7 +93,7 @@ struct Rail: View {
         }
         .buttonStyle(.plain)
         .help(tip)
-        .onHover { inside in if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil } }
+        .onHover { side.hover(key, $0) }
         .accessibilityLabel(label)
         .accessibilityAddTraits(on ? .isSelected : [])
     }
@@ -113,12 +101,12 @@ struct Rail: View {
     /// A space's button, 44 by 38: its template's symbol raised, its assistant's eyes under it (unless Settings ›
     /// Interface hides them), the selection's fill when it is open.
     private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id), now = eyes(entry.id), key = SidebarState.Hover.space(entry.id)
+        let on = library.selection == .space(entry.id), now = side.eyes(entry.id), key = SidebarState.Hover.space(entry.id)
         return ZStack {
             Image(systemName: Template.symbol(of: entry.id)).font(.system(size: 14)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink2.ui)
                 .frame(width: 17, height: 17).offset(y: entry.isSpace ? -4 : 0)
                 .overlay(alignment: .topTrailing) {
-                    if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -7) }
+                    if side.assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -7) }
                 }
             if entry.isSpace && library.preferences.sidebarEyes {
                 Image(nsImage: Sign.miniEyes(now, template: false)).resizable().frame(width: 13.6, height: 8.5)
@@ -132,7 +120,7 @@ struct Rail: View {
             state.cursor = nil
             library.select(.space(entry.id))
         }
-        .onHover { inside in if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil } }
+        .onHover { side.hover(key, $0) }
         .help(Self.tip(entry, now))
         .contextMenu { SidebarView.items(library.menu(for: entry)) }
         .accessibilityElement(children: .ignore)

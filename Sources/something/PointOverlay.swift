@@ -143,7 +143,11 @@ final class PointOverlay: NSView {
             steps -= one
             (pointer, keyed) = (nil, true)
             guard let part = await Pointing.step(one, from: hovered ?? stepped, wrap: tray == nil, in: space.web, frame: frame) else {
-                if let tray { leave(to: tray, by: one) }
+                // The keys go on into the tray, its first field going on, its Send going back; the frame goes with them.
+                guard let tray else { return }
+                (stepped, keyed) = (nil, false)
+                hover(nil)
+                window?.makeFirstResponder(one > 0 ? tray.fields.first : tray.sendButton)
                 return
             }
             stepped = part
@@ -154,13 +158,6 @@ final class PointOverlay: NSView {
 
     /// The comments' tray while they are written: the keys go on through it.
     private var tray: CommentTray? { space.flatMap(Comments.of).flatMap { $0.phase == .writing ? $0.tray : nil } }
-
-    /// Gives the keys to `tray`, its first field going on, its last button going back; the frame goes with them.
-    private func leave(to tray: CommentTray, by: Int) {
-        (stepped, keyed) = (nil, false)
-        hover(nil)
-        window?.makeFirstResponder(by > 0 ? tray.fields.first : tray.sendButton)
-    }
 
     /// Esc reaches escape() through the app's key monitor wherever the focus is in the window; this is the way of a
     /// window without that monitor (a test's), the overlay being the first responder.

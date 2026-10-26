@@ -223,13 +223,13 @@ struct SidebarView: View {
     /// space is never one.
     var column = true
 
-    private var state: SidebarState { library.sidebar }
+    var state: SidebarState { library.sidebar }
     /// What the list says while there is no space, and no group header shows: the center invites to make one.
     static let empty = "Your spaces appear here"
 
     var body: some View {
         if column && state.rail {
-            Rail(library: library, assistant: assistant, eyes: eyes)
+            Rail(side: self)
         } else {
             whole
         }
@@ -330,20 +330,20 @@ struct SidebarView: View {
         .padding(.top, 8)
     }
 
-    private func newSpace() {
+    func newSpace() {
         state.cursor = nil
         library.select(.newSpace)
         assistant.focus()
     }
 
-    private func step(_ by: Int) -> KeyPress.Result {
+    func step(_ by: Int) -> KeyPress.Result {
         guard let stop = library.step(by) else { return .ignored }
         if stop == .newSpace { assistant.focus() }
         return .handled
     }
 
     /// Notes which row the pointer is over, and forgets it when the pointer leaves that row.
-    private func hover(_ key: SidebarState.Hover, _ inside: Bool) {
+    func hover(_ key: SidebarState.Hover, _ inside: Bool) {
         if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil }
     }
 
