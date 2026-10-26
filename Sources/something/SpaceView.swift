@@ -36,6 +36,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Called after each load, when the page stopped and at its first uncaught error: the title, the problems, the stop
     /// or the strip changed, and the window shows them.
     var loaded: () -> Void = {}
+    /// Called once per load when the space's own frame has loaded (its first `scrolled`): History takes its picture.
+    var landed: () -> Void = {}
+    private var landedLoad = -1
     /// When the page's process ended since the space opened, oldest first; `stopped` from the last end to the next
     /// load; `paused`, after two, until a load the person asks for or Ask to Fix.
     private(set) var stops: [Date] = []
@@ -465,6 +468,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             guard let place = message.body as? [Any], place.count == 3, let page = place[0] as? String,
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
             scrolled = (page, x, y)
+            if landedLoad != loads { landedLoad = loads; landed() }
             // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
             pointer?.followSoon()
             note?.follow()
@@ -544,14 +548,23 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// The width a margin note takes at the page's right (MarginNote): the page narrows beside it, as in a narrower
     /// window; 0 gives it the whole width.
     var margin: CGFloat = 0 {
-        didSet { place() }
+        didSet { place(layingOut: !resizing) }
+    }
+    private var resizing = false
+
+    /// Sets `margin` from inside a layout pass that already sized the area (a margin note resized with the window):
+    /// laying the superview out again from there would re-enter the pass.
+    func resized(margin width: CGFloat) {
+        resizing = true
+        defer { resizing = false }
+        margin = width
     }
 
     /// Lays the area out: the strip across its top, the page under it beside the margin, what covers the page over
     /// it, and a margin note over both.
-    private func place() {
+    private func place(layingOut: Bool = true) {
         // The area takes the center's size by constraints, which may not have run yet.
-        area.superview?.layoutSubtreeIfNeeded()
+        if layingOut { area.superview?.layoutSubtreeIfNeeded() }
         let height = strip?.frame.height ?? 0
         web.frame = NSRect(x: 0, y: 0, width: area.bounds.width - margin, height: area.bounds.height - height)
         for view in area.subviews where view !== web && view !== strip {

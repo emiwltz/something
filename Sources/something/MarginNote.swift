@@ -101,7 +101,7 @@ final class MarginNote: NSView {
         if fits != side {
             side = fits
             card.width = fits == .margin ? Self.margin - 32 : Self.narrow
-            space?.margin = fits == .margin ? Self.margin : 0
+            space?.resized(margin: fits == .margin ? Self.margin : 0)
         }
         place()
         follow()

@@ -186,6 +186,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     func windowWillEnterFullScreen(_ notification: Notification) { fullScreen(true) }
     func windowWillExitFullScreen(_ notification: Notification) { fullScreen(false) }
+    // A transition that fails leaves the window as it was: its layout goes back too.
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) { fullScreen(false) }
+    func windowDidFailToExitFullScreen(_ window: NSWindow) { fullScreen(true) }
 
     /// Lays the window out for full screen (`on`) or back: the sidebar steps aside and comes back as it was, the space
     /// starts at the window's top, which the hidden toolbar no longer holds, and the Full Screen button turns to leave
@@ -434,6 +437,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         space.note?.dismiss()
         let overlay = PointOverlay(space, motion: library.preferences.motion)
         overlay.stopped = { [weak self] in self?.stopPointing() }
+        overlay.holdOption = { [weak self] in self?.library.preferences.holdOption ?? true }
         let name = space.space.name
         overlay.eyes = { [weak self] in self?.assistant.eyes(of: name) ?? .unknown }
         overlay.quickChange = { [weak self, weak space] words, parts in
@@ -525,8 +529,15 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return true
         }
         if let pointer = space.pointer, pointer.escape() { return true }
-        guard let note = space.note else { return false }
-        note.dismiss()
+        if let note = space.note {
+            note.dismiss()
+            return true
+        }
+        // The open card is the last layer: Esc folds it into the sticker wherever the focus is. Inside the card, the
+        // card's own Esc does it, after its field had the key (an input method's Esc).
+        let inCard = (window.firstResponder as? NSView)?.isDescendant(of: glass.card) == true
+        guard assistant.open, assistant.place.space != nil, !inCard else { return false }
+        assistant.escape()
         return true
     }
 

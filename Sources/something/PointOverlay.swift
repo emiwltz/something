@@ -23,6 +23,8 @@ final class PointOverlay: NSView {
     var commented: () -> Bool = { false }
     /// The eyes of the space's assistant, which the composer shows beside the space's name.
     var eyes: () -> Sign.State = { .unknown }
+    /// Whether ⌥ adds a part (Settings › Interface › Hold ⌥ to point inside a drawn frame); off, a click replaces.
+    var holdOption: () -> Bool = { true }
     /// The composer, while parts are picked.
     private(set) var composer: PointComposer?
     /// The part under the pointer, and the parts picked, in the page's viewport (the overlay's own points).
@@ -31,7 +33,7 @@ final class PointOverlay: NSView {
     /// What the banner says, in its order: the mode, then the way on or out.
     var banner: [String] {
         picks.isEmpty ? ["Point at a part of the space", "Esc", "to stop"]
-            : ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"]
+            : holdOption() ? ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"] : ["Say what should change", "Esc", "Back"]
     }
 
     private var asking = false, pending: CGPoint?, pointer: CGPoint?, holding = false
@@ -78,7 +80,7 @@ final class PointOverlay: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let at = convert(event.locationInWindow, from: nil)
-        (holding, keyed) = (event.modifierFlags.contains(.option), false)
+        (holding, keyed) = (adds(event), false)
         // Over the composer, no part is under the pointer.
         if let composer, composer.frame.contains(at) {
             pointer = nil
@@ -88,7 +90,7 @@ final class PointOverlay: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        holding = event.modifierFlags.contains(.option)
+        holding = adds(event)
         // The keys' frame stays while ⇧ goes down for ⇧Tab.
         if let pointer { look(at: pointer) } else if !picks.isEmpty, !keyed { hover(nil) }
     }
@@ -97,9 +99,12 @@ final class PointOverlay: NSView {
         hover(nil)
     }
 
+    /// Whether `event` adds a part: ⌥ is held and the setting lets it.
+    private func adds(_ event: NSEvent) -> Bool { holdOption() && event.modifierFlags.contains(.option) }
+
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        let at = convert(event.locationInWindow, from: nil), adding = event.modifierFlags.contains(.option)
+        let at = convert(event.locationInWindow, from: nil), adding = adds(event)
         Task { @MainActor in await click(at: at, adding: adding) }
     }
 
@@ -125,7 +130,7 @@ final class PointOverlay: NSView {
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 48: Task { @MainActor in await step(event.modifierFlags.contains(.shift) ? -1 : 1) }
-        case 36, 76, 49: if let hovered { pick(hovered, adding: event.modifierFlags.contains(.option)) }
+        case 36, 76, 49: if let hovered { pick(hovered, adding: adds(event)) }
         default: super.keyDown(with: event)
         }
     }

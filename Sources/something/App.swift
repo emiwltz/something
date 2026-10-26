@@ -240,9 +240,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 guard let self, let view, current === view else { return }
                 shell.show(view)
                 info.show(view.space)
-                Task { @MainActor [weak self] in await self?.info.history.picture(of: view) }
                 assistant.place = AssistantModel.place(view)
                 library.relist()
+            }
+            view.landed = { [weak self, weak view] in
+                guard let self, let view, current === view else { return }
+                Task { @MainActor [weak self] in await self?.info.history.picture(of: view) }
             }
             view.made = assistant.made.contains(name)
             view.journaled = { [weak self] in self?.info.journaled() }

@@ -225,7 +225,7 @@ public final class Engine {
     /// since an agent may match its rules against real paths), and returns its id, which `assistants` holds from then on.
     /// Its driver lets it build spaces without asking, and offers it `lent`, unless `askEverything`. It runs `model` at
     /// `effort` when given, and continues the conversation `resume` when given (a space's own, woken again, or a Quick
-    /// Change's); a resume keeps the assistant's rights, and its lent tools depend on the driver (Codex offers them only to
+    /// Change's); a resume keeps the assistant's rights, and its lent tools depend on the driver (one may offer them only to
     /// a new thread). Only the app calls this: a space launches through `launch`, which never makes an assistant. Throws as
     /// `launch`, and BAD_PARAMS for an empty `resume` or one an agent could read as an option.
     public func launchAssistant(_ kind: String, folder: String, model: String? = nil, effort: String? = nil, resume: String? = nil,

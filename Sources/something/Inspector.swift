@@ -221,7 +221,7 @@ final class InfoController: NSHostingController<InspectorView> {
         switch (rootView.info.content, event.keyCode) {
         case (.history, 126): moveUp(nil)
         case (.history, 125): moveDown(nil)
-        case (.history, 49): if !event.isARepeat { rootView.info.history.compare(true) }
+        case (.history, 49): if !event.isARepeat { hold() }
         case (_, 53): cancelOperation(nil) // Escape, which no field of the panel took
         default: super.keyDown(with: event)
         }
@@ -229,6 +229,35 @@ final class InfoController: NSHostingController<InspectorView> {
 
     override func keyUp(with event: NSEvent) {
         guard rootView.info.content == .history, event.keyCode == 49 else { return super.keyUp(with: event) }
+        release()
+    }
+
+    /// What ends the hold wherever the focus went meanwhile: Space released in any window (the page took a click),
+    /// the window losing the keys, or the app losing the focus (⌘-Tab).
+    private var keyUp: Any?, resigned: [NSObjectProtocol] = []
+
+    /// Space went down in History: the chosen version is shown over the page until the key comes up, wherever it does.
+    private func hold() {
+        rootView.info.history.compare(true)
+        guard keyUp == nil, rootView.info.history.comparing else { return }
+        keyUp = NSEvent.addLocalMonitorForEvents(matching: .keyUp) { [weak self] event in
+            guard event.keyCode == 49, let self else { return event }
+            // Taken while the version still shows: the page never gets a Space it did not see go down.
+            let shown = rootView.info.history.comparing
+            release()
+            return shown ? nil : event
+        }
+        let center = NotificationCenter.default
+        resigned = [(NSWindow.didResignKeyNotification, view.window as Any?), (NSApplication.didResignActiveNotification, nil)].map { name, object in
+            center.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.release() } }
+        }
+    }
+
+    /// The hold ended: the page as it is now.
+    private func release() {
+        if let keyUp { NSEvent.removeMonitor(keyUp) }
+        resigned.forEach(NotificationCenter.default.removeObserver)
+        (keyUp, resigned) = (nil, [])
         rootView.info.history.compare(false)
     }
 }

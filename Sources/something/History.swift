@@ -126,6 +126,7 @@ import WebKit
     func press(_ id: String) {
         guard pressing == nil else { return }
         let held = DispatchWorkItem { [weak self] in
+            self?.pressing = nil
             self?.chosen = id
             self?.compare(true)
         }

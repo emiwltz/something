@@ -884,6 +884,16 @@ import WebKit
         await adding.value
         await following.value
         #expect(overlay.picks.map(\.path) == [cell.path, card.path] && overlay.picks.map(\.rect) == [cell.rect, card.rect])
+        // With Hold ⌥ off in Settings, ⌥ adds nothing: an ⌥-click picks again, and the banner no longer offers it.
+        overlay.holdOption = { false }
+        #expect(overlay.banner == ["Say what should change", "Esc", "Back"])
+        let optionClick = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: at, modifierFlags: .option, timestamp: ProcessInfo.processInfo.systemUptime,
+                                                          windowNumber: offscreen.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        overlay.mouseDown(with: optionClick)
+        #expect(await wait(until: { overlay.picks.map(\.path) == [cell.path] }), "an ⌥-click with the setting off replaces the picks")
+        overlay.holdOption = { true }
+        await overlay.click(at: inner, adding: true)
+        #expect(overlay.picks.map(\.path) == [cell.path, card.path])
 
         // A reload keeps the mode and its picks, and the frames ask the new page where their parts are: moved by the
         // page before, back where the file has them after.
@@ -1053,5 +1063,54 @@ import WebKit
         // No room below: over the part; at the left edge: 12 off it.
         let over = MarginNote.layout(part: CGRect(x: 0, y: 500, width: 100, height: 60), side: .under, size: CGSize(width: 524, height: 630), height: 170)
         #expect(over.note == CGRect(x: 12, y: 500 - 7 - 12 - 170, width: 268, height: 170))
+    }
+
+    /// A turn kept as a version gets its picture from the load itself: `landed` runs once the space's frame loaded,
+    /// once per load, and History takes the picture then, as App wires it; nothing calls picture(of:) by hand.
+    @Test func aLoadedPageGivesItsVersionAPicture() async throws {
+        let home = Home(prefix: "something-window-")
+        defer { home.remove() }
+        let space = try home.space("brief", page(nil, "<h1>Brief</h1>"))
+        let info = Info(places: home.places, ask: FakeAsk()), store = info.history.store
+        try store.capture(space, kind: .turn, sentence: "Make it shorter", who: "Claude Code")
+        info.show(space)
+        let view = try await home.window(space)
+        defer { view.close() }
+        let offscreen = Offscreen(view.area)
+        defer { withExtendedLifetime(offscreen) {} }
+        var landings = 0
+        view.landed = { [weak view] in
+            landings += 1
+            guard let view else { return }
+            Task { @MainActor in await info.history.picture(of: view) }
+        }
+        view.open()
+        #expect(await wait(until: { store.list("brief").first?.thumb != nil }), "the newest version has no picture")
+        #expect(landings == 1)
+        view.load()
+        #expect(await wait(until: { landings == 2 }), "each load lands once")
+    }
+
+    /// The open card is the last layer Esc closes, wherever the focus is: in the page, Esc folds it into the sticker;
+    /// inside the card, the card's own Esc does it.
+    @Test func escFoldsTheOpenCardFromThePage() async throws {
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
+        defer { home.remove() }
+        let space = try home.space("brief", page(nil, "<h1>Brief</h1>"))
+        let library = Library(places: home.places, ask: ask, share: Home.share)
+        library.relist()
+        let shell = Shell(library: library, info: Info(places: home.places, ask: ask),
+                          assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
+        defer { shell.window.close() }
+        let view = try await home.window(space)
+        defer { view.close() }
+        shell.show(view)
+        shell.assistant.place = AssistantModel.place(view)
+        shell.assistant.open = true
+        shell.window.makeFirstResponder(view.web)
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape) && !shell.assistant.open, "Esc in the page folds the card")
+        #expect(!shell.escape(escape), "then nothing is left to close")
     }
 }
