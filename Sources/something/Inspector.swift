@@ -241,9 +241,11 @@ extension Shell {
     func showInfo(_ shown: Bool) {
         if shown { info.content = .info }
         info.history.closed()
-        // Keys that were in the panel go back to the page as it closes.
+        // Keys that were in the panel go back to the page as it closes, or to point mode's overlay while it is on.
         let panel = inspector.viewController.view
-        if !shown, let held = window.firstResponder as? NSView, held.isDescendant(of: panel), let space { window.makeFirstResponder(space.web) }
+        if !shown, let held = window.firstResponder as? NSView, held.isDescendant(of: panel), let space {
+            window.makeFirstResponder(space.pointer ?? space.web)
+        }
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
     }

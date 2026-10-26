@@ -2,8 +2,8 @@
 // neither see the questions nor change the functions that answer them: the part under a point, the part before or after
 // another (the keys' way), where parts are now, and a scroll the overlay hands on. A part is an element at least 40x24
 // points; it is named by a path of standard tags and :nth-of-type only, never a class, an id or a custom element, so
-// what something keeps of a part says nothing the page chose. The page is not told that someone points: nothing runs
-// in its world.
+// what something keeps of a part says nothing the page chose. Nothing runs in the page's world; but a step by keys
+// scrolls its part into view, a scroll the page sees, as it sees the wheel's scroll the overlay hands on.
 import CoreGraphics
 import WebKit
 
@@ -47,20 +47,23 @@ enum Pointing {
         """ + described
 
     /// The part `by` (1 or -1) after the part at `from`, in the page's order, or the first (the last) when `from` is
-    /// null or gone: the same parts a pointer finds, scrolled into view.
+    /// null or gone: the parts a pointer could frame, shown ones only, scrolled into view. Past the last (the first) it
+    /// goes round when `wrap`, else answers null: the keys leave the page for the comments' tray.
     static let stepScript = """
         const standard = new Set(tags), parts = [];
         const walk = (node) => {
           for (const child of node.children) {
             if (!standard.has(child.localName)) continue;
             const box = child.getBoundingClientRect();
-            if (box.width >= least[0] && box.height >= least[1]) parts.push(child);
+            const shown = child.checkVisibility?.({opacityProperty: true, visibilityProperty: true}) !== false;
+            if (shown && box.width >= least[0] && box.height >= least[1]) parts.push(child);
             walk(child);
           }
         };
         if (document.body) walk(document.body);
         if (!parts.length) return null;
         const at = from ? parts.indexOf(document.querySelector(from)) : -1;
+        if (at >= 0 && !wrap && (at + by < 0 || at + by >= parts.length)) return null;
         const node = parts[at < 0 ? (by > 0 ? 0 : parts.length - 1) : (at + by + parts.length) % parts.length];
         node.scrollIntoView({block: "nearest", inline: "nearest", behavior: "instant"});
         return describe(node);
@@ -99,10 +102,11 @@ enum Pointing {
     }
 
     /// The part `by` (1 or -1) after `from` in the page's order, scrolled into view, or the first (the last) when
-    /// `from` is nil or gone; nil when the page has no part or cannot be asked.
+    /// `from` is nil or gone; nil when the page has no part or cannot be asked, or past the last (the first) part
+    /// unless `wrap`.
     @MainActor
-    static func step(_ by: Int, from: Part?, in web: WKWebView, frame: WKFrameInfo) async -> Part? {
-        await ask(stepScript, ["by": by, "from": from?.path ?? NSNull()], in: web, frame: frame)
+    static func step(_ by: Int, from: Part?, wrap: Bool = true, in web: WKWebView, frame: WKFrameInfo) async -> Part? {
+        await ask(stepScript, ["by": by, "from": from?.path ?? NSNull(), "wrap": wrap], in: web, frame: frame)
     }
 
     @MainActor

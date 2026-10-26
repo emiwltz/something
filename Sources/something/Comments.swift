@@ -31,6 +31,9 @@ final class Comments: NSView, NSTextFieldDelegate {
     let tray = CommentTray()
     /// Asks after the comments sent a few times a second, only while they are at work.
     private var timer: Timer?, asking = false, askAgain = false
+    /// What the page's keys went on to before the tray stood in that place, once it did.
+    private weak var after: NSView?
+    private var chained = false
 
     /// The comments over `space`'s page, if any wait or are at work.
     static func of(_ space: SpaceView) -> Comments? { space.area.subviews.lazy.compactMap { $0 as? Comments }.first }
@@ -113,8 +116,26 @@ final class Comments: NSView, NSTextFieldDelegate {
             ? CGRect(x: ((width - min(640, width - 40)) / 2).rounded(), y: bounds.height - 16 - height, width: min(640, width - 40), height: height)
             : CGRect(x: 16, y: bounds.height - 16 - height, width: min(460, max(260, width - 440)), height: height)
         tray.setAccessibilityValue(pins.joined(separator: ", "))
+        chain()
         needsDisplay = true
         space?.pointer?.needsDisplay = true
+    }
+
+    /// The keys' way through the tray, Tab after Tab: each row's words then its ✕, Clear, Send. While pointing, the
+    /// overlay steps through the page's parts into the tray and Send's Tab goes back to it; else the tray comes after
+    /// the page, and Send's Tab goes where the page's went.
+    private func chain() {
+        guard let space, let first = tray.fields.first else { return }
+        let stops: [NSView] = zip(tray.fields, tray.removes).flatMap { [$0, $1] as [NSView] } + [tray.clear, tray.sendButton]
+        for (stop, next) in zip(stops, stops.dropFirst()) { stop.nextKeyView = next }
+        if !chained { (after, chained) = (space.web.nextKeyView, true) }
+        space.web.nextKeyView = first
+        tray.sendButton.nextKeyView = after ?? space.web
+        // Set last, so that ⇧Tab from the first field goes back to it.
+        if let overlay = space.pointer {
+            overlay.nextKeyView = first
+            tray.sendButton.nextKeyView = overlay
+        }
     }
 
     override func resizeSubviews(withOldSize size: NSSize) {
@@ -172,6 +193,7 @@ final class Comments: NSView, NSTextFieldDelegate {
     override func removeFromSuperview() {
         timer?.invalidate()
         timer = nil
+        if chained { space?.web.nextKeyView = after }
         super.removeFromSuperview()
     }
 
@@ -222,6 +244,7 @@ final class CommentTray: NSView {
         super.init(frame: .zero)
         (sendButton.height, sendButton.size, sendButton.hintSize, sendButton.pad, sendButton.least) = (28, 12, 11, 11, 0)
         (sendButton.target, sendButton.action) = (self, #selector(send))
+        (clear.keyable, sendButton.keyable) = (true, true)
         addSubview(clear)
         addSubview(sendButton)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
@@ -305,6 +328,17 @@ final class CommentTray: NSView {
     }
     override func mouseExited(with event: NSEvent) { hovered = nil }
 
+    /// Tab and ⇧Tab on a ✕, Clear or Send go on along the key views here, and Space presses it, with or without the
+    /// system's full keyboard access: the views around the page keep their keys.
+    override func keyDown(with event: NSEvent) {
+        guard let held = window?.firstResponder as? NSView, held.isDescendant(of: self) else { return super.keyDown(with: event) }
+        switch event.keyCode {
+        case 48: event.modifierFlags.contains(.shift) ? window?.selectKeyView(preceding: held) : window?.selectKeyView(following: held)
+        case 49: (held as? NSButton)?.performClick(nil)
+        default: super.keyDown(with: event)
+        }
+    }
+
     private func name(_ comment: Comments.Comment) -> NSAttributedString {
         NSAttributedString(string: comment.part.kind, attributes: [.font: Look.font(.ui, size: 12, weight: .semibold), .foregroundColor: Look.Token.ink2.color])
     }
@@ -351,9 +385,12 @@ final class CommentTray: NSView {
     }
 }
 
-/// A tray row's ✕: Tab reaches it, and it shows while it has the keys, as under the pointer.
+/// A tray row's ✕: Tab reaches it, with or without the system's full keyboard access, and it shows while it has the
+/// keys, as under the pointer.
 final class RowRemove: NSButton {
     private(set) var focused = false
+    override var acceptsFirstResponder: Bool { !isHidden }
+    override var canBecomeKeyView: Bool { !isHidden }
     override func becomeFirstResponder() -> Bool { lit(super.becomeFirstResponder(), true) }
     override func resignFirstResponder() -> Bool { lit(super.resignFirstResponder(), false) }
 

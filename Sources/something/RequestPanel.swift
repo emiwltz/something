@@ -573,6 +573,10 @@ class PanelButton: NSButton {
     /// Its narrowest width, and the colour a primary one is filled with.
     lazy var least: CGFloat = primary ? 112 : 96
     var fill = Look.Token.act
+    /// Tab reaches it even without the system's full keyboard access, where it is the only way to its action by keys.
+    var keyable = false
+    override var acceptsFirstResponder: Bool { keyable || super.acceptsFirstResponder }
+    override var canBecomeKeyView: Bool { keyable && !isHidden || super.canBecomeKeyView }
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }
 
@@ -636,6 +640,10 @@ class PanelButton: NSButton {
 /// by the system's font and clips Onest.
 final class LinkButton: NSButton {
     private let symbol: NSImage?, face: NSFont, lead: CGFloat
+    /// Tab reaches it even without the system's full keyboard access, where it is the only way to its action by keys.
+    var keyable = false
+    override var acceptsFirstResponder: Bool { keyable || super.acceptsFirstResponder }
+    override var canBecomeKeyView: Bool { keyable && !isHidden || super.canBecomeKeyView }
 
     init(_ title: String, _ symbol: String?, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
         self.symbol = symbol.map { NSImage.symbol($0, 10, .medium) }

@@ -739,3 +739,52 @@ extension Picture {
         }
     }
 }
+
+extension AcceptanceTrust {
+    /// The request panel by keys: it arrives without them, and none of the keys typed to it answers Allow Once, before
+    /// or after the arming, nor a key equivalent; ← and → walk the queue; Escape denies the request shown, and the close
+    /// button the next. VoiceOver's press is refused before the arming and while the person has not taken the panel;
+    /// that it answers once both hold is PanelsTests', since a panel never shown never becomes key.
+    @Test("Keys only: the request panel") func keysOnly() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        let source = FakePrompts()
+        Self.request("r", [12, 2], in: source)
+        var time: TimeInterval = 100
+        let panels = Self.panels(source, shell, open: "agents")
+        panels.clock = { time }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: Self.desk)
+        func key(_ code: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = []) throws {
+            panel.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: panel.windowNumber,
+                                                          context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
+        }
+        func typeEveryKey() throws {
+            for (characters, code) in [("\r", UInt16(36)), (" ", 49), ("\u{3}", 76)] {
+                for flags in [NSEvent.ModifierFlags(), .command, .option] { try key(code, characters, flags) }
+            }
+        }
+        #expect(!panel.isKeyWindow && !panel.held && panel.request?.id == "r1")
+        try typeEveryKey()
+        #expect(!panel.allowButton.accessibilityPerformPress() && source.answers.isEmpty, "nothing answers before the arming")
+        try key(124, "\u{f703}")
+        #expect(panel.request?.id == "r2" && panel.position == "2 of 2", "→ walks the queue")
+        try key(123, "\u{f702}")
+        #expect(panel.request?.id == "r1" && panel.position == "1 of 2")
+        time += 1
+        panel.tick()
+        #expect(panel.armed && panel.allowButton.isEnabled)
+        try typeEveryKey()
+        #expect(source.answers.isEmpty && !panel.allowButton.acceptsFirstResponder && panel.allowButton.keyEquivalent.isEmpty, "armed, still no key answers")
+        #expect(!panel.allowButton.accessibilityPerformPress() && source.answers.isEmpty, "VoiceOver's press waits for the person to take the panel")
+        try key(53, "\u{1b}")
+        #expect(source.answers.map(\.0) == ["r1"] && source.answers.map(\.1) == [.deny] && panel.request?.id == "r2", "Escape denies")
+        panel.standardWindowButton(.closeButton)?.performClick(nil)
+        #expect(source.answers.map(\.1) == [.deny, .deny] && panels.panel == nil, "the close button denies")
+    }
+}

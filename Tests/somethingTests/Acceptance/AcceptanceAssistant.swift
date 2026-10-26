@@ -556,4 +556,45 @@ struct AcceptanceAssistant {
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
+
+    /// The sticker and the card by keys alone: the sticker with the keys shows its label as under the pointer, Return
+    /// opens the card and its field takes the keys once drawn; Esc in the field reduces the card to the sticker and the
+    /// page has the keys again; Space opens it too, and ⌘K (the menu's, here its action) from the page. VoiceOver's
+    /// press on the sticker opens it.
+    @Test("Keys only: the sticker and the card") func keysOnly() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, _, brief) = try await AcceptanceAssistant.atWork(stage)
+        defer { brief.close() }
+        let model = shell.assistant, glass = shell.glass, sticker = glass.sticker, window = shell.window
+        glass.motion = { .reduced }
+        #expect(await wait(5) { glass.grown == false && glass.stickerShown })
+        func key(_ code: UInt16, _ characters: String) throws {
+            window.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                           context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
+        }
+        func opened() async -> Bool {
+            await wait(5) { glass.grown == true && !glass.morphing && window.firstResponder is NSTextView && !model.wantsFocus }
+        }
+        func reduced() async throws -> Bool {
+            try key(53, "\u{1b}")
+            return await wait(5) { !model.cardShown && glass.grown == false && glass.stickerShown && window.firstResponder === brief.web }
+        }
+        #expect(window.makeFirstResponder(sticker) && sticker.hovering && !glass.label.isHidden, "the sticker with the keys shows its label")
+        try key(36, "\r")
+        #expect(model.cardShown && sticker.accessibilityRole() == .button)
+        #expect(await opened(), "the card's field has the keys: \(String(describing: window.firstResponder))")
+        #expect(try await reduced(), "Esc reduces the card, the page has the keys")
+        #expect(window.makeFirstResponder(sticker))
+        try key(49, " ")
+        #expect(await opened())
+        #expect(try await reduced())
+        model.focus()
+        #expect(await opened(), "⌘K from the page")
+        #expect(try await reduced())
+        #expect(sticker.accessibilityPerformPress() && model.cardShown)
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
 }

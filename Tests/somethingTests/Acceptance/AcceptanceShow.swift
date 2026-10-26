@@ -839,9 +839,11 @@ struct AcceptanceShow {
     }
 
     /// The keys' path through show and change, with no pointer: ⌥⌘S, then Tab and ⇧Tab frame the parts in the page's
-    /// order (VoiceOver hears each kind), Return picks the one framed and the composer takes the keys, ⌘↵ adds the
-    /// comment; Tab reaches a tray row's ✕, which shows while it has the keys; Esc stops pointing. Show History… gives
-    /// the panel the keys at once: ↓ chooses an older version, Esc closes it and the page has the keys again.
+    /// order (VoiceOver hears each kind), Return picks the one framed and the composer takes the keys; Tab there frames
+    /// another part and ⌥Return adds it; ⌘↵ adds the comment. Tab past the last part goes into the tray (each row's words,
+    /// its ✕, which shows while it has the keys, Clear, Send) and back to pointing; once Esc stops pointing, the tray
+    /// comes after the page. Show History… gives the panel the keys at once: ↓ chooses an older version, Esc closes it,
+    /// even with a margin note shown, and the page has the keys again.
     @Test("Keys only: point, comment, History") func keysOnly() async throws {
         let stage = try Stage("show")
         defer { stage.remove() }
@@ -855,37 +857,93 @@ struct AcceptanceShow {
             window.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
                                                            context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
         }
+        func tab(back: Bool = false) throws { try key(48, back ? "\u{19}" : "\t", back ? .shift : []) }
+        /// Whether `view` has the keys: itself, or the field editor at work in it.
+        func has(_ view: NSView) -> Bool {
+            window.firstResponder === view || (window.firstResponder as? NSTextView).map { $0.isFieldEditor && $0.delegate === view as AnyObject } == true
+        }
 
         shell.point()
         let overlay = try #require(brief.pointer)
         #expect(window.firstResponder === overlay && overlay.accessibilityHelp() == "Esc to stop. Tab frames the next part, Return picks it")
-        try key(48, "\t")
+        try tab()
         #expect(await wait(until: { overlay.hovered != nil }))
         let first = try #require(overlay.hovered)
         #expect(overlay.accessibilityValue() as? String == first.kind)
-        try key(48, "\t")
+        try tab()
         #expect(await wait(until: { overlay.hovered.map { $0.path != first.path } == true }))
         let second = try #require(overlay.hovered)
         #expect(second.path.hasPrefix(first.path), "the next part in the page's order lies in the first: \(first.path) \(second.path)")
-        try key(48, "\u{19}", .shift)
+        try tab(back: true)
         #expect(await wait(until: { overlay.hovered?.path == first.path }), "⇧Tab goes back")
-        try key(48, "\t")
-        #expect(await wait(until: { overlay.hovered?.path == second.path }))
+        // Two quick Tabs move two parts, one each, in order.
+        try tab()
+        try tab()
+        #expect(await wait(until: { overlay.hovered.map { $0.path != first.path && $0.path != second.path } == true }))
+        let third = try #require(overlay.hovered)
+        try tab(back: true)
+        #expect(await wait(until: { overlay.hovered?.path == second.path }), "\(String(describing: overlay.hovered?.path)) after \(third.path)")
         try key(36, "\r")
         let composer = try #require(overlay.composer)
         #expect(overlay.picks.map(\.path) == [second.path] && window.firstResponder === composer.field)
         composer.field.insertText("Say it in one line", replacementRange: composer.field.selectedRange())
+        // Tab in the composer frames another part; ⌥Return adds it, and the words wait.
+        try tab()
+        #expect(await wait(until: { overlay.hovered?.path == third.path }), "Tab from the composer frames the next part")
+        #expect(window.firstResponder === overlay && overlay.accessibilityHelp()?.hasSuffix(". Tab frames another part, ⌥Return adds it") == true)
+        try key(36, "\r", .option)
+        #expect(overlay.picks.map(\.path) == [second.path, third.path] && window.firstResponder === composer.field && composer.field.string == "Say it in one line")
         #expect(composer.field.performKeyEquivalent(with: try AcceptanceShow.commandReturn(window)))
         let comments = try #require(Comments.of(brief)), tray = comments.tray
-        #expect(comments.list.map(\.words) == ["Say it in one line"] && overlay.picks.isEmpty && brief.pointer === overlay)
+        #expect(comments.list.map(\.words) == ["Say it in one line", "Say it in one line"] && overlay.picks.isEmpty && brief.pointer === overlay)
         #expect(tray.fields.first?.accessibilityLabel() == "Comment 1 on \(second.kind)" && tray.removes.first?.alphaValue == 0)
-        let remove = try #require(tray.removes.first)
-        #expect(window.makeFirstResponder(remove) && remove.alphaValue == 1, "the ✕ that has the keys shows")
-        #expect(window.makeFirstResponder(overlay) && remove.alphaValue == 0)
+        #expect(window.firstResponder === overlay)
+
+        // Tab past the page's last part goes into the tray, then through it and back to pointing.
+        var tabs = 0
+        while !has(tray.fields[0]), tabs < 200 {
+            let before = overlay.hovered?.path
+            try tab()
+            tabs += 1
+            _ = await wait(until: { overlay.hovered?.path != before || has(tray.fields[0]) })
+        }
+        #expect(has(tray.fields[0]) && overlay.hovered == nil, "Tab past the last part reaches the first comment, after \(tabs) tabs")
+        try tab()
+        #expect(window.firstResponder === tray.removes[0] && tray.removes[0].alphaValue == 1, "the ✕ that has the keys shows")
+        try tab()
+        #expect(has(tray.fields[1]) && tray.removes[0].alphaValue == 0)
+        try tab()
+        try tab()
+        #expect(window.firstResponder === tray.clear)
+        try tab()
+        #expect(window.firstResponder === tray.sendButton)
+        try tab()
+        #expect(window.firstResponder === overlay, "Send's Tab goes back to pointing")
+        try tab()
+        #expect(await wait(until: { overlay.hovered?.path == first.path }), "and on to the first part")
+        try tab(back: true)
+        #expect(await wait(until: { window.firstResponder === tray.sendButton }), "⇧Tab before the first part goes to Send")
+        for _ in 1...5 { try tab(back: true) }
+        #expect(has(tray.fields[0]), "⇧Tab goes back through the tray")
+        try tab(back: true)
+        #expect(window.firstResponder === overlay, "⇧Tab from the first comment goes back to pointing")
+        window.makeFirstResponder(tray.removes[1])
+        try key(49, " ")
+        #expect(comments.list.count == 1, "Space on a ✕ takes its comment out")
+
+        // Esc stops pointing: the page has the keys, and the tray comes after it.
+        window.makeFirstResponder(overlay)
         #expect(shell.escape(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
                                                             context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))))
         #expect(brief.pointer == nil && window.firstResponder === brief.web)
+        // Tab past the page's last element: WebKit asks the window for the view after the page, as here.
+        #expect(brief.web.nextKeyView === tray.fields[0] && tray.sendButton.nextKeyView === brief.web)
+        window.selectKeyView(following: brief.web)
+        #expect(has(tray.fields[0]), "the tray comes after the page")
+        try tab(back: true)
+        #expect(window.firstResponder === brief.web, "and ⇧Tab goes back to it")
         tray.clear.performClick(nil)
+        #expect(brief.web.nextKeyView == nil, "the tray gone, the page's keys go where they went before")
 
         // History, by its keys alone.
         info.clock = { Stage.local }
@@ -899,5 +957,12 @@ struct AcceptanceShow {
         #expect(info.history.chosen == all[2].id)
         try key(53, "\u{1b}")
         #expect(!shell.infoShown && window.firstResponder === brief.web, "Esc closes History and the page has the keys again")
+        // With a margin note shown, the app's key monitor asks Shell.escape first: the panel with the keys still closes.
+        shell.showHistory()
+        let note = MarginNote.show("A note", about: second, title: "Daily brief", over: brief)
+        defer { note.dismiss() }
+        #expect(shell.escape(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))))
+        #expect(!shell.infoShown && brief.note != nil && window.firstResponder === brief.web, "Esc closed the panel, not the note")
     }
 }

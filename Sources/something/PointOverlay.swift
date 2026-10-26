@@ -3,7 +3,8 @@
 // the pointer, draws the sign's four corners around that part with its kind in a pill ("this table"), and says the
 // mode and its way out in a banner at the top, unless comments wait (their tray says it). A click picks a part; once a frame is drawn, ⌥-click adds one, and the
 // composer (PointComposer.swift) attaches to the last one picked. Without a pointer, Tab and ⇧Tab frame the parts in
-// the page's order and Return or Space picks the one framed. Esc lets go of the picked parts, then stops the
+// the page's order, Return or Space picks the one framed and ⌥Return adds it; while comments wait, the keys go on past
+// the last part into their tray and come back from it. Esc lets go of the picked parts, then stops the
 // mode. The frames follow the page when it scrolls or reloads. It is all drawn in draw(_:), so a picture of the
 // window shows it as the screen does.
 import AppKit
@@ -34,6 +35,9 @@ final class PointOverlay: NSView {
     }
 
     private var asking = false, pending: CGPoint?, pointer: CGPoint?, holding = false
+    /// Steps by keys not yet taken, one at a time as look(at:) asks; the part framed by keys stays, picks or not, until
+    /// the pointer moves; the last part stepped to, where the next step starts when nothing is framed.
+    private var steps = 0, stepping = false, keyed = false, stepped: Pointing.Part?
     private var following = false, followAgain = false
     /// The hole's rectangle as drawn, moving towards its part; when it started and from where, while it moves.
     private var hole: CGRect?, from: CGRect?, began: TimeInterval = 0
@@ -74,7 +78,7 @@ final class PointOverlay: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let at = convert(event.locationInWindow, from: nil)
-        holding = event.modifierFlags.contains(.option)
+        (holding, keyed) = (event.modifierFlags.contains(.option), false)
         // Over the composer, no part is under the pointer.
         if let composer, composer.frame.contains(at) {
             pointer = nil
@@ -86,7 +90,7 @@ final class PointOverlay: NSView {
     override func flagsChanged(with event: NSEvent) {
         holding = event.modifierFlags.contains(.option)
         // The keys' frame stays while ⇧ goes down for ⇧Tab.
-        if let pointer { look(at: pointer) } else if !picks.isEmpty { hover(nil) }
+        if let pointer { look(at: pointer) } else if !picks.isEmpty, !keyed { hover(nil) }
     }
     override func mouseExited(with event: NSEvent) {
         pointer = nil
@@ -116,23 +120,46 @@ final class PointOverlay: NSView {
         followSoon()
     }
 
-    /// Tab and ⇧Tab frame the next or the previous part, Return and Space pick the part framed: pointing with the keys.
+    /// Tab and ⇧Tab frame the next or the previous part, Return and Space pick the part framed, ⌥Return and ⌥Space add
+    /// it to the parts picked: pointing with the keys.
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
-        case 48 where picks.isEmpty: Task { @MainActor in await step(event.modifierFlags.contains(.shift) ? -1 : 1) }
-        case 36, 76, 49: if let hovered { pick(hovered, adding: false) }
+        case 48: Task { @MainActor in await step(event.modifierFlags.contains(.shift) ? -1 : 1) }
+        case 36, 76, 49: if let hovered { pick(hovered, adding: event.modifierFlags.contains(.option)) }
         default: super.keyDown(with: event)
         }
     }
 
     /// Frames the part `by` (1 or -1) after the one framed, in the page's order, scrolled into view; the pointer's
-    /// part gives way to it until the pointer moves.
+    /// part gives way to it until the pointer moves. Steps asked while one is under way are taken after it, one part
+    /// each. While comments wait, a step past the last part (before the first) gives the keys to their tray.
     func step(_ by: Int) async {
-        guard let space, let frame = space.frame else { return }
-        pointer = nil
-        guard let part = await Pointing.step(by, from: hovered, in: space.web, frame: frame) else { return }
-        hover(part)
-        NSAccessibility.post(element: self, notification: .valueChanged)
+        steps += by
+        guard !stepping else { return }
+        stepping = true
+        defer { (stepping, steps) = (false, 0) }
+        while steps != 0, let space, let frame = space.frame {
+            let one = steps > 0 ? 1 : -1, tray = tray
+            steps -= one
+            (pointer, keyed) = (nil, true)
+            guard let part = await Pointing.step(one, from: hovered ?? stepped, wrap: tray == nil, in: space.web, frame: frame) else {
+                if let tray { leave(to: tray, by: one) }
+                return
+            }
+            stepped = part
+            hover(part)
+            NSAccessibility.post(element: self, notification: .valueChanged)
+        }
+    }
+
+    /// The comments' tray while they are written: the keys go on through it.
+    private var tray: CommentTray? { space.flatMap(Comments.of).flatMap { $0.phase == .writing ? $0.tray : nil } }
+
+    /// Gives the keys to `tray`, its first field going on, its last button going back; the frame goes with them.
+    private func leave(to tray: CommentTray, by: Int) {
+        (stepped, keyed) = (nil, false)
+        hover(nil)
+        window?.makeFirstResponder(by > 0 ? tray.fields.first : tray.sendButton)
     }
 
     /// Esc reaches escape() through the app's key monitor wherever the focus is in the window; this is the way of a
@@ -200,7 +227,7 @@ final class PointOverlay: NSView {
     private func hover(_ part: Pointing.Part?) {
         // A picked part keeps its frame: the pointer over it draws no second one; once one is picked, the pointer
         // frames another only while ⌥ is held, to add it.
-        let part = part.flatMap { part in picks.contains { $0.path == part.path } || (!picks.isEmpty && !holding) ? nil : part }
+        let part = part.flatMap { part in picks.contains { $0.path == part.path } || (!picks.isEmpty && !holding && !keyed) ? nil : part }
         guard part != hovered else { return }
         hovered = part
         changed()
@@ -258,7 +285,8 @@ final class PointOverlay: NSView {
         }
         compose()
         setAccessibilityLabel(banner[0])
-        setAccessibilityHelp(banner.dropFirst().joined(separator: " ") + (picks.isEmpty ? ". Tab frames the next part, Return picks it" : ""))
+        setAccessibilityHelp(banner.dropFirst().joined(separator: " ") + (picks.isEmpty ? ". Tab frames the next part, Return picks it"
+                                                                                        : ". Tab frames another part, ⌥Return adds it"))
         setAccessibilityValue((picks.isEmpty ? [hovered?.kind].compactMap { $0 } : picks.map(\.kind)).joined(separator: ", "))
         tick()
         needsDisplay = true
@@ -287,6 +315,12 @@ final class PointOverlay: NSView {
                 _ = escape()
             }
             made.escape = { [weak self] in _ = self?.escape() }
+            // Tab in the composer frames another part, to add with ⌥Return; the words wait in the composer.
+            made.tab = { [weak self] by in
+                guard let self else { return }
+                window?.makeFirstResponder(self)
+                Task { @MainActor in await self.step(by) }
+            }
             addSubview(made)
             composer = made
             watchEyes(made)

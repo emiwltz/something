@@ -18,6 +18,8 @@ final class PointComposer: NSView, NSTextViewDelegate {
     let title: String
     /// What Return and ⌘↵ do with the words, trimmed and never empty; Esc, the overlay's.
     var quick: (String) -> Void = { _ in }, comment: (String) -> Void = { _ in }, escape: () -> Void = {}
+    /// Tab (1) and ⇧Tab (-1): the overlay's, to frame another part.
+    var tab: (Int) -> Void = { _ in }
 
     init(names: String, title: String, eyes: Sign.State) {
         (self.names, self.title, self.eyes) = (names, title, eyes)
@@ -90,7 +92,7 @@ final class PointComposer: NSView, NSTextViewDelegate {
         field.needsDisplay = true
     }
 
-    /// Return makes a Quick Change; Shift-Return (and ⌥-Return) breaks the line; Esc is the overlay's.
+    /// Return makes a Quick Change; Shift-Return (and ⌥-Return) breaks the line; Esc and Tab are the overlay's.
     func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)):
@@ -99,6 +101,9 @@ final class PointComposer: NSView, NSTextViewDelegate {
             return true
         case #selector(NSResponder.cancelOperation(_:)):
             escape()
+            return true
+        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+            tab(selector == #selector(NSResponder.insertTab(_:)) ? 1 : -1)
             return true
         default:
             return false

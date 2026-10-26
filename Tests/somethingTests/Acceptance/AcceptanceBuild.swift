@@ -146,6 +146,50 @@ struct AcceptanceBuild {
 
     /// A first start for the welcome: a home with no space, `programs` on its PATH (every agent's by default), the main
     /// window on New Space, and the welcome window at `step`; under a Homebrew prefix with `homebrew`.
+    /// The welcome by keys alone, as the window server sends them: Return goes on, → chooses another builder, Space
+    /// turns a comfort on, ⌘[ goes back, ⌘K says hello, and Return at Ready ends the tour with the choices; Escape, at
+    /// any step, skips it.
+    @Test("Keys only: the welcome") func keysOnly() async throws {
+        let scene = try await Self.welcome(.welcome, homebrew: true)
+        defer { scene.remove() }
+        let window = scene.window, tour = scene.tour
+        var ended: [(String?, Bool)] = []
+        tour.finished = { ended.append(($0, $1)) }
+        func key(_ code: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = []) throws {
+            let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
+                                                      context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+            if !flags.contains(.command) || !window.performKeyEquivalent(with: event) { window.sendEvent(event) }
+        }
+        #expect(window.firstResponder is WelcomeKeys)
+        try key(36, "\r")
+        #expect(tour.step == .assistant && scene.assistant.entries.filter(\.checked).map(\.id) == ["claude"])
+        try key(124, "\u{f703}", [.numericPad, .function])
+        #expect(scene.assistant.entries.filter(\.checked).map(\.id) == ["codex"], "→ chooses the next builder")
+        try key(36, "\r")
+        #expect(tour.step == .comforts && tour.cursor == 0 && !tour.addLauncher)
+        try key(49, " ")
+        #expect(tour.addLauncher, "Space turns the comfort under the cursor on")
+        try key(33, "[", .command)
+        #expect(tour.step == .assistant, "⌘[ goes back")
+        try key(36, "\r")
+        try key(36, "\r")
+        #expect(tour.step == .meet && !tour.met)
+        try key(40, "k", .command)
+        #expect(tour.met, "⌘K says hello")
+        try key(36, "\r")
+        #expect(tour.step == .ready && ended.isEmpty)
+        try key(36, "\r")
+        #expect(ended.count == 1 && ended.first?.1 == false, "Return at Ready ends the tour, its choices applied")
+
+        let other = try await Self.welcome(.comforts)
+        defer { other.remove() }
+        var skipped = false
+        other.tour.finished = { skipped = $1 }
+        other.window.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: other.window.windowNumber,
+                                                             context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)))
+        #expect(skipped, "Escape skips the tour")
+    }
+
     @MainActor struct WelcomeScene {
         let stage: Stage, shell: Shell, library: Library, tour: Tour, window: NSWindow
         var assistant: AssistantModel { shell.assistant }
