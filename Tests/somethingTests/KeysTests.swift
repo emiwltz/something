@@ -1,7 +1,7 @@
 // The one table of commands and the menu bar made from it, against the mockup's tables (Tests/Fixtures/mockup) both
 // ways: the same keys with the same words, the same menus in the same order; every command owned by a slice; greyed,
 // never hidden, while no space is open; the keys something keeps from a page, on any layout, and the monitor that
-// keeps them; the ⌘/ sheet that lists them; About's version and promise.
+// keeps them; the ⌘/ sheet that lists them; About's version and promise; Help's items, from this Mac only.
 import AppKit
 import Foundation
 import Testing
@@ -332,5 +332,37 @@ enum Mockup {
         let about = Keys.about(bundle)
         #expect(about[.applicationVersion] as? String == "0.3.0" && about[.version] as? String == "31")
         #expect((about[.credits] as? NSAttributedString)?.string.hasSuffix("Nothing leaves this Mac.") == true)
+    }
+
+    /// Help's items open the README and the guide from this Mac (rule 5): a bundled file each, no address anywhere,
+    /// the promise at its heading, the text read-only and without a link to follow.
+    @Test func helpOpensLocalFilesOnly() throws {
+        let menu = try #require(MenuBar(builders: nil).submenu("Help"))
+        let actions = Dictionary(uniqueKeysWithValues: menu.items.compactMap { item in item.action.map { (item.title, $0) } })
+        #expect(actions["something Help"] == #selector(App.openHelp(_:)) && actions["What something Does and Doesn’t"] == #selector(App.showPromise(_:))
+                && actions["Guide for Coding Agents"] == #selector(App.showGuide(_:)))
+        for id in ["help", "promise", "guide"] {
+            let page = try #require(Help.page(id, share: Home.share), "\(id)")
+            #expect(page.file.isFileURL && FileManager.default.fileExists(atPath: page.file.path), "\(id)")
+            #expect(page.title == Keys.command(id)?.title && Keys.enabled(id, Keys.Situation()))
+            let window = try #require(Help.window(page), "\(id)")
+            let view = try #require((window.contentView as? NSScrollView)?.documentView as? NSTextView)
+            #expect(!view.isEditable && view.isSelectable && window.title == page.title)
+            let text = try #require(view.textStorage)
+            var linked = false
+            text.enumerateAttribute(.link, in: NSRange(location: 0, length: text.length)) { value, _, _ in linked = linked || value != nil }
+            #expect(!linked && !view.isAutomaticLinkDetectionEnabled, "\(id): nothing in the window opens an address")
+            // The promise opens with its heading at the top; the others at their first line.
+            let at = page.heading.map { (text.string as NSString).range(of: "\n" + $0 + "\n").location + 1 }
+            let layout = try #require(view.layoutManager), container = try #require(view.textContainer)
+            let top = at.map { layout.boundingRect(forGlyphRange: NSRange(location: $0, length: 1), in: container).minY } ?? 0
+            let below = top + view.textContainerOrigin.y - view.visibleRect.minY
+            #expect(id == "promise" ? top > 100 && below > 10 && below < 30 : view.visibleRect.minY == 0, "\(id): its heading opens \(below) pt below the top")
+        }
+        #expect(Help.page("about", share: Home.share) == nil)
+        // The Markdown, read: headings without their marks, wrapped lines joined, items marked, links as words.
+        let (text, headings) = Help.text("# Title\n\nA [link](https://example.com) and **bold**\nwrapped.\n\n- one\n  more\n1. two\n\n## Next\n")
+        #expect(text.string == "Title\nA link and bold wrapped.\n•\tone more\n1.\ttwo\nNext\n")
+        #expect(headings == ["Title": 0, "Next": text.string.count - 5])
     }
 }

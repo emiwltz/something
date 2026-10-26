@@ -194,21 +194,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         shell.front()
     }
 
-    @objc func showPromise(_ sender: Any?) { sheet(Ask.doesAndDoesnt()) {} }
-
-    /// something Help: the README on GitHub, in the person's browser, once they said so.
-    @objc func openHelp(_ sender: Any?) {
-        guard let readme = URL(string: "https://github.com/emiwltz/something#readme") else { return }
-        sheet(Ask.alert("Open something's Help on GitHub?", readme.absoluteString, buttons: ["Open", "Cancel"], escape: 1)) {
-            NSWorkspace.shared.open(readme)
-        }
-    }
-
-    /// The guide for coding agents, shown in Finder: the person hands its path to their agent.
-    @objc func showGuide(_ sender: Any?) {
-        NSWorkspace.shared.activateFileViewerSelecting([Resources.share.appendingPathComponent("guide.md")])
-    }
-
     /// Shows the window; the space open when it was closed opens again.
     func front() {
         shell.front()

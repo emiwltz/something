@@ -1,8 +1,8 @@
 // Packaging: tools/make-app.sh assembles something.app in a temporary prefix, from the program this suite built, and
 // the app is then run as Homebrew runs it, through the wrapper its write_exec_script writes: a symlink would break
-// Bundle.main. The bundle's version is read inside it, share/ holds the fonts and their licences, its program carries
-// the SDK that compiled it, its ad-hoc signature verifies, its program answers plan B's hook, and LaunchServices keeps
-// no something.app from $TMPDIR. The tap's formula builds with the very steps of the one CI installs.
+// Bundle.main. The bundle's version is read inside it, share/ holds the fonts and their licences, the README sits
+// beside share/ for Help, its program carries the SDK that compiled it, its ad-hoc signature verifies, its program
+// answers plan B's hook, and LaunchServices keeps no something.app from $TMPDIR. The tap's formula builds with the very steps of the one CI installs.
 import Foundation
 import Testing
 @testable import something
@@ -54,6 +54,11 @@ import Testing
         for name in ["Fraunces.ttf", "Onest.ttf", "YoungSerif-Regular.ttf", "OFL-Fraunces.txt", "OFL-Onest.txt", "OFL-YoungSerif.txt"] {
             #expect(FileManager.default.fileExists(atPath: app.appendingPathComponent("Contents/Resources/share/fonts/\(name)").path), "\(name)")
         }
+        // Help shows the README and the guide from inside the app, never from the Internet (rule 5).
+        let readme = app.appendingPathComponent("Contents/Resources/README.md")
+        #expect(try Data(contentsOf: readme) == Data(contentsOf: root.appendingPathComponent("README.md")))
+        let help = await Help.page("help", share: app.appendingPathComponent("Contents/Resources/share"))
+        #expect(help?.file == readme)
         // macOS gives its current look only to a program stamped with a recent SDK: the one that compiled it.
         let built = try await run("/usr/bin/xcrun", ["vtool", "-show-build", app.appendingPathComponent("Contents/MacOS/something").path]).out
         let stamped = built.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.first { $0.hasPrefix("sdk ") }?.dropFirst(4)

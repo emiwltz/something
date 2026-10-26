@@ -356,7 +356,9 @@ struct GalleryTests {
         let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", rights: ["store"], scope: nil, missing: [],
                                   folder: nil, made: true)
         try draw(try #require(Ask.rights(made, home: "/Users/example").sheet.contentView), "rights-made-by-agent" + suffix, fixture)
-        try draw(Ask.doesAndDoesnt(), "does-and-doesnt" + suffix, fixture)
+        let promise = try #require(Help.page("promise", share: Home.share).flatMap { Help.window($0) })
+        promise.appearance = NSAppearance(named: suffix.isEmpty ? .aqua : .darkAqua)
+        try draw(try #require(promise.contentView), "help-promise" + suffix, fixture)
     }
 
     func settle(_ view: SpaceView) async { await Picture.settle(view) }

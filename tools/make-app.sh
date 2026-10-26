@@ -1,8 +1,9 @@
 #!/bin/bash
 # Assembles something.app in <prefix>: Contents/Info.plist with <version>, Contents/MacOS/something (stripped),
-# Contents/Resources/share and the icon, then an ad-hoc signature (no Apple account) that seals the bundle. A something.app
-# already in <prefix> is replaced. The program is stamped with the SDK that compiled it: swift build's default build
-# system records an older one, and macOS gives its current look only to a program stamped with a recent SDK.
+# Contents/Resources/share, the README (Help shows it and share/guide.md from this Mac) and the icon, then an ad-hoc
+# signature (no Apple account) that seals the bundle. A something.app already in <prefix> is replaced. The program is
+# stamped with the SDK that compiled it: swift build's default build system records an older one, and macOS gives its
+# current look only to a program stamped with a recent SDK.
 #
 #   tools/make-app.sh <prefix> <version> [<executable>]
 #
@@ -44,5 +45,6 @@ xcrun vtool -set-build-version macos "$minimum" "$(xcrun --show-sdk-version)" -r
 # The local symbols only serve a debugger: without them the program is half its size. The signature comes after.
 strip -x "$app/Contents/MacOS/something"
 cp -R "$repository/share" "$app/Contents/Resources/share"
+cp "$repository/README.md" "$app/Contents/Resources/README.md"
 cp "$repository/packaging/something.icns" "$app/Contents/Resources/something.icns"
 codesign --force --sign - "$app"

@@ -166,37 +166,9 @@ final class NativeAsk: Asking {
     }
 }
 
-/// What something does, and what it never does, side by side.
-struct Promise: View {
-    /// The README's promise, word for word (AGENTS.md rule 2): here, and in Settings › Permissions.
+/// The README's promise, word for word (AGENTS.md rule 2): in Settings › Permissions, and the README itself.
+enum Promise {
     static let sentence = "something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 18) {
-                column("something will", "checkmark.circle.fill", .green, ["See what your coding agents are doing, by reading what they write.",
-                                                                      "Start your agent to build spaces with you.",
-                                                                      "Ask you, in a window of the Mac, before anything sensitive."])
-                column("something never", "xmark.circle.fill", .red, ["Writes into your agents' sessions or settings.", "Lets a space reach the Internet.",
-                                                                      "Answers for you."])
-            }
-            Text(Self.sentence)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(width: 440)
-        .padding(.vertical, 4)
-    }
-
-    private func column(_ title: String, _ symbol: String, _ tint: Color, _ lines: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).fontWeight(.semibold)
-            ForEach(lines, id: \.self) { line in
-                Label { Text(line).fixedSize(horizontal: false, vertical: true) } icon: { Image(systemName: symbol).foregroundStyle(tint) }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 }
 
 /// One line of the rights sheet with a folder chooser: a sentence, the folder on a line of its own below it, so that
@@ -501,10 +473,6 @@ enum Ask {
     }
 
     /// Help › What something Does and Doesn't: two columns, and the promise.
-    static func doesAndDoesnt() -> NSAlert {
-        alert("What something does and doesn't", accessory: NSHostingView(rootView: Promise()))
-    }
-
     /// A right's word and the name of the agent kind it narrows to, nil for all of them: "launch:pi" is ("launch", "pi").
     static func parts(of right: String) -> (word: String, kind: String?) {
         let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
