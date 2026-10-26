@@ -236,7 +236,7 @@ import Testing
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 18, minute: 2)))
         model.clock = { start }
         model.find()
-        _ = await wait(3, until: { model.found != nil })
+        _ = await wait(until: { model.found != nil })
         let agents = model.agents
         #expect(agents.filter(\.builds).map(\.id) == Registry.app.builders.map(\.kind))
         #expect(agents.filter { !$0.builds }.map(\.id) == Registry.app.agents.filter { $0.builder == nil }.map(\.kind))
@@ -256,7 +256,7 @@ import Testing
         model.again()
         #expect(effects.looks == 1, "Look Again asks the engine once")
         #expect(model.lookedLine == "Looking for agents on this Mac…", "while the new look runs")
-        _ = await wait(3, until: { model.found != nil })
+        _ = await wait(until: { model.found != nil })
         #expect(model.lookedLine == "Looked today at 18:02 · 3 agents")
     }
 
@@ -277,7 +277,7 @@ import Testing
             }
         }
         model.find()
-        _ = await wait(3, until: { model.found != nil })
+        _ = await wait(until: { model.found != nil })
         let agents = model.agents
         let claude = try #require(agents.first { $0.id == "claude" }), codex = try #require(agents.first { $0.id == "codex" })
         let pi = try #require(agents.first { $0.id == "pi" })
@@ -343,7 +343,7 @@ import Testing
         for tab in SettingsTab.allCases {
             settings.select(tab)
             settings.window.layoutIfNeeded()
-            _ = await wait(3, until: {
+            _ = await wait(until: {
                 let page = settings.tabs.tabViewItems[settings.tabs.selectedTabViewItemIndex].viewController
                 return abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - (page?.preferredContentSize.height ?? 0)) <= 1
             })
@@ -439,7 +439,7 @@ import Testing
         let (model, effects) = model(home)
         model.clock = { now }
         model.measure()
-        #expect(await wait(5, until: { model.storage != nil }))
+        #expect(await wait(until: { model.storage != nil }))
         let store = Versions(root: home.places.versions, keep: 0, limit: 0)
         let old = try #require(model.storage?.old)
         #expect(old.spaces == 1 && old.bytes == 4 * "<p>An invented board, take 0.</p>".utf8.count, "notes keeps its only version")
@@ -458,7 +458,7 @@ import Testing
         #expect(try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).count == 10)
         #expect(model.cleared == "Cleared less than 1 MB of versions older than 30 days.")
         #expect(model.sections(.storage)[1].foot == model.cleared)
-        #expect(await wait(5, until: { model.storage?.old == Versions.Old() }))
+        #expect(await wait(until: { model.storage?.old == Versions.Old() }))
     }
 
     /// The alert: the sign, its question, what goes and what stays, Cancel focused and Escape's, Clear Versions in bad.

@@ -662,20 +662,29 @@ import WebKit
         model.draft = "Hello."
         model.send()
         #expect(await wait(until: { model.light == .ready }))
-        model.clock = { Date().addingTimeInterval(Presence.late - 1) }
+        // The clock reads 3 s before "Still working" from the moment it first sees the turn run, however long the
+        // launch and the refresh took on a busy runner: only a main actor held 3 s could miss the turn not yet late.
+        var anchor: (wall: Date, at: Date)?
+        model.clock = {
+            if anchor == nil, let turn = model.session.turn, turn.ended == nil, let started = turn.started.flatMap(iso8601.date) {
+                anchor = (Date(), started + Presence.late - 3)
+            }
+            return anchor.map { $0.at + Date().timeIntervalSince($0.wall) } ?? Date()
+        }
         model.draft = "Add a weather corner."
         model.send()
         let late = { () -> Bool? in if case .working(_, late: let late)? = model.presence.now { late } else { nil } }
-        #expect(await wait(5) { late() == false }, "\(String(describing: model.presence.now))")
+        #expect(await wait { late() == false }, "\(String(describing: model.presence.now))")
         // The presence reads the clock each time it is asked: only an observer told by the timer proves it fires.
         var (beat, told) = (model.beat, toldOfPresence(model))
-        #expect(await wait(5) { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
+        #expect(await wait { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
         #expect(late() == true, "\(String(describing: model.presence.now))")
-        model.clock = { Date().addingTimeInterval(Presence.changedFor - 1.5) }
+        // The wall's clock: "Changed …" holds 3.6 s from the turn's end, which the refresh brings well before.
+        model.clock = Date.init
         try Data().write(to: home.root.appendingPathComponent("out/finish"))
-        #expect(await wait(5) { model.presence.now == .changed("brief.html") }, "\(String(describing: model.presence.now))")
+        #expect(await wait { model.presence.now == .changed("brief.html") }, "\(String(describing: model.presence.now))")
         (beat, told) = (model.beat, toldOfPresence(model))
-        #expect(await wait(5) { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
+        #expect(await wait { told() && model.beat > beat }, "the one-shot timer tells whoever draws the presence")
         #expect(model.presence.now == nil, "\(String(describing: model.presence.now))")
         await finish(home, model)
     }
@@ -1251,7 +1260,7 @@ import WebKit
         #expect(await wait(until: { users().filter { $0.contains("Invented, after the quick one.") }.count == 1 && main.id != nil }), "\(users())")
         #expect(model.held.isEmpty && main.id != id)
         #expect(await wait(until: { quick.phase == .ended }) && model.quicks["brief"] != nil)
-        #expect(await wait(5, until: { model.quicks["brief"] == nil && quick.phase == .gone }))
+        #expect(await wait(until: { model.quicks["brief"] == nil && quick.phase == .gone }))
         await finish(home, model)
     }
 

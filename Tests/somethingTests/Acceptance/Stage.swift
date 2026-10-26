@@ -141,7 +141,7 @@ final class Stage {
             let name: NSAppearance.Name = dark ? .darkAqua : .aqua
             NSApp.appearance = NSAppearance(named: name)
             // The windows follow it later, on the run loop.
-            _ = await wait(5, until: { NSApp.windows.allSatisfy { $0.appearance != nil || $0.effectiveAppearance.name == name } })
+            _ = await wait(until: { NSApp.windows.allSatisfy { $0.appearance != nil || $0.effectiveAppearance.name == name } })
             try await body(dark ? "-dark" : "")
         }
     }

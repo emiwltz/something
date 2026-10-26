@@ -91,7 +91,7 @@ struct AcceptanceStopped {
             space = brief
         }()
         // The fade-in holds the cover until it ends.
-        #expect(await wait(2, until: { cover == nil }))
+        #expect(await wait(until: { cover == nil }))
         #expect(space == nil)
     }
 

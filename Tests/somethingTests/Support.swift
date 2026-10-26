@@ -211,7 +211,7 @@ func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
 /// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on. The default is
 /// only a guard against a hang: WebKit's first processes start slowly on a busy Mac.
 @MainActor @discardableResult
-func wait(_ seconds: Double = 30, until condition: () -> Bool = { false }) async -> Bool {
+func wait(_ seconds: Double = 60, until condition: () -> Bool = { false }) async -> Bool {
     let end = Date().addingTimeInterval(seconds)
     while !condition(), Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
     return condition()

@@ -152,7 +152,7 @@ struct AcceptanceShell {
         // As the panel is read: its assistant waiting, what its request asks, Show Request and never Allow (rule 2);
         // what it may do, allowed; its group.
         let panel = shell.inspector.viewController.view
-        let read = await AcceptanceBuild.read(panel)
+        let read = await AcceptanceBuild.read(panel) { $0.contains { $0.hasPrefix("Show Request") } && $0.contains { $0.contains("Group: Agents") } }
         #expect(read.contains { $0.hasPrefix("Show Request") } && !read.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(read)")
         let waits = "Waiting for you. It wants to run a command. Its request waits in a window of its own, outside the space."
         #expect(read.contains(waits), "\(read)")
@@ -166,7 +166,7 @@ struct AcceptanceShell {
         source.prompts = []
         panels.refresh()
         #expect(info.waiting == 0 && shell.chip.count == 0)
-        let after = await AcceptanceBuild.read(panel)
+        let after = await AcceptanceBuild.read(panel) { !$0.contains { $0.hasPrefix("Show Request") } && $0.contains("Put to Sleep") }
         #expect(!after.contains { $0.hasPrefix("Show Request") } && after.contains("Put to Sleep"), "\(after)")
         // Esc with the focus in the panel goes up the responder chain to it: it closes, the page takes its width back.
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))

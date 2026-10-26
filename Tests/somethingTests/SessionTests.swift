@@ -108,7 +108,9 @@ import Testing
     @Test func leavingASpaceSetsItsSleepAndAModeChangeRenewsIt() async throws {
         let (home, model) = try helper.assistant(prefix: "something-session-")
         defer { home.remove() }
-        var now = Date()
+        // An hour ahead of the wall, whose time the turns carry: their "Changed …" moments are long past, however slow
+        // the runner, and the next moment the assistant waits for can only be the sleep.
+        var now = Date() + 3600
         model.clock = { now }
         await helper.look(model)
         model.place = place(home, "Stack", "stack")

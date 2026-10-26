@@ -102,19 +102,25 @@ import Testing
             shell.window.setContentSize(shell.window.contentMinSize)
             shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
             let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent
-            // The toolbar lays its items out again on a later turn of the run loop.
-            func settle() {
+            // The toolbar lays its items out again on a later turn of the run loop, later under load: turned until
+            // `done`, at least 0.2 s; the minute only stops a hang.
+            func settle(until done: () -> Bool) {
+                let end = Date(timeIntervalSinceNow: 60)
                 RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.2))
                 shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+                while !done(), Date() < end {
+                    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+                    shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
+                }
             }
-            settle()
-            #expect(shell.window.contentView?.frame.width == 640)
             let full = try #require(shell.controls[Shell.full])
+            settle { full.window === shell.window && full.convert(full.bounds, to: nil).maxX <= 640 - 10 + 2 }
+            #expect(shell.window.contentView?.frame.width == 640)
             #expect(full.window === shell.window && !full.isHiddenOrHasHiddenAncestor)
             #expect(full.convert(full.bounds, to: nil).maxX <= 640 - 10 + 2, "\(full.convert(full.bounds, to: nil))")
             #expect(shell.titleLine.intrinsicContentSize.width < whole)
             shell.window.setContentSize(NSSize(width: 1200, height: 760))
-            settle()
+            settle { shell.titleLine.intrinsicContentSize.width == whole }
             #expect(shell.titleLine.intrinsicContentSize.width == whole)
         }
     }

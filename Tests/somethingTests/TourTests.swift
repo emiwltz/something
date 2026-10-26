@@ -102,7 +102,7 @@ import Testing
         // The second builder's row: the click chooses it, and the keys stay with the welcome.
         // SwiftUI places the rows when it is ready, later under load: the click is repeated until one lands, as a
         // second click on the same row chooses the same builder.
-        #expect(await wait(10, until: {
+        #expect(await wait(until: {
             Self.click(window, at: NSPoint(x: 200, y: Welcome.size.height - 208))
             return model.kind == "codex"
         }), "the click reached the row")
@@ -125,11 +125,15 @@ import Testing
         // command itself, on that line, must leave the keys with the welcome.
         var copied: [String] = []
         none.copy = { copied.append($0) }
+        // SwiftUI places the lines when it is ready, later under load: the scan goes again until a click lands.
         var line: CGFloat?
-        for y in stride(from: 150.0, to: 320, by: 4) where line == nil {
-            Self.click(alone, at: NSPoint(x: 595, y: Welcome.size.height - y))
-            await wait(0.02)
-            if copied.last == InstallList.builders[0].command { line = y }
+        let end = Date() + 60
+        while line == nil, Date() < end {
+            for y in stride(from: 150.0, to: 320, by: 4) where line == nil {
+                Self.click(alone, at: NSPoint(x: 595, y: Welcome.size.height - y))
+                await wait(0.02)
+                if copied.last == InstallList.builders[0].command { line = y }
+            }
         }
         let y = try #require(line, "a click reached the first Copy Command")
         Self.click(alone, at: NSPoint(x: 300, y: Welcome.size.height - y))

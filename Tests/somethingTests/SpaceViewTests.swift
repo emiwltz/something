@@ -370,9 +370,12 @@ import WebKit
         // Links: one window at a time, and none after three Cancels until the page reloads. Each one is journaled.
         // While the link window is open, its modal loop turns the run loop: the page's second call is answered then.
         ask.during = { _ in
-            window.web.evaluateJavaScript("something.open('https://example.com/b').then((v) => window.nested = v, (e) => window.nested = e.code)",
-                                          in: window.frame, in: .page)
-            RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+            // Turned until the second call is answered, however long a busy runner takes; the minute only stops a hang.
+            var answered = false
+            window.web.callAsyncJavaScript("try { window.nested = await something.open('https://example.com/b') } catch (e) { window.nested = e.code }",
+                                           in: window.frame, in: .page) { _ in answered = true }
+            let end = Date().addingTimeInterval(60)
+            while !answered, Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.05)) }
         }
         #expect(try await run(window, "return await something.open('https://example.com/a')") as? Bool == false)
         #expect(ask.links == [URL(string: "https://example.com/a")!])
@@ -869,7 +872,7 @@ import WebKit
             let target = try #require(offscreen.window.contentView?.hitTest(at))
             type == .leftMouseDown ? target.mouseDown(with: event) : target.mouseUp(with: event)
         }
-        #expect(await wait(10, until: { overlay.picks.first?.path == cell.path }))
+        #expect(await wait(until: { overlay.picks.first?.path == cell.path }))
         #expect(overlay.banner == ["Say what should change", "Hold ⌥ and click to add a part", "Esc", "Back"])
         await wait(0.3)
         #expect(try await run(window, "return window.clicks ?? 0") as? Int == 0)
@@ -889,13 +892,13 @@ import WebKit
         #expect(overlay.picks.first?.rect.minY == cell.rect.minY + 180)
         window.load()
         try await ready(window)
-        #expect(await wait(10, until: { overlay.picks.first?.rect == cell.rect }), "\(String(describing: overlay.picks.first))")
+        #expect(await wait(until: { overlay.picks.first?.rect == cell.rect }), "\(String(describing: overlay.picks.first))")
         #expect(window.pointer === overlay && overlay.picks.map(\.path) == [cell.path, card.path] && window.pointable)
 
         // The wheel scrolls the page, from something's world, and the frames follow it. The overlay's scroll is what its
         // wheel calls; a real wheel reaching it is a hand trial (PointOverlay.scrollWheel), as no wheel is proven offscreen.
         await overlay.scroll(by: CGSize(width: 0, height: 300), at: CGPoint(x: cell.rect.midX, y: cell.rect.midY))
-        #expect(await wait(10, until: { overlay.picks.first?.rect.minY == cell.rect.minY - 300 }), "\(String(describing: overlay.picks.first))")
+        #expect(await wait(until: { overlay.picks.first?.rect.minY == cell.rect.minY - 300 }), "\(String(describing: overlay.picks.first))")
         #expect(try await run(window, "return scrollY") as? Double == 300)
         // Over a box that scrolls, the wheel scrolls the box, not the page.
         await overlay.scroll(by: CGSize(width: 0, height: 100), at: try await center(".pane"))

@@ -155,15 +155,15 @@ import WebKit
         gallery.preview(pebble)
         #expect(gallery.hovered == nil && gallery.heading == ("Pebble", "Template preview"))
         #expect(headings == ["Pebble · Template preview"])
-        // SwiftUI draws the preview, and registers Close Preview's key, on the run loop.
-        await wait(0.3)
+        // SwiftUI draws the preview, and registers Close Preview's key, on the run loop, as late as a busy runner makes
+        // it: Escape is pressed until it is taken. Before, it means nothing, and does nothing.
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
                                                    context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
-        #expect(window.performKeyEquivalent(with: escape))
+        #expect(await wait { window.performKeyEquivalent(with: escape) })
         #expect(gallery.previewing == nil)
         #expect(headings.last == "Templates · Start from one, then make it yours")
-        await wait(0.3)
-        #expect(!window.performKeyEquivalent(with: escape), "Escape means nothing on the cards")
+        #expect(await wait { !window.performKeyEquivalent(with: escape) }, "Escape means nothing on the cards")
+        #expect(gallery.previewing == nil && headings.count == 2, "\(headings)")
         library.use(pebble)
         #expect(Spaces(root: home.places.spaces).list().map(\.name) == ["pet"])
         #expect(pebble.ground != nil)

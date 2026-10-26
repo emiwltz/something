@@ -179,8 +179,10 @@ final class FakeNotifier: Notifier {
         panel.clock = { time }
         panel.show(FakePrompts().permission("r1", about: "npm test"), who: Asker(program: "Codex"), age: nil)
         time += 1
-        let end = Date() + 0.1
-        while Date() < end { RunLoop.main.run(mode: .modalPanel, before: end) }
+        // Only the modal loop's mode turns: the button can arm only if the ticker runs there. The bound only stops a
+        // hang; a busy runner may take long before its first frame.
+        let end = Date() + 10
+        while !panel.allowButton.isEnabled, Date() < end { RunLoop.main.run(mode: .modalPanel, before: Date() + 0.05) }
         #expect(panel.allowButton.isEnabled)
     }
 

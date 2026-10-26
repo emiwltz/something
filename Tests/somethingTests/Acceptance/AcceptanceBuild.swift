@@ -38,8 +38,8 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             // The mockup has no night of this screen.
             if suffix.isEmpty { try await Picture.window(shell, library: library, web: nil, "a1", root: stage.home.root) }
-            let words = await Self.read(host)
-            #expect(words == Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], "\(words)")
+            let shown = Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], words = await Self.read(host) { $0 == shown }
+            #expect(words == shown, "\(words)")
         }
         film.leave()
         #expect(shell.film == nil && film.superview == nil)
@@ -199,8 +199,8 @@ struct AcceptanceBuild {
         #expect(model.kind == "claude" && model.draft.isEmpty && !model.canSend)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1" + suffix, root: stage.home.root)
-            let words = await Self.read(host)
-            #expect(words == Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], "\(words)")
+            let shown = Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], words = await Self.read(host) { $0 == shown }
+            #expect(words == shown, "\(words)")
         }
         // Build is greyed while the field is empty or blank, and only then. (An offscreen SwiftUI view gives VoiceOver only
         // its descriptions: neither a control's enabled state nor its press can be reached here, so the model's are read.)
@@ -235,7 +235,7 @@ struct AcceptanceBuild {
         #expect(BlankView.reply(in: model, since: since) == "Invented reply." && !model.blocked)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d1-answer" + suffix, root: stage.home.root)
-            let answered = await Self.read(host)
+            let answered = await Self.read(host) { $0.contains("Who is waiting for me") }
             #expect(shell.glass.isHidden && answered.contains("Who is waiting for me"), "\(answered)")
         }
         // A reply older than the page belongs to another moment: back on New Space (as after a space made opens, or a
@@ -327,19 +327,25 @@ struct AcceptanceBuild {
         #expect(ladder.say == "I’ll make “Waiting room”: one card per agent that waits for you, oldest first.")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d2" + suffix, root: stage.home.root)
-            let words = await Self.read(host)
-            #expect(words.contains("Your assistant: \(ladder.say ?? "")") && words.contains("Stop") && !words.contains("Build")
+            let says = { (words: [String]) in
+                words.contains("Your assistant: \(ladder.say ?? "")") && words.contains("Stop") && !words.contains("Build")
                     && !words.contains("Who is waiting for me") && words.contains { $0.hasPrefix("Write, now, waiting-room.html, ") }
-                    && words.contains("Check, to come, Opens it, reads it, looks for errors"), "\(words)")
+                    && words.contains("Check, to come, Opens it, reads it, looks for errors")
+            }
+            let words = await Self.read(host, until: says)
+            #expect(says(words), "\(words)")
         }
         // d2-stopped: Stop mid-Write leaves the ladder saying what stays on disk, the sentence back in the field.
         model.stop()
         #expect(!model.building && model.draft == "Who is waiting for me" && model.ladder?.steps.map(\.mark) == [.done, .off, .off])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d2-stopped" + suffix, root: stage.home.root)
-            let words = await Self.read(host)
-            #expect(words.contains("Your assistant: Stopped. waiting-room.html stays in your spaces folder, unchecked.") && words.contains("Build Again")
-                    && !words.contains("Stop"), "\(words)")
+            let says = { (words: [String]) in
+                words.contains("Your assistant: Stopped. waiting-room.html stays in your spaces folder, unchecked.") && words.contains("Build Again")
+                    && !words.contains("Stop")
+            }
+            let words = await Self.read(host, until: says)
+            #expect(says(words), "\(words)")
         }
         await Self.finish(model)
     }
@@ -387,7 +393,7 @@ struct AcceptanceBuild {
         room.made = true
         // The still is taken once, in the appearance of the moment: the day's, for the picture.
         NSApp.appearance = NSAppearance(named: .aqua)
-        await wait(0.5)
+        await wait { shell.window.effectiveAppearance.name == .aqua }
         let arrival = try #require(Arrival.made(name, in: shell))
         shell.show(room)
         #expect(shell.window.title == "Waiting room")
@@ -407,9 +413,11 @@ struct AcceptanceBuild {
         var current = true
         Arrival.open(room, after: arrival, library: library, motion: .calm) { current }
         #expect(arrival.playing && library.fresh == name)
-        // While it plays: nothing loads, nothing is asked.
-        await wait(0.3)
-        #expect(arrival.playing && room.web.url == nil && ask.questions.isEmpty && shell.window.attachedSheet == nil)
+        // While it plays, however long a busy runner makes it: nothing loads, nothing is asked.
+        while arrival.playing {
+            #expect(room.web.url == nil && ask.questions.isEmpty && shell.window.attachedSheet == nil)
+            await wait(0.02)
+        }
         #expect(await wait(until: { arrival.superview == nil }))
         #expect(arrival.progress == 1 && !shell.glass.subviews.contains { $0 is Arrival })
         // Once it is gone: the page loads and asks for its rights.
@@ -516,17 +524,25 @@ struct AcceptanceBuild {
     }
 
 
-    /// The labels VoiceOver reads in `view`, depth first. A SwiftUI view offscreen gives only the description of its
-    /// outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here.
-    static func read(_ view: NSView) async -> [String] {
+    /// The labels VoiceOver reads in `view`, depth first, once `says` holds of them (else once two reads 0.1 s apart
+    /// agree, for a view with no live clock), or after a minute. A SwiftUI view offscreen gives only the description of
+    /// its outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here.
+    static func read(_ view: NSView, until says: (([String]) -> Bool)? = nil) async -> [String] {
         let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
         // As an assistive app asks: SwiftUI makes its elements only then.
         NSApp.accessibilitySetValue(true, forAttribute: enhanced)
         defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
-        // The first question makes them, on the run loop.
+        // The first question makes them, and SwiftUI updates them, on the run loop, as late as a busy runner lets it:
+        // read again until they hold still and say what is awaited. The minute only stops a hang.
         _ = view.accessibilityChildren()
-        await wait(0.3)
-        return labels(view)
+        let end = Date() + 60
+        var last: [String]?
+        while true {
+            await wait(0.1)
+            let words = labels(view)
+            if says.map({ $0(words) }) ?? (words == last && !words.isEmpty) || Date() > end { return words }
+            last = words
+        }
     }
 
     private static func labels(_ element: Any) -> [String] {
@@ -553,7 +569,8 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5" + suffix, root: stage.home.root)
             // VoiceOver reads the heading, the filters and one element per card, named by its template.
-            #expect(await Self.read(host) == ["Templates", "Show", "My agents", "Project watch", "Daily brief", "Logbook", "Stack", "Pebble"])
+            let cards = ["Templates", "Show", "My agents", "Project watch", "Daily brief", "Logbook", "Stack", "Pebble"]
+            #expect(await Self.read(host) { $0 == cards } == cards)
         }
         gallery.shown = .agents
         #expect(gallery.cards(library.templates).map(\.id) == ["agents", "project"])
@@ -564,8 +581,7 @@ struct AcceptanceBuild {
         // Forgotten first, so that only cards drawn at the new size count.
         gallery.drawn = [:]
         shell.window.setContentSize(NSSize(width: 760, height: 680))
-        await wait(0.3)
-        #expect(gallery.drawn.count == 6 && columns() == 2, "\(gallery.drawn)")
+        #expect(await wait { gallery.drawn.count == 6 && columns() == 2 }, "\(gallery.drawn)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5-narrow" + suffix, root: stage.home.root)
         }
@@ -583,7 +599,8 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d6" + suffix, root: stage.home.root)
             // The bar, then the picture; the cards are gone.
-            #expect(await Self.read(host) == ["Template preview", "A picture of My agents"])
+            let bar = ["Template preview", "A picture of My agents"]
+            #expect(await Self.read(host) { $0 == bar } == bar)
         }
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
                                                    context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))

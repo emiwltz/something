@@ -108,13 +108,13 @@ struct AcceptanceCommand {
         listed.effort = [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")]
         library.preferences.change { ($0.listed["claude"], $0.model, $0.effort) = (listed, "opus", "high") }
         model.find()
-        _ = await wait(3, until: { model.found != nil })
+        _ = await wait(until: { model.found != nil })
         model.clock = { Stage.local }
         if tab == .interface { model.choose(.light) }
         if tab == .storage {
             model.weigh = { _, _ in AcceptanceCommand.weights }
             model.measure()
-            _ = await wait(3, until: { model.storage != nil })
+            _ = await wait(until: { model.storage != nil })
         }
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))

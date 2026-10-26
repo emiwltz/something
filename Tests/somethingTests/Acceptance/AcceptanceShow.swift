@@ -36,7 +36,7 @@ struct AcceptanceShow {
             "const b = document.querySelector('.box').getBoundingClientRect(); return [b.right - 5, b.y + b.height / 2]",
             in: frame, contentWorld: .defaultClient) as? [Double])
         overlay.look(at: CGPoint(x: box[0], y: box[1]))
-        #expect(await wait(10, until: { overlay.hovered != nil }))
+        #expect(await wait(until: { overlay.hovered != nil }))
         #expect(overlay.hovered?.kind == "this block" && overlay.accessibilityValue() as? String == "this block")
         #expect(overlay.hovered?.tag == "div" && overlay.hovered?.path.contains("box") == false, "\(String(describing: overlay.hovered))")
         try await stage.appearances { suffix in
