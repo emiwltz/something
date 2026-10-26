@@ -45,6 +45,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         menuBar.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
         menuBar.open = { [weak self] in self?.current.map { ($0.space.name, $0.title) } }
         menuBar.editingText = { [weak self] in self?.shell.window.firstResponder is NSText }
+        menuBar.eyes = { [weak self] in self?.assistant.eyes(of: $0) ?? .unknown }
         // WebKit hands a page the keys it has the focus for, ⌘P and ⌘1 included: something's own go to the menu first.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -326,6 +327,21 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
     @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
     @objc func showRequest(_ sender: Any?) { panels.present(in: current?.space.name) }
+
+    /// The toolbar's chip. With one request, its space opens; the panel comes in front when that space is open, or
+    /// when the request belongs to none. With more, a menu of the assistants by state, each opening its space. It never
+    /// answers: Allow and Deny are only the panel's (rule 2).
+    @objc func chipClicked(_ sender: NSView) {
+        let spaces = (panels.queue.waiting + panels.elsewhere).map { panels.queue.space($0).flatMap { library.entry($0) == nil ? nil : $0 } }
+        let rows = library.order().filter(\.isSpace).map { ($0.id, $0.title, assistant.eyes(of: $0.id)) }
+        switch WaitingChip.goes(spaces, open: current?.space.name, assistants: rows) {
+        case .space(let name):
+            library.select(.space(name))
+            front()
+        case .request: showRequest(sender)
+        case .menu(let menu): menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.isFlipped ? sender.bounds.height + 4 : -4), in: sender)
+        }
+    }
     @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
     /// Put Idle Assistants to Sleep, said in a toast.
     @objc func putIdleToSleep(_ sender: Any?) {

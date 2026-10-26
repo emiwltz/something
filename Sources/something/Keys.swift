@@ -270,8 +270,8 @@ enum Keys {
     }
 }
 
-/// The menu bar while the app runs: Go lists the spaces with ⌘1 to ⌘9 and checks the open one, the headers of Space
-/// and Assistant name it, and ⌘⌫ is Move to Trash only while no text is being edited. It is made again each time a
+/// The menu bar while the app runs: Go lists the spaces with ⌘1 to ⌘9, each with its assistant's eyes and state, and
+/// checks the open one, the headers of Space and Assistant name it, and ⌘⌫ is Move to Trash only while no text is being edited. It is made again each time a
 /// menu opens or a key reaches it.
 final class MenuBar: NSObject, NSMenuDelegate {
     let menu = Keys.menu()
@@ -279,6 +279,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
     var spaces: () -> [(id: String, title: String)] = { [] }
     /// The open space, nil when none is.
     var open: () -> (id: String, title: String)? = { nil }
+    /// The state of a space's assistant, as its row's eyes say it.
+    var eyes: (String) -> Sign.State = { _ in .unknown }
     /// Whether text is being edited in a native field, where ⌘⌫ deletes.
     var editingText: () -> Bool = { false }
 
@@ -338,11 +340,40 @@ final class MenuBar: NSObject, NSMenuDelegate {
         }
         guard let go = submenu("Go"), let header = go.items.firstIndex(where: { $0.isSectionHeader }) else { return }
         go.items.filter { $0.identifier?.rawValue.hasPrefix("space:") == true }.forEach(go.removeItem)
-        for (index, space) in spaces().enumerated() {
-            let item = NSMenuItem(title: space.title, action: #selector(App.goToSpace(_:)), keyEquivalent: index < 9 ? "\(index + 1)" : "")
-            (item.identifier, item.representedObject) = (NSUserInterfaceItemIdentifier("space:" + space.id), space.id)
-            item.state = space.id == open?.id ? .on : .off
+        let lines = spaces().map { ($0.id, $0.title, eyes($0.id)) }, tab = NSMenuItem.tab(lines.map { ($0.1, $0.2) })
+        for (index, (id, title, state)) in lines.enumerated() {
+            let item = NSMenuItem.space(id, title, state, tab: tab, key: index < 9 ? "\(index + 1)" : "")
+            item.identifier = NSUserInterfaceItemIdentifier("space:" + id)
+            item.state = id == open?.id ? .on : .off
             go.insertItem(item, at: header + 1 + index)
         }
     }
+}
+
+extension NSMenuItem {
+    /// A space with its assistant: the still mini eyes (a menu cannot animate them), the name, and the state's word at
+    /// the right tab stop `tab`, smaller and secondary, as the mockup's Go menu and chip menu draw it. It opens the
+    /// space; `title` stays the name alone.
+    static func space(_ id: String, _ title: String, _ state: Sign.State, tab: CGFloat, key: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(App.goToSpace(_:)), keyEquivalent: key)
+        (item.representedObject, item.image) = (id, Sign.miniEyes(state))
+        let style = NSMutableParagraphStyle()
+        style.tabStops = [NSTextTab(textAlignment: .right, location: tab)]
+        let line = NSMutableAttributedString(string: title, attributes: [.font: menuFont, .paragraphStyle: style])
+        line.append(NSAttributedString(string: "\t" + state.word, attributes: [.font: wordFont, .foregroundColor: NSColor.secondaryLabelColor,
+                                                                                .paragraphStyle: style]))
+        item.attributedTitle = line
+        // Setting the attributed title rewrites `title`; set again, it keeps the drawn line and names the space alone.
+        item.title = title
+        return item
+    }
+
+    /// Where the state words end: past the longest name and the longest word, with a gap between them.
+    static func tab(_ lines: [(title: String, state: Sign.State)]) -> CGFloat {
+        func width(_ words: String, _ font: NSFont) -> CGFloat { ceil(NSAttributedString(string: words, attributes: [.font: font]).size().width) }
+        return (lines.map { width($0.title, menuFont) }.max() ?? 0) + 24 + (lines.map { width($0.state.word, wordFont) }.max() ?? 0)
+    }
+
+    private static var menuFont: NSFont { NSFont.menuFont(ofSize: 0) }
+    private static var wordFont: NSFont { NSFont.menuFont(ofSize: NSFont.smallSystemFontSize) }
 }

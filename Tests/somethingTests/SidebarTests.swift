@@ -197,6 +197,63 @@ import Testing
         let off = try await inked()
         #expect(on > off + 40, "eyes drawn: \(on) dark pixels, hidden: \(off)")
     }
+
+    /// The rows' eyes come from each space's own session: no session reads asleep, never ready; a folded group shows
+    /// waiting before working, and nothing for quieter states; the Settings switch hides the header's eyes too.
+    @Test func eyesComeFromSessionsAndAFoldedGroupShowsTheMostUrgent() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        let model = AssistantModel(engine: test.engine(), places: test.places)
+        #expect(library.entries.filter(\.isSpace).allSatisfy { model.eyes(of: $0.id) == .sleep }, "no session is asleep, not ready")
+        #expect(Library.urgent([.listen, .think, .wait, .done]) == .wait)
+        #expect(Library.urgent([.listen, .think, .sleep]) == .think)
+        #expect(Library.urgent([.listen, .done, .sleep, .unknown, .limit]) == nil)
+        library.preferences.fold("Agents", true)
+        #expect(library.label(group: "Agents", count: 2, urgent: .wait) == "Agents, 2 spaces, folded, waiting for you")
+        #expect(library.label(group: "Notes", count: 1, urgent: .think) == "Notes, 1 space, open", "an open group shows its rows' eyes")
+        #expect(Library.label(try #require(library.entry("pet")), .unknown) == "Pebble, Unknown", "unknown is said, never idle")
+    }
+
+    /// The chip goes where the request is and never answers: one request opens its space, or the panel when that space
+    /// is open or it has none; several open the menu of assistants by state, waiting first, ready and asleep left out.
+    @Test func theChipGoesToTheRequestAndNeverAnswers() throws {
+        let rows: [(String, String, Sign.State)] = [("brief", "Daily brief", .think), ("agents", "My agents", .wait), ("project", "Project watch", .listen),
+                                                    ("logbook", "Logbook", .sleep), ("oracle", "Oracle", .wait), ("pet", "Pebble", .done),
+                                                    ("stack", "Stack", .unknown)]
+        guard case .space("agents") = WaitingChip.goes(["agents"], open: "logbook", assistants: rows) else { Issue.record("opens its space"); return }
+        guard case .request = WaitingChip.goes(["agents"], open: "agents", assistants: rows) else { Issue.record("the panel"); return }
+        guard case .request = WaitingChip.goes([nil], open: "agents", assistants: rows) else { Issue.record("no space: the panel"); return }
+        guard case .request = WaitingChip.goes([nil, nil], open: nil, assistants: rows.filter { $0.2 == .sleep }) else { Issue.record("none to list"); return }
+        guard case .menu(let menu) = WaitingChip.goes(["agents", "oracle"], open: "logbook", assistants: rows) else { Issue.record("a menu"); return }
+        #expect(menu.items.first?.isSectionHeader == true && menu.items.first?.title == "Assistants")
+        let items = menu.items.dropFirst()
+        #expect(items.map(\.title) == ["My agents", "Oracle", "Daily brief", "Pebble", "Stack"])
+        #expect(items.map { $0.attributedTitle?.string.components(separatedBy: "\t").last } == ["Waiting for you", "Waiting for you", "Working", "Done", "Unknown"])
+        #expect(items.allSatisfy { $0.action == #selector(App.goToSpace(_:)) && $0.image != nil }, "each opens its space, with its eyes")
+        #expect(!items.contains { ["Allow", "Deny"].contains(where: $0.title.contains) }, "the chip never answers")
+        let chip = WaitingChip()
+        #expect(chip.action == #selector(App.chipClicked(_:)))
+        chip.count = 2
+        #expect(chip.accessibilityLabel() == "2 wait for you")
+    }
+
+    /// Go lists each space with its assistant's still eyes and state word, the name alone as its title.
+    @Test func goShowsEachSpacesEyes() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        let bar = MenuBar(builders: nil)
+        bar.spaces = { library.order().filter(\.isSpace).map { ($0.id, $0.title) } }
+        bar.eyes = { ["brief": .think, "agents": .wait][$0] ?? .sleep }
+        bar.refresh()
+        let go = try #require(bar.submenu("Go")).items.filter { $0.identifier?.rawValue.hasPrefix("space:") == true }
+        #expect(go.map(\.title) == ["Daily brief", "My agents", "Logbook", "Pebble", "Oracle"])
+        #expect(go.map { $0.attributedTitle?.string ?? "" } == ["Daily brief\tWorking", "My agents\tWaiting for you", "Logbook\tAsleep", "Pebble\tAsleep",
+                                                                "Oracle\tAsleep"])
+        #expect(go.allSatisfy { $0.image?.isTemplate == true }, "still template eyes the menu colours")
+        #expect(go.prefix(2).map(\.keyEquivalent) == ["1", "2"])
+    }
 }
 
 extension SidebarMenu {

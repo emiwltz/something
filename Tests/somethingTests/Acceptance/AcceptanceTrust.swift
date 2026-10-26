@@ -105,7 +105,7 @@ struct AcceptanceTrust {
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Codex wants to run a command" && panel.position == nil)
         let chip = try #require(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.chip })
-        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.showRequest(_:)))
+        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.chipClicked(_:)))
         #expect(PanelsTests.texts(panel.contentView).starts(with: ["something", "·  Permission", "", "Codex wants to run a command",
                                                                    "My agents · its assistant · just now", "It will run one command in the My agents space.",
                                                                    "Space", "My agents", "Folder", "~/something/spaces", "The exact command"]))

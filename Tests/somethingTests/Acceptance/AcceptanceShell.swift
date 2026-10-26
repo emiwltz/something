@@ -1,10 +1,11 @@
 // Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, Info, full screen, the rail and the
 // rows' eyes (b1, b3–b8; b2, La page, waits for Emi). It also draws the frame of b1 alone, with and without a toast,
-// while b1 waits for W3.
+// and a long title in a narrow window.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
+import SwiftUI
 import Testing
 import WebKit
 @testable import something
@@ -55,7 +56,58 @@ struct AcceptanceShell {
         }
     }
 
-    @Test("b1: the window", .disabled("not built yet: W3")) func b1() async throws {}
+    /// Gives the rows of `shell` the eyes of `states`, as the sessions would; a space it does not name is asleep.
+    static func eyes(_ shell: Shell, _ states: [String: Sign.State]) throws {
+        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+        host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { states[$0] ?? .sleep })
+    }
+
+    /// The window of every day (W1–W3): the groups open, each row with its assistant's eyes at the mockup's moment,
+    /// Daily brief open, the chip counting the one request. A folded group shows its most urgent eyes; Go lists the
+    /// spaces with the same eyes and words; the Settings switch hides the rows' eyes, their words staying for VoiceOver.
+    @Test("b1: the window") func b1() async throws {
+        let stage = try Stage("shell-b1")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try Self.eyes(shell, Stage.moment)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let chip = try #require(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.chip })
+        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.chipClicked(_:)))
+        #expect(library.sections().allSatisfy { $0.group.map(library.folded) == false })
+        let labels = library.order().map { Library.label($0, Stage.moment[$0.id] ?? .unknown) }
+        #expect(labels == ["Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready", "Logbook, Asleep", "Oracle, Ready",
+                           "Pebble, Done", "Stack, Asleep"], "\(labels)")
+        let drawn = try stage.drawn(shell)
+        for line in ["Agents", "Notes", "Breaks", "Daily brief", "Pebble", "Stack", "Templates"] {
+            #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
+        }
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "b1" + suffix, root: stage.home.root)
+        }
+        // Go, with the same eyes and words: still images, as a menu cannot animate.
+        let bar = MenuBar(builders: nil)
+        bar.spaces = { library.order().filter(\.isSpace).map { ($0.id, $0.title) } }
+        bar.open = { ("brief", "Daily brief") }
+        bar.eyes = { Stage.moment[$0] ?? .unknown }
+        bar.refresh()
+        let go = try #require(bar.submenu("Go")).items.filter { $0.identifier?.rawValue.hasPrefix("space:") == true }
+        #expect(go.map { $0.attributedTitle?.string ?? "" } == labels.map { $0.replacingOccurrences(of: ", ", with: "\t") })
+        #expect(go.allSatisfy { $0.image?.isTemplate == true } && go.filter { $0.state == .on }.map(\.title) == ["Daily brief"])
+        if let gallery {
+            let lines = go.map { "\($0.state == .on ? "✓ " : "")[eyes] \($0.attributedTitle?.string.replacingOccurrences(of: "\t", with: "  ") ?? "")  ⌘\($0.keyEquivalent)" }
+            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("g9-go.txt"), atomically: true, encoding: .utf8)
+        }
+        // Folded, Agents shows its most urgent eyes, waiting before working, and says so.
+        library.preferences.fold("Agents", true)
+        let urgent = Library.urgent(library.sections()[0].entries.map { Stage.moment[$0.id] ?? .unknown })
+        #expect(urgent == .wait && library.label(group: "Agents", count: 3, urgent: urgent) == "Agents, 3 spaces, folded, waiting for you")
+        #expect(!(try stage.drawn(shell)).contains { $0.contains("My agents") })
+        library.preferences.fold("Agents", false)
+    }
     /// The sidebar and its groups (W2): Agents, Notes and Breaks, Breaks folded with its count, Daily brief open, the
     /// pointer over Project watch, whose "…" shows. An open menu cannot be drawn offscreen: its structure is checked by
     /// value and written beside the picture as b3-menu.txt.
@@ -220,5 +272,54 @@ struct AcceptanceShell {
     }
 
     @Test("b7: the rail", .disabled("not built yet: W6")) func b7() async throws {}
-    @Test("b8: rows with their eyes", .disabled("not built yet: W3")) func b8() async throws {}
+    /// Several assistants at work, Logbook open (W3): Project watch starts working, Daily brief finishes, Oracle asks;
+    /// the rows' eyes follow, the chip and the panel count both requests, the whole Mac's, and Logbook's sticker shows no
+    /// badge, since none is its own. The chip's menu lists the assistants by state; nothing in it answers.
+    @Test("b8: rows with their eyes") func b8() async throws {
+        let stage = try Stage("shell-b8")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(AcceptanceTrust.large)
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try Self.eyes(shell, Stage.moment)
+        let logbook = try await stage.open("logbook", in: shell, library)
+        defer { logbook.close() }
+        let now = Stage.moment.merging(["project": .think, "brief": .done, "oracle": .wait]) { $1 }
+        try Self.eyes(shell, now)
+        let source = FakePrompts()
+        AcceptanceTrust.request("r", [0, 0], in: source)
+        let panels = AcceptanceTrust.panels(source, shell, open: "logbook")
+        panels.queue.space = { ["a1": "agents", "a2": "oracle"][$0.agent] }
+        panels.clock = { 100 }
+        panels.refresh()
+        shell.glass.motion = { .reduced }
+        #expect(await wait(5) { shell.glass.grown == false && shell.glass.stickerShown })
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: AcceptanceTrust.desk)
+        #expect(shell.chip.count == 2 && shell.chip.accessibilityLabel() == "2 wait for you" && panel.position == "1 of 2")
+        #expect(shell.glass.mine == 0 && shell.glass.sticker.badge.isHidden, "no request is Logbook's")
+        let rows = library.order().filter(\.isSpace).map { ($0.id, $0.title, now[$0.id] ?? .unknown) }
+        guard case .menu(let menu) = WaitingChip.goes(panels.queue.waiting.map(panels.queue.space), open: "logbook", assistants: rows) else {
+            Issue.record("two requests open the menu")
+            return
+        }
+        #expect(menu.items.map(\.title) == ["Assistants", "My agents", "Oracle", "Project watch", "Daily brief", "Pebble"])
+        #expect(!menu.items.contains { $0.title.contains("Allow") || $0.title.contains("Deny") }, "the chip never answers")
+        if let gallery {
+            let lines = menu.items.map { $0.isSectionHeader ? "# " + $0.title : "[eyes] " + ($0.attributedTitle?.string.replacingOccurrences(of: "\t", with: "  ") ?? "") }
+            try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
+            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b8-chip-menu.txt"), atomically: true, encoding: .utf8)
+        }
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: logbook.web, "b8" + suffix, root: stage.home.root)
+        }
+        // With one request left, the chip goes to its space; when that space is open, to the panel.
+        guard case .space("agents") = WaitingChip.goes(["agents"], open: "logbook", assistants: rows),
+              case .request = WaitingChip.goes(["agents"], open: "agents", assistants: rows) else {
+            Issue.record("one request")
+            return
+        }
+        panel.orderOut(nil)
+    }
 }

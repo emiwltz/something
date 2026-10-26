@@ -603,8 +603,30 @@ final class TitleLine: NSView {
 }
 
 /// The toolbar's chip: the eyes of a request, how many wait and "wait for you", in a pill with a hairline and no
-/// shadow. One meaning only, the count of every request, as the Dock's; a click shows the request (W3 adds its menu).
+/// shadow, hidden at 0. One meaning only, the count of every request, as the Dock's; a click goes to the request, or,
+/// with several, opens the menu of the assistants by state (`goes`).
 final class WaitingChip: NSButton {
+    /// Where a click goes: a space to open, the request panel, or the assistants' menu.
+    enum Go { case space(String), request, menu(NSMenu) }
+
+    /// The states the menu lists, in its order: who waits, who works, who is done, stopped or unknown. Ready and
+    /// asleep are left out: nothing to look at.
+    static let listed: [Sign.State] = [.wait, .think, .done, .limit, .unknown]
+
+    /// Where a click goes, `spaces` being each waiting request's space (nil for none or one no longer listed): one
+    /// request opens its space, or shows the panel when it is `open` or has none; several open the menu of
+    /// `assistants` (id, title, state) in `listed`, by state then in the sidebar's order, or the panel when none is.
+    static func goes(_ spaces: [String?], open: String?, assistants: [(String, String, Sign.State)]) -> Go {
+        if spaces.count == 1 { return spaces[0].map { $0 == open ? .request : .space($0) } ?? .request }
+        let rows = assistants.filter { listed.contains($0.2) }.enumerated()
+            .sorted { (listed.firstIndex(of: $0.element.2) ?? 0, $0.offset) < (listed.firstIndex(of: $1.element.2) ?? 0, $1.offset) }.map(\.element)
+        guard !rows.isEmpty else { return .request }
+        let menu = NSMenu(title: "Assistants"), tab = NSMenuItem.tab(rows.map { ($0.1, $0.2) })
+        menu.addItem(.sectionHeader(title: "Assistants"))
+        rows.forEach { menu.addItem(.space($0.0, $0.1, $0.2, tab: tab)) }
+        return .menu(menu)
+    }
+
     var count = 0 {
         didSet {
             setAccessibilityLabel("\(count) \(said)")
@@ -622,7 +644,7 @@ final class WaitingChip: NSButton {
 
     init() {
         super.init(frame: .zero)
-        (isBordered, title, target, action) = (false, "", nil, #selector(App.showRequest(_:)))
+        (isBordered, title, target, action) = (false, "", nil, #selector(App.chipClicked(_:)))
         toolTip = Keys.tooltip("showreq", "Show Request")
     }
     required init?(coder: NSCoder) { nil }
