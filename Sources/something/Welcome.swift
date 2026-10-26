@@ -201,8 +201,7 @@ struct WelcomeView: View {
             }
             .padding(compact ? EdgeInsets(top: 6, leading: 11, bottom: 6, trailing: 12) : EdgeInsets(top: 9, leading: 13, bottom: 9, trailing: 14))
             .frame(minHeight: compact ? 49 : 52)
-            .background(Look.Token.bg2.ui, in: shape)
-            .overlay(shape.strokeBorder(on ? Look.Token.ink.ui : Look.Token.line.ui, lineWidth: on ? 1.5 : 1))
+            .boxed(shape, Look.Token.bg2.ui, ring: on ? Look.Token.ink.ui : Look.Token.line.ui, width: on ? 1.5 : 1)
             .contentShape(shape)
         }
         .buttonStyle(.plain)
@@ -297,7 +296,7 @@ struct WelcomeView: View {
                     Text(why).font(Look.font(.ui, size: 12.5).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Switch(on: on)
+                SwitchTrack(on: on).accessibilityHidden(true)
             }
             .padding(EdgeInsets(top: 15, leading: 16, bottom: 15, trailing: 16))
             .overlay(RoundedRectangle(cornerRadius: Look.card - 3, style: .continuous).strokeBorder(Look.Token.ink3.ui, lineWidth: 1.5).padding(3).opacity(current ? 1 : 0))
@@ -327,7 +326,7 @@ struct WelcomeView: View {
                     Text("Hi. Tell me what you'd like to make, and I'll build it with you.")
                         .font(Look.font(.voice, size: 17).ui).lineSpacing(5).fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 17).padding(.vertical, 12).frame(maxWidth: 360, alignment: .leading)
-                        .background(Look.Token.bg2.ui, in: bubble).overlay(bubble.strokeBorder(Look.Token.line.ui))
+                        .boxed(bubble, Look.Token.bg2.ui, ring: Look.Token.line.ui)
                         .padding(.top, 24)
                         .accessibilityLabel("Your assistant: Hi. Tell me what you'd like to make, and I'll build it with you.")
                     Text("That's all it takes, in any space: \(Keys.shown("ask")), then your words.").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -481,8 +480,7 @@ struct WelcomeView: View {
 extension View {
     /// A plate: bg2 in a hairline, at the card's radius (the welcome's, the ladder's steps).
     func plate() -> some View {
-        let shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
-        return background(Look.Token.bg2.ui, in: shape).overlay(shape.strokeBorder(Look.Token.line.ui))
+        boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
     }
 }
 
@@ -509,8 +507,7 @@ private struct BigCap: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         Text(key).font(Look.font(.ui, size: 22, weight: .medium).ui).frame(width: 54, height: 54)
-            .background(Look.Token.bg2.ui, in: shape)
-            .overlay(shape.strokeBorder(Look.Token.line2.ui))
+            .boxed(shape, Look.Token.bg2.ui, ring: Look.Token.line2.ui)
             .background(shape.fill(Look.Token.line2.ui).offset(y: 2))
     }
 }
@@ -524,17 +521,6 @@ private struct Ghost: ButtonStyle {
             .padding(.leading, leading).padding(.trailing, trailing).frame(height: 34)
             .background(configuration.isPressed ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .contentShape(Rectangle())
-    }
-}
-
-/// A switch as the mockup draws it, 30 by 18: ink when on, mist when off.
-private struct Switch: View {
-    let on: Bool
-
-    var body: some View {
-        Capsule().fill((on ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)
-            .overlay(alignment: on ? .trailing : .leading) { Circle().fill(Look.Token.bg2.ui).frame(width: 14, height: 14).padding(2) }
-            .accessibilityHidden(true)
     }
 }
 

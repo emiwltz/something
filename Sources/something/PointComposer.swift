@@ -126,11 +126,11 @@ final class PointComposer: NSView, NSTextViewDelegate {
         shape.fill()
         // The header, 16 high: the target, the parts' names, and to the right the eyes and the space.
         let mid: CGFloat = 18, small = Look.font(.ui, size: 11.5)
-        PointOverlay.draw(PointOverlay.symbol("scope", 11, .medium), Look.Token.ink2.color, in: CGRect(x: 12, y: mid - 6.5, width: 13, height: 13))
+        NSImage.symbol("scope", 11, .medium).draw(Look.Token.ink2.color, flippedIn: CGRect(x: 12, y: mid - 6.5, width: 13, height: 13))
         let space = NSAttributedString(string: title, attributes: [.font: small, .foregroundColor: Look.Token.ink3.color])
         let spaceSize = space.size(), spaceX = bounds.width - 12 - ceil(spaceSize.width)
         space.draw(at: CGPoint(x: spaceX, y: mid - spaceSize.height / 2))
-        PointOverlay.draw(Sign.miniEyes(eyes), Look.Token.eyes.color, in: CGRect(x: spaceX - 6 - 13, y: mid - 4, width: 13, height: 8))
+        Sign.miniEyes(eyes).draw(Look.Token.eyes.color, flippedIn: CGRect(x: spaceX - 6 - 13, y: mid - 4, width: 13, height: 8))
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         let name = NSAttributedString(string: names, attributes: [.font: Look.font(.ui, size: 11.5, weight: .semibold),

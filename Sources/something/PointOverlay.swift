@@ -278,12 +278,11 @@ final class PointOverlay: NSView {
     /// Draws again while the hole moves or the banner arrives, at up to 60 frames a second.
     private func tick() {
         guard timer == nil, moving else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
-            guard let self else { return timer.invalidate() }
+        timer = .frames(1.0 / 60, common: false) { [weak self] in
+            guard let self else { return false }
             needsDisplay = true
-            guard !moving else { return }
-            timer.invalidate()
-            self.timer = nil
+            if !moving { timer = nil }
+            return moving
         }
     }
 
@@ -414,7 +413,7 @@ final class PointOverlay: NSView {
         NSBezierPath(roundedRect: box, xRadius: 17, yRadius: 17).fill()
         var x = box.minX + 12
         let mid = box.midY
-        Self.draw(Self.symbol("scope", 12, .medium), Look.Token.ink.color, in: CGRect(x: x, y: mid - 6.5, width: 13, height: 13))
+        NSImage.symbol("scope", 12, .medium).draw(Look.Token.ink.color, flippedIn: CGRect(x: x, y: mid - 6.5, width: 13, height: 13))
         x += 13 + 9
         for (index, piece) in pieces.enumerated() {
             switch piece {
@@ -432,21 +431,6 @@ final class PointOverlay: NSView {
             x += width(piece) + gaps[index]
         }
         NSGraphicsContext.restoreGraphicsState()
-    }
-
-    /// Draws `image` in `color` into `box` of a flipped view: a symbol's template image takes no tint when drawn by hand.
-    static func draw(_ image: NSImage, _ color: NSColor, in box: CGRect) {
-        NSImage(size: image.size, flipped: false) { rect in
-            image.draw(in: rect)
-            color.set()
-            rect.fill(using: .sourceAtop)
-            return true
-        }.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-    }
-
-    /// The system symbol `name` at `size` points and `weight`.
-    static func symbol(_ name: String, _ size: CGFloat, _ weight: NSFont.Weight) -> NSImage {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: weight)) ?? NSImage()
     }
 
     override func removeFromSuperview() {

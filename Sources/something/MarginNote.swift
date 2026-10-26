@@ -231,7 +231,7 @@ final class MarginNote: NSView {
             let text = top + Self.header + 9 + 1 + 9
             words.draw(with: CGRect(x: 14, y: text, width: bounds.width - 28, height: textHeight), options: [.usesLineFragmentOrigin])
             let foot = bounds.height - 9 - 13
-            PointOverlay.draw(PointOverlay.symbol("scope", 10, .medium), Look.Token.ink3.color, in: CGRect(x: 14, y: foot - 5.5, width: 11, height: 11))
+            NSImage.symbol("scope", 10, .medium).draw(Look.Token.ink3.color, flippedIn: CGRect(x: 14, y: foot - 5.5, width: 11, height: 11))
             part.draw(at: CGPoint(x: 14 + 11 + 5, y: foot - part.size().height / 2))
         }
     }

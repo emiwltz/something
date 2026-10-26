@@ -169,18 +169,16 @@ final class Arrival: NSView {
     func grow(_ grown: @escaping () -> Void) {
         playing = true
         let began = clock()
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+        timer = .frames(1.0 / 60) { [weak self] in
             MainActor.assumeIsolated {
-                guard let self else { return timer.invalidate() }
+                guard let self else { return false }
                 self.progress = min(1, CGFloat((self.clock() - began) / self.span))
-                guard self.progress >= 1 else { return }
-                timer.invalidate()
+                guard self.progress >= 1 else { return true }
                 self.playing = false
                 grown()
+                return false
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     /// Fades it out in `duration`, then takes it off its layer and calls `arrived`.

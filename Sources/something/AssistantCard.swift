@@ -383,8 +383,7 @@ struct NoticeView: View {
             Image(systemName: notice.symbol).font(.system(size: 12, weight: .medium))
                 .foregroundStyle(notice.bad ? Look.Token.bad.ui : Look.Token.ink.ui)
                 .frame(width: 24, height: 24)
-                .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.control))
-                .overlay(RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.line.ui))
+                .boxed(RoundedRectangle(cornerRadius: Look.control), Look.Token.bg2.ui, ring: Look.Token.line.ui)
             VStack(alignment: .leading, spacing: 2) {
                 Text(notice.title).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                 if !notice.text.isEmpty {
@@ -404,8 +403,7 @@ struct NoticeView: View {
                                 }
                                 .font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                                     .padding(.horizontal, 11).frame(height: 27)
-                                    .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.control + 1))
-                                    .overlay(RoundedRectangle(cornerRadius: Look.control + 1).strokeBorder(Look.Token.line2.ui))
+                                    .boxed(RoundedRectangle(cornerRadius: Look.control + 1), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
                             }
                             .buttonStyle(.plain)
                         }
@@ -417,8 +415,7 @@ struct NoticeView: View {
             Spacer(minLength: 0)
         }
         .padding(EdgeInsets(top: 11, leading: 12, bottom: 11, trailing: 12))
-        .background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: Look.card + 2, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Look.card + 2, style: .continuous).strokeBorder(Look.Token.line2.ui))
+        .boxed(RoundedRectangle(cornerRadius: Look.card + 2, style: .continuous), Look.Token.bg.ui, ring: Look.Token.line2.ui)
     }
 }
 

@@ -291,8 +291,7 @@ struct InspectorView: View {
                 let sentence = Info.sentence(state, wants: info.waiting > 0 ? info.asks().map(Words.wants) : nil)
                 HStack(alignment: .top, spacing: 12) {
                     Image(nsImage: Sign.miniEyes(state, template: false)).resizable().interpolation(.high).frame(width: 30.6, height: 20.4)
-                        .frame(width: 40, height: 34).background(Look.Token.bg.ui, in: RoundedRectangle(cornerRadius: 9))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Look.Token.line.ui))
+                        .frame(width: 40, height: 34).boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg.ui, ring: Look.Token.line.ui)
                     (Text(state.word + ". ").font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui)
                         + Text(sentence).font(Look.font(.voice, size: 13).ui).foregroundColor(Look.Token.ink2.ui))
                         .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
@@ -486,14 +485,19 @@ struct InspectorView: View {
 }
 
 /// The mockup's switch: 30 by 18, ink when on, mist when off, its knob bg2.
+struct SwitchTrack: View {
+    let on: Bool
+
+    var body: some View {
+        Capsule().fill((on ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)
+            .overlay(alignment: on ? .trailing : .leading) { Circle().fill(Look.Token.bg2.ui).frame(width: 14, height: 14).padding(2) }
+    }
+}
+
+/// A toggle drawn as the mockup's switch.
 struct SwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
-        Button { configuration.isOn.toggle() } label: {
-            Capsule().fill((configuration.isOn ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)
-                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-                    Circle().fill(Look.Token.bg2.ui).frame(width: 14, height: 14).padding(2)
-                }
-        }
+        Button { configuration.isOn.toggle() } label: { SwitchTrack(on: configuration.isOn) }
         .buttonStyle(.plain)
         .accessibilityRepresentation { Toggle(isOn: configuration.$isOn) { configuration.label } }
     }

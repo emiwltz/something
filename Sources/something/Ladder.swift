@@ -177,8 +177,7 @@ struct LadderView: View {
             }
             .padding(EdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 12))
             .frame(maxHeight: .infinity, alignment: .top)
-            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line2.ui))
+            .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

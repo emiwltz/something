@@ -243,7 +243,6 @@ struct BuildField: View {
             }
         }
         .padding(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 12))
-        .background(busy ? Color.clear : Look.Token.bg2.ui, in: shape)
-        .overlay(shape.strokeBorder(busy ? Look.Token.line.ui : typing ? Look.Token.ink2.ui : Look.Token.line2.ui))
+        .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink2.ui : Look.Token.line2.ui)
     }
 }

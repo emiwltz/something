@@ -393,8 +393,7 @@ struct PopMenu<Choices: View>: View {
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
             }
             .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
-            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
+            .boxed(RoundedRectangle(cornerRadius: 6), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
         }
         .plainMenu()
         .accessibilityElement(children: .ignore).accessibilityLabel("\(title): \(shown)").accessibilityAddTraits(.isButton)

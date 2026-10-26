@@ -282,6 +282,13 @@ extension Look.Curve {
     func animation(_ duration: TimeInterval) -> Animation { .timingCurve(Double(x1), Double(y1), Double(x2), Double(y2), duration: duration) }
 }
 
+extension View {
+    /// The view on `fill` in `shape`, ringed in `ring` `width` points wide inside the shape's edge.
+    func boxed<S: InsettableShape>(_ shape: S, _ fill: Color, ring: Color, width: CGFloat = 1) -> some View {
+        background(fill, in: shape).overlay(shape.strokeBorder(ring, lineWidth: width))
+    }
+}
+
 extension NSFont {
     /// The font as SwiftUI draws it.
     var ui: Font { Font(self as CTFont) }
@@ -301,6 +308,11 @@ extension NSImage {
             rect.fill(using: .sourceAtop)
             return true
         }
+    }
+
+    /// Draws the image in `color` into `box` of a flipped view.
+    func draw(_ color: NSColor, flippedIn box: CGRect) {
+        tinted(color).draw(in: box, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 }
 
