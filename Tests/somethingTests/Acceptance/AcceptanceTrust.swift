@@ -34,14 +34,14 @@ struct AcceptanceTrust {
           something check agents --strict \
             --report /tmp/something-check/agents.json && \
           python3 - <<'EOF'
-        import json, pathlib
+        import json
         r = json.load(open('/tmp/something-check/agents.json'))
         counts = {k: len(v) for k, v in r['agents'].items()}
-        herdr = json.load(open(pathlib.Path.home() / '.herdr/state.json'))
+        seen_by = json.load(open('/tmp/something-check/seen.json'))
         for kind, n in counts.items():
-            seen = sum(1 for a in herdr['agents'] if a['kind'] == kind)
+            seen = sum(1 for a in seen_by['agents'] if a['kind'] == kind)
             flag = 'ok' if seen == n else 'DIFF'
-            print(f"{kind:<12} page={n:<3} herdr={seen:<3} {flag}")
+            print(f"{kind:<12} page={n:<3} seen={seen:<3} {flag}")
         print(len(r['errors']), 'errors')
         EOF
         """#

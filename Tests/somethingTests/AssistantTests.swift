@@ -1297,7 +1297,8 @@ import WebKit
         comments.remove(1)
         #expect(comments.pins == ["Comment 1 on this paragraph", "Comment 2 on this heading"] && comments.tray.footer == ["2 comments"])
         #expect(comments.tray.fields.map { $0.accessibilityLabel() } == ["Comment 1 on this paragraph", "Comment 2 on this heading"])
-        #expect(comments.pin(1).minX == 20 - PointOverlay.pad - 11 && comments.pin(1).minY == 40 - PointOverlay.pad - 11)
+        // The pin sits clear of its part, kept on the page at its left edge.
+        #expect(comments.pin(1).minX == 2 && comments.pin(1).minY == 40 - PointOverlay.pad - 15 && comments.pin(1).maxY <= 40)
 
         // Sent: one message, to Daily brief's own conversation; the person opens My agents meanwhile.
         model.place = place

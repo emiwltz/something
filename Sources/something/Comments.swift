@@ -199,10 +199,10 @@ final class Comments: NSView, NSTextFieldDelegate {
 
     // MARK: Drawing
 
-    /// A pin: 22 points round, 11 off its part's frame corner, never cut by the page's top or left.
+    /// A pin: 22 points round, just outside its part's top-left corner, clear of its text, never cut by the page.
     func pin(_ index: Int) -> CGRect {
-        let r = rects[index], off = PointOverlay.pad + 11
-        return CGRect(x: max(2, r.minX - off), y: max(2, r.minY - off), width: 22, height: 22)
+        let r = rects[index], off = PointOverlay.pad + 15, right = bounds.width - 24, low = bounds.height - 24
+        return CGRect(x: min(max(2, r.minX - off), right), y: min(max(2, r.minY - off), low), width: 22, height: 22)
     }
 
     /// A comment's number in its round, a pin's (22 points) or a tray row's (20), or a check once it is done.

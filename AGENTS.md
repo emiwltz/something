@@ -35,9 +35,11 @@ Sources/Agent*/            one target per agent family: AgentClaude, AgentCodex,
                            AgentPi (pi, and OMP's reader), AgentAmp
 Sources/something/         the command and the Mac app; Extensions.swift is the only list of the agents
 share/                     what the app reads at run time: something.js, the templates, the guide, the skill, the
-                           assistant's AGENTS.md, the contract as data (share/contract/)
-Tests/                     the Swift suites; Fixtures/ (invented agent homes the readers read); Exchanges/ (recorded
-                           exchanges, invented text); something.js's tests. somethingTests links three helpers from
+                           assistant's AGENTS.md, the fonts (share/fonts/, with their licenses), the contract as data
+                           (share/contract/)
+Tests/                     the Swift suites; Fixtures/ (invented agent homes the readers read, the mockup's menus and
+                           shortcuts, test spaces); somethingTests/Acceptance/ (one scenario per mockup screen);
+                           Exchanges/ (recorded exchanges, invented text); something.js's tests. somethingTests links three helpers from
                            SomethingAgentsTests (AssistantBuild, FakeMessagesAPI, LeavesNothing): change them there
 packaging/, tools/         Info.plist, the icon, the Homebrew formula and the tap's files, make-app.sh, previews.sh
 ```
@@ -161,7 +163,7 @@ header of each `*Trial.swift` says what it proves.
   (its catalog in `AcceptanceTests.swift`, the invented home in `Stage.swift`): each asserts structure, words, counts
   and VoiceOver labels at every run. `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
   screen, day and night (`<id>.png`, `<id>-dark.png`), to set beside the mockup's; `SOMETHING_ACCEPT_STRICT=1` fails
-  while a screen that counts is still unbuilt. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what
+  while a screen that counts is still unbuilt or waits for its shots. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what
   the mockup has no screen for (alerts, the rights sheets' variants, the assistant's rarer states, the templates).
   After changing a template, run `tools/previews.sh` and commit its pictures.
 

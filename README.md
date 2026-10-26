@@ -31,17 +31,17 @@ in the way. Click it (or ⌘K) to ask for a change: the space reloads as your ag
 ⌘\ makes it small again, ⌘. stops the assistant. Templates (⇧⌘T) are six finished spaces to start from, and need no
 agent. ⌘P goes or asks: type a space's name to go there, or a sentence for an assistant. The line "Goes to" says once
 where it goes (this space, a New Space built from it, or another space), Tab changes it, and nothing is sent before
-Return. ⌘/ lists every shortcut.
+Return. ⌘/ lists the shortcuts.
 
 **One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
 its own space. The sidebar shows each one's eyes; the toolbar counts the requests that wait for you. **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
 space's, and any that works or waits for you, are never put to sleep). Settings (⌘,), Assistant, changes both: Put
 idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
-sleeping assistant wakes on your next message and picks its conversation up, kept in
-`~/Library/Application Support/something/assistants/`: its agent, model, effort and last 60 items. An agent that cannot
-resume a conversation (all but Claude Code for now) is never put to sleep on its own; put to sleep by you, it starts a
-new conversation, and says so.
+sleeping assistant wakes on your next message and picks its conversation up, unless Resume each space's conversation is
+off in the same pane, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
+60 items. An agent that cannot resume a conversation (all but Claude Code for now) is never put to sleep on its own; put
+to sleep by you, it starts a new conversation, and says so.
 
 **Quick Change**: point at a part of a space (⌥⌘S), say what should change, and press Return. A temporary session of
 that space's assistant, the same agent with the same model and effort, makes the change while the space's own
@@ -167,7 +167,7 @@ Quit something first (⌘Q): quitting stops the agents it launched.
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
 rm -rf ~/Applications/something.app                  # the launcher, if the welcome added it
-rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
+rm -rf ~/Library/Application\ Support/something      # your settings, answers to the rights sheets, journals, versions and assistants' conversations
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
 ```
