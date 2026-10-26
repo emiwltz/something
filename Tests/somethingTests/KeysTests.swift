@@ -214,7 +214,8 @@ enum Mockup {
         #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
         // The README names a few of them as examples: each must be one something keeps.
         let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)
-        #expect(readme.contains("something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others"))
+        let flatReadme = readme.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        #expect(flatReadme.contains("something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others"))
         for key in ["⌘P", "⌘K", "⌘I", "⌘."] { #expect(mine.contains(key), "the README names \(key), which something does not keep") }
     }
 

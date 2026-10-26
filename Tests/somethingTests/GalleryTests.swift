@@ -79,14 +79,16 @@ struct GalleryTests {
     }
 
     @Test func drawsEveryWindow() async throws {
-        defer { NSApp.appearance = nil }
         // The sheets and the tour show the app's icon, as in the app; this test program has none of its own.
         NSApp.applicationIconImage = NSImage(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("packaging/something.icns"))
 
         // One after the other: the appearance is the app's, so two drawings at once would mix them.
-        for dark in [false, true] {
-            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-            try await drawEveryWindow(suffix: dark ? "-dark" : "")
+        // Alone with the acceptance scenarios too, which may run beside it.
+        try await Stage.alone {
+            for dark in [false, true] {
+                NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+                try await drawEveryWindow(suffix: dark ? "-dark" : "")
+            }
         }
     }
 

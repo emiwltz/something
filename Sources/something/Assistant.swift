@@ -362,6 +362,9 @@ import SomethingCore
 
     func name(of session: Session) -> String { Registry.app.name(of: session.kind ?? preferred ?? builders.first ?? "") }
 
+    /// Whether the agent this place's assistant uses (the one name(of:) names) picks a conversation up when it wakes.
+    var agentResumes: Bool { resumable(session.kind ?? preferred ?? builders.first ?? "") }
+
     /// What to type in Terminal to sign the builder in: its program, whose name is its kind.
     var command: String { kind ?? builders.first ?? "" }
 

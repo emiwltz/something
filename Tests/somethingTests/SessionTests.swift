@@ -77,7 +77,9 @@ import Testing
         defer { home.remove() }
         var now = Date()
         model.clock = { now }
+        #expect(model.agentResumes, "Claude Code resumes even before its first conversation, as Info says")
         model.resumable = { _ in false }
+        #expect(!model.agentResumes)
         await helper.look(model)
         model.place = place(home, "Stack", "stack")
         model.send("Hello.")

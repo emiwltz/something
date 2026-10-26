@@ -507,9 +507,10 @@ struct AcceptanceShow {
         let all = info.history.versions
         #expect(all.count == 12 && all[1].kind == .outside && all.last?.kind == .outside)
         // Taken in the day appearance the pictures are compared in, whatever this Mac's own.
-        NSApp.appearance = NSAppearance(named: .aqua)
-        #expect(await info.history.picture(of: brief), "the picture of the newest version")
-        NSApp.appearance = nil
+        await Stage.alone {
+            NSApp.appearance = NSAppearance(named: .aqua)
+            #expect(await info.history.picture(of: brief), "the picture of the newest version")
+        }
         let picture = try Data(contentsOf: store.picture("brief", all[0].id))
         #expect(store.list("brief").first?.thumb != nil && NSImage(data: picture)?.isValid == true)
         for version in all.dropFirst() { try store.keep(picture: picture, of: version.id, in: "brief") }
@@ -620,9 +621,10 @@ struct AcceptanceShow {
         let toastRead = await AcceptanceBuild.read(toast)
         #expect(toastRead.contains("Show What Changed") && !toastRead.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(toastRead)")
         await Picture.settle(brief)
-        NSApp.appearance = NSAppearance(named: .aqua)
-        #expect(await info.history.picture(of: brief), "the picture of the edit")
-        NSApp.appearance = nil
+        await Stage.alone {
+            NSApp.appearance = NSAppearance(named: .aqua)
+            #expect(await info.history.picture(of: brief), "the picture of the edit")
+        }
         info.show(brief.space)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f8-toast" + suffix, root: stage.home.root)

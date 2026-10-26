@@ -374,7 +374,10 @@ struct InspectorView: View {
             }
             .padding(14)
             .plate()
-            if !assistant.resumes { Text("\(name) cannot resume a conversation, so each one starts fresh.").foot() }
+            // About the agent, not this conversation: a space with none yet must not read as if its agent never resumes.
+            if !assistant.agentResumes {
+                Text("\(name) cannot resume a conversation, so each one starts fresh.").foot()
+            }
         }
     }
 

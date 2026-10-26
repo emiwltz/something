@@ -134,16 +134,25 @@ final class Stage {
     /// suffix ("" or "-dark") and asserts in both. The area suites run side by side on the main actor and meet at each
     /// await: one scenario draws at a time, or another's night would reach this one's day picture.
     func appearances(_ body: (String) async throws -> Void) async throws {
-        _ = await wait(600, until: { !Stage.drawing })
-        Stage.drawing = true
-        defer { (Stage.drawing, NSApp.appearance) = (false, nil) }
-        for dark in gallery == nil ? [false] : [false, true] {
-            let name: NSAppearance.Name = dark ? .darkAqua : .aqua
-            NSApp.appearance = NSAppearance(named: name)
-            // The windows follow it later, on the run loop.
-            _ = await wait(until: { NSApp.windows.allSatisfy { $0.appearance != nil || $0.effectiveAppearance.name == name } })
-            try await body(dark ? "-dark" : "")
+        try await Stage.alone {
+            for dark in gallery == nil ? [false] : [false, true] {
+                let name: NSAppearance.Name = dark ? .darkAqua : .aqua
+                NSApp.appearance = NSAppearance(named: name)
+                // The windows follow it later, on the run loop.
+                _ = await wait(until: { NSApp.windows.allSatisfy { $0.appearance != nil || $0.effectiveAppearance.name == name } })
+                try await body(dark ? "-dark" : "")
+            }
         }
+    }
+
+    /// Runs `body`, which sets NSApp's appearance, while no other scenario or the gallery does, then gives the app back
+    /// its own appearance. Anything that sets NSApp.appearance in a test goes through here, or a night picture drawn at
+    /// the same time by another suite would reach a day one (or the reverse).
+    static func alone<T>(_ body: () async throws -> T) async rethrows -> T {
+        _ = await wait(600, until: { !drawing })
+        drawing = true
+        defer { (drawing, NSApp.appearance) = (false, nil) }
+        return try await body()
     }
 }
 
@@ -193,6 +202,16 @@ enum Picture {
             let script = "(() => { const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); "
                 + "for (let node; (node = walk.nextNode());) if (node.data.includes(root)) node.data = node.data.split(root).join('/Users/example'); return 0; })()"
             _ = try? await web.callAsyncJavaScript("return \(script)", arguments: ["root": root.path], in: frame, contentWorld: .page)
+        }
+        // WebKit hands a page the window's appearance on its own time, after the window: wait until the page wears the
+        // picture's, or a day picture shows the page in the Mac's night (or the reverse).
+        if let web, web.superview != nil, web.url != nil {
+            let dark = (NSApp.appearance ?? web.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            if NSApp.appearance != nil { web.appearance = NSApp.appearance }
+            for _ in 0..<50 {
+                if (try? await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches")) as? Bool == dark { break }
+                _ = await wait(0.1)
+            }
         }
         // A page not loaded yet (a space arriving, its rights not asked) has nothing to take: its area is drawn empty.
         let snapshot = web?.superview == nil || web?.url == nil ? nil : try await web?.takeSnapshot(configuration: nil)

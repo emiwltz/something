@@ -20,8 +20,9 @@ something
 ## The first minutes
 
 `something` opens its window. A short welcome, "Ready to build something today?", asks which of your installed coding
-agents builds your spaces with you (it starts none of them). It also offers two comforts, each off until you turn it
-on: a small launcher in `~/Applications`, so that Spotlight finds something, and a notification when a request waits.
+agents builds your spaces with you (it starts none of them). It also offers, each off until you turn it on, a
+notification when a request waits and, when installed with Homebrew, a small launcher in `~/Applications` so that
+Spotlight finds something.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a
 suggestion, and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Each space's
@@ -57,11 +58,11 @@ it, with Undo (⌘Z); Redo (⇧⌘Z) puts it back.
 
 A space's past is kept as **versions** in `~/Library/Application Support/something/versions/`, never in the spaces
 folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
-outside something" when no turn of its assistant made it. History (in Info, ⌘I, or the Space menu) lists them with a
-picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is itself
-a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all are kept
-by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or 500
-files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
+outside something" when no turn of its assistant made it. History (in Info, ⌘I, or View › Show History…) lists them with
+a picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is
+itself a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all
+are kept by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or
+500 files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
 versions with it, and a space deleted or renamed in Finder sends the versions left under its old name there too, so a
 new space of that name starts without them.
 
@@ -107,7 +108,8 @@ runs them in its shell instead. What "without asking" means for each:
   those three tools. What the sandbox blocks asks you.
 - **OpenCode** asks as your OpenCode settings say. **OMP** too, and its own default asks nothing.
 - **pi** and **Amp** never ask when something launches them, by design (a tool your Amp settings would ask for, Amp
-  refuses by itself): they can run any command on your Mac. The welcome and the first lines of each conversation say so.
+  refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
+  space's right to start agents, in the sheet that asks for it and in Info.
 
 "Ask Before Every Change", in the assistant card's menu or Settings › Permissions, turns the exception off from the next
 conversation. No space can see what you say to your assistant, or write to it. something writes `AGENTS.md` and

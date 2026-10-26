@@ -392,9 +392,11 @@ struct AcceptanceBuild {
         defer { room.close() }
         room.made = true
         // The still is taken once, in the appearance of the moment: the day's, for the picture.
-        NSApp.appearance = NSAppearance(named: .aqua)
-        await wait { shell.window.effectiveAppearance.name == .aqua }
-        let arrival = try #require(Arrival.made(name, in: shell))
+        let arrival = try await Stage.alone {
+            NSApp.appearance = NSAppearance(named: .aqua)
+            await wait { shell.window.effectiveAppearance.name == .aqua }
+            return try #require(Arrival.made(name, in: shell))
+        }
         shell.show(room)
         #expect(shell.window.title == "Waiting room")
         // What App.open does around it: the conversation follows the space shown.
