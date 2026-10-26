@@ -836,14 +836,13 @@ import WebKit
         #expect(await wait(10, until: { overlay.picks.first?.rect == cell.rect }), "\(String(describing: overlay.picks.first))")
         #expect(window.pointer === overlay && overlay.picks.map(\.path) == [cell.path, card.path] && window.pointable)
 
-        // The wheel scrolls the page, from something's world, and the frames follow it.
-        let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: -300, wheel2: 0, wheel3: 0)
-            .flatMap { NSEvent(cgEvent: $0) })
-        overlay.scrollWheel(with: wheel)
+        // The wheel scrolls the page, from something's world, and the frames follow it. The overlay's scroll is what its
+        // wheel calls; a real wheel reaching it is a hand trial (PointOverlay.scrollWheel), as no wheel is proven offscreen.
+        await overlay.scroll(by: CGSize(width: 0, height: 300), at: CGPoint(x: cell.rect.midX, y: cell.rect.midY))
         #expect(await wait(10, until: { overlay.picks.first?.rect.minY == cell.rect.minY - 300 }), "\(String(describing: overlay.picks.first))")
         #expect(try await run(window, "return scrollY") as? Double == 300)
         // Over a box that scrolls, the wheel scrolls the box, not the page.
-        await Pointing.scroll(by: CGSize(width: 0, height: 100), at: try await center(".pane"), in: window.web, frame: try #require(window.frame))
+        await overlay.scroll(by: CGSize(width: 0, height: 100), at: try await center(".pane"))
         #expect(try await run(window, "return [document.querySelector('.pane').scrollTop, scrollY]") as? [Double] == [100, 300])
 
         // Esc lets the picks go, then stops the mode.

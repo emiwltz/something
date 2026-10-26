@@ -31,7 +31,12 @@ import SomethingCore
     enum Light { case off, ready, working, waiting, error }
     /// One line of the conversation: the day its turns start, the person's message with what it was about, the
     /// agent's text, or one tool it ran and whether it failed or was refused.
-    enum Row: Equatable { case day(Date), mine(caption: String?, text: String), reply(String), tool(failed: Bool, words: String, command: String?) }
+    enum Row: Equatable {
+        case day(Date), mine(caption: String?, text: String), reply(String), tool(failed: Bool, words: String, command: String?)
+        /// The person's words, or the agent's, when the row holds them.
+        var mine: String? { if case .mine(_, let text) = self { text } else { nil } }
+        var reply: String? { if case .reply(let text) = self { text } else { nil } }
+    }
     /// What the open space reported while it ran: its title, its name and the codes, never its text. A page that
     /// stopped is named by its file, with the app's own reason `stopped`, which is no code of the contract.
     struct Fault: Equatable {
@@ -45,9 +50,7 @@ import SomethingCore
     @ObservationIgnored let places: Places
     /// The clock of sleep and of the presence; a test moves it.
     @ObservationIgnored var clock: () -> Date = Date.init
-    /// Whether a builder of `kind` picks its conversation up when it wakes: only Claude Code until a trial proves
-    /// another (Registry.resumesAsBuilt). Any other is never put to sleep by itself nor counted by the cap; a test
-    /// fakes one.
+    /// Whether a builder of `kind` picks its conversation up when it wakes (Registry.resumesAsBuilt); a test fakes one.
     @ObservationIgnored var resumable: (String) -> Bool = { Registry.resumesAsBuilt.contains($0) }
     /// Puts a word on the pasteboard; a test keeps it.
     @ObservationIgnored var copy: (String) -> Void = {
@@ -163,10 +166,8 @@ import SomethingCore
     @ObservationIgnored private var preferred: String?
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
-    /// The presence changes with time alone twice: Stop is offered 10 s into a turn, and "Changed …" leaves 3.6 s after
-    /// it; and an idle assistant falls asleep after the Preferences' delay. A one-shot timer moves `beat` then, which the
-    /// presence reads, so the card and the sticker ask again; no timer runs at rest. `beatAt` is the moment it was set
-    /// for.
+    /// Moved by a one-shot timer when time alone changes the presence (Stop offered 10 s into a turn, "Changed …" gone
+    /// 3.6 s after it, sleep after the delay): the presence reads it, so the card and the sticker ask again.
     private(set) var beat = 0
     @ObservationIgnored private var beatTimer: Timer?
     @ObservationIgnored private(set) var beatAt: Date?
@@ -239,19 +240,15 @@ import SomethingCore
         // A build watched is concluded on the refresh where its turn ends, before a held message starts the next, wherever
         // the person went meanwhile.
         if let before, !before.session.launching {
-            let built = before.session, light = light(built)
-            let answered = built.turn.map { $0.id != before.turn && $0.state != "working" } == true && ![.working, .waiting].contains(light)
-            if answered || built.id == nil || built.stopped || light == .error || built.agent?.alive == false {
+            let built = before.session
+            if over(built, after: before.turn) {
                 ended()
                 if self.before?.session === built { self.before = nil }
             }
         }
         // A turn that may have changed its space ended, however it ended: before the next starts, it is kept.
         for each in sessions.values {
-            guard let changing = each.changing, let space = each.space, !each.launching else { continue }
-            let light = light(each)
-            let answered = each.turn.map { $0.id != changing.after && $0.state != "working" } == true && ![.working, .waiting].contains(light)
-            guard answered || each.id == nil || each.stopped || light == .error || each.agent?.alive == false else { continue }
+            guard let changing = each.changing, let space = each.space, !each.launching, over(each, after: changing.after) else { continue }
             each.changing = nil
             turnEnded(space, changing.sentence, name(of: each))
         }
@@ -261,6 +258,14 @@ import SomethingCore
                   each.releasedAfter != .some(each.turn?.id) else { continue }
             release(each)
         }
+    }
+
+    /// Whether the turn of `session` that followed the turn `after` (any turn for nil) is over: answered, stopped,
+    /// failed, or never started.
+    private func over(_ session: Session, after: String?) -> Bool {
+        let light = light(session)
+        let answered = session.turn.map { $0.id != after && $0.state != "working" } == true && ![.working, .waiting].contains(light)
+        return answered || session.id == nil || session.stopped || light == .error || session.agent?.alive == false
     }
 
     /// Sends the oldest message held for `session`, noting the turn it leaves after.
@@ -284,15 +289,15 @@ import SomethingCore
         if build.seen.count != was { before = build }
     }
 
-    /// The question of the build asked from the blank page while the page is shown, when it is one question with one
-    /// choice among at most nine labels, which keys 1 to 9 can answer. Any other request, of this build (a permission)
-    /// or of any other conversation, goes to the panel.
+    /// The build's question while the blank page shows, when keys 1 to 9 can answer it (`question(of:)`); any other
+    /// request goes to the panel.
     private func inlineQuestion() -> Asked? {
         guard place == .blank, let build = before else { return nil }
         return question(of: build)
     }
 
-    /// The question `build` asks that the blank page can answer, wherever the person is.
+    /// The question `build` asks that the blank page can answer, wherever the person is: one question with one choice
+    /// among at most nine labels.
     private func question(of build: Build) -> Asked? {
         guard build.session === sessions[.new], let id = build.session.id else { return nil }
         for request in engine.state.requests where request.kind == "question" && request.agent == id {
@@ -336,7 +341,6 @@ import SomethingCore
         beatTimer = Timer.scheduledTimer(withTimeInterval: wait + 0.05, repeats: false) { [weak self] _ in self?.tick() }
     }
 
-    /// The presence is asked again, the time alone having changed it; an assistant idle for long enough falls asleep.
     func tick() {
         rest()
         keepTime()
@@ -347,7 +351,7 @@ import SomethingCore
         if self[keyPath: property] != value { self[keyPath: property] = value }
     }
 
-    /// The kinds that can build, in the order they are offered (Extensions.swift).
+    /// The kinds that can build, in their order (Extensions.swift).
     var builders: [String] { Registry.app.builders.map(\.kind) }
 
     var name: String { name(of: session) }
@@ -605,7 +609,7 @@ import SomethingCore
     /// space's own.
     func space(of agent: String) -> String? { quicks.values.first { $0.session.id == agent }?.space ?? session(of: agent)?.space }
 
-    /// Whether `agent` is a Quick Change's temporary session: the request panel says so.
+    /// Whether `agent` is a Quick Change's: the request panel says so.
     func quick(_ agent: String) -> Bool { quicks.values.contains { $0.session.id == agent } }
 
     /// The messages held for the end of the turn, as the person wrote them.
@@ -619,7 +623,6 @@ import SomethingCore
         wantsFocus = true
     }
 
-    /// Relaunches, then sends the last message again.
     func tryAgain() {
         guard let last = session.last else { return }
         halt(session)
@@ -643,7 +646,6 @@ import SomethingCore
         start([], resume: thread)
     }
 
-    /// Copies the command that signs the builder in, in Terminal.
     func copyCommand() { copy(command) }
 
     /// Chooses the builder `kind`; a conversation running with another one ends, after the person said so.
@@ -721,7 +723,7 @@ import SomethingCore
         refresh()
     }
 
-    /// Ask Before Every Change: from the next conversation on.
+    /// Ask Before Every Change, from the next conversation on.
     func toggleAsking() {
         askEverything.toggle()
         Preferences.at(places).askEverything = askEverything
@@ -771,7 +773,6 @@ import SomethingCore
         }
     }
 
-    /// Whether Put to Sleep can act on the open place's assistant: awake, with nothing under way.
     var canSleep: Bool { idle(session) }
 
     /// Put to Sleep: the open place's assistant sleeps now, whatever its kind; one that cannot resume begins a new
@@ -796,7 +797,6 @@ import SomethingCore
         save(session)
     }
 
-    /// Writes what a space's conversation keeps on disk.
     private func save(_ session: Session) { session.save(in: places.assistants) }
 
     /// The space to open by itself once the build asked from the blank page ended: the first new space listed since,
@@ -848,7 +848,7 @@ import SomethingCore
     }
 
     static func messages(_ rows: [Row]) -> Int {
-        rows.filter { if case .mine = $0 { true } else if case .reply = $0 { true } else { false } }.count
+        rows.filter { $0.mine != nil || $0.reply != nil }.count
     }
 
     /// The eyes of the space `name`'s assistant, as its card would draw them: asleep while it has no conversation yet,
@@ -979,9 +979,8 @@ import SomethingCore
             let each = quick.session
             each.read(state)
             guard !each.launching else { continue }
-            let light = light(each), asks = each.id.map { id in state.requests.contains { $0.agent == id } } == true
-            let answered = each.turn.map { $0.state != "working" } == true && ![.working, .waiting].contains(light)
-            guard !asks, answered || each.id == nil || each.stopped || light == .error || each.agent?.alive == false else { continue }
+            let asks = each.id.map { id in state.requests.contains { $0.agent == id } } == true
+            guard !asks, over(each, after: nil) else { continue }
             end(quick)
         }
     }
@@ -991,7 +990,7 @@ import SomethingCore
     private func end(_ quick: Quick) {
         let each = quick.session
         let problem = each.failure ?? (light(each) == .error ? each.agent?.error?.message ?? "\(name(of: each)) stopped before it was done." : nil)
-        let reply = each.rows.reversed().lazy.compactMap { row -> String? in if case .reply(let words) = row { words } else { nil } }.first
+        let reply = each.rows.last { $0.reply != nil }?.reply
         halt(each)
         let changed = quickEnded(quick.space, quick.sentence, name(of: each), problem)
         quick.phase = changed ? .done : .ended

@@ -100,7 +100,7 @@ struct BlankView: View {
     /// The sentence the build started with: the person's last message.
     private var sent: String? {
         guard model.building else { return nil }
-        return model.rows.reversed().lazy.compactMap { if case .mine(_, let text) = $0 { text } else { nil } }.first ?? ""
+        return model.rows.last { $0.mine != nil }?.mine ?? ""
     }
 
     /// The assistant's last words when a build asked here ended without a space (a question, an error), while the page
@@ -110,9 +110,8 @@ struct BlankView: View {
     /// The last reply, when it came at or after row `since` and answers a message sent from the blank page; else nil.
     static func reply(in model: AssistantModel, since: Int) -> String? {
         let rows = model.rows
-        guard !model.building, let at = rows.lastIndex(where: { if case .reply = $0 { true } else { false } }), at >= since,
-              case .reply(let text) = rows[at], !rows[at...].contains(where: { if case .mine = $0 { true } else { false } }),
-              case .mine(let caption, _)? = rows[..<at].last(where: { if case .mine = $0 { true } else { false } }),
+        guard !model.building, let at = rows.lastIndex(where: { $0.reply != nil }), at >= since, let text = rows[at].reply,
+              !rows[at...].contains(where: { $0.mine != nil }), case .mine(let caption, _)? = rows[..<at].last(where: { $0.mine != nil }),
               caption == "on the blank page" else { return nil }
         return text
     }
@@ -225,16 +224,8 @@ struct BuildField: View {
                         .foregroundStyle(Look.Token.ink.ui)
                         .lineLimit(2...6)
                         .frame(minHeight: 50, alignment: .topLeading)
-                        .focused($typing)
-                        .disabled(model.blocked)
                         .accessibilityLabel("Describe the space you want")
-                        .onChange(of: model.wantsFocus, initial: true) {
-                            if model.wantsFocus { (typing, model.wantsFocus) = (true, false) }
-                        }
-                        .onKeyPress(.return, phases: .down) { press in
-                            let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
-                            return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
-                        }
+                        .composing(model, $typing)
                 }
             }
             .font(Look.font(.ui, size: 16).ui).kerning(-0.16).lineSpacing(4.5)

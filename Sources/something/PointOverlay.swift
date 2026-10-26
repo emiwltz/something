@@ -95,16 +95,21 @@ final class PointOverlay: NSView {
         Task { @MainActor in await click(at: at, adding: adding) }
     }
 
-    /// The wheel scrolls the page under the overlay, then the frames and the part under the pointer follow it.
+    /// The wheel scrolls the page under the overlay. That a real wheel reaches here with these deltas is a hand trial:
+    /// a native wheel event cannot be proven offscreen, nor while the display sleeps (spike SP9).
     override func scrollWheel(with event: NSEvent) {
         let line: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
         let delta = CGSize(width: -event.scrollingDeltaX * line, height: -event.scrollingDeltaY * line)
+        let at = convert(event.locationInWindow, from: nil)
+        Task { @MainActor in await scroll(by: delta, at: at) }
+    }
+
+    /// Scrolls the box at `point` that scrolls, else the page, by `delta` from something's world, then the frames and
+    /// the part under the pointer follow it. Returns once the page scrolled.
+    func scroll(by delta: CGSize, at point: CGPoint) async {
         guard let space, let frame = space.frame, delta != .zero else { return }
-        let web = space.web, at = convert(event.locationInWindow, from: nil)
-        Task { @MainActor in
-            await Pointing.scroll(by: delta, at: at, in: web, frame: frame)
-            followSoon()
-        }
+        await Pointing.scroll(by: delta, at: point, in: space.web, frame: frame)
+        followSoon()
     }
 
     /// Esc reaches escape() through the app's key monitor wherever the focus is in the window; this is the way of a
@@ -337,15 +342,16 @@ final class PointOverlay: NSView {
         text.draw(at: CGPoint(x: pill.minX + 8, y: pill.midY - size.height / 2))
     }
 
-    /// The sign's four corners in `r`, in `ink`, haloed in the background; the corner `skipping` (0 top left, then
-    /// clockwise) is left out, for the eyes of a frame at work to take its place.
-    static func corners(_ r: CGRect, ink: Look.Token, skipping: Int? = nil) {
+    /// The sign's four corners in `r`, in `ink`: arms of `a` points, stroked `width` wide in the sign's 100-unit
+    /// corner, haloed in the background when `halo`; the corner `skipping` (0 top left, then clockwise) is left out,
+    /// for the eyes of a frame at work to take its place. The arrival's growing frame draws them too.
+    static func corners(_ r: CGRect, ink: Look.Token, arm a: CGFloat = PointOverlay.arm, width: CGFloat = PointOverlay.stroke * 100 / PointOverlay.arm,
+                        halo: Bool = true, skipping: Int? = nil) {
         guard let c = NSGraphicsContext.current?.cgContext else { return }
-        let a = Self.arm
         c.saveGState()
-        c.setShadow(offset: .zero, blur: 2.5, color: Look.Token.bg.color.cgColor)
-        c.setStrokeColor(ink.color.cgColor)
-        c.setLineWidth(Self.stroke * 100 / a)
+        if halo { c.setShadow(offset: .zero, blur: 2.5, color: Look.Token.bg.color.cgColor) }
+        c.setStrokeColor(Sign.color(ink))
+        c.setLineWidth(width)
         c.setLineCap(.round)
         c.setLineJoin(.round)
         let corners = [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX - a, y: r.minY), CGPoint(x: r.maxX - a, y: r.maxY - a), CGPoint(x: r.minX, y: r.maxY - a)]

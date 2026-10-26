@@ -309,16 +309,8 @@ struct Field: View {
                 .lineLimit(1...5)
                 .padding(.horizontal, 2).padding(.vertical, 5)
                 .frame(minHeight: 30)
-                .focused($typing)
-                .disabled(model.blocked)
                 .accessibilityLabel("Message")
-                .onChange(of: model.wantsFocus, initial: true) {
-                    if model.wantsFocus { (typing, model.wantsFocus) = (true, false) }
-                }
-                .onKeyPress(.return, phases: .down) { press in
-                    let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
-                    return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
-                }
+                .composing(model, $typing)
             let stop = model.stops
             Button { stop ? model.stop() : model.send() } label: {
                 Group {
@@ -363,6 +355,22 @@ struct Field: View {
             if !NSApp.sendAction(#selector(NSTextView.insertNewlineIgnoringFieldEditor(_:)), to: nil, from: nil) { model.draft += "\n" }
         }
         return .handled
+    }
+}
+
+extension View {
+    /// The focus and keys of this field or New Space's: ⌘K's focus once the field is drawn, and Return as `returned`
+    /// says, which reads whether an input method composes from the field editor.
+    func composing(_ model: AssistantModel, _ typing: FocusState<Bool>.Binding) -> some View {
+        focused(typing)
+            .disabled(model.blocked)
+            .onChange(of: model.wantsFocus, initial: true) {
+                if model.wantsFocus { (typing.wrappedValue, model.wantsFocus) = (true, false) }
+            }
+            .onKeyPress(.return, phases: .down) { press in
+                let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
+                return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
+            }
     }
 }
 

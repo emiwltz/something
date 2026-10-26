@@ -107,11 +107,10 @@ final class Film: NSView {
     }
 
     private func animate(_ seconds: TimeInterval, _ curve: Look.Curve, _ changes: @escaping () -> Void) {
-        NSAnimationContext.runAnimationGroup { context in
-            (context.duration, context.timingFunction, context.allowsImplicitAnimation) = (seconds * pace, curve.timing, true)
+        Look.animate(seconds * pace, curve, implicit: true, { [weak self] in
             changes()
-            layoutSubtreeIfNeeded()
-        }
+            self?.layoutSubtreeIfNeeded()
+        })
     }
 
     /// The whole film: the sign lands, the lines rise, then the frame grows and the window shows through.

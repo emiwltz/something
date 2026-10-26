@@ -140,22 +140,8 @@ final class Arrival: NSView {
     override func draw(_ dirtyRect: NSRect) {
         still?.draw(in: stillRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         guard progress < 1 || playing || holds, let c = NSGraphicsContext.current?.cgContext else { return }
-        let shape = shape, r = shape.rect, a = shape.arm
-        c.setStrokeColor(Sign.color(.ink))
-        c.setLineWidth(shape.stroke)
-        c.setLineCap(.round)
-        c.setLineJoin(.round)
-        let corners = [CGPoint(x: r.minX, y: r.minY), CGPoint(x: r.maxX - a, y: r.minY), CGPoint(x: r.maxX - a, y: r.maxY - a), CGPoint(x: r.minX, y: r.maxY - a)]
-        for (index, at) in corners.enumerated() {
-            c.saveGState()
-            c.translateBy(x: at.x + a / 2, y: at.y + a / 2)
-            c.rotate(by: CGFloat(index) * CGFloat.pi / 2)
-            c.scaleBy(x: a / 100, y: a / 100)
-            c.translateBy(x: -50, y: -50)
-            c.addPath(Sign.Geometry.corner)
-            c.strokePath()
-            c.restoreGState()
-        }
+        let shape = shape
+        PointOverlay.corners(shape.rect, ink: .ink, arm: shape.arm, width: shape.stroke, halo: false)
         guard shape.eyes > 0 else { return }
         // The sign's eyes at rest, Ready, as the mockup's frame carries them, around the face's center.
         let g = Sign.Geometry(), side = start.rect.width / (1 - 2 * g.inset), eyes = g.eyes(.listen, side: side)
