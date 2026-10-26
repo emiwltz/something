@@ -60,6 +60,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                pointer.escape() { return nil }
             // Then a margin note's, the top thing over the page.
             if shell.window.isKeyWindow, shell.escape(event) { return nil }
+            // ⌘↵ sends the comments waiting over the space, wherever the focus is but in the composer.
+            if shell.window.isKeyWindow, shell.sendComments(event) { return nil }
             if event.keyCode == 53, shell.window.isKeyWindow { assistant.nudge() }
             return menuBar.intercept(event, window: shell.window)
         }

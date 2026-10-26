@@ -874,7 +874,7 @@ import SomethingCore
         guard session.kind != nil else { return }
         (session.last, session.failure, session.active) = (message, nil, clock())
         if let space = session.space, session.changing == nil {
-            session.changing = (AssistantModel.shown(message).text, session.turn?.id)
+            session.changing = (AssistantModel.sentence(AssistantModel.shown(message).text), session.turn?.id)
             turnStarts(space)
         }
         if session.launching { return session.queued.append(message) }
@@ -1017,6 +1017,51 @@ import SomethingCore
         if let main = sessions[.space(quick.space)], !main.held.isEmpty, !main.launching, ![.working, .waiting].contains(light(main)) { release(main) }
     }
 
+    // MARK: Comments
+
+    /// Add Comment's comments on the space `place`, sent together in one message to that space's own conversation, as a
+    /// written message is: held while it works, or while a Quick Change works on the space. The message holds the
+    /// context line, one line per comment with its part's name and path, then the numbered words; nothing of the page's
+    /// text. Returns why it is refused (nothing to send, or no builder to ask); nil once sent or held.
+    func comment(_ comments: [(part: Pointing.Part, words: String)], at place: Place) -> String? {
+        let list = comments.filter { !$0.words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard case .space(let title, let name, _) = place, !list.isEmpty else { return "Point at a part and add a comment first." }
+        let main = session(for: place)
+        guard let kind = main.kind, installed[kind] != false, ![.missing, .crashed].contains(presence(of: main).stuck) else {
+            return "\(AssistantModel.clean(title))’s assistant can’t start · open its card to see why"
+        }
+        let message = ([AssistantModel.context(place, home: places.home.path)] + AssistantModel.comments(list)).joined(separator: "\n")
+        if quickWorks(on: name) || (main.id != nil && !main.launching && ([.working, .waiting].contains(light(main)) || !main.held.isEmpty)) {
+            main.held.append(message)
+            refresh()
+        } else {
+            deliver(message, to: main)
+        }
+        return nil
+    }
+
+    /// The comments' lines: where each part is, for the agent, then "3 comments on this page:" and each one numbered as
+    /// its pin, by its part's name, its words on one line.
+    static func comments(_ list: [(part: Pointing.Part, words: String)]) -> [String] {
+        let header = "\(list.count) comment\(list.count == 1 ? "" : "s") on this page:"
+        return list.indices.map { "[something] Comment \($0 + 1) is on \(list[$0].part.kind): \(list[$0].part.path)" } + [header]
+            + list.indices.map { index in
+                let kind = list[index].part.kind, words = list[index].words.split(whereSeparator: \.isNewline).joined(separator: " ")
+                return "\(index + 1). \(kind.prefix(1).uppercased() + kind.dropFirst()): \(words.trimmingCharacters(in: .whitespaces))"
+            }
+    }
+
+    /// The sentence a turn is kept and undone by: the person's words, or "3 comments" for comments sent together.
+    static func sentence(_ text: String) -> String {
+        let first = text.prefix { $0 != "\n" }, suffix = " on this page:"
+        guard first.hasSuffix(suffix), let count = Int(first.prefix { $0.isNumber }),
+              ["\(count) comment\(suffix)", "\(count) comments\(suffix)"].contains(first) else { return text }
+        return String(first.dropLast(suffix.count))
+    }
+
+    /// Whether the last turn of the space `name`'s conversation failed: the comments sent with it come back to send.
+    func failed(on name: String) -> Bool { sessions[.space(name)].map { $0.failure != nil || light($0) == .error } ?? false }
+
     // MARK: Words
 
     /// Where the person is with `view` open: its title as its declaration gave it, else its name; the blank page for nil.
@@ -1042,10 +1087,14 @@ import SomethingCore
         return "The space “\(clean(fault.title))” (\(fault.name)) has problems: \(fault.codes.joined(separator: ", ")). Run something check \(fault.name) and fix what it reports."
     }
 
-    /// A message as the conversation shows it: its context line taken off, said as a caption ("about My agents").
+    /// A message as the conversation shows it: its context line taken off, said as a caption ("about My agents"), and
+    /// something's lines after it (where the parts pointed at are, for the agent) with it.
     static func shown(_ text: String) -> (caption: String?, text: String) {
         guard text.hasPrefix("[something] ") else { return (nil, text) }
-        let line = text.prefix { $0 != "\n" }, rest = String(text.dropFirst(line.count + 1))
+        let line = text.prefix { $0 != "\n" }
+        var after = text.dropFirst(line.count + 1)
+        while after.hasPrefix("[something] ") { after = after.drop { $0 != "\n" }.dropFirst() }
+        let rest = String(after)
         if line.hasSuffix("on the blank page.") { return ("on the blank page", rest) }
         if line.hasSuffix("on the templates.") { return ("on the templates", rest) }
         guard let open = line.range(of: "Open space: “"), let close = line.range(of: "” (", options: .backwards),

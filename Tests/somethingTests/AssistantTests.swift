@@ -60,6 +60,12 @@ import WebKit
     while IFS= read -r line; do
       printf '%s\n' "$line" >> "$HOME/out/input"
       case "$line" in
+        *'comments on this page'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          tool k1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          tool k2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          words k3 'Done. I worked through your comments and checked the page.'
+          later "$done" "$idle" ;;
         *'go-slow'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           later "$done" "$idle" ;;
@@ -1243,6 +1249,78 @@ import WebKit
         #expect(model.held.isEmpty && main.id != id)
         #expect(await wait(until: { quick.phase == .ended }) && model.quicks["brief"] != nil)
         #expect(await wait(5, until: { model.quicks["brief"] == nil && quick.phase == .gone }))
+        await finish(home, model)
+    }
+
+    /// Add Comment: each part picked gets the words, numbered in order; one taken out renumbers the others, and the
+    /// last one gone takes the layer with it. Sent, they leave in one message to the space's main assistant:
+    /// something's lines say where each part is, then the numbered words, nothing of the page's text; the conversation
+    /// shows only the list. The turn is kept as the comments' space's version, named "2 comments", while another space
+    /// is open; then the pins are done.
+    @Test func commentsLeaveTogetherInOneMessage() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        let brief = try home.space("brief", "<p>white</p>"), agents = try home.space("agents", "<p>tiles</p>")
+        let place = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: brief.location.path)
+        let changes = Changes(places: home.places, undo: WindowUndo())
+        changes.find = { Spaces(root: home.places.spaces).named($0) }
+        model.turnStarts = { changes.before($0) }
+        model.turnEnded = { changes.after($0, sentence: $1, who: $2) }
+        let part = { (tag: String, index: Int) in
+            Pointing.Part(path: ":root > body:nth-of-type(1) > \(tag):nth-of-type(\(index))", tag: tag, rect: CGRect(x: 20, y: 40 * index, width: 200, height: 30))
+        }
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 600)), comments = Comments(frame: holder.bounds)
+        holder.addSubview(comments)
+        comments.working = { model.works(on: "brief") }
+        comments.failed = { model.failed(on: "brief") }
+        comments.send = { list in model.comment(list.map { ($0.part, $0.words) }, at: place) == nil }
+
+        comments.add("  Make it smaller, one line ", [part("p", 1), part("table", 1)])
+        comments.add("", [part("h1", 1)])
+        comments.add("Add the week\nnumber", [part("h1", 1)])
+        #expect(comments.list.map(\.words) == ["Make it smaller, one line", "Make it smaller, one line", "Add the week\nnumber"])
+        #expect(comments.pins == ["Comment 1 on this paragraph", "Comment 2 on this table", "Comment 3 on this heading"])
+        #expect(comments.tray.footer == ["3 comments"] && comments.tray.fields.map(\.stringValue) == comments.list.map(\.words))
+        #expect(comments.tray.removes.map { $0.accessibilityLabel() } == ["Remove comment 1", "Remove comment 2", "Remove comment 3"])
+        comments.remove(1)
+        #expect(comments.pins == ["Comment 1 on this paragraph", "Comment 2 on this heading"] && comments.tray.footer == ["2 comments"])
+        #expect(comments.tray.fields.map { $0.accessibilityLabel() } == ["Comment 1", "Comment 2"])
+        #expect(comments.pin(1).minX == 20 - PointOverlay.pad - 11 && comments.pin(1).minY == 40 - PointOverlay.pad - 11)
+
+        // Sent: one message, to Daily brief's own conversation; the person opens My agents meanwhile.
+        model.place = place
+        let main = model.session
+        comments.sendAll()
+        #expect(comments.phase == .sending && comments.tray.footer == ["2 comments", "Working through them"] && model.works(on: "brief"))
+        model.place = .space(title: "My agents", name: "agents", page: agents.location.path)
+        let users = { self.input(home).filter { $0.contains(#""type":"user""#) } }
+        #expect(await wait(until: { users().count == 1 && main.agent?.state == "working" }), "\(users())")
+        let message = #"[something] Open space: “Daily brief” (brief, ~/something/spaces/brief.html).\n"#
+            + #"[something] Comment 1 is on this paragraph: :root > body:nth-of-type(1) > p:nth-of-type(1)\n"#
+            + #"[something] Comment 2 is on this heading: :root > body:nth-of-type(1) > h1:nth-of-type(1)\n"#
+            + #"2 comments on this page:\n1. This paragraph: Make it smaller, one line\n2. This heading: Add the week number"#
+        #expect(users().first?.contains(#""content":""# + message + #"""#) == true, "\(users())")
+        #expect(!users().joined().contains("white"), "nothing of the page")
+        #expect(await wait(until: { main.rows.contains(.mine(caption: "about Daily brief",
+                                                               text: "2 comments on this page:\n1. This paragraph: Make it smaller, one line\n2. This heading: Add the week number")) }),
+                "\(main.rows)")
+        #expect(changes.versions.list("brief").map(\.kind) == [.outside])
+
+        // The turn changes the page and ends: the comments' version, named by their count; the pins done.
+        try "<p>smaller</p>".write(to: brief.location, atomically: true, encoding: .utf8)
+        try Data().write(to: home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { comments.phase == .done }), "\(comments.phase)")
+        let made = changes.versions.list("brief")
+        #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "2 comments" && made.first?.who == "Claude Code")
+        #expect(changes.versions.list("agents").isEmpty && comments.tray.footer == ["2 comments", "All done"])
+        #expect(comments.pins == ["Comment 1 on this paragraph, done", "Comment 2 on this heading, done"])
+        #expect(AssistantModel.sentence("1 comment on this page:\n1. This table: Wider") == "1 comment" && AssistantModel.sentence("Make it 3 comments") == "Make it 3 comments")
+        // A new comment after them starts a new list; the last one taken out takes the layer away.
+        comments.add("Bolder", [part("p", 2)])
+        #expect(comments.phase == .writing && comments.pins == ["Comment 1 on this paragraph"])
+        comments.remove(0)
+        #expect(comments.superview == nil)
         await finish(home, model)
     }
 

@@ -1,5 +1,5 @@
 // Acceptance scenarios of show and change: pointing, picked frames, the margin note, the toast, History, the glimpse and
-// the comments (f1–f11; f9–f11 wait for their shots).
+// the comments (f1–f11).
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -182,8 +182,10 @@ struct AcceptanceShow {
         // Then only the chip, which says the session ended.
         #expect(await wait(15) { quick.phase == .ended })
         #expect(drawn.badge == nil && drawn.chip == "Quick session ended" && drawn.superview != nil)
+        // The mockup's f9 (Quick Change) is this same moment, its shot the same: drawn here, its keys proven in f9.
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f3" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: brief.web, "f9" + suffix, root: stage.home.root)
         }
         shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         var stopped = false
@@ -387,7 +389,190 @@ struct AcceptanceShow {
     @Test("f6: History", .disabled("not built yet: T19")) func f6() async throws {}
     @Test("f7: the glimpse", .disabled("not built yet: T20")) func f7() async throws {}
     @Test("f8: changed outside something", .disabled("not built yet: T21")) func f8() async throws {}
-    @Test("f9: comment pins", .disabled("not built yet: T18")) func f9() async throws {}
-    @Test("f10: the comments tray", .disabled("not built yet: T18")) func f10() async throws {}
-    @Test("f11: comments sent together", .disabled("not built yet: T18")) func f11() async throws {}
+    /// The mockup's comments: a selector of Daily brief's page, where in it to click, and the words.
+    static let comments: [(String, Double, String)] = [
+        (".dateline", 0.5, "Make it smaller, one line"), (".mast h1", 0.5, "Add the week number after the date"),
+        ("#paper > :first-child", 0.3, "Keep this to two short paragraphs"),
+    ]
+
+    /// ⌘↵, as the keyboard sends it to `window`.
+    static func commandReturn(_ window: NSWindow) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+                                      context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+    }
+
+    /// Picks the part of `space` under the element `selector`, `across` its width at its middle, writes `words` in the
+    /// composer and adds them with ⌘↵. Returns the part.
+    @discardableResult
+    static func comment(_ selector: String, across: Double, _ words: String, over space: SpaceView) async throws -> Pointing.Part {
+        let overlay = try #require(space.pointer), frame = try #require(space.frame)
+        let at = try #require(try await space.web.callAsyncJavaScript(
+            "const b = document.querySelector(s).getBoundingClientRect(); return [b.x + b.width * a, b.y + b.height / 2]",
+            arguments: ["s": selector, "a": across], in: frame, contentWorld: .defaultClient) as? [Double])
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
+        let composer = try #require(overlay.composer), part = try #require(overlay.picks.first)
+        composer.field.insertText(words, replacementRange: composer.field.selectedRange())
+        #expect(composer.field.performKeyEquivalent(with: try commandReturn(try #require(space.web.window))))
+        return part
+    }
+
+    /// The composer's two gestures side by side, by their keys (the mockup's f9 is Quick Change's last moment, the same
+    /// screen as f3's, which f3 draws as f9): ↵ makes a Quick Change of the words about the parts; ⌘↵ adds them as a
+    /// comment, and point mode stays on to pick another part. ⌘↵ in the window sends the comments, never while the
+    /// composer is open; an assistant that cannot start refuses them, said in a toast, and they stay to send again.
+    @Test("f9: Quick Change beside Add Comment") func f9() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.layer.announce = { _ in }
+        shell.point()
+        let overlay = try #require(brief.pointer), frame = try #require(brief.frame)
+        var quick: (String, [Pointing.Part])?
+        overlay.quickChange = { quick = ($0, $1) }
+        let at = try #require(try await brief.web.callAsyncJavaScript(
+            "const b = document.querySelector('.mast h1').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]",
+            in: frame, contentWorld: .defaultClient) as? [Double])
+        await overlay.click(at: CGPoint(x: at[0], y: at[1]), adding: false)
+        let composer = try #require(overlay.composer)
+        composer.field.insertText("Make the masthead smaller", replacementRange: composer.field.selectedRange())
+        composer.field.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(quick?.0 == "Make the masthead smaller" && quick?.1 == overlay.picks && Comments.of(brief) == nil)
+        // ⌘↵ in the composer: a comment, the mode on, no part picked; ⌘↵ in the window is the composer's while it is open.
+        #expect(!shell.sendComments(try AcceptanceShow.commandReturn(shell.window)))
+        #expect(composer.field.performKeyEquivalent(with: try AcceptanceShow.commandReturn(shell.window)))
+        let comments = try #require(Comments.of(brief))
+        #expect(comments.list.map(\.words) == ["Make the masthead smaller"] && brief.pointer === overlay && overlay.picks.isEmpty && overlay.composer == nil)
+        // Sent with no assistant to start: refused, said, kept.
+        #expect(shell.sendComments(try AcceptanceShow.commandReturn(shell.window)))
+        #expect(comments.phase == .writing && comments.list.count == 1 && brief.pointer != nil)
+        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
+        #expect(toast.words == "Daily brief’s assistant can’t start · open its card to see why")
+        shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
+    }
+
+    /// Daily brief in point mode; the weather corner, the masthead and the lead story picked one after the other, each
+    /// given words and Add Comment (⌘↵): a numbered pin at each part, point mode still on to pick the next, its banner
+    /// gone, and the tray at the bottom of the space, 640 wide: each comment's number, part and words, then "3
+    /// comments", the way on (Point at another part · Esc Stop Pointing), Clear and Send to Assistant ⌘↵ (f10). Nothing
+    /// is sent before Send, and nothing allows anything. A comment taken out renumbers the others; Esc stops pointing
+    /// and the tray stays; Clear takes them all, and the banner comes back.
+    @Test("f10: the comments tray") func f10() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.point()
+        let overlay = try #require(brief.pointer)
+        var parts: [Pointing.Part] = []
+        for (selector, across, words) in AcceptanceShow.comments { parts.append(try await AcceptanceShow.comment(selector, across: across, words, over: brief)) }
+        let comments = try #require(Comments.of(brief)), tray = comments.tray
+        #expect(brief.pointer === overlay && overlay.picks.isEmpty && overlay.composer == nil && overlay.commented())
+        #expect(comments.list.map(\.words) == AcceptanceShow.comments.map(\.2) && comments.list.map(\.part.path) == parts.map(\.path))
+        #expect(comments.pins == parts.indices.map { "Comment \($0 + 1) on \(parts[$0].kind)" } && comments.phase == .writing)
+        #expect(tray.footer == ["3 comments", "Point at another part", "Esc", "Stop Pointing"] && tray.accessibilityLabel() == "Comments")
+        #expect(tray.fields.map(\.stringValue) == AcceptanceShow.comments.map(\.2) && tray.fields.allSatisfy(\.isEditable))
+        #expect(tray.frame.width == 640 && abs(tray.frame.midX - comments.bounds.width / 2) <= 0.5 && tray.frame.maxY == comments.bounds.height - 16)
+        #expect(tray.frame.height == 6 + 3 * 31 + 2 + 46 && comments.frame == brief.web.frame)
+        #expect(tray.sendButton.title == "Send to Assistant" && tray.sendButton.hint == "⌘↵" && tray.sendButton.primary && tray.clear.title == "Clear")
+        func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
+        #expect(!buttons(tray).contains { $0.title.contains("Allow") }, "a comment never allows anything")
+        #expect(!FileManager.default.fileExists(atPath: stage.home.root.appendingPathComponent("out/input").path), "nothing sent")
+        // A click on the tray is the tray's, never a pick of the page under it.
+        let inTray = comments.convert(CGPoint(x: tray.frame.midX, y: tray.frame.maxY - 20), to: comments.superview)
+        #expect(comments.superview?.hitTest(inTray).map { $0 === tray || $0.isDescendant(of: tray) } == true)
+        #expect(comments.hitTest(comments.convert(CGPoint(x: 30, y: 30), to: comments.superview)) == nil)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f10" + suffix, root: stage.home.root)
+        }
+
+        tray.removes[1].performClick(nil)
+        #expect(comments.pins == ["Comment 1 on \(parts[0].kind)", "Comment 2 on \(parts[2].kind)"] && tray.footer[0] == "2 comments")
+        #expect(overlay.escape() && brief.pointer == nil && tray.footer == ["2 comments"] && Comments.of(brief) === comments)
+        tray.clear.performClick(nil)
+        #expect(Comments.of(brief) == nil)
+        shell.point()
+        #expect(brief.pointer?.commented() == false)
+    }
+
+    /// The three comments of f10, Send to Assistant (⌘↵): point mode closes, the card opens on the conversation, and
+    /// the comments go in one message to Daily brief's main assistant, which the card shows as the numbered list; the
+    /// tray moves to the left of the card and says it works through them, the pins kept (f11-working). Its turn
+    /// changes the page and ends: every pin and row a check, the words struck through, "All done", and the change kept
+    /// as one version named "3 comments", undone by that name (f11).
+    @Test("f11: comments sent together") func f11() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        Preferences.at(stage.home.places).listed["claude"] = {
+            var options = Options()
+            options.model = [Option(value: "opus", label: "Opus 5.5")]
+            return options
+        }()
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.layer.announce = { _ in }
+        model.choose(model: "opus")
+        library.preferences.motion = .reduced
+        let changes = Changes(places: stage.home.places, undo: shell.undo)
+        changes.follow(model, in: shell, library: library)
+        changes.toast = { words, action, quiet, _ in _ = shell.toast(words, action: action, quiet: quiet, seconds: 60) }
+        let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), style = try #require(was.range(of: "</style>"))
+        let users = { ((try? String(contentsOf: stage.home.root.appendingPathComponent("out/input"), encoding: .utf8)) ?? "")
+            .split(separator: "\n").filter { $0.contains(#""type":"user""#) } }
+
+        shell.point()
+        var parts: [Pointing.Part] = []
+        for (selector, across, words) in AcceptanceShow.comments { parts.append(try await AcceptanceShow.comment(selector, across: across, words, over: brief)) }
+        let comments = try #require(Comments.of(brief)), tray = comments.tray
+        comments.linger = 60
+        #expect(shell.sendComments(try AcceptanceShow.commandReturn(shell.window)))
+
+        // Sent: the mode closed, the card open on the conversation, the tray beside it, at work.
+        let point = try #require(shell.controls[Shell.point] as? ToolButton)
+        #expect(brief.pointer == nil && !point.pressed && model.open && model.threadShown && comments.phase == .sending)
+        #expect(tray.footer == ["3 comments", "Working through them"] && tray.frame.minX == 16 && tray.frame.width == 460 && tray.removes.allSatisfy(\.isHidden))
+        #expect(!tray.fields.contains(where: \.isEditable) && tray.sendButton.isHidden && tray.clear.isHidden)
+        let list = parts.indices.map { "\($0 + 1). \(parts[$0].kind.prefix(1).uppercased() + parts[$0].kind.dropFirst()): \(AcceptanceShow.comments[$0].2)" }
+        let shown = (["3 comments on this page:"] + list).joined(separator: "\n")
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "about Daily brief", text: shown)) }), "\(model.rows)")
+        #expect(await wait(until: { !users().isEmpty }), "the fake read nothing")
+        #expect(users().count == 1 && users()[0].contains(parts.indices.map { "[something] Comment \($0 + 1) is on \(parts[$0].kind): \(parts[$0].path)" }.joined(separator: "\\n")), "\(users())")
+        #expect(model.session === model.session(for: AssistantModel.place(brief)) && model.quicks.isEmpty, "the main assistant's")
+        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f11-working" + suffix, root: stage.home.root)
+        }
+
+        // The turn changes the page and ends: all done, one version named by the count.
+        let loads = brief.loads
+        try was.replacingCharacters(in: style, with: "  .dateline b { font-size: 80%; }\n</style>").write(to: page, atomically: true, encoding: .utf8)
+        try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { comments.phase == .done }), "\(comments.phase)")
+        #expect(tray.footer == ["3 comments", "All done"] && comments.pins.allSatisfy { $0.hasSuffix(", done") })
+        #expect(tray.fields.allSatisfy { ($0.attributedStringValue.attribute(.strikethroughStyle, at: 0, effectiveRange: nil) as? Int) == 1 })
+        let made = changes.versions.list("brief")
+        #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "3 comments" && shell.undo.undoMenuItemTitle == "Undo “3 comments”")
+        #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
+        await Picture.settle(brief)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f11" + suffix, root: stage.home.root)
+        }
+        shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
+        var stopped = false
+        engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
 }

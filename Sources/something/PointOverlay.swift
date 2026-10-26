@@ -1,7 +1,7 @@
 // Point mode's layer over the open space's page: it takes every click (none reaches the page) and hands the wheel on
 // as a scroll from something's world (Pointing.swift). It dims the space a little, with a hole around the part under
 // the pointer, draws the sign's four corners around that part with its kind in a pill ("this table"), and says the
-// mode and its way out in a banner at the top. A click picks a part; once a frame is drawn, ⌥-click adds one, and the
+// mode and its way out in a banner at the top, unless comments wait (their tray says it). A click picks a part; once a frame is drawn, ⌥-click adds one, and the
 // composer (PointComposer.swift) attaches to the last one picked. Esc lets go of the picked parts, then stops the
 // mode. The frames follow the page when it scrolls or reloads. It is all drawn in draw(_:), so a picture of the
 // window shows it as the screen does.
@@ -17,6 +17,8 @@ final class PointOverlay: NSView {
     /// What the composer's Quick Change (Return) and Add Comment (⌘↵) do with the words and the parts picked.
     var quickChange: (String, [Pointing.Part]) -> Void = { _, _ in }
     var addComment: (String, [Pointing.Part]) -> Void = { _, _ in }
+    /// Whether comments wait over the space (Comments.swift): their tray says the way on, and the banner leaves.
+    var commented: () -> Bool = { false }
     /// The eyes of the space's assistant, which the composer shows beside the space's name.
     var eyes: () -> Sign.State = { .unknown }
     /// The composer, while parts are picked.
@@ -322,7 +324,7 @@ final class PointOverlay: NSView {
             frame(hovered, words: (picks.isEmpty ? "" : "+ ") + hovered.kind, ink: picks.isEmpty ? .ink : .ink2,
                   at: lifted && picks.isEmpty ? drawnHole : nil)
         }
-        drawBanner()
+        if !commented() { drawBanner() }
         if let composer { Look.drawFloat(composer.frame, radius: Look.card, fill: .bg2, ring: true, appearance: effectiveAppearance) }
     }
 

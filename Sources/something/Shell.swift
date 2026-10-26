@@ -322,6 +322,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             guard let self, let space else { return }
             quickChange(words, parts: parts, on: space)
         }
+        overlay.addComment = { [weak self, weak space] words, parts in
+            guard let self, let space else { return }
+            comments(on: space).add(words, parts)
+        }
+        overlay.commented = { [weak space] in space.flatMap(Comments.of)?.list.isEmpty == false }
         assistant.open = false
         space.point(overlay)
         pressPoint(true)
@@ -337,6 +342,39 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         stopPointing()
         if let quick = assistant.quicks[space.space.name] { QuickFrame.show(quick, over: space) }
+    }
+
+    /// The comments over `space`, made at the first: sent to its main assistant, the card then open on the
+    /// conversation; a refusal is said, and the comments stay.
+    func comments(on space: SpaceView) -> Comments {
+        if let kept = Comments.of(space) { return kept }
+        let made = Comments.show(over: space), name = space.space.name
+        made.working = { [weak self] in self?.assistant.works(on: name) == true }
+        made.failed = { [weak self] in self?.assistant.failed(on: name) == true }
+        made.pointing = { [weak space] in space?.pointer != nil }
+        made.send = { [weak self, weak space] list in
+            guard let self, let space else { return false }
+            if let refused = assistant.comment(list.map { ($0.part, $0.words) }, at: AssistantModel.place(space)) {
+                _ = toast(refused, quiet: true, seconds: 4)
+                return false
+            }
+            if self.space === space {
+                stopPointing()
+                (assistant.open, assistant.threadShown) = (true, true)
+            }
+            return true
+        }
+        return made
+    }
+
+    /// ⌘↵ in this window: the open space's comments leave together, unless the composer is open (its ⌘↵ adds one).
+    /// Returns whether they did, the key then used up.
+    func sendComments(_ event: NSEvent) -> Bool {
+        guard [36, 76].contains(event.keyCode), event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+              event.windowNumber == window.windowNumber, window.attachedSheet == nil, let space, space.pointer?.composer == nil,
+              let comments = Comments.of(space), comments.phase == .writing, !comments.list.isEmpty else { return false }
+        comments.sendAll()
+        return true
     }
 
     /// A Quick Change that changed nothing answered `words`: a note beside its first part, now on the space shown, or
@@ -376,6 +414,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private func pressPoint(_ on: Bool) {
         (controls[Shell.point] as? ToolButton)?.pressed = on
         assistant.pointing = on
+        space.flatMap(Comments.of)?.changed()
     }
 
     /// Heads the toolbar with `space`: the name the person gave it in the sidebar, else its declared title.

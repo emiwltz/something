@@ -1,7 +1,7 @@
 // The acceptance catalog, the interface's stop criterion: every screen id of the mockup Emi approved, with the one
 // slice that builds it. Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")`
 // until that slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from
-// that file, so this catalog is only edited to bring back La page (b2 and the _p variants) or to mark f9–f11 shot. With SOMETHING_ACCEPT_STRICT=1
+// that file, so this catalog is only edited to bring back La page (b2 and the _p variants) or to mark an id shot. With SOMETHING_ACCEPT_STRICT=1
 // the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots.
 import Foundation
 import Testing
@@ -33,7 +33,8 @@ enum Catalog {
     /// La page, pending Emi's decision: no scenario is written for these, and the gate does not count them.
     static let excluded: Set<String> = ["b2", "b1_p", "c2_p", "d1_p", "e1_p", "f6_p", "g4_p"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
-    static let pendingShots: Set<String> = ["f9", "f10", "f11"]
+    /// f9–f11, the last ones, have their shots and are built (T18): none waits.
+    static let pendingShots: Set<String> = []
 
     static func status(_ id: String) -> Status { excluded.contains(id) ? .excluded : pendingShots.contains(id) ? .pendingShots : .counted }
     static func slice(_ id: String) -> String? { owners.first { $0.id == id }?.slice }
