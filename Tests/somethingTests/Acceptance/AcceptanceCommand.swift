@@ -202,7 +202,37 @@ struct AcceptanceCommand {
                                                                                            atomically: true, encoding: .utf8)
         }
     }
-    @Test("g10: the shortcuts card", .disabled("not built yet: G1")) func g10() async throws {}
+    /// The shortcuts card (⌘/) over Daily brief, the mockup's moment around it: the scrim over the window, the card
+    /// in its middle, Keys' lines in two columns with their keycaps, and the footer. Its words are read off its picture.
+    @Test("g10: the shortcuts card") func g10() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try stage.moment(shell)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        #expect(Keys.command("keys")?.action == #selector(App.showKeys(_:)) && Keys.enabled("keys", Keys.Situation(space: true)))
+        let sheet = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(shell.window.firstResponder === sheet && sheet.frame == shell.layer.bounds)
+        let card = try #require(sheet.subviews.first)
+        let shows = ["Keyboard Shortcuts", "SPACES", "SHOW", "ASSISTANT", "WINDOW", "Go to a space, or ask", "Close Info or History",
+                     "Point inside a drawn frame", "hold", "Talk to this space's assistant", "Show the request that waits", "Keyboard shortcuts",
+                     "Close window", "Menu keys can be changed in System Settings", "Close"]
+        try await stage.appearances { suffix in
+            shell.window.layoutIfNeeded()
+            await wait(1)
+            #expect(card.frame.size.width == 680 && abs(card.frame.midX - 600) < 1 && abs(card.frame.midY - 380) < 1)
+            let rep = try Picture.bitmap(card.bounds.size)
+            card.cacheDisplay(in: card.bounds, to: rep)
+            let read = try Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "’", with: "'")
+            for line in shows { #expect(read.contains(line), "g10\(suffix) shows “\(line)”; read: \(read)") }
+            try await Picture.window(shell, library: library, web: brief.web, "g10" + suffix, root: stage.home.root)
+        }
+        #expect(KeysSheet.toggle(in: shell.layer) == nil && shell.layer.isHidden, "⌘/ again closes it")
+    }
     /// Agents: the six builders found, Claude Code the default, the two agents something only sees with their
     /// reasons, and when it last looked, by the Stage's clock.
     @Test("g11: Settings, Agents") func g11() async throws {

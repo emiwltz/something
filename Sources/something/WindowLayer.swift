@@ -1,7 +1,8 @@
-// The layer above the whole window's split view, for what covers the window rather than one column: the toast now,
-// later the palette, the shortcut sheet and the sidebar shown over the space. It takes the mouse only on what it
-// holds, so the columns, their dividers and the toolbar's separators under it behave as if it were not there, and it
-// is hidden while it holds nothing. The glass over the center, which holds the assistant, is one too (Glass.swift).
+// The layer above the whole window's split view, for what covers the window rather than one column: the toast, the
+// shortcut sheet (KeysSheet.swift), and later the palette and the sidebar shown over the space. It takes the mouse only
+// on what it holds, so the columns, their dividers and the toolbar's separators under it behave as if it were not
+// there, and it is hidden while it holds nothing. The glass over the center, which holds the assistant, is one too
+// (Glass.swift).
 import AppKit
 
 class WindowLayer: NSView {

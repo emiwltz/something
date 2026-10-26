@@ -55,7 +55,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 assistant.answer(index)
                 return nil
             }
-            // Escape: point mode's first, wherever the focus is in the window; else the assistant's nudge.
+            // Escape: the shortcut sheet's first, over all; then point mode's, wherever the focus is in the window;
+            // else the assistant's nudge.
+            if event.keyCode == 53, shell.window.isKeyWindow, KeysSheet.close(in: shell.layer) { return nil }
             if event.keyCode == 53, shell.window.isKeyWindow, shell.window.attachedSheet == nil, let pointer = current?.pointer,
                pointer.escape() { return nil }
             // Then a margin note's, the top thing over the page.

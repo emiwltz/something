@@ -1,7 +1,7 @@
 // The one table of commands and the menu bar made from it, against the mockup's tables (Tests/Fixtures/mockup) both
 // ways: the same keys with the same words, the same menus in the same order; every command owned by a slice; greyed,
 // never hidden, while no space is open; the keys something keeps from a page, on any layout, and the monitor that
-// keeps them; About's version and promise.
+// keeps them; the ⌘/ sheet that lists them; About's version and promise.
 import AppKit
 import Foundation
 import Testing
@@ -155,8 +155,9 @@ enum Mockup {
                  "history", "versions"].allSatisfy { Keys.enabled($0, open) })
         #expect(!Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)), "nothing to point at in a stopped page")
         // Not wired yet: present and greyed, a space open or not.
-        #expect(!["palette", "keys"]
+        #expect(!["palette"]
             .contains { Keys.enabled($0, open) })
+        #expect(Keys.enabled("keys", none) && Keys.enabled("keys", open) && !Keys.enabled("keys", Keys.Situation(welcoming: true)))
         #expect(Keys.enabled("sleep", none) && Keys.enabled("sleep", open) && Keys.enabled("askAll", none))
         #expect(Keys.enabled("stop", Keys.Situation(working: true)), "a build on the New Space page can be stopped")
         #expect(!Keys.enabled("showreq", open) && Keys.enabled("showreq", Keys.Situation(waiting: true)), "Show Request while one waits")
@@ -252,6 +253,56 @@ enum Mockup {
         let copy = try Self.event("c", .command, keyCode: 8, window: window.windowNumber)
         #expect(bar.intercept(copy, window: window) === copy)
         #expect(acted.count == 3)
+    }
+
+    /// The ⌘/ sheet: over all of the window layer, every line of Keys once in its two columns, the focus taken from
+    /// the page and given back; Esc, a click on the scrim and ⌘/ again close it, a click on the card does not.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theShortcutSheetShowsEveryCommandOnceAndClosesThreeWays() throws {
+        final class Page: NSView { override var acceptsFirstResponder: Bool { true } }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let content = try #require(window.contentView), page = Page(frame: content.bounds)
+        content.addSubview(page)
+        let layer = WindowLayer(over: content)
+        #expect(window.makeFirstResponder(page) && KeysSheet.shown(in: layer) == nil && !KeysSheet.close(in: layer))
+        let listed = ShortcutColumns.columns.flatMap { $0.flatMap(ShortcutColumns.lines) }.map(\.id)
+        #expect(Set(listed) == Set(Keys.commands.filter { $0.area != nil }.map(\.id)) && Set(listed).count == listed.count, "every command once")
+        #expect(listed.count == 21 && ShortcutColumns.caps(Keys.shown("tpls")) == [.key("⇧"), .key("⌘"), .key("T")])
+
+        func show() throws -> KeysSheet {
+            let sheet = try #require(KeysSheet.toggle(in: layer, motion: .reduced))
+            layer.layoutSubtreeIfNeeded()
+            #expect(!layer.isHidden && sheet.frame == layer.bounds && window.firstResponder === sheet, "it takes the keys from the page")
+            return sheet
+        }
+        func closed(_ how: String) {
+            #expect(KeysSheet.shown(in: layer) == nil && layer.isHidden, "\(how) closes it")
+            #expect(window.firstResponder === page, "\(how) gives the keys back to the page")
+        }
+        var sheet = try show()
+        let card = try #require(sheet.subviews.first)
+        #expect(card.frame.width == 680 && abs(card.frame.midX - 600) < 1 && abs(card.frame.midY - 380) < 1)
+        #expect(sheet.accessibilityLabel() == "Keyboard shortcuts")
+        // A click on the card is the card's; anywhere else on the scrim is the sheet's.
+        let onCard = sheet.hitTest(NSPoint(x: card.frame.midX, y: card.frame.midY))
+        #expect(onCard.map { $0 !== sheet && $0.isDescendant(of: card) } == true)
+        #expect(layer.hitTest(NSPoint(x: 20, y: 20)) === sheet, "the scrim keeps the click from the page")
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        sheet.keyDown(with: escape)
+        closed("Esc")
+        sheet = try show()
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 20, y: 20), modifierFlags: [], timestamp: 0,
+                                                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        sheet.mouseDown(with: click)
+        closed("A click on the scrim")
+        _ = try show()
+        #expect(KeysSheet.toggle(in: layer) == nil)
+        closed("⌘/ again")
+        _ = try show()
+        #expect(KeysSheet.close(in: layer))
+        closed("The app's Esc")
     }
 
     @Test func aboutSaysTheVersionAndThePromise() throws {

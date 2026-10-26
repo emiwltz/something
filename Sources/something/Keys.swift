@@ -1,6 +1,6 @@
 // The one list of the app's commands, and the menu bar made from it. Each command has its menu words, its key, the
 // action it sends, the slice that wires it, and its line in the shortcut sheet; the menus, the tooltips and Settings ›
-// Shortcuts read it, and the ⌘/ sheet and ⌘P are to (G1, G2), so a key cannot say two things. The table and the menus
+// Shortcuts and the ⌘/ sheet read it, and ⌘P is to (G2), so a key cannot say two things. The table and the menus
 // are the mockup's (Tests/Fixtures/mockup), checked both ways. A command not wired yet has no action: its item is present and
 // greyed, never hidden. The keys marked `mine` are something's even while a page has the focus: WebKit would hand them
 // to the page first, so the app's key monitor gives them to the menu before it (share/guide.md says so).
@@ -71,7 +71,8 @@ enum Keys {
         Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control],
                 action: #selector(NSSplitViewController.toggleSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
         Command(id: "settings", title: "Settings…", key: ",", action: #selector(App.showSettings(_:)), owner: "G4", area: .window, line: "Settings", mine: true),
-        Command(id: "keys", title: "Keyboard Shortcuts", key: "/", owner: "G1", area: .window, line: "Keyboard shortcuts", mine: true),
+        Command(id: "keys", title: "Keyboard Shortcuts", key: "/", action: #selector(App.showKeys(_:)), owner: "G1", area: .window,
+                line: "Keyboard shortcuts", mine: true),
         Command(id: "close", title: "Close Window", key: "w", action: #selector(NSWindow.performClose(_:)), owner: "F5",
                 area: .window, line: "Close window"),
         // Only in the menus.
