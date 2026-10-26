@@ -582,7 +582,8 @@ struct AcceptanceShow {
     /// hand. The folder's watch sees it, the page reloads with it, and it is kept as an edit outside something; a quiet
     /// toast says "Daily brief changed outside something" with Show What Changed (f8-toast). Nothing is undone: the
     /// file keeps the line. Show What Changed opens History on the version before, ready to compare or restore; the
-    /// newest row, with its pencil, says what changed in its files and that something kept the version before it.
+    /// newest row, with its pencil, says what changed in its files and that something kept the version before it; it
+    /// is added on top of the six rows f6 shows, the fold still "6 older versions".
     @Test("f8: changed outside something") func f8() async throws {
         let stage = try Stage("show")
         defer { stage.remove() }
@@ -632,11 +633,14 @@ struct AcceptanceShow {
         shell.window.layoutIfNeeded()
         let history = info.history
         #expect(shell.infoShown && info.content == .history && history.chosen == all[0].id && history.restorable)
-        #expect(history.versions.count == 13 && history.versions[1].id == all[0].id)
+        #expect(history.versions.count == 13 && history.versions[1].id == all[0].id && history.rows.count == 7)
+        #expect(history.older == "6 older versions, back to 12 October")
         let read = await AcceptanceBuild.read(shell.inspector.viewController.view)
         for words in ["History", "Edited outside something, Today 18:21 · Changed on disk, not by its assistant, brief.html · one line added. something kept the version before it., now",
                       "“Add a weather corner, top right”, Today 18:12 · Claude Code",
-                      "Edited outside something, Today 16:40 · Changed on disk, not by its assistant", "Hold Space to compare", "Restore This Version"] {
+                      "Edited outside something, Today 16:40 · Changed on disk, not by its assistant",
+                      "“Use a newspaper look, like a morning paper”, Monday 09:20 · Claude Code", "6 older versions, back to 12 October",
+                      "Hold Space to compare", "Restore This Version"] {
             #expect(read.contains(words), "History reads \(words): \(read)")
         }
         #expect(await wait(until: { toast.superview == nil }), "the toast left")

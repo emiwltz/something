@@ -2,11 +2,12 @@
 // under the same header. Each row is a version: the page's picture, the sentence that made it, when and who; the
 // newest says Now. A change no turn claims reads "Edited outside something", with a pencil, and the newest such edit
 // also says what it changed in its files; the first capture of the space, while it is still kept, is the space as
-// something first kept it, never an edit on disk. Six rows show, then a row that unfolds the older ones. History opens
-// on the version before the newest. Restore This Version brings the chosen one back through Changes, where the restore
-// is itself a version, undone by ⌘Z, and refused while an assistant works on that space. ↑ and ↓ move the choice while
-// the focus is in the panel. A version's picture is taken once its page settled, when the page shows exactly its files.
-// Holding a row 260 ms, or Space, shows that version over the page until it is let go (Glimpse.swift).
+// something first kept it, never an edit on disk. Six rows show (seven when the newest is that edit), then a row that
+// unfolds the older ones. History opens on the version before the newest. Restore This Version brings the chosen one
+// back through Changes, where the restore is itself a version, undone by ⌘Z, and refused while an assistant works on
+// that space. ↑ and ↓ move the choice while the focus is in the panel. A version's picture is taken once its page
+// settled, when the page shows exactly its files. Holding a row 260 ms, or Space, shows that version over the page
+// until it is let go (Glimpse.swift).
 import AppKit
 import Observation
 import SomethingCore
@@ -34,7 +35,7 @@ import WebKit
     private(set) var bytes = 0
     /// The chosen version, by id; Restore This Version brings it back.
     var chosen: String?
-    /// Whether the versions older than the first six show.
+    /// Whether the versions past the rows shown show.
     var unfolded = false
     /// The row under the pointer.
     var hovered: String?
@@ -77,14 +78,26 @@ import WebKit
         chosen = versions.first?.id
     }
 
-    /// The rows shown: the first six, or all once unfolded.
-    var rows: [Versions.Version] { unfolded ? versions : Array(versions.prefix(History.first)) }
+    /// Show What Changed: chooses the version kept just before the edit `id`, while both are still kept; a turn or a
+    /// restore since then does not move the choice to another pair.
+    func choose(before id: String) {
+        guard let at = versions.firstIndex(where: { $0.id == id }), at + 1 < versions.count else { return }
+        if at + 1 >= shown { unfolded = true }
+        chosen = versions[at + 1].id
+    }
 
-    /// Moves the choice `by` rows, unfolding the older versions when it goes past the sixth.
+    /// How many rows show before the older ones fold: six, plus the newest when `detail` describes it, an edit outside
+    /// something added on top without pushing a row into the fold.
+    var shown: Int { History.first + (versions.first.flatMap(detail) == nil ? 0 : 1) }
+
+    /// The rows shown: the first ones, or all once unfolded.
+    var rows: [Versions.Version] { unfolded ? versions : Array(versions.prefix(shown)) }
+
+    /// Moves the choice `by` rows, unfolding the older versions when it goes past the last row shown.
     func move(_ by: Int) {
         guard !versions.isEmpty else { return }
         let at = versions.firstIndex { $0.id == chosen } ?? 0, next = max(0, min(versions.count - 1, at + by))
-        if next >= History.first { unfolded = true }
+        if next >= shown { unfolded = true }
         chosen = versions[next].id
         if comparing { compare(true) }
     }
@@ -171,8 +184,8 @@ import WebKit
 
     /// The fold's words: "6 older versions, back to 12 October"; nil when nothing folds.
     var older: String? {
-        guard !unfolded, versions.count > History.first, let oldest = versions.last else { return nil }
-        let count = versions.count - History.first, format = DateFormatter()
+        guard !unfolded, versions.count > shown, let oldest = versions.last else { return nil }
+        let count = versions.count - shown, format = DateFormatter()
         (format.locale, format.dateFormat) = (Locale(identifier: "en_US_POSIX"), "d MMMM")
         return "\(count) older version\(count == 1 ? "" : "s"), back to \(format.string(from: oldest.when))"
     }

@@ -391,7 +391,7 @@ import Testing
         changes.working = { model.works(on: $0) }
         changes.recycle = { try FileManager.default.removeItem(at: $0) }
         changes.toast = { words, action, quiet, _ in toasts.append((words, action, quiet)) }
-        changes.show = { shown.append($0) }
+        changes.show = { shown.append($0 + " " + $1) }
         changes.clock = { at }
         model.turnStarts = { changes.before($0) }
         model.turnEnded = { changes.after($0, sentence: $1, who: $2) }
@@ -415,12 +415,13 @@ import Testing
         #expect(outside.kind == .outside && outside.who == nil && outside.sentence == nil && outside.when == at && outside.summary == "brief.html · one line added")
         #expect(toasts.last?.words == "Daily brief changed outside something" && toasts.last?.quiet == true && toasts.last?.action?.label == "Show What Changed")
         #expect(try String(contentsOf: brief.location, encoding: .utf8) == "<p>blue</p>\n<p>sky</p>\n")
-        toasts.last?.action?.act()
-        #expect(shown == ["brief"])
+        let show = toasts.last?.action
+        show?.act()
+        #expect(shown == ["brief " + outside.id])
         let history = History(places: home.places)
         history.show(brief)
         #expect(history.chosen == history.versions[1].id && history.detail(outside) == "brief.html · one line added. something kept the version before it.")
-        #expect(history.detail(history.versions[1]) == nil)
+        #expect(history.detail(history.versions[1]) == nil && history.shown == History.first + 1)
         // Seen again with nothing new: nothing more.
         #expect(changes.seen("brief") == nil && toasts.count == 1)
 
@@ -454,6 +455,15 @@ import Testing
         changes.bringBack("brief", to: back, words: "the version before")
         #expect(changes.versions.list("brief").first?.kind == .restore && changes.seen("brief") == nil)
         #expect(await wait(until: { model.engine.state.agents.first { $0.id == quick.session.id }?.alive == false }))
+
+        // Show What Changed clicked once another edit was kept: History still opens on the version before its own.
+        try "<p>sea</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        let edit = try #require(changes.seen("brief")), before = try #require(changes.versions.list("brief").dropFirst().first)
+        try "<p>sand</p>\n".write(to: brief.location, atomically: true, encoding: .utf8)
+        #expect(changes.seen("brief") != nil)
+        history.show(brief)
+        history.choose(before: edit.id)
+        #expect(history.chosen == before.id && history.chosen != history.versions[1].id)
         await assistants.finish(home, model)
     }
 }

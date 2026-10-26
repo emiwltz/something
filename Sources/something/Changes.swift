@@ -30,9 +30,9 @@ final class Changes {
     var toast: (_ words: String, _ action: Toast.Action?, _ quiet: Bool, _ seconds: TimeInterval) -> Void = { _, _, _, _ in }
     /// Called once a version of a space was kept or restored: History reads them again.
     var kept: (String) -> Void = { _ in }
-    /// Opens History on the space `name`, on the version before its newest.
-    var show: (String) -> Void = { _ in }
-    /// The clock an edit outside something is kept by; a test sets it.
+    /// Opens History on the space `name`, on the version kept just before the edit of that id.
+    var show: (_ name: String, _ edit: String) -> Void = { _, _ in }
+    /// The clock every version this file keeps is stamped by; a test sets it.
     var clock: () -> Date = Date.init
     /// The version each turn under way started from, by space.
     private var started: [String: String] = [:]
@@ -55,12 +55,16 @@ final class Changes {
         assistant.quickEnded = { [weak self] in self?.quick($0, sentence: $1, who: $2, problem: $3) ?? false }
         shell.info.history.restoring = { [weak self] in self?.bringBack($0, to: $1, words: $2) }
         kept = { [weak shell] in shell?.info.history.kept($0) }
-        show = { [weak shell, weak library] name in
+        show = { [weak shell, weak library] name, edit in
             guard let shell, let library else { return }
-            guard library.selection.space != name else { return shell.showHistory() }
+            let open = { [weak shell] in
+                shell?.showHistory()
+                shell?.info.history.choose(before: edit)
+            }
+            guard library.selection.space != name else { return open() }
             // The space opens on the next turn of the main queue (Library.select); History after it.
             library.select(.space(name))
-            DispatchQueue.main.async { [weak shell] in shell?.showHistory() }
+            DispatchQueue.main.async(execute: open)
         }
     }
 
@@ -73,9 +77,10 @@ final class Changes {
     /// A turn begins on the space `name`: it is kept as it is, when no version holds it yet.
     func before(_ name: String) {
         guard let space = find(name) else { return }
+        let store = versions
         do {
-            try versions.capture(space, kind: .outside)
-            started[name] = versions.list(name).first?.id
+            try store.capture(space, kind: .outside, at: clock())
+            started[name] = store.list(name).first?.id
         } catch {
             started[name] = nil
         }
@@ -84,13 +89,15 @@ final class Changes {
     /// The watch saw the files of `name` change. When no assistant works on it and it has versions already (the state
     /// before the change is known), what changed is kept as an edit outside something, History reads it, and the toast
     /// says so with Show What Changed. Returns that version; nil when the change was a turn's, nothing changed since the
-    /// newest version, or the space cannot be versioned, which Info's Versions already says.
+    /// newest version, or the space cannot be versioned: Info's Versions says why, and the watch runs this at each
+    /// reload, so a toast would repeat it.
     @discardableResult
     func seen(_ name: String) -> Versions.Version? {
-        guard !working(name), let space = find(name), !versions.list(name).isEmpty,
-              let made = try? versions.capture(space, kind: .outside, at: clock()) else { return nil }
+        let store = versions
+        guard !working(name), let space = find(name), !store.list(name).isEmpty,
+              let made = try? store.capture(space, kind: .outside, at: clock()) else { return nil }
         kept(name)
-        toast("\(title(name)) changed outside something", Toast.Action(label: "Show What Changed") { [weak self] in self?.show(name) }, true, 9)
+        toast("\(title(name)) changed outside something", Toast.Action(label: "Show What Changed") { [weak self] in self?.show(name, made.id) }, true, 9)
         return made
     }
 
@@ -111,7 +118,7 @@ final class Changes {
         let from = started.removeValue(forKey: name)
         guard let space = find(name) else { return nil }
         let made: Versions.Version?
-        do { made = try versions.capture(space, kind: kind, sentence: sentence, who: who) } catch {
+        do { made = try versions.capture(space, kind: kind, sentence: sentence, who: who, at: clock()) } catch {
             toast(error.sentence, nil, true, 6)
             return nil
         }
@@ -139,7 +146,7 @@ final class Changes {
     private func restore(_ name: String, sentence: String, to target: String, from current: String) {
         let undoing = undo.isUndoing
         guard let space = find(name) else { return toast("\(title(name)) is gone; nothing was restored.", nil, true, 4) }
-        do { try versions.restore(target, of: space, recycle: recycle) } catch {
+        do { try versions.restore(target, of: space, recycle: recycle, at: clock()) } catch {
             return toast(error.sentence, nil, true, 6)
         }
         offer(name, sentence: sentence, back: current, forth: target)
@@ -153,7 +160,7 @@ final class Changes {
         guard allows(name, "restore") else { return }
         guard let space = find(name) else { return toast("\(title(name)) is gone; nothing was restored.", nil, true, 4) }
         let made: Versions.Version?
-        do { made = try versions.restore(version.id, of: space, recycle: recycle) } catch {
+        do { made = try versions.restore(version.id, of: space, recycle: recycle, at: clock()) } catch {
             return toast(error.sentence, nil, true, 6)
         }
         guard let made else { return toast("\(title(name)) is already \(words)", nil, true, 3) }
