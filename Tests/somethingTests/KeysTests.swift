@@ -305,6 +305,24 @@ enum Mockup {
         closed("The app's Esc")
     }
 
+    /// Under Calm motion the card rises 9 points by constraint: the scrim's shadow and ring, drawn by the sheet, end
+    /// where the card ends, not where it was on the first frame.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theCardsShadowFollowsItWhileItRises() async throws {
+        // Shown, out of sight: only a window on a screen draws.
+        let window = TourTests.shown(NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760), styleMask: [.titled], backing: .buffered, defer: false))
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let layer = WindowLayer(over: try #require(window.contentView))
+        let sheet = try #require(KeysSheet.toggle(in: layer, motion: .calm))
+        let card = try #require(sheet.subviews.first)
+        #expect(abs(card.frame.midY - 371) < 1, "it starts 9 points low")
+        let drawnLow = await wait(10) { sheet.drawn != .zero }
+        #expect(drawnLow && abs(sheet.drawn.midY - 380) > 0.5, "the window drew the first frames: drawn at \(sheet.drawn)")
+        let settled = await wait(10) { abs(card.frame.midY - 380) < 1 && sheet.drawn == card.frame }
+        #expect(settled, "the shadow and ring end under the card: drawn at \(sheet.drawn), card at \(card.frame)")
+        #expect(KeysSheet.close(in: layer))
+    }
+
     @Test func aboutSaysTheVersionAndThePromise() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("something-keys-\(UUID().uuidString).bundle")
         defer { try? FileManager.default.removeItem(at: folder) }

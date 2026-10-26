@@ -221,6 +221,15 @@ enum Picture {
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, place)
         }
+        // The toolbar draws above the window layer: what the layer holds over its band (the shortcut sheet's scrim)
+        // dims the band, not its controls, which are drawn again over it.
+        let band = shell.window.contentLayoutRect.maxY
+        let reaches = shell.layer.subviews.contains { !shell.layer.isHidden && $0.convert($0.bounds, to: frame).maxY > band }
+        let bar = try (reaches ? shell.window.toolbar?.items.compactMap(\.view) ?? [] : []).filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
+            let drawn = try bitmap(view.bounds.size)
+            view.cacheDisplay(in: view.bounds, to: drawn)
+            return (drawn, view.convert(view.bounds, to: frame))
+        }
         // A window never shown is never key, and draws its lights gray: the main window keeps the keys while the
         // request panel, which never takes them, stands in front, so its lights are drawn in their colors.
         let lights = keyed ? Self.lights(of: shell.window) : []
@@ -238,7 +247,7 @@ enum Picture {
                 filtered(snapshot, filters).draw(in: web.convert(web.bounds, to: frame))
             }
             for (image, place, alpha) in held { image.draw(in: place, from: .zero, operation: .sourceOver, fraction: alpha) }
-            for (drawn, place) in over {
+            for (drawn, place) in over + bar {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }
             paint(lights)

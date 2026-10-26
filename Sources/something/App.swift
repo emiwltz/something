@@ -48,19 +48,15 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         // WebKit hands a page the keys it has the focus for, ⌘P and ⌘1 included: something's own go to the menu first.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
-            // The build's question on New Space takes a digit only when no text is edited and it has that choice.
-            if shell.window.isKeyWindow, shell.window.attachedSheet == nil,
+            // The build's question on New Space takes a digit only when no text is edited and it has that choice,
+            // and the shortcut sheet does not cover it.
+            if shell.window.isKeyWindow, shell.window.attachedSheet == nil, KeysSheet.shown(in: shell.layer) == nil,
                let index = Ladder.choice(event.charactersIgnoringModifiers, modifiers: event.modifierFlags, editing: shell.window.firstResponder is NSText),
                assistant.asked?.question.options.indices.contains(index) == true {
                 assistant.answer(index)
                 return nil
             }
-            // Escape: the shortcut sheet's first, over all; then point mode's, wherever the focus is in the window;
-            // else the assistant's nudge.
-            if event.keyCode == 53, shell.window.isKeyWindow, KeysSheet.close(in: shell.layer) { return nil }
-            if event.keyCode == 53, shell.window.isKeyWindow, shell.window.attachedSheet == nil, let pointer = current?.pointer,
-               pointer.escape() { return nil }
-            // Then a margin note's, the top thing over the page.
+            // Escape closes the top thing in the window (Shell.escape); else it is the assistant's nudge.
             if shell.window.isKeyWindow, shell.escape(event) { return nil }
             // ⌘↵ sends the comments waiting over the space, wherever the focus is but in the composer.
             if shell.window.isKeyWindow, shell.sendComments(event) { return nil }

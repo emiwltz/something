@@ -395,10 +395,15 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The space `name` left (trashed): an answer still waiting for it never shows for a later space of that name.
     func forget(_ name: String) { unread[name] = nil }
 
-    /// Esc typed in this window, wherever the focus is: a margin note leaves, the top thing over the page. Returns
-    /// whether it did, the key then used up.
+    /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet, over all; else point
+    /// mode's step back; else a margin note, the top thing over the page. Returns whether one closed, the key then used
+    /// up (the assistant's nudge waits for an Esc nothing took).
     func escape(_ event: NSEvent) -> Bool {
-        guard event.keyCode == 53, event.windowNumber == window.windowNumber, window.attachedSheet == nil, let note = space?.note else { return false }
+        guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
+        if KeysSheet.close(in: layer) { return true }
+        guard window.attachedSheet == nil, let space else { return false }
+        if let pointer = space.pointer, pointer.escape() { return true }
+        guard let note = space.note else { return false }
         note.dismiss()
         return true
     }

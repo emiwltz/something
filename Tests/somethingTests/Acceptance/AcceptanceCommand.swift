@@ -223,7 +223,7 @@ struct AcceptanceCommand {
                      "Close window", "Menu keys can be changed in System Settings", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
-            await wait(1)
+            await wait(10) { card.frame.width == 680 && abs(card.frame.midY - 380) < 1 }
             #expect(card.frame.size.width == 680 && abs(card.frame.midX - 600) < 1 && abs(card.frame.midY - 380) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
@@ -232,6 +232,30 @@ struct AcceptanceCommand {
             try await Picture.window(shell, library: library, web: brief.web, "g10" + suffix, root: stage.home.root)
         }
         #expect(KeysSheet.toggle(in: shell.layer) == nil && shell.layer.isHidden, "⌘/ again closes it")
+        // The toolbar draws above the sheet: a click on one of its controls closes the sheet and is used up; a click
+        // on the scrim or a light goes on (the scrim closes it itself, the light is the window's).
+        func click(_ view: NSView) throws -> NSEvent {
+            let place = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+            return try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: place, modifierFlags: [], timestamp: 0,
+                                                   windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        let info = try #require(shell.controls[Shell.info]), light = try #require(shell.window.standardWindowButton(.closeButton))
+        var over = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(over.covers(try click(info)) == nil && KeysSheet.shown(in: shell.layer) == nil && !shell.infoShown, "a toolbar control closes it, unworked")
+        over = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(over.covers(try click(light)) != nil && KeysSheet.shown(in: shell.layer) == nil, "a light closes it and stays the window's")
+        over = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(over.covers(try click(over)) != nil && KeysSheet.shown(in: shell.layer) === over, "the scrim's click is its own")
+        #expect(KeysSheet.close(in: shell.layer))
+        // Esc in the window closes the top thing only: the sheet over point mode, then point mode's step.
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        shell.point()
+        #expect(brief.pointer != nil)
+        _ = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(shell.escape(escape) && KeysSheet.shown(in: shell.layer) == nil && brief.pointer != nil, "Esc closes the sheet, point mode stays")
+        #expect(shell.escape(escape) && brief.pointer == nil, "the next Esc is point mode's")
+        #expect(!shell.escape(escape), "then nothing is left to close: the app nudges the assistant")
     }
     /// Agents: the six builders found, Claude Code the default, the two agents something only sees with their
     /// reasons, and when it last looked, by the Stage's clock.

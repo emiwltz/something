@@ -1,7 +1,8 @@
 // The shortcut sheet (⌘/): a card on a scrim in the window layer, "Keyboard Shortcuts" and ✕, Keys' lines in the two
 // columns Settings › Shortcuts draws too, and a footer that says where the menu keys are changed. Esc, ✕, a click on
 // the scrim or ⌘/ again closes it. It takes the focus while it is up, so no key reaches the page under it, and gives
-// it back to where it was.
+// it back to where it was. The toolbar draws above the window layer, so a click on one of its controls closes the
+// sheet instead of acting, as a click on the scrim does.
 import AppKit
 import SwiftUI
 
@@ -11,6 +12,8 @@ final class KeysSheet: NSView {
     private var rise: NSLayoutConstraint?
     /// What had the focus before the sheet took it.
     private weak var before: NSResponder?
+    /// The watch on the window's clicks while the sheet is in one, for the toolbar it cannot cover.
+    private var clicks: Any?
 
     private init() {
         card = NSHostingView(rootView: KeysCard())
@@ -75,6 +78,32 @@ final class KeysSheet: NSView {
         window.makeFirstResponder(back ?? window.contentView)
     }
 
+    /// A click in the sheet's window that lands outside it (the toolbar draws above the layer) closes it. Returns nil,
+    /// the click used up, when it would have worked a toolbar control; else `event`, so the lights and the window's
+    /// drag still answer it.
+    func covers(_ event: NSEvent) -> NSEvent? {
+        guard let window, event.window === window, let frame = window.contentView?.superview,
+              let hit = frame.hitTest(event.locationInWindow), !hit.isDescendant(of: self) else { return event }
+        close()
+        let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap(window.standardWindowButton)
+        let control = sequence(first: hit, next: \.superview).contains { view in view is NSControl && !lights.contains { $0 === view } }
+        return control ? nil : event
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let clicks { NSEvent.removeMonitor(clicks) }
+        clicks = window == nil ? nil : NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            self?.covers(event) ?? event
+        }
+    }
+
+    /// The card moves by constraint while it rises, which does not redraw the scrim: its float shadow and ring follow.
+    override func layout() {
+        super.layout()
+        needsDisplay = true
+    }
+
     override var acceptsFirstResponder: Bool { true }
     override func cancelOperation(_ sender: Any?) { close() }
     override func keyDown(with event: NSEvent) { event.keyCode == 53 ? close() : super.keyDown(with: event) }
@@ -83,10 +112,14 @@ final class KeysSheet: NSView {
     /// The scrim takes the wheel too: the page under it stays where it is.
     override func scrollWheel(with event: NSEvent) {}
 
+    /// Where the card's shadow and ring were last drawn.
+    private(set) var drawn = NSRect.zero
+
     /// The scrim, then the card's float shadow and ring; drawn here so a picture made with cacheDisplay shows them.
     override func draw(_ dirtyRect: NSRect) {
         Look.Token.scrim.color.setFill()
         bounds.fill()
+        drawn = card.frame
         Look.drawFloat(card.frame, radius: KeysCard.radius, fill: .bg2, ring: true, appearance: effectiveAppearance)
     }
 }
