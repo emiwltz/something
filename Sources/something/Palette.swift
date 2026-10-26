@@ -159,6 +159,21 @@ import SwiftUI
         destination.space.map { place.space == $0 } ?? (place == .blank)
     }
 
+    /// Gives `text` from ⌘P to `assistant` once `destination` (titled `title`) is open: sent, the card open over a
+    /// space; kept in the field, focused, when no agent can take it yet (none chosen, or it is missing or crashed);
+    /// said through `told` when the destination did not open. The person's sentence is never lost without a word.
+    @MainActor static func deliver(_ text: String, to destination: Library.Destination, assistant: AssistantModel, title: String?, told: (String) -> Void) {
+        guard arrived(at: destination, assistant.place) else {
+            return told("The message was not sent: \(destination.space == nil ? "New Space" : title ?? "the space") did not open")
+        }
+        if destination.space != nil { assistant.open = true }
+        guard assistant.kind != nil, !assistant.blocked else {
+            assistant.draft = text
+            return assistant.focus()
+        }
+        assistant.send(text)
+    }
+
     private func flip(_ index: Int) { (destination, flips) = (index, flips + 1) }
 
     /// How well `row` answers `query` (lowercased): 0 when its name starts with it, 1 when one of its words does, 2
@@ -555,15 +570,14 @@ extension App {
     }
 
     /// Sends `text` from ⌘P to the assistant of `destination`, its card open, or to New Space's, which builds a space
-    /// from it. The library opens a destination on the main queue's next turn: the sentence leaves after that, and only
-    /// if the assistant is there (a space that could not open sends nothing).
+    /// from it. The library opens a destination on the main queue's next turn: the sentence goes after that
+    /// (PaletteModel.deliver).
     @MainActor func ask(_ text: String, at destination: Library.Destination) {
         library.select(destination)
         front()
         DispatchQueue.main.async { [weak self] in
-            guard let self, PaletteModel.arrived(at: destination, assistant.place) else { return }
-            if destination.space != nil { assistant.open = true }
-            assistant.send(text)
+            guard let self else { return }
+            PaletteModel.deliver(text, to: destination, assistant: assistant, title: library.entry(destination.space)?.title, told: library.told)
         }
     }
 }
@@ -572,7 +586,7 @@ extension PaletteModel.Row {
     /// Opens what the row names in `library`: selects its space, gives its command's id to `send`, opens the
     /// Templates page asked for its template's preview, which the page opens as it draws (GalleryView), or gives its
     /// sentence and destination to `ask`.
-    @MainActor func open(in library: Library, send: (String) -> Void, ask: (String, Library.Destination) -> Void = { _, _ in }) {
+    @MainActor func open(in library: Library, send: (String) -> Void, ask: (String, Library.Destination) -> Void) {
         switch kind {
         case .ask(let destination, let text, _): ask(text, destination)
         case .space: library.select(.space(target))

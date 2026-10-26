@@ -2,7 +2,8 @@
 // one marked; the actions that can act, the templates), the scoring and its sections, what each kind of row opens
 // (a space, made the most recent; a command, sent by its id; a template's preview, on the Templates page); and,
 // offscreen, the field's keys: typing, ↓ and Return open the second row, Esc and ⌘P close. ⌘P, ask: where the ask
-// row sits, the destinations' order, Tab and the segments, one destination, and nothing sent before Return.
+// row sits, the destinations' order, Tab and the segments, one destination, nothing sent before Return, and after it
+// the sentence sent with its space's context line, or kept in the field when no agent can take it.
 import AppKit
 import SwiftUI
 import Testing
@@ -92,7 +93,7 @@ import Testing
         let library = Self.library(stage), model = Self.model(library)
         var closed = 0
         model.close = { closed += 1 }
-        model.chose = { row in row.open(in: library) { Issue.record("a space row sent \($0)") } }
+        model.chose = { row in row.open(in: library, send: { Issue.record("a space row sent \($0)") }) { _, _ in Issue.record("a space row asked") } }
         model.move(1)
         model.move(-2)
         #expect(model.selected == model.rows.count - 1 && model.keyed == model.rows.last?.id, "↑ from the first goes round to the last")
@@ -109,7 +110,7 @@ import Testing
         defer { stage.remove() }
         let library = Self.library(stage), model = Self.model(library)
         var sent: [String] = []
-        model.chose = { row in row.open(in: library) { sent.append($0) } }
+        model.chose = { row in row.open(in: library, send: { sent.append($0) }) { _, _ in Issue.record("an action row asked") } }
         model.pick(try #require(model.rows.firstIndex { $0.id == "action:settings" }))
         #expect(sent == ["settings"] && library.selection == .space("brief"))
     }
@@ -119,7 +120,7 @@ import Testing
         let stage = try Stage("palette")
         defer { stage.remove() }
         let library = Self.library(stage), model = Self.model(library)
-        model.chose = { row in row.open(in: library) { Issue.record("a template row sent \($0)") } }
+        model.chose = { row in row.open(in: library, send: { Issue.record("a template row sent \($0)") }) { _, _ in Issue.record("a template row asked") } }
         model.pick(try #require(model.rows.firstIndex { $0.id == "template:pet" }))
         #expect(library.selection == .templates && library.asked == "pet")
         let gallery = Gallery(), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
@@ -258,6 +259,41 @@ import Testing
         let brief = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/brief.html")
         #expect(PaletteModel.arrived(at: .space("brief"), brief) && !PaletteModel.arrived(at: .space("pet"), brief))
         #expect(!PaletteModel.arrived(at: .space("brief"), .blank))
+    }
+
+    /// After Return, at the destination: with no agent chosen the sentence waits in the field, focused, and nothing
+    /// is delivered; a destination that did not open says the message was not sent and keeps the field as it was.
+    @Test func aSentenceNoAgentCanTakeWaitsInTheField() async throws {
+        let (home, model) = try AssistantTests().assistant([], prefix: "something-accept-palette-")
+        defer { home.remove() }
+        var told: [String] = []
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        model.open = false
+        #expect(model.kind == nil)
+        PaletteModel.deliver(Self.sentence, to: .space("agents"), assistant: model, title: "My agents") { told.append($0) }
+        #expect(model.draft == Self.sentence && model.open && model.wantsFocus && told.isEmpty)
+        #expect(model.engine.state.agents.isEmpty && model.rows.isEmpty, "nothing delivered")
+        model.draft = ""
+        PaletteModel.deliver(Self.sentence, to: .space("pet"), assistant: model, title: "Pebble") { told.append($0) }
+        PaletteModel.deliver(Self.sentence, to: .newSpace, assistant: model, title: nil) { told.append($0) }
+        #expect(told == ["The message was not sent: Pebble did not open", "The message was not sent: New Space did not open"])
+        #expect(model.draft.isEmpty)
+    }
+
+    /// After Return, at a space whose agent is chosen: the card opens and the message leaves with the context line
+    /// that names that space.
+    @Test func aSentenceGoesWithItsSpacesContextLine() async throws {
+        let assistants = AssistantTests()
+        let (home, model) = try assistants.assistant(prefix: "something-accept-palette-")
+        defer { home.remove() }
+        await assistants.look(model)
+        model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
+        model.open = false
+        PaletteModel.deliver("Make the tiles wider.", to: .space("agents"), assistant: model, title: "My agents") { Issue.record("told \($0)") }
+        #expect(model.open && model.draft.isEmpty)
+        #expect(await wait(until: { model.rows.contains(.reply("Invented reply.")) }))
+        #expect(assistants.input(home).contains { $0.contains(#"[something] Open space: “My agents” (agents, ~/something/spaces/agents.html).\nMake the tiles wider."#) })
+        await assistants.finish(home, model)
     }
 
     /// In a window, the field has the keys: typed words narrow the list, ↓ moves to the second row and Return opens
