@@ -212,6 +212,10 @@ enum Mockup {
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
         let listed = try Self.guideKeys(guide), mine = Set(Keys.commands.filter(\.mine).map(\.shown))
         #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
+        // The README names a few of them as examples: each must be one something keeps.
+        let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)
+        #expect(readme.contains("something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others"))
+        for key in ["⌘P", "⌘K", "⌘I", "⌘."] { #expect(mine.contains(key), "the README names \(key), which something does not keep") }
     }
 
     /// The keys the guide's Keys item lists, from "has the focus: " to the sentence's end ("⌘, and ⌘/.").

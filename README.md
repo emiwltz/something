@@ -59,10 +59,11 @@ A space's past is kept as **versions** in `~/Library/Application Support/somethi
 folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
 outside something" when no turn of its assistant made it. History (in Info, ⌘I, or the Space menu) lists them with a
 picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is itself
-a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all are kept by default; the oldest go first, never a space's
-latest, its files or its memory. A space heavier than 15 MB or 500 files keeps no versions; restoring it sends the files
-it changes to the Trash. A space moved to the Trash takes its versions with it, and a space deleted or renamed in Finder
-sends the versions left under its old name there too, so a new space of that name starts without them.
+a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all are kept
+by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or 500
+files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
+versions with it, and a space deleted or renamed in Finder sends the versions left under its old name there too, so a
+new space of that name starts without them.
 
 Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
 
@@ -106,12 +107,12 @@ runs them in its shell instead. What "without asking" means for each:
   those three tools. What the sandbox blocks asks you.
 - **OpenCode** asks as your OpenCode settings say. **OMP** too, and its own default asks nothing.
 - **pi** and **Amp** never ask when something launches them, by design (a tool your Amp settings would ask for, Amp
-  refuses by itself): they can run any command on your Mac. The tour and the bar say so.
+  refuses by itself): they can run any command on your Mac. The welcome and the first lines of each conversation say so.
 
-"Ask Before Every Change", in the bar's agent menu, turns the exception off from the next conversation. No space can
-see what you say to your assistant, or write to it. something writes `AGENTS.md` and `CLAUDE.md` in
-`~/something/spaces` to tell your assistant what something is; a copy whose first line you removed is yours and left
-alone.
+"Ask Before Every Change", in the assistant card's menu or Settings › Permissions, turns the exception off from the next
+conversation. No space can see what you say to your assistant, or write to it. something writes `AGENTS.md` and
+`CLAUDE.md` in `~/something/spaces` to tell your assistant what something is; a copy whose first line you removed is
+yours and left alone.
 
 ## Permissions
 
@@ -123,15 +124,15 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
-  panel, across the window's top right corner. The Dock's badge and the toolbar count every request waiting, a
-  space's sticker only its own; while something is in the background, its icon bounces once for each new one. A notification of the Mac says who waits and in which space only if you turn on "Notify me when a
-  request waits", and never the command.
+  panel, across the window's top right corner. The Dock's badge and the toolbar count every request waiting, a space's
+  sticker only its own; while something is in the background, its icon bounces once for each new one. A notification of
+  the Mac says who waits and in which space only if you turn on "Notify me when a request waits", and never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.
 - **Links.** Each link a space opens asks you first.
-- **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others [the guide](share/guide.md#what-the-person-sees-of-your-space)
-  lists) reach its menus even while a space has the focus: a page cannot keep them, so it cannot stop you from
-  stopping your assistant.
+- **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others
+  [the guide](share/guide.md#what-the-person-sees-of-your-space) lists) reach its menus even while a space has the
+  focus: a page cannot keep them, so it cannot stop you from stopping your assistant.
 - **Export.** An exported space carries its memory only if you choose so.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
@@ -163,7 +164,7 @@ Quit something first (⌘Q): quitting stops the agents it launched.
 ```sh
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
-rm -rf ~/Applications/something.app                  # the launcher, if the tour added it
+rm -rf ~/Applications/something.app                  # the launcher, if the welcome added it
 rm -rf ~/Library/Application\ Support/something      # your answers to the rights sheets, the journals
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere

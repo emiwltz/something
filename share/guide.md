@@ -78,9 +78,9 @@ at the person's next message; an agent that cannot resume starts fresh, and some
 points at parts of a space, lines `[something] Pointing at <part>: <path>` say which ones, before their words: change
 those parts. That is a Quick Change, made by a short-lived session of the same agent and model, stopped at the end of
 its turn. Comments come to the space's own assistant in one message: a line `[something] Comment <n> is on <part>:
-<path>` for each, then "<n> comments on this page:" and each one numbered; work through all of them. A path holds only
-standard tags and their order, a CSS selector such as `:root > body:nth-of-type(1) > main:nth-of-type(1) >
-section:nth-of-type(2)`, never what the page chose.
+<path>` for each, then "<n> comments on this page:" ("1 comment on this page:" for one) and each one numbered; work
+through all of them. A path holds only standard tags and their order, a CSS selector such as `:root >
+body:nth-of-type(1) > main:nth-of-type(1) > section:nth-of-type(2)`, never what the page chose.
 
 ## Where a space lives
 
