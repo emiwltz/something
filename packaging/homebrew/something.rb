@@ -7,7 +7,7 @@ class Something < Formula
   # The release v0.2.0, as in the tap's twin, which also gets its bottles. A release: AGENTS.md, "Releasing".
   url "https://github.com/emiwltz/something/archive/refs/tags/v0.2.0.tar.gz"
   sha256 "88ba2489ded5c448b54730cde4c0ed6effb1006064d158fc0a407ead2c224f43"
-  license "MIT"
+  license all_of: ["MIT", "OFL-1.1"]
   head "https://github.com/emiwltz/something.git", branch: "main"
 
   # macOS 15, as the package and the app's Info.plist say: the oldest macOS on which CI installs this formula

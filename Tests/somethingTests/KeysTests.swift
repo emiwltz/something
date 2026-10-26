@@ -212,6 +212,9 @@ enum Mockup {
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
         let listed = try Self.guideKeys(guide), mine = Set(Keys.commands.filter(\.mine).map(\.shown))
         #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
+        // The two keys the window takes from a focused page only for a while (Shell.sendComments, Shell.escape).
+        let flatGuide = guide.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        #expect(flatGuide.contains("While comments wait over your space, ⌘↵ sends them; while one of something's notes shows over it, Escape closes it."))
         // The README names a few of them as examples: each must be one something keeps.
         let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)
         let flatReadme = readme.split(whereSeparator: \.isWhitespace).joined(separator: " ")

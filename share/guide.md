@@ -39,7 +39,7 @@ The same contract as data, for tests: `share/contract/` (`state-example.json`, `
 
 Finished spaces, each one HTML file in `templates/` next to this guide, each passing `something check` with no
 problem, with every right it declares and with each one refused. Copy the closest one and change it; the person can
-also start from one in something's Templates (File › Templates).
+also start from one in something's Templates (⇧⌘T, or File › New from Template…).
 
 | Template | What it is | Rights |
 |---|---|---|
@@ -53,7 +53,7 @@ also start from one in something's Templates (File › Templates).
 - `something new <name> --from <template>` copies one; a template is one file, so `--folder` is refused with it.
 - Project watch declares the folder `~/code/your-project` in `agents.folders` and `folder`: a placeholder. Write the
   person's project folder in its place in the copy (until then, `check` warns FOLDER_MISSING); something's Use
-  Template asks the person for it and does so.
+  This Template asks the person for it and does so.
 - What they show of the agents is rebuilt from the state each time they open (the threads' last turns), not only
   what happened while they were open; what they keep goes in `store`.
 
@@ -446,12 +446,14 @@ await something.store.set("seen", [...seen, "a1"]);
   and a tray along the bottom of your space; neither is your page's, and both follow the part as it scrolls.
 - **Info and History.** Info (⌘I) and History open in one panel, 320 points wide, docked at the window's right edge:
   your space narrows beside it and gets a `resize`, nothing hides under it: lay your page out for narrow widths too.
-  While the person holds a version in History, that version of your files shows over your page in a
-  second, read-only view: it reads today's state, and every write it tries is refused before the bridge, so your
-  journal gets no line from it. Do not count on how many times your page loads.
+  While the person holds a version in History, that version of your files shows over your page in a second, read-only
+  view: it reads today's state and memory, and every other call is refused with `NOT_SUPPORTED` ("This is an older
+  version of the space, shown to compare: it cannot act.") before it reaches your journal. Do not count on how many
+  times your page loads. A Quick Change's answer may open a 284-point margin at the right edge the same way.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
   ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
-  `preventDefault()` cannot keep them. Every other key is your page's.
+  `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
+  something's notes shows over it, Escape closes it. Every other key is your page's.
 
 ## Checking your space
 

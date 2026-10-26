@@ -153,6 +153,9 @@ import SomethingCore
     /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
     struct Asked: Equatable { let request: String, question: Question }
     private(set) var asked: Asked?
+    /// When the blank page first showed `asked`: its choices take a click or a digit only RequestPanel.arming later,
+    /// so that one meant for the page as the question grows under it does not answer the agent.
+    private(set) var askedShown: Date?
     /// The question of a build the person stopped or left, until its agent withdraws it, which comes later: kept out of
     /// the panel meanwhile, as nobody should be asked what they just stopped.
     @ObservationIgnored private var dropped: String?
@@ -282,7 +285,9 @@ import SomethingCore
     /// Notes when something first saw each item of the build's turn and each end of its tools, and the question the
     /// blank page answers.
     private func follow() {
-        keep(\.asked, inlineQuestion())
+        let question = inlineQuestion()
+        if question?.request != asked?.request { askedShown = question.map { _ in clock() } }
+        keep(\.asked, question)
         if let dropped, !engine.state.requests.contains(where: { $0.id == dropped }) { self.dropped = nil }
         guard var build = before, let turn = build.session.turn, turn.id != build.turn else { return }
         let now = clock(), was = build.seen.count
@@ -322,9 +327,16 @@ import SomethingCore
         return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] })
     }
 
-    /// Answers the build's question with its choice `index`. An answer that did not reach the agent is its failure.
+    /// How far the question's choices have armed, from 0 to 1; they answer at 1.
+    func arming(now: Date) -> Double {
+        guard let askedShown else { return 0 }
+        return min(1, max(0, now.timeIntervalSince(askedShown) / RequestPanel.arming))
+    }
+
+    /// Answers the build's question with its choice `index`, once its choices have armed; before, nothing happens. An
+    /// answer that did not reach the agent is its failure.
     func answer(_ index: Int) {
-        guard let asked, asked.question.options.indices.contains(index) else { return }
+        guard let asked, asked.question.options.indices.contains(index), arming(now: clock()) >= 1 else { return }
         self.asked = nil
         do { try engine.answer(asked.request, .choice([[asked.question.options[index]]])) } catch { before?.session.failure = error.sentence }
     }

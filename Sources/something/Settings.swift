@@ -245,7 +245,9 @@ struct SettingsSection: Identifiable {
                                 self?.chose(chosen)
                             })),
                 SettingsRow(title: "Model", note: "", control: listed(\.model, registry.limits[kind]?.contains("model") == true ? "Its own model" : "Default model", \.model)),
-                SettingsRow(title: "Effort", note: "Higher is slower and uses your limits faster.", control: listed(\.effort, "Default effort", \.effort)),
+                registry.limits[kind]?.contains("effort") == true
+                    ? SettingsRow(title: "Effort", note: "\(registry.name(of: kind)) sets its own effort.", control: .locked("Set by the agent"))
+                    : SettingsRow(title: "Effort", note: "Higher is slower and uses your limits faster.", control: listed(\.effort, "Default effort", \.effort)),
             ]),
             SettingsSection(title: "Conversations", rows: [
                 SettingsRow(title: "Resume each space’s conversation",

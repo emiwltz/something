@@ -138,6 +138,11 @@ import Testing
                           // versions:'50', limit:'500 MB'.
                           "Keep": "50", "Storage limit": "500 MB", "When it is full": "Clear Old Versions…", "Where": "Show in Finder"])
         #expect(model.preferences.appearance == .system, "appearance:'System'")
+        // A default agent that sets its own effort: the mockup's greyed "Set by the agent".
+        model.preferences.assistant = "amp"
+        let effort = try #require(model.sections(.assistant).flatMap(\.rows).first { $0.title == "Effort" })
+        guard case .locked(let word) = effort.control else { Issue.record("not locked"); return }
+        #expect(word == "Set by the agent" && effort.note == "Amp sets its own effort.")
         let opening = model.sections(.general)[0].rows[0]
         guard case .choice(let options, _, _) = opening.control else { Issue.record("not a choice"); return }
         #expect(options.map(\.label) == ["The last space you had open", "New Space", "A space", "Daily brief", "Logbook"])

@@ -385,12 +385,15 @@ enum Ask {
         }
     }
 
-    /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button. The
-    /// folder is shown from `home`.
+    /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button, and takes
+    /// no Return: a page can raise this sheet while the person types in it, and a Return meant for the page must not
+    /// lower the mode. The folder is shown from `home`.
     static func lowers(_ mode: String, kind: String, folder: String?, space: String, home: String = NSHomeDirectory()) -> NSAlert {
-        alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
+        let sheet = alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
               "The agent works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"). In this mode it asks you less before it acts.",
               buttons: ["Allow", "Don't Allow"], escape: 1)
+        sheet.buttons[0].keyEquivalent = ""
+        return sheet
     }
 
     /// The link sheet: whose page asks, the server (or address) in bold, the whole link with it in bold too, then

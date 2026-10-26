@@ -160,6 +160,12 @@ import Testing
         // In another app the blocked build still bounces the Dock once, and the badge and the chip count it.
         #expect(dock.badge == "1" && dock.bounces == 1 && chip.value == 1)
         #expect(model.ladder?.choices == ["One card per agent", "A single list, oldest first"] && model.ladder?.steps[1].mark == .waits)
+        // A click or a digit before the choices have armed (RequestPanel.arming) answers nothing.
+        let shown = try #require(model.askedShown)
+        model.clock = { shown + RequestPanel.arming / 2 }
+        model.answer(0)
+        #expect(model.asked != nil && model.engine.state.requests.count == 1 && model.arming(now: model.clock()) == 0.5)
+        model.clock = { Date() + RequestPanel.arming }
         model.answer(0)
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now && model.ladder?.say == "One card per agent. Writing it now." }))
         #expect(AssistantTests().input(home).contains { $0.contains("\"answers\"") && $0.contains("One card per agent") })

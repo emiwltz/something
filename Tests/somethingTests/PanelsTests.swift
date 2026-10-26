@@ -117,6 +117,13 @@ final class FakeNotifier: Notifier {
         #expect(answers == [.once, .deny] && panel.standardWindowButton(.closeButton)?.accessibilityLabel() == "Close: deny")
     }
 
+    /// A page can raise the mode-lowering sheet while the person types in it: Return does not answer Allow.
+    @Test func aReturnNeverLowersAMode() {
+        let sheet = Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review", home: "/Users/example")
+        #expect(sheet.buttons.map(\.title) == ["Allow", "Don't Allow"])
+        #expect(sheet.buttons[0].keyEquivalent.isEmpty && sheet.buttons[1].keyEquivalent == "\u{1b}")
+    }
+
     /// The panel as VoiceOver finds it: key or not as a test says.
     final class KeyPanel: RequestPanel {
         var key = false

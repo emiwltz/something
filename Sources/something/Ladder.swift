@@ -155,19 +155,23 @@ struct LadderView: View {
         }
     }
 
-    /// The question's labels, two to a row, each answered by a click or its number.
+    /// The question's labels, two to a row, each answered by a click or its number once they have armed, which fills
+    /// them from the left as Allow Once fills (PanelButton.progress).
     private var choices: some View {
-        Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            ForEach(Array(stride(from: 0, to: ladder.choices.count, by: 2)), id: \.self) { row in
-                GridRow {
-                    ForEach(row..<min(row + 2, ladder.choices.count), id: \.self) { choice($0) }
+        TimelineView(.animation(minimumInterval: 0.05, paused: model.arming(now: model.clock()) >= 1)) { _ in
+            let arming = model.arming(now: model.clock())
+            Grid(horizontalSpacing: 10, verticalSpacing: 10) {
+                ForEach(Array(stride(from: 0, to: ladder.choices.count, by: 2)), id: \.self) { row in
+                    GridRow {
+                        ForEach(row..<min(row + 2, ladder.choices.count), id: \.self) { choice($0, arming: arming) }
+                    }
                 }
             }
         }
     }
 
-    /// The label `index`, its number shown, answered by a click or that key.
-    private func choice(_ index: Int) -> some View {
+    /// The label `index`, its number shown, answered by a click or that key once `arming` reaches 1.
+    private func choice(_ index: Int, arming: Double) -> some View {
         let label = ladder.choices[index]
         return Button { model.answer(index) } label: {
             HStack(alignment: .top, spacing: 12) {
@@ -178,9 +182,16 @@ struct LadderView: View {
             .padding(EdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 12))
             .frame(maxHeight: .infinity, alignment: .top)
             .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
+            .overlay(alignment: .leading) {
+                if arming < 1 {
+                    GeometryReader { box in Rectangle().fill(Look.Token.line.ui.opacity(0.5)).frame(width: box.size.width * arming) }
+                        .clipShape(RoundedRectangle(cornerRadius: Look.card, style: .continuous)).allowsHitTesting(false)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(arming < 1)
         .accessibilityLabel("\(label), \(index + 1)")
     }
 
