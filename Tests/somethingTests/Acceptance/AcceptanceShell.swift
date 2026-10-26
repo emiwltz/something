@@ -379,11 +379,18 @@ struct AcceptanceShell {
         // menu item stays on beside the rail, whose column cannot collapse, and goes the person's way: the responder
         // chain from the window, to its delegate.
         let action = try #require(Keys.command("sidebar")?.action)
-        let item = NSMenuItem(title: "Show Sidebar", action: action, keyEquivalent: "s")
-        #expect(shell.split.validateUserInterfaceItem(item) && item.title == "Show Sidebar")
-        #expect(shell.window.tryToPerform(action, with: item))
+        let item = NSMenuItem(title: "Hide Sidebar", action: action, keyEquivalent: "s")
+        // Nothing in the split view has the focus: the menu picks the first in the window's responder chain that
+        // answers (the test's window is never key, so NSApp's own search would find nothing), the window itself.
+        shell.window.makeFirstResponder(nil)
+        var target = shell.window.firstResponder
+        while let responder = target, !responder.responds(to: action) { target = responder.nextResponder }
+        #expect(target === shell.window)
+        let validated = { (target as? NSMenuItemValidation)?.validateMenuItem(item) == true }
+        #expect(validated() && item.title == "Show Sidebar")
+        #expect(NSApp.sendAction(action, to: target, from: item))
         let laid = try #require(SidebarOver.shown(in: shell.layer))
-        #expect(shell.split.validateUserInterfaceItem(item) && item.title == "Hide Sidebar")
+        #expect(validated() && item.title == "Hide Sidebar")
         _ = await wait(until: { laid.alphaValue == 1 })
         laid.layoutSubtreeIfNeeded()
         let band = shell.window.frame.height - shell.window.contentLayoutRect.maxY

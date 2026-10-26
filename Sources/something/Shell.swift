@@ -227,7 +227,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         library.sidebar.cursor = nil
         library.sidebar.rail = on
         if on {
-            sideBefore = (side.isCollapsed, side.isCollapsed ? sideBefore.width : side.viewController.view.frame.width)
+            // At launch the column may not be laid out yet: a width under the sidebar's least is not the person's.
+            let width = side.viewController.view.frame.width
+            sideBefore = (side.isCollapsed, side.isCollapsed || width < 190 ? sideBefore.width : width)
             split.splitView.autosaveName = nil
             (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Rail.width, Rail.width, false)
             side.isCollapsed = false
@@ -685,8 +687,19 @@ final class Split: NSSplitViewController {
 
 /// The main window. NSWindow answers toggleSidebar: itself, without the split view's override, whenever nothing in the
 /// split view has the focus: ⌃⌘S and the rail's toggle would then never lay the sidebar over the space.
+/// The menu validates ⌃⌘S against this window then too: NSWindow's own validation reaches the split view today, but
+/// privately, so the window asks it itself.
 final class MainWindow: NSWindow {
     @objc func toggleSidebar(_ sender: Any?) { (contentViewController as? Split)?.toggleSidebar(sender) }
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        guard item.action == #selector(Split.toggleSidebar(_:)), let split = contentViewController as? Split else {
+            return super.validateUserInterfaceItem(item)
+        }
+        return split.validateUserInterfaceItem(item)
+    }
+    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        item.action == #selector(Split.toggleSidebar(_:)) ? validateUserInterfaceItem(item) : super.validateMenuItem(item)
+    }
 }
 
 /// A borderless, clear window laid over the whole of the main window, toolbar and lights included: the welcome's veil,
