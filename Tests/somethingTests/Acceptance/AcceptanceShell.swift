@@ -241,7 +241,75 @@ struct AcceptanceShell {
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
-    @Test("b5: full screen", .disabled("not built yet: W5")) func b5() async throws {}
+    /// Full screen (W5): the system hides the toolbar with the menu bar; the sidebar steps aside and the space starts
+    /// at the window's top; ⌃⌘S lays the sidebar over the space, and Esc, a click outside or a space picked takes it
+    /// away. A window never shown cannot enter a real full screen: the layout comes from its flag, and the pictures
+    /// leave out the toolbar and the lights the system hides (the hand trial checks a real one). b5-sidebar is the
+    /// sidebar laid over, which the mockup's screen shows only once ⌃⌘S is pressed.
+    @Test("b5: full screen") func b5() async throws {
+        let stage = try Stage("shell-b5")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        let options = shell.window(shell.window, willUseFullScreenPresentationOptions: [])
+        #expect(options.isSuperset(of: [.fullScreen, .autoHideToolbar, .autoHideMenuBar]) && shell.window.collectionBehavior.contains(.fullScreenPrimary))
+        let command = try #require(Keys.command("full"))
+        #expect(command.action == #selector(NSWindow.toggleFullScreen(_:)) && command.key == "f" && command.modifiers == [.command, .control])
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let side = shell.split.splitViewItems[0], height = Stage.Size.main.height
+        func top() -> CGFloat? { shell.shown.map { $0.convert($0.bounds, to: nil).maxY } }
+        shell.window.layoutIfNeeded()
+        #expect(top() == shell.window.contentLayoutRect.maxY && shell.window.contentLayoutRect.maxY < height, "under the toolbar")
+        shell.fullScreen(true)
+        shell.window.layoutIfNeeded()
+        #expect(shell.full && side.isCollapsed && shell.space === brief)
+        #expect(top() == height && brief.web.frame.width == Stage.Size.main.width, "the space alone, from the window's top")
+        #expect(shell.controls[Shell.full]?.image?.accessibilityDescription == "Exit Full Screen")
+        // ⌃⌘S lays the sidebar over the space, its column still away; it takes the keys, and gives them back.
+        func over() -> SidebarOver? { SidebarOver.shown(in: shell.layer) }
+        shell.window.makeFirstResponder(brief.web)
+        shell.split.toggleSidebar(nil)
+        let laid = try #require(over())
+        // It arrives from the window's edge.
+        _ = await wait(until: { laid.alphaValue == 1 })
+        laid.layoutSubtreeIfNeeded()
+        #expect(side.isCollapsed && laid.card.frame == NSRect(x: 0, y: 0, width: SidebarOver.width, height: height), "\(laid.card.frame)")
+        #expect(laid.accessibilityLabel() == "Sidebar" && shell.window.firstResponder === laid.card)
+        #expect(shell.layer.hitTest(NSPoint(x: 600, y: 300)) === laid, "a click outside lands on the layer, which closes it")
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape) && over() == nil && shell.window.firstResponder === brief.web, "Esc")
+        shell.split.toggleSidebar(nil)
+        shell.split.toggleSidebar(nil)
+        #expect(over() == nil, "⌃⌘S again")
+        shell.split.toggleSidebar(nil)
+        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 600, y: 300), modifierFlags: [], timestamp: 0,
+                                                    windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        try #require(over()).mouseDown(with: click)
+        #expect(over() == nil, "a click outside")
+        shell.split.toggleSidebar(nil)
+        shell.show(brief)
+        #expect(over() == nil, "a space picked")
+        shell.window.toolbar?.isVisible = false
+        [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].forEach { shell.window.standardWindowButton($0)?.isHidden = true }
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "b5" + suffix, root: stage.home.root, keyed: false)
+            shell.split.toggleSidebar(nil)
+            try await Picture.window(shell, library: library, web: brief.web, "b5-sidebar" + suffix, root: stage.home.root, keyed: false)
+            #expect(SidebarOver.close(in: shell.layer))
+        }
+        shell.window.toolbar?.isVisible = true
+        // Out of full screen, the sidebar comes back as it was, the space under the toolbar, and ⌃⌘S hides the column.
+        shell.fullScreen(false)
+        shell.window.layoutIfNeeded()
+        #expect(!shell.full && !side.isCollapsed && top() == shell.window.contentLayoutRect.maxY)
+        shell.split.toggleSidebar(nil)
+        #expect(over() == nil)
+        #expect(await wait(until: { side.isCollapsed }), "the column hides")
+        shell.fullScreen(true)
+        shell.fullScreen(false)
+        #expect(side.isCollapsed, "a sidebar hidden before stays hidden after")
+    }
     /// No space yet (W2, the center AB12's): the sidebar says only where the spaces will be, New Space selected.
     @Test("b6: no space yet") func b6() async throws {
         let stage = try Stage("shell-b6")

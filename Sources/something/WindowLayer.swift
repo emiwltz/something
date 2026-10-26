@@ -1,9 +1,10 @@
 // The layer above the whole window's split view, for what covers the window rather than one column: the toast, and
-// the cards on a scrim, the shortcut sheet (KeysSheet.swift) and the palette (Palette.swift); later the sidebar shown
-// over the space. It takes the mouse only on what it holds, so the columns, their dividers and the toolbar's separators
+// the cards on a scrim, the shortcut sheet (KeysSheet.swift) and the palette (Palette.swift); and the sidebar laid
+// over the space in full screen (SidebarOver). It takes the mouse only on what it holds, so the columns, their dividers and the toolbar's separators
 // under it behave as if it were not there, and it is hidden while it holds nothing. The glass over the center, which
 // holds the assistant, is one too (Glass.swift).
 import AppKit
+import SwiftUI
 
 class WindowLayer: NSView {
     /// Says `words` to VoiceOver at once, for what appears here without taking the focus. Tests replace it.
@@ -159,5 +160,35 @@ class ScrimCard: NSView {
         bounds.fill()
         drawn = card.frame
         Look.drawFloat(card.frame, radius: radius, fill: .bg2, ring: true, appearance: effectiveAppearance)
+    }
+}
+
+/// The sidebar laid over the space at the window's left edge, full height, where full screen leaves no column for it:
+/// the mockup's .wn-sideov, its float shadow and ring, no scrim. It arrives from the edge, takes the focus for ↑ and ↓,
+/// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it.
+final class SidebarOver: ScrimCard {
+    static let width: CGFloat = 236
+    private let host: NSView
+
+    /// Lays out `list`, the window's own sidebar list: its first row 49 points down, under the 50-point band of the
+    /// mockup's sidebar head, whatever safe area the full screen gives.
+    init(_ list: SidebarView) {
+        let host = NSHostingView(rootView: list.padding(.top, 52).background(Look.Token.side.ui))
+        (host.safeAreaRegions, host.sizingOptions) = ([], [])
+        self.host = host
+        super.init(card: host, radius: 0, label: "Sidebar")
+        let place = host.leadingAnchor.constraint(equalTo: leadingAnchor)
+        NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor), host.bottomAnchor.constraint(equalTo: bottomAnchor),
+                                     host.widthAnchor.constraint(equalToConstant: SidebarOver.width)])
+        arrival = (place, -SidebarOver.width, 0.5)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var focus: NSView? { host }
+
+    /// No scrim: the space stays as it is beside the sidebar, which casts the float shadow.
+    override func draw(_ dirtyRect: NSRect) {
+        Look.drawFloat(card.frame, radius: 0, fill: .side, ring: true, appearance: effectiveAppearance)
     }
 }
