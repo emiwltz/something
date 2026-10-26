@@ -271,8 +271,8 @@ enum Keys {
 }
 
 /// The menu bar while the app runs: Go lists the spaces with ⌘1 to ⌘9, each with its assistant's eyes and state, and
-/// checks the open one, the headers of Space and Assistant name it, and ⌘⌫ is Move to Trash only while no text is being edited. It is made again each time a
-/// menu opens or a key reaches it.
+/// checks the open one, the headers of Space and Assistant name it, and ⌘⌫ is Move to Trash only while no text is
+/// being edited. It is made again each time a menu opens or a key reaches it.
 final class MenuBar: NSObject, NSMenuDelegate {
     let menu = Keys.menu()
     /// The spaces in the sidebar's order.
@@ -365,6 +365,8 @@ extension NSMenuItem {
         item.attributedTitle = line
         // Setting the attributed title rewrites `title`; set again, it keeps the drawn line and names the space alone.
         item.title = title
+        // The state word only drawn, the tooltip carries it for assistive output too.
+        item.toolTip = "\(title) · \(state.word)"
         return item
     }
 

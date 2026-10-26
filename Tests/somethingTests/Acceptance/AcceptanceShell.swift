@@ -300,7 +300,16 @@ struct AcceptanceShell {
         #expect(shell.chip.count == 2 && shell.chip.accessibilityLabel() == "2 wait for you" && panel.position == "1 of 2")
         #expect(shell.glass.mine == 0 && shell.glass.sticker.badge.isHidden, "no request is Logbook's")
         let rows = library.order().filter(\.isSpace).map { ($0.id, $0.title, now[$0.id] ?? .unknown) }
-        guard case .menu(let menu) = WaitingChip.goes(panels.queue.waiting.map(panels.queue.space), open: "logbook", assistants: rows) else {
+        // The app's own mapping: every request the chip counts, a space no longer listed made nil.
+        let spaces = panels.requestSpaces { library.entry($0) != nil }
+        #expect(spaces.count == shell.chip.count && spaces == ["agents", "oracle"])
+        #expect(panels.requestSpaces { _ in false } == [nil, nil])
+        // The menu opens under the chip in a window, at the pointer when the toolbar's overflow sent the click.
+        let placed = WaitingChip(), holder = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 40), styleMask: [], backing: .buffered, defer: true)
+        holder.isReleasedWhenClosed = false
+        holder.contentView?.addSubview(placed)
+        #expect(placed.menuPlace.1 === placed && WaitingChip().menuPlace.1 == nil)
+        guard case .menu(let menu) = WaitingChip.goes(spaces, open: "logbook", assistants: rows) else {
             Issue.record("two requests open the menu")
             return
         }

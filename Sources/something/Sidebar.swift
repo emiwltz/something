@@ -3,8 +3,9 @@
 // are only a view, kept in the preferences: the files never move. A row shows the template's symbol (else a page),
 // the title, "…" under the pointer for the menu a right click also gives, and the eyes of its own assistant, which
 // `eyes` gives, ringed once when they change (not under Reduced motion), their word shown under the pointer; a folded
-// group shows the most urgent eyes of its rows, waiting before working. A page whose declaration does not read is listed too, in secondary color: "not a space yet". A space
-// the assistant made while the person was elsewhere has a dot, one that just arrived a ring of ink fading out.
+// group shows the most urgent eyes of its rows, waiting before working. A page whose declaration does not read is
+// listed too, in secondary color: "not a space yet". A space the assistant made while the person was elsewhere has a
+// dot, one that just arrived a ring of ink fading out.
 // Rename… gives a space a name shown in place of its title, since its file is its name and its grants are keyed by
 // it; a group is renamed in place too, or by a double click. Its rows are drawn here, not by a List: the mockup's
 // 25-point rows and the identity's quiet selection, which a sidebar List's own 32-point rows and highlight would
@@ -483,8 +484,11 @@ struct SidebarView: View {
 
 /// The mockup's .wn-ping: when a row's eyes change, a ring of ink2 over the selection's fill at once, gone in 1.6 s on
 /// the "out" curve; nothing as the row first appears, and nothing under Reduced motion (the eyes change all the same).
-private struct Ping: View {
+struct Ping: View {
     let state: Sign.State, still: Bool, ring: Bool
+
+    /// The ring's opacity as it appears: 1, or 0 under Reduced motion (`still`).
+    static func peak(still: Bool) -> Double { still ? 0 : 1 }
 
     var body: some View {
         // The fill goes under the row (`ring` false), the ring over it.
@@ -492,7 +496,7 @@ private struct Ping: View {
             .background(ring ? .clear : Look.Token.sel.ui, in: RoundedRectangle(cornerRadius: Look.control))
             .allowsHitTesting(false)
             .keyframeAnimator(initialValue: 0.0, trigger: state) { ring, alpha in ring.opacity(alpha) } keyframes: { _ in
-                MoveKeyframe(still ? 0.0 : 1)
+                MoveKeyframe(Self.peak(still: still))
                 LinearKeyframe(0.0, duration: still ? 0.01 : 1.6, timingCurve: Look.out.unit)
             }
     }

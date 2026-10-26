@@ -627,6 +627,12 @@ final class WaitingChip: NSButton {
         return .menu(menu)
     }
 
+    /// Where the assistants' menu opens: just under the chip in its window, or at the pointer when the chip is in no
+    /// window (the toolbar sent it to its overflow menu).
+    var menuPlace: (NSPoint, NSView?) {
+        window == nil ? (NSEvent.mouseLocation, nil) : (NSPoint(x: 0, y: isFlipped ? bounds.height + 4 : -4), self)
+    }
+
     var count = 0 {
         didSet {
             setAccessibilityLabel("\(count) \(said)")

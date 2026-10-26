@@ -164,42 +164,72 @@ import Testing
         #expect(Library.label(try #require(library.entry("pet")), .sleep) == "Pebble, \(Sign.State.sleep.word)")
     }
 
+    /// A sidebar of `library` 232 by 420 points offscreen, every assistant's eyes `eyes`.
+    func side(_ library: Library, _ test: Home, eyes: Sign.State) -> (NSHostingView<SidebarView>, Offscreen) {
+        let side = NSHostingView(rootView: SidebarView(library: library, assistant: AssistantModel(engine: test.engine(), places: test.places),
+                                                       eyes: { _ in eyes }))
+        side.appearance = NSAppearance(named: .aqua)
+        let offscreen = Offscreen(side)
+        offscreen.window.setContentSize(NSSize(width: 232, height: 420))
+        side.frame.size = NSSize(width: 232, height: 420)
+        return (side, offscreen)
+    }
+
+    /// The dark pixels in the sidebar from `left` points on: past 200, the rows' eyes at their trailing end.
+    func inked(_ side: NSView, from left: Double = 200) async throws -> Int {
+        await wait(0.5)
+        side.layoutSubtreeIfNeeded()
+        let rep = try #require(side.bitmapImageRepForCachingDisplay(in: side.bounds))
+        side.cacheDisplay(in: side.bounds, to: rep)
+        var count = 0
+        for x in Int(Double(rep.pixelsWide) * left / 232)..<rep.pixelsWide - 8 {
+            for y in 0..<rep.pixelsHigh {
+                if let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5, color.brightnessComponent < 0.4 {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
     /// Settings' "Show each assistant’s eyes in the sidebar": off, the rows draw no eyes at their trailing end.
     @Test func theEyesFollowTheSetting() async throws {
         let test = Home(prefix: "something-sidebar-")
         defer { test.remove() }
         let library = try library(test)
-        let side = NSHostingView(rootView: SidebarView(library: library, assistant: AssistantModel(engine: test.engine(), places: test.places),
-                                                       eyes: { _ in .listen }))
-        side.appearance = NSAppearance(named: .aqua)
-        let offscreen = Offscreen(side)
-        offscreen.window.setContentSize(NSSize(width: 232, height: 420))
-        side.frame.size = NSSize(width: 232, height: 420)
-        /// The dark pixels in the rows' trailing 26 points, where the eyes are.
-        func inked() async throws -> Int {
-            await wait(0.5)
-            side.layoutSubtreeIfNeeded()
-            let rep = try #require(side.bitmapImageRepForCachingDisplay(in: side.bounds))
-            side.cacheDisplay(in: side.bounds, to: rep)
-            var count = 0
-            for x in Int(Double(rep.pixelsWide) * 200 / 232)..<rep.pixelsWide - 8 {
-                for y in 0..<rep.pixelsHigh {
-                    if let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5, color.brightnessComponent < 0.4 {
-                        count += 1
-                    }
-                }
-            }
-            return count
-        }
+        let (side, offscreen) = side(library, test, eyes: .listen)
+        defer { _ = offscreen }
         library.preferences.sidebarEyes = true
-        let on = try await inked()
+        let on = try await inked(side)
         library.preferences.sidebarEyes = false
-        let off = try await inked()
+        let off = try await inked(side)
         #expect(on > off + 40, "eyes drawn: \(on) dark pixels, hidden: \(off)")
     }
 
+    /// Every group folded, so no row shows: the headers' eyes, the most urgent of their rows, are all the switch hides.
+    @Test func theSettingHidesAFoldedGroupsEyes() async throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        library.preferences.groups[2].spaces.append("oracle")
+        for group in ["Agents", "Notes", "Breaks"] { library.preferences.fold(group, true) }
+        library.relist()
+        let (side, offscreen) = side(library, test, eyes: .wait)
+        defer { _ = offscreen }
+        library.preferences.sidebarEyes = true
+        let on = try await inked(side, from: 0)
+        library.preferences.sidebarEyes = false
+        let off = try await inked(side, from: 0)
+        #expect(on > off + 20, "headers' eyes drawn: \(on) dark pixels, hidden: \(off)")
+    }
+
+    /// The ring of a row whose eyes changed: at full ink when calm, none under Reduced motion.
+    @Test func theRingIsStillUnderReducedMotion() {
+        #expect(Ping.peak(still: false) == 1 && Ping.peak(still: true) == 0)
+    }
+
     /// The rows' eyes come from each space's own session: no session reads asleep, never ready; a folded group shows
-    /// waiting before working, and nothing for quieter states; the Settings switch hides the header's eyes too.
+    /// waiting before working, and nothing for quieter states.
     @Test func eyesComeFromSessionsAndAFoldedGroupShowsTheMostUrgent() throws {
         let test = Home(prefix: "something-sidebar-")
         defer { test.remove() }
@@ -252,6 +282,7 @@ import Testing
         #expect(go.map { $0.attributedTitle?.string ?? "" } == ["Daily brief\tWorking", "My agents\tWaiting for you", "Logbook\tAsleep", "Pebble\tAsleep",
                                                                 "Oracle\tAsleep"])
         #expect(go.allSatisfy { $0.image?.isTemplate == true }, "still template eyes the menu colours")
+        #expect(go.first?.toolTip == "Daily brief · Working", "the state in words, not only drawn")
         #expect(go.prefix(2).map(\.keyEquivalent) == ["1", "2"])
     }
 }

@@ -45,6 +45,12 @@ final class Panels {
     private(set) var elsewhere: [Request] = []
     private(set) var panel: RequestPanel?
 
+    /// Each waiting request's space, the queue's then those answered elsewhere, as the chip counts them; nil for a
+    /// request of no space, or of a space `listed` no longer has.
+    func requestSpaces(listed: (String) -> Bool) -> [String?] {
+        (queue.waiting + elsewhere).map { queue.space($0).flatMap { listed($0) ? $0 : nil } }
+    }
+
     init(source: PromptSource, shows: Bool = true) {
         self.source = source
         self.shows = shows
