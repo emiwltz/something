@@ -446,7 +446,7 @@ struct AcceptanceShell {
         panels.clock = { 100 }
         panels.refresh()
         shell.glass.motion = { .reduced }
-        #expect(await wait(5) { shell.glass.grown == false && shell.glass.stickerShown })
+        #expect(await wait { shell.glass.grown == false && shell.glass.stickerShown })
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: AcceptanceTrust.desk)
         #expect(shell.chip.count == 2 && shell.chip.accessibilityLabel() == "2 wait for you" && panel.position == "1 of 2")

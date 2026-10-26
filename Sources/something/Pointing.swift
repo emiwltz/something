@@ -84,8 +84,10 @@ enum Pointing {
         }
         """
 
-    /// Where each part of `paths` is now, null for one that is gone.
+    /// Where each part of `paths` is now, null for one that is gone; nothing while the page is still loading, whose
+    /// parts are not all there yet (a follow can reach a reload half made on a busy Mac).
     static let rectsScript = """
+        if (document.readyState !== "complete" || location.href === "about:blank") return [];
         return paths.map((path) => {
           const node = document.querySelector(path);
           if (!node) return null;
@@ -119,7 +121,7 @@ enum Pointing {
     }
 
     /// Where the parts of `paths` are now, in their order: nil for one the page no longer has; empty when the page
-    /// cannot be asked (between two loads), so that its parts are not taken for gone.
+    /// cannot be asked (between two loads, or still loading), so that its parts are not taken for gone.
     @MainActor
     static func rects(_ paths: [String], in web: WKWebView, frame: WKFrameInfo) async -> [CGRect?] {
         guard !paths.isEmpty,

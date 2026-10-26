@@ -159,7 +159,7 @@ struct AcceptanceShow {
         #expect(await wait(until: { !users().isEmpty }), "the quick session did not start")
         #expect(users().count == 1 && users()[0].contains("Pointing at \(part.kind): \(part.path)") && users()[0].contains("Make the weather corner smaller"))
         #expect(model.session.id == nil && model.session.rows.isEmpty, "the main conversation is untouched")
-        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == false && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f3-working" + suffix, root: stage.home.root)
         }
@@ -270,7 +270,7 @@ struct AcceptanceShow {
         #expect(layout.lead?.first?.x == min(note.part.rect.maxX + PointOverlay.pad, brief.web.frame.width - 6))
         // The quick session's chip has left: only the note stays.
         #expect(await wait(until: { model.quicks["brief"] == nil }))
-        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == false && !shell.glass.morphing })
         await Picture.settle(brief)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f4" + suffix, root: stage.home.root)
@@ -355,7 +355,7 @@ struct AcceptanceShow {
         func reloaded(after loads: Int) async {
             #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
             await Picture.settle(brief)
-            #expect(await wait(5) { shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown }?.bottom?.constant == -22 },
+            #expect(await wait { shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown }?.bottom?.constant == -22 },
                     "the toast rose")
         }
 
@@ -813,7 +813,7 @@ struct AcceptanceShow {
         #expect(await wait(until: { !users().isEmpty }), "the fake read nothing")
         #expect(users().count == 1 && users()[0].contains(parts.indices.map { "[something] Comment \($0 + 1) is on \(parts[$0].kind): \(parts[$0].path)" }.joined(separator: "\\n")), "\(users())")
         #expect(model.session === model.session(for: AssistantModel.place(brief)) && model.quicks.isEmpty, "the main assistant's")
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f11" + suffix, root: stage.home.root)
         }

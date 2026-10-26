@@ -70,7 +70,7 @@ struct AcceptanceTrust {
     static func waiting(_ shell: Shell, mine: Int) async {
         let glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
-        #expect(await wait(5) { glass.grown == false && glass.stickerShown })
+        #expect(await wait { glass.grown == false && glass.stickerShown })
         let agent = Self.asks(shell)
         #expect(shell.assistant.eyes(of: "agents") == .wait || mine == 0)
         sticker.show(Presence(Presence.Facts(name: "Codex", installed: true), agent: agent, turn: nil, now: Stage.now), title: "My agents")
@@ -251,7 +251,7 @@ struct AcceptanceTrust {
         #expect(glass.mine == 1)
         // The card open, its field not typed in: the request panel holds the keys.
         model.open = true
-        #expect(await wait(5) { glass.grown == true && !glass.morphing })
+        #expect(await wait { glass.grown == true && !glass.morphing })
         let notice = try #require(model.notice)
         #expect(notice.title == "Claude Code is waiting for your answer" && notice.actions.map(\.title) == ["Show Request \(Keys.shown("showreq"))"])
         let panel = try #require(panels.panel)

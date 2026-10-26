@@ -358,6 +358,13 @@ import Testing
         // The system's Reduce Motion, when on, leaves only the film's absence to check.
         if Look.motion(.calm) == .calm {
             let film = try #require(Film.play(in: shell, library: library, pace: 0.2, onScreen: false) { opened += 1 })
+            // A look at the frame while it grows, queued on the main queue just after the film's own step that starts
+            // it: it runs before the step that shows New Space's sign again, which that one queues later, however late
+            // a busy Mac runs them both.
+            var growing: (hero: Bool, sign: Bool, inset: CGFloat?, span: TimeInterval?)?
+            DispatchQueue.main.asyncAfter(deadline: .now() + (Film.lands + 0.3) * 0.2) {
+                growing = (Arrival.sign(in: shell.center)?.isHidden == true, film.sign.isHidden, film.grown?.reach?.inset, film.grown?.span)
+            }
             #expect(library.selection == .newSpace && shell.film === film && film.cover.contentView === film)
             #expect(film.cover.frame == shell.window.frame && film.frame.size == shell.window.frame.size)
             let band = NSPoint(x: 300, y: shell.window.frame.height - 20)
@@ -366,9 +373,10 @@ import Testing
                     "nothing under the film, toolbar included, is pressed while it plays")
             #expect(film.cover.canBecomeKey && !Keys.enabled("new", Keys.Situation(welcoming: shell.film != nil)))
             #expect(film.sentence.stringValue == "A blank page. Your world." && film.word.stringValue == "something" && film.grown == nil)
-            #expect(await wait(until: { film.grown != nil }))
+            #expect(await wait(until: { growing != nil }))
             let hero = try #require(Arrival.sign(in: shell.center))
-            #expect(hero.isHidden && film.sign.isHidden && film.grown?.reach?.inset == 12 && film.grown?.span == Arrival.grows * 0.2)
+            #expect(growing?.hero == true && growing?.sign == true && growing?.inset == 12 && growing?.span == Arrival.grows * 0.2,
+                    "\(String(describing: growing))")
             #expect(await wait(until: { opened == 1 }))
             #expect(await wait(until: { film.superview == nil }))
             #expect(!hero.isHidden && shell.film == nil && opened == 1)

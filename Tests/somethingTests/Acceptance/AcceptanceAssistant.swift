@@ -20,7 +20,7 @@ struct AcceptanceAssistant {
         let model = shell.assistant, glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
         // A space opens with its assistant as the sticker, which follows its presence on the next turn of the main loop.
-        #expect(await wait(5) { glass.grown == false && glass.card.isHidden && glass.stickerShown && sticker.presence == model.presence })
+        #expect(await wait { glass.grown == false && glass.card.isHidden && glass.stickerShown && sticker.presence == model.presence })
         shell.waiting(1, mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
@@ -53,7 +53,7 @@ struct AcceptanceAssistant {
         #expect(model.messageCount == 3 && model.placeholder == "Write your next request · it waits for this one")
         #expect(model.stops && !model.canSend, "Send is Stop while it works and nothing is written")
         let host = shell.glass.card
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
         shell.window.layoutIfNeeded()
         let card = host.frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
         #expect(card.width == AssistantCard.width && card.maxX == shell.center.bounds.width - 16 && card.minY == 16)
@@ -77,9 +77,9 @@ struct AcceptanceAssistant {
         // window gives it the focus is for a trial by hand: this window is never shown).
         shell.reduceAssistant(nil)
         #expect(!model.cardShown)
-        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
+        #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
         model.focus()
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         shell.window.layoutIfNeeded()
         #expect(model.cardShown && !model.wantsFocus, "the field took the request")
         var stopped = false
@@ -150,7 +150,7 @@ struct AcceptanceAssistant {
         #expect(AssistantCard.day(Date(timeIntervalSince1970: 1_792_404_000), now: Stage.now) == "Monday")
         #expect(model.firstLines.isEmpty && model.messageCount == 2 && model.placeholder == "Ask for a change · it wakes up")
         #expect(model.dot == .ink3 && model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: logbook.web, "c3" + suffix, root: stage.home.root)
         }
@@ -181,7 +181,7 @@ struct AcceptanceAssistant {
         #expect(model.presence.now == .working("Checking the page…", late: true) && model.presence.header == "Working")
         #expect(model.messageCount == 4 && model.placeholder == "Write your next request · it waits for this one")
         #expect(model.stops && !model.canSend && model.presence.stopHelp == Keys.tooltip("stop"))
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c4" + suffix, root: stage.home.root)
         }
@@ -235,7 +235,7 @@ struct AcceptanceAssistant {
         // This space's alone: the defaults for new spaces are unchanged.
         #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
         shell.waiting(1, mine: 0)
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: project.web, "c5" + suffix, root: stage.home.root)
         }
@@ -271,12 +271,12 @@ struct AcceptanceAssistant {
         // field is not typed in, as the mockup's.
         model.open = true
         model.threadShown = true
-        #expect(await wait(5) { glass.grown == true && !glass.morphing })
+        #expect(await wait { glass.grown == true && !glass.morphing })
         let fades = glass.fades
         // Logbook: its own conversation, empty and asleep; the card stayed open, its content faded.
         let logbook = try await stage.open("logbook", in: shell, library)
         defer { logbook.close() }
-        #expect(await wait(5) { glass.fades == fades + 1 })
+        #expect(await wait { glass.fades == fades + 1 })
         #expect(model.cardShown && glass.grown == true && model.session !== briefs && model.rows.isEmpty && model.title == "Logbook")
         #expect(model.presence.state == .sleep && model.placeholder == "Ask for a change · it wakes up")
         // My agents: written to, it answers, then asks; the card leads to the request, never shows Allow.
@@ -321,7 +321,7 @@ struct AcceptanceAssistant {
         let glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
         // A space opens with its assistant as the sticker.
-        #expect(await wait(5) { glass.grown == false && glass.card.isHidden && glass.stickerShown })
+        #expect(await wait { glass.grown == false && glass.card.isHidden && glass.stickerShown })
         shell.waiting(1, mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
@@ -380,7 +380,7 @@ struct AcceptanceAssistant {
         /// Opens the card over `view` and draws it as `ids`, after `check` holds.
         func draw(_ view: SpaceView, _ ids: [String]) async throws {
             model.focus()
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             try await stage.appearances { suffix in
                 for id in ids { try await Picture.window(shell, library: library, web: view.web, id + suffix, root: stage.home.root) }
             }
@@ -478,7 +478,7 @@ struct AcceptanceAssistant {
         defer { brief.close() }
         let glass = shell.glass, sticker = glass.sticker, window = shell.window
         glass.motion = { .reduced }
-        #expect(await wait(5) { glass.grown == false && glass.stickerShown && glass.corner.maxX == glass.bounds.width - 16 })
+        #expect(await wait { glass.grown == false && glass.stickerShown && glass.corner.maxX == glass.bounds.width - 16 })
         // The mockup's glide: through 70% across and 55% down the space, then 42% and 34%, let go at 20% and 42%.
         let room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
         func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
@@ -502,7 +502,7 @@ struct AcceptanceAssistant {
         // Another space: the same place, its label on the side toward the middle.
         let logbook = try await stage.open("logbook", in: shell, library)
         defer { logbook.close() }
-        #expect(await wait(5) { glass.stickerShown && sticker.title == "Logbook" })
+        #expect(await wait { glass.stickerShown && sticker.title == "Logbook" })
         #expect(glass.spot == spot && glass.corner.minX == 16)
         shell.waiting(1, mine: 0)
         sticker.mouseEntered(with: try mouse(.mouseMoved, press))
@@ -537,7 +537,7 @@ struct AcceptanceAssistant {
         model.clock = { later }
         model.tick()
         #expect(model.presence.now == .working("Editing brief.html…", late: true))
-        #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c10" + suffix, root: stage.home.root)
         }
@@ -568,17 +568,17 @@ struct AcceptanceAssistant {
         defer { brief.close() }
         let model = shell.assistant, glass = shell.glass, sticker = glass.sticker, window = shell.window
         glass.motion = { .reduced }
-        #expect(await wait(5) { glass.grown == false && glass.stickerShown })
+        #expect(await wait { glass.grown == false && glass.stickerShown })
         func key(_ code: UInt16, _ characters: String) throws {
             window.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
                                                            context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
         }
         func opened() async -> Bool {
-            await wait(5) { glass.grown == true && !glass.morphing && window.firstResponder is NSTextView && !model.wantsFocus }
+            await wait { glass.grown == true && !glass.morphing && window.firstResponder is NSTextView && !model.wantsFocus }
         }
         func reduced() async throws -> Bool {
             try key(53, "\u{1b}")
-            return await wait(5) { !model.cardShown && glass.grown == false && glass.stickerShown && window.firstResponder === brief.web }
+            return await wait { !model.cardShown && glass.grown == false && glass.stickerShown && window.firstResponder === brief.web }
         }
         #expect(window.makeFirstResponder(sticker) && sticker.hovering && !glass.label.isHidden, "the sticker with the keys shows its label")
         try key(36, "\r")

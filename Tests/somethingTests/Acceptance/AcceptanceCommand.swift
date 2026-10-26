@@ -39,7 +39,7 @@ struct AcceptanceCommand {
                      "Asleep", "SPACES", "Daily brief", "Working", "Project watch", "Ready", "ACTIONS", "New Space", "something", "Move", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
-            await wait(10) { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 }
+            await wait { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 }
             #expect(card.frame.size == NSSize(width: 640, height: 500) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
@@ -91,7 +91,7 @@ struct AcceptanceCommand {
                      "Build New Space", "something", "Move", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
-            await wait(10) { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 && card.frame.height < 300 }
+            await wait { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 && card.frame.height < 300 }
             #expect(card.frame.size == NSSize(width: 640, height: 196) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
@@ -315,7 +315,7 @@ struct AcceptanceCommand {
                      "Close window", "Menu keys can be changed in System Settings", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
-            await wait(10) { card.frame.width == 680 && abs(card.frame.midY - 380) < 1 }
+            await wait { card.frame.width == 680 && abs(card.frame.midY - 380) < 1 }
             #expect(card.frame.size.width == 680 && abs(card.frame.midX - 600) < 1 && abs(card.frame.midY - 380) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)

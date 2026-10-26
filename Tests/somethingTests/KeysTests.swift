@@ -328,9 +328,16 @@ enum Mockup {
         let sheet = try #require(KeysSheet.toggle(in: layer, motion: .calm))
         let card = try #require(sheet.subviews.first)
         #expect(abs(card.frame.midY - 371) < 1, "it starts 9 points low")
-        let drawnLow = await wait(10) { sheet.drawn != .zero }
-        #expect(drawnLow && abs(sheet.drawn.midY - 380) > 0.5, "the window drew the first frames: drawn at \(sheet.drawn)")
-        let settled = await wait(10) { abs(card.frame.midY - 380) < 1 && sheet.drawn == card.frame }
+        // The first frame, drawn now by hand (AppKit does not draw the sheet while it is still transparent): a busy
+        // Mac may otherwise draw the window first once the card has risen.
+        let rep = try #require(sheet.bitmapImageRepForCachingDisplay(in: sheet.bounds))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        sheet.draw(sheet.bounds)
+        NSGraphicsContext.restoreGraphicsState()
+        #expect(sheet.drawn == card.frame && sheet.drawn.midY < 379.5, "the first frame, low: drawn at \(sheet.drawn), card at \(card.frame)")
+        // Then the window alone draws it again where the card rises to.
+        let settled = await wait { abs(card.frame.midY - 380) < 1 && sheet.drawn == card.frame }
         #expect(settled, "the shadow and ring end under the card: drawn at \(sheet.drawn), card at \(card.frame)")
         #expect(KeysSheet.close(in: layer))
     }

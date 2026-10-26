@@ -976,14 +976,14 @@ import WebKit
         offscreen.window.setContentSize(center.frame.size)
         let glass = Glass(over: center, model: model), host = glass.card
         glass.motion = { .reduced }
-        #expect(await wait(5) { glass.grown == true })
+        #expect(await wait { glass.grown == true })
         let frame = host.frame, card = frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
         #expect(card.width == AssistantCard.width && card.maxX == 900 - 16 && card.minY == 16)
         #expect(center.hitTest(NSPoint(x: card.minX - 4, y: card.midY)) !== host)
         #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY - 4)) !== host)
         #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20))?.isDescendant(of: host) == true)
         model.open = false
-        #expect(await wait(5) { glass.grown == false })
+        #expect(await wait { glass.grown == false })
         #expect(center.hitTest(NSPoint(x: card.midX, y: card.minY + 20)) === center, "a reduced card takes no click")
         withExtendedLifetime(offscreen) {}
     }

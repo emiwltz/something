@@ -466,11 +466,12 @@ struct AcceptanceBuild {
         }
         #expect(await wait(until: { arrival.superview == nil }))
         #expect(arrival.progress == 1 && !shell.glass.subviews.contains { $0 is Arrival })
+        // The mockup's d3 is the end of it: the space arrived, its row selected and fresh (let go 1.6 s after, however
+        // long the page then takes to load on a busy Mac).
+        #expect(library.fresh == name && library.selection == .space(name))
         // Once it is gone: the page loads and asks for its rights.
         #expect(await wait(until: { room.web.url != nil && !ask.questions.isEmpty }), "\(String(describing: room.web.url))")
-        #expect(ask.questions.first?.rights == ["state", "store"])
-        // The mockup's d3 is the end of it: the space arrived, its row selected and fresh.
-        #expect(library.fresh == name && library.selection == .space(name))
+        #expect(ask.questions.first?.rights == ["state", "store"] && library.selection == .space(name))
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: room.web, "d3" + suffix, root: stage.home.root)
         }

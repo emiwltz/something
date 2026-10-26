@@ -57,6 +57,7 @@ struct ArrivalTests {
         #expect(await wait(until: { arrived }))
         #expect(arrival.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
         #expect(library.selection == .space("agents-2") && library.fresh == "agents-2")
+        #expect(await wait(until: { library.fresh == nil }), "then let go, so the next arrival rings it again")
         gallery.used = nil
         #expect(Arrival.made("agents-2", in: shell) == nil)
     }

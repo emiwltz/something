@@ -151,13 +151,12 @@ final class Arrival: NSView {
     }
 
     /// Grows the frame, then fades it and the still, and calls `arrived` once it is gone; under Reduced `motion`, only
-    /// the still fades. The row of `name` in `library` is ringed meanwhile, for 1.6 s, then let go so the next
-    /// arrival of the same name rings it again.
+    /// the still fades. The row of `name` in `library` is ringed meanwhile, and let go 1.6 s after the arrival is gone
+    /// (the ring's own time), so the next arrival of the same name rings it again: counted from the start, a busy Mac
+    /// playing slowly let it go before the space was there.
     func play(_ name: String, library: Library, motion: Look.Motion, arrived: @escaping () -> Void) {
         library.fresh = name
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak library] in
-            if library?.fresh == name { library?.fresh = nil }
-        }
+        ringed = (name, library)
         guard Look.motion(motion) == .calm, start.rect.width > 0 else {
             progress = 1
             return fade(0.25, arrived)
@@ -189,8 +188,17 @@ final class Arrival: NSView {
         })
     }
 
+    /// The row ringed while it plays.
+    private var ringed: (name: String, library: Library)?
+
     override func removeFromSuperview() {
         timer?.invalidate()
+        if let (name, library) = ringed {
+            ringed = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak library] in
+                if library?.fresh == name { library?.fresh = nil }
+            }
+        }
         super.removeFromSuperview()
     }
 }

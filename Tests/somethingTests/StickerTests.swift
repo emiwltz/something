@@ -26,7 +26,7 @@ struct StickerTests {
         shell.glass.motion = { motion }
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        #expect(await wait(5) { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
+        #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
         try await body(shell, brief, stage)
     }
 
@@ -56,7 +56,7 @@ struct StickerTests {
             }
             // Open, the card takes its own clicks, its margin still the page's.
             shell.reduceAssistant(nil)
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             let card = glass.card.frame.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
             let inCard = try #require(root.hitTest(glass.convert(NSPoint(x: card.midX, y: card.midY), to: root)))
             #expect(inCard.isDescendant(of: glass.card))
@@ -89,8 +89,8 @@ struct StickerTests {
     @Test func aClickReturnOrCommandKGrowsTheCardAndEscReducesIt() async throws {
         try await brief { shell, brief in
             let glass = shell.glass, sticker = glass.sticker, model = shell.assistant, window = shell.window
-            func grown() async -> Bool { await wait(5) { glass.grown == true && !glass.morphing && !glass.card.isHidden } }
-            func shrunk() async -> Bool { await wait(5) { glass.grown == false && !glass.morphing && glass.card.isHidden } }
+            func grown() async -> Bool { await wait { glass.grown == true && !glass.morphing && !glass.card.isHidden } }
+            func shrunk() async -> Bool { await wait { glass.grown == false && !glass.morphing && glass.card.isHidden } }
             // A click on the sticker.
             let at = sticker.convert(NSPoint(x: sticker.surface.midX, y: sticker.surface.midY), to: nil)
             sticker.mouseDown(with: try event(.leftMouseDown, at: at, in: window))
@@ -127,15 +127,15 @@ struct StickerTests {
         try await brief(motion: .calm) { shell, _ in
             let glass = shell.glass, model = shell.assistant
             model.open = true
-            #expect(await wait(1) { glass.morphing }, "it moves")
+            #expect(await wait { glass.morphing }, "it moves")
             #expect(glass.card.frame.maxX == glass.bounds.width && glass.card.frame.minY == 0, "from the sticker's corner")
-            #expect(await wait(5) { !glass.morphing })
+            #expect(await wait { !glass.morphing })
             let card = glass.card.frame
             #expect(card.maxX == glass.bounds.width && card.minY == 0 && card.width == AssistantCard.width + 2 * AssistantCard.margin)
             #expect(glass.card.alphaValue == 1 && glass.sticker.alphaValue == 0)
             model.open = false
-            #expect(await wait(1) { model.folding }, "drawn while it shrinks")
-            #expect(await wait(5) { !glass.morphing })
+            #expect(await wait { model.folding }, "drawn while it shrinks")
+            #expect(await wait { !glass.morphing })
             #expect(glass.card.isHidden && !model.folding && glass.sticker.alphaValue == 1)
             #expect(glass.card.frame == glass.corner.insetBy(dx: -AssistantCard.margin, dy: -AssistantCard.margin))
             #expect(glass.card.layer?.animationKeys()?.isEmpty ?? true, "no animation remains")
@@ -168,12 +168,12 @@ struct StickerTests {
             #expect(glass.stickerShown)
             shell.show(nil)
             shell.assistant.place = .blank
-            #expect(await wait(5) { glass.sticker.isHidden })
+            #expect(await wait { glass.sticker.isHidden })
             shell.assistant.place = .templates
-            #expect(await wait(5) { glass.sticker.isHidden })
+            #expect(await wait { glass.sticker.isHidden })
             // Off a space there is no sticker to fold into: Esc leaves the card open.
             shell.assistant.open = true
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             glass.card.cancelOperation(nil)
             #expect(shell.assistant.cardShown && shell.assistant.open)
         }
@@ -186,19 +186,19 @@ struct StickerTests {
             shell.show(nil)
             model.place = .blank
             (model.open, model.threadShown) = (true, true)
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             shell.show(brief)
             model.place = AssistantModel.place(brief)
-            #expect(await wait(5) { glass.grown == false && !glass.morphing && glass.stickerShown })
+            #expect(await wait { glass.grown == false && !glass.morphing && glass.stickerShown })
             // ⌘K still grows the card, and a new title for the same space keeps it grown.
             model.focus()
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             model.place = .space(title: "Renamed", name: brief.space.name, page: brief.space.page.path)
             #expect(model.open)
             // From one space to another the card stays open.
             model.place = .space(title: "Logbook", name: "logbook", page: "/Users/example/something/spaces/logbook/index.html")
             #expect(model.open)
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
         }
     }
 
@@ -256,7 +256,7 @@ struct StickerTests {
             // Another space: the same place.
             let logbook = try await stage.open("logbook", in: shell, shell.library)
             defer { logbook.close() }
-            #expect(await wait(5) { glass.stickerShown })
+            #expect(await wait { glass.stickerShown })
             #expect(glass.corner.origin == Glass.origin(of: spot, in: room))
             // The center resizes: the sticker stays against its side and the edge that holds it.
             shell.window.setContentSize(NSSize(width: 1000, height: 660))
@@ -265,7 +265,7 @@ struct StickerTests {
             #expect(glass.corner.origin == Glass.origin(of: spot, in: smaller) && glass.corner.minX == 16)
             // The card grows from the sticker's corner, inside the center.
             shell.assistant.focus()
-            #expect(await wait(5) { glass.grown == true && !glass.morphing })
+            #expect(await wait { glass.grown == true && !glass.morphing })
             #expect(glass.card.frame.minX == 0 && glass.card.frame.minY >= 0 && glass.card.frame.maxY <= smaller.height)
         }
     }
@@ -275,7 +275,7 @@ struct StickerTests {
             let glass = shell.glass, start = glass.corner
             try drag(glass.sticker, in: shell.window, [CGSize(width: 1, height: 1), CGSize(width: 2, height: 0)])
             #expect(glass.corner == start && glass.held == nil && shell.library.preferences.sticker == nil)
-            #expect(await wait(5) { glass.grown == true && shell.assistant.open })
+            #expect(await wait { glass.grown == true && shell.assistant.open })
         }
     }
 
@@ -284,7 +284,7 @@ struct StickerTests {
             let glass = shell.glass
             try drag(glass.sticker, in: shell.window, [CGSize(width: -300, height: 100)])
             #expect(glass.snapping, "it moves to its side")
-            #expect(await wait(5) { !glass.snapping })
+            #expect(await wait { !glass.snapping })
             #expect(glass.sticker.frame == glass.corner.insetBy(dx: -Sticker.room, dy: -Sticker.room) && glass.spot?.trailing == true)
         }
     }
@@ -299,7 +299,7 @@ struct StickerTests {
             #expect(!glass.snapping && sticker.frame == glass.corner.insetBy(dx: -Sticker.room, dy: -Sticker.room))
             #expect(glass.corner.origin == held, "the snap ended and the sticker is where the pointer holds it")
             sticker.mouseUp(with: try event(.leftMouseUp, at: .zero, in: shell.window))
-            #expect(await wait(5) { !glass.snapping && glass.held == nil })
+            #expect(await wait { !glass.snapping && glass.held == nil })
         }
     }
 
@@ -322,7 +322,7 @@ struct StickerTests {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let glass = shell.glass
-        #expect(await wait(5) { glass.stickerShown })
+        #expect(await wait { glass.stickerShown })
         let room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
         #expect(glass.spot == (remember ? saved : nil))
         #expect(glass.corner.origin == Glass.origin(of: remember ? saved : Glass.first, in: room))
@@ -350,13 +350,13 @@ struct StickerTests {
             shell.glass.motion = { preferences.motion }
             // A change of the model has the glass read the new source, as it does once a space opens in the app.
             shell.assistant.open = true
-            #expect(await wait(5) { shell.glass.grown == true })
+            #expect(await wait { shell.glass.grown == true })
             shell.assistant.open = false
-            #expect(await wait(5) { shell.glass.grown == false && shell.glass.stickerShown })
+            #expect(await wait { shell.glass.grown == false && shell.glass.stickerShown })
             preferences.motion = .calm
-            #expect(await wait(5) { sign.animating })
+            #expect(await wait { sign.animating })
             preferences.motion = .reduced
-            #expect(await wait(5) { !sign.animating })
+            #expect(await wait { !sign.animating })
         }
     }
 }
