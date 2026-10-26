@@ -397,17 +397,14 @@ final class PointOverlay: NSView {
             case .dot: 3
             }
         }
-        func space(after piece: Piece, before next: Piece) -> CGFloat {
-            switch (piece, next) {
-            case (.key, .words), (.words, .key): 4
-            default: 9
+        let gaps = pieces.indices.map { index -> CGFloat in
+            guard index + 1 < pieces.count else { return 0 }
+            switch (pieces[index], pieces[index + 1]) {
+            case (.key, .words), (.words, .key): return 4
+            default: return 9
             }
         }
-        var total: CGFloat = 13 + 9
-        for (index, piece) in pieces.enumerated() {
-            total += width(piece) + (index + 1 < pieces.count ? space(after: piece, before: pieces[index + 1]) : 0)
-        }
-        let boxWidth = 12 + total + 14
+        let boxWidth = 12 + 13 + 9 + zip(pieces, gaps).reduce(0) { $0 + width($1.0) + $1.1 } + 14
         let p = progress(0.45, since: arrived, Look.out)
         let box = CGRect(x: (bounds.width - boxWidth) / 2, y: 14 - 56 * (1 - p), width: boxWidth, height: 34)
         NSGraphicsContext.saveGraphicsState()
@@ -432,7 +429,7 @@ final class PointOverlay: NSView {
                 Look.Token.ink3.color.setFill()
                 NSBezierPath(ovalIn: CGRect(x: x, y: mid - 1.5, width: 3, height: 3)).fill()
             }
-            x += width(piece) + (index + 1 < pieces.count ? space(after: piece, before: pieces[index + 1]) : 0)
+            x += width(piece) + gaps[index]
         }
         NSGraphicsContext.restoreGraphicsState()
     }
