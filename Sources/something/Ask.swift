@@ -472,7 +472,6 @@ enum Ask {
               escape: 1, accessory: NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy)))
     }
 
-    /// Help › What something Does and Doesn't: two columns, and the promise.
     /// A right's word and the name of the agent kind it narrows to, nil for all of them: "launch:pi" is ("launch", "pi").
     static func parts(of right: String) -> (word: String, kind: String?) {
         let parts = right.split(separator: ":", maxSplits: 1).map(String.init)

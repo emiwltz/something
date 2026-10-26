@@ -61,7 +61,7 @@ import WebKit
         // The store is walked for its weight only when what it holds changed.
         if other || listed != versions { bytes = space.map { store.weight($0.name) } ?? 0 }
         versions = listed
-        if other { (unfolded, images) = (false, [:]) }
+        if other { images = [:] }
         if other || !versions.contains(where: { $0.id == chosen }) { opened() }
     }
 

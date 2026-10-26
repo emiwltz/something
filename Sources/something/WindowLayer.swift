@@ -53,6 +53,11 @@ class ScrimCard: NSView {
     private var clicks: Any?
     /// Where the card's shadow and ring were last drawn.
     private(set) var drawn = NSRect.zero
+    /// How the card arrives under Calm motion, set by the subclass: `place`, the constraint that places it, starts
+    /// `by` points off and comes back while the card fades in for `seconds`.
+    var arrival: (place: NSLayoutConstraint, by: CGFloat, seconds: TimeInterval)?
+    /// What takes the focus while the card is up; nil: the scrim.
+    var focus: NSView? { nil }
 
     init(card: NSView, radius: CGFloat, label: String) {
         (self.card, self.radius) = (card, radius)
@@ -78,16 +83,28 @@ class ScrimCard: NSView {
         return true
     }
 
-    /// Lays the card over all of `layer`, any other card closed first, and gives the focus to `focus` (else to the
-    /// scrim). The layer lays the card out first: a SwiftUI card makes its AppKit views on its first layout.
-    func present(in layer: WindowLayer, focus: () -> NSView? = { nil }) {
+    /// Shows the card `make` makes over all of `layer`, or closes the one of this kind when it is up, as its key does;
+    /// returns the card when it shows. Any other card closes first; the card takes the focus and arrives under Calm
+    /// `motion`. The layer lays the card out first: a SwiftUI card makes its AppKit views on its first layout.
+    static func toggle<Card: ScrimCard>(in layer: WindowLayer, motion: Look.Motion, _ make: () -> Card) -> Card? {
+        if Card.close(in: layer) { return nil }
+        let card = make()
         layer.subviews.compactMap { $0 as? ScrimCard }.forEach { $0.close() }
-        frame = layer.bounds
-        autoresizingMask = [.width, .height]
-        layer.hold(self)
-        before = layer.window?.firstResponder
+        (card.frame, card.autoresizingMask) = (layer.bounds, [.width, .height])
+        layer.hold(card)
+        card.before = layer.window?.firstResponder
         layer.layoutSubtreeIfNeeded()
-        layer.window?.makeFirstResponder(focus() ?? self)
+        layer.window?.makeFirstResponder(card.focus ?? card)
+        let calm = Look.duration(card.arrival?.seconds ?? 0, Look.motion(motion))
+        guard calm > 0, let (place, by, _) = card.arrival else { return card }
+        let rest = place.constant
+        (card.alphaValue, place.constant) = (0, rest + by)
+        layer.layoutSubtreeIfNeeded()
+        Look.animate(calm, Look.out, settle: [card]) {
+            card.animator().alphaValue = 1
+            place.animator().constant = rest
+        }
+        return card
     }
 
     /// Takes the card away at once, the focus back where it was when that is still in the window.

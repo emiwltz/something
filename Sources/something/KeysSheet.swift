@@ -5,37 +5,21 @@ import AppKit
 import SwiftUI
 
 final class KeysSheet: ScrimCard {
-    /// The card's distance below the window's middle: 9 points while it arrives, as the mockup's -48 % does.
-    private var rise: NSLayoutConstraint?
-
     private init() {
         let host = NSHostingView(rootView: KeysCard())
         super.init(card: host, radius: KeysCard.radius, label: "Keyboard shortcuts")
         host.rootView = KeysCard { [weak self] in self?.close() }
         let rise = host.centerYAnchor.constraint(equalTo: centerYAnchor)
         NSLayoutConstraint.activate([rise, host.centerXAnchor.constraint(equalTo: centerXAnchor)])
-        self.rise = rise
+        // It rises 9 points to the window's middle while it arrives, as the mockup's -48 % does.
+        arrival = (rise, 9, 0.26)
     }
 
     required init?(coder: NSCoder) { nil }
 
     /// Shows the sheet over all of `layer`, or closes it when it is up, as ⌘/ does; returns the sheet when it shows.
-    /// It fades in and rises under Calm `motion`.
     @discardableResult
-    static func toggle(in layer: WindowLayer, motion: Look.Motion = .calm) -> KeysSheet? {
-        if close(in: layer) { return nil }
-        let sheet = KeysSheet()
-        sheet.present(in: layer)
-        let calm = Look.duration(0.26, Look.motion(motion))
-        guard calm > 0, let rise = sheet.rise else { return sheet }
-        (sheet.alphaValue, rise.constant) = (0, 9)
-        layer.layoutSubtreeIfNeeded()
-        Look.animate(calm, Look.out, settle: [sheet]) {
-            sheet.animator().alphaValue = 1
-            rise.animator().constant = 0
-        }
-        return sheet
-    }
+    static func toggle(in layer: WindowLayer, motion: Look.Motion = .calm) -> KeysSheet? { KeysSheet.toggle(in: layer, motion: motion, KeysSheet.init) }
 }
 
 /// The card: its title and ✕, the two columns of Keys' lines, and the footer.

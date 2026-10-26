@@ -46,8 +46,7 @@ final class Comments: NSView, NSTextFieldDelegate {
     /// Puts an empty layer of comments over `space`'s page, above all that covers it, so the tray takes its clicks.
     static func show(over space: SpaceView) -> Comments {
         let made = Comments(frame: space.web.frame)
-        made.space = space
-        made.autoresizingMask = [.width, .height]
+        (made.space, made.autoresizingMask) = (space, [.width, .height])
         space.area.addSubview(made)
         return made
     }
@@ -81,7 +80,6 @@ final class Comments: NSView, NSTextFieldDelegate {
     /// Clear: every comment goes, and point mode's banner comes back.
     func clear() {
         (list, rects) = ([], [])
-        timer?.invalidate()
         let pointer = space?.pointer
         removeFromSuperview()
         pointer?.needsDisplay = true
@@ -154,23 +152,20 @@ final class Comments: NSView, NSTextFieldDelegate {
     /// running one asking once more at its end for all that came meanwhile.
     func follow() {
         guard !asking else { return askAgain = true }
-        guard window != nil, let space, let frame = space.frame, !list.isEmpty else { return }
+        guard window != nil, let space, space.frame != nil, !list.isEmpty else { return }
         asking = true
-        let paths = list.map(\.part.path)
         Task { @MainActor in
-            let found = await Pointing.rects(paths, in: space.web, frame: frame)
-            asking = false
-            if found.count == rects.count, paths == list.map(\.part.path) {
-                let moved = zip(rects, found).map { $1 ?? $0 }
-                if moved != rects {
-                    rects = moved
+            repeat {
+                askAgain = false
+                guard let frame = space.frame else { break }
+                let paths = list.map(\.part.path), found = await Pointing.rects(paths, in: space.web, frame: frame)
+                // Comments added or removed meanwhile keep their places: the answer was about the list before.
+                if found.count == rects.count, paths == list.map(\.part.path), zip(rects, found).contains(where: { $1 != nil && $1 != $0 }) {
+                    rects = zip(rects, found).map { $1 ?? $0 }
                     needsDisplay = true
                 }
-            }
-            if askAgain {
-                askAgain = false
-                follow()
-            }
+            } while askAgain && window != nil && !list.isEmpty
+            asking = false
         }
     }
 
@@ -188,20 +183,18 @@ final class Comments: NSView, NSTextFieldDelegate {
         return CGRect(x: max(2, r.minX - off), y: max(2, r.minY - off), width: 22, height: 22)
     }
 
+    /// A comment's number in its round, a pin's (22 points) or a tray row's (20), or a check once it is done.
+    static func badge(_ number: Int, done: Bool, in box: CGRect) {
+        (done ? Look.Token.ok : .act).color.setFill()
+        NSBezierPath(ovalIn: box).fill()
+        if done { return NSImage.symbol("checkmark", box.width / 2 - 1, .bold).draw(.white, flippedIn: box.insetBy(dx: box.width / 4, dy: box.width / 4)) }
+        let text = NSAttributedString(string: "\(number)", attributes: [.font: Look.font(.ui, size: box.width / 2 + 0.5, weight: .bold),
+                                                                        .foregroundColor: Look.Token.actfg.color])
+        text.draw(at: CGPoint(x: box.midX - text.size().width / 2, y: box.midY - text.size().height / 2))
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        for index in list.indices {
-            let box = pin(index)
-            (phase == .done ? Look.Token.ok : .act).color.setFill()
-            NSBezierPath(ovalIn: box).fill()
-            if phase == .done {
-                NSImage.symbol("checkmark", 10, .bold).draw(.white, flippedIn: box.insetBy(dx: 5.5, dy: 5.5))
-            } else {
-                let number = NSAttributedString(string: "\(index + 1)", attributes: [.font: Look.font(.ui, size: 11.5, weight: .bold),
-                                                                                    .foregroundColor: Look.Token.actfg.color])
-                let size = number.size()
-                number.draw(at: CGPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2))
-            }
-        }
+        for index in list.indices { Comments.badge(index + 1, done: phase == .done, in: pin(index)) }
         // The tray's ground: the float shadow, with a hairline ring.
         Look.drawFloat(tray.frame, radius: Look.card, fill: .bg2, ring: false, appearance: effectiveAppearance)
         Look.Token.bg2.color.setFill()
@@ -316,16 +309,8 @@ final class CommentTray: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let done = phase == .done
         for (index, comment) in list.enumerated() {
-            let mid = Self.top + CGFloat(index) * Self.row + Self.row / 2, circle = CGRect(x: 14, y: mid - 10, width: 20, height: 20)
-            (done ? Look.Token.ok : .act).color.setFill()
-            NSBezierPath(ovalIn: circle).fill()
-            if done {
-                NSImage.symbol("checkmark", 9, .bold).draw(.white, flippedIn: circle.insetBy(dx: 5, dy: 5))
-            } else {
-                let number = NSAttributedString(string: "\(index + 1)", attributes: [.font: Look.font(.ui, size: 10.5, weight: .bold),
-                                                                                    .foregroundColor: Look.Token.actfg.color])
-                number.draw(at: CGPoint(x: circle.midX - number.size().width / 2, y: circle.midY - number.size().height / 2))
-            }
+            let mid = Self.top + CGFloat(index) * Self.row + Self.row / 2
+            Comments.badge(index + 1, done: done, in: CGRect(x: 14, y: mid - 10, width: 20, height: 20))
             let label = name(comment)
             label.draw(at: CGPoint(x: 42, y: mid - label.size().height / 2))
         }

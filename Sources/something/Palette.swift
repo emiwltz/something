@@ -234,8 +234,7 @@ import SwiftUI
 final class Palette: ScrimCard, NSTextFieldDelegate {
     let model: PaletteModel
     let field: NSTextField
-    /// The card's distance from the window's top: 6 points less while it arrives, as the mockup's palin does.
-    private var drop: NSLayoutConstraint?
+    override var focus: NSView? { field }
 
     private init(_ model: PaletteModel) {
         let field = NSTextField()
@@ -254,27 +253,17 @@ final class Palette: ScrimCard, NSTextFieldDelegate {
         model.close = { [weak self] in self?.close() }
         let drop = host.topAnchor.constraint(equalTo: topAnchor, constant: PaletteCard.top)
         NSLayoutConstraint.activate([drop, host.centerXAnchor.constraint(equalTo: centerXAnchor)])
-        self.drop = drop
+        // It comes down 6 points while it arrives, as the mockup's palin does.
+        arrival = (drop, -6, 0.22)
     }
 
     required init?(coder: NSCoder) { nil }
 
     /// Shows the palette of `model` over all of `layer`, the keys in its field, or closes it when it is up, as ⌘P
-    /// does; returns the palette when it shows. It fades in and comes down 6 points under Calm `motion`.
+    /// does; returns the palette when it shows.
     @discardableResult
     static func toggle(in layer: WindowLayer, model: PaletteModel, motion: Look.Motion = .calm) -> Palette? {
-        if close(in: layer) { return nil }
-        let palette = Palette(model)
-        palette.present(in: layer) { palette.field }
-        let calm = Look.duration(0.22, Look.motion(motion))
-        guard calm > 0, let drop = palette.drop else { return palette }
-        (palette.alphaValue, drop.constant) = (0, PaletteCard.top - 6)
-        layer.layoutSubtreeIfNeeded()
-        Look.animate(calm, Look.out, settle: [palette]) {
-            palette.animator().alphaValue = 1
-            drop.animator().constant = PaletteCard.top
-        }
-        return palette
+        Palette.toggle(in: layer, motion: motion) { Palette(model) }
     }
 
     func controlTextDidChange(_ notification: Notification) { model.query = field.stringValue }
@@ -355,9 +344,8 @@ struct PaletteCard: View {
 
     /// The ask row: the sign, where the sentence goes and the sentence; under it, the line "Goes to".
     private func ask(_ row: PaletteModel.Row, _ text: String, none: Bool, at index: Int) -> some View {
-        let on = index == model.selected
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
+            pickable(HStack(spacing: 12) {
                 Image(nsImage: drawn(Sign.image(.listen, side: 18))).frame(width: 26, height: 26).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(row.title).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
@@ -366,15 +354,7 @@ struct PaletteCard: View {
                 .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10).frame(height: 54)
-            .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: 9))
-            .contentShape(Rectangle())
-            .onContinuousHover(coordinateSpace: .global) { if case .active(let point) = $0 { model.hover(index, at: point) } }
-            .onTapGesture { model.pick(index) }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Self.label(row))
-            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-            .accessibilityAction { model.pick(index) }
+            .padding(.horizontal, 10).frame(height: 54), row, at: index)
             goes
             if none {
                 Text("No space, action or template is called “\(text)”.").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
@@ -440,7 +420,7 @@ struct PaletteCard: View {
 
     private func row(_ row: PaletteModel.Row, at index: Int) -> some View {
         let on = index == model.selected
-        return HStack(spacing: 11) {
+        return pickable(HStack(spacing: 11) {
             Image(systemName: row.symbol).font(.system(size: 12.5)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
                 .background(on ? Look.Token.bg2.ui : Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 7))
                 .overlay { if on { RoundedRectangle(cornerRadius: 7).strokeBorder(Look.Token.line.ui, lineWidth: 1) } }
@@ -452,16 +432,22 @@ struct PaletteCard: View {
             Spacer(minLength: 8)
             trail(row.kind)
         }
-        .padding(.horizontal, 10).frame(height: Self.row)
-        .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: 9))
-        .contentShape(Rectangle())
-        .onContinuousHover(coordinateSpace: .global) { if case .active(let point) = $0 { model.hover(index, at: point) } }
-        .onTapGesture { model.pick(index) }
+        .padding(.horizontal, 10).frame(height: Self.row), row, at: index)
         .id(row.id)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Self.label(row))
-        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { model.pick(index) }
+    }
+
+    /// `view` as a row the keys and the pointer rest on, which a click, Return or VoiceOver opens.
+    private func pickable(_ view: some View, _ row: PaletteModel.Row, at index: Int) -> some View {
+        let on = index == model.selected
+        return view
+            .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
+            .onContinuousHover(coordinateSpace: .global) { if case .active(let point) = $0 { model.hover(index, at: point) } }
+            .onTapGesture { model.pick(index) }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Self.label(row))
+            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { model.pick(index) }
     }
 
     /// What VoiceOver says of a row: its name, its group or line, and a space's state, open or not.
