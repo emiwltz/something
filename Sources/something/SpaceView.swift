@@ -42,7 +42,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var stopped = false, paused = false
     /// The clock of the stops, the calendar and the 12 or 24 hours they are said in; a test sets them.
     var now: () -> Date = Date.init, calendar = Calendar.current, hours = Locale.current
-    private var covering: NSView?, strip: NSView?
+    private var covering: NSView?, strip: NSView?, glimpsed: NSView?
     /// Point mode's overlay over the page while the person points at its parts (PointOverlay.swift); nil otherwise.
     private(set) var pointer: PointOverlay?
     /// Whether point mode may stand over the page: it is shown and runs. A page still loading may be pointed at;
@@ -58,7 +58,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var faults: [String] = []
     private(set) var firstError: String?
     var dismissed = false
-    private let bridge: String, scheme: Scheme
+    private let bridge: String, scheme: Scheme, rules: WKContentRuleList
+    /// Set on the view of an older version shown over the open page to compare (Glimpse.swift): it never asks, never
+    /// watches, and answers only reads (SpaceBridge.swift).
+    private(set) var readOnly = false
     private var stamp: Date?
     private var timer: Timer?
     private var looking = false
@@ -81,8 +84,19 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// The space `space` of the spaces folder, not yet loaded. `share` is the folder of something.js; `rules` is
     /// Lockdown's rule list. Throws a `SpaceError` when something.js cannot be read: without it the space could not
     /// reach anything.
-    init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList, launches: Launches) throws {
-        bridge = try SpaceView.bridge(share)
+    convenience init(space: Space, places: Places, engine: Engine, ask: Asking, share: URL, rules: WKContentRuleList, launches: Launches) throws {
+        self.init(space: space, places: places, engine: engine, ask: ask, bridge: try SpaceView.bridge(share), rules: rules, launches: launches)
+    }
+
+    /// The read-only view of `copy`, an older version of `open`'s space written outside the spaces folder, with the
+    /// open view's scheme, rules, guards and stage, scrolled where the open page is.
+    convenience init(glimpse copy: Space, of open: SpaceView) {
+        self.init(space: copy, places: open.places, engine: open.engine, ask: open.ask, bridge: open.bridge, rules: open.rules, launches: open.launches)
+        (readOnly, staged, stagedAt, scrolled) = (true, open.staged, open.stagedAt, open.scrolled)
+    }
+
+    private init(space: Space, places: Places, engine: Engine, ask: Asking, bridge: String, rules: WKContentRuleList, launches: Launches) {
+        (self.bridge, self.rules) = (bridge, rules)
         self.launches = launches
         self.space = space
         self.places = places
@@ -327,6 +341,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
             ask.tell(error.sentence)
             return nil
         }
+        // An older version shown to compare is never asked about: it acts on nothing, and runs under the grant in force.
+        if readOnly { return grant }
         // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
         // not this space's.
         if grant == nil { launched = [] }
@@ -436,6 +452,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// blocked until the next reload. A link of a frame inside the space goes nowhere. Or an error (`faultScript`).
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty else { return }
+        // An older version shown to compare follows no link and shows no error; once loaded and scrolled, it is shown.
+        if readOnly { return message.name == "scrolled" ? loaded() : () }
         if message.name == "scrolled" {
             guard let place = message.body as? [Any], place.count == 3, let page = place[0] as? String,
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
@@ -482,6 +500,16 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         view.frame = web.frame
         view.autoresizingMask = [.width, .height]
         area.addSubview(view)
+    }
+
+    /// Puts `view`, an older version's (Glimpse.swift), right over the page in place of the one there; nil takes it away.
+    func glimpse(_ view: NSView?) {
+        glimpsed?.removeFromSuperview()
+        glimpsed = view
+        guard let view else { return }
+        view.frame = web.frame
+        view.autoresizingMask = [.width, .height]
+        area.addSubview(view, positioned: .above, relativeTo: web)
     }
 
     /// Puts `overlay` over the page in place of the one there, nil to take point mode's overlay away.
@@ -536,6 +564,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         note?.dismiss()
         point(nil)
         cover(nil)
+        glimpse(nil)
         show(strip: nil)
         loads += 1
         watching(false)

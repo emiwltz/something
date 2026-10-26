@@ -5,6 +5,7 @@
 // row that unfolds the older ones. History opens on the version before the newest. Restore This Version brings the chosen one back through Changes, where the restore
 // is itself a version, undone by ⌘Z, and refused while an assistant works on that space. ↑ and ↓ move the choice while
 // the focus is in the panel. A version's picture is taken once its page settled, when the page shows exactly its files.
+// Holding a row 260 ms, or Space, shows that version over the page until it is let go (Glimpse.swift).
 import AppKit
 import Observation
 import SomethingCore
@@ -17,6 +18,15 @@ import WebKit
     @ObservationIgnored var clock: () -> Date = Date.init
     /// Brings the space `name` back to a version, named in words ("the version of Today 18:12"): Changes'.
     @ObservationIgnored var restoring: (_ name: String, _ version: Versions.Version, _ words: String) -> Void = { _, _, _ in }
+    /// The open space's view, over which a held version shows, and where a failure is said: Info's.
+    @ObservationIgnored var current: () -> SpaceView? = { nil }
+    @ObservationIgnored var tell: (String) -> Void = { _ in }
+    /// The version held over the page, while it is.
+    @ObservationIgnored private(set) var glimpse: Glimpse?
+    /// Whether the chosen version shows over the page: its row is ringed.
+    private(set) var comparing = false
+    /// The pointer down on a row, until it is held long enough or let go.
+    @ObservationIgnored private var pressing: DispatchWorkItem?
     private(set) var space: Space?
     /// Its versions, newest first, and what they weigh in the store.
     private(set) var versions: [Versions.Version] = []
@@ -32,8 +42,8 @@ import WebKit
     /// The pictures read so far, by version id: rows are drawn again at each hover, the files read once.
     @ObservationIgnored private var images: [String: NSImage] = [:]
 
-    /// How many rows show before the older ones fold.
-    static let first = 6
+    /// How many rows show before the older ones fold; how long a row is held before its version shows.
+    static let first = 6, hold = 0.26
 
     init(places: Places) { self.places = places }
 
@@ -44,6 +54,7 @@ import WebKit
     /// opens to compare or restore; the same one keeps its choice while that version is still kept.
     func show(_ space: Space?) {
         let other = space?.name != self.space?.name, listed = space.map { store.list($0.name) } ?? []
+        if other { closed() }
         self.space = space
         // The store is walked for its weight only when what it holds changed.
         if other || listed != versions { bytes = space.map { store.weight($0.name) } ?? 0 }
@@ -74,6 +85,51 @@ import WebKit
         let at = versions.firstIndex { $0.id == chosen } ?? 0, next = max(0, min(versions.count - 1, at + by))
         if next >= History.first { unfolded = true }
         chosen = versions[next].id
+        if comparing { compare(true) }
+    }
+
+    /// Shows the chosen version over the open page (`on`), or the page as it is now. The newest is what the page
+    /// shows: holding it shows nothing.
+    func compare(_ on: Bool) {
+        guard on, let space, let version = versions.first(where: { $0.id == chosen }), version.id != versions.first?.id,
+              let open = current(), open.space.name == space.name, open.pointable else {
+            glimpse?.release()
+            (glimpse, comparing) = (nil, false)
+            return
+        }
+        guard glimpse?.version.id != version.id else { return }
+        glimpse?.release()
+        do {
+            glimpse = try Glimpse(version, over: open, store: store, words: title(version), when: History.when(version.when, now: clock()))
+            comparing = true
+        } catch {
+            (glimpse, comparing) = (nil, false)
+            tell(error.sentence)
+        }
+    }
+
+    /// The pointer went down on the row `id`: held `hold` seconds, its version is chosen and shown over the page.
+    func press(_ id: String) {
+        guard pressing == nil else { return }
+        let held = DispatchWorkItem { [weak self] in
+            self?.chosen = id
+            self?.compare(true)
+        }
+        pressing = held
+        DispatchQueue.main.asyncAfter(deadline: .now() + History.hold, execute: held)
+    }
+
+    /// The pointer went up: the page as it is now.
+    func lift() {
+        pressing?.cancel()
+        pressing = nil
+        compare(false)
+    }
+
+    /// History closed, or shows another space: nothing is held any more, and the copy of the last one held goes.
+    func closed() {
+        lift()
+        if let space { Glimpse.remove(store, space.name) }
     }
 
     /// Restore This Version: the chosen one, unless it is the newest (what the space is now).
@@ -220,9 +276,11 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 8).padding(.vertical, 7 * Look.density)
             .background(RoundedRectangle(cornerRadius: 8).fill(chosen ? Look.Token.sel.ui : history.hovered == version.id ? Look.Token.hover.ui : .clear))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).opacity(chosen && history.comparing ? 1 : 0))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in history.press(version.id) }.onEnded { _ in history.lift() })
         .onHover { history.hovered = $0 ? version.id : history.hovered == version.id ? nil : history.hovered }
         .accessibilityLabel(history.title(version) + ", " + history.byline(version) + (version.id == history.versions.first?.id ? ", now" : ""))
         .accessibilityAddTraits(chosen ? .isSelected : [])

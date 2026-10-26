@@ -665,6 +665,62 @@ import WebKit
         #expect(SpaceView.scrollScript(back: ("/other.html", 0, 900)).contains(#"["/other.html", 0.0, 900.0]"#))
     }
 
+    /// Holding an older version shows it over the page in a second locked web view at the same scroll: a copy in the
+    /// store's folder, never in the spaces folder, that reads the state and the memory and is refused every write
+    /// before the core, asks nothing, reaches no server, adds no line to the space's journal, and goes when History
+    /// closes. Released, its web view goes at once; the newest is what the page shows, and holding it shows nothing.
+    @Test func aHeldVersionShowsOverThePageAndOnlyReads() async throws {
+        let home = Home(prefix: "something-window-"), listener = try Listener(), ask = FakeAsk()
+        defer { home.remove(); listener.stop() }
+        let declared = #"{"contract": 1, "rights": ["state", "store", "send"]}"#, tall = "<div style='height: 4000px'></div><script>window.done = true</script>"
+        let space = try home.space("held", page(declared, "<h1>then</h1>" + tall)), store = Versions(root: home.places.versions, keep: 0, limit: 0)
+        let then = try #require(try store.capture(space, kind: .turn, sentence: "Make it", who: "Claude Code"))
+        try page(declared, "<h1>now</h1>" + tall).write(to: space.location, atomically: true, encoding: .utf8)
+        try store.capture(space, kind: .turn, sentence: "Say now", who: "Claude Code")
+        let window = try await home.window(space, ask)
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        _ = try await run(window, "await something.store.set('seen', 3); scrollTo(0, 700); return 0")
+        #expect(await wait(until: { window.scrolled?.y == 700 }))
+        let journal = try Journal(folder: home.places.journals).last(50, space: "held"), asked = ask.questions.count
+        let history = History(places: home.places)
+        history.current = { window }
+        history.show(space)
+        #expect(history.chosen == then.id && history.versions.count == 2)
+
+        history.compare(true)
+        let glimpse = try #require(history.glimpse), held = try #require(glimpse.view)
+        #expect(history.comparing && held.readOnly && glimpse.cover.superview === window.area && glimpse.cover.alphaValue == 0)
+        #expect(await wait(until: { glimpse.shown && held.frame != nil }), "the held version did not load")
+        #expect(await wait(until: { glimpse.cover.alphaValue == 1 }))
+        let copy = Glimpse.folder(store, "held")
+        #expect(held.space.location.path == copy.appendingPathComponent("held.html").path)
+        #expect(!held.space.location.path.hasPrefix(home.places.spaces.path) && Spaces(root: home.places.spaces).list().map(\.name) == ["held"])
+        #expect(try await run(held, "return [document.querySelector('h1').textContent, scrollY]") as? [AnyHashable] == ["then", 700])
+        #expect(try await run(held, "return (await something.state()).contract") as? Int == 1)
+        #expect(try await run(held, "return await something.store.get('seen')") as? Int == 3)
+        for call in ["something.send('a1', 'invented')", "something.store.set('seen', 4)", "something.open('https://example.com')"] {
+            #expect(try await run(held, "try { await \(call); return 'answered' } catch (e) { return e.code }") as? String == "NOT_SUPPORTED", "\(call)")
+        }
+        _ = try await run(held, "try { await fetch('http://127.0.0.1:\(listener.port)/held') } catch (e) {} return 0")
+        #expect(try Journal(folder: home.places.journals).last(50, space: "held") == journal, "the space's journal got a line")
+        #expect(try Memory(folder: home.places.data, space: "held").get("seen") as? Int == 3 && ask.questions.count == asked)
+        #expect(try await run(window, "return document.querySelector('h1').textContent") as? String == "now")
+
+        // Released: the page as it is now, the older one's web view let go; the copy stays until History closes.
+        history.lift()
+        #expect(!history.comparing && history.glimpse == nil && glimpse.view == nil)
+        #expect(await wait(until: { glimpse.cover.superview == nil }))
+        #expect(FileManager.default.fileExists(atPath: copy.path))
+        history.chosen = history.versions.first?.id
+        history.compare(true)
+        #expect(!history.comparing && history.glimpse == nil, "the newest is what the page shows")
+        history.closed()
+        #expect(!FileManager.default.fileExists(atPath: copy.path) && history.bytes == store.weight("held"))
+        #expect(listener.hits.isEmpty, "\(listener.hits)")
+    }
+
     /// A page whose process ends is said stopped; after two stops a changed file no longer reloads it, until the
     /// person's Reload. Ask to Fix names only the title, the file and something's own sentence.
     @Test func aPageThatStopsTwiceWaitsForReload() async throws {

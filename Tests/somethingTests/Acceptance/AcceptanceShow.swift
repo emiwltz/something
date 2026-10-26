@@ -416,28 +416,8 @@ struct AcceptanceShow {
         changes.follow(shell.assistant, in: shell, library: library)
         var said: [String] = []
         changes.toast = { words, _, _, _ in said.append(words) }
-        // The versions, each a little other file; the newest is the page as it loaded.
         let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
-        for (index, version) in Self.briefVersions.enumerated() {
-            let last = index == Self.briefVersions.count - 1
-            try (last ? was : was + "<!-- \(index) -->\n").write(to: page, atomically: true, encoding: .utf8)
-            let at = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: version.1, hour: version.2, minute: version.3)))
-            try store.capture(brief.space, kind: version.0 == nil ? .outside : .turn, sentence: version.0, who: version.0 == nil ? nil : "Claude Code", at: at)
-        }
-        #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
-        await Picture.settle(brief)
-        info.show(brief.space)
-        let all = info.history.versions
-        #expect(all.count == 12 && all[1].kind == .outside && all.last?.kind == .outside)
-        // The newest's picture, once its page settled; the older ones, never shown here, are given the same.
-        // Taken in the day appearance the pictures are compared in, whatever this Mac's own.
-        NSApp.appearance = NSAppearance(named: .aqua)
-        #expect(await info.history.picture(of: brief), "the picture of the newest version")
-        NSApp.appearance = nil
-        let picture = try Data(contentsOf: store.picture("brief", all[0].id))
-        #expect(store.list("brief").first?.thumb != nil && NSImage(data: picture)?.isValid == true)
-        for version in all.dropFirst() { try store.keep(picture: picture, of: version.id, in: "brief") }
-        info.show(brief.space)
+        let all = try await Self.keepVersions(of: brief, info)
 
         // Info: its Versions part.
         let center = shell.center.frame.width
@@ -508,7 +488,96 @@ struct AcceptanceShow {
         #expect(history.versions.last?.first == true && history.title(history.versions.last!) == "As something first kept it")
         shell.showInfo(false)
     }
-    @Test("f7: the glimpse", .disabled("not built yet: T20")) func f7() async throws {}
+    /// Keeps Daily brief's twelve versions, each a little other file, the newest the page as it loaded, and their
+    /// pictures: the newest's once its page settled, the older ones, never shown, given the same. `older` changes the
+    /// page of the versions before the last three. Returns them, newest first.
+    static func keepVersions(of brief: SpaceView, _ info: Info, older: (String) -> String = { $0 }) async throws -> [Versions.Version] {
+        let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
+        for (index, version) in briefVersions.enumerated() {
+            let last = index == briefVersions.count - 1, then = index < briefVersions.count - 3 ? older(was) : was
+            try (last ? was : then + "<!-- \(index) -->\n").write(to: page, atomically: true, encoding: .utf8)
+            let at = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: version.1, hour: version.2, minute: version.3)))
+            try store.capture(brief.space, kind: version.0 == nil ? .outside : .turn, sentence: version.0, who: version.0 == nil ? nil : "Claude Code", at: at)
+        }
+        // Loaded here, at its last file: the folder's watch, which looks each second, has nothing left to reload.
+        brief.load()
+        #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
+        await Picture.settle(brief)
+        info.show(brief.space)
+        let all = info.history.versions
+        #expect(all.count == 12 && all[1].kind == .outside && all.last?.kind == .outside)
+        // Taken in the day appearance the pictures are compared in, whatever this Mac's own.
+        NSApp.appearance = NSAppearance(named: .aqua)
+        #expect(await info.history.picture(of: brief), "the picture of the newest version")
+        NSApp.appearance = nil
+        let picture = try Data(contentsOf: store.picture("brief", all[0].id))
+        #expect(store.list("brief").first?.thumb != nil && NSImage(data: picture)?.isValid == true)
+        for version in all.dropFirst() { try store.keep(picture: picture, of: version.id, in: "brief") }
+        info.show(brief.space)
+        return all
+    }
+
+    /// History open on “Make the headlines shorter”: held, that version fades in over the page in a second locked web
+    /// view, the row ringed, the label at the top of the space saying which version, when, and Release to see now. Its
+    /// writes are refused, Daily brief's journal unchanged, the library lists no new space. Let go, the page is now
+    /// again; Space held with the focus in History does the same. Closing History removes the copy.
+    @Test("f7: the glimpse") func f7() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, info) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        info.clock = { Stage.local }
+        info.current = { brief }
+        let all = try await Self.keepVersions(of: brief, info) { $0.replacingOccurrences(of: "<h1>The Daily Brief</h1>", with: "<h1>Daily Brief</h1>") }
+        let spaces = library.entries.count, journal = try Journal(folder: stage.home.places.journals).last(50, space: "brief")
+        shell.showHistory()
+        shell.window.layoutIfNeeded()
+        let history = info.history
+        history.chosen = all[3].id
+        history.press(all[3].id)
+        #expect(!history.comparing, "a press shows nothing before it is held")
+        #expect(await wait(until: { history.glimpse?.shown == true }), "the held version did not show")
+        let glimpse = try #require(history.glimpse), held = try #require(glimpse.view)
+        #expect(history.comparing && history.chosen == all[3].id && glimpse.cover.frame == brief.web.frame)
+        #expect(await wait(until: { glimpse.cover.alphaValue == 1 }))
+        #expect(try await run(held, "return document.querySelector('.mast h1').textContent") as? String == "Daily Brief")
+        #expect(try await run(brief, "return document.querySelector('.mast h1').textContent") as? String == "The Daily Brief")
+        let label = await AcceptanceBuild.read(glimpse.cover)
+        #expect(label == ["“Make the headlines shorter”", "Yesterday 14:30", "Release to see now"], "\(label)")
+        for call in ["something.send('a1', 'invented')", "something.store.set('seen', 1)"] {
+            #expect(try await run(held, "try { await \(call); return 'answered' } catch (e) { return e.code }") as? String == "NOT_SUPPORTED", "\(call)")
+        }
+        #expect(try Journal(folder: stage.home.places.journals).last(50, space: "brief") == journal)
+        library.relist()
+        #expect(library.entries.count == spaces && !held.space.location.path.hasPrefix(stage.home.places.spaces.path))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f7" + suffix, root: stage.home.root)
+        }
+
+        // Let go: now again, its web view released.
+        history.lift()
+        #expect(!history.comparing && glimpse.view == nil)
+        #expect(await wait(until: { glimpse.cover.superview == nil }))
+        // Space, held with the focus in History.
+        let panel = shell.inspector.viewController.view
+        #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
+        let space = { (type: NSEvent.EventType) in
+            NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                             context: nil, characters: " ", charactersIgnoringModifiers: " ", isARepeat: false, keyCode: 49)
+        }
+        shell.window.sendEvent(try #require(space(.keyDown)))
+        #expect(history.comparing && history.glimpse != nil)
+        shell.window.sendEvent(try #require(space(.keyUp)))
+        #expect(!history.comparing && history.glimpse == nil)
+        // Closing History removes the copy.
+        let copy = Glimpse.folder(history.store, "brief")
+        #expect(FileManager.default.fileExists(atPath: copy.path))
+        shell.showInfo(false)
+        #expect(!FileManager.default.fileExists(atPath: copy.path))
+    }
     @Test("f8: changed outside something", .disabled("not built yet: T21")) func f8() async throws {}
     /// The mockup's comments: a selector of Daily brief's page, where in it to click, and the words.
     static let comments: [(String, Double, String)] = [

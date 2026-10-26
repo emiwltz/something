@@ -14,10 +14,19 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
         let loaded = loads
         let answer = { [weak self] in
             guard let self, self.loads == loaded else { return SpaceView.reply(message, open: false, { $0 }, replyHandler) }
-            SpaceView.reply(message, open: self.blocked.isEmpty, { Bridge.answer($0, host: self) }, replyHandler)
+            SpaceView.reply(message, open: self.blocked.isEmpty, { self.readOnly ? SpaceView.compared($0, host: self) : Bridge.answer($0, host: self) },
+                            replyHandler)
         }
-        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, let kind = SpaceView.lookup(message.body, host: self) else { return answer() }
+        guard SpaceView.isSpace(message.frameInfo), blocked.isEmpty, !readOnly, let kind = SpaceView.lookup(message.body, host: self) else { return answer() }
         engine.lookFor(kind, then: answer)
+    }
+
+    /// The answer to an older version shown to compare (Glimpse.swift): the state and the memory read as the open
+    /// space's, and every other call refused here, before the core, so that nothing acts and the space's journal gets
+    /// no line.
+    static func compared(_ request: [String: Any], host: BridgeHost) -> [String: Any] {
+        guard !["state", "store.get"].contains(request["method"] as? String ?? "") else { return Bridge.answer(request, host: host) }
+        return ["id": request["id"] ?? NSNull(), "error": ["code": "NOT_SUPPORTED", "message": "This is an older version of the space, shown to compare: it cannot act."]]
     }
 
     /// The kind whose program must be found before the call `body` is answered: a launch or a resume the space may

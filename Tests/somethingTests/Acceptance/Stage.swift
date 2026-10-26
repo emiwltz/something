@@ -198,7 +198,21 @@ enum Picture {
         let snapshot = web?.superview == nil || web?.url == nil ? nil : try await web?.takeSnapshot(configuration: nil)
         // What covers the page in its area (Stopped), then the assistant, float over the page, which was drawn over
         // them; the window layer (the toast) covers all.
-        let covers = web?.superview?.subviews.filter { $0 !== web && !$0.isHidden } ?? []
+        let covers = web?.superview?.subviews.filter { $0 !== web && !$0.isHidden && !($0 is Glimpse.Cover) } ?? []
+        // A version held to compare lies over the page: its own page, then its label, as faded in as it is.
+        var held: [(NSImage, NSRect, CGFloat)] = []
+        for cover in web?.superview?.subviews.compactMap({ $0 as? Glimpse.Cover }) ?? [] {
+            for view in cover.subviews {
+                let image = try await (view as? WKWebView)?.takeSnapshot(configuration: nil) ?? {
+                    let drawn = try bitmap(view.bounds.size)
+                    view.cacheDisplay(in: view.bounds, to: drawn)
+                    let image = NSImage(size: view.bounds.size)
+                    image.addRepresentation(drawn)
+                    return image
+                }()
+                held.append((image, view.convert(view.bounds, to: frame), cover.alphaValue))
+            }
+        }
         let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.layer].filter { !$0.isHidden }
         // The first-launch film plays in its own window over the whole of this one, toolbar included.
         let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) } + (shell.film.map { [($0 as NSView, frame.bounds)] } ?? [])
@@ -223,6 +237,7 @@ enum Picture {
                 let filters = covers.compactMap { $0.layer?.backgroundFilters as? [CIFilter] }.flatMap { $0 }.compactMap { $0.copy() as? CIFilter }
                 filtered(snapshot, filters).draw(in: web.convert(web.bounds, to: frame))
             }
+            for (image, place, alpha) in held { image.draw(in: place, from: .zero, operation: .sourceOver, fraction: alpha) }
             for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             }

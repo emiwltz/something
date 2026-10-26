@@ -110,18 +110,8 @@ struct Versions {
     /// (nothing is written then), or a file cannot be written.
     @discardableResult
     func restore(_ id: String, of space: Space, recycle: (URL) throws -> Void, at when: Date = Date()) throws -> Version? {
-        guard let chosen = list(space.name).first(where: { $0.id == id }) else {
-            throw SpaceError("This version of \(space.name) is no longer kept.")
-        }
         // Read whole before anything is written: a missing blob or a path out of the space restores nothing.
-        var contents: [String: Data] = [:]
-        for (path, hash) in chosen.files {
-            let parts = path.split(separator: "/")
-            guard !path.hasPrefix("/"), !parts.contains(".."), let data = try? Data(contentsOf: blob(space.name, hash)) else {
-                throw SpaceError("This version of \(space.name) is incomplete in \(folder(space.name).path); nothing was restored.")
-            }
-            contents[path] = data
-        }
+        let (chosen, contents) = try read(id, of: space.name)
         guard space.form == .file ? contents.count == 1 : contents["index.html"] != nil else {
             throw SpaceError(space.form == .file
                 ? "This version of \(space.name) was a folder; the space is one file now, so nothing was restored."
@@ -159,6 +149,20 @@ struct Versions {
         return try capture(space, kind: .restore, who: "You", restored: chosen.id, at: when)
     }
 
+    /// The version `id` of `name` and its files' contents, by path, read whole before anything is written from them.
+    /// Throws a `SpaceError` when it is no longer kept, a blob is missing or a path would climb out of the space.
+    func read(_ id: String, of name: String) throws -> (Version, [String: Data]) {
+        guard let version = list(name).first(where: { $0.id == id }) else { throw SpaceError("This version of \(name) is no longer kept.") }
+        var contents: [String: Data] = [:]
+        for (path, hash) in version.files {
+            guard !path.hasPrefix("/"), !path.split(separator: "/").contains(".."), let data = try? Data(contentsOf: blob(name, hash)) else {
+                throw SpaceError("This version of \(name) is incomplete in \(folder(name).path).")
+            }
+            contents[path] = data
+        }
+        return (version, contents)
+    }
+
     /// The picture of the version `id` of `name`, where `keep(picture:)` writes it.
     func picture(_ name: String, _ id: String) -> URL { folder(name).appendingPathComponent("thumbs/\(id).png") }
 
@@ -185,10 +189,18 @@ struct Versions {
         }
     }
 
-    /// What the versions of `name` weigh in the store, in bytes: their contents and pictures.
+    /// The folder of a space's store where a version held to compare is written out (Glimpse.swift), for a moment.
+    static let glimpse = "glimpse"
+
+    /// What the versions of `name` weigh in the store, in bytes: their contents and pictures, not a held version's copy.
     func weight(_ name: String) -> Int {
         let walk = FileManager.default.enumerator(at: folder(name), includingPropertiesForKeys: [.fileSizeKey])
-        return (walk?.allObjects as? [URL] ?? []).reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+        var bytes = 0
+        while let url = walk?.nextObject() as? URL {
+            if url.lastPathComponent == Versions.glimpse, url.deletingLastPathComponent().lastPathComponent == name { walk?.skipDescendants() }
+            bytes += (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        }
+        return bytes
     }
 
     /// Sends the versions of `name` to the Trash with its space, through `recycle`.

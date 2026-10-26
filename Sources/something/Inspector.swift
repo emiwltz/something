@@ -67,6 +67,8 @@ import SwiftUI
         self.ask = ask
         history = History(places: places)
         history.clock = { [weak self] in self?.clock() ?? Date() }
+        history.current = { [weak self] in self?.open() }
+        history.tell = { [weak self] in self?.ask.tell($0) }
     }
 
     /// Shows `space`, or nothing when no space is open. Read again at each change: it is a few small files.
@@ -208,7 +210,8 @@ import SwiftUI
     }
 }
 
-/// The panel's controller: Esc closes it while the focus is in it, and ↑ ↓ move History's choice.
+/// The panel's controller: Esc closes it while the focus is in it, ↑ ↓ move History's choice, and Space held shows it
+/// over the page.
 final class InfoController: NSHostingController<InspectorView> {
     override func cancelOperation(_ sender: Any?) { rootView.info.close() }
     override func moveUp(_ sender: Any?) { if rootView.info.content == .history { rootView.info.history.move(-1) } }
@@ -218,8 +221,14 @@ final class InfoController: NSHostingController<InspectorView> {
         switch (rootView.info.content, event.keyCode) {
         case (.history, 126): moveUp(nil)
         case (.history, 125): moveDown(nil)
+        case (.history, 49): if !event.isARepeat { rootView.info.history.compare(true) }
         default: super.keyDown(with: event)
         }
+    }
+
+    override func keyUp(with event: NSEvent) {
+        guard rootView.info.content == .history, event.keyCode == 49 else { return super.keyUp(with: event) }
+        rootView.info.history.compare(false)
     }
 }
 
@@ -230,6 +239,7 @@ extension Shell {
     /// Opens Info, or closes the panel, at once: the page is laid out again a single time, never through an animation.
     func showInfo(_ shown: Bool) {
         if shown { info.content = .info }
+        info.history.closed()
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
     }
