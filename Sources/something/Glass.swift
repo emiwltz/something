@@ -129,8 +129,8 @@ final class Glass: WindowLayer {
         let to = stickerFrame, duration = Look.duration(0.42, Look.motion(motion()))
         guard duration > 0, from != to else { return say() }
         (sticker.frame, snapping) = (from, true)
-        Look.animate(duration, Look.out, implicit: true, settle: [sticker], { [sticker] in
-            sticker.animator().frame = to
+        Look.animate(duration, Look.out, implicit: true, { [sticker] in
+            sticker.moving.frame = to
         }, done: { [weak self] in
             guard let self else { return }
             snapping = false
@@ -226,10 +226,10 @@ final class Glass: WindowLayer {
         let move = moves
         say()
         let target = open ? grownFrame : shrunk
-        Look.animate(duration, Look.douce, implicit: true, settle: [card, sticker], { [card, sticker] in
-            card.animator().frame = target
-            card.animator().alphaValue = open ? 1 : 0
-            sticker.animator().alphaValue = open ? 0 : 1
+        Look.animate(duration, Look.douce, implicit: true, { [card, sticker] in
+            card.moving.frame = target
+            card.moving.alphaValue = open ? 1 : 0
+            sticker.moving.alphaValue = open ? 0 : 1
         }, done: { [weak self] in
             guard let self, move == moves else { return }
             morphing = false

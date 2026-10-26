@@ -142,7 +142,7 @@ final class Comments: NSView, NSTextFieldDelegate {
         changed()
         DispatchQueue.main.asyncAfter(deadline: .now() + linger) { [weak self] in
             guard let self, phase == .done else { return }
-            Look.animate(0.35, Look.douce, settle: [self], { self.animator().alphaValue = 0 }, done: { [weak self] in
+            Look.animate(0.35, Look.douce, { self.moving.alphaValue = 0 }, done: { [weak self] in
                 if self?.phase == .done { self?.clear() }
             })
         }

@@ -476,9 +476,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             veil?.alphaValue = 0
         }
         Look.animate(Look.duration(0.5, Look.motion(library.preferences.motion)), Look.douce, {
-            page?.animator().alphaValue = back ? 0.35 : 1
-            sidebar.animator().alphaValue = back ? 0.7 : 1
-            veil?.animator().alphaValue = back ? 1 : 0
+            page?.moving.alphaValue = back ? 0.35 : 1
+            sidebar.moving.alphaValue = back ? 0.7 : 1
+            veil?.moving.alphaValue = back ? 1 : 0
         }, done: back ? nil : { [weak self] in
             // The blur goes once the page is back in full, so that it never snaps off a page still faded.
             if self?.welcoming == nil { Self.blur(page, false) }

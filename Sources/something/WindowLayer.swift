@@ -100,9 +100,9 @@ class ScrimCard: NSView {
         let rest = place.constant
         (card.alphaValue, place.constant) = (0, rest + by)
         layer.layoutSubtreeIfNeeded()
-        Look.animate(calm, Look.out, settle: [card]) {
-            card.animator().alphaValue = 1
-            place.animator().constant = rest
+        Look.animate(calm, Look.out) {
+            card.moving.alphaValue = 1
+            place.moving.constant = rest
         }
         return card
     }

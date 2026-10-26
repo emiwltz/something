@@ -68,7 +68,7 @@ final class Glimpse {
     private func show() {
         guard !shown, view != nil else { return }
         shown = true
-        Look.animate(0.4, Look.douce, settle: [cover]) { [cover] in cover.animator().alphaValue = 1 }
+        Look.animate(0.4, Look.douce) { [cover] in cover.moving.alphaValue = 1 }
     }
 
     /// Lets the version go: the page as it is now fades back, and the older page's web view is released.
@@ -76,7 +76,7 @@ final class Glimpse {
         guard let view else { return }
         (self.view, shown) = (nil, false)
         view.close()
-        Look.animate(0.4, Look.douce, settle: [cover], { [cover] in cover.animator().alphaValue = 0 }, done: { [cover] in cover.removeFromSuperview() })
+        Look.animate(0.4, Look.douce, { [cover] in cover.moving.alphaValue = 0 }, done: { [cover] in cover.removeFromSuperview() })
     }
 
     /// The label at the top of the space: which version shows, when it was made, and that letting go shows now.

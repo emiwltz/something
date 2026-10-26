@@ -76,7 +76,7 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
 6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by
    `BudgetTests`, every line counted: the core 1,850 lines in all; the host 2,750 in all and 450 per file; in each
-   `Agent*` target, 650 per driver and 450 per other file; the app 18,107 in all, a soft budget Emi raises per block on
+   `Agent*` target, 650 per driver and 450 per other file; the app 18,138 in all, a soft budget Emi raises per block on
    measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 700 lines.
 7. **Agents are extensions.** `SomethingCore` knows no agent. No line of the host's code names one. A family imports
    the host and never another family; what the host shares with them is `package`, public only where the app needs
@@ -110,9 +110,10 @@ What is committed here is public, and stays in the history even when a later com
 - **A choice nothing covers:** if it is implementation, take the smallest reversible option, note it in the commit, go
   on. If it changes what the product is or what the README promises, ask Emi.
 - **Keep the paperwork small.** The documents are the README, this file and the guide. No progress logs, no plan files.
-- **Sub-agents:** at most two at a time (the suite and the builds are memory-hungry), one writer per file, an
-  independent reviewer for anything that touches the core. Their brief gives the goal, the files they may touch, what is
-  forbidden, the proof expected, and tells them to work alone.
+- **Sub-agents:** as many as free memory allows (the suite and the builds are memory-hungry): run `memory_pressure`
+  before each launch; 40 % free or more, go ahead, under about ten agents on the whole Mac; 20 to 40 %, one more at
+  most; under 20 %, wait. One writer per file, an independent reviewer for anything that touches the core. Their brief
+  gives the goal, the files they may touch, what is forbidden, the proof expected, and tells them to work alone.
 
 ## Proving
 

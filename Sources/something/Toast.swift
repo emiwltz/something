@@ -109,6 +109,6 @@ final class Toast: NSView {
             return
         }
         let bottom = bottom
-        Look.animate(duration, Look.out, { bottom?.animator().constant = constant }, done: done)
+        Look.animate(duration, Look.out, { bottom?.moving.constant = constant }, done: done)
     }
 }

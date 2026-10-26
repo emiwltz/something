@@ -250,11 +250,12 @@ enum Look {
         motion == .reduced ? 0 : calm
     }
 
-    /// Plays `changes` (made through `animator()`) in `duration` on `curve`, then calls `done` once. AppKit moves a
-    /// view's frame and alpha on the display's refresh, which stops while the display sleeps or the window is hidden:
-    /// a quarter second after the end, whatever has not landed lands at once, so no state waits for a screen.
-    /// `settle` are the views whose stalled animations are taken off when it lands that way.
-    static func animate(_ duration: TimeInterval, _ curve: Curve, implicit: Bool = false, settle: [NSView] = [],
+    /// Plays `changes` (made through `moving`) in `duration` on `curve`, then calls `done` once. AppKit plays an
+    /// `animator()` change on the display's refresh, which stops while the screen is locked or the display sleeps;
+    /// a change of no duration made through it waits for that refresh too. So once the end is past and the screen does
+    /// not refresh, or five seconds later in any case, whatever has not landed lands at once: `changes` runs again with
+    /// `moving` the object itself, and the views it moved lose their stalled animations. No state waits for a screen.
+    static func animate(_ duration: TimeInterval, _ curve: Curve, implicit: Bool = false,
                         _ changes: @escaping () -> Void, done: (() -> Void)? = nil) {
         final class Once { var over = false }
         let once = Once()
@@ -263,19 +264,52 @@ enum Look {
             once.over = true
             done?()
         }
+        let before = Moving.views
+        Moving.views = []
         NSAnimationContext.runAnimationGroup({ context in
             (context.duration, context.timingFunction, context.allowsImplicitAnimation) = (duration, curve.timing, implicit)
             changes()
         }, completionHandler: finish)
-        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.25) {
+        let moved = Moving.views
+        Moving.views = before
+        let last = Date().addingTimeInterval(duration + 5)
+        func land() {
             guard !once.over else { return }
-            settle.forEach { $0.layer?.removeAllAnimations() }
+            // A busy Mac only runs late: its animation still ends by itself, on screen.
+            guard !refreshes || Date() > last else { return DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: land) }
+            moved.forEach { $0.layer?.removeAllAnimations() }
             NSAnimationContext.runAnimationGroup { context in
                 (context.duration, context.allowsImplicitAnimation) = (0, false)
+                Moving.landing = true
                 changes()
+                Moving.landing = false
             }
             finish()
         }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.25, execute: land)
+    }
+
+    /// Whether the screen refreshes: not while it is locked or the main display sleeps.
+    static var refreshes: Bool {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return session?["CGSSessionScreenIsLocked"] as? Bool != true && CGDisplayIsAsleep(CGMainDisplayID()) == 0
+    }
+
+    /// What `moving` answers while Look.animate runs its changes.
+    fileprivate enum Moving {
+        /// True while the changes land at once.
+        static var landing = false
+        /// The views the changes moved through their animator.
+        static var views: [NSView] = []
+    }
+}
+
+extension NSAnimatablePropertyContainer {
+    /// What Look.animate's changes write through: the animator while they play, the object itself when they land.
+    var moving: Self {
+        if Look.Moving.landing { return self }
+        if let view = self as? NSView { Look.Moving.views.append(view) }
+        return animator()
     }
 }
 
