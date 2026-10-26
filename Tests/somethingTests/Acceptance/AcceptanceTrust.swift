@@ -601,8 +601,13 @@ struct AcceptanceTrust {
         shell.window.setFrameOrigin(Self.large)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        // The requests that will be denied still wait: the chip counts them.
+        // The requests that will be denied still wait: the chip counts them, and the rows' eyes agree with the sheet's.
         shell.waiting(leaving.requests.count, mine: 0)
+        let name = { (title: String) in Stage.templates.first { $0.1 == title }?.0 ?? title.lowercased() }
+        var rows = Stage.moment
+        leaving.working.compactMap(\.space).forEach { rows[name($0)] = .think }
+        leaving.requests.compactMap(\.space).forEach { rows[name($0)] = .wait }
+        try AcceptanceShell.eyes(shell, rows)
         let sheet = Ask.quit(leaving)
         #expect(sheet.isAlert && sheet.title == texts[0] && sheet.frame.width == Sheet.width)
         #expect(PanelsTests.texts(sheet.contentView) == texts)

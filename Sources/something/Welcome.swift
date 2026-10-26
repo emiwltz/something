@@ -20,7 +20,7 @@ enum Welcome {
     /// The welcome's own window, never released when closed, its content taking the keys.
     static func window(_ tour: Tour, assistant: AssistantModel, motion: Look.Motion) -> NSWindow {
         let keys = WelcomeKeys(tour: tour, assistant: assistant, motion: motion)
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .fullSizeContentView],
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                               backing: .buffered, defer: true)
         (window.titlebarAppearsTransparent, window.titleVisibility, window.isReleasedWhenClosed) = (true, .hidden, false)
         window.title = "Welcome to something"

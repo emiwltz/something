@@ -18,13 +18,13 @@ enum SettingsTab: String, CaseIterable {
 
     private var face: (label: String, symbol: String) {
         switch self {
-        case .general: ("General", "gearshape")
+        case .general: ("General", "sun.max")
         case .assistant: ("Assistant", "sparkle")
         case .permissions: ("Permissions", "checkmark.shield")
         case .interface: ("Interface", "eye")
         case .shortcuts: ("Shortcuts", "keyboard")
         case .storage: ("Versions & Storage", "square.3.layers.3d")
-        case .agents: ("Agents", "powerplug")
+        case .agents: ("Agents", "powerplug.portrait")
         }
     }
 }
@@ -439,7 +439,8 @@ enum Found {
             page.title = tab.label
             let item = NSTabViewItem(viewController: page)
             (item.label, item.identifier) = (tab.label, tab.rawValue)
-            item.image = NSImage(systemSymbolName: tab.symbol, accessibilityDescription: tab.label)?
+            // powerplug.portrait is SF Symbols 6's: an older system shows the plug lying down.
+            item.image = (NSImage(systemSymbolName: tab.symbol, accessibilityDescription: tab.label) ?? NSImage(systemSymbolName: "powerplug", accessibilityDescription: tab.label))?
                 .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular))
             tabs.addTabViewItem(item)
         }

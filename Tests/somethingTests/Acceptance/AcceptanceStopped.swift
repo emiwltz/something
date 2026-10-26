@@ -14,11 +14,10 @@ struct AcceptanceStopped {
     static func brief(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
         let (shell, library, _) = stage.window()
         let brief = try await stage.open("brief", in: shell, library)
-        brief.loaded = { [weak shell, weak brief] in
-            brief.map { shell?.show($0) }
-            // The composer goes with the sticker's slice: the mockup shows the page and the card alone.
-            shell?.glass.isHidden = true
-        }
+        brief.loaded = { [weak shell, weak brief] in brief.map { shell?.show($0) } }
+        // The mockup's moment around the stopped space: the groups, the rows' eyes and the one request the chip counts.
+        try stage.moment(shell)
+        shell.waiting(1, mine: 0)
         brief.calendar.timeZone = try #require(Stage.zone)
         brief.hours = Locale(identifier: "en_GB")
         return (shell, library, brief)

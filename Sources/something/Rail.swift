@@ -57,7 +57,7 @@ struct Rail: View {
             }
             Self.line.padding(.top, 8)
             Button { Keys.send("settings") } label: {
-                Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
+                Image(systemName: "sun.max").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")

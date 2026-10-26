@@ -764,9 +764,9 @@ struct AcceptanceShow {
 
     /// The three comments of f10, Send to Assistant (⌘↵): point mode closes, the card opens on the conversation, and
     /// the comments go in one message to Daily brief's main assistant, which the card shows as the numbered list; the
-    /// tray moves to the left of the card and says it works through them, the pins kept (f11-working). Its turn
-    /// changes the page and ends: every pin and row a check, the words struck through, "All done", and the change kept
-    /// as one version named "3 comments", undone by that name (f11).
+    /// tray moves to the left of the card and says it works through them, the pins kept (f11, the mockup's moment). Its
+    /// turn changes the page and ends: every pin and row a check, the words struck through, "All done", and the change
+    /// kept as one version named "3 comments", undone by that name, its toast clear of the card (f11-done).
     @Test("f11: comments sent together") func f11() async throws {
         let stage = try Stage("show")
         defer { stage.remove() }
@@ -815,7 +815,7 @@ struct AcceptanceShow {
         #expect(model.session === model.session(for: AssistantModel.place(brief)) && model.quicks.isEmpty, "the main assistant's")
         #expect(await wait(5) { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "f11-working" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: brief.web, "f11" + suffix, root: stage.home.root)
         }
 
         // The turn changes the page and ends: all done, one version named by the count.
@@ -829,8 +829,13 @@ struct AcceptanceShow {
         #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "3 comments" && shell.undo.undoMenuItemTitle == "Undo “3 comments”")
         #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
         await Picture.settle(brief)
+        // The toast stands just above the open card, over neither its composer nor the tray.
+        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.first)
+        shell.layer.layoutSubtreeIfNeeded()
+        let card = shell.glass.card.convert(shell.glass.card.bounds, to: nil), placed = toast.convert(toast.bounds, to: nil)
+        #expect(placed.minY >= card.maxY && !placed.intersects(tray.convert(tray.bounds, to: nil)), "\(placed) \(card)")
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "f11" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: brief.web, "f11-done" + suffix, root: stage.home.root)
         }
         shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         var stopped = false

@@ -475,6 +475,10 @@ struct AcceptanceShell {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
             try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b8-chip-menu.txt"), atomically: true, encoding: .utf8)
         }
+        // Drawn armed, as the mockup shows it: half a second after the request appeared.
+        panel.clock = { 100 + RequestPanel.arming }
+        panel.tick()
+        #expect(panel.armed && panel.allowButton.isEnabled)
         try await stage.appearances { suffix in
             try await Picture.panel(panel, over: shell, library: library, web: logbook.web, "b8" + suffix, root: stage.home.root)
         }

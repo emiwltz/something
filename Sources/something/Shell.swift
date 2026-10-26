@@ -285,7 +285,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
             let button = ToolButton(image: image, target: nil, action: action)
             (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, Look.Token.ink2.color, tip)
-            button.symbolConfiguration = .init(pointSize: 13, weight: .medium)
+            // The mockup's icons are thin strokes, Point's target a size below the others'.
+            button.symbolConfiguration = .init(pointSize: id == Shell.point ? 12 : 13, weight: .regular)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
             var width: CGFloat = 28
             if let words {
@@ -382,7 +383,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Shows `words` at the bottom of the center for a moment; see Toast.
     @discardableResult
     func toast(_ words: String, action: Toast.Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2) -> Toast {
-        Toast.show(words, action: action, quiet: quiet, seconds: seconds, motion: library.preferences.motion, in: layer, under: center)
+        Toast.show(words, action: action, quiet: quiet, seconds: seconds, motion: library.preferences.motion, in: layer, under: center,
+                   clearOf: glass.grown == true && !glass.isHidden ? glass.card : nil)
     }
 
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file

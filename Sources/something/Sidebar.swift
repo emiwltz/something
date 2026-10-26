@@ -320,7 +320,7 @@ struct SidebarView: View {
                 Text("something").font(Look.font(.title, size: 15, weight: .bold).ui).kerning(-0.375)
                 Spacer(minLength: 0)
                 Button { Keys.send("settings") } label: {
-                    Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
+                    Image(systemName: "sun.max").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")

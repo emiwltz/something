@@ -132,8 +132,18 @@ class ScrimCard: NSView {
         return control ? nil : event
     }
 
+    /// The toolbar's controls, faded while the card is up: the toolbar draws above the window layer, so the scrim dims
+    /// only the band behind them, and the faded controls let the whole toolbar dim evenly with the window.
+    private var faded: [NSView] = []
+    /// Whether the card dims the window under it; the sidebar laid over does not.
+    var dims: Bool { true }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        faded.forEach { $0.alphaValue = 1 }
+        let items = window?.toolbar?.items.flatMap { ($0 as? NSToolbarItemGroup)?.subitems ?? [$0] } ?? []
+        faded = dims ? items.compactMap(\.view) : []
+        faded.forEach { $0.alphaValue = 0.45 }
         if let clicks { NSEvent.removeMonitor(clicks) }
         clicks = window == nil ? nil : NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
             self?.covers(event) ?? event
@@ -187,6 +197,7 @@ final class SidebarOver: ScrimCard {
     required init?(coder: NSCoder) { nil }
 
     override var focus: NSView? { host }
+    override var dims: Bool { false }
 
     /// No scrim: the space stays as it is beside the sidebar, which casts the float shadow.
     override func draw(_ dirtyRect: NSRect) {

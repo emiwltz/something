@@ -46,26 +46,78 @@ final class Stage {
 
     let home: Home
     /// Whether the window lists the spaces in the mockup's groups: the screens of a space at work (show, assistant,
-    /// build, trust) are drawn with the sidebar the mockup shows them with.
+    /// build, trust, stopped) are drawn with the sidebar the mockup shows them with.
     let grouped: Bool
     /// Whether the other rows show the mockup's moment while the open space's row follows its live assistant.
     let lively: Bool
+    /// Whether the pages see the mockup's agents (`world`).
+    let seeded: Bool
 
     /// A home named `something-accept-<area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
     init(_ area: String) throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         Look.register(fonts: Home.share.appendingPathComponent("fonts"))   // as the app does at start
         home = Home(prefix: "something-accept-\(area)-")
-        grouped = ["show", "assistant", "build", "trust"].contains(area)
+        grouped = ["show", "assistant", "build", "trust", "stopped"].contains(area)
         lively = area == "assistant"
+        seeded = area != "show"
         try Library.prepare(home.places)
         for (name, _) in Stage.templates {
             try home.space(name, try String(contentsOf: Home.share.appendingPathComponent("templates/\(name).html"), encoding: .utf8))
         }
         try home.space("oracle", try String(contentsOf: Stage.oracle, encoding: .utf8))
+        try Memory(folder: home.places.data, space: "logbook").set("notes", Stage.notes)
     }
 
     func remove() { home.remove() }
+
+    /// The mockup's agents (core/data.js), as the watch would see them started outside something, their words invented:
+    /// Amp waiting 34 minutes in its terminal in shop, two Claude Code at work (pacman, portfolio), pi idle in notes,
+    /// and one program something sees only by its process, its state unknown. Times are the mockup's, in this Mac's zone.
+    static var world: (agents: [Agent], threads: [AgentThread]) {
+        func at(_ minutes: Double) -> String { iso8601.string(from: local.addingTimeInterval(-60 * minutes)) }
+        func agent(_ key: String, _ kind: String, _ folder: String?, _ state: String, started: Double, updated: Double) -> Agent {
+            var agent = Agent(id: "\(kind)-\(key)", kind: kind, origin: "elsewhere")
+            (agent.folder, agent.state, agent.alive, agent.evidence) = (folder.map { "/Users/example/\($0)" }, state, true, "log")
+            (agent.name, agent.thread, agent.started, agent.updated) = (folder.map { ($0 as NSString).lastPathComponent }, key, at(started), at(updated))
+            agent.waiting = state == "waiting" ? "permission" : state == "unknown" ? nil : "none"
+            agent.because = ["send": "This agent was started outside something; something only reads it."]
+            return agent
+        }
+        func thread(_ key: String, _ kind: String, _ turns: [(state: String, start: Double, end: Double?, items: [(String, String, String?, Double)])]) -> AgentThread {
+            AgentThread(id: key, agent: "\(kind)-\(key)", title: nil, started: turns.first.map { at($0.start) }, turns: turns.enumerated().map { index, turn in
+                Turn(id: "\(key)-\(index)", state: turn.state, started: at(turn.start), ended: turn.end.map(at), items: turn.items.enumerated().map { n, item in
+                    Item(id: "\(key)-\(index)-\(n)", kind: item.2 == nil ? "message" : "tool", author: item.0, text: item.1, at: at(item.3),
+                         tool: item.2.map { Tool(name: $0, status: turn.state == "working" && n == turn.items.count - 1 ? "running" : "done") })
+                })
+            })
+        }
+        var other = Agent(id: "other-4210", kind: "other", origin: "elsewhere")
+        (other.name, other.pid, other.alive, other.evidence) = ("node", 4210, true, "process")
+        let agents = [agent("shop", "amp", "code/shop", "waiting", started: 52, updated: 38), agent("pacman", "claude", "code/pacman", "working", started: 12, updated: 1),
+                      agent("portfolio", "claude", "code/portfolio", "working", started: 25, updated: 2), agent("notes", "pi", "notes", "idle", started: 200, updated: 190), other]
+        let threads = [
+            thread("shop", "amp", [("done", 52, 40, [("person", "Fix the total on the cart page", nil, 52), ("agent", "Read cart.js", "Read", 50),
+                                                       ("agent", "The total adds the delivery twice.", nil, 41)]),
+                                    ("working", 39, nil, [("person", "Go on, but run the tests first", nil, 39), ("agent", "npm test", "Bash", 38)])]),
+            thread("pacman", "claude", [("working", 12, nil, [("person", "Bring the chase mode back", nil, 12), ("agent", "Edit ghosts.js", "Edit", 20),
+                                                               ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 17),
+                                                               ("agent", "Edit ghosts.js", "Edit", 1)])]),
+            thread("portfolio", "claude", [("working", 25, nil, [("person", "Resize the images for the projects page", nil, 25),
+                                                                  ("agent", "Resizing images, 14 of 28", "Bash", 2)])]),
+            thread("notes", "pi", [("done", 200, 190, [("person", "Summarise the reading list", nil, 200), ("agent", "Done: six books, two articles.", nil, 190)])]),
+        ]
+        return (agents, threads)
+    }
+
+    /// Notes the person wrote in Logbook, as the mockup's page shows them (invented), with its time stamps.
+    static var notes: [[String: String]] {
+        let day = { (hour: Int, minute: Int, back: Int) in
+            iso8601.string(from: Calendar.current.date(byAdding: .day, value: -back, to: Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: local) ?? local) ?? local)
+        }
+        return [("n1", day(9, 12, 0), "Coffee, then the ghost logic. Keep it simple."), ("n2", day(13, 5, 0), "Idea: a page that shows only who waits for me."),
+                ("n3", day(11, 20, 1), "Read the onboarding of a launcher. Everything by keyboard.")].map { ["id": $0.0, "at": $0.1, "text": $0.2] }
+    }
 
     /// The mockup's moment in the sidebar (core/data.js): Daily brief working, My agents waiting for the request the
     /// chip counts, Project watch and Oracle listening, Pebble just done, Logbook and Stack asleep.
@@ -113,6 +165,9 @@ final class Stage {
     /// Opens the space `name` in `shell`'s center, loaded, its animations ended; the caller closes it.
     func open(_ name: String, in shell: Shell, _ library: Library) async throws -> SpaceView {
         let view = try await home.window(try #require(library.entry(name)?.space))
+        // The pages see the mockup's agents; the engine is never started, so no watch tick replaces them. The show
+        // screens (f) keep the quiet page: their frames and comments are measured on its parts.
+        if seeded { view.engine.update(outside: Stage.world) }
         // The pages' clock stands at the mockup's moment, in this Mac's own zone, whatever the day of the run.
         if gallery != nil {
             view.staged = [WKUserScript(source: Stage.fixedClock, injectionTime: .atDocumentStart, forMainFrameOnly: false)]
@@ -240,14 +295,14 @@ enum Picture {
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, place)
         }
-        // The toolbar draws above the window layer: what the layer holds over its band (the shortcut sheet's scrim)
-        // dims the band, not its controls, which are drawn again over it.
+        // The toolbar draws above the window layer: what the layer holds over its band (a scrim card's scrim) dims the
+        // band, not its controls, which are drawn again over it, as faded as a scrim card leaves them.
         let band = shell.window.contentLayoutRect.maxY
         let reaches = shell.layer.subviews.contains { !shell.layer.isHidden && $0.convert($0.bounds, to: frame).maxY > band }
-        let bar = try (reaches ? shell.window.toolbar?.items.compactMap(\.view) ?? [] : []).filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
+        let bar = try (reaches ? shell.toolbarItems.compactMap(\.view) : []).filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)
-            return (drawn, view.convert(view.bounds, to: frame))
+            return (drawn, view.convert(view.bounds, to: frame), view.alphaValue)
         }
         // A window never shown is never key, and draws its lights gray: the main window keeps the keys while the
         // request panel, which never takes them, stands in front, so its lights are drawn in their colors.
@@ -266,8 +321,11 @@ enum Picture {
                 filtered(snapshot, filters).draw(in: web.convert(web.bounds, to: frame))
             }
             for (image, place, alpha) in held { image.draw(in: place, from: .zero, operation: .sourceOver, fraction: alpha) }
-            for (drawn, place) in over + bar {
+            for (drawn, place) in over {
                 drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            }
+            for (drawn, place, alpha) in bar {
+                drawn.draw(in: place, from: .zero, operation: .sourceOver, fraction: alpha, respectFlipped: true, hints: nil)
             }
             paint(lights)
         }
