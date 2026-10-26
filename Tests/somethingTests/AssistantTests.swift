@@ -1296,7 +1296,7 @@ import WebKit
         #expect(comments.tray.removes.map { $0.accessibilityLabel() } == ["Remove comment 1", "Remove comment 2", "Remove comment 3"])
         comments.remove(1)
         #expect(comments.pins == ["Comment 1 on this paragraph", "Comment 2 on this heading"] && comments.tray.footer == ["2 comments"])
-        #expect(comments.tray.fields.map { $0.accessibilityLabel() } == ["Comment 1", "Comment 2"])
+        #expect(comments.tray.fields.map { $0.accessibilityLabel() } == ["Comment 1 on this paragraph", "Comment 2 on this heading"])
         #expect(comments.pin(1).minX == 20 - PointOverlay.pad - 11 && comments.pin(1).minY == 40 - PointOverlay.pad - 11)
 
         // Sent: one message, to Daily brief's own conversation; the person opens My agents meanwhile.

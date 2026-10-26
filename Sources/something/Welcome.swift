@@ -96,7 +96,7 @@ struct WelcomeView: View {
             Rectangle().fill(Look.Token.line.ui).frame(height: 1)
             footer(screen).frame(height: 59)
         }
-        .animation(motion == .reduced ? nil : Look.douce.animation(0.45), value: screen)
+        .animation(Look.motion(motion) == .reduced ? nil : Look.douce.animation(0.45), value: screen)
         .font(Look.font(.ui, size: 13).ui).foregroundStyle(Look.Token.ink.ui)
         .background(Look.Token.bg.ui)
         .ignoresSafeArea()

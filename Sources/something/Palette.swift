@@ -269,19 +269,25 @@ final class Palette: ScrimCard, NSTextFieldDelegate {
     func controlTextDidChange(_ notification: Notification) { model.query = field.stringValue }
 
     /// The field's keys: ↑ ↓ move, Tab and ⇧Tab change where a sentence goes (and never leave the field), Return
-    /// opens or sends, Esc closes; any other is the field's.
+    /// opens or sends, Esc closes; any other is the field's. VoiceOver, which stays on the field, hears where the keys
+    /// went.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
-        case #selector(NSResponder.moveDown(_:)): model.move(1)
-        case #selector(NSResponder.moveUp(_:)): model.move(-1)
-        case #selector(NSResponder.insertTab(_:)): model.cycle(1)
-        case #selector(NSResponder.insertBacktab(_:)): model.cycle(-1)
+        case #selector(NSResponder.moveDown(_:)), #selector(NSResponder.moveUp(_:)):
+            model.move(selector == #selector(NSResponder.moveDown(_:)) ? 1 : -1)
+            let rows = model.rows
+            if rows.indices.contains(model.selected) { windowLayer?.announce(PaletteCard.label(rows[model.selected])) }
+        case #selector(NSResponder.insertTab(_:)), #selector(NSResponder.insertBacktab(_:)):
+            model.cycle(selector == #selector(NSResponder.insertTab(_:)) ? 1 : -1)
+            if let on = model.segments.first(where: \.on) { windowLayer?.announce(PaletteCard.label(on, model)) }
         case #selector(NSResponder.insertNewline(_:)): model.pick()
         case #selector(NSResponder.cancelOperation(_:)): close()
         default: return false
         }
         return true
     }
+
+    private var windowLayer: WindowLayer? { superview as? WindowLayer }
 }
 
 /// The card: the field, the sections of rows (or what says nothing answers), and the footer.

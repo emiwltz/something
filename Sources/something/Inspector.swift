@@ -222,6 +222,7 @@ final class InfoController: NSHostingController<InspectorView> {
         case (.history, 126): moveUp(nil)
         case (.history, 125): moveDown(nil)
         case (.history, 49): if !event.isARepeat { rootView.info.history.compare(true) }
+        case (_, 53): cancelOperation(nil) // Escape, which no field of the panel took
         default: super.keyDown(with: event)
         }
     }
@@ -240,17 +241,22 @@ extension Shell {
     func showInfo(_ shown: Bool) {
         if shown { info.content = .info }
         info.history.closed()
+        // Keys that were in the panel go back to the page as it closes.
+        let panel = inspector.viewController.view
+        if !shown, let held = window.firstResponder as? NSView, held.isDescendant(of: panel), let space { window.makeFirstResponder(space.web) }
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
     }
 
-    /// Shows History in the panel, in Info's place, while a space is open: Info's button is not pressed for it.
+    /// Shows History in the panel, in Info's place, while a space is open, with the keys: ↑ ↓, Space and Esc are
+    /// History's at once. Info's button is not pressed for it.
     func showHistory() {
         guard space != nil else { return }
         if info.content != .history || inspector.isCollapsed { info.history.opened() }
         info.content = .history
         inspector.isCollapsed = false
         (controls[Shell.info] as? ToolButton)?.pressed = false
+        window.makeFirstResponder(inspector.viewController.view)
     }
 
     /// ⌘I and the toolbar's Info: opens Info while a space is open (in History's place when it shows), else closes

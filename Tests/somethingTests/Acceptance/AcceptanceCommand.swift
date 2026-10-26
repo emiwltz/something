@@ -362,4 +362,39 @@ struct AcceptanceCommand {
             #expect(settings.model.sections(.agents).isEmpty && settings.model.lookedLine == "Looked today at 18:02 · 8 agents")
         }
     }
+
+    /// The palette by its keys, VoiceOver on its field: ↓ and ↑ move the keys from row to row and say the row, Tab
+    /// says where a sentence goes, Return opens; the shortcut sheet takes the keys and Esc closes it.
+    @Test("Keys only: the palette and the shortcut sheet") func keysOnly() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        library.preferences.change { $0.recents = ["brief", "agents", "pet", "logbook", "project", "oracle", "stack"] }
+        var said: [String] = []
+        shell.layer.announce = { said.append($0) }
+        let model = PaletteModel(library: library, eyes: { Stage.moment[$0] ?? .unknown }, enabled: { Keys.enabled($0, Keys.Situation(space: true)) })
+        var chosen: [PaletteModel.Row] = []
+        model.chose = { chosen.append($0) }
+        _ = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
+        let editor = try #require(shell.window.firstResponder as? NSTextView)
+        editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
+        editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
+        editor.doCommand(by: #selector(NSResponder.moveUp(_:)))
+        #expect(model.selected == 1 && said == ["Pebble, Done", "Logbook, Asleep", "Pebble, Done"], "\(said)")
+        editor.insertText("A reading list", replacementRange: editor.selectedRange())
+        editor.doCommand(by: #selector(NSResponder.insertTab(_:)))
+        #expect(said.last == "New Space, built from this sentence" && shell.window.firstResponder === editor)
+        editor.doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+        #expect(said.last == "This Space, Daily brief")
+        editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(chosen.count == 1 && Palette.shown(in: shell.layer) == nil)
+
+        let sheet = try #require(KeysSheet.toggle(in: shell.layer, motion: .reduced))
+        #expect(shell.window.firstResponder === sheet && sheet.accessibilityLabel() == "Keyboard shortcuts")
+        sheet.cancelOperation(nil)
+        #expect(KeysSheet.shown(in: shell.layer) == nil && shell.layer.isHidden)
+    }
 }

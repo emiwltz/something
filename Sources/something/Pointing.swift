@@ -1,8 +1,9 @@
 // What point mode asks of the page, always from something's own world (Lockdown.world), where the page's scripts can
-// neither see the questions nor change the functions that answer them: the part under a point, where parts are now,
-// and a scroll the overlay hands on. A part is an element at least 40x24 points; it is named by a path of standard
-// tags and :nth-of-type only, never a class, an id or a custom element, so what something keeps of a part says nothing
-// the page chose. The page is not told that someone points: nothing runs in its world.
+// neither see the questions nor change the functions that answer them: the part under a point, the part before or after
+// another (the keys' way), where parts are now, and a scroll the overlay hands on. A part is an element at least 40x24
+// points; it is named by a path of standard tags and :nth-of-type only, never a class, an id or a custom element, so
+// what something keeps of a part says nothing the page chose. The page is not told that someone points: nothing runs
+// in its world.
 import CoreGraphics
 import WebKit
 
@@ -42,14 +43,42 @@ enum Pointing {
           node = node.parentElement;
         }
         if (!node || node === document.body || node === root) return null;
-        const path = [];
-        for (let n = node; n !== root; n = n.parentElement) {
-          let i = 1;
-          for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.localName === n.localName) i++;
-          path.unshift(`${n.localName}:nth-of-type(${i})`);
+        return describe(node);
+        """ + described
+
+    /// The part `by` (1 or -1) after the part at `from`, in the page's order, or the first (the last) when `from` is
+    /// null or gone: the same parts a pointer finds, scrolled into view.
+    static let stepScript = """
+        const standard = new Set(tags), parts = [];
+        const walk = (node) => {
+          for (const child of node.children) {
+            if (!standard.has(child.localName)) continue;
+            const box = child.getBoundingClientRect();
+            if (box.width >= least[0] && box.height >= least[1]) parts.push(child);
+            walk(child);
+          }
+        };
+        if (document.body) walk(document.body);
+        if (!parts.length) return null;
+        const at = from ? parts.indexOf(document.querySelector(from)) : -1;
+        const node = parts[at < 0 ? (by > 0 ? 0 : parts.length - 1) : (at + by + parts.length) % parts.length];
+        node.scrollIntoView({block: "nearest", inline: "nearest", behavior: "instant"});
+        return describe(node);
+        """ + described
+
+    /// Names a node by its path of tags from the root, with its tag and its rectangle: what a part is.
+    private static let described = """
+
+        function describe(node) {
+          const path = [];
+          for (let n = node; n !== document.documentElement; n = n.parentElement) {
+            let i = 1;
+            for (let s = n.previousElementSibling; s; s = s.previousElementSibling) if (s.localName === n.localName) i++;
+            path.unshift(`${n.localName}:nth-of-type(${i})`);
+          }
+          const box = node.getBoundingClientRect();
+          return {path: ":root > " + path.join(" > "), tag: node.localName, rect: [box.x, box.y, box.width, box.height]};
         }
-        const box = node.getBoundingClientRect();
-        return {path: ":root > " + path.join(" > "), tag: node.localName, rect: [box.x, box.y, box.width, box.height]};
         """
 
     /// Where each part of `paths` is now, null for one that is gone.
@@ -66,8 +95,19 @@ enum Pointing {
     /// point at, or when the page cannot be asked (not loaded, or gone).
     @MainActor
     static func part(at point: CGPoint, in web: WKWebView, frame: WKFrameInfo) async -> Part? {
-        let found = try? await web.callAsyncJavaScript(partScript, arguments: ["x": point.x, "y": point.y, "tags": tags,
-                                                                               "least": [least.width, least.height]],
+        await ask(partScript, ["x": point.x, "y": point.y], in: web, frame: frame)
+    }
+
+    /// The part `by` (1 or -1) after `from` in the page's order, scrolled into view, or the first (the last) when
+    /// `from` is nil or gone; nil when the page has no part or cannot be asked.
+    @MainActor
+    static func step(_ by: Int, from: Part?, in web: WKWebView, frame: WKFrameInfo) async -> Part? {
+        await ask(stepScript, ["by": by, "from": from?.path ?? NSNull()], in: web, frame: frame)
+    }
+
+    @MainActor
+    private static func ask(_ script: String, _ arguments: [String: Any], in web: WKWebView, frame: WKFrameInfo) async -> Part? {
+        let found = try? await web.callAsyncJavaScript(script, arguments: arguments.merging(["tags": tags, "least": [least.width, least.height]]) { $1 },
                                                        in: frame, contentWorld: Lockdown.world)
         guard let found = found as? [String: Any], let path = found["path"] as? String, let tag = found["tag"] as? String,
               let rect = rect(found["rect"]) else { return nil }

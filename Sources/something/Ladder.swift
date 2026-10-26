@@ -224,7 +224,7 @@ struct LadderView: View {
     /// The step's mark: a ring to come, an arc turning smoothly once each 0.9 s now, a filled tick done, a dot
     /// pulsing while it waits, "!" failed. Reduced motion keeps the arc on top and the dot still.
     @ViewBuilder private func dot(_ mark: Ladder.Mark, now: Date) -> some View {
-        let moves = motion != .reduced
+        let moves = Look.motion(motion) == .calm
         switch mark {
         case .later, .off: Circle().strokeBorder((mark == .off ? Look.Token.line : .line2).ui, lineWidth: 1.5)
         case .now:

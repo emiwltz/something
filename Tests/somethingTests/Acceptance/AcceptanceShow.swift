@@ -29,7 +29,7 @@ struct AcceptanceShow {
         shell.point()
         let overlay = try #require(brief.pointer)
         #expect(point.pressed && shell.assistant.pointing && !shell.assistant.open && overlay.frame == brief.web.frame)
-        #expect(overlay.accessibilityLabel() == "Point at a part of the space" && overlay.accessibilityHelp() == "Esc to stop")
+        #expect(overlay.accessibilityLabel() == "Point at a part of the space" && overlay.accessibilityHelp() == "Esc to stop. Tab frames the next part, Return picks it")
         // The pointer over the waiting box: its frame and kind.
         let frame = try #require(brief.frame)
         let box = try #require(try await brief.web.callAsyncJavaScript(
@@ -836,5 +836,68 @@ struct AcceptanceShow {
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
+    }
+
+    /// The keys' path through show and change, with no pointer: ⌥⌘S, then Tab and ⇧Tab frame the parts in the page's
+    /// order (VoiceOver hears each kind), Return picks the one framed and the composer takes the keys, ⌘↵ adds the
+    /// comment; Tab reaches a tray row's ✕, which shows while it has the keys; Esc stops pointing. Show History… gives
+    /// the panel the keys at once: ↓ chooses an older version, Esc closes it and the page has the keys again.
+    @Test("Keys only: point, comment, History") func keysOnly() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, info) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.layer.announce = { _ in }
+        let window = shell.window
+        func key(_ code: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = []) throws {
+            window.sendEvent(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
+                                                           context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
+        }
+
+        shell.point()
+        let overlay = try #require(brief.pointer)
+        #expect(window.firstResponder === overlay && overlay.accessibilityHelp() == "Esc to stop. Tab frames the next part, Return picks it")
+        try key(48, "\t")
+        #expect(await wait(until: { overlay.hovered != nil }))
+        let first = try #require(overlay.hovered)
+        #expect(overlay.accessibilityValue() as? String == first.kind)
+        try key(48, "\t")
+        #expect(await wait(until: { overlay.hovered.map { $0.path != first.path } == true }))
+        let second = try #require(overlay.hovered)
+        #expect(second.path.hasPrefix(first.path), "the next part in the page's order lies in the first: \(first.path) \(second.path)")
+        try key(48, "\u{19}", .shift)
+        #expect(await wait(until: { overlay.hovered?.path == first.path }), "⇧Tab goes back")
+        try key(48, "\t")
+        #expect(await wait(until: { overlay.hovered?.path == second.path }))
+        try key(36, "\r")
+        let composer = try #require(overlay.composer)
+        #expect(overlay.picks.map(\.path) == [second.path] && window.firstResponder === composer.field)
+        composer.field.insertText("Say it in one line", replacementRange: composer.field.selectedRange())
+        #expect(composer.field.performKeyEquivalent(with: try AcceptanceShow.commandReturn(window)))
+        let comments = try #require(Comments.of(brief)), tray = comments.tray
+        #expect(comments.list.map(\.words) == ["Say it in one line"] && overlay.picks.isEmpty && brief.pointer === overlay)
+        #expect(tray.fields.first?.accessibilityLabel() == "Comment 1 on \(second.kind)" && tray.removes.first?.alphaValue == 0)
+        let remove = try #require(tray.removes.first)
+        #expect(window.makeFirstResponder(remove) && remove.alphaValue == 1, "the ✕ that has the keys shows")
+        #expect(window.makeFirstResponder(overlay) && remove.alphaValue == 0)
+        #expect(shell.escape(try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                                            context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))))
+        #expect(brief.pointer == nil && window.firstResponder === brief.web)
+        tray.clear.performClick(nil)
+
+        // History, by its keys alone.
+        info.clock = { Stage.local }
+        info.current = { brief }
+        let all = try await Self.keepVersions(of: brief, info)
+        shell.showHistory()
+        let panel = shell.inspector.viewController.view
+        #expect((window.firstResponder as? NSView)?.isDescendant(of: panel) == true, "the panel has the keys: \(String(describing: window.firstResponder))")
+        #expect(info.history.chosen == all[1].id)
+        try key(125, "\u{f701}")
+        #expect(info.history.chosen == all[2].id)
+        try key(53, "\u{1b}")
+        #expect(!shell.infoShown && window.firstResponder === brief.web, "Esc closes History and the page has the keys again")
     }
 }

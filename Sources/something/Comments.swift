@@ -207,11 +207,11 @@ final class Comments: NSView, NSTextFieldDelegate {
 /// The tray: one row per comment, then its footer. The words are fields; the rest is drawn.
 final class CommentTray: NSView {
     weak var owner: Comments?
-    private(set) var fields: [NSTextField] = [], removes: [NSButton] = []
+    private(set) var fields: [NSTextField] = [], removes: [RowRemove] = []
     private(set) lazy var clear = LinkButton("Clear", nil, size: 12, target: self, action: #selector(clearAll))
     let sendButton = PanelButton("Send to Assistant", primary: true, hint: "⌘↵", symbol: "arrow.up")
     private var list: [Comments.Comment] = [], phase = Comments.Phase.writing, pointing = false
-    private var hovered: Int? { didSet { removes.enumerated().forEach { $1.alphaValue = $0 == hovered ? 1 : 0 } } }
+    private var hovered: Int? { didSet { light() } }
 
     /// Rows 31 high under 6 points, 2 under them, then the footer, 46.
     static let row: CGFloat = 31, top: CGFloat = 6, footer: CGFloat = 46
@@ -235,7 +235,10 @@ final class CommentTray: NSView {
     override var isFlipped: Bool { true }
     @objc private func send() { owner?.sendAll() }
     @objc private func clearAll() { owner?.clear() }
-    @objc private func remove(_ sender: NSButton) { removes.firstIndex(of: sender).map { owner?.remove($0) } }
+    @objc private func remove(_ sender: RowRemove) { removes.firstIndex(of: sender).map { owner?.remove($0) } }
+
+    /// Shows a row's ✕ while the pointer is over the row or the ✕ has the keys.
+    func light() { removes.enumerated().forEach { $1.alphaValue = $0 == hovered || $1.focused ? 1 : 0 } }
 
     /// The footer's words, as drawn: the count, then the way on while writing, or how the work goes.
     var footer: [String] {
@@ -261,7 +264,7 @@ final class CommentTray: NSView {
                 return field
             }
             removes = list.indices.map { _ in
-                let button = NSButton(image: NSImage.symbol("xmark", 10, .medium).tinted(Look.Token.ink3.color), target: self, action: #selector(remove(_:)))
+                let button = RowRemove(image: NSImage.symbol("xmark", 10, .medium).tinted(Look.Token.ink3.color), target: self, action: #selector(remove(_:)))
                 (button.isBordered, button.alphaValue) = (false, 0)
                 addSubview(button)
                 return button
@@ -276,7 +279,7 @@ final class CommentTray: NSView {
                     face.strikethroughStyle: phase == .done ? NSUnderlineStyle.single.rawValue : 0, face.strikethroughColor: Look.Token.line2.color])
             }
             (field.isEditable, field.isSelectable) = (writing, writing)
-            field.setAccessibilityLabel("Comment \(index + 1)")
+            field.setAccessibilityLabel("Comment \(index + 1) on \(comment.part.kind)")
             let x = 42 + ceil(name(comment).size().width) + 9 + 6
             field.frame = CGRect(x: x, y: y + (Self.row - 18) / 2, width: max(40, bounds.width - x - 10 - (writing ? 30 : 0)), height: 18)
             removes[index].frame = CGRect(x: bounds.width - 10 - 26, y: y + (Self.row - 24) / 2, width: 24, height: 24)
@@ -345,5 +348,18 @@ final class CommentTray: NSView {
             let stop = NSAttributedString(string: words[3], attributes: quiet)
             stop.draw(at: CGPoint(x: cap.maxX + 6, y: mid - stop.size().height / 2))
         }
+    }
+}
+
+/// A tray row's ✕: Tab reaches it, and it shows while it has the keys, as under the pointer.
+final class RowRemove: NSButton {
+    private(set) var focused = false
+    override func becomeFirstResponder() -> Bool { lit(super.becomeFirstResponder(), true) }
+    override func resignFirstResponder() -> Bool { lit(super.resignFirstResponder(), false) }
+
+    private func lit(_ done: Bool, _ on: Bool) -> Bool {
+        if done { focused = on }
+        (superview as? CommentTray)?.light()
+        return done
     }
 }

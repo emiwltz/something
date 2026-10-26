@@ -2,7 +2,8 @@
 // as a scroll from something's world (Pointing.swift). It dims the space a little, with a hole around the part under
 // the pointer, draws the sign's four corners around that part with its kind in a pill ("this table"), and says the
 // mode and its way out in a banner at the top, unless comments wait (their tray says it). A click picks a part; once a frame is drawn, ⌥-click adds one, and the
-// composer (PointComposer.swift) attaches to the last one picked. Esc lets go of the picked parts, then stops the
+// composer (PointComposer.swift) attaches to the last one picked. Without a pointer, Tab and ⇧Tab frame the parts in
+// the page's order and Return or Space picks the one framed. Esc lets go of the picked parts, then stops the
 // mode. The frames follow the page when it scrolls or reloads. It is all drawn in draw(_:), so a picture of the
 // window shows it as the screen does.
 import AppKit
@@ -84,7 +85,8 @@ final class PointOverlay: NSView {
 
     override func flagsChanged(with event: NSEvent) {
         holding = event.modifierFlags.contains(.option)
-        if let pointer { look(at: pointer) } else { hover(nil) }
+        // The keys' frame stays while ⇧ goes down for ⇧Tab.
+        if let pointer { look(at: pointer) } else if !picks.isEmpty { hover(nil) }
     }
     override func mouseExited(with event: NSEvent) {
         pointer = nil
@@ -112,6 +114,25 @@ final class PointOverlay: NSView {
         guard let space, let frame = space.frame, delta != .zero else { return }
         await Pointing.scroll(by: delta, at: point, in: space.web, frame: frame)
         followSoon()
+    }
+
+    /// Tab and ⇧Tab frame the next or the previous part, Return and Space pick the part framed: pointing with the keys.
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 48 where picks.isEmpty: Task { @MainActor in await step(event.modifierFlags.contains(.shift) ? -1 : 1) }
+        case 36, 76, 49: if let hovered { pick(hovered, adding: false) }
+        default: super.keyDown(with: event)
+        }
+    }
+
+    /// Frames the part `by` (1 or -1) after the one framed, in the page's order, scrolled into view; the pointer's
+    /// part gives way to it until the pointer moves.
+    func step(_ by: Int) async {
+        guard let space, let frame = space.frame else { return }
+        pointer = nil
+        guard let part = await Pointing.step(by, from: hovered, in: space.web, frame: frame) else { return }
+        hover(part)
+        NSAccessibility.post(element: self, notification: .valueChanged)
     }
 
     /// Esc reaches escape() through the app's key monitor wherever the focus is in the window; this is the way of a
@@ -154,6 +175,11 @@ final class PointOverlay: NSView {
             if !adding { unpick() }
             return
         }
+        pick(part, adding: adding)
+    }
+
+    /// Picks `part`, or adds it to the parts picked; the composer takes the keys.
+    func pick(_ part: Pointing.Part, adding: Bool) {
         if adding, !picks.isEmpty {
             if !picks.contains(where: { $0.path == part.path }) { picks.append(part) }
         } else {
@@ -232,7 +258,7 @@ final class PointOverlay: NSView {
         }
         compose()
         setAccessibilityLabel(banner[0])
-        setAccessibilityHelp(banner.dropFirst().joined(separator: " "))
+        setAccessibilityHelp(banner.dropFirst().joined(separator: " ") + (picks.isEmpty ? ". Tab frames the next part, Return picks it" : ""))
         setAccessibilityValue((picks.isEmpty ? [hovered?.kind].compactMap { $0 } : picks.map(\.kind)).joined(separator: ", "))
         tick()
         needsDisplay = true
