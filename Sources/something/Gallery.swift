@@ -11,8 +11,12 @@ import SomethingCore
 import SwiftUI
 
 struct Template: Identifiable {
-    /// The templates, in the order they are shown.
-    static let names = ["agents", "project", "brief", "logbook", "stack", "pet"]
+    /// The templates, in the order they are shown, each with its symbol and its filter on the Templates page: what it
+    /// is for, not what it may do.
+    private static let table: [(name: String, symbol: String, category: Category)] = [
+        ("agents", "square.3.layers.3d", .agents), ("project", "scope", .agents), ("brief", "note.text", .notes),
+        ("logbook", "clock", .notes), ("stack", "play", .play), ("pet", "sparkle", .play)]
+    static let names = table.map(\.name)
     /// The folder a template declares when it follows one: Use Template writes the folder the person chose in its place.
     static let placeholder = "~/code/your-project"
 
@@ -51,19 +55,10 @@ struct Template: Identifiable {
     /// The symbol of the template a space was made from, by the space's name (agents, agents-2…); a page for any other.
     static func symbol(of space: String) -> String {
         let base = space.replacingOccurrences(of: #"-\d+$"#, with: "", options: .regularExpression)
-        let symbols = ["brief": "note.text", "agents": "square.3.layers.3d", "project": "scope", "logbook": "clock", "pet": "sparkle",
-                       "stack": "play"]
-        return symbols[base] ?? "doc"
+        return table.first { $0.name == base }?.symbol ?? "doc"
     }
 
-    /// Its filter on the Templates page: what it is for, not what it may do.
-    var category: Category {
-        switch id {
-        case "agents", "project": .agents
-        case "brief", "logbook": .notes
-        default: .play
-        }
-    }
+    var category: Category { Self.table.first { $0.name == id }?.category ?? .play }
 
     /// The rights it asks for, every one, in one line: "Sees and writes to your agents", "Sees your agents ·
     /// Remembers". The rights sheet asks for each when the copy first opens.
@@ -378,23 +373,31 @@ struct Secondary: ButtonStyle {
     }
 }
 
-/// The mockup's .popb, the label of a choice's menu: its value and an up-down chevron, bg2 inside a ring of line2, 24
-/// points high at a radius of 6. Settings and Info draw their menus with it, never the system's grey pill. Settings'
-/// are at least 96 points wide, their chevron at the trailing end (.cm-popb).
-struct PopButton: View {
-    let label: String
+/// The mockup's .popb, a choice's menu: its value `shown` and an up-down chevron, bg2 inside a ring of line2, 24 points
+/// high at a radius of 6, opening the system's menu of `choices`, an inline picker. Settings and Info draw their menus
+/// with it, never the system's grey pill. Settings' are at least 96 points wide, their chevron at the trailing end
+/// (.cm-popb). VoiceOver reads one button, "title: shown".
+struct PopMenu<Choices: View>: View {
+    let title: String, shown: String
     var minWidth: CGFloat = 0
+    @ViewBuilder let choices: Choices
 
     var body: some View {
-        HStack(spacing: 6) {
-            // The paddings, the gap and the chevron take 29 points of the width.
-            Text(label).font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
-                .frame(minWidth: max(0, minWidth - 29), alignment: .leading)
-            Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+        Menu {
+            choices.pickerStyle(.inline).labelsHidden()
+        } label: {
+            HStack(spacing: 6) {
+                // The paddings, the gap and the chevron take 29 points of the width.
+                Text(shown).font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
+                    .frame(minWidth: max(0, minWidth - 29), alignment: .leading)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+            }
+            .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
+            .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
         }
-        .padding(.leading, 9).padding(.trailing, 6).frame(height: 24)
-        .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui))
+        .plainMenu()
+        .accessibilityElement(children: .ignore).accessibilityLabel("\(title): \(shown)").accessibilityAddTraits(.isButton)
     }
 }
 

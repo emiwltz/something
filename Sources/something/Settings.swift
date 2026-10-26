@@ -13,27 +13,18 @@ import SwiftUI
 enum SettingsTab: String, CaseIterable {
     case general, assistant, permissions, interface, shortcuts, storage, agents
 
-    var label: String {
-        switch self {
-        case .general: "General"
-        case .assistant: "Assistant"
-        case .permissions: "Permissions"
-        case .interface: "Interface"
-        case .shortcuts: "Shortcuts"
-        case .storage: "Versions & Storage"
-        case .agents: "Agents"
-        }
-    }
+    var label: String { face.label }
+    var symbol: String { face.symbol }
 
-    var symbol: String {
+    private var face: (label: String, symbol: String) {
         switch self {
-        case .general: "gearshape"
-        case .assistant: "sparkle"
-        case .permissions: "checkmark.shield"
-        case .interface: "eye"
-        case .shortcuts: "keyboard"
-        case .storage: "square.3.layers.3d"
-        case .agents: "powerplug"
+        case .general: ("General", "gearshape")
+        case .assistant: ("Assistant", "sparkle")
+        case .permissions: ("Permissions", "checkmark.shield")
+        case .interface: ("Interface", "eye")
+        case .shortcuts: ("Shortcuts", "keyboard")
+        case .storage: ("Versions & Storage", "square.3.layers.3d")
+        case .agents: ("Agents", "powerplug")
         }
     }
 }
@@ -303,10 +294,9 @@ struct SettingsSection: Identifiable {
     var lookedLine: String {
         guard let found, let looked else { return "Looking for agents on this Mac…" }
         let count = found.values.filter { (try? $0.get()) != nil }.count, agents = "\(count) agent\(count == 1 ? "" : "s")"
-        let day = Info.day(looked, now: clock()), format = DateFormatter()
-        (format.locale, format.dateFormat) = (Locale(identifier: "en_US_POSIX"), "HH:mm")
+        let day = Info.day(looked, now: clock())
         let when = ["Today", "Yesterday"].contains(day) ? day.lowercased() : "on " + day
-        return "Looked \(when) at \(format.string(from: looked)) · \(agents)"
+        return "Looked \(when) at \(Presence.clock.string(from: looked)) · \(agents)"
     }
 
     /// "When something opens": the last space, New Space, or one space. A space no longer there reads as the last.
@@ -564,9 +554,9 @@ struct RowControl: View {
     var body: some View {
         switch row.control {
         case .choice(let options, let get, let set):
-            // The mockup's .popb, not the system's grey pill; the menu itself is the system's, a heading as a section.
+            // The menu itself is the system's, a heading as a section.
             let shown = options.first { !$0.heading && $0.value == get() }?.label ?? ""
-            Menu {
+            PopMenu(title: row.title, shown: shown, minWidth: row.trail == nil ? 96 : 0) {
                 let cut = options.firstIndex(where: \.heading) ?? options.count
                 Picker(row.title, selection: Binding(get: get, set: set)) {
                     ForEach(options[..<cut], id: \.self) { Text($0.label).tag($0.value) }
@@ -574,12 +564,7 @@ struct RowControl: View {
                         Section(options[cut].label) { ForEach(options[(cut + 1)...], id: \.self) { Text($0.label).tag($0.value) } }
                     }
                 }
-                .pickerStyle(.inline).labelsHidden()
-            } label: {
-                PopButton(label: shown, minWidth: row.trail == nil ? 96 : 0)
             }
-            .plainMenu().fixedSize()
-            .accessibilityElement(children: .ignore).accessibilityLabel("\(row.title): \(shown)").accessibilityAddTraits(.isButton)
         case .toggle(let get, let set, let enabled):
             Toggle(row.title, isOn: Binding(get: get, set: set)).toggleStyle(SwitchStyle()).labelsHidden().disabled(!enabled)
                 .opacity(enabled ? 1 : 0.45)

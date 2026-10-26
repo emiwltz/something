@@ -50,19 +50,6 @@ enum SidebarMenu {
         case note(String)
     }
 
-    /// The menu in words, one line per item, a submenu's indented: what the pictures write beside them.
-    static func text(_ lines: [Line], indent: String = "") -> [String] {
-        lines.flatMap { line -> [String] in
-            switch line {
-            case let .item(title, _, key, checked, enabled, destructive, _):
-                let marks = [key.map(Keys.shown), checked ? "✓" : nil, enabled ? nil : "(dimmed)", destructive ? "(red)" : nil].compactMap { $0 }
-                return [indent + ([title] + marks).joined(separator: "  ")]
-            case let .submenu(title, _, lines): return [indent + title + "  ▸"] + text(lines, indent: indent + "  ")
-            case .separator: return [indent + "—"]
-            case .note(let words): return [indent + "(" + words + ")"]
-            }
-        }
-    }
 }
 
 extension Library {
@@ -407,7 +394,7 @@ struct SidebarView: View {
                     Menu { Self.items(menu, live: false) } label: {
                         Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(Look.Token.ink2.ui)
                     }
-                    .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize().frame(width: 22, height: 20)
+                    .plainMenu().frame(width: 22, height: 20)
                     .accessibilityLabel("More for \(entry.title)")
                 }
                 if entry.isSpace {

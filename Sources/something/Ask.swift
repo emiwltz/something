@@ -363,17 +363,10 @@ enum Ask {
 
     /// One row per right, in a ringed list: its symbol in a tile, its name and what it lets the space do, its switch.
     private static func list(_ rights: [String], _ switches: [SheetSwitch], width: CGFloat) -> NSView {
-        let rows = NSStackView()
-        (rows.orientation, rows.spacing) = (.vertical, 0)
-        for (index, (one, toggle)) in zip(rights, switches).enumerated() {
-            if index > 0 {
-                let rule = Box(NSView(), fill: .line)
-                rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
-                rows.addArrangedSubview(rule)
-            }
+        // The rules between the rows run from edge to edge, as the mockup's borders do.
+        Sheet.ringed(zip(rights, switches).map { one, toggle in
             let words = right(one)
-            let image = NSImageView(image: NSImage(systemSymbolName: words.symbol, accessibilityDescription: nil) ?? NSImage())
-            (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink2.color)
+            let image = NSImageView.symbol(words.symbol, 11, .regular, tint: .ink2)
             let tile = Box(image, fill: .bg2, ring: .line, radius: 7, insets: NSEdgeInsets(top: 5, left: 5, bottom: 5, right: 5))
             NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16)])
             let room = width - 24 - 26 - 30 - 22
@@ -391,11 +384,8 @@ enum Ask {
             label.widthAnchor.constraint(equalToConstant: room).isActive = true
             let line = NSStackView(views: [tile, label, toggle])
             (line.spacing, line.alignment) = (11, .centerY)
-            rows.addArrangedSubview(Box(line, insets: NSEdgeInsets(top: 7.5, left: 12, bottom: 7.5, right: 12)))
-        }
-        // The rules between the rows run from edge to edge, as the mockup's borders do.
-        rows.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width).isActive = true }
-        return Box(rows, fill: .bg, ring: .line, radius: Look.card)
+            return Box(line, insets: NSEdgeInsets(top: 7.5, left: 12, bottom: 7.5, right: 12))
+        }, width: width)
     }
 
     /// The rights sheet's fine print: what the space does not ask for, among the four rights, then that each starts off.
@@ -410,10 +400,8 @@ enum Ask {
     /// A right as the rights sheet says it: its name, what it lets the space do, the warning a person must read before
     /// allowing it (or nil), and its symbol.
     static func right(_ right: String) -> (title: String, detail: String, warning: String?, symbol: String) {
-        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        let kind = parts.count == 2 ? Registry.app.name(of: parts[1]) : nil
-        let warning = warning(for: right)
-        switch parts[0] {
+        let (word, kind) = parts(of: right), warning = warning(for: right)
+        switch word {
         case "state": return ("See your agents", "Which agents run on this Mac, what each one is doing, and its last messages. It only reads.", nil, "eye")
         case "send": return ("Write to your \(kind.map { $0 + " " } ?? "")agents",
                              "Send a message to an agent you pick, stop it, or change its settings. It shows in that agent’s own conversation.", nil, "message")

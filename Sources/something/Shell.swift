@@ -170,8 +170,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
             let item = NSToolbarItem(itemIdentifier: id)
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
-            let button = id == Shell.point ? PressButton(image: image, target: nil, action: action) : ToolButton(image: image, target: nil, action: action)
-            (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, tip)
+            let button = ToolButton(image: image, target: nil, action: action)
+            (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, Look.Token.ink2.color, tip)
             button.symbolConfiguration = .init(pointSize: 13, weight: .medium)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
             var width: CGFloat = 28
@@ -374,7 +374,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     private func pressPoint(_ on: Bool) {
-        (controls[Shell.point] as? PressButton)?.pressed = on
+        (controls[Shell.point] as? ToolButton)?.pressed = on
         assistant.pointing = on
     }
 
@@ -504,28 +504,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 }
 
-/// Point in the toolbar: pressed, it is filled in the action's colours, as the mockup's pressed chip.
-final class PressButton: NSButton {
-    var pressed = false {
-        didSet {
-            contentTintColor = pressed ? Look.Token.actfg.color : Look.Token.ink2.color
-            attributedTitle = NSAttributedString(string: title, attributes: [.font: font ?? Look.font(.ui, size: 12, weight: .medium),
-                                                                             .foregroundColor: contentTintColor ?? Look.Token.ink2.color])
-            setAccessibilityValue(pressed ? "on" : "off")
-            needsDisplay = true
-        }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        if pressed {
-            Look.Token.act.color.setFill()
-            // The mockup's chip is 26 high in the 28-point button.
-            NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: (bounds.height - 26) / 2), xRadius: Look.control + 1, yRadius: Look.control + 1).fill()
-        }
-        super.draw(dirtyRect)
-    }
-}
-
 /// A borderless, clear window laid over the whole of the main window, toolbar and lights included: the welcome's veil,
 /// which never takes the keys, and the first-launch film's (Film.swift), which takes them while it plays.
 final class Cover: NSWindow {
@@ -650,15 +628,27 @@ struct Unshown: View {
 }
 
 /// A toolbar button that shows itself pressed, as the mockup's .ib[aria-pressed]: the selection's fill under an ink icon.
+/// Point is a `chip`: pressed, it is filled in the action's colours, as the mockup's pressed chip, its words too.
 final class ToolButton: NSButton {
+    var chip = false
     var pressed = false {
-        didSet { (contentTintColor, needsDisplay) = ((pressed ? Look.Token.ink : .ink2).color, true) }
+        didSet {
+            contentTintColor = (pressed ? chip ? Look.Token.actfg : .ink : .ink2).color
+            if chip {
+                attributedTitle = NSAttributedString(string: title, attributes: [.font: font ?? Look.font(.ui, size: 12, weight: .medium),
+                                                                                 .foregroundColor: contentTintColor ?? Look.Token.ink2.color])
+                setAccessibilityValue(pressed ? "on" : "off")
+            }
+            needsDisplay = true
+        }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         if pressed {
-            Look.Token.sel.color.setFill()
-            NSBezierPath(roundedRect: bounds, xRadius: Look.control, yRadius: Look.control).fill()
+            (chip ? Look.Token.act : .sel).color.setFill()
+            // The mockup's chip is 26 high in the 28-point button.
+            let radius = chip ? Look.control + 1 : Look.control
+            NSBezierPath(roundedRect: bounds.insetBy(dx: 0, dy: chip ? (bounds.height - 26) / 2 : 0), xRadius: radius, yRadius: radius).fill()
         }
         super.draw(dirtyRect)
     }

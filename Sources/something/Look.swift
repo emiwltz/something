@@ -286,3 +286,41 @@ extension NSFont {
     /// The font as SwiftUI draws it.
     var ui: Font { Font(self as CTFont) }
 }
+
+extension NSImage {
+    /// The system symbol `name` at `size` points and `weight`; an empty image when the system has none.
+    static func symbol(_ name: String, _ size: CGFloat, _ weight: NSFont.Weight) -> NSImage {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: weight)) ?? NSImage()
+    }
+
+    /// The image filled with `color` wherever it draws: a symbol's template image takes no tint when drawn by hand.
+    func tinted(_ color: NSColor) -> NSImage {
+        NSImage(size: size, flipped: false) { rect in
+            self.draw(in: rect)
+            color.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+    }
+}
+
+extension NSImageView {
+    /// A view of the system symbol `name` at `size` points and `weight`, in `tint`.
+    static func symbol(_ name: String, _ size: CGFloat, _ weight: NSFont.Weight, tint: Look.Token) -> NSImageView {
+        let view = NSImageView(image: NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage())
+        (view.symbolConfiguration, view.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: size, weight: weight), tint.color)
+        return view
+    }
+}
+
+extension Timer {
+    /// A timer on the main run loop that calls `step` every `interval` seconds until `step` returns false. It runs in
+    /// every mode, a sheet's modal loop or an open menu included, unless `common` is false.
+    static func frames(_ interval: TimeInterval, common: Bool = true, _ step: @escaping () -> Bool) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: true) { timer in
+            if !step() { timer.invalidate() }
+        }
+        RunLoop.main.add(timer, forMode: common ? .common : .default)
+        return timer
+    }
+}

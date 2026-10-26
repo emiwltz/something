@@ -198,3 +198,19 @@ import Testing
         #expect(on > off + 40, "eyes drawn: \(on) dark pixels, hidden: \(off)")
     }
 }
+
+extension SidebarMenu {
+    /// The menu in words, one line per item, a submenu's indented: what the pictures write beside them.
+    static func text(_ lines: [Line], indent: String = "") -> [String] {
+        lines.flatMap { line -> [String] in
+            switch line {
+            case let .item(title, _, key, checked, enabled, destructive, _):
+                let marks = [key.map(Keys.shown), checked ? "✓" : nil, enabled ? nil : "(dimmed)", destructive ? "(red)" : nil].compactMap { $0 }
+                return [indent + ([title] + marks).joined(separator: "  ")]
+            case let .submenu(title, _, lines): return [indent + title + "  ▸"] + text(lines, indent: indent + "  ")
+            case .separator: return [indent + "—"]
+            case .note(let words): return [indent + "(" + words + ")"]
+            }
+        }
+    }
+}

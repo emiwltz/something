@@ -91,11 +91,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             self?.showRequest(nil)
         })
         panels.attention?.notify = { [weak self] in self?.library.preferences.notify == true }
-        panels.queue.space = { [weak self] request in
-            guard let self else { return nil }
-            return RequestQueue.space(of: request.agent, assistant: engine.assistants.contains(request.agent), working: assistant.space(of: request.agent),
-                                      launches: launches.ids)
-        }
+        panels.queue.space = { [weak self] request in self?.space(ofAgent: request.agent) }
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand
@@ -425,9 +421,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// What quitting ends now, from the app's own sources.
     func leaving() -> Leaving {
         App.leaving(agents: engine.state.agents, threads: engine.state.threads, waiting: panels.queue.waiting, who: who) { agent in
-            RequestQueue.space(of: agent.id, assistant: self.engine.assistants.contains(agent.id), working: self.assistant.space(of: agent.id),
-                               launches: self.launches.ids).map { self.library.entry($0)?.title ?? $0 }
+            self.space(ofAgent: agent.id).map { self.library.entry($0)?.title ?? $0 }
         }
+    }
+
+    /// The space `agent` works for, as the request queue says it, or nil.
+    private func space(ofAgent agent: String) -> String? {
+        RequestQueue.space(of: agent, assistant: engine.assistants.contains(agent), working: assistant.space(of: agent), launches: launches.ids)
     }
 
     /// What quitting ends: the requests `waiting`, oldest first, each named as the panel names it (`who`); then the

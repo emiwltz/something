@@ -133,18 +133,14 @@ final class Sheet: NSPanel {
     private static func tile(_ icon: Icon, alert: Bool) -> NSView {
         switch icon {
         case .symbol(let name):
-            let image = NSImageView(image: NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage())
-            (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 14, weight: .regular), Look.Token.ink2.color)
+            let image = NSImageView.symbol(name, 14, .regular, tint: .ink2)
             let tile = Box(image, fill: .sunk, ring: .line, radius: Look.control, insets: NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8))
             NSLayoutConstraint.activate([image.widthAnchor.constraint(equalToConstant: 16), image.heightAnchor.constraint(equalToConstant: 16)])
             return tile
         case .sign:
-            // The app's own tile stays light by night, as its icon does; the mockup's 30-point sign draws its corners
-            // about 22 points wide, which a 25-point image of ours does, in the same 44-point tile.
-            let tile = Box(NSImageView(image: Sign.image(.listen, side: 25)), fill: .bg, ring: .line2, radius: 11,
-                           insets: NSEdgeInsets(top: 9.5, left: 9.5, bottom: 9.5, right: 9.5))
-            tile.appearance = NSAppearance(named: .aqua)
-            return tile
+            // The mockup's 30-point sign draws its corners about 22 points wide, which a 25-point image of ours does, in
+            // the same 44-point tile.
+            return Sign.tile(side: 25, radius: 11, inset: 9.5)
         }
     }
 
@@ -166,15 +162,11 @@ final class Sheet: NSPanel {
 
     /// The rows of what a sheet is about, a mark, a label and a quiet detail each, in a ringed list.
     private static func list(_ rows: [Row], width: CGFloat) -> NSView {
-        let lines = NSStackView()
-        (lines.orientation, lines.spacing) = (.vertical, 0)
-        for (index, row) in rows.enumerated() {
-            if index > 0 { lines.addArrangedSubview(Box(NSView(), fill: .line)) }
+        ringed(rows.map { row in
             let image: NSImageView
             switch row.mark {
             case .symbol(let name):
-                image = NSImageView(image: NSImage(systemSymbolName: name, accessibilityDescription: nil) ?? NSImage())
-                (image.symbolConfiguration, image.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 11, weight: .regular), Look.Token.ink3.color)
+                image = NSImageView.symbol(name, 11, .regular, tint: .ink3)
                 image.widthAnchor.constraint(equalToConstant: 14).isActive = true
             case .eyes(let state):
                 image = NSImageView(image: Sign.miniEyes(state))
@@ -196,11 +188,25 @@ final class Sheet: NSPanel {
             let line = NSStackView(views: [image, label, meta].compactMap { $0 })
             (line.spacing, line.distribution, line.alignment) = (9, .fill, .centerY)
             line.heightAnchor.constraint(greaterThanOrEqualToConstant: Look.row + 3).isActive = true
-            lines.addArrangedSubview(line)
+            return line
+        }, width: width, inset: 12)
+    }
+
+    /// `rows` in a ringed list `width` wide, a rule between each two; `inset` points each side keep the rows and the
+    /// rules off the ring.
+    static func ringed(_ rows: [NSView], width: CGFloat, inset: CGFloat = 0) -> NSView {
+        let lines = NSStackView()
+        (lines.orientation, lines.spacing) = (.vertical, 0)
+        for (index, row) in rows.enumerated() {
+            if index > 0 {
+                let rule = Box(NSView(), fill: .line)
+                rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
+                lines.addArrangedSubview(rule)
+            }
+            lines.addArrangedSubview(row)
         }
-        lines.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width - 24).isActive = true }
-        lines.arrangedSubviews.filter { $0 is Box }.forEach { $0.heightAnchor.constraint(equalToConstant: 1).isActive = true }
-        return Box(lines, fill: .bg, ring: .line, radius: Look.card, insets: NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 12))
+        lines.arrangedSubviews.forEach { $0.widthAnchor.constraint(equalToConstant: width - 2 * inset).isActive = true }
+        return Box(lines, fill: .bg, ring: .line, radius: Look.card, insets: NSEdgeInsets(top: 0, left: inset, bottom: 0, right: inset))
     }
 }
 

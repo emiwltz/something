@@ -56,29 +56,22 @@ enum Sign {
 
         /// The two eyes' rectangles of `state` at rest in a sign of side `side`, top-left origin.
         func eyes(_ state: State, side: CGFloat) -> [CGRect] {
-            let e = eye * side, (w, h) = state == .done ? (joy, joy) : Sign.eyeSize(state), gap = 1.4 * e
-            let face = Sign.faceShift(state)
+            // In eye units: tall ovals, dashes when working, bars asleep (the joy eye's are `joy`); the face looks up and
+            // right while it waits for the person, down when stopped.
+            let (w, h): (CGFloat, CGFloat) = switch state {
+            case .done: (joy, joy)
+            case .think: (1.35, 0.34)
+            case .sleep: (1.2, 0.22)
+            case .unknown: (1.05, 1.3)
+            default: (0.88, 1.56)
+            }
+            let e = eye * side, gap = 1.4 * e
+            let face = state == .wait ? CGPoint(x: 0.55, y: -0.3) : state == .limit ? CGPoint(x: 0, y: 0.5) : .zero
             let cx = side / 2 + face.x * e, cy = side / 2 + face.y * e + 0.45 * e
             return [-1, 1].map { (side: CGFloat) in
                 CGRect(x: cx + side * (gap + w * e) / 2 - w * e / 2, y: cy - h * e / 2, width: w * e, height: h * e)
             }
         }
-    }
-
-    /// An eye's width and height in eye units (the joy eye's are Geometry.joy): tall ovals, dashes when working, bars
-    /// asleep.
-    static func eyeSize(_ state: State) -> (CGFloat, CGFloat) {
-        switch state {
-        case .think: (1.35, 0.34)
-        case .sleep: (1.2, 0.22)
-        case .unknown: (1.05, 1.3)
-        default: (0.88, 1.56)
-        }
-    }
-
-    /// Where the face looks, in eye units: up and right while it waits for the person, down when stopped.
-    static func faceShift(_ state: State) -> CGPoint {
-        state == .wait ? CGPoint(x: 0.55, y: -0.3) : state == .limit ? CGPoint(x: 0, y: 0.5) : .zero
     }
 
     /// A moment of the sign's motion: the frame's scale and lift (a fraction of the side), the eyes' openness and
@@ -215,13 +208,21 @@ enum Sign {
 
     /// The still sign of `state`, `side` points square, resolving its colours wherever it is drawn; VoiceOver reads
     /// the state's word.
-    static func image(_ state: State, side: CGFloat, geometry: Geometry = Geometry()) -> NSImage {
+    static func image(_ state: State, side: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: side, height: side), flipped: true) { rect in
-            draw(state, geometry: geometry, in: rect, flipped: true)
+            draw(state, in: rect, flipped: true)
             return true
         }
         image.accessibilityDescription = state.word
         return image
+    }
+
+    /// The app's sign at rest, `side` points, in a light ringed tile: it stays light by night too, as the app's icon does.
+    static func tile(side: CGFloat, radius: CGFloat, inset: CGFloat) -> NSView {
+        let tile = Box(NSImageView(image: image(.listen, side: side)), fill: .bg, ring: .line2, radius: radius,
+                       insets: NSEdgeInsets(top: inset, left: inset, bottom: inset, right: inset))
+        tile.appearance = NSAppearance(named: .aqua)
+        return tile
     }
 
     /// The mini eyes of `state`, 16x10 points, for menus and the rail: still (menus cannot animate), a template image
@@ -290,7 +291,7 @@ enum Sign {
     /// Draws a grabbed thing's surface in `rect`, rounded by `radius`, with the hard offset shadow ("portée"): a
     /// 1.5 pt ring of ink and its solid copy `lift` points down and right. Only for what a person grabs (the sticker,
     /// a template card on hover), never for inputs, composers or primary buttons: Emi dislikes it there.
-    static func grab(_ rect: CGRect, radius: CGFloat, lift: Lift = .rest, surface: Look.Token = .bg2) {
+    static func grab(_ rect: CGRect, radius: CGFloat, lift: Lift = .rest) {
         let flipped = NSGraphicsContext.current?.isFlipped ?? false
         let ring = rect.insetBy(dx: -1.5, dy: -1.5), drop = ring.offsetBy(dx: lift.rawValue, dy: flipped ? lift.rawValue : -lift.rawValue)
         let night = Look.isDark(NSAppearance.currentDrawing())
@@ -298,7 +299,7 @@ enum Sign {
         ink.setFill()
         NSBezierPath(roundedRect: drop, xRadius: radius + 1.5, yRadius: radius + 1.5).fill()
         NSBezierPath(roundedRect: ring, xRadius: radius + 1.5, yRadius: radius + 1.5).fill()
-        (surface.color.usingColorSpace(.sRGB) ?? .white).setFill()
+        (Look.Token.bg2.color.usingColorSpace(.sRGB) ?? .white).setFill()
         NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
     }
 }

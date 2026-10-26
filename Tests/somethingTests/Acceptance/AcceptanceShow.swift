@@ -21,7 +21,7 @@ struct AcceptanceShow {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         shell.waiting(1, mine: 0)
-        let point = try #require(shell.controls[Shell.point] as? PressButton)
+        let point = try #require(shell.controls[Shell.point] as? ToolButton)
         #expect(point.isEnabled && !point.pressed && shell.assistant.pointable && !shell.assistant.pointing)
         #expect(Keys.enabled("pointpart", Keys.Situation(space: true)) && !Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)))
         #expect(Keys.command("pointpart")?.shown == "⌥⌘S" && point.toolTip == "Point (⌥⌘S)")
@@ -149,7 +149,7 @@ struct AcceptanceShow {
         composer.sendQuick()
 
         // The mode closed; the frame stays, at work, and takes no click.
-        let point = try #require(shell.controls[Shell.point] as? PressButton)
+        let point = try #require(shell.controls[Shell.point] as? ToolButton)
         #expect(brief.pointer == nil && !point.pressed && !model.pointing)
         let quick = try #require(model.quicks["brief"])
         let drawn = try #require(brief.area.subviews.compactMap { $0 as? QuickFrame }.first)

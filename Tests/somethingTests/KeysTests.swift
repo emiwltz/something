@@ -204,10 +204,10 @@ enum Mockup {
             (",", .command), ("/", .command), ("\\", .command), (".", .command), ("K", [.command, .shift]), ("T", [.command, .shift]),
             ("p", [.command, .option]), ("s", [.command, .option]), ("1", .command), ("9", .command), ("f", [.command, .control]),
             ("s", [.command, .control]), ("r", .command)]
-        for (key, modifiers) in kept { #expect(Keys.claims(try Self.event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
+        for (key, modifiers) in kept { #expect(Keys.claim(try Self.event(key, modifiers)) != nil, "\(Keys.symbols(modifiers))\(key)") }
         let left: [(String, NSEvent.ModifierFlags)] = [("z", .command), ("Z", [.command, .shift]), ("c", .command), ("v", .command),
             ("a", .command), ("w", .command), ("0", .command), ("P", [.command, .shift]), ("p", []), ("1", [.command, .option])]
-        for (key, modifiers) in left { #expect(!Keys.claims(try Self.event(key, modifiers)), "\(Keys.symbols(modifiers))\(key)") }
+        for (key, modifiers) in left { #expect(Keys.claim(try Self.event(key, modifiers)) == nil, "\(Keys.symbols(modifiers))\(key)") }
         // The guide tells a page which keys it cannot keep.
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
         for command in Keys.commands where command.mine { #expect(guide.contains(command.shown), "\(command.shown)") }

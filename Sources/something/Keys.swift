@@ -253,8 +253,6 @@ enum Keys {
         }.map { .command($0.id) }
     }
 
-    static func claims(_ event: NSEvent) -> Bool { claim(event) != nil }
-
     // MARK: About
 
     /// The About panel's contents: the sign (the app's icon), the version ("0.3.0" and the build, "31", which the panel

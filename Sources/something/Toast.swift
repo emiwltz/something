@@ -46,9 +46,7 @@ final class Toast: NSView {
         button = action.map { NSButton(title: $0.label, target: nil, action: nil) }
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let icon = NSImageView(image: NSImage(systemSymbolName: quiet ? "info.circle" : "checkmark", accessibilityDescription: nil) ?? NSImage())
-        icon.symbolConfiguration = .init(pointSize: 12, weight: .semibold)
-        icon.contentTintColor = Look.Token.bg.color
+        let icon = NSImageView.symbol(quiet ? "info.circle" : "checkmark", 12, .semibold, tint: .bg)
         NSLayoutConstraint.activate([icon.widthAnchor.constraint(equalToConstant: 14), icon.heightAnchor.constraint(equalToConstant: 14)])
         let text = NSTextField(labelWithString: words)
         (text.font, text.textColor, text.lineBreakMode) = (Look.font(.ui, size: 12.5, weight: .medium), Look.Token.bg.color, .byTruncatingMiddle)

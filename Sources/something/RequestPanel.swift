@@ -193,14 +193,11 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         tick()
         ticker?.invalidate()
         guard !question else { return }
-        let ticker = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
-            // tick() stops it once armed, after enabling the button.
-            guard let self else { return timer.invalidate() }
-            tick()
+        // In every mode: it arms while a sheet waits in a modal loop, or a menu is open. tick() stops it once armed.
+        ticker = .frames(1.0 / 30) { [weak self] in
+            self?.tick()
+            return self != nil
         }
-        // In every mode: it arms while a sheet waits in a modal loop, or a menu is open.
-        RunLoop.main.add(ticker, forMode: .common)
-        self.ticker = ticker
     }
 
     /// Whether Allow Once answers: 0.5 s after the request appeared, so that no click meant for something else lands on
@@ -474,9 +471,8 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
                       Self.text(question.text, Look.Style(face: .voice, size: 15, weight: .regular, leading: 1.42)),
                       options.isEmpty ? nil : Box(list), Box(own)].compactMap { $0 }
         }
-        let lock = NSImageView(image: NSImage(systemSymbolName: "lock", accessibilityDescription: nil) ?? NSImage())
-        (lock.symbolConfiguration, lock.contentTintColor) = (NSImage.SymbolConfiguration(pointSize: 9, weight: .medium), Look.Token.ink3.color)
-        let hint = NSStackView(views: [lock, Self.text("The space can't see this window.", Look.Style(face: .ui, size: 11, weight: .regular, leading: 1.3), .ink3)])
+        let hint = NSStackView(views: [NSImageView.symbol("lock", 9, .medium, tint: .ink3),
+                                       Self.text("The space can't see this window.", Look.Style(face: .ui, size: 11, weight: .regular, leading: 1.3), .ink3)])
         hint.spacing = 5
         let last = NSStackView(views: [denyButton, hint])
         last.distribution = .equalSpacing
@@ -487,9 +483,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     /// A label in the panel's type, wrapping inside its insets.
     static func text(_ string: String, _ style: Look.Style, _ color: Look.Token = .ink) -> NSTextField {
         let field = NSTextField(wrappingLabelWithString: string)
-        field.font = style.font
-        field.textColor = color.color
-        field.preferredMaxLayoutWidth = width - 32
+        (field.font, field.textColor, field.preferredMaxLayoutWidth) = (style.font, color.color, width - 32)
         return field
     }
 }
@@ -514,10 +508,7 @@ final class PanelHeader: NSView {
     private var grabbed: (mouse: NSPoint, origin: NSPoint)?
 
     init() {
-        // The app's badge stays light by night too, as the app's icon does.
-        let badge = Box(NSImageView(image: Sign.image(.listen, side: 13)), fill: .bg, ring: .line2, radius: 4.5,
-                        insets: NSEdgeInsets(top: 2, left: 2, bottom: 2, right: 2))
-        badge.appearance = NSAppearance(named: .aqua)
+        let badge = Sign.tile(side: 13, radius: 4.5, inset: 2)
         title = NSStackView(views: [badge, RequestPanel.text("something", Look.Style(face: .ui, size: 11.5, weight: .semibold, leading: 1)), kindLabel])
         title.spacing = 6
         let back = Self.arrow("chevron.left", "Previous request", -1), on = Self.arrow("chevron.right", "Next request", 1)
@@ -588,8 +579,7 @@ class PanelButton: NSButton {
     /// `symbol`, a system symbol's name, goes 7 points before the title.
     init(_ title: String, primary: Bool = false, hint: String? = nil, symbol: String? = nil, target: AnyObject? = nil, action: Selector? = nil) {
         (self.primary, self.hint) = (primary, hint)
-        self.symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10.5, weight: .semibold))
+        self.symbol = symbol.map { NSImage.symbol($0, 10.5, .semibold) }
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
         setContentHuggingPriority(.required, for: .horizontal)
@@ -633,13 +623,8 @@ class PanelButton: NSButton {
         }
         let label = label, size = label.size(), x = ((bounds.width - size.width - lead) / 2).rounded()
         if let symbol {
-            let ink = (primary ? Look.Token.actfg : .ink).color
-            NSImage(size: symbol.size, flipped: false) { rect in
-                symbol.draw(in: rect)
-                ink.set()
-                rect.fill(using: .sourceAtop)
-                return true
-            }.draw(in: NSRect(origin: NSPoint(x: x, y: ((bounds.height - symbol.size.height) / 2).rounded()), size: symbol.size))
+            symbol.tinted((primary ? Look.Token.actfg : .ink).color)
+                .draw(in: NSRect(origin: NSPoint(x: x, y: ((bounds.height - symbol.size.height) / 2).rounded()), size: symbol.size))
         }
         label.draw(at: NSPoint(x: x + lead, y: ((bounds.height - size.height) / 2).rounded()))
     }
@@ -653,8 +638,7 @@ final class LinkButton: NSButton {
     private let symbol: NSImage?, face: NSFont, lead: CGFloat
 
     init(_ title: String, _ symbol: String?, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
-        self.symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 10, weight: .medium))
+        self.symbol = symbol.map { NSImage.symbol($0, 10, .medium) }
         (face, lead) = (Look.font(.ui, size: size, weight: weight), symbol == nil ? 0 : 17)
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
@@ -672,13 +656,7 @@ final class LinkButton: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         if let symbol {
-            let tinted = NSImage(size: symbol.size, flipped: false) { rect in
-                symbol.draw(in: rect)
-                Look.Token.ink2.color.set()
-                rect.fill(using: .sourceAtop)
-                return true
-            }
-            tinted.draw(in: NSRect(x: 0, y: ((bounds.height - symbol.size.height) / 2).rounded(), width: symbol.size.width, height: symbol.size.height))
+            symbol.tinted(Look.Token.ink2.color).draw(in: NSRect(x: 0, y: ((bounds.height - symbol.size.height) / 2).rounded(), width: symbol.size.width, height: symbol.size.height))
         }
         words.draw(at: NSPoint(x: lead, y: ((bounds.height - words.size().height) / 2).rounded()))
     }
@@ -766,15 +744,13 @@ final class KeyRing: NSView {
         let length = Look.duration(1.1, motion), start = CACurrentMediaTime()
         guard length > 0 else { return }
         pulse = 0
-        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
-            guard let self else { return timer.invalidate() }
+        timer = .frames(1.0 / 30) { [weak self] in
+            guard let self else { return false }
             let done = (CACurrentMediaTime() - start) / length
             pulse = done < 1 ? done : nil
-            if pulse == nil { timer.invalidate() }
             needsDisplay = true
+            return pulse != nil
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }

@@ -48,24 +48,6 @@ import SomethingCore
                  holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
         }
 
-        init() {}
-
-        /// Each key on its own: one value of the wrong type falls back to its default, never the whole file.
-        init(from decoder: Decoder) throws {
-            let keys = try decoder.container(keyedBy: CodingKeys.self)
-            func read<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T { (try? keys.decodeIfPresent(T.self, forKey: key)) ?? fallback }
-            let base = Values()
-            (lastOpen, assistant, model, effort) = (read(.lastOpen, nil), read(.assistant, nil), read(.model, nil), read(.effort, nil))
-            listed = read(.listed, base.listed)
-            (askEverything, resume, toured) = (read(.askEverything, base.askEverything), read(.resume, base.resume), read(.toured, base.toured))
-            (launcherOffered, addToApplications) = (read(.launcherOffered, base.launcherOffered), read(.addToApplications, base.addToApplications))
-            (groups, folded, names, recents) = (read(.groups, base.groups), read(.folded, base.folded), read(.names, base.names), read(.recents, base.recents))
-            (openAtStart, appearance, motion) = (read(.openAtStart, base.openAtStart), read(.appearance, base.appearance), read(.motion, base.motion))
-            (assistantAtOpening, sidebarEyes) = (read(.assistantAtOpening, base.assistantAtOpening), read(.sidebarEyes, base.sidebarEyes))
-            (rememberSticker, holdOption, notify) = (read(.rememberSticker, base.rememberSticker), read(.holdOption, base.holdOption), read(.notify, base.notify))
-            (sticker, sleepAfter, awakeAtMost) = (read(.sticker, nil), read(.sleepAfter, base.sleepAfter), read(.awakeAtMost, base.awakeAtMost))
-            (versionsKept, storageLimit) = (read(.versionsKept, base.versionsKept), read(.storageLimit, base.storageLimit))
-        }
     }
 
     /// How many recent spaces are kept, the most recent first.
@@ -82,7 +64,17 @@ import SomethingCore
     init(_ places: Places) {
         file = places.window
         kept = (try? Data(contentsOf: file)).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-        values = (try? JSONSerialization.data(withJSONObject: kept)).flatMap { try? JSONDecoder().decode(Values.self, from: $0) } ?? Values()
+        // Each key on its own over the defaults: one value of the wrong type falls back to its default, never the whole file.
+        func decoded(_ json: [String: Any]) -> Values? {
+            (try? JSONSerialization.data(withJSONObject: json)).flatMap { try? JSONDecoder().decode(Values.self, from: $0) }
+        }
+        var read = (try? JSONEncoder().encode(Values())).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        for (key, value) in kept where Values.CodingKeys(rawValue: key) != nil {
+            var tried = read
+            tried[key] = value
+            if decoded(tried) != nil { read = tried }
+        }
+        values = decoded(read) ?? Values()
     }
 
     /// The one copy of the preferences kept in `places`, read the first time it is asked for.

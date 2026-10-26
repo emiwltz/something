@@ -111,18 +111,12 @@ import SwiftUI
         }
     }
 
-    /// A right as the panel names it, in the mockup's short words, and what it lets the space do, with the warning
-    /// the rights sheet gives when it has one.
+    /// A right as the panel names it, as the rights sheet does, and what it lets the space do in the mockup's short
+    /// words, with the warning the rights sheet gives when it has one.
     static func words(for right: String) -> (name: String, detail: String) {
-        let (word, kind) = Ask.parts(of: right)
-        let (name, detail): (String, String) = switch word {
-        case "state": ("See your agents", "Their state, folder and last messages.")
-        case "send": ("Write to your \(kind.map { $0 + " " } ?? "")agents", "Send them a message you typed here.")
-        case "launch": ("Start \(kind ?? "agents")", "Launch one in a folder you choose.")
-        case "store": ("Remember things", "A small memory, kept in its own folder.")
-        default: (right, "")
-        }
-        return (name, [detail, Ask.warning(for: right).map { $0 + "." }].compactMap { $0 }.joined(separator: " "))
+        let detail = ["state": "Their state, folder and last messages.", "send": "Send them a message you typed here.",
+                      "launch": "Launch one in a folder you choose.", "store": "A small memory, kept in its own folder."][Ask.parts(of: right).word]
+        return (Ask.right(right).title, [detail ?? "", Ask.warning(for: right).map { $0 + "." }].compactMap { $0 }.joined(separator: " "))
     }
 
     /// What the assistant is doing, in one plain sentence after its state's word; the unknown is said as such.
@@ -401,17 +395,12 @@ struct InspectorView: View {
                     Text("Group").foregroundStyle(Look.Token.ink3.ui)
                     // The groups as the sidebar's Show in Group has them: no "None", a space leaves a group only for
                     // another one there too.
-                    Menu {
+                    PopMenu(title: "Group", shown: group ?? "None") {
                         Picker("Group", selection: Binding(get: { group ?? "" }, set: { if $0 != group { library.move(space.name, to: $0) } })) {
                             ForEach(groups, id: \.self) { Text($0).tag($0) }
                         }
-                        .pickerStyle(.inline).labelsHidden()
-                    } label: {
-                        PopButton(label: group ?? "None")
                     }
-                    .plainMenu().disabled(groups.isEmpty)
-                    .accessibilityElement(children: .ignore).accessibilityLabel("Group: \(group ?? "None")").accessibilityAddTraits(.isButton)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .disabled(groups.isEmpty).frame(maxWidth: .infinity, alignment: .trailing)
                 }
                 row("Made", info.made.map { Info.day($0, now: now) } ?? "Unknown")
                 row("Size", info.size.map { Info.weight($0, form: space.form) } ?? "Unknown")
