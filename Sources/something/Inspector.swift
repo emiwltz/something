@@ -1,9 +1,10 @@
 // Info, docked at the window's right edge at full height, 320 points: the space narrows beside it, nothing hides under
-// it. One panel holds Info or, later, History (T19), swapped by `content` without a relayout; it opens and closes at
+// it. One panel holds Info or History (History.swift), swapped by `content` without a relayout; it opens and closes at
 // once, the page laid out again a single time (SP10). Info says, of the open space: its assistant (its eyes and a plain
 // sentence, agent, model, conversation, New Conversation, Put to Sleep, and Show Request while a request of its own
-// waits), what it may do (a switch for each right answered, Ask Again), about it (its description, group, made, size,
-// last change, where), Show in Finder, Export… and Move to Trash…, and last its activity, the journal newest first.
+// waits), what it may do (a switch for each right answered, Ask Again), its versions (how many, the latest, Show
+// History…), about it (its description, group, made, size, last change, where), Show in Finder, Export… and Move to
+// Trash…, and last its activity, the journal newest first.
 // A switched right is kept in the grants file and reaches the open space at once as a `granted` event. ✕ and ⌘I close
 // it, and Esc while the focus is in it: an Esc of the whole window would take it from every page and field.
 import AppKit
@@ -26,6 +27,10 @@ import SwiftUI
     @ObservationIgnored var close: () -> Void = {}
     /// The clock the dates are said by; a test sets it.
     @ObservationIgnored var clock: () -> Date = Date.init
+    /// Shows History in the panel: the window's.
+    @ObservationIgnored var showHistory: () -> Void = {}
+    /// The open space's versions, which History and the Versions part show.
+    let history: History
     var content = Content.info
     /// How many requests of the open space's own wait: Show Request is offered while one does.
     var waiting = 0
@@ -60,11 +65,14 @@ import SwiftUI
     init(places: Places, ask: Asking) {
         self.places = places
         self.ask = ask
+        history = History(places: places)
+        history.clock = { [weak self] in self?.clock() ?? Date() }
     }
 
     /// Shows `space`, or nothing when no space is open. Read again at each change: it is a few small files.
     func show(_ space: Space?) {
         self.space = space
+        history.show(space)
         (rights, activity, folder, problem, answered, made, changed, size) = ([], [], nil, nil, nil, nil, nil, nil)
         guard let space else { return }
         let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
@@ -200,9 +208,19 @@ import SwiftUI
     }
 }
 
-/// The panel's controller: Esc closes it while the focus is in it.
+/// The panel's controller: Esc closes it while the focus is in it, and ↑ ↓ move History's choice.
 final class InfoController: NSHostingController<InspectorView> {
     override func cancelOperation(_ sender: Any?) { rootView.info.close() }
+    override func moveUp(_ sender: Any?) { if rootView.info.content == .history { rootView.info.history.move(-1) } }
+    override func moveDown(_ sender: Any?) { if rootView.info.content == .history { rootView.info.history.move(1) } }
+
+    override func keyDown(with event: NSEvent) {
+        switch (rootView.info.content, event.keyCode) {
+        case (.history, 126): moveUp(nil)
+        case (.history, 125): moveDown(nil)
+        default: super.keyDown(with: event)
+        }
+    }
 }
 
 extension Shell {
@@ -216,8 +234,17 @@ extension Shell {
         (controls[Shell.info] as? ToolButton)?.pressed = shown
     }
 
-    /// ⌘I and the toolbar's Info: opens Info while a space is open, else closes the panel.
-    func toggleInfo(spaceOpen: Bool) { showInfo(!infoShown && spaceOpen) }
+    /// Shows History in the panel, in Info's place, while a space is open: Info's button is not pressed for it.
+    func showHistory() {
+        guard space != nil else { return }
+        info.content = .history
+        inspector.isCollapsed = false
+        (controls[Shell.info] as? ToolButton)?.pressed = false
+    }
+
+    /// ⌘I and the toolbar's Info: opens Info while a space is open (in History's place when it shows), else closes
+    /// the panel.
+    func toggleInfo(spaceOpen: Bool) { showInfo(!(infoShown && info.content == .info) && spaceOpen) }
 }
 
 struct InspectorView: View {
@@ -227,25 +254,20 @@ struct InspectorView: View {
 
     var body: some View {
         Group {
-            if let space = info.space, info.content == .info {
+            if let space = info.space {
+                let title = library.entry(space.name)?.title ?? space.name
                 VStack(spacing: 0) {
                     // The toolbar's lower edge goes on over the panel.
                     Rectangle().fill(Look.Token.line.ui).frame(height: 1)
-                    header(space)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            if assistant.place.space == space.name { yours }
-                            group("What it may do") { permissions }
-                            group("About") { facts(space) }
-                            actions(space)
-                            group("Activity") { activity }
-                        }
-                        .padding(EdgeInsets(top: 20, leading: 18, bottom: 22, trailing: 18))
+                    if info.content == .history {
+                        HistoryView(history: info.history, title: title, close: info.close)
+                    } else {
+                        DockHeader(title: "Info", sub: "\(title) · \(space.location.lastPathComponent)",
+                                    help: Words.path(space.location.path, home: info.places.home.path), close: ("Close Info", info.close))
+                        details(space)
                     }
-                    .scrollIndicators(.never)
                 }
             } else {
-                // History (T19) fills the same panel; with no space open, nothing.
                 Color.clear
             }
         }
@@ -256,25 +278,39 @@ struct InspectorView: View {
         .overlay(alignment: .leading) { Rectangle().fill(Look.Token.line.ui).frame(width: 1) }
     }
 
-    /// "Info", the space's title and file, and ✕.
-    private func header(_ space: Space) -> some View {
-        let title = library.entry(space.name)?.title ?? space.name
-        return HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Info").font(Look.titleS.font.ui).kerning(-0.34).accessibilityAddTraits(.isHeader)
-                Text("\(title) · \(space.location.lastPathComponent)").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
-                    .lineLimit(1).help(Words.path(space.location.path, home: info.places.home.path))
+    /// Info's parts, scrolled.
+    private func details(_ space: Space) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if assistant.place.space == space.name { yours }
+                group("What it may do") { permissions }
+                group("Versions") { versions }
+                group("About") { facts(space) }
+                actions(space)
+                group("Activity") { activity }
             }
-            .padding(.top, 1)
-            Spacer(minLength: 0)
-            Button { info.close() } label: {
-                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink2.ui)
-                    .frame(width: 24, height: 24).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).help(Keys.tooltip("insp", "Close")).accessibilityLabel("Close Info")
+            .padding(EdgeInsets(top: 20, leading: 18, bottom: 22, trailing: 18))
         }
-        .padding(EdgeInsets(top: 14, leading: 16, bottom: 11, trailing: 12))
-        .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+        .scrollIndicators(.never)
+    }
+
+    /// Versions: how many are kept and what they weigh, when the latest was made (its sentence on hover), and
+    /// Show History….
+    private var versions: some View {
+        let history = info.history, latest = history.versions.first
+        return VStack(alignment: .leading, spacing: 11) {
+            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: Look.row * 0.32) {
+                row("Kept", latest == nil ? "None yet" : "\(history.versions.count) · \(Size.words(history.bytes))")
+                if let latest { row("Latest", History.when(latest.when, now: info.clock())).help(history.title(latest)) }
+            }
+            Button { info.showHistory() } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "clock.arrow.circlepath").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui)
+                    Text("Show History…").font(Look.font(.ui, size: 12.5, weight: .medium).ui)
+                }
+            }
+            .buttonStyle(Secondary(height: 30))
+        }
     }
 
     /// Its assistant: the eyes and a sentence, Show Request while a request of its own waits, agent, model and
@@ -481,6 +517,30 @@ struct InspectorView: View {
             .padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading).contentShape(Rectangle())
         }
         .buttonStyle(.plain).help(Keys.tooltip(key, title))
+    }
+}
+
+/// The panel's header, Info's and History's: its title, a line under it, and ✕ (`close`: its label and action).
+struct DockHeader: View {
+    let title: String, sub: String, help: String?
+    let close: (label: String, run: () -> Void)
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(Look.titleS.font.ui).kerning(-0.34).accessibilityAddTraits(.isHeader)
+                Text(sub).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).help(help ?? "")
+            }
+            .padding(.top, 1)
+            Spacer(minLength: 0)
+            Button(action: close.run) {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink2.ui)
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(Keys.tooltip("insp", "Close")).accessibilityLabel(close.label)
+        }
+        .padding(EdgeInsets(top: 14, leading: 16, bottom: 11, trailing: 12))
+        .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
     }
 }
 

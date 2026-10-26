@@ -256,6 +256,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 guard let self, let view, current === view else { return }
                 shell.show(view)
                 info.show(view.space)
+                Task { @MainActor [weak self] in await self?.info.history.picture(of: view) }
                 assistant.place = AssistantModel.place(view)
                 library.relist()
             }
@@ -319,6 +320,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func showInFinder(_ sender: Any?) { current.map { library.showInFinder($0.space.name) } }
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
     @objc func toggleInfo(_ sender: Any?) { shell.toggleInfo(spaceOpen: current != nil) }
+    @objc func showHistory(_ sender: Any?) { shell.showHistory() }
     @objc func pointAtPart(_ sender: Any?) { shell.point() }
     @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }
     @objc func reduceAssistant(_ sender: Any?) { shell.reduceAssistant(sender) }

@@ -3,7 +3,9 @@
 // Trash, the limits (versions per space, the storage limit) dropping the oldest first and never a space's latest, a space
 // too heavy refused in words yet still restored through the Trash, a version of the other form or a link refused before
 // anything is written, an index that does not read never written over, and the summaries of what changed. Nothing
-// reaches the person's Trash.
+// reaches the person's Trash. History: the choice, its moves and the fold, the rows' words (the oldest kept state never
+// an edit on disk), the days as it says them, a picture kept beside its version and dropped with it, and Restore This
+// Version refused while the assistant works, then itself a version undone by ⌘Z.
 import Foundation
 import SomethingCore
 import Testing
@@ -234,5 +236,119 @@ import Testing
         try versions.trash("today", recycle: { recycled.append($0) })
         try versions.trash("never-versioned", recycle: { recycled.append($0) })
         #expect(recycled == [versions.folder("today")])
+    }
+
+    /// A file space of `test` with `count` versions, 13 hours apart up to `now`: the first kept as it was, then turns,
+    /// the fourth an edit no turn claims.
+    func history(_ test: Home, now: Date, _ count: Int) throws -> (Space, Versions) {
+        let space = try test.space("today", "<p>0</p>\n"), versions = store(test)
+        try versions.capture(space, kind: .outside, at: now.addingTimeInterval(-Double(count) * 3_600 * 13))
+        for step in 1..<count {
+            try "<p>\(step)</p>\n".write(to: space.location, atomically: true, encoding: .utf8)
+            let at = now.addingTimeInterval(-Double(count - step) * 3_600 * 13)
+            try versions.capture(space, kind: step == 3 ? .outside : .turn, sentence: step == 3 ? nil : "Say \(step)", who: "Claude Code", at: at)
+        }
+        return (space, versions)
+    }
+
+    @Test func historyChoosesTheVersionBeforeTheNewestAndFoldsTheOlderOnes() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let now = Date()
+        let (space, versions) = try history(test, now: now, 9)
+        let history = History(places: test.places)
+        history.clock = { now }
+        history.show(space)
+        let all = versions.list("today")
+        #expect(history.versions == all && history.chosen == all[1].id && history.restorable && history.bytes > 0)
+        #expect(history.rows.count == 6 && history.older?.hasPrefix("3 older versions, back to ") == true)
+        // The words: a turn by its sentence, an edit no turn claims, the oldest as something first kept it.
+        #expect(history.title(all[0]) == "“Say 8”" && history.byline(all[0]).hasSuffix(" · Claude Code"))
+        let edit = try #require(all.first { $0.kind == .outside && $0.id != all.last?.id })
+        #expect(history.title(edit) == "Edited outside something" && history.byline(edit).hasSuffix(" · Changed on disk, not by its assistant"))
+        let first = try #require(all.last)
+        #expect(history.title(first) == "As something first kept it" && history.byline(first).hasSuffix(" · Before its first change here"))
+        #expect(!history.byline(first).contains("disk"))
+        // ↓ past the sixth unfolds; the moves stop at both ends; the newest cannot be restored over itself.
+        history.move(10)
+        #expect(history.chosen == first.id && history.unfolded && history.rows.count == 9 && history.older == nil)
+        history.move(-20)
+        #expect(history.chosen == all[0].id && !history.restorable)
+        // The same space read again keeps the choice; another starts over.
+        history.move(2)
+        history.show(space)
+        #expect(history.chosen == all[2].id)
+        history.show(nil)
+        #expect(history.versions.isEmpty && history.chosen == nil && history.rows.isEmpty)
+    }
+
+    @Test func historySaysTheDaysAsTheMockupDoes() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 22, hour: 18, minute: 20)))
+        let at = { (day: Int, hour: Int, minute: Int, year: Int) in
+            calendar.date(from: DateComponents(year: year, month: 10, day: day, hour: hour, minute: minute)) ?? now
+        }
+        #expect(History.when(at(22, 18, 12, 2026), now: now, calendar: calendar) == "Today 18:12")
+        #expect(History.when(at(21, 21, 5, 2026), now: now, calendar: calendar) == "Yesterday 21:05")
+        #expect(History.when(at(20, 11, 2, 2026), now: now, calendar: calendar) == "Tuesday 11:02")
+        #expect(History.when(at(19, 9, 20, 2026), now: now, calendar: calendar) == "Monday 09:20")
+        #expect(History.when(at(12, 9, 20, 2026), now: now, calendar: calendar) == "12 Oct 09:20")
+        #expect(History.when(at(12, 9, 20, 2025), now: now, calendar: calendar) == "12 Oct 2025 09:20")
+    }
+
+    @Test func aPictureIsKeptBesideItsVersionAndGoesWithIt() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let space = try test.space("today", "<p>Morning</p>\n")
+        let versions = store(test, keep: 1)
+        let morning = try #require(try versions.capture(space, kind: .turn, sentence: "Say morning", who: "Codex"))
+        #expect(versions.holds(space, morning))
+        try versions.keep(picture: Data([1, 2, 3]), of: morning.id, in: "today")
+        #expect(versions.list("today").first?.thumb == "thumbs/\(morning.id).png")
+        #expect(FileManager.default.fileExists(atPath: versions.picture("today", morning.id).path))
+        #expect(throws: SpaceError.self) { try versions.keep(picture: Data(), of: "gone", in: "today") }
+        try "<p>Evening</p>\n".write(to: space.location, atomically: true, encoding: .utf8)
+        #expect(!versions.holds(space, morning))
+        try versions.capture(space, kind: .turn, sentence: "Say evening", who: "Codex")
+        #expect(!FileManager.default.fileExists(atPath: versions.picture("today", morning.id).path), "dropped with its version")
+    }
+
+    @Test func restoreThisVersionWaitsForTheAssistantThenIsAVersionUndoneByCommandZ() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let now = Date()
+        let (space, _) = try history(test, now: now, 3)
+        let undo = WindowUndo()
+        undo.groupsByEvent = false
+        let changes = Changes(places: test.places, undo: undo)
+        var working = true, said: [(String, String?)] = []
+        changes.find = { Spaces(root: test.places.spaces).named($0) }
+        changes.title = { _ in "Today" }
+        changes.working = { _ in working }
+        changes.recycle = { _ in Issue.record("nothing to trash") }
+        changes.toast = { words, action, _, _ in said.append((words, action?.label)) }
+        let history = History(places: test.places)
+        history.clock = { now }
+        history.restoring = { changes.bringBack($0, to: $1, words: $2) }
+        changes.kept = { history.kept($0) }
+        history.show(space)
+        let before = history.versions, chosen = before[1]
+        undo.beginUndoGrouping()
+        history.restore()
+        #expect(said.last?.0 == "Today’s assistant is working · restore once it’s done" && history.versions == before)
+        #expect(try String(contentsOf: space.location, encoding: .utf8) == "<p>2</p>\n")
+        working = false
+        history.restore()
+        undo.endUndoGrouping()
+        let words = "the version of " + History.when(chosen.when, now: now)
+        #expect(try String(contentsOf: space.location, encoding: .utf8) == "<p>1</p>\n")
+        #expect(history.versions.count == 4 && history.versions[0].kind == .restore && history.versions[0].restored == chosen.id)
+        #expect(history.chosen == history.versions[0].id && history.title(history.versions[0]) == "Restored " + words)
+        #expect(said.last?.0 == "Restored " + words && said.last?.1 == "Undo ⌘Z")
+        #expect(undo.undoMenuItemTitle == "Undo " + Changes.quoted("Restore " + words))
+        undo.undo()
+        #expect(try String(contentsOf: space.location, encoding: .utf8) == "<p>2</p>\n")
+        #expect(history.versions.count == 5 && history.chosen == history.versions[0].id)
     }
 }

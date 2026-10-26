@@ -339,7 +339,8 @@ final class CheckPage: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if !rendered.problems.contains(problem) { rendered.problems.append(problem) }
     }
 
-    private static func png(_ image: NSImage) -> Data? {
+    /// The image as PNG data; nil when it does not convert.
+    static func png(_ image: NSImage) -> Data? {
         image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))?.representation(using: .png, properties: [:])
     }
 

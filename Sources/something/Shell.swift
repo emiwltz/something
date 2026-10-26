@@ -100,6 +100,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
+        info.showHistory = { [weak self] in self?.showHistory() }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }

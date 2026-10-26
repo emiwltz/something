@@ -1,14 +1,15 @@
-// Each space's past, kept in the engine's own folder, never in the spaces folder agents edit:
-// Application Support/something/versions/<space>/, an index.json of its versions, newest first, and blobs/<sha256>,
-// each file's content kept once however many versions hold it. A version is taken only when the space's files changed:
-// after a turn of its assistant, named by the person's sentence, or for a change no turn claims ("Edited outside
-// something"). Restoring writes a version's files back, sends the files it did not have to the Trash, and is itself a
-// version, so it can be undone the same way. The Preferences' limits (versions per space, the storage limit) drop the
-// oldest versions first; the latest version of a space is never dropped, nor a space or its memory. A space heavier
-// than an export carries (15 MB of files, 500 files) is not versioned, and says so; restoring it to an older version
-// sends the files it changes to the Trash instead, so a space an agent overfilled can still go back. Clear Old Versions
-// (Settings › Versions & Storage) drops the versions older than a date, each space keeping its newest few. Nothing is
-// read or written through a symbolic link: a restore never writes outside the space.
+// Each space's past, kept in the engine's own folder, never in the spaces folder agents edit: Application
+// Support/something/versions/<space>/, an index.json of its versions, newest first, and blobs/<sha256>, each file's
+// content kept once however many versions hold it. A version is taken only when the space's files changed: after a turn
+// of its assistant, named by the person's sentence, or for a change no turn claims ("Edited outside something").
+// Restoring writes a version's files back, sends the files it did not have to the Trash, and is itself a version, so it
+// can be undone the same way. A version's picture, once History took it, is kept beside it (thumbs/). The Preferences'
+// limits (versions per space, the storage limit) drop the oldest versions first; the latest version of a space is never
+// dropped, nor a space or its memory. A space heavier than an export carries (15 MB of files, 500 files) is not
+// versioned, and says so; restoring it to an older version sends the files it changes to the Trash instead, so a space
+// an agent overfilled can still go back. Clear Old Versions (Settings › Versions & Storage) drops the versions older
+// than a date, each space keeping its newest few. Nothing is read or written through a symbolic link: a restore never
+// writes outside the space.
 import CryptoKit
 import Foundation
 import SomethingCore
@@ -31,7 +32,7 @@ struct Versions {
         let summary: String
         /// The id of the version a restore brought back.
         var restored: String?
-        /// The page's picture, a file in the space's folder, once History draws one.
+        /// The page's picture once History took it: a PNG in the store, `thumbs/<id>.png` of the space's folder.
         var thumb: String?
     }
 
@@ -156,6 +157,38 @@ struct Versions {
         return try capture(space, kind: .restore, who: "You", restored: chosen.id, at: when)
     }
 
+    /// The picture of the version `id` of `name`, where `keep(picture:)` writes it.
+    func picture(_ name: String, _ id: String) -> URL { folder(name).appendingPathComponent("thumbs/\(id).png") }
+
+    /// Keeps `png` as the picture of the version `id` of `name`. Throws a `SpaceError` when the version is gone or the
+    /// store cannot be written.
+    func keep(picture png: Data, of id: String, in name: String) throws {
+        var versions = try read(name)
+        guard let index = versions.firstIndex(where: { $0.id == id }) else { throw SpaceError("This version of \(name) is no longer kept.") }
+        do {
+            try FileManager.default.createDirectory(at: picture(name, id).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try png.write(to: picture(name, id), options: .atomic)
+        } catch {
+            throw SpaceError("The picture of a version of \(name) could not be kept: \(error.localizedDescription)")
+        }
+        versions[index].thumb = "thumbs/\(id).png"
+        try save(name, versions)
+    }
+
+    /// Whether `space`'s files are now exactly those of `version`.
+    func holds(_ space: Space, _ version: Version) -> Bool {
+        let files = space.files()
+        return files.count == version.files.count && files.allSatisfy { file in
+            (try? Data(contentsOf: file.url)).map(Versions.hash) == version.files[file.path]
+        }
+    }
+
+    /// What the versions of `name` weigh in the store, in bytes: their contents and pictures.
+    func weight(_ name: String) -> Int {
+        let walk = FileManager.default.enumerator(at: folder(name), includingPropertiesForKeys: [.fileSizeKey])
+        return (walk?.allObjects as? [URL] ?? []).reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+
     /// Sends the versions of `name` to the Trash with its space, through `recycle`.
     func trash(_ name: String, recycle: (URL) throws -> Void) throws {
         if FileManager.default.fileExists(atPath: folder(name).path) { try recycle(folder(name)) }
@@ -220,6 +253,10 @@ struct Versions {
             let held = Set(versions.flatMap(\.files.values))
             let blobs = (try? FileManager.default.contentsOfDirectory(atPath: folder(name).appendingPathComponent("blobs").path)) ?? []
             for hash in blobs where !held.contains(hash) { try? FileManager.default.removeItem(at: blob(name, hash)) }
+            let ids = Set(versions.map(\.id)), thumbs = folder(name).appendingPathComponent("thumbs")
+            for file in (try? FileManager.default.contentsOfDirectory(atPath: thumbs.path)) ?? [] where !ids.contains(String(file.dropLast(4))) {
+                try? FileManager.default.removeItem(at: thumbs.appendingPathComponent(file))
+            }
         }
     }
 

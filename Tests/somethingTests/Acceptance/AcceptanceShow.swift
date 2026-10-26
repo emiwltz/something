@@ -386,7 +386,113 @@ struct AcceptanceShow {
         }
         shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
     }
-    @Test("f6: History", .disabled("not built yet: T19")) func f6() async throws {}
+    /// The mockup's twelve versions of Daily brief, oldest first: the sentence (nil for the state kept before the first
+    /// change, and for an edit no turn claims), the day of October and the time, local.
+    static let briefVersions: [(String?, Int, Int, Int)] = [
+        (nil, 12, 9, 0), ("Make me a morning paper of my agents", 12, 9, 4), ("Put the date under the title", 13, 10, 15),
+        ("Add a quote of the day", 14, 17, 40), ("Split the news into three columns", 15, 11, 30), ("Use a serif for the headlines", 17, 16, 5),
+        ("Use a newspaper look, like a morning paper", 19, 9, 20), ("Add the day’s numbers under At work", 20, 11, 2),
+        ("Make the headlines shorter", 21, 14, 30), ("Put the agents that wait for me first", 21, 21, 5), (nil, 22, 16, 40),
+        ("Add a weather corner, top right", 22, 18, 12),
+    ]
+
+    /// Daily brief open, its twelve versions kept: Info's Versions part says how many, what they weigh and the latest,
+    /// and Show History… puts History in Info's place, 320 points, the page narrowed beside it. History opens on the
+    /// version before the newest, the edit outside something with its pencil, six rows, then the fold to the six
+    /// older back to 12 October; Hold Space to compare beside Restore This Version. The newest's picture is taken once
+    /// its page settled. ↓ moves the choice; a restore waits while the assistant works, then is a version; Esc closes.
+    @Test("f6: History") func f6() async throws {
+        let stage = try Stage("show")
+        defer { stage.remove() }
+        let (shell, library, info) = stage.window()
+        try stage.moment(shell)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        shell.waiting(1, mine: 0)
+        shell.layer.announce = { _ in }
+        info.clock = { Stage.local }
+        info.current = { brief }
+        let changes = Changes(places: stage.home.places, undo: shell.undo)
+        changes.follow(shell.assistant, in: shell, library: library)
+        var said: [String] = []
+        changes.toast = { words, _, _, _ in said.append(words) }
+        // The versions, each a little other file; the newest is the page as it loaded.
+        let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
+        for (index, version) in Self.briefVersions.enumerated() {
+            let last = index == Self.briefVersions.count - 1
+            try (last ? was : was + "<!-- \(index) -->\n").write(to: page, atomically: true, encoding: .utf8)
+            let at = try #require(Calendar.current.date(from: DateComponents(year: 2026, month: 10, day: version.1, hour: version.2, minute: version.3)))
+            try store.capture(brief.space, kind: version.0 == nil ? .outside : .turn, sentence: version.0, who: version.0 == nil ? nil : "Claude Code", at: at)
+        }
+        #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
+        await Picture.settle(brief)
+        info.show(brief.space)
+        let all = info.history.versions
+        #expect(all.count == 12 && all[1].kind == .outside && all.last?.kind == .outside)
+        // The newest's picture, once its page settled; the older ones, never shown here, are given the same.
+        // Taken in the day appearance the pictures are compared in, whatever this Mac's own.
+        NSApp.appearance = NSAppearance(named: .aqua)
+        #expect(await info.history.picture(of: brief), "the picture of the newest version")
+        NSApp.appearance = nil
+        let picture = try Data(contentsOf: store.picture("brief", all[0].id))
+        #expect(store.list("brief").first?.thumb != nil && NSImage(data: picture)?.isValid == true)
+        for version in all.dropFirst() { try store.keep(picture: picture, of: version.id, in: "brief") }
+        info.show(brief.space)
+
+        // Info: its Versions part.
+        let center = shell.center.frame.width
+        shell.showInfo(true)
+        shell.window.layoutIfNeeded()
+        let panel = shell.inspector.viewController.view
+        let infoRead = await AcceptanceBuild.read(panel)
+        #expect(infoRead.contains("VERSIONS") && infoRead.contains("Show History…"), "\(infoRead)")
+        #expect(info.history.bytes == store.weight("brief") && History.when(all[0].when, now: info.clock()) == "Today 18:12")
+        // Show History…: in Info's place, at its width; Info's button no longer pressed.
+        info.showHistory()
+        shell.window.layoutIfNeeded()
+        #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        #expect(shell.inspector.viewController.view.frame.width == 320 && brief.web.frame.width == center - 320, "\(shell.inspector.viewController.view.frame.width) \(brief.web.frame.width)")
+        let history = info.history
+        #expect(history.chosen == all[1].id && history.restorable && history.rows.count == 6)
+        #expect(history.older == "6 older versions, back to 12 October")
+        let read = await AcceptanceBuild.read(panel)
+        for words in ["History", "“Add a weather corner, top right”, Today 18:12 · Claude Code, now",
+                      "Edited outside something, Today 16:40 · Changed on disk, not by its assistant",
+                      "“Use a newspaper look, like a morning paper”, Monday 09:20 · Claude Code", "6 older versions, back to 12 October",
+                      "Hold Space to compare", "Restore This Version", "Close History"] {
+            #expect(read.contains(words), "History reads \(words): \(read)")
+        }
+        #expect(!read.contains { $0.contains("Before its first change") }, "the oldest is folded")
+        #expect(!read.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f6" + suffix, root: stage.home.root)
+        }
+
+        // ↓ with the focus in the panel; ⌘I goes back to Info, Show History… again.
+        #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
+        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.moveDown(_:)))
+        #expect(history.chosen == all[2].id)
+        shell.toggleInfo(spaceOpen: true)
+        #expect(shell.infoShown && info.content == .info)
+        #expect(Keys.command("history")?.action == #selector(App.showHistory(_:)) && Keys.enabled("history", Keys.Situation(space: true)))
+        shell.showHistory()
+        #expect(info.content == .history && history.chosen == all[2].id)
+
+        // Restore This Version waits while the assistant works on Daily brief, then is a version, the newest chosen.
+        changes.working = { _ in true }
+        history.restore()
+        #expect(said.last == "Daily brief’s assistant is working · restore once it’s done" && history.versions.count == 12)
+        changes.working = { _ in false }
+        history.restore()
+        #expect(try String(contentsOf: page, encoding: .utf8) == was + "<!-- 9 -->\n")
+        #expect(history.versions.count == 13 && history.versions[0].kind == .restore && history.chosen == history.versions[0].id)
+        #expect(said.last == "Restored the version of Yesterday 21:05" && history.title(history.versions[0]) == said.last)
+
+        // Esc with the focus in it closes it; the page takes its width back.
+        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        shell.window.layoutIfNeeded()
+        #expect(!shell.infoShown && brief.web.frame.width == center)
+    }
     @Test("f7: the glimpse", .disabled("not built yet: T20")) func f7() async throws {}
     @Test("f8: changed outside something", .disabled("not built yet: T21")) func f8() async throws {}
     /// The mockup's comments: a selector of Daily brief's page, where in it to click, and the words.

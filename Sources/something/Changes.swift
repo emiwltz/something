@@ -4,6 +4,7 @@
 // manager carries the same name, so the Edit menu and ⌘Z undo that sentence, after whatever typing the focused field
 // undoes first. A Quick Change's turn is kept the same way, as a quick version. Undo and Redo restore a version, each
 // itself a version; both wait while an assistant works on that space, whose next write would mix with the restore.
+// History's Restore This Version goes the same way: a version, a toast "Restored …" with Undo ⌘Z, refused meanwhile.
 // The space is the turn's, never only the open one: a turn goes on after the person opens another space.
 import AppKit
 import SomethingCore
@@ -23,6 +24,8 @@ final class Changes {
     var recycle: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
     /// Shows a toast: words, its action, whether it is only information, and how long it stays.
     var toast: (_ words: String, _ action: Toast.Action?, _ quiet: Bool, _ seconds: TimeInterval) -> Void = { _, _, _, _ in }
+    /// Called once a version of a space was kept or restored: History reads them again.
+    var kept: (String) -> Void = { _ in }
     /// The version each turn under way started from, by space.
     private var started: [String: String] = [:]
 
@@ -42,6 +45,8 @@ final class Changes {
         assistant.turnStarts = { [weak self] in self?.before($0) }
         assistant.turnEnded = { [weak self] in self?.after($0, sentence: $1, who: $2) }
         assistant.quickEnded = { [weak self] in self?.quick($0, sentence: $1, who: $2, problem: $3) ?? false }
+        shell.info.history.restoring = { [weak self] in self?.bringBack($0, to: $1, words: $2) }
+        kept = { [weak shell] in shell?.info.history.kept($0) }
     }
 
     /// The store, with the person's limits as Settings has them now.
@@ -83,6 +88,7 @@ final class Changes {
             return nil
         }
         guard let made else { return nil }
+        kept(name)
         // Without a version before it (the turn began on a space too heavy, since lightened), it cannot be undone.
         guard let back = from ?? versions.list(name).dropFirst().first?.id else {
             toast("Changed \(title(name))", nil, false, 3.2)
@@ -110,11 +116,29 @@ final class Changes {
         }
         offer(name, sentence: sentence, back: current, forth: target)
         said(name, sentence: sentence, undone: undoing)
+        kept(name)
+    }
+
+    /// Restore This Version: `name` goes back to `version`, which `words` name ("the version of Today 18:12"). The
+    /// restore is a version, offered to undo; refused, in the toast, while an assistant works on that space.
+    func bringBack(_ name: String, to version: Versions.Version, words: String) {
+        guard allows(name, "restore") else { return }
+        guard let space = find(name) else { return toast("\(title(name)) is gone; nothing was restored.", nil, true, 4) }
+        let made: Versions.Version?
+        do { made = try versions.restore(version.id, of: space, recycle: recycle) } catch {
+            return toast(error.sentence, nil, true, 6)
+        }
+        guard let made, let back = versions.list(name).dropFirst().first?.id else { return }
+        let sentence = "Restore " + words
+        offer(name, sentence: sentence, back: back, forth: made.id)
+        said(name, sentence: sentence, undone: false, words: "Restored " + words)
+        kept(name)
     }
 
     /// The toast of a change, or of its undo: "Changed Daily brief" with Undo “…” ⌘Z, or Undone “…” with Redo ⇧⌘Z,
-    /// whose action acts while that change is still the next one to undo or redo.
-    private func said(_ name: String, sentence: String, undone: Bool) {
+    /// whose action acts while that change is still the next one to undo or redo. `words`, when given, say the change
+    /// in place of "Changed …", its action then Undo ⌘Z.
+    private func said(_ name: String, sentence: String, undone: Bool, words: String? = nil) {
         let quoted = Changes.quoted(sentence)
         if undone {
             toast("Undone \(quoted)", Toast.Action(label: "Redo ⇧⌘Z") { [weak self] in
@@ -122,17 +146,18 @@ final class Changes {
                 undo.redo()
             }, false, 6)
         } else {
-            toast("Changed \(title(name))", Toast.Action(label: "Undo \(quoted) ⌘Z") { [weak self] in
+            toast(words ?? "Changed \(title(name))", Toast.Action(label: words == nil ? "Undo \(quoted) ⌘Z" : "Undo ⌘Z") { [weak self] in
                 guard let self, undo.undoActionUserInfoValue(forKey: Changes.space) as? String == name, undo.undoActionName == quoted else { return }
                 undo.undo()
             }, false, 9)
         }
     }
 
-    /// Whether the change of `name` may be undone or redone now; when an assistant works on it, the toast says to wait.
-    private func allows(_ name: String) -> Bool {
+    /// Whether the change of `name` may be undone, redone or restored (`doing`) now; when an assistant works on it, the
+    /// toast says to wait.
+    private func allows(_ name: String, _ doing: String = "undo") -> Bool {
         guard working(name) else { return true }
-        toast("\(title(name))’s assistant is working · undo once it’s done", nil, true, 4)
+        toast("\(title(name))’s assistant is working · \(doing) once it’s done", nil, true, 4)
         return false
     }
 
