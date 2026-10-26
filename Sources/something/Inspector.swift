@@ -237,6 +237,7 @@ extension Shell {
     /// Shows History in the panel, in Info's place, while a space is open: Info's button is not pressed for it.
     func showHistory() {
         guard space != nil else { return }
+        if info.content != .history || inspector.isCollapsed { info.history.opened() }
         info.content = .history
         inspector.isCollapsed = false
         (controls[Shell.info] as? ToolButton)?.pressed = false

@@ -128,7 +128,8 @@ final class Changes {
         do { made = try versions.restore(version.id, of: space, recycle: recycle) } catch {
             return toast(error.sentence, nil, true, 6)
         }
-        guard let made, let back = versions.list(name).dropFirst().first?.id else { return }
+        guard let made else { return toast("\(title(name)) is already \(words)", nil, true, 3) }
+        guard let back = versions.list(name).dropFirst().first?.id else { return }
         let sentence = "Restore " + words
         offer(name, sentence: sentence, back: back, forth: made.id)
         said(name, sentence: sentence, undone: false, words: "Restored " + words)

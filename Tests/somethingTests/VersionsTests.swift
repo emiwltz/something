@@ -282,6 +282,26 @@ import Testing
         #expect(history.versions.isEmpty && history.chosen == nil && history.rows.isEmpty)
     }
 
+    @Test func historyOpensBeforeTheNewestAfterATurnAndNamesOnlyTheFirstCaptureAsFirstKept() throws {
+        let test = Home(prefix: "something-versions-")
+        defer { test.remove() }
+        let now = Date()
+        let (space, _) = try history(test, now: now, 9)
+        let history = History(places: test.places)
+        history.show(space)
+        // A turn kept while the panel shows chooses the newest; the panel opened again chooses the one before it.
+        try "<p>9</p>\n".write(to: space.location, atomically: true, encoding: .utf8)
+        try store(test, keep: 7).capture(space, kind: .turn, sentence: "Say 9", who: "Claude Code", at: now)
+        history.kept("today")
+        #expect(history.chosen == history.versions[0].id && !history.restorable)
+        history.opened()
+        #expect(history.chosen == history.versions[1].id && history.restorable && !history.unfolded)
+        // The first capture pruned, the oldest kept is an edit on disk, said as one.
+        let oldest = try #require(history.versions.last)
+        #expect(history.versions.count == 7 && oldest.kind == .outside && oldest.first == nil)
+        #expect(history.title(oldest) == "Edited outside something" && history.byline(oldest).hasSuffix(" · Changed on disk, not by its assistant"))
+    }
+
     @Test func historySaysTheDaysAsTheMockupDoes() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))

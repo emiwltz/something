@@ -118,6 +118,13 @@ enum Look {
         [.thin: 100, .ultraLight: 200, .light: 300, .medium: 500, .semibold: 600, .bold: 700, .heavy: 800, .black: 900][weight] ?? 400
     }
 
+    /// `font` slanted as a browser draws a synthetic italic: the bundled Onest has no italic face, and the mockup sets
+    /// a few words in italic all the same.
+    static func oblique(_ font: NSFont) -> NSFont {
+        let slant = AffineTransform(m11: 1, m12: 0, m21: 0.2, m22: 1, tX: 0, tY: 0)
+        return NSFont(descriptor: font.fontDescriptor.withMatrix(slant), size: font.pointSize) ?? font
+    }
+
     /// The font of `face` at `size` and `weight`. The bundled families are variable: the weight is set on their wght
     /// axis exactly, and Fraunces's optical size follows the size as the mockup's `font-optical-sizing: auto` does.
     /// When a family is not registered it is the system's: New York for titles and the agent's voice (the mockup falls

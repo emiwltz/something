@@ -32,6 +32,8 @@ struct Versions {
         let summary: String
         /// The id of the version a restore brought back.
         var restored: String?
+        /// Set on the first version something kept of the space, the state before its first change here.
+        var first: Bool?
         /// The page's picture once History took it: a PNG in the store, `thumbs/<id>.png` of the space's folder.
         var thumb: String?
     }
@@ -93,7 +95,7 @@ struct Versions {
         let before = versions.first.map { $0.files.compactMapValues { try? Data(contentsOf: blob(space.name, $0)) } }
         var version = Version(id: UUID().uuidString.lowercased(), kind: kind, sentence: sentence, when: when, who: who, files: files,
                               summary: Versions.summary(before, contents))
-        version.restored = restored
+        (version.restored, version.first) = (restored, versions.isEmpty ? true : nil)
         versions.insert(version, at: 0)
         try save(space.name, versions)
         prune()

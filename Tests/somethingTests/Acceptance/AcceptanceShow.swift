@@ -468,15 +468,21 @@ struct AcceptanceShow {
             try await Picture.window(shell, library: library, web: brief.web, "f6" + suffix, root: stage.home.root)
         }
 
-        // ↓ with the focus in the panel; ⌘I goes back to Info, Show History… again.
+        // ↓ and ↑ as keys with the focus in the panel; ⌘I goes back to Info, Show History… again opens on the
+        // version before the newest.
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
-        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.moveDown(_:)))
+        let arrow = { (code: UInt16) in
+            NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                             context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: code)
+        }
+        for code: UInt16 in [125, 125, 126] { shell.window.sendEvent(try #require(arrow(code))) }
         #expect(history.chosen == all[2].id)
         shell.toggleInfo(spaceOpen: true)
         #expect(shell.infoShown && info.content == .info)
         #expect(Keys.command("history")?.action == #selector(App.showHistory(_:)) && Keys.enabled("history", Keys.Situation(space: true)))
         shell.showHistory()
-        #expect(info.content == .history && history.chosen == all[2].id)
+        #expect(info.content == .history && history.chosen == all[1].id)
+        history.chosen = all[2].id
 
         // Restore This Version waits while the assistant works on Daily brief, then is a version, the newest chosen.
         changes.working = { _ in true }
@@ -492,6 +498,15 @@ struct AcceptanceShow {
         shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
         shell.window.layoutIfNeeded()
         #expect(!shell.infoShown && brief.web.frame.width == center)
+        // Opened again after the restore: on the version before the newest, not on Now. Restoring the version the
+        // space already is says so.
+        shell.showHistory()
+        #expect(history.chosen == history.versions[1].id && history.restorable)
+        history.chosen = all[2].id
+        history.restore()
+        #expect(said.last == "Daily brief is already the version of Yesterday 21:05" && history.versions.count == 13)
+        #expect(history.versions.last?.first == true && history.title(history.versions.last!) == "As something first kept it")
+        shell.showInfo(false)
     }
     @Test("f7: the glimpse", .disabled("not built yet: T20")) func f7() async throws {}
     @Test("f8: changed outside something", .disabled("not built yet: T21")) func f8() async throws {}
