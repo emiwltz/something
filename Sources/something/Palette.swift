@@ -5,18 +5,26 @@
 // whose name starts with them, then those with a word that does, then those that contain them, section by section.
 // ↑ ↓ and the pointer move, Return or a click opens, Esc, a click on the scrim or ⌘P again closes; the footer says
 // what Return does. The recent spaces are the preferences' (Preferences.opened), which opening one updates.
+// ⌘P, ask: a sentence (two words or more, or a word nothing answers, three letters at least) becomes the ask row, on
+// top, or last under "Ask" when it also names a space or a template. Its destination is said once, on the line "Goes
+// to": This Space, New Space, Another (the other spaces, most recent first); Tab, ⇧Tab or a click changes it, and
+// nothing leaves before Return, which sends it to that space's assistant or builds a New Space from it.
 import AppKit
 import SwiftUI
 
 /// What the palette lists, what is typed and where the keys rest.
 @MainActor @Observable final class PaletteModel {
     struct Row: Identifiable {
-        enum Section: String { case recent = "Recent", spaces = "Spaces", actions = "Actions", templates = "Templates" }
-        enum Kind: Equatable { case space(Sign.State, open: Bool), action(key: String), template }
-        /// "space:brief", "action:new", "template:pet": its kind, then the space, command or template it opens.
+        /// A section's header; the sentence's ask row on top has none.
+        enum Section: String { case sentence = "", recent = "Recent", spaces = "Spaces", actions = "Actions", templates = "Templates", ask = "Ask" }
+        /// An ask row: where its `text` goes, and whether nothing answered it as a single word (`none`).
+        enum Kind: Equatable { case space(Sign.State, open: Bool), action(key: String), template, ask(Library.Destination, text: String, none: Bool) }
+        /// "space:brief", "action:new", "template:pet", "ask:new": its kind, then the space, command, template or
+        /// destination it opens.
         let id: String
         let section: Section, title: String, sub: String?, symbol: String, kind: Kind
         var target: String { String(id.drop { $0 != ":" }.dropFirst()) }
+        var asks: Bool { if case .ask = kind { true } else { false } }
     }
 
     /// The actions ⌘P lists, by Keys' id, with their symbols, in the mockup's order.
@@ -39,6 +47,10 @@ import SwiftUI
     var query = "" { didSet { if query != oldValue { selected = 0; key(rows.first?.id) } } }
     /// The index of the row the keys rest on.
     var selected = 0
+    /// The index, in `destinations`, of where a sentence goes; it stays while the words change, as the mockup's.
+    private(set) var destination = 0
+    /// Counts the destination's changes: the segment chosen flips in.
+    private(set) var flips = 0
     /// The row the keys last moved to, or the first after new words, which the list scrolls into view; the pointer's
     /// needs no scrolling.
     private(set) var keyed: String?
@@ -70,10 +82,84 @@ import SwiftUI
             return recent.map { space($0, .recent) } + rest.map { space($0, .spaces) } + actions + templates
         }
         let sections: [Row.Section] = [.spaces, .actions, .templates]
-        return (spaces.map { space($0, .spaces) } + actions + templates).enumerated()
+        let scored = (spaces.map { space($0, .spaces) } + actions + templates).enumerated()
             .compactMap { index, row in Self.score(row, query).map { (row, sections.firstIndex(of: row.section) ?? 0, $0, index) } }
-            .sorted { ($0.1, $0.2, $0.3) < ($1.1, $1.2, $1.3) }.map(\.0)
+            .sorted { ($0.1, $0.2, $0.3) < ($1.1, $1.2, $1.3) }
+        let rows = scored.map(\.0), text = self.query.trimmingCharacters(in: .whitespaces)
+        guard text.count >= 3, rows.isEmpty || text.split(whereSeparator: \.isWhitespace).count >= 2 else { return rows }
+        // A sentence that also names a space or a template comes after what it names: Return opens that first.
+        let named = scored.contains { $0.2 < 2 && ($0.0.section == .spaces || $0.0.kind == .template) }
+        let to = goes, none = rows.isEmpty && !text.contains(where: \.isWhitespace)
+        let ask = Row(id: "ask:" + (to.space ?? "new"), section: named ? .ask : .sentence, title: asking(to), sub: "“\(text)”",
+                      symbol: "", kind: .ask(to, text: text, none: none))
+        return named ? rows + [ask] : [ask] + rows
     }
+
+    /// Where a sentence can go: the open space, a new space, then every other space, the most recent first.
+    var destinations: [Library.Destination] {
+        let here = library.selection.space, spaces = library.order().filter(\.isSpace).map(\.id)
+        var others: [String] = []
+        for name in library.preferences.recents + spaces where name != here && spaces.contains(name) && !others.contains(name) { others.append(name) }
+        return (here.map { [.space($0)] } ?? []) + [.newSpace] + others.map { .space($0) }
+    }
+
+    /// Where a sentence goes now.
+    var goes: Library.Destination { destinations[at] }
+
+    /// `destination`, or the first when the spaces it counted changed.
+    private var at: Int { destinations.indices.contains(destination) ? destination : 0 }
+
+    /// The ask row's words for `destination`.
+    func asking(_ destination: Library.Destination) -> String {
+        destination.space.map { "Ask \(Words.possessive(library.entry($0)?.title ?? $0)) assistant" } ?? "Make a New Space"
+    }
+
+    /// The line "Goes to": This Space when a space is open, New Space, and Another, which names the other space chosen
+    /// or else the first; one of them is on.
+    struct Segment: Identifiable {
+        enum Place { case here, new, another }
+        let place: Place, index: Int, space: String?, on: Bool
+        var id: Place { place }
+    }
+
+    var segments: [Segment] {
+        let all = destinations, at = at, here = library.selection.space
+        func other(_ index: Int) -> Bool { another(all[index]) }
+        var line = here.map { [Segment(place: .here, index: 0, space: $0, on: at == 0)] } ?? []
+        if let new = all.firstIndex(of: .newSpace) { line.append(Segment(place: .new, index: new, space: nil, on: at == new)) }
+        if let another = other(at) ? at : all.indices.first(where: other) {
+            line.append(Segment(place: .another, index: another, space: all[another].space, on: other(at)))
+        }
+        return line
+    }
+
+    /// Tab (1) or ⇧Tab (-1), while there is an ask row: the sentence goes to the next destination, round.
+    func cycle(_ by: Int) {
+        guard rows.contains(where: \.asks) else { return }
+        let count = destinations.count
+        flip(((at + by) % count + count) % count)
+    }
+
+    /// A click on the segment of `index`: Another, clicked while another space is chosen, moves on to the next one.
+    func choose(_ index: Int) {
+        let all = destinations
+        guard all.indices.contains(index) else { return }
+        func other(_ index: Int) -> Bool { another(all[index]) }
+        guard other(index), other(at) else { return flip(index) }
+        let others = all.indices.filter(other)
+        flip(others[((others.firstIndex(of: at) ?? -1) + 1) % others.count])
+    }
+
+    /// Whether `destination` is a space other than the open one.
+    private func another(_ destination: Library.Destination) -> Bool { destination.space.map { $0 != library.selection.space } ?? false }
+
+    /// Whether the assistant at `place` is `destination`'s: that space's, or New Space's on the blank page (on the
+    /// Templates page it shares the conversation but builds nothing).
+    static func arrived(at destination: Library.Destination, _ place: AssistantModel.Place) -> Bool {
+        destination.space.map { place.space == $0 } ?? (place == .blank)
+    }
+
+    private func flip(_ index: Int) { (destination, flips) = (index, flips + 1) }
 
     /// How well `row` answers `query` (lowercased): 0 when its name starts with it, 1 when one of its words does, 2
     /// when its name or the words under it contain it; nil when it does not answer.
@@ -118,8 +204,15 @@ import SwiftUI
         chose(rows[index])
     }
 
-    /// What the footer says Return does.
-    var enter: String { "Open" }
+    /// Whether Return sends a sentence: the keys rest on the ask row.
+    var sends: Bool { let rows = rows; return rows.indices.contains(selected) && rows[selected].asks }
+
+    /// What the footer says Return does: Open, or where the sentence goes.
+    var enter: String {
+        let rows = rows
+        guard rows.indices.contains(selected), case .ask(let to, _, _) = rows[selected].kind else { return "Open" }
+        return to.space.map { "Send to \(library.entry($0)?.title ?? $0)" } ?? "Build New Space"
+    }
 }
 
 /// The palette over the window: the card and its field, which has the keys while it is up.
@@ -171,11 +264,14 @@ final class Palette: ScrimCard, NSTextFieldDelegate {
 
     func controlTextDidChange(_ notification: Notification) { model.query = field.stringValue }
 
-    /// The field's keys: ↑ ↓ move, Return opens, Esc closes; any other is the field's.
+    /// The field's keys: ↑ ↓ move, Tab and ⇧Tab change where a sentence goes (and never leave the field), Return
+    /// opens or sends, Esc closes; any other is the field's.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.moveDown(_:)): model.move(1)
         case #selector(NSResponder.moveUp(_:)): model.move(-1)
+        case #selector(NSResponder.insertTab(_:)): model.cycle(1)
+        case #selector(NSResponder.insertBacktab(_:)): model.cycle(-1)
         case #selector(NSResponder.insertNewline(_:)): model.pick()
         case #selector(NSResponder.cancelOperation(_:)): close()
         default: return false
@@ -213,8 +309,8 @@ struct PaletteCard: View {
 
     /// The rows under their sections' headers, scrolled to keep the keys' row in view.
     private func list(_ rows: [PaletteModel.Row]) -> some View {
-        let headed = rows.indices.filter { $0 == 0 || rows[$0 - 1].section != rows[$0].section }
-        let tall = 12 + CGFloat(headed.count) * Self.header + CGFloat(rows.count) * Self.row
+        let headed = rows.indices.filter { ($0 == 0 || rows[$0 - 1].section != rows[$0].section) && !rows[$0].section.rawValue.isEmpty }
+        let tall = 12 + CGFloat(headed.count) * Self.header + rows.map(Self.height).reduce(0, +)
         return ScrollViewReader { scroller in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -225,7 +321,7 @@ struct PaletteCard: View {
                                 .padding(EdgeInsets(top: 0, leading: 10, bottom: 4, trailing: 10))
                                 .frame(maxWidth: .infinity, minHeight: Self.header, maxHeight: Self.header, alignment: .bottomLeading)
                         }
-                        row(rows[index], at: index)
+                        if case .ask(_, let text, let none) = rows[index].kind { ask(rows[index], text, none: none, at: index) } else { row(rows[index], at: index) }
                     }
                 }
                 .padding(6)
@@ -233,6 +329,97 @@ struct PaletteCard: View {
             .scrollIndicators(.never)
             .frame(height: min(tall, Self.list))
             .onChange(of: model.keyings) { if let id = model.keyed { scroller.scrollTo(id) } }
+        }
+    }
+
+    /// A row's height: the ask row's with its line "Goes to", and the line that says nothing answers.
+    static func height(_ row: PaletteModel.Row) -> CGFloat {
+        guard case .ask(_, _, let none) = row.kind else { return Self.row }
+        return 54 + 34 + (none ? 28 : 0)
+    }
+
+    /// The ask row: the sign, where the sentence goes and the sentence; under it, the line "Goes to".
+    private func ask(_ row: PaletteModel.Row, _ text: String, none: Bool, at index: Int) -> some View {
+        let on = index == model.selected
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Image(nsImage: drawn(Sign.image(.listen, side: 18))).frame(width: 26, height: 26).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(row.title).font(Look.font(.ui, size: 13.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                    Text(row.sub ?? "").font(Look.font(.ui, size: 13, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
+                }
+                .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10).frame(height: 54)
+            .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: 9))
+            .contentShape(Rectangle())
+            .onContinuousHover(coordinateSpace: .global) { if case .active(let point) = $0 { model.hover(index, at: point) } }
+            .onTapGesture { model.pick(index) }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Self.label(row))
+            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { model.pick(index) }
+            goes
+            if none {
+                Text("No space, action or template is called “\(text)”.").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
+                    .lineLimit(1).padding(EdgeInsets(top: 4, leading: 50, bottom: 0, trailing: 12)).frame(height: 28, alignment: .top)
+            }
+        }
+        .id(row.id)
+    }
+
+    /// "Goes to" and its segments, the one chosen on and flipping in when it changes, then the Tab key.
+    private var goes: some View {
+        let calm = Look.motion(model.library.preferences.motion) == .calm
+        return HStack(spacing: 4) {
+            Text("Goes to").padding(.trailing, 4)
+            ForEach(model.segments) { segment in
+                Button { model.choose(segment.index) } label: { self.segment(segment) }
+                    .buttonStyle(.plain)
+                    .keyframeAnimator(initialValue: 1.0, trigger: model.flips) { view, done in view.opacity(0.35 + 0.65 * done).offset(y: 2 * (1 - done)) } keyframes: { _ in
+                        MoveKeyframe(segment.on && calm ? 0.0 : 1)
+                        LinearKeyframe(1.0, duration: segment.on && calm ? 0.28 : 0.01, timingCurve: Look.out.unit)
+                    }
+                    .accessibilityLabel(Self.label(segment, model))
+                    .accessibilityAddTraits(segment.on ? [.isButton, .isSelected] : .isButton)
+            }
+            Spacer(minLength: 0)
+            Keycap(words: "⇥")
+        }
+        .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
+        .padding(EdgeInsets(top: 2, leading: 50, bottom: 8, trailing: 10)).frame(height: 34)
+        .accessibilityElement(children: .contain).accessibilityLabel("Where it goes")
+    }
+
+    private func segment(_ segment: PaletteModel.Segment) -> some View {
+        let name = segment.space.flatMap { model.library.entry($0)?.title } ?? ""
+        func eyes() -> some View { Image(nsImage: drawn(Sign.miniEyes(model.eyes(segment.space ?? ""), template: false))).scaleEffect(0.85) }
+        func named() -> some View { Text(name).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(segment.on ? Look.Token.ink2.ui : Look.Token.ink3.ui).truncationMode(.tail).frame(maxWidth: 130, alignment: .leading).fixedSize() }
+        return HStack(spacing: 5) {
+            switch segment.place {
+            case .here: eyes(); Text("This Space"); named()
+            case .new: Image(systemName: "plus").font(.system(size: 9, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui); Text("New Space")
+            case .another:
+                Text("Another"); eyes(); named()
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
+            }
+        }
+        .font(Look.font(.ui, size: 11.5, weight: segment.on ? .medium : .regular).ui)
+        .foregroundStyle(segment.on ? Look.Token.ink.ui : Look.Token.ink2.ui)
+        .padding(.horizontal, 8).frame(height: 24)
+        .background(segment.on ? Look.Token.bg2.ui : .clear, in: RoundedRectangle(cornerRadius: 6))
+        .overlay { if segment.on { RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui, lineWidth: 1) } }
+        .contentShape(Rectangle())
+    }
+
+    /// What VoiceOver says of a segment: where it sends, and the space it names.
+    static func label(_ segment: PaletteModel.Segment, _ model: PaletteModel) -> String {
+        let name = segment.space.flatMap { model.library.entry($0)?.title }
+        return switch segment.place {
+        case .here: "This Space, " + (name ?? "")
+        case .new: "New Space, built from this sentence"
+        case .another: "Another space, " + (name ?? "") + ", click again for the next one"
         }
     }
 
@@ -284,7 +471,7 @@ struct PaletteCard: View {
                 Image(nsImage: drawn(Sign.miniEyes(state, template: false))).frame(width: 18)
             }
         case .action(let key): if !key.isEmpty { Keycap(words: key) }
-        case .template: EmptyView()
+        case .template, .ask: EmptyView()
         }
     }
 
@@ -320,6 +507,8 @@ struct PaletteCard: View {
             Spacer(minLength: 0)
             HStack(spacing: 4) { Keycap(words: "↑", boxed: true); Keycap(words: "↓", boxed: true); Text("Move") }
             HStack(spacing: 4) { Keycap(words: "↵", boxed: true); Text(model.enter) }
+                .font(Look.font(.ui, size: Look.small.size, weight: model.sends ? .medium : .regular).ui)
+                .foregroundStyle(model.sends ? Look.Token.ink2.ui : Look.Token.ink3.ui)
             HStack(spacing: 4) { Keycap(words: "esc", boxed: true); Text("Close") }
         }
         .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
@@ -359,18 +548,33 @@ extension App {
         Palette.toggle(in: shell.layer, model: model, motion: library.preferences.motion)
     }
 
-    /// Opens what a row of the palette names, the window brought to the front for a space.
+    /// Opens what a row of the palette names, the window brought to the front for a space, or sends its sentence.
     @MainActor func go(_ row: PaletteModel.Row) {
-        row.open(in: library, send: Keys.send)
+        row.open(in: library, send: Keys.send) { [weak self] text, destination in self?.ask(text, at: destination) }
         if case .space = row.kind { front() }
+    }
+
+    /// Sends `text` from ⌘P to the assistant of `destination`, its card open, or to New Space's, which builds a space
+    /// from it. The library opens a destination on the main queue's next turn: the sentence leaves after that, and only
+    /// if the assistant is there (a space that could not open sends nothing).
+    @MainActor func ask(_ text: String, at destination: Library.Destination) {
+        library.select(destination)
+        front()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, PaletteModel.arrived(at: destination, assistant.place) else { return }
+            if destination.space != nil { assistant.open = true }
+            assistant.send(text)
+        }
     }
 }
 
 extension PaletteModel.Row {
-    /// Opens what the row names in `library`: selects its space, gives its command's id to `send`, or opens the
-    /// Templates page asked for its template's preview, which the page opens as it draws (GalleryView).
-    @MainActor func open(in library: Library, send: (String) -> Void) {
+    /// Opens what the row names in `library`: selects its space, gives its command's id to `send`, opens the
+    /// Templates page asked for its template's preview, which the page opens as it draws (GalleryView), or gives its
+    /// sentence and destination to `ask`.
+    @MainActor func open(in library: Library, send: (String) -> Void, ask: (String, Library.Destination) -> Void = { _, _ in }) {
         switch kind {
+        case .ask(let destination, let text, _): ask(text, destination)
         case .space: library.select(.space(target))
         case .action: send(target)
         case .template:

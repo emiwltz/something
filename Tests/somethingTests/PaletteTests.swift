@@ -1,7 +1,8 @@
 // ⌘P, go: the rows of an empty query (three recent spaces, the others with their group, state and eyes, the open
 // one marked; the actions that can act, the templates), the scoring and its sections, what each kind of row opens
 // (a space, made the most recent; a command, sent by its id; a template's preview, on the Templates page); and,
-// offscreen, the field's keys: typing, ↓ and Return open the second row, Esc and ⌘P close.
+// offscreen, the field's keys: typing, ↓ and Return open the second row, Esc and ⌘P close. ⌘P, ask: where the ask
+// row sits, the destinations' order, Tab and the segments, one destination, and nothing sent before Return.
 import AppKit
 import SwiftUI
 import Testing
@@ -78,8 +79,8 @@ import Testing
         model.move(1)
         model.move(-1)
         #expect(model.keyed == model.rows.first?.id && model.keyings == keyings + 3, "the keys landing again scroll again")
-        model.query = "qqq"
-        #expect(model.rows.isEmpty)
+        model.query = "qq"
+        #expect(model.rows.isEmpty, "two letters nothing answers are not a sentence")
         model.move(1)
         model.pick()
         #expect(model.selected == 0, "nothing to move to or open")
@@ -144,6 +145,121 @@ import Testing
         #expect(model.selected == 4)
     }
 
+    static let sentence = "A small page that tracks my reading list"
+
+    /// A sentence nothing names is the only row, on top and without a header, and goes first to the open space; Tab
+    /// goes to New Space, then to the other spaces, most recent first, and round; ⇧Tab back. The footer says where.
+    @Test func aSentenceAsksTheOpenSpaceFirstAndTabChangesWhere() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage), model = Self.model(library)
+        model.query = "  " + Self.sentence + " "
+        let ask = try #require(model.rows.first)
+        #expect(model.rows.count == 1 && ask.section == .sentence && ask.section.rawValue.isEmpty)
+        #expect(ask.kind == .ask(.space("brief"), text: Self.sentence, none: false) && ask.title == "Ask Daily brief’s assistant")
+        #expect(ask.sub == "“\(Self.sentence)”" && model.enter == "Send to Daily brief" && model.sends)
+        #expect(model.destinations == [.space("brief"), .newSpace, .space("agents"), .space("pet"), .space("logbook"), .space("project"),
+                                       .space("oracle"), .space("stack")], "this space, a new one, then the others, most recent first")
+        model.cycle(1)
+        #expect(model.rows.first?.title == "Make a New Space" && model.enter == "Build New Space" && model.flips == 1)
+        model.cycle(1)
+        #expect(model.rows.first?.title == "Ask My agents’ assistant" && model.enter == "Send to My agents")
+        model.cycle(-1)
+        model.cycle(-1)
+        model.cycle(-1)
+        #expect(model.goes == .space("stack"), "⇧Tab from the first goes round to the last")
+        model.query = "A small page that tracks my books"
+        #expect(model.goes == .space("stack"), "new words keep where it goes")
+        try #expect(PaletteCard.label(#require(model.rows.first)) == "Ask Stack’s assistant, “A small page that tracks my books”")
+    }
+
+    /// The line "Goes to": This Space, New Space, Another naming the first other space until one is chosen; one on.
+    /// A click on Another while another space is chosen moves on to the next one, round; a click elsewhere chooses it.
+    @Test func theSegmentsSayOneDestination() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage), model = Self.model(library)
+        model.query = Self.sentence
+        func line() -> [String] { model.segments.map { "\($0.place)\($0.space.map { ":" + $0 } ?? "")\($0.on ? "*" : "")" } }
+        #expect(line() == ["here:brief*", "new", "another:agents"])
+        model.cycle(1)
+        #expect(line() == ["here:brief", "new*", "another:agents"], "the mockup's picture")
+        model.choose(2)
+        #expect(line() == ["here:brief", "new", "another:agents*"])
+        model.choose(2)
+        #expect(line() == ["here:brief", "new", "another:pet*"], "Another again: the next other space")
+        for _ in 0..<5 { model.choose(model.segments[2].index) }
+        #expect(line() == ["here:brief", "new", "another:agents*"], "round")
+        model.choose(0)
+        #expect(line() == ["here:brief*", "new", "another:agents"] && model.segments.filter(\.on).count == 1)
+        #expect(PaletteCard.label(model.segments[2], model) == "Another space, My agents, click again for the next one")
+        let flips = model.flips
+        model.choose(99)
+        #expect(model.flips == flips && model.goes == .space("brief"), "no such segment")
+    }
+
+    /// With no space open, a sentence goes first to a new space, and there is no This Space.
+    @Test func withNoSpaceOpenASentenceMakesANewSpace() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage)
+        library.select(.newSpace)
+        let model = Self.model(library, space: false)
+        model.query = Self.sentence
+        #expect(model.rows.first?.title == "Make a New Space" && model.enter == "Build New Space")
+        #expect(model.destinations.first == .newSpace && model.destinations.count == 8 && model.segments.map(\.place) == [.new, .another])
+    }
+
+    /// A sentence that also names a space comes last, under Ask, and Return opens the space first; one word that
+    /// names something is no sentence; one word nothing answers is, and says so; a row's words never become a sentence
+    /// below three letters.
+    @Test func whereTheAskRowSits() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let model = Self.model(Self.library(stage))
+        model.query = "Daily brief"
+        #expect(model.rows.first?.id == "space:brief" && model.rows.last?.section == .ask && model.rows.filter(\.asks).count == 1)
+        #expect(model.enter == "Open" && !model.sends)
+        model.query = "brief"
+        #expect(!model.rows.contains { $0.asks }, "one word that answers is a name")
+        model.query = "new space"
+        #expect(model.rows.first?.asks == true && model.rows.dropFirst().first?.id == "action:new", "an action named leaves the sentence on top")
+        model.query = "zebra"
+        #expect(model.rows.map(\.kind) == [.ask(.space("brief"), text: "zebra", none: true)], "one word nothing answers")
+        model.query = "zebra crossing"
+        #expect(model.rows.map(\.kind) == [.ask(.space("brief"), text: "zebra crossing", none: false)])
+        model.query = "ab"
+        #expect(model.rows.isEmpty)
+        model.query = "go x"
+        #expect(model.rows.first?.asks == true)
+        try #expect(PaletteCard.height(#require(model.rows.first)) == 88)
+        model.query = "zebra"
+        try #expect(PaletteCard.height(#require(model.rows.first)) == 116)
+    }
+
+    /// Typing, Tab and the segments send nothing; Return gives the sentence and its one destination to `ask`, and
+    /// selects nothing itself. It reaches the assistant only where it was going.
+    @Test func nothingLeavesBeforeReturn() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage), model = Self.model(library)
+        var asked: [(String, Library.Destination)] = [], closed = 0
+        model.close = { closed += 1 }
+        model.chose = { row in row.open(in: library, send: { Issue.record("an ask row sent \($0)") }) { asked.append(($0, $1)) } }
+        model.query = Self.sentence
+        model.cycle(1)
+        model.choose(2)
+        model.choose(1)
+        #expect(asked.isEmpty && closed == 0)
+        model.pick()
+        #expect(asked.count == 1 && asked.first?.0 == Self.sentence && asked.first?.1 == .newSpace && closed == 1)
+        #expect(library.selection == .space("brief"))
+        #expect(PaletteModel.arrived(at: .newSpace, .blank) && !PaletteModel.arrived(at: .newSpace, .templates))
+        let brief = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/brief.html")
+        #expect(PaletteModel.arrived(at: .space("brief"), brief) && !PaletteModel.arrived(at: .space("pet"), brief))
+        #expect(!PaletteModel.arrived(at: .space("brief"), .blank))
+    }
+
     /// In a window, the field has the keys: typed words narrow the list, ↓ moves to the second row and Return opens
     /// it, the palette closed and the keys given back to the page; Esc and ⌘P again close it; it closes the sheet of
     /// shortcuts, one card at a time.
@@ -186,5 +302,14 @@ import Testing
         _ = try show()
         #expect(Palette.toggle(in: layer, model: Self.model(library)) == nil && Palette.shown(in: layer) == nil, "⌘P again closes it")
         #expect(chosen.count == 1, "nothing opens but by Return or a click")
+        // Tab and ⇧Tab change where a sentence goes and keep the keys in the field.
+        (palette, editor) = try show()
+        editor.insertText(Self.sentence, replacementRange: editor.selectedRange())
+        editor.doCommand(by: #selector(NSResponder.insertTab(_:)))
+        #expect(palette.model.goes == .newSpace && window.firstResponder === editor)
+        editor.doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+        #expect(palette.model.goes == .space("brief") && window.firstResponder === editor && chosen.count == 1)
+        editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(chosen == [second.id, "ask:brief"])
     }
 }

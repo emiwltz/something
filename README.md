@@ -26,7 +26,9 @@ Spotlight finds something.
 The tour ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a suggestion,
 and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Ask for changes in the bar
 at the bottom of the window: the space reloads as your agent saves it. ⌘K types to the agent, ⌘J shows the
-conversation, ⌘. stops it. Templates (⇧⌘T) are six finished spaces to start from, and need no agent.
+conversation, ⌘. stops it. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks:
+type a space's name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this
+space, a New Space built from it, or another space), Tab changes it, and nothing is sent before Return.
 
 Each space has its own assistant. **something stops idle assistants on its own** to save memory: one idle for 10
 minutes falls asleep, and at most 3 stay awake (the open space's, and any that works or waits for you, are never put to

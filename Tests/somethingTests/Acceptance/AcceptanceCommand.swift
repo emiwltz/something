@@ -59,7 +59,51 @@ struct AcceptanceCommand {
                                                    context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         #expect(shell.escape(escape) && Palette.shown(in: shell.layer) == nil)
     }
-    @Test("g2: the palette's ask row", .disabled("not built yet: G3")) func g2() async throws {}
+    /// ⌘P over Daily brief with a sentence typed, then Tab once, as the mockup's moment: the ask row alone, "Make a
+    /// New Space" and the sentence quoted, the line "Goes to" with New Space on, Return said as Build New Space; and
+    /// nothing sent. Its words are read off its picture.
+    @Test("g2: the palette's ask row") func g2() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.relist()
+        try stage.moment(shell)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        library.preferences.change { $0.recents = ["brief", "agents", "pet", "logbook", "project", "oracle", "stack"] }
+        let model = PaletteModel(library: library, eyes: { Stage.moment[$0] ?? .unknown }, enabled: { Keys.enabled($0, Keys.Situation(space: true)) })
+        var chosen: [PaletteModel.Row] = []
+        model.chose = { chosen.append($0) }
+        let palette = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
+        let editor = try #require(shell.window.firstResponder as? NSTextView)
+        let sentence = "A small page that tracks my reading list"
+        editor.insertText(sentence, replacementRange: editor.selectedRange())
+        editor.doCommand(by: #selector(NSResponder.insertTab(_:)))
+        #expect(model.query == sentence && shell.window.firstResponder === editor, "Tab keeps the keys in the field")
+        #expect(model.rows.map(\.kind) == [.ask(.newSpace, text: sentence, none: false)] && model.rows.first?.title == "Make a New Space")
+        #expect(model.enter == "Build New Space" && model.selected == 0)
+        #expect(model.segments.map(\.place) == [.here, .new, .another] && model.segments.map(\.on) == [false, true, false])
+        #expect(model.segments.map(\.space) == ["brief", nil, "agents"])
+        let card = palette.card
+        let shows = [sentence, "Make a New Space", "Goes to", "This Space", "Daily brief", "New Space", "Another", "My agents",
+                     "Build New Space", "something", "Move", "Close"]
+        try await stage.appearances { suffix in
+            shell.window.layoutIfNeeded()
+            await wait(10) { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 && card.frame.height < 300 }
+            #expect(card.frame.size == NSSize(width: 640, height: 196) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
+            let rep = try Picture.bitmap(card.bounds.size)
+            card.cacheDisplay(in: card.bounds, to: rep)
+            let read = try Picture.text(rep).joined(separator: "\n")
+            for line in shows { #expect(read.contains(line), "g2\(suffix) shows “\(line)”; read: \(read)") }
+            #expect(!read.contains("RECENT") && !read.contains("Open"), "g2\(suffix) shows the ask row alone; read: \(read)")
+            try await Picture.window(shell, library: library, web: brief.web, "g2" + suffix, root: stage.home.root)
+        }
+        #expect(chosen.isEmpty, "nothing leaves before Return")
+        editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+        #expect(chosen.map(\.kind) == [.ask(.newSpace, text: sentence, none: false)] && Palette.shown(in: shell.layer) == nil)
+    }
     /// General: the three rows of Start and the version line; the open menu of "When something opens" is a menu the
     /// window server draws, so its items are checked as text (g3-menu.txt).
     @Test("g3: Settings, General") func g3() async throws {
