@@ -396,8 +396,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func forget(_ name: String) { unread[name] = nil }
 
     /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
-    /// all; else point mode's step back; else a margin note, the top thing over the page. Returns whether one closed, the key then used
-    /// up (the assistant's nudge waits for an Esc nothing took).
+    /// all; else point mode's step back; else a margin note, the top thing over the page. Returns whether one closed,
+    /// the key then used up (the assistant's nudge waits for an Esc nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
         if ScrimCard.close(in: layer) { return true }

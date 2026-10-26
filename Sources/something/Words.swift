@@ -193,10 +193,10 @@ enum Words {
         return (title, [denies, stops].compactMap { $0 }.joined(separator: " "))
     }
 
-    /// `names` as a sentence says them, `last` before the last one: "A, B and C".
     /// "Daily brief’s", "My agents’": whose a space's assistant is.
     static func possessive(_ title: String) -> String { title + (title.lowercased().hasSuffix("s") ? "’" : "’s") }
 
+    /// `names` as a sentence says them, `last` before the last one: "A, B and C".
     static func list(_ names: [String], _ last: String) -> String {
         names.count > 1 ? names.dropLast().joined(separator: ", ") + " \(last) " + (names.last ?? "") : names.first ?? ""
     }

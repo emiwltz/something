@@ -35,12 +35,18 @@ import SwiftUI
     @ObservationIgnored var chose: (Row) -> Void = { _ in }
     @ObservationIgnored var close: () -> Void = {}
 
-    /// What is typed; new words put the keys back on the first row.
-    var query = "" { didSet { if query != oldValue { selected = 0 } } }
+    /// What is typed; new words put the keys back on the first row, which the list scrolls back to.
+    var query = "" { didSet { if query != oldValue { selected = 0; key(rows.first?.id) } } }
     /// The index of the row the keys rest on.
     var selected = 0
-    /// The row the keys last moved to, which the list scrolls into view; the pointer's needs no scrolling.
-    var keyed: String?
+    /// The row the keys last moved to, or the first after new words, which the list scrolls into view; the pointer's
+    /// needs no scrolling.
+    private(set) var keyed: String?
+    /// Counts the keys' moves and the new words: landing again on the row last keyed still scrolls it into view.
+    private(set) var keyings = 0
+    /// Where the pointer last was in the window: a row that scrolls under a pointer that did not move takes nothing
+    /// from the keys, as the mockup's pointermove does.
+    @ObservationIgnored private var pointer: CGPoint?
 
     init(library: Library, eyes: @escaping (String) -> Sign.State, enabled: @escaping (String) -> Bool, full: @escaping () -> Bool = { false }) {
         (self.library, self.eyes, self.enabled, self.full) = (library, eyes, enabled, full)
@@ -92,7 +98,16 @@ import SwiftUI
         let rows = rows
         guard !rows.isEmpty else { return }
         selected = ((selected + by) % rows.count + rows.count) % rows.count
-        keyed = rows[selected].id
+        key(rows[selected].id)
+    }
+
+    private func key(_ id: String?) { (keyed, keyings) = (id, keyings + 1) }
+
+    /// The pointer at `point`, in the window, over the row at `index`: the keys move to it only if the pointer moved.
+    func hover(_ index: Int, at point: CGPoint) {
+        guard point != pointer else { return }
+        pointer = point
+        if selected != index { selected = index }
     }
 
     /// Return, or a click on the row at `index`: the palette closes, then the row opens. Nothing when there is no row.
@@ -217,7 +232,7 @@ struct PaletteCard: View {
             }
             .scrollIndicators(.never)
             .frame(height: min(tall, Self.list))
-            .onChange(of: model.keyed) { _, id in if let id { scroller.scrollTo(id) } }
+            .onChange(of: model.keyings) { if let id = model.keyed { scroller.scrollTo(id) } }
         }
     }
 
@@ -238,7 +253,7 @@ struct PaletteCard: View {
         .padding(.horizontal, 10).frame(height: Self.row)
         .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: 9))
         .contentShape(Rectangle())
-        .onHover { if $0, model.selected != index { model.selected = index } }
+        .onContinuousHover(coordinateSpace: .global) { if case .active(let point) = $0 { model.hover(index, at: point) } }
         .onTapGesture { model.pick(index) }
         .id(row.id)
         .accessibilityElement(children: .ignore)
@@ -344,15 +359,22 @@ extension App {
         Palette.toggle(in: shell.layer, model: model, motion: library.preferences.motion)
     }
 
-    /// Opens what a row of the palette names: its space, its command, or its template's preview.
+    /// Opens what a row of the palette names, the window brought to the front for a space.
     @MainActor func go(_ row: PaletteModel.Row) {
-        switch row.kind {
-        case .space:
-            library.select(.space(row.target))
-            front()
-        case .action: Keys.send(row.target)
+        row.open(in: library, send: Keys.send)
+        if case .space = row.kind { front() }
+    }
+}
+
+extension PaletteModel.Row {
+    /// Opens what the row names in `library`: selects its space, gives its command's id to `send`, or opens the
+    /// Templates page asked for its template's preview, which the page opens as it draws (GalleryView).
+    @MainActor func open(in library: Library, send: (String) -> Void) {
+        switch kind {
+        case .space: library.select(.space(target))
+        case .action: send(target)
         case .template:
-            library.asked = row.target
+            library.asked = target
             library.select(.templates)
         }
     }

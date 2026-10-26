@@ -29,13 +29,14 @@ struct AcceptanceCommand {
         let model = PaletteModel(library: library, eyes: { Stage.moment[$0] ?? .unknown }, enabled: { Keys.enabled($0, Keys.Situation(space: true)) })
         let palette = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
         #expect((shell.window.firstResponder as? NSTextView)?.delegate === palette.field && palette.accessibilityLabel() == "Go to or ask")
+        #expect(palette.frame == shell.layer.bounds, "the scrim covers the window")
         let rows = model.rows
         #expect(rows.prefix(7).map(\.title) == ["My agents", "Pebble", "Logbook", "Daily brief", "Project watch", "Oracle", "Stack"])
         #expect(rows.prefix(3).map(\.kind) == [.space(.wait, open: false), .space(.done, open: false), .space(.sleep, open: false)])
         #expect(rows[3].kind == .space(.think, open: true) && rows[7].title == "New Space" && model.selected == 0 && model.enter == "Open")
         let card = palette.card
         let shows = ["Go to a space, or ask its assistant", "RECENT", "My agents", "Waiting for you", "Pebble", "Breaks", "Done", "Logbook",
-                     "Asleep", "SPACES", "Daily brief", "Open", "Working", "Project watch", "Ready", "ACTIONS", "New Space", "something", "Move", "Close"]
+                     "Asleep", "SPACES", "Daily brief", "Working", "Project watch", "Ready", "ACTIONS", "New Space", "something", "Move", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
             await wait(10) { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 }
@@ -44,6 +45,11 @@ struct AcceptanceCommand {
             card.cacheDisplay(in: card.bounds, to: rep)
             let read = try Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "…", with: "...")
             for line in shows { #expect(read.contains(line), "g1\(suffix) shows “\(line)”; read: \(read)") }
+            // The footer's "↵ Open" and Daily brief's badge: the badge is the second.
+            #expect(read.components(separatedBy: "Open").count - 1 == 2, "g1\(suffix) shows Daily brief's Open badge; read: \(read)")
+            let scrim = try Picture.bitmap(palette.bounds.size)
+            palette.cacheDisplay(in: palette.bounds, to: scrim)
+            #expect(palette.drawn == card.frame, "the card's shadow and ring drawn where the card is")
             try await Picture.window(shell, library: library, web: brief.web, "g1" + suffix, root: stage.home.root)
         }
         #expect(Palette.toggle(in: shell.layer, model: model) == nil && shell.layer.isHidden, "⌘P again closes it")

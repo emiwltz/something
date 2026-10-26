@@ -1,7 +1,9 @@
 // ⌘P, go: the rows of an empty query (three recent spaces, the others with their group, state and eyes, the open
-// one marked; the actions that can act, the templates), the scoring and its sections, the recent spaces updated by
-// opening one; and, offscreen, the field's keys: typing, ↓ and Return open the second row, Esc and ⌘P close.
+// one marked; the actions that can act, the templates), the scoring and its sections, what each kind of row opens
+// (a space, made the most recent; a command, sent by its id; a template's preview, on the Templates page); and,
+// offscreen, the field's keys: typing, ↓ and Return open the second row, Esc and ⌘P close.
 import AppKit
+import SwiftUI
 import Testing
 @testable import something
 
@@ -69,8 +71,13 @@ import Testing
         let ranks = rows.map { (order($0.section), PaletteModel.score($0, "s") ?? 9) }
         #expect(zip(ranks, ranks.dropFirst()).allSatisfy { $0 <= $1 }, "by section, then by score")
         model.selected = 3
+        let keyings = model.keyings
         model.query = "st"
         #expect(model.selected == 0, "new words put the keys back on the first row")
+        #expect(model.keyed == model.rows.first?.id && model.keyings == keyings + 1, "and scroll back to it")
+        model.move(1)
+        model.move(-1)
+        #expect(model.keyed == model.rows.first?.id && model.keyings == keyings + 3, "the keys landing again scroll again")
         model.query = "qqq"
         #expect(model.rows.isEmpty)
         model.move(1)
@@ -84,7 +91,7 @@ import Testing
         let library = Self.library(stage), model = Self.model(library)
         var closed = 0
         model.close = { closed += 1 }
-        model.chose = { row in library.select(.space(row.target)) }
+        model.chose = { row in row.open(in: library) { Issue.record("a space row sent \($0)") } }
         model.move(1)
         model.move(-2)
         #expect(model.selected == model.rows.count - 1 && model.keyed == model.rows.last?.id, "↑ from the first goes round to the last")
@@ -93,6 +100,48 @@ import Testing
         #expect(closed == 1 && library.selection == .space("pet"))
         #expect(library.preferences.recents.prefix(3) == ["pet", "brief", "agents"])
         #expect(model.rows.filter { $0.section == .recent }.map(\.title) == ["Daily brief", "My agents", "Logbook"])
+    }
+
+    /// An action row sends its command's id, as the menu item would, and selects nothing.
+    @Test func anActionRowSendsItsCommand() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage), model = Self.model(library)
+        var sent: [String] = []
+        model.chose = { row in row.open(in: library) { sent.append($0) } }
+        model.pick(try #require(model.rows.firstIndex { $0.id == "action:settings" }))
+        #expect(sent == ["settings"] && library.selection == .space("brief"))
+    }
+
+    /// A template row opens the Templates page on that template's preview, as the page draws, and the ask is used up.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func aTemplateRowOpensItsPreview() async throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let library = Self.library(stage), model = Self.model(library)
+        model.chose = { row in row.open(in: library) { Issue.record("a template row sent \($0)") } }
+        model.pick(try #require(model.rows.firstIndex { $0.id == "template:pet" }))
+        #expect(library.selection == .templates && library.asked == "pet")
+        let gallery = Gallery(), host = NSHostingView(rootView: GalleryView(library: library, model: gallery))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 964, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+        (window.contentView, window.isReleasedWhenClosed) = (host, false)
+        defer { window.close() }
+        host.layoutSubtreeIfNeeded()
+        #expect(await wait { gallery.previewing?.id == "pet" })
+        #expect(library.asked == nil)
+    }
+
+    /// The pointer selects the row it moves onto; a row scrolled under a pointer that did not move takes nothing.
+    @Test func onlyAMovingPointerSelects() throws {
+        let stage = try Stage("palette")
+        defer { stage.remove() }
+        let model = Self.model(Self.library(stage))
+        model.hover(2, at: CGPoint(x: 300, y: 200))
+        #expect(model.selected == 2)
+        model.move(1)
+        model.hover(4, at: CGPoint(x: 300, y: 200))
+        #expect(model.selected == 3, "the keys keep it")
+        model.hover(4, at: CGPoint(x: 301, y: 200))
+        #expect(model.selected == 4)
     }
 
     /// In a window, the field has the keys: typed words narrow the list, ↓ moves to the second row and Return opens
