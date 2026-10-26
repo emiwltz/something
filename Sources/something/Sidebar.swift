@@ -35,6 +35,8 @@ import SwiftUI
     /// What is being renamed in place, and the name typed so far.
     var renaming: Target?
     var draft = ""
+    /// Whether the window is narrow enough that its sidebar column is the rail (Rail.swift); the Shell decides.
+    var rail = false
 
     /// A menu began: the row or header under the pointer is the one it was opened on (the menu bar's are over none).
     func menuOpened() {
@@ -121,10 +123,14 @@ extension Library {
         }
     }
 
+    /// The rail's stops: New Space, then every space in the sidebar's order, folded or not, since the rail shows no
+    /// header and every row.
+    func railStops() -> [SidebarState.Stop] { [.newSpace] + order().map { .space($0.id) } }
+
     /// ↑ (-1) or ↓ (1): the keys rest on the next stop, which opens when it is a space or New Space. Returns the stop,
     /// nil when there is none to go to (on the Templates page, the keys are not in the list).
     @discardableResult func step(_ by: Int) -> SidebarState.Stop? {
-        let all = stops()
+        let all = sidebar.rail ? railStops() : stops()
         let here: SidebarState.Stop? = sidebar.cursor.map { .group($0) } ?? (selection == .newSpace ? .newSpace : selection.space.map { .space($0) })
         guard let here else { return nil }
         // An open space in a folded group (opened from the Go menu) is not a stop: the keys start from its header.
@@ -213,12 +219,23 @@ struct SidebarView: View {
     let assistant: AssistantModel
     /// The state of the space of that name's assistant, read from its own conversation.
     let eyes: (String) -> Sign.State
+    /// Whether this is the window's column, which turns into the rail in a narrow window; the sidebar laid over the
+    /// space is never one.
+    var column = true
 
     private var state: SidebarState { library.sidebar }
     /// What the list says while there is no space, and no group header shows: the center invites to make one.
     static let empty = "Your spaces appear here"
 
     var body: some View {
+        if column && state.rail {
+            Rail(library: library, assistant: assistant, eyes: eyes)
+        } else {
+            whole
+        }
+    }
+
+    private var whole: some View {
         VStack(alignment: .leading, spacing: 0) {
             nav("new", label: "New Space", on: library.selection == .newSpace, open: newSpace) {
                 // The identity's ink, never the system's accent: a rounded square of ink with its plus.

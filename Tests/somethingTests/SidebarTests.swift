@@ -1,7 +1,8 @@
 // The sidebar's groups and names, in a throwaway home: moving a space to a group writes only the preferences, a new
 // group takes the first free name, a name another group has is refused, a folded group keeps its count and its rows
 // leave ↑ and ↓, renaming in place keeps the name on Return and none on Esc, a space's new name is only shown (its
-// file and declaration stay), and a row's menu is the mockup's. No window is shown.
+// file and declaration stay), and a row's menu is the mockup's; the rail's keys go through every space, folded or not,
+// and the window takes the rail below 860 points and keeps it until 880. No window is shown.
 import AppKit
 import Foundation
 import SomethingCore
@@ -284,6 +285,24 @@ import Testing
         #expect(go.allSatisfy { $0.image?.isTemplate == true }, "still template eyes the menu colours")
         #expect(go.first?.toolTip == "Daily brief · Working", "the state in words, not only drawn")
         #expect(go.prefix(2).map(\.keyEquivalent) == ["1", "2"])
+    }
+
+    @Test func theRailsKeysGoThroughEverySpaceAndItsLineHasHysteresis() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        library.preferences.fold("Agents", true)
+        library.sidebar.rail = true
+        let order = library.order().map(\.id)
+        #expect(library.railStops() == [.newSpace] + order.map { .space($0) } && !library.stops().contains(.space("brief")))
+        library.select(.newSpace)
+        #expect(library.step(1) == .space("brief"), "a folded group's rows are stops of the rail")
+        #expect(library.step(1) == .space("agents") && library.sidebar.cursor == nil)
+        let brief = try #require(library.entry("brief"))
+        #expect(Rail.tip(brief, .think) == "Daily brief · Working" && Library.label(brief, .think) == "Daily brief, Working")
+        for (width, now, rail) in [(859.0, false, true), (860, false, false), (879, true, true), (880, true, false), (870, false, false), (870, true, true)] {
+            #expect(Shell.rail(width, now: now) == rail, "\(width) \(now)")
+        }
     }
 }
 

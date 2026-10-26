@@ -171,14 +171,15 @@ final class SidebarOver: ScrimCard {
     private let host: NSView
 
     /// Lays out `list`, the window's own sidebar list: its first row 49 points down, under the 50-point band of the
-    /// mockup's sidebar head, whatever safe area the full screen gives.
-    init(_ list: SidebarView) {
-        let host = NSHostingView(rootView: list.padding(.top, 52).background(Look.Token.side.ui))
+    /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar beside
+    /// the rail), its first row just under them.
+    init(_ list: SidebarView, under: CGFloat = 0) {
+        let host = NSHostingView(rootView: list.padding(.top, max(52 - under, 8)).background(Look.Token.side.ui))
         (host.safeAreaRegions, host.sizingOptions) = ([], [])
         self.host = host
         super.init(card: host, radius: 0, label: "Sidebar")
         let place = host.leadingAnchor.constraint(equalTo: leadingAnchor)
-        NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor), host.bottomAnchor.constraint(equalTo: bottomAnchor),
+        NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor, constant: under), host.bottomAnchor.constraint(equalTo: bottomAnchor),
                                      host.widthAnchor.constraint(equalToConstant: SidebarOver.width)])
         arrival = (place, -SidebarOver.width, 0.5)
     }

@@ -339,7 +339,81 @@ struct AcceptanceShell {
         }
     }
 
-    @Test("b7: the rail", .disabled("not built yet: W6")) func b7() async throws {}
+    /// The narrow window (W6), 760 by 680: the sidebar is a 64-point rail, one button per space in the sidebar's order
+    /// saying "Title, state", folded groups too, a line between groups; the toolbar's toggle goes, the title drops its
+    /// file, the chip its words. ⌃⌘S lays the whole sidebar over the space under the toolbar. Below 860 points the
+    /// window takes the rail and keeps it until 880; the sidebar then comes back as it was.
+    @Test("b7: the rail") func b7() async throws {
+        let stage = try Stage("shell-b7")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window(NSSize(width: 760, height: 680))
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.preferences.fold("Breaks", true)
+        library.relist()
+        try Self.eyes(shell, Stage.moment)
+        shell.waiting(1, mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let side = shell.split.splitViewItems[0], host = side.viewController.view
+        shell.window.layoutIfNeeded()
+        #expect(shell.rail && library.sidebar.rail && !side.isCollapsed && host.frame.width == Rail.width, "\(host.frame)")
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.chip, Shell.tools],
+                "the rail has its own toggle")
+        #expect(shell.titleLine.bare && shell.titleLine.shown.string == "Daily brief" && shell.window.subtitle == "brief.html")
+        #expect(shell.chip.compact && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.intrinsicContentSize.width < 50)
+        // One button per space, in the sidebar's order, Breaks' rows too though it is folded; each says its title and
+        // state, and under the pointer its name and state.
+        let order = library.order()
+        let spaces = order.map { Library.label($0, Stage.moment[$0.id] ?? .sleep) }
+        let fixed = ["Show Sidebar", "New Space", "Go to…", "New Group", "Templates", "Settings"]
+        let said = await AcceptanceBuild.read(host) { words in (spaces + fixed).allSatisfy(words.contains) }
+        #expect(said.filter((spaces + fixed).contains) == Array(fixed.prefix(4)) + spaces + fixed.suffix(2), "\(said)")
+        #expect(order.map { Rail.tip($0, Stage.moment[$0.id] ?? .sleep) }.first == "Daily brief · Working")
+        // ↑ and ↓ go through New Space and every space, no header.
+        #expect(library.railStops() == [.newSpace] + order.map { .space($0.id) })
+        #expect(library.step(1) == .space("agents") && library.step(-1) == .space("brief") && library.sidebar.cursor == nil)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "b7" + suffix, root: stage.home.root)
+        }
+        // ⌃⌘S, and the rail's toggle, lay the whole sidebar over the space, under the toolbar; Esc takes it away.
+        shell.split.toggleSidebar(nil)
+        let laid = try #require(SidebarOver.shown(in: shell.layer))
+        _ = await wait(until: { laid.alphaValue == 1 })
+        laid.layoutSubtreeIfNeeded()
+        let band = shell.window.frame.height - shell.window.contentLayoutRect.maxY
+        #expect(laid.card.frame == NSRect(x: 0, y: 0, width: SidebarOver.width, height: 680 - band), "\(laid.card.frame)")
+        #expect(shell.rail && !side.isCollapsed && shell.window.firstResponder === laid.card)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "b7-sidebar" + suffix, root: stage.home.root)
+        }
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape) && SidebarOver.shown(in: shell.layer) == nil)
+        // The line, both ways: 20 points of hysteresis.
+        #expect(Shell.rail(859, now: false) && !Shell.rail(860, now: false) && Shell.rail(879, now: true) && !Shell.rail(880, now: true))
+        shell.window.setContentSize(NSSize(width: 870, height: 680))
+        #expect(shell.rail, "still the rail at 870")
+        shell.window.setContentSize(NSSize(width: 880, height: 680))
+        shell.window.layoutIfNeeded()
+        #expect(!shell.rail && !library.sidebar.rail && host.frame.width == 236 && !shell.titleLine.bare && !shell.chip.compact, "\(host.frame)")
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.chip, Shell.tools])
+        shell.window.setContentSize(NSSize(width: 870, height: 680))
+        #expect(!shell.rail, "still the sidebar at 870")
+        // A sidebar hidden before the window narrows is the rail all the same, and hidden again once it widens.
+        side.isCollapsed = true
+        shell.window.setContentSize(NSSize(width: 800, height: 680))
+        #expect(shell.rail && !side.isCollapsed)
+        shell.window.setContentSize(Stage.Size.main)
+        #expect(!shell.rail && side.isCollapsed)
+        // Full screen never has the rail.
+        side.isCollapsed = false
+        shell.window.setContentSize(NSSize(width: 800, height: 680))
+        shell.fullScreen(true)
+        #expect(!shell.rail && side.isCollapsed)
+        shell.fullScreen(false)
+        #expect(shell.rail && !side.isCollapsed)
+    }
+
     /// Several assistants at work, Logbook open (W3): Project watch starts working, Daily brief finishes, Oracle asks;
     /// the rows' eyes follow, the chip and the panel count both requests, the whole Mac's, and Logbook's sticker shows no
     /// badge, since none is its own. The chip's menu lists the assistants by state; nothing in it answers.

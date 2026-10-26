@@ -9,6 +9,9 @@
 // every click.
 // In full screen the space is alone: the system hides the toolbar and the menu bar until the pointer reaches the top,
 // the sidebar steps aside and the space starts at the screen's top; ⌃⌘S lays the sidebar over it (SidebarOver).
+// A window narrower than 860 points has the rail in place of its sidebar (Rail.swift), until it is 880 wide again, so
+// that a window resized about the line does not flicker between the two: ⌃⌘S lays the whole sidebar over the space
+// there too, the toolbar's own toggle goes (the rail has one), the title drops the file and the chip its words.
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -63,6 +66,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private var top: NSLayoutConstraint?
     /// The toolbar's lower edge, over the center only.
     private let edge = NSBox()
+    /// Whether the sidebar column is the rail; the column's own state before, given back after.
+    private(set) var rail = false
+    private var sideBefore: (hidden: Bool, width: CGFloat) = (false, 236)
+    /// Below `narrow` points the window takes the rail; it gives it up at `narrow + hysteresis`.
+    static let narrow: CGFloat = 860, hysteresis: CGFloat = 20
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
@@ -98,7 +106,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior.insert(.fullScreenPrimary)
-        let toolbar = NSToolbar(identifier: "main")
+        // Its own identifier: toolbars of one identifier share their items, and the rail takes some away from this one.
+        let toolbar = NSToolbar(identifier: "main-" + UUID().uuidString)
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
@@ -108,6 +117,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
+        // A frame kept narrow from the last time starts with the rail.
+        fit()
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
         info.showHistory = { [weak self] in self?.showHistory() }
@@ -150,6 +161,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// The window changed size, which does not always move the columns: the title measures its room again.
     func windowDidResize(_ notification: Notification) {
+        fit()
         titleLine.invalidateIntrinsicContentSize()
         veil?.setFrame(window.frame, display: true)
         film?.cover.setFrame(window.frame, display: true)
@@ -176,6 +188,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// it. Pinned to the top rather than to the safe area, the page does not move when the toolbar comes down over it.
     func fullScreen(_ on: Bool) {
         guard on != full else { return }
+        if on { railed(false) }
         full = on
         _ = SidebarOver.close(in: layer)
         let side = split.splitViewItems[0]
@@ -187,25 +200,72 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         edge.isHidden = on
         controls[Shell.full]?.image = NSImage(systemSymbolName: on ? "arrow.down.right.and.arrow.up.left" : "viewfinder",
                                               accessibilityDescription: on ? "Exit Full Screen" : "Full Screen")
+        if !on { fit() }
     }
 
-    /// ⌃⌘S in full screen: lays the sidebar over the space, or takes it away. Returns false elsewhere, where the
-    /// sidebar column shows or hides as usual.
+    /// Whether a window `width` points wide has the rail, `now` being whether it has it: below 860 it takes it, and
+    /// keeps it until 880.
+    static func rail(_ width: CGFloat, now: Bool) -> Bool { width < narrow + (now ? hysteresis : 0) }
+
+    /// Takes the rail or gives it up for the window's width; never in full screen, where the sidebar steps aside.
+    func fit() {
+        railed(!full && Shell.rail(window.frame.width, now: rail))
+    }
+
+    /// Turns the sidebar column into the rail (`on`), shown whatever the column was, or back into the sidebar as it
+    /// was before; the toolbar follows.
+    private func railed(_ on: Bool) {
+        guard on != rail else { return }
+        rail = on
+        _ = SidebarOver.close(in: layer)
+        let side = split.splitViewItems[0]
+        library.sidebar.cursor = nil
+        library.sidebar.rail = on
+        if on {
+            sideBefore = (side.isCollapsed, side.isCollapsed ? sideBefore.width : side.viewController.view.frame.width)
+            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Rail.width, Rail.width, false)
+            side.isCollapsed = false
+            split.splitView.setPosition(Rail.width, ofDividerAt: 0)
+        } else {
+            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (190, 320, true)
+            split.splitView.setPosition(sideBefore.width, ofDividerAt: 0)
+            side.isCollapsed = sideBefore.hidden
+        }
+        // The toggle goes with the separator that follows the sidebar's edge, removed: even hidden, the separator would
+        // keep the title well past the lights.
+        if let toolbar = window.toolbar {
+            if on { Shell.head.forEach { _ in toolbar.removeItem(at: 0) } } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
+        }
+        (titleLine.bare, chip.compact) = (on, on)
+    }
+
+    /// ⌃⌘S in full screen or beside the rail: lays the sidebar over the space, or takes it away; beside the rail, under
+    /// the toolbar, which would draw the title over it. Returns false elsewhere, where the sidebar column shows or
+    /// hides as usual.
     private func sidebarOver() -> Bool {
-        guard full else { return false }
+        guard full || rail else { return false }
+        let under = full ? 0 : window.frame.height - window.contentLayoutRect.maxY
+        // The column's own eyes, so that both lists always say the same.
+        guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return true }
         _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) }))
+            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false), under: under)
         }
         return true
     }
+
+    /// ⌃⌘S and the rail's toggle while nothing in the split view has the focus: the window's delegate is the last in
+    /// line for it.
+    @objc func toggleSidebar(_ sender: Any?) { split.toggleSidebar(sender) }
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
+    /// The toolbar's items over the sidebar column, which the rail has not.
+    static let head: [NSToolbarItem.Identifier] = [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator]
+
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace,
-         Shell.chip, Shell.tools]
+        Shell.head + [Shell.title, .flexibleSpace, Shell.chip, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -284,6 +344,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         (window.title, window.subtitle) = (title, file)
         let line = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
                                                                          .foregroundColor: Look.Token.ink.color, .kern: -0.135])
+        titleLine.title = line.length
         if !file.isEmpty {
             line.append(NSAttributedString(string: "  " + file, attributes: [.font: Look.font(.ui, size: 11.5),
                                                                               .foregroundColor: Look.Token.ink3.color]))
@@ -641,6 +702,13 @@ final class TitleLine: NSView {
     var line = NSAttributedString() {
         didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
     }
+    /// How much of `line` is the title: beside the rail, `bare`, only the title is drawn.
+    var title = 0
+    var bare = false {
+        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+    }
+    /// What is drawn: the line, or its title alone.
+    var shown: NSAttributedString { bare && title < line.length ? line.attributedSubstring(from: NSRange(location: 0, length: title)) : line }
 
     /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
     /// menu than narrow a view that asks for more.
@@ -649,12 +717,12 @@ final class TitleLine: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        let whole = ceil(line.size().width) + TitleLine.indent
+        let whole = ceil(shown.size().width) + TitleLine.indent
         let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
-        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(line.size().height))
+        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(shown.size().height))
     }
     override func draw(_ dirtyRect: NSRect) {
-        let cut = NSMutableAttributedString(attributedString: line), style = NSMutableParagraphStyle()
+        let cut = NSMutableAttributedString(attributedString: shown), style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         cut.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cut.length))
         cut.draw(in: NSRect(x: TitleLine.indent, y: 0, width: bounds.width - TitleLine.indent, height: bounds.height))
@@ -701,10 +769,14 @@ final class WaitingChip: NSButton {
             needsDisplay = true
         }
     }
+    /// Beside the rail, the eyes and the count alone; the label still says the words.
+    var compact = false {
+        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+    }
     private var said: String { count == 1 ? "waits for you" : "wait for you" }
-    /// The count, then the words, as drawn.
+    /// The count, then the words unless `compact`, as drawn.
     private var parts: [NSAttributedString] {
-        [("\(count)", NSFont.Weight.semibold), (said, .medium)].map { words, weight in
+        ([("\(count)", NSFont.Weight.semibold)] + (compact ? [] : [(said, .medium)])).map { words, weight in
             NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 12, weight: weight), .foregroundColor: Look.Token.ink.color])
         }
     }
@@ -716,10 +788,11 @@ final class WaitingChip: NSButton {
     }
     required init?(coder: NSCoder) { nil }
 
-    // The mockup's .wn-chip: 26 high, 8 before the eyes, 6 between the pieces, 10 after the words.
+    // The mockup's .wn-chip: 26 high, 8 before the eyes, 6 between the pieces, 10 after the words; compact, 7 and 9.
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 8 + 16 + parts.reduce(0) { $0 + 6 + ceil($1.size().width) } + 10, height: 26)
+        NSSize(width: lead + 16 + parts.reduce(0) { $0 + 6 + ceil($1.size().width) } + (compact ? 9 : 10), height: 26)
     }
+    private var lead: CGFloat { compact ? 7 : 8 }
 
     override func draw(_ dirtyRect: NSRect) {
         let pill = bounds.insetBy(dx: 0.5, dy: (bounds.height - 26) / 2 + 0.5), path = NSBezierPath(roundedRect: pill, xRadius: 12.5, yRadius: 12.5)
@@ -728,8 +801,8 @@ final class WaitingChip: NSButton {
         Look.Token.line2.color.setStroke()
         path.lineWidth = 1
         path.stroke()
-        Sign.miniEyes(.wait, template: false).draw(in: NSRect(x: 8, y: bounds.midY - 5, width: 16, height: 10))
-        var x: CGFloat = 8 + 16
+        Sign.miniEyes(.wait, template: false).draw(in: NSRect(x: lead, y: bounds.midY - 5, width: 16, height: 10))
+        var x: CGFloat = lead + 16
         for piece in parts {
             let size = piece.size()
             piece.draw(at: NSPoint(x: x + 6, y: bounds.midY - size.height / 2))
