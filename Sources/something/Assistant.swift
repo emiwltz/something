@@ -89,7 +89,7 @@ import SomethingCore
             }
             if place.key != oldValue.key {
                 // The assistant left stays awake for the whole delay from now: it was the open one until now.
-                session.active = clock()
+                (session.active, wantsFocus) = (clock(), false)
                 session = session(for: place)
                 // The left one is restful only now: nothing else may set the timer before its delay ends.
                 rest()
@@ -114,7 +114,7 @@ import SomethingCore
     var folding = false
     /// Whether the open space's journal could not be written.
     var unkept = false
-    /// Set by ⌘K until a field takes the focus: asked while hidden or on its way out, one would take it and refuse it.
+    /// Set by ⌘K until a field takes the focus; dropped as the place changes, so a stale one never takes another's keys.
     var wantsFocus = false
     /// Each place's conversation, made at its first use; and the one the card shows and the messages go to, the open
     /// place's, with what the window reads of it.
