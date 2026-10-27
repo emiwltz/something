@@ -359,13 +359,13 @@ struct Field: View {
 }
 
 extension View {
-    /// The focus and keys of this field or New Space's: ⌘K's focus once the field is drawn, and Return as `returned`
-    /// says, which reads whether an input method composes from the field editor.
+    /// The focus and keys of this field or New Space's: ⌘K's focus a turn later, once the glass has shown the card (a
+    /// hidden field refuses it), and Return as `returned` says, which reads an input method composing from the editor.
     func composing(_ model: AssistantModel, _ typing: FocusState<Bool>.Binding) -> some View {
         focused(typing)
             .disabled(model.blocked)
             .onChange(of: model.wantsFocus, initial: true) {
-                if model.wantsFocus { (typing.wrappedValue, model.wantsFocus) = (true, false) }
+                if model.wantsFocus { DispatchQueue.main.async { (typing.wrappedValue, model.wantsFocus) = (true, false) } }
             }
             .onKeyPress(.return, phases: .down) { press in
                 let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true

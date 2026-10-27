@@ -80,8 +80,8 @@ struct AcceptanceAssistant {
         #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
         model.focus()
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
-        shell.window.layoutIfNeeded()
-        #expect(model.cardShown && !model.wantsFocus, "the field took the request")
+        #expect(await wait { !model.wantsFocus }, "the field took the request")
+        #expect(model.cardShown)
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
