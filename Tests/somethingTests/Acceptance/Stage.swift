@@ -168,11 +168,10 @@ final class Stage {
         // The pages see the mockup's agents; the engine is never started, so no watch tick replaces them. The show
         // screens (f) keep the quiet page: their frames and comments are measured on its parts.
         if seeded { view.engine.update(outside: Stage.world) }
-        // The pages' clock stands at the mockup's moment, in this Mac's own zone, whatever the day of the run.
-        if gallery != nil {
-            view.staged = [WKUserScript(source: Stage.fixedClock, injectionTime: .atDocumentStart, forMainFrameOnly: false)]
-            view.stagedAt = iso8601.string(from: Stage.local)
-        }
+        // The pages' clock stands at the mockup's moment, in this Mac's own zone, whatever the day of the run, in every
+        // run and not only a picture's: the brief's dateline is wider on a Wednesday, and f4's pick moved with it.
+        view.staged = [WKUserScript(source: Stage.fixedClock, injectionTime: .atDocumentStart, forMainFrameOnly: false)]
+        view.stagedAt = iso8601.string(from: Stage.local)
         view.open()
         #expect(await wait(until: { !view.web.isLoading && view.frame != nil }), "\(name) did not load")
         library.select(.space(name))

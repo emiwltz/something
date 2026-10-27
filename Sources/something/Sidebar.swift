@@ -325,8 +325,8 @@ struct SidebarView: View {
         }
     }
 
-    /// Needs You, over the groups while a request waits: a mark and the words in the colour of what waits, the count,
-    /// then a row per space, a bar of that colour at its edge. A click opens the space, or, open already, shows its
+    /// Needs You, over the groups while a request waits: a mark and the words in the colour of what waits (the count
+    /// only for VoiceOver, as X9.1 draws no number), then a row per space, a bar of that colour at its edge. A click opens the space, or, open already, shows its
     /// request in the panel, the only place that answers (rule 2).
     @ViewBuilder private var needs: some View {
         let spaces = library.needing()
@@ -337,7 +337,6 @@ struct SidebarView: View {
                         .background(Circle().fill(Look.Token.needSoft.ui).frame(width: 13, height: 13))
                     Text("Needs You")
                     Spacer(minLength: 0)
-                    Text("\(spaces.count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
                 }
                 .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
                 .foregroundStyle(Look.Token.needInk.ui)
