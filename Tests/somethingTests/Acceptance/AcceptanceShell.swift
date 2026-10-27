@@ -397,7 +397,14 @@ struct AcceptanceShell {
         let sidebar = try #require(view.items.first { $0.identifier?.rawValue == "sidebar" })
         shell.window.makeFirstResponder(nil)
         #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Hide Sidebar")
-        view.items.first { $0.identifier?.rawValue == "insp" }?.title = shell.infoWords
+        // The Info items, in View and Space, are named as the app's validation names them: Show, then Hide while Info shows.
+        let infos = [view, space].compactMap { menu in menu.items.first { $0.identifier?.rawValue == "insp" } }
+        #expect(infos.count == 2)
+        shell.showInfo(true)
+        infos.forEach(shell.retitle)
+        #expect(infos.allSatisfy { $0.title == "Hide Info" }, "\(infos.map(\.title))")
+        shell.showInfo(false)
+        infos.forEach(shell.retitle)
         let lines = Mockup.lines(view)
         #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
                           "Enter Full Screen  ⌃⌘F"], "\(lines)")

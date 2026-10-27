@@ -357,7 +357,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Greyed, never hidden: Keys says when each command can act. Show Info says "Hide Info" while it shows.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
-        if id == "insp" { item.title = shell.infoWords }
+        shell.retitle(item)
         return Keys.enabled(id, situation)
     }
 

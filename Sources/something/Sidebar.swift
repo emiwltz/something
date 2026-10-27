@@ -21,8 +21,8 @@ import SwiftUI
     enum Stop: Hashable { case newSpace, group(String), space(String) }
 
     /// What can be under the pointer: one of the fixed rows ("new", "palette", "tpls"), a group's header, a space's row,
-    /// apart so that a space named like a fixed row lights only its own.
-    enum Hover: Hashable { case nav(String), group(String), space(String) }
+    /// a space's row in Needs You, apart so that a space named like a fixed row, or listed twice, lights only its own.
+    enum Hover: Hashable { case nav(String), group(String), space(String), needs(String) }
 
     /// The row under the pointer.
     var hovered: Hover?
@@ -204,6 +204,13 @@ extension Library {
 
     /// The spaces Needs You lists: those of `needs` the sidebar lists, in its order.
     func needing() -> [Entry] { sidebar.needs.compactMap(entry) }
+
+    /// Where a click on a Needs You row goes.
+    enum NeedsGo: Equatable { case space(String), request }
+
+    /// Where a click on `id`'s Needs You row goes: the open space's row shows its request in the panel, any other
+    /// opens its space. Never an answer: only the panel's Allow Once or Deny decides (rule 2).
+    func needsGo(_ id: String) -> NeedsGo { selection == .space(id) ? .request : .space(id) }
 }
 
 extension App {
@@ -438,12 +445,15 @@ struct SidebarView: View {
     /// elsewhere, "…" under the pointer. In Needs You (`needs`), the bar of what waits at its edge, no "…", and a
     /// click on the open space shows its request.
     private func space(_ entry: Library.Entry, needs: Bool = false) -> some View {
-        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, key = needs ? SidebarState.Hover.nav("needs." + entry.id) : .space(entry.id),
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, key = needs ? SidebarState.Hover.needs(entry.id) : .space(entry.id),
             menued = state.menued == key, hovered = state.hovered == key || menued
         let menu = library.menu(for: entry)
         let open = {
             state.cursor = nil
-            if needs && on { Keys.send("showreq") } else { library.select(.space(entry.id)) }
+            switch needs ? library.needsGo(entry.id) : .space(entry.id) {
+            case .request: Keys.send("showreq")
+            case let .space(id): library.select(.space(id))
+            }
         }
         return HStack(spacing: 6) {
             if state.renaming == .space(entry.id) && !needs {

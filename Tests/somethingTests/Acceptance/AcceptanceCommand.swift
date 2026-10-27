@@ -155,10 +155,11 @@ struct AcceptanceCommand {
     /// sidebar's eyes left with v6.2's list of names (S5).
     @Test("g6: Settings, Interface") func g6() async throws {
         let shows = ["Auto", "Light", "Dark", "Calm", "Reduced", "Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
-                     "to point inside a drawn frame"]
+                     // Vision reads the night's "frame" as "trame"; the row's whole title is held by the model below.
+                     "Pointing", "to point inside a drawn"]
         try await settings(.interface, "g6", shows: shows) { settings, _ in
             let sections = settings.model.sections(.interface)
-            #expect(sections.map(\.title) == ["Appearance", "The assistant", "Show"] && sections[0].appearance)
+            #expect(sections.map(\.title) == ["Appearance", "The assistant", "Pointing"] && sections[0].appearance)
             #expect(sections.flatMap(\.rows).map(\.title) == ["Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
                                                               "Hold ⌥ to point inside a drawn frame"])
         }

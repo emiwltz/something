@@ -2,8 +2,9 @@
 // group takes the first free name, a name another group has is refused, a folded group keeps its count and its rows
 // leave ↑ and ↓, renaming in place keeps the name on Return and none on Esc, a space's new name is only shown (its
 // file and declaration stay), and a row's menu is the mockup's; the rows are names only, Needs You mirrors the spaces
-// that wait; the rail's keys go through every space, folded or not, its tiles are a letter on the colour of the name,
-// and the window takes the rail below 860 points and keeps it until 880. No window is shown.
+// that wait and a click on one goes to what waits, never answering; the rail's keys go through every space, folded or
+// not, its tiles are a letter on the colour of the name, and the window takes the rail below 860 points and keeps it
+// until 880. No window is shown.
 import AppKit
 import Foundation
 import SomethingCore
@@ -220,6 +221,25 @@ import Testing
         #expect(library.needing().map(\.title) == ["Oracle", "My agents"])
         #expect(library.order().map(\.id) == order && library.stops() == stops, "mirrored, never moved")
         #expect(library.preferences.group(of: "agents") == "Agents")
+    }
+
+    /// A click on a Needs You row goes to what waits and never answers it: another space opens; the open space's
+    /// row shows its request in the panel, the selection kept; no word of the row or its menu is Allow or Deny.
+    @Test func needsYouGoesToTheRequestAndNeverAnswers() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        library.sidebar.needs = ["agents", "oracle"]
+        library.select(.space("brief"))
+        #expect(library.needsGo("agents") == .space("agents"), "another space opens")
+        library.select(.space("agents"))
+        #expect(library.needsGo("agents") == .request && library.needsGo("oracle") == .space("oracle"))
+        #expect(library.selection == .space("agents"), "asking where it goes moves nothing")
+        #expect(Keys.command("showreq")?.action == #selector(App.showRequest(_:)), "the panel, which asks")
+        for entry in library.needing() {
+            let words = SidebarMenu.text(library.menu(for: entry)) + [Library.label(entry, .wait)]
+            #expect(!words.contains { $0.contains("Allow") || $0.contains("Deny") }, "\(words)")
+        }
     }
 
     /// The rows' eyes, which VoiceOver says, come from each space's own session: no session reads asleep, never

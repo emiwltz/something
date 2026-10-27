@@ -18,7 +18,7 @@ enum SettingsTab: String, CaseIterable {
 
     private var face: (label: String, symbol: String) {
         switch self {
-        case .general: ("General", "sun.max")
+        case .general: ("General", "gearshape")
         case .assistant: ("Assistant", "sparkle")
         case .permissions: ("Permissions", "checkmark.shield")
         case .interface: ("Interface", "eye")
@@ -206,7 +206,7 @@ struct SettingsSection: Identifiable {
                                 control: choice(\.assistantAtOpening, [(.reduced, "Reduced"), (.open, "Open")])),
                     SettingsRow(title: "Remember where I put the assistant", note: "One place for every space.", control: toggle(\.rememberSticker)),
                 ]),
-                SettingsSection(title: "Show", rows: [
+                SettingsSection(title: "Pointing", rows: [
                     SettingsRow(title: "Hold ⌥ to point inside a drawn frame",
                                 note: "Showing a part of a space stays a visible mode; ⌥ only works once a frame is drawn.", control: toggle(\.holdOption)),
                 ]),

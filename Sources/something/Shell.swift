@@ -362,8 +362,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
     }
 
-    /// What View's Info item says: what it will do.
+    /// What View's and Space's Info items say: what they will do.
     var infoWords: String { infoShown && info.content == .info ? "Hide Info" : "Show Info" }
+
+    /// Names a menu item as it reads now: the Info items, in View and Space, say Hide Info while Info shows.
+    func retitle(_ item: NSMenuItem) {
+        if item.identifier?.rawValue == "insp" { item.title = infoWords }
+    }
 
     /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You; `mine`,
     /// the open space's own, to the sticker's label.

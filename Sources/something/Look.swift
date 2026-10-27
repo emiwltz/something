@@ -64,8 +64,8 @@ enum Look {
         return NSColor(srgbRed: part(16), green: part(8), blue: part(0), alpha: alpha)
     }
 
-    /// The narrow rail's letter tiles: a white letter on one of these, picked from the space's name, so that no two
-    /// neighbours look alike; the same by day and by night, as the mockup draws them.
+    /// The narrow rail's letter tiles: a white letter on one of these, picked by the mockup's hash of the space's file
+    /// name, so two spaces may share one; the same by day and by night, as the mockup draws them.
     static let tiles: [UInt32] = [0xC2453A, 0x2F6FB4, 0x2A7D57, 0xB07A1A, 0x7A4FB4, 0xC25A8A, 0x3F8A8C, 0x5C5E66]
 
     /// The tile colour of the space `name`: the mockup's hash of its name (h = h * 31 + each UTF-16 unit, from 7).
