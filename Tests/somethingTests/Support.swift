@@ -217,6 +217,25 @@ func wait(_ seconds: Double = 60, until condition: () -> Bool = { false }) async
     return condition()
 }
 
+/// Whether a field inside `view()`, shown, has had the keys of `window` (its editor the first responder) since this was
+/// made. Asked rather than who has the keys now: in a window never shown, while other suites run, SwiftUI sometimes
+/// takes the focus back from a field right after giving it, however it was asked (a shown window is a hand trial).
+@MainActor
+final class FieldKeys {
+    private(set) var taken = false
+    private var observation: NSKeyValueObservation?
+
+    init(_ window: NSWindow, inside view: @escaping @MainActor () -> NSView?) {
+        observation = window.observe(\.firstResponder) { [weak self] window, _ in
+            MainActor.assumeIsolated {
+                guard let editor = window.firstResponder as? NSTextView, let view = view(), !view.isHiddenOrHasHiddenAncestor,
+                      editor.isDescendant(of: view) else { return }
+                self?.taken = true
+            }
+        }
+    }
+}
+
 /// Runs `code` as the body of an async function in the space's frame (the app's page while the space is blocked)
 /// and returns what it returns.
 @MainActor

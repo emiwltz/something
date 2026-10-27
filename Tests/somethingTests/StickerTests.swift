@@ -1,11 +1,13 @@
 // The glass and the sticker, in a window never shown with Daily brief open: the glass takes the mouse only on the
 // sticker and the card, so a click beside them reaches the page; the badge counts only this space's requests and shows
 // the request; a click, Return or ⌘K grows the card from the sticker's corner, ⌘\, Esc or Reduce shrinks it back, the
-// focus leaving the card for the page; the label says what the assistant does on hover or focus; the sticker is only
-// over a space; a drag moves it to the nearest side and keeps its place for every space, a press that moves less than 4
-// points is a click. Cursor, the key view loop and what VoiceOver reads are hand trials.
+// focus leaving the card for the page, and New Space opened with the card open gives its own field the keys; the label
+// says what the assistant does on hover or focus; the sticker is only over a space; a drag moves it to the nearest side
+// and keeps its place for every space, a press that moves less than 4 points is a click. Cursor, the key view loop and
+// what VoiceOver reads are hand trials.
 import AppKit
 import SomethingCore
+import SwiftUI
 import Testing
 @testable import SomethingAgents
 @testable import something
@@ -27,6 +29,10 @@ struct StickerTests {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
+        // Laid out as a window on the screen is before a click reaches it. This one is never shown: its split view's
+        // pass (Info collapsed in Shell.init) waits for the run loop, which a busy full run may not give it in time,
+        // while the space laid the center out alone, wider than its column: a click at its right found no column.
+        shell.window.layoutIfNeeded()
         try await body(shell, brief, stage)
     }
 
@@ -120,6 +126,24 @@ struct StickerTests {
             #expect(await shrunk())
             #expect(sticker.accessibilityPerformPress())
             #expect(await grown())
+        }
+    }
+
+    /// New Space from the sidebar (⌘N and the arrow onto it alike) with the card open: the library opens New Space on
+    /// the next turn, and the card's field, still drawn until then (SwiftUI drawing it first is forced here), leaves the
+    /// request to New Space's field, which takes the keys.
+    @Test func newSpaceTakesTheKeysFromTheOpenCard() async throws {
+        try await brief { shell, _ in
+            let model = shell.assistant
+            // As the app opens a destination (App.open): New Space in the center, the assistant on the blank page.
+            shell.library.opened = { [weak shell] in if $0 == .newSpace { shell?.show(nil); shell?.assistant.place = .blank } }
+            model.open = true
+            #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
+            let sidebar = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+            let keys = FieldKeys(shell.window) { [weak shell] in model.place == .blank ? shell?.shown : nil }
+            sidebar.rootView.newSpace()
+            shell.glass.card.layoutSubtreeIfNeeded()
+            #expect(await wait { keys.taken && !model.wantsFocus }, "New Space's field took the keys")
         }
     }
 

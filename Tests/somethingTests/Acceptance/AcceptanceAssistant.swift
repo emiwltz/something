@@ -73,15 +73,17 @@ struct AcceptanceAssistant {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "c2-thread" + suffix, root: stage.home.root)
         }
-        // ⌘\ reduces it; ⌘K opens it again, and the field, drawn anew, takes the request for the focus (whether the
-        // window gives it the focus is for a trial by hand: this window is never shown).
+        // ⌘\ reduces it; ⌘K opens it again, and the field, drawn anew, takes the keys, even when SwiftUI draws it (here
+        // forced) before the glass shows the card: a hidden field refuses the focus, and the request comes after.
         shell.reduceAssistant(nil)
         #expect(!model.cardShown)
         #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
+        let keys = FieldKeys(shell.window) { host }
         model.focus()
+        #expect(model.cardShown && host.isHidden)
+        host.layoutSubtreeIfNeeded()
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
-        #expect(await wait { !model.wantsFocus }, "the field took the request")
-        #expect(model.cardShown)
+        #expect(await wait { keys.taken && !model.wantsFocus }, "the card's field took the keys")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })

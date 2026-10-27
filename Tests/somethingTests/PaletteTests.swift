@@ -271,7 +271,8 @@ import Testing
         model.open = false
         #expect(model.kind == nil)
         PaletteModel.deliver(Self.sentence, to: .space("agents"), assistant: model, title: "My agents") { told.append($0) }
-        #expect(model.draft == Self.sentence && model.open && model.wantsFocus && told.isEmpty)
+        #expect(model.draft == Self.sentence && model.open && told.isEmpty)
+        #expect(await wait(until: { model.wantsFocus }), "the field is asked for the focus on the next turn")
         #expect(model.engine.state.agents.isEmpty && model.rows.isEmpty, "nothing delivered")
         model.draft = ""
         PaletteModel.deliver(Self.sentence, to: .space("pet"), assistant: model, title: "Pebble") { told.append($0) }

@@ -114,7 +114,7 @@ import SomethingCore
     var folding = false
     /// Whether the open space's journal could not be written.
     var unkept = false
-    /// Set by ⌘K until the field takes the focus, which it may do only once it is drawn.
+    /// Set by ⌘K until a field takes the focus: asked while hidden or on its way out, one would take it and refuse it.
     var wantsFocus = false
     /// Each place's conversation, made at its first use; and the one the card shows and the messages go to, the open
     /// place's, with what the window reads of it.
@@ -538,10 +538,10 @@ import SomethingCore
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + AssistantModel.fixing(fault))
     }
 
-    /// ⌘K: opens the card, its field taking the focus.
+    /// ⌘K: opens the card. Its field is asked a turn later, after the glass shows it and the page the library opens.
     func focus() {
         open = true
-        wantsFocus = true
+        DispatchQueue.main.async { [weak self] in self?.wantsFocus = true }
     }
 
     /// Esc in the card: reduces it into the sticker over a space. Elsewhere there is no sticker to bring it back, so

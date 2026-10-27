@@ -326,7 +326,8 @@ import Testing
         tour.move(.ready)
         Self.press(welcome, .return)
         #expect(ended == false && shell.welcoming == nil && Preferences(home.places).toured)
-        #expect(library.selection == .newSpace && model.wantsFocus)
+        #expect(library.selection == .newSpace)
+        #expect(await wait(until: { model.wantsFocus }), "its field is asked on the next turn")
         #expect(await wait(until: { templates.alphaValue == 1 && sidebar.alphaValue == 1 && templates.contentFilters.isEmpty }))
         #expect(await wait(until: { shell.veil == nil }))
         #expect(!App.welcomes(Library(places: home.places, ask: FakeAsk(), share: Home.share)), "the tour ended is kept")
@@ -337,7 +338,8 @@ import Testing
         let second = shell.welcome(again, onScreen: false)
         model.wantsFocus = false
         second.performClose(nil)
-        #expect(ended == true && shell.welcoming == nil && library.selection == .newSpace && model.wantsFocus)
+        #expect(ended == true && shell.welcoming == nil && library.selection == .newSpace)
+        #expect(await wait(until: { model.wantsFocus }))
         #expect(toast?.words == "Skipped · everything is in Settings when you want it")
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }

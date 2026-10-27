@@ -359,8 +359,8 @@ struct Field: View {
 }
 
 extension View {
-    /// The focus and keys of this field or New Space's: ⌘K's focus a turn later, once the glass has shown the card (a
-    /// hidden field refuses it), and Return as `returned` says, which reads an input method composing from the editor.
+    /// The focus and keys of this field or New Space's: ⌘K's focus a turn after the request, once a field just drawn is
+    /// in the window (before, it refuses it), and Return as `returned` says, which reads an input method composing.
     func composing(_ model: AssistantModel, _ typing: FocusState<Bool>.Binding) -> some View {
         focused(typing)
             .disabled(model.blocked)
