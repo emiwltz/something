@@ -140,7 +140,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
 or the agent's channel, for that launch only. It writes only in `~/something/` and
-`~/Library/Application Support/something/`.
+`~/Library/Application Support/something/`, plus the launcher in `~/Applications` if you turn it on and the snapshots
+`something check` takes in `$TMPDIR/something-check`; what it removes goes to the Trash.
 
 ## No network for spaces
 
