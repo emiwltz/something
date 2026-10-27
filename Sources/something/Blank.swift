@@ -123,6 +123,9 @@ struct BlankView: View {
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
+            // The label goes on an element of its own: given to the selectable text itself, SwiftUI resolved it through
+            // the text's own label without end, and an assistive app reading the page crashed the app.
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("Your assistant: \(text)")
     }
 

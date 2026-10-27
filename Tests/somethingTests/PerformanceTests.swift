@@ -81,8 +81,11 @@ struct PerformanceTests {
             #expect(Palette.toggle(in: shell.layer, model: model) == nil, "⌘P again closes it")
             return took
         }
-        _ = try open()
-        let times = try (0..<3).map { _ in try open() }
+        // While no other test turns on a mode of the whole process that slows every view made (VoiceOver's, a night).
+        let times = try await Stage.alone {
+            _ = try open()
+            return try (0..<3).map { _ in try open() }
+        }
         print("⌘P with 50 spaces opened in " + times.map { String(format: "%.1f ms", $0 * 1000) }.joined(separator: ", "))
         #expect(try #require(times.min()) < (ProcessInfo.processInfo.environment["CI"] == nil ? 0.1 : 0.5), "\(times)")
     }
