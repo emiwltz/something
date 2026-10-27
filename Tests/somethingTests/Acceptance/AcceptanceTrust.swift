@@ -46,14 +46,16 @@ struct AcceptanceTrust {
         EOF
         """#
 
-    /// Panels on the Stage's clock, their requests asked by the agents `request` names, counted in `shell`'s chip, and
-    /// on the sticker those of the space `open`, as the app counts them: each request belongs to its agent's space. The
-    /// assistant of My agents is `assistant`'s kind.
+    /// Panels on the Stage's clock, their requests asked by the agents `request` names, their spaces in `shell`'s
+    /// Needs You, and on the sticker's label those of the space `open`, as the app counts them: each request belongs to
+    /// its agent's space. The assistant of My agents is `assistant`'s kind.
     static func panels(_ source: FakePrompts, _ shell: Shell, open: String? = nil, assistant: String = "codex") -> Panels {
         let panels = Panels(source: source, shows: false)
         panels.now = { Stage.now }
         if open != nil { panels.queue.space = { ["a1": "agents", "a2": "project", "a3": "logbook"][$0.agent] } }
-        panels.counted = { [unowned panels] in shell.waiting($0, mine: open.map { panels.queue.count(in: $0) } ?? 0) }
+        panels.counted = { [unowned panels] _ in
+            shell.waiting(panels.requestSpaces { _ in true }.compactMap { $0 }, mine: open.map { panels.queue.count(in: $0) } ?? 0)
+        }
         let agents = [(assistant, "My agents", "/Users/example/something/spaces", true), ("claude", "Project watch", "/Users/example/code/watch", false),
                       ("pi", "Logbook", "/Users/example/notes", false)]
         panels.who = { request in
@@ -66,7 +68,7 @@ struct AcceptanceTrust {
     }
 
     /// My agents' assistant, Codex, waiting for the answer its request asks: the sticker's eyes look up, as the app
-    /// draws them from its presence; its badge counts the space's own requests.
+    /// draws them from its presence; its label counts the space's own requests, and it carries no badge.
     static func waiting(_ shell: Shell, mine: Int) async {
         let glass = shell.glass, sticker = glass.sticker
         glass.motion = { .reduced }
@@ -74,7 +76,7 @@ struct AcceptanceTrust {
         let agent = Self.asks(shell)
         #expect(shell.assistant.eyes(of: "agents") == .wait || mine == 0)
         sticker.show(Presence(Presence.Facts(name: "Codex", installed: true), agent: agent, turn: nil, now: Stage.now), title: "My agents")
-        #expect(sticker.sign.state == .wait && glass.mine == mine && sticker.badge.isHidden == (mine == 0) && sticker.badge.count == mine)
+        #expect(sticker.sign.state == .wait && glass.mine == mine && sticker.subviews == [sticker.sign])
     }
 
     /// The open space's assistant, Codex, waiting for an answer, as its own conversation reads it: the sidebar's eyes.
@@ -104,8 +106,8 @@ struct AcceptanceTrust {
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Codex wants to run a command" && panel.position == nil)
-        let chip = try #require(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.chip })
-        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.chipClicked(_:)))
+        #expect(library.sidebar.needs == ["agents"] && !(shell.window.toolbar?.items.contains { $0.itemIdentifier.rawValue == "chip" } ?? true),
+                "what waits is in Needs You, never in the toolbar")
         #expect(PanelsTests.texts(panel.contentView).starts(with: ["something", "·  Permission", "", "Codex wants to run a command",
                                                                    "My agents · its assistant · just now", "It will run one command in the My agents space.",
                                                                    "Space", "My agents", "Folder", "~/something/spaces", "The exact command"]))
@@ -139,7 +141,7 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e1" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && chip.isHidden && shell.glass.sticker.badge.isHidden, "answered: the chip and the badge go")
+        #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && library.sidebar.needs.isEmpty && shell.glass.mine == 0, "answered: Needs You empties")
     }
     /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
     /// corner below the toolbar, its footer in sight.
@@ -197,7 +199,7 @@ struct AcceptanceTrust {
         await Self.waiting(shell, mine: 1)
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
-        #expect(panel.position == "1 of 3" && panel.header.of.stringValue == "1 of 3" && shell.chip.accessibilityLabel() == "3 wait for you")
+        #expect(panel.position == "1 of 3" && panel.header.of.stringValue == "1 of 3" && library.sidebar.needs == ["agents", "project", "logbook"])
         #expect(PanelsTests.texts(panel.contentView).contains("My agents · its assistant · asked 34 min ago"))
         // The steps, as the header's arrows press them: on to the second, which arms again, and back.
         time += 1
@@ -215,7 +217,7 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e3" + suffix, root: stage.home.root)
         }
         panel.allow()
-        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2" && shell.chip.count == 2 && shell.glass.mine == 0)
+        #expect(source.answers.map(\.0) == ["r1"] && panel.request?.id == "r2" && panel.position == "1 of 2" && library.sidebar.needs == ["project", "logbook"] && shell.glass.mine == 0)
     }
     /// Show Request (⌥⌘P, or the card's notice) while My agents' assistant waits, its card open and saying so: the same
     /// panel in the same place, now holding the keys, ringed in ink2 after one pulse, the main window's lights gray.
@@ -331,7 +333,7 @@ struct AcceptanceTrust {
         var time: TimeInterval = 100
         (panels.now, panels.clock) = ({ Stage.now }, { time })
         panels.who = { _ in App.who(Agent(id: "a1", kind: "claude", origin: "launched"), space: "Daily brief", home: "/Users/example", assistant: true) }
-        panels.counted = { shell.waiting($0, mine: 0) }
+        panels.counted = { _ in shell.waiting([], mine: 0) }
         panels.refresh()
         let panel = try #require(panels.panel)
         panel.place(beside: shell.window, screen: Self.desk)
@@ -601,9 +603,9 @@ struct AcceptanceTrust {
         shell.window.setFrameOrigin(Self.large)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        // The requests that will be denied still wait: the chip counts them, and the rows' eyes agree with the sheet's.
-        shell.waiting(leaving.requests.count, mine: 0)
+        // The requests that will be denied still wait: Needs You lists their spaces, and the rows' eyes agree with the sheet's.
         let name = { (title: String) in Stage.templates.first { $0.1 == title }?.0 ?? title.lowercased() }
+        shell.waiting(leaving.requests.compactMap(\.space).map(name), mine: 0)
         var rows = Stage.moment
         leaving.working.compactMap(\.space).forEach { rows[name($0)] = .think }
         leaving.requests.compactMap(\.space).forEach { rows[name($0)] = .wait }

@@ -30,6 +30,8 @@ import Testing
         "hover": (0x121316, 0.05, 0xF1F1EE, 0.06), "sel": (0x121316, 0.075, 0xF1F1EE, 0.095),
         "act": (0x24262C, 1, 0xF1F1EE, 1), "actfg": (0xFFFFFF, 1, 0x121316, 1), "ok": (0x2A7D57, 1, 0x7BC79B, 1),
         "bad": (0xC23A35, 1, 0xF07A6E, 1), "glass": (0xF4F4F1, 0.94, 0x1A1C21, 0.93), "scrim": (0x121316, 0.18, 0x000000, 0.42),
+        // v6d.css's Needs You, kept by v6.2.
+        "ad-y": (0xE0A21A, 1, 0xF2C14E, 1), "ad-yt": (0x7A5300, 1, 0xF2C14E, 1), "ad-ys": (0xE0A21A, 0.14, 0xF2C14E, 0.13),
     ]
 
     @Test func everyTokenResolvesToTheMockupsHexByDayAndByNight() {
@@ -69,7 +71,12 @@ import Testing
             }
             // The primary button's words on its fill read as body text does.
             #expect(contrast(resolved(Look.Token.actfg.color, in: appearance).hex, resolved(Look.Token.act.color, in: appearance).hex) >= 7)
+            // Needs You's words on the sidebar read as a label does.
+            let side = resolved(Look.Token.side.color, in: appearance).hex
+            #expect(contrast(resolved(Look.Token.needInk.color, in: appearance).hex, side) >= 4.5, "\(appearance.name.rawValue)")
         }
+        // The rail's letters, white, on each tile colour, as large text does.
+        for tone in Look.tiles { #expect(contrast(0xFFFFFF, tone) >= 3, "\(String(tone, radix: 16))") }
     }
 
     @Test func theSizesAndTheScaleAreTheMockups() {

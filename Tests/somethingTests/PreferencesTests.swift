@@ -7,12 +7,13 @@ import Testing
 @testable import something
 
 @Suite(.serialized, .leavesNothing("something-preferences-")) struct PreferencesTests {
-    /// The mockup's CM_PREFS, the keys that are preferences (its `used` and `looked` are measures, not choices). Its
+    /// The mockup's CM_PREFS, the keys that are preferences (its `used` and `looked` are measures, not choices; its
+    /// `sideEyes` left with v6.2's sidebar of names, a window.json that has it keeps it unread). Its
     /// agent, model and effort are the made-up agent it found: here they are nil, the first builder found and its
     /// own model and effort.
     static let mockup: [String: Any] = [
         "open": "last", "apps": true, "resume": true, "sleep": "10 minutes", "awake": "3", "askAll": false, "notify": false,
-        "asstOpen": "Reduced", "sticker": true, "sideEyes": true, "motion": "Calm", "appearance": "System", "alt": true,
+        "asstOpen": "Reduced", "sticker": true, "motion": "Calm", "appearance": "System", "alt": true,
         "versions": "50", "limit": "500 MB",
     ]
 
@@ -22,7 +23,7 @@ import Testing
         return ["open": values.openAtStart, "apps": values.addToApplications, "resume": values.resume,
                 "sleep": values.sleepAfter == 0 ? "Never" : "\(values.sleepAfter) minutes", "awake": "\(values.awakeAtMost)",
                 "askAll": values.askEverything, "notify": values.notify, "asstOpen": capitalized(values.assistantAtOpening.rawValue),
-                "sticker": values.rememberSticker, "sideEyes": values.sidebarEyes, "motion": capitalized(values.motion.rawValue),
+                "sticker": values.rememberSticker, "motion": capitalized(values.motion.rawValue),
                 "appearance": capitalized(values.appearance.rawValue), "alt": values.holdOption,
                 "versions": values.versionsKept == 0 ? "All" : "\(values.versionsKept)", "limit": "\(values.storageLimit) MB"]
     }
@@ -84,7 +85,7 @@ import Testing
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.assistantAtOpening) = ("new", .dark, .reduced, .open)
-        (values.sidebarEyes, values.rememberSticker, values.holdOption, values.notify) = (false, false, false, true)
+        (values.rememberSticker, values.holdOption, values.notify) = (false, false, true)
         values.sticker = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
         (values.sleepAfter, values.awakeAtMost, values.versionsKept, values.storageLimit) = (0, 5, 0, 2000)
         // Each value differs from its default, so that a key not written would be seen.

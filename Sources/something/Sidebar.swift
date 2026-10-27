@@ -1,11 +1,11 @@
-// The sidebar: New Space and Go to… first; SPACES with New Group; the spaces in their groups, each group folding under
-// its header, which keeps its count; Templates pinned at the bottom, then the sign, the wordmark and Settings. Groups
-// are only a view, kept in the preferences: the files never move. A row shows the template's symbol (else a page),
-// the title, "…" under the pointer for the menu a right click also gives, and the eyes of its own assistant, which
-// `eyes` gives, ringed once when they change (not under Reduced motion), their word shown under the pointer; a folded
-// group shows the most urgent eyes of its rows, waiting before working. A page whose declaration does not read is
-// listed too, in secondary color: "not a space yet". A space the assistant made while the person was elsewhere has a
-// dot, one that just arrived a ring of ink fading out.
+// The sidebar: New Space and Go to… first; SPACES with New Group; Needs You, the spaces whose requests wait for the
+// person, oldest first, each still in its group too (so ⌘1–9 never move); the spaces in their groups, each group
+// folding under its header, which keeps its count; Templates pinned at the bottom, then the word "something" and
+// Settings. Groups are only a view, kept in the preferences: the files never move. A row is a name: the title, and "…"
+// under the pointer for the menu a right click also gives; its assistant's state lives on the sticker and its card,
+// and in the row's VoiceOver label, which `eyes` gives. A page whose declaration does not read is listed too, in
+// secondary color: "not a space yet". A space the assistant made while the person was elsewhere has a dot, one that
+// just arrived a ring of ink fading out.
 // Rename… gives a space a name shown in place of its title, since its file is its name and its grants are keyed by
 // it; a group is renamed in place too, or by a double click. Its rows are drawn here, not by a List: the mockup's
 // 25-point rows and the identity's quiet selection, which a sidebar List's own 32-point rows and highlight would
@@ -28,8 +28,8 @@ import SwiftUI
     var hovered: Hover?
     /// The row or header whose menu is open: it stays lit, a row ringed, while the pointer is in the menu.
     var menued: Hover?
-    /// The space whose eyes are under the pointer: they say their state in words.
-    var eyed: String?
+    /// The spaces whose requests wait for the person, oldest first: Needs You. The Shell says it.
+    var needs: [String] = []
     /// The group header the keys rest on; nil while they rest on the selection.
     var cursor: String?
     /// What is being renamed in place, and the name typed so far.
@@ -197,14 +197,13 @@ extension Library {
         entry.isSpace ? "\(entry.title), \(state.word)" : "\(entry.title), not a space yet"
     }
 
-    /// What VoiceOver says of a group's header; folded, the state its eyes show, when one does.
-    func label(group: String, count: Int, urgent: Sign.State? = nil) -> String {
+    /// What VoiceOver says of a group's header.
+    func label(group: String, count: Int) -> String {
         "\(group), \(count) \(count == 1 ? "space" : "spaces"), \(folded(group) ? "folded" : "open")"
-            + (folded(group) ? urgent.map { ", \($0.word.lowercased())" } ?? "" : "")
     }
 
-    /// The eyes a folded group shows: waiting if one of its assistants waits, else working if one works, else none.
-    static func urgent(_ states: [Sign.State]) -> Sign.State? { [.wait, .think].first(where: states.contains) }
+    /// The spaces Needs You lists: those of `needs` the sidebar lists, in its order.
+    func needing() -> [Entry] { sidebar.needs.compactMap(entry) }
 }
 
 extension App {
@@ -300,10 +299,11 @@ struct SidebarView: View {
         } else {
             let sections = library.sections()
             VStack(alignment: .leading, spacing: 8) {
+                needs
                 ForEach(sections, id: \.group) { section in
                     VStack(alignment: .leading, spacing: 1) {
                         if let group = section.group {
-                            header(group, count: section.entries.count, urgent: Library.urgent(section.entries.filter(\.isSpace).map { eyes($0.id) }))
+                            header(group, count: section.entries.count)
                         }
                         if section.group.map(library.folded) != true {
                             ForEach(section.entries) { space($0) }
@@ -318,16 +318,42 @@ struct SidebarView: View {
         }
     }
 
-    /// The sign listening, the wordmark, and Settings.
+    /// Needs You, over the groups while a request waits: a mark and the words in the colour of what waits, the count,
+    /// then a row per space, a bar of that colour at its edge. A click opens the space, or, open already, shows its
+    /// request in the panel, the only place that answers (rule 2).
+    @ViewBuilder private var needs: some View {
+        let spaces = library.needing()
+        if !spaces.isEmpty {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 7) {
+                    Circle().fill(Look.Token.need.ui).frame(width: 7, height: 7)
+                        .background(Circle().fill(Look.Token.needSoft.ui).frame(width: 13, height: 13))
+                    Text("Needs You")
+                    Spacer(minLength: 0)
+                    Text("\(spaces.count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
+                }
+                .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
+                .foregroundStyle(Look.Token.needInk.ui)
+                .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6)).frame(height: 26)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Needs You, \(spaces.count) \(spaces.count == 1 ? "space" : "spaces")")
+                .accessibilityAddTraits(.isHeader)
+                ForEach(spaces) { space($0, needs: true) }
+            }
+            .padding(EdgeInsets(top: 2, leading: 0, bottom: 6, trailing: 0))
+            .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+        }
+    }
+
+    /// The word "something", and Settings.
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Look.Token.line.ui).frame(height: 1)
             HStack(spacing: 8) {
-                Image(nsImage: Sign.image(.listen, side: 20)).accessibilityHidden(true)
                 Text("something").font(Look.font(.title, size: 15, weight: .bold).ui).kerning(-0.375)
                 Spacer(minLength: 0)
                 Button { Keys.send("settings") } label: {
-                    Image(systemName: "sun.max").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
+                    Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
@@ -374,7 +400,7 @@ struct SidebarView: View {
 
     /// A group's header, 26 points: its name, its count, and the chevron, shown under the pointer and while folded.
     /// A click folds it; a double click renames it in place.
-    private func header(_ group: String, count: Int, urgent: Sign.State?) -> some View {
+    private func header(_ group: String, count: Int) -> some View {
         let folded = library.folded(group), key = SidebarState.Hover.group(group)
         let lit = state.hovered == key || state.menued == key || state.cursor == group
         return HStack(spacing: 6) {
@@ -382,9 +408,6 @@ struct SidebarView: View {
                 RenameField(state: state, target: .group(group), commit: library.commitRename, cancel: library.cancelRename).frame(maxWidth: 160)
             } else {
                 Text(group).lineLimit(1)
-            }
-            if folded, let urgent, library.preferences.sidebarEyes {
-                Image(nsImage: Sign.miniEyes(urgent, template: false)).padding(.leading, 4).help(urgent.word)
             }
             Spacer(minLength: 0)
             Text("\(count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
@@ -405,48 +428,38 @@ struct SidebarView: View {
         .onHover { hover(key, $0) }
         .contextMenu { Self.items(library.menu(forGroup: group)) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(library.label(group: group, count: count, urgent: urgent))
+        .accessibilityLabel(library.label(group: group, count: count))
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { library.toggle(group) }
         .accessibilityAction(named: "Rename") { library.beginRename(.group(group)) }
     }
 
-    /// A row of the list, 25 points in Emi's compact density: its symbol, its title, "…" under the pointer, its eyes.
-    private func space(_ entry: Library.Entry) -> some View {
-        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, menued = state.menued == .space(entry.id),
-            hovered = state.hovered == .space(entry.id) || menued
-        let now = eyes(entry.id), menu = library.menu(for: entry), still = Look.motion(library.preferences.motion) == .reduced
-        return HStack(spacing: 9) {
-            Image(systemName: Template.symbol(of: entry.id)).font(.system(size: 12)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink3.ui)
-                .frame(width: 15)
-                .overlay(alignment: .topTrailing) {
-                    if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -3) }
-                }
-            if state.renaming == .space(entry.id) {
+    /// A row of the list, 25 points in Emi's compact density: its name, the dot of a space made while the person was
+    /// elsewhere, "…" under the pointer. In Needs You (`needs`), the bar of what waits at its edge, no "…", and a
+    /// click on the open space shows its request.
+    private func space(_ entry: Library.Entry, needs: Bool = false) -> some View {
+        let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, key = needs ? SidebarState.Hover.nav("needs." + entry.id) : .space(entry.id),
+            menued = state.menued == key, hovered = state.hovered == key || menued
+        let menu = library.menu(for: entry)
+        let open = {
+            state.cursor = nil
+            if needs && on { Keys.send("showreq") } else { library.select(.space(entry.id)) }
+        }
+        return HStack(spacing: 6) {
+            if state.renaming == .space(entry.id) && !needs {
                 RenameField(state: state, target: .space(entry.id), commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
                 Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
+                if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).accessibilityHidden(true) }
                 Spacer(minLength: 4)
-                let worded = state.eyed == entry.id && entry.isSpace && library.preferences.sidebarEyes
-                if hovered && !worded {
+                if hovered && !needs {
                     Menu { Self.items(menu, live: false) } label: {
                         Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(Look.Token.ink2.ui)
                     }
                     .plainMenu().frame(width: 22, height: 20)
                     .accessibilityLabel("More for \(entry.title)")
                 }
-                if entry.isSpace {
-                    // Settings › Interface may hide the eyes; the row's label still says the state.
-                    if library.preferences.sidebarEyes {
-                        HStack(spacing: 6) {
-                            if worded { Text(now.word).font(Look.font(.ui, size: Look.small.size, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui) }
-                            Image(nsImage: Sign.miniEyes(now, template: false)).frame(width: 22)
-                        }
-                        .onHover { inside in
-                            if inside { state.eyed = entry.id } else if state.eyed == entry.id { state.eyed = nil }
-                        }
-                    }
-                } else {
+                if !entry.isSpace {
                     Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
                 }
             }
@@ -454,28 +467,26 @@ struct SidebarView: View {
         .lineLimit(1)
         .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
         .background(on ? Look.Token.sel.ui : hovered ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .overlay(alignment: .leading) {
+            if needs { RoundedRectangle(cornerRadius: 2).fill(Look.Token.need.ui).frame(width: 3).padding(.vertical, 8).offset(x: 1) }
+        }
         .overlay {
             if menued { RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink2.ui, lineWidth: 1.5).allowsHitTesting(false) }
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            state.cursor = nil
-            library.select(.space(entry.id))
-        }
-        .onHover { hover(.space(entry.id), $0) }
+        .onTapGesture(perform: open)
+        .onHover { hover(key, $0) }
         .contextMenu { Self.items(menu) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Library.label(entry, now))
+        .accessibilityLabel(Library.label(entry, needs ? .wait : eyes(entry.id)))
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction { library.select(.space(entry.id)) }
-        .background { Ping(state: now, still: still, ring: false) }
-        .overlay { Ping(state: now, still: still, ring: true) }
+        .accessibilityAction { open() }
         // The mockup's .fresh: the ring at once, then gone in 1.6 s on the "out" curve; a row it leaves goes 0 to 0.
         .overlay {
             RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5).allowsHitTesting(false)
                 .keyframeAnimator(initialValue: 0.0, trigger: library.fresh) { ring, alpha in ring.opacity(alpha) } keyframes: { _ in
-                    MoveKeyframe(fresh ? 1.0 : 0)
-                    LinearKeyframe(0.0, duration: fresh ? 1.6 : 0.01, timingCurve: Look.out.unit)
+                    MoveKeyframe(fresh && !needs ? 1.0 : 0)
+                    LinearKeyframe(0.0, duration: fresh && !needs ? 1.6 : 0.01, timingCurve: Look.out.unit)
                 }
         }
     }
@@ -503,26 +514,6 @@ struct SidebarView: View {
         case .separator: return AnyView(Divider())
         case .note(let words): return AnyView(Text(words))
         }
-    }
-}
-
-/// The mockup's .wn-ping: when a row's eyes change, a ring of ink2 over the selection's fill at once, gone in 1.6 s on
-/// the "out" curve; nothing as the row first appears, and nothing under Reduced motion (the eyes change all the same).
-struct Ping: View {
-    let state: Sign.State, still: Bool, ring: Bool
-
-    /// The ring's opacity as it appears: 1, or 0 under Reduced motion (`still`).
-    static func peak(still: Bool) -> Double { still ? 0 : 1 }
-
-    var body: some View {
-        // The fill goes under the row (`ring` false), the ring over it.
-        RoundedRectangle(cornerRadius: Look.control).strokeBorder(ring ? Look.Token.ink2.ui : .clear, lineWidth: 1.5)
-            .background(ring ? .clear : Look.Token.sel.ui, in: RoundedRectangle(cornerRadius: Look.control))
-            .allowsHitTesting(false)
-            .keyframeAnimator(initialValue: 0.0, trigger: state) { ring, alpha in ring.opacity(alpha) } keyframes: { _ in
-                MoveKeyframe(Self.peak(still: still))
-                LinearKeyframe(0.0, duration: still ? 0.01 : 1.6, timingCurve: Look.out.unit)
-            }
     }
 }
 

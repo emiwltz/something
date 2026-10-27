@@ -71,24 +71,18 @@ struct StickerTests {
         }
     }
 
-    @Test func theBadgeCountsOnlyThisSpaceAndShowsTheRequest() async throws {
+    /// v6.2 says what waits in three places only (the panel, Needs You, the Dock): the sticker has no badge, and only
+    /// its label, under the pointer, says that this space's requests wait.
+    @Test func theStickerCarriesNoBadgeAndWhatWaitsGoesToNeedsYou() async throws {
         try await brief { shell, _ in
-            let badge = shell.glass.sticker.badge
-            var shown = 0
-            shell.assistant.showRequest = { shown += 1 }
-            shell.waiting(3, mine: 0)
-            #expect(badge.isHidden && shell.chip.count == 3, "My agents waits; Daily brief does not")
-            shell.waiting(3, mine: 1)
-            #expect(!badge.isHidden && badge.count == 1 && shell.chip.count == 3)
-            #expect(badge.accessibilityLabel() == "1 request from this space waiting for your answer")
-            let surface = shell.glass.sticker.surface
-            #expect(badge.frame.maxX == surface.maxX + 8 && badge.frame.minY == surface.minY - 8 && badge.frame.height == 19)
-            let root = try #require(shell.window.contentView?.superview)
-            #expect(root.hitTest(badge.convert(NSPoint(x: badge.bounds.midX, y: badge.bounds.midY), to: root)) === badge)
-            badge.performClick(nil)
-            #expect(shown == 1 && !shell.assistant.open, "the badge shows the request and leaves the card closed")
-            shell.waiting(0, mine: 0)
-            #expect(badge.isHidden)
+            let sticker = shell.glass.sticker, library = shell.library
+            shell.waiting(["agents", "agents", "oracle"], mine: 0)
+            #expect(library.sidebar.needs == ["agents", "oracle"] && shell.glass.mine == 0, "one row per space, oldest first")
+            shell.waiting(["brief", "agents"], mine: 1)
+            #expect(shell.glass.mine == 1 && library.sidebar.needs == ["brief", "agents"])
+            #expect(sticker.subviews == [sticker.sign], "nothing but the sign on the sticker")
+            shell.waiting([], mine: 0)
+            #expect(library.sidebar.needs.isEmpty && shell.glass.mine == 0)
         }
     }
 
@@ -175,7 +169,7 @@ struct StickerTests {
             #expect(glass.label.words == shell.assistant.presence.word)
             #expect(glass.label.frame.maxX == glass.corner.minX - 10 && glass.label.frame.midY == glass.corner.midY)
             #expect(sticker.accessibilityLabel() == shell.assistant.presence.label("Daily brief"))
-            shell.waiting(1, mine: 1)
+            shell.waiting(["brief"], mine: 1)
             #expect(glass.label.words == "A request waiting for your answer")
             #expect(Glass.words(shell.assistant.presence, mine: 2) == "2 requests waiting for your answer")
             sticker.mouseExited(with: try event(.mouseMoved, at: .zero, in: window))

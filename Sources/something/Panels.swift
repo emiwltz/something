@@ -3,7 +3,7 @@
 // denied; a question is answered or left unanswered. The panel is not modal, so a request the agent withdraws leaves
 // it while the person still looks at it. A space sees the request in its state and can never answer it. One question
 // is left out of the panel: the one New Space's build asks while that page is shown, which the page answers (`inline`),
-// and, once that build is stopped, until its agent withdraws it; the Dock and the toolbar's chip still count it. Its
+// and, once that build is stopped, until its agent withdraws it; the Dock still counts it. Its
 // permissions, and every other conversation's questions, come here.
 import AppKit
 import SomethingAgents
@@ -37,15 +37,15 @@ final class Panels {
     let queue = RequestQueue()
     /// The Dock and the notifications, which follow the queue; the app's.
     var attention: Attention?
-    /// Told how many requests wait at each change: the toolbar's chip.
+    /// Told how many requests wait at each change: the window then says where (Needs You).
     var counted: (Int) -> Void = { _ in }
     /// Whether a request is answered elsewhere, by something's own page: never queued or shown here, only counted.
     var inline: (Request) -> Bool = { _ in false }
-    /// The requests answered elsewhere, waiting: the Dock and the chip count them with the queue's.
+    /// The requests answered elsewhere, waiting: the Dock counts them with the queue's.
     private(set) var elsewhere: [Request] = []
     private(set) var panel: RequestPanel?
 
-    /// Each waiting request's space, the queue's then those answered elsewhere, as the chip counts them; nil for a
+    /// Each waiting request's space, the queue's then those answered elsewhere, oldest first in each; nil for a
     /// request of no space, or of a space `listed` no longer has.
     func requestSpaces(listed: (String) -> Bool) -> [String?] {
         (queue.waiting + elsewhere).map { queue.space($0).flatMap { listed($0) ? $0 : nil } }

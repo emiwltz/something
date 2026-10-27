@@ -1,5 +1,5 @@
 {
-  "source": "The exploration mockup's menu bar (command/command.js: Desk.appMenu and Desk.menus) with no space open. \"separator\" is a line, \"header\" a section header, \"spaces\" the spaces something lists, \"system\" an item macOS adds by itself, \"needsSpace\" an item greyed while no space is open. Titles are the first state of a title that changes (Undo, Show Sidebar, Enter Full Screen).",
+  "source": "The exploration mockup's menu bar (command/command.js: Desk.appMenu and Desk.menus) with no space open, as round 2's frozen v6.2 left it: one name per command, in every menu (v6g 7.2), Reload in View only, History once. \"separator\" is a line, \"header\" a section header, \"spaces\" the spaces something lists, \"system\" an item macOS adds by itself, \"needsSpace\" an item greyed while no space is open. Titles are the first state of a title that changes (Undo, Show Sidebar, Enter Full Screen).",
   "menus": [
     {"title": "something", "items": [
       {"title": "About something"}, {"separator": true},
@@ -9,7 +9,7 @@
       {"title": "Quit something", "key": "⌘Q"}
     ]},
     {"title": "File", "items": [
-      {"title": "New Space", "key": "⌘N"}, {"title": "New from Template…", "key": "⇧⌘T"}, {"separator": true},
+      {"title": "New Space", "key": "⌘N"}, {"title": "Templates", "key": "⇧⌘T"}, {"separator": true},
       {"title": "Import Space…"}, {"title": "Export Space", "key": "⇧⌘E"}, {"separator": true},
       {"title": "Show in Finder", "key": "⌥⌘R"}, {"title": "Move to Trash…", "key": "⌘⌫"}, {"separator": true},
       {"title": "Close Window", "key": "⌘W"}
@@ -22,7 +22,7 @@
     {"title": "View", "items": [
       {"title": "Show Sidebar", "key": "⌃⌘S"}, {"title": "Show Info", "key": "⌘I", "needsSpace": true}, {"separator": true},
       {"title": "Show History…", "needsSpace": true}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"separator": true},
-      {"title": "Reload Space", "key": "⌘R"}, {"separator": true},
+      {"title": "Reload Space", "key": "⌘R", "needsSpace": true}, {"separator": true},
       {"title": "Enter Full Screen", "key": "⌃⌘F"}
     ]},
     {"title": "Go", "items": [
@@ -32,9 +32,9 @@
     ]},
     {"title": "Space", "items": [
       {"header": "No space open"},
-      {"title": "Space Info", "key": "⌘I", "needsSpace": true}, {"title": "Reload", "key": "⌘R", "needsSpace": true},
-      {"title": "What It May Do…", "needsSpace": true}, {"title": "Versions…", "needsSpace": true}, {"separator": true},
-      {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
+      {"title": "Show Info", "key": "⌘I", "needsSpace": true},
+      {"title": "What It May Do…", "needsSpace": true}, {"title": "Show History…", "needsSpace": true}, {"separator": true},
+      {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export Space", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
       {"title": "Move to Trash…", "key": "⌘⌫", "needsSpace": true}
     ]},
     {"title": "Assistant", "items": [
@@ -52,7 +52,7 @@
     ]},
     {"title": "Help", "items": [
       {"title": "Search", "system": true}, {"separator": true, "system": true},
-      {"title": "something Help"}, {"title": "Keyboard Shortcuts", "key": "⌘/"}, {"title": "What something Does and Doesn’t"},
+      {"title": "something Help"}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"title": "What something Does and Doesn’t"},
       {"title": "Guide for Coding Agents"}, {"separator": true},
       {"title": "Welcome Tour"}
     ]}

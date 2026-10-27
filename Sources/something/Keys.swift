@@ -71,7 +71,7 @@ enum Keys {
         Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control],
                 action: #selector(NSSplitViewController.toggleSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
         Command(id: "settings", title: "Settings…", key: ",", action: #selector(App.showSettings(_:)), owner: "G4", area: .window, line: "Settings", mine: true),
-        Command(id: "keys", title: "Keyboard Shortcuts", key: "/", action: #selector(App.showKeys(_:)), owner: "G1", area: .window,
+        Command(id: "keys", title: "Show Keyboard Shortcuts", key: "/", action: #selector(App.showKeys(_:)), owner: "G1", area: .window,
                 line: "Keyboard shortcuts", mine: true),
         Command(id: "close", title: "Close Window", key: "w", action: #selector(NSWindow.performClose(_:)), owner: "F5",
                 area: .window, line: "Close window"),
@@ -95,7 +95,6 @@ enum Keys {
         Command(id: "selectAll", title: "Select All", key: "a", action: #selector(NSText.selectAll(_:)), owner: "F5"),
         Command(id: "history", title: "Show History…", action: #selector(App.showHistory(_:)), owner: "T19", needsSpace: true),
         Command(id: "rights", title: "What It May Do…", action: #selector(App.showSpaceInfo(_:)), owner: "W4", needsSpace: true),
-        Command(id: "versions", title: "Versions…", action: #selector(App.showHistory(_:)), owner: "T19", needsSpace: true),
         // The menu item only holds the submenu; its selector is there so that the app can grey it.
         Command(id: "buildWith", title: "Build With", action: #selector(App.buildWith(_:)), owner: "AB11", needsSpace: true),
         Command(id: "askAll", title: "Ask Before Every Change…", action: #selector(App.showPermissions(_:)), owner: "G5"),
@@ -139,10 +138,10 @@ enum Keys {
 
     // MARK: The menus
 
-    /// One line of a menu: a command's item (with its own words when the menu says it differently), a separator, a
-    /// section header, the spaces (Go), or a submenu the system fills (Services).
+    /// One line of a menu: a command's item, under its one name in every menu, a separator, a section header, the
+    /// spaces (Go), or a submenu the system fills (Services).
     enum Entry {
-        case item(String, String? = nil)
+        case item(String)
         case separator
         case header(String)
         case spaces
@@ -153,14 +152,14 @@ enum Keys {
     static let menus: [(title: String, entries: [Entry])] = [
         ("something", [.item("about"), .separator, .item("settings"), .separator, .services, .separator,
                        .item("hide"), .item("hideOthers"), .item("showAll"), .separator, .item("quit")]),
-        ("File", [.item("new"), .item("tpls", "New from Template…"), .separator, .item("import"), .item("export"), .separator,
+        ("File", [.item("new"), .item("tpls"), .separator, .item("import"), .item("export"), .separator,
                   .item("finder"), .item("trash"), .separator, .item("close")]),
         ("Edit", [.item("undo"), .item("redo"), .separator, .item("cut"), .item("copy"), .item("paste"), .item("selectAll")]),
-        ("View", [.item("sidebar"), .item("insp"), .separator, .item("history"), .item("keys", "Show Keyboard Shortcuts"), .separator,
+        ("View", [.item("sidebar"), .item("insp"), .separator, .item("history"), .item("keys"), .separator,
                   .item("reload"), .separator, .item("full")]),
         ("Go", [.item("palette"), .separator, .header("Spaces"), .spaces, .separator, .item("new"), .item("tpls")]),
-        ("Space", [.header("space"), .item("insp", "Space Info"), .item("reload", "Reload"), .item("rights"), .item("versions"), .separator,
-                   .item("finder"), .item("export", "Export"), .separator, .item("trash")]),
+        ("Space", [.header("space"), .item("insp"), .item("rights"), .item("history"), .separator,
+                   .item("finder"), .item("export"), .separator, .item("trash")]),
         ("Assistant", [.header("assistant"), .item("ask"), .item("convo"), .item("newconvo"), .item("reduce"), .item("stop"),
                        .item("showreq"), .separator, .item("pointpart"), .separator, .item("buildWith"), .item("askAll"), .separator,
                        .item("sleep")]),
@@ -188,9 +187,9 @@ enum Keys {
                     let header = NSMenuItem.sectionHeader(title: words == "space" || words == "assistant" ? "No space open" : words)
                     if words == "space" || words == "assistant" { header.identifier = NSUserInterfaceItemIdentifier("header." + words) }
                     menu.addItem(header)
-                case .item(let id, let words):
+                case .item(let id):
                     guard let command = command(id) else { continue }
-                    let item = NSMenuItem(title: words ?? command.title, action: command.action, keyEquivalent: command.key)
+                    let item = NSMenuItem(title: command.title, action: command.action, keyEquivalent: command.key)
                     item.keyEquivalentModifierMask = command.modifiers
                     item.identifier = NSUserInterfaceItemIdentifier(id)
                     if id == "buildWith" { item.submenu = NSMenu(title: "Build With") }
@@ -352,7 +351,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
 
 extension NSMenuItem {
     /// A space with its assistant: the still mini eyes (a menu cannot animate them), the name, and the state's word at
-    /// the right tab stop `tab`, smaller and secondary, as the mockup's Go menu and chip menu draw it. It opens the
+    /// the right tab stop `tab`, smaller and secondary, as the mockup's Go menu draws it. It opens the
     /// space; `title` stays the name alone.
     static func space(_ id: String, _ title: String, _ state: Sign.State, tab: CGFloat, key: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: #selector(App.goToSpace(_:)), keyEquivalent: key)

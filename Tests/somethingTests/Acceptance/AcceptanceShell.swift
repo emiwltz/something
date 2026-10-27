@@ -1,7 +1,8 @@
-// Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen, the rail and the
-// rows' eyes (b1, b3, b5–b8; b2, La page, waits for Emi), the word "space" explained (x1-2), and Info in three parts (x5-1 to
-// x5-3, which retired b4). It also draws the frame of b1 alone, with and without a toast,
-// and a long title in a narrow window.
+// Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen and the rail
+// (b1, b3, b5–b7; b2, La page, waits for Emi; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2),
+// Info in three parts (x5-1 to x5-3, which retired b4), and round 2's calm window: the toolbar and Needs You (x9-1),
+// the list of names and the rail's letter tiles (x9-2), finding a space in the rail (j4-1). It also draws the frame of
+// b1 alone, with and without a toast, and a long name in a narrow window.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -24,15 +25,15 @@ struct AcceptanceShell {
         #expect(shell.window.contentView?.frame.size == Stage.Size.main)
         #expect(shell.split.splitViewItems.count == 3 && shell.inspector.isCollapsed)
         #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title,
-                                                                       .flexibleSpace, Shell.chip, Shell.tools])
+                                                                       .flexibleSpace, Shell.tools])
         let items = shell.toolbarItems
-        #expect(items.suffix(4).map(\.itemIdentifier) == [Shell.point, Shell.reload, Shell.info, Shell.full])
+        #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         let titles = Stage.templates.map(\.1) + ["Oracle"]
         #expect(Set(library.entries.map(\.title)) == Set(titles), "\(library.entries.map(\.title))")
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        #expect(shell.window.title == "Daily brief" && shell.window.subtitle == "brief.html" && library.selection == .space("brief"))
-        #expect(items.filter { [Shell.reload, Shell.info].contains($0.itemIdentifier) }.allSatisfy { $0.isEnabled && !$0.isHidden })
+        #expect(shell.window.title == "Daily brief" && shell.window.subtitle == "" && library.selection == .space("brief"))
+        #expect(items.first { $0.itemIdentifier == Shell.info }?.isEnabled == true && shell.controls[Shell.info]?.isHidden == false)
         #expect(items.first { $0.itemIdentifier == Shell.point }?.isEnabled == true)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame" + suffix, root: stage.home.root)
@@ -46,9 +47,9 @@ struct AcceptanceShell {
             toast.leave(now: true)
             #expect(shell.layer.isHidden)
         }
-        // In a narrow window a long title gives way to the tools, cut with an ellipsis.
+        // In a narrow window a long name gives way to the tools, cut with an ellipsis.
         shell.window.setContentSize(shell.window.contentMinSize)
-        shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
+        shell.heading("A morning brief with every feed, newsletter and calendar I read before work starts", "", space: true)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame-narrow" + suffix, root: stage.home.root)
             #expect(shell.window.contentView?.frame.width == 640)
@@ -64,9 +65,9 @@ struct AcceptanceShell {
         host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { states[$0] ?? .sleep })
     }
 
-    /// The window of every day (W1–W3): the groups open, each row with its assistant's eyes at the mockup's moment,
-    /// Daily brief open, the chip counting the one request. A folded group shows its most urgent eyes; Go lists the
-    /// spaces with the same eyes and words; the Settings switch hides the rows' eyes, their words staying for VoiceOver.
+    /// The window of every day (W1–W3), as v6.2 left it (S5): the groups open, each row a name whose VoiceOver label
+    /// says its assistant's state at the mockup's moment, Daily brief open, My agents' request in Needs You. Go lists
+    /// the spaces with their eyes and words; a folded group shows no eyes.
     @Test("b1: the window") func b1() async throws {
         let stage = try Stage("shell-b1")
         defer { stage.remove() }
@@ -74,18 +75,17 @@ struct AcceptanceShell {
         library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
         try Self.eyes(shell, Stage.moment)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        let chip = try #require(shell.window.toolbar?.items.first { $0.itemIdentifier == Shell.chip })
-        #expect(!chip.isHidden && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.action == #selector(App.chipClicked(_:)))
+        #expect(library.needing().map(\.title) == ["My agents"])
         #expect(library.sections().allSatisfy { $0.group.map(library.folded) == false })
         let labels = library.order().map { Library.label($0, Stage.moment[$0.id] ?? .unknown) }
         #expect(labels == ["Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready", "Logbook, Asleep", "Oracle, Ready",
                            "Pebble, Done", "Stack, Asleep"], "\(labels)")
         let drawn = try stage.drawn(shell)
         // Vision may read the f of "brief" as a t beside "pages of your own": the title's start is enough.
-        for line in ["Agents", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
+        for line in ["Needs You", "Agents", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         try await stage.appearances { suffix in
@@ -104,11 +104,11 @@ struct AcceptanceShell {
             let lines = go.map { "\($0.state == .on ? "✓ " : "")[eyes] \($0.attributedTitle?.string.replacingOccurrences(of: "\t", with: "  ") ?? "")  ⌘\($0.keyEquivalent)" }
             try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("g9-go.txt"), atomically: true, encoding: .utf8)
         }
-        // Folded, Agents shows its most urgent eyes, waiting before working, and says so.
+        // Folded, Agents hides its rows, My agents too, which Needs You still lists.
         library.preferences.fold("Agents", true)
-        let urgent = Library.urgent(library.sections()[0].entries.map { Stage.moment[$0.id] ?? .unknown })
-        #expect(urgent == .wait && library.label(group: "Agents", count: 3, urgent: urgent) == "Agents, 3 spaces, folded, waiting for you")
-        #expect(!(try stage.drawn(shell)).contains { $0.contains("My agents") })
+        #expect(library.label(group: "Agents", count: 3) == "Agents, 3 spaces, folded")
+        let folded = try stage.drawn(shell)
+        #expect(folded.filter { $0.contains("My agents") }.count == 1 && !folded.contains { $0.contains("Project watch") }, "\(folded)")
         library.preferences.fold("Agents", false)
     }
     /// The sidebar and its groups (W2): Agents, Notes and Breaks, Breaks folded with its count, Daily brief open, the
@@ -122,7 +122,7 @@ struct AcceptanceShell {
         library.preferences.fold("Breaks", true)
         library.relist()
         try stage.moment(shell)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let sections = library.sections()
@@ -133,7 +133,6 @@ struct AcceptanceShell {
         #expect(library.stops().contains(.space("pet")) == false, "a folded group's rows are not stops")
         let row = try #require(library.entry("project"))
         #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
-        #expect(Template.symbol(of: "brief") != Template.symbol(of: "oracle") && Template.symbol(of: "oracle") == "doc")
         let menu = SidebarMenu.text(library.menu(for: row))
         #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
                          "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export", "—",
@@ -142,7 +141,6 @@ struct AcceptanceShell {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
             try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b3-menu.txt"), atomically: true, encoding: .utf8)
         }
-        // Vision may read a row's symbol as a letter before its title ("• Oracle"): a line contains the title.
         let drawn = try stage.drawn(shell)
         for line in ["Agents", "Notes", "Breaks", "Daily bri", "Project watch", "Oracle"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
@@ -187,7 +185,7 @@ struct AcceptanceShell {
         shell.window.layoutIfNeeded()
         #expect(shell.full && side.isCollapsed && shell.space === brief)
         #expect(top() == height && brief.web.frame.width == Stage.Size.main.width, "the space alone, from the window's top")
-        #expect(shell.controls[Shell.full]?.image?.accessibilityDescription == "Exit Full Screen")
+        #expect(shell.controls[Shell.full]?.image?.accessibilityDescription == "Exit Full Screen", "until the page's own mode (S6)")
         // ⌃⌘S lays the sidebar over the space, its column still away; it takes the keys, and gives them back.
         func over() -> SidebarOver? { SidebarOver.shown(in: shell.layer) }
         shell.window.makeFirstResponder(brief.web)
@@ -263,9 +261,9 @@ struct AcceptanceShell {
     }
 
     /// The narrow window (W6), 760 by 680: the sidebar is a 64-point rail, one button per space in the sidebar's order
-    /// saying "Title, state", folded groups too, a line between groups; the toolbar's toggle goes, the title drops its
-    /// file, the chip its words. ⌃⌘S lays the whole sidebar over the space under the toolbar. Below 860 points the
-    /// window takes the rail and keeps it until 880; the sidebar then comes back as it was.
+    /// saying "Title, state", folded groups too, a line between groups; the toolbar's toggle goes. ⌃⌘S lays the whole
+    /// sidebar over the space under the toolbar. Below 860 points the window takes the rail and keeps it until 880; the
+    /// sidebar then comes back as it was. Its letter tiles are x9-2's.
     @Test("b7: the rail") func b7() async throws {
         let stage = try Stage("shell-b7")
         defer { stage.remove() }
@@ -274,16 +272,14 @@ struct AcceptanceShell {
         library.preferences.fold("Breaks", true)
         library.relist()
         try Self.eyes(shell, Stage.moment)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let side = shell.split.splitViewItems[0], host = side.viewController.view
         shell.window.layoutIfNeeded()
         #expect(shell.rail && library.sidebar.rail && !side.isCollapsed && host.frame.width == Rail.width, "\(host.frame)")
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.chip, Shell.tools],
-                "the rail has its own toggle")
-        #expect(shell.titleLine.bare && shell.titleLine.shown.string == "Daily brief" && shell.window.subtitle == "brief.html")
-        #expect(shell.chip.compact && shell.chip.accessibilityLabel() == "1 waits for you" && shell.chip.intrinsicContentSize.width < 50)
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.tools], "the rail has its own toggle")
+        #expect(shell.titleLine.line.string == "Daily brief")
         // One button per space, in the sidebar's order, Breaks' rows too though it is folded; each says its title and
         // state, and under the pointer its name and state.
         let order = library.order()
@@ -328,8 +324,8 @@ struct AcceptanceShell {
         #expect(shell.rail, "still the rail at 870")
         shell.window.setContentSize(NSSize(width: 880, height: 680))
         shell.window.layoutIfNeeded()
-        #expect(!shell.rail && !library.sidebar.rail && host.frame.width == 236 && !shell.titleLine.bare && !shell.chip.compact, "\(host.frame)")
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.chip, Shell.tools])
+        #expect(!shell.rail && !library.sidebar.rail && host.frame.width == 236, "\(host.frame)")
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
         shell.window.setContentSize(NSSize(width: 870, height: 680))
         #expect(!shell.rail, "still the sidebar at 870")
         // A sidebar hidden before the window narrows is the rail all the same, and hidden again once it widens.
@@ -347,62 +343,132 @@ struct AcceptanceShell {
         #expect(shell.rail && !side.isCollapsed)
     }
 
-    /// Several assistants at work, Logbook open (W3): Project watch starts working, Daily brief finishes, Oracle asks;
-    /// the rows' eyes follow, the chip and the panel count both requests, the whole Mac's, and Logbook's sticker shows no
-    /// badge, since none is its own. The chip's menu lists the assistants by state; nothing in it answers.
-    @Test("b8: rows with their eyes") func b8() async throws {
-        let stage = try Stage("shell-b8")
-        defer { stage.remove() }
-        let (shell, library, _) = stage.window()
-        shell.window.setFrameOrigin(AcceptanceTrust.large)
-        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+    /// The mockup's window for round 2 (X9.1, X9.2, J4.1): its groups (Work, Notes, Breaks), Daily brief open, My
+    /// agents waiting for the answer to its request, the rows' states at the mockup's moment.
+    static func calm(_ stage: Stage, _ size: NSSize = Stage.Size.main) async throws -> (Shell, Library, SpaceView) {
+        let (shell, library, _) = stage.window(size)
+        let groups = [("Work", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
+        library.preferences.groups = groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
         try Self.eyes(shell, Stage.moment)
-        let logbook = try await stage.open("logbook", in: shell, library)
-        defer { logbook.close() }
-        let now = Stage.moment.merging(["project": .think, "brief": .done, "oracle": .wait]) { $1 }
-        try Self.eyes(shell, now)
-        let source = FakePrompts()
-        AcceptanceTrust.request("r", [0, 0], in: source)
-        let panels = AcceptanceTrust.panels(source, shell, open: "logbook")
-        panels.queue.space = { ["a1": "agents", "a2": "oracle"][$0.agent] }
-        panels.clock = { 100 }
-        panels.refresh()
-        shell.glass.motion = { .reduced }
-        #expect(await wait { shell.glass.grown == false && shell.glass.stickerShown })
-        let panel = try #require(panels.panel)
-        panel.place(beside: shell.window, screen: AcceptanceTrust.desk)
-        #expect(shell.chip.count == 2 && shell.chip.accessibilityLabel() == "2 wait for you" && panel.position == "1 of 2")
-        #expect(shell.glass.mine == 0 && shell.glass.sticker.badge.isHidden, "no request is Logbook's")
-        let rows = library.order().filter(\.isSpace).map { ($0.id, $0.title, now[$0.id] ?? .unknown) }
-        // The app's own mapping: every request the chip counts, a space no longer listed made nil.
-        let spaces = panels.requestSpaces { library.entry($0) != nil }
-        #expect(spaces.count == shell.chip.count && spaces == ["agents", "oracle"])
-        #expect(panels.requestSpaces { _ in false } == [nil, nil])
-        // The menu opens under the chip in a window, at the pointer when the toolbar's overflow sent the click.
-        let placed = WaitingChip(), holder = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 40), styleMask: [], backing: .buffered, defer: true)
-        holder.isReleasedWhenClosed = false
-        holder.contentView?.addSubview(placed)
-        #expect(placed.menuPlace.1 === placed && WaitingChip().menuPlace.1 == nil)
-        guard case .menu(let menu) = WaitingChip.goes(spaces, open: "logbook", assistants: rows) else {
-            Issue.record("two requests open the menu")
-            return
+        shell.waiting(["agents"], mine: 0)
+        let brief = try await stage.open("brief", in: shell, library)
+        return (shell, library, brief)
+    }
+
+    /// The calm toolbar (S5, X9.1): the name alone, then Point, Info and Page Full Screen; no Reload, no waiting chip.
+    /// A click on the name opens Info, its button pressed, and closes it. What waits is in the sidebar's Needs You,
+    /// above the groups, My agents still in Work; the View menu says what its items will do and holds Reload. The open
+    /// View menu cannot be drawn offscreen: its lines are written beside the picture as x9-1-view.txt.
+    @Test("x9-1: the calm toolbar") func x9_1() async throws {
+        let stage = try Stage("shell-x9-1")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.calm(stage)
+        defer { brief.close() }
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.toolbarItems.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
+        #expect(shell.toolbarItems.allSatisfy { !["reload", "chip"].contains($0.itemIdentifier.rawValue) })
+        let title = shell.titleLine
+        #expect(title.line.string == "Daily brief" && shell.window.subtitle == "" && title.accessibilityLabel() == "Daily brief")
+        #expect(title.accessibilityRole() == .button && title.toolTip == "Show Info (⌘I)")
+        let labels = [Shell.point, Shell.info, Shell.full].map { shell.controls[$0]?.image?.accessibilityDescription }
+        #expect(labels == ["Point", "Info", "Page Full Screen"], "\(labels)")
+        // The name opens Info, as ⌘I: the button pressed, View's item says Hide Info; again, it closes.
+        #expect(shell.infoWords == "Show Info" && title.accessibilityPerformPress())
+        #expect(shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == true && shell.infoWords == "Hide Info")
+        #expect(title.accessibilityPerformPress() && !shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        // Needs You, then the groups; My agents in both, so ⌘1–9 keep the groups' order.
+        #expect(library.needing().map(\.title) == ["My agents"] && library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
+        #expect(library.order().map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
+        let host = shell.split.splitViewItems[0].viewController.view
+        let read = await AcceptanceBuild.read(host) { $0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
+        let rows = read.filter { $0.contains(", ") && !$0.contains("space") }
+        #expect(rows == ["My agents, Waiting for you", "Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready",
+                         "Logbook, Asleep", "Oracle, Ready", "Pebble, Done", "Stack, Asleep"], "\(read)")
+        #expect(read.contains("Needs You, 1 space") && read.contains("Work, 3 spaces, open") && read.contains("Settings"), "\(read)")
+        let drawn = try stage.drawn(shell)
+        for line in ["Needs You", "Work", "Daily brief", "Project watch", "Templates", "something"] {
+            #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
-        #expect(menu.items.map(\.title) == ["Assistants", "My agents", "Oracle", "Project watch", "Daily brief", "Pebble"])
-        #expect(!menu.items.contains { $0.title.contains("Allow") || $0.title.contains("Deny") }, "the chip never answers")
+        #expect(drawn.filter { $0.contains("My agents") }.count == 2, "\(drawn)")
+        // The View menu, Daily brief open, the sidebar shown: each item says what it does; Reload is here only.
+        let bar = MenuBar(builders: nil)
+        let view = try #require(bar.submenu("View")), space = try #require(bar.submenu("Space"))
+        let sidebar = try #require(view.items.first { $0.identifier?.rawValue == "sidebar" })
+        shell.window.makeFirstResponder(nil)
+        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Hide Sidebar")
+        view.items.first { $0.identifier?.rawValue == "insp" }?.title = shell.infoWords
+        let lines = Mockup.lines(view)
+        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
+                          "Enter Full Screen  ⌃⌘F"], "\(lines)")
+        #expect(!space.items.contains { $0.identifier?.rawValue == "reload" }, "Reload lives in View only")
         if let gallery {
-            let lines = menu.items.map { $0.isSectionHeader ? "# " + $0.title : "[eyes] " + ($0.attributedTitle?.string.replacingOccurrences(of: "\t", with: "  ") ?? "") }
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
-            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b8-chip-menu.txt"), atomically: true, encoding: .utf8)
+            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("x9-1-view.txt"), atomically: true, encoding: .utf8)
         }
-        // Drawn armed, as the mockup shows it: half a second after the request appeared.
-        panel.clock = { 100 + RequestPanel.arming }
-        panel.tick()
-        #expect(panel.armed && panel.allowButton.isEnabled)
         try await stage.appearances { suffix in
-            try await Picture.panel(panel, over: shell, library: library, web: logbook.web, "b8" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: brief.web, "x9-1" + suffix, root: stage.home.root)
         }
-        panel.orderOut(nil)
+        // Hidden, the sidebar's item says Show Sidebar; the request answered, Needs You goes.
+        shell.split.splitViewItems[0].isCollapsed = true
+        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Show Sidebar")
+        shell.split.splitViewItems[0].isCollapsed = false
+        shell.waiting([], mine: 0)
+        #expect(library.needing().isEmpty)
+        let after = await AcceptanceBuild.read(host) { !$0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
+        #expect(!after.contains("Needs You, 1 space"), "\(after)")
+    }
+
+    /// The list of names in the narrow window (S5, X9.2), 760 by 680: the rail's tiles, a letter on the colour of
+    /// each space's name, in the sidebar's order, Daily brief's ringed; no eyes. Each tile says "Title, state" to
+    /// VoiceOver and "Title · state" under the pointer; the toolbar is the calm one.
+    @Test("x9-2: the list of names") func x9_2() async throws {
+        let stage = try Stage("shell-x9-2")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.calm(stage, NSSize(width: 760, height: 680))
+        defer { brief.close() }
+        let host = shell.split.splitViewItems[0].viewController.view
+        shell.window.layoutIfNeeded()
+        #expect(shell.rail && host.frame.width == Rail.width)
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.tools])
+        let order = library.order()
+        #expect(order.map { Rail.letter($0.title) } == ["D", "M", "P", "L", "O", "P", "S"])
+        #expect(order.map { Rail.tip($0, Stage.moment[$0.id] ?? .sleep) }.first == "Daily brief · Working")
+        // Neighbours of a group never share a colour here.
+        for section in library.sections() {
+            let tones = section.entries.map { Look.tile($0.id) }
+            #expect(zip(tones, tones.dropFirst()).allSatisfy { $0 != $1 }, "\(section.group ?? "")")
+        }
+        let spaces = order.map { Library.label($0, Stage.moment[$0.id] ?? .sleep) }
+        let said = await AcceptanceBuild.read(host) { words in spaces.allSatisfy(words.contains) }
+        #expect(said.filter(spaces.contains) == spaces && !said.contains("Needs You"), "\(said)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x9-2" + suffix, root: stage.home.root)
+        }
+    }
+
+    /// Finding a space in the narrow window (S5, J4.1): the pointer over My agents' tile, whose assistant waits: the
+    /// tile lit, its tooltip its name and state (a tooltip cannot be drawn offscreen: its words are checked). The
+    /// sidebar laid over by ⌃⌘S shows Needs You first.
+    @Test("j4-1: find your spaces") func j4_1() async throws {
+        let stage = try Stage("shell-j4-1")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.calm(stage, NSSize(width: 760, height: 680))
+        defer { brief.close() }
+        let agents = try #require(library.entry("agents"))
+        #expect(Rail.tip(agents, .wait) == "My agents · Waiting for you" && Library.label(agents, .wait) == "My agents, Waiting for you")
+        library.sidebar.hovered = .space("agents")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "j4-1" + suffix, root: stage.home.root)
+        }
+        library.sidebar.hovered = nil
+        shell.split.toggleSidebar(nil)
+        let laid = try #require(SidebarOver.shown(in: shell.layer))
+        _ = await wait(until: { laid.alphaValue == 1 })
+        let said = await AcceptanceBuild.read(laid) { $0.contains("Needs You, 1 space") }
+        let first = said.firstIndex(of: "Needs You, 1 space"), work = said.firstIndex(of: "Work, 3 spaces, open")
+        #expect(first != nil && work != nil && (first ?? 0) < (work ?? 0), "Needs You over the groups: \(said)")
+        #expect(SidebarOver.close(in: shell.layer))
     }
 
     /// X1.2, the words: "Space" stays, explained once where every space is listed, "pages of your own" beside SPACES;

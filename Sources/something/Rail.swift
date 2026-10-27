@@ -1,8 +1,8 @@
 // The narrow window's sidebar, a rail of icons (the mockup's .wn-rail): the toggle that lays the whole sidebar over the
-// space (⌃⌘S), New Space, Go to…, a line, New Group, then each space's icon with its assistant's eyes under it, every
-// group's rows shown even folded since no header is, a line between groups; Templates and Settings at the foot. No
-// words fit: each button says what it is under the pointer, a space "name · state", and to VoiceOver, a space
-// "Title, state" as in the sidebar. ↑ and ↓ move through New Space and the spaces.
+// space (⌃⌘S), New Space, Go to…, a line, New Group, then each space as a letter on its colour (the only place a space
+// has one: the sidebar is a list of names), every group's rows shown even folded since no header is, a line between
+// groups; Templates and Settings at the foot. No words fit: each button says what it is under the pointer, a space "name
+// · state", and to VoiceOver, a space "Title, state" as in the sidebar. ↑ and ↓ move through New Space and the spaces.
 import AppKit
 import SwiftUI
 
@@ -16,9 +16,14 @@ struct Rail: View {
     private var library: Library { side.library }
     private var state: SidebarState { side.state }
 
-    /// What a space's icon says under the pointer.
+    /// What a space's tile says under the pointer: its name, and its assistant's state, the rail's only word for it.
     static func tip(_ entry: Library.Entry, _ state: Sign.State) -> String {
         "\(entry.title) · \(entry.isSpace ? state.word : "not a space yet")"
+    }
+
+    /// The letter a space's tile shows: the first of its name, in capitals; "?" for a name with none.
+    static func letter(_ title: String) -> String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "?"
     }
 
     var body: some View {
@@ -57,7 +62,7 @@ struct Rail: View {
             }
             Self.line.padding(.top, 8)
             Button { Keys.send("settings") } label: {
-                Image(systemName: "sun.max").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
+                Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
@@ -98,22 +103,27 @@ struct Rail: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// A space's button, 44 by 38: its template's symbol raised, its assistant's eyes under it (unless Settings ›
-    /// Interface hides them), the selection's fill when it is open.
+    /// A space's button, 44 by 38: its letter tile, 22 points, white on the colour of its name (a page that is not a
+    /// space yet, grey), ringed in that colour when it is open, on the selection's fill.
     private func space(_ entry: Library.Entry) -> some View {
         let on = library.selection == .space(entry.id), now = side.eyes(entry.id), key = SidebarState.Hover.space(entry.id)
-        return ZStack {
-            Image(systemName: Template.symbol(of: entry.id)).font(.system(size: 14)).foregroundStyle(on ? Look.Token.ink.ui : Look.Token.ink2.ui)
-                .frame(width: 17, height: 17).offset(y: entry.isSpace ? -4 : 0)
-                .overlay(alignment: .topTrailing) {
-                    if side.assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 3, y: -7) }
+        let tone = entry.isSpace ? Color(nsColor: Look.tile(entry.id)) : Look.Token.mist.ui
+        return Text(Self.letter(entry.title)).font(Look.font(.ui, size: 11, weight: .semibold).ui)
+            .foregroundStyle(entry.isSpace ? Color.white : Look.Token.ink2.ui)
+            .frame(width: 22, height: 22)
+            .background(tone, in: RoundedRectangle(cornerRadius: 6.16))
+            .overlay { RoundedRectangle(cornerRadius: 6.16).strokeBorder(.black.opacity(0.06), lineWidth: 1) }
+            // The mockup's selected tile: 2 points of the background around it, then 1.5 of its colour.
+            .overlay {
+                if on {
+                    RoundedRectangle(cornerRadius: 8.16).strokeBorder(Look.Token.bg.ui, lineWidth: 2).padding(-2)
+                    RoundedRectangle(cornerRadius: 9.66).strokeBorder(tone, lineWidth: 1.5).padding(-3.5)
                 }
-            if entry.isSpace && library.preferences.sidebarEyes {
-                Image(nsImage: Sign.miniEyes(now, template: false)).resizable().frame(width: 13.6, height: 8.5)
-                    .frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 4)
             }
-        }
-        .frame(width: 44, height: 38)
+            .overlay(alignment: .topTrailing) {
+                if side.assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 4, y: -4) }
+            }
+            .frame(width: 44, height: 38)
         .background(on ? Look.Token.sel.ui : state.hovered == key ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .contentShape(Rectangle())
         .onTapGesture {

@@ -206,9 +206,7 @@ struct SettingsSection: Identifiable {
                                 control: choice(\.assistantAtOpening, [(.reduced, "Reduced"), (.open, "Open")])),
                     SettingsRow(title: "Remember where I put the assistant", note: "One place for every space.", control: toggle(\.rememberSticker)),
                 ]),
-                SettingsSection(title: "Sidebar and show", rows: [
-                    SettingsRow(title: "Show each assistant’s eyes in the sidebar", note: "Its state at a glance: working, waiting for you, asleep.",
-                                control: toggle(\.sidebarEyes)),
+                SettingsSection(title: "Show", rows: [
                     SettingsRow(title: "Hold ⌥ to point inside a drawn frame",
                                 note: "Showing a part of a space stays a visible mode; ⌥ only works once a frame is drawn.", control: toggle(\.holdOption)),
                 ]),

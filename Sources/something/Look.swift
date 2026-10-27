@@ -11,6 +11,8 @@ enum Look {
     /// A colour of the identity, named as the mockup names its token (`--ink`, `--line2`…).
     enum Token: String, CaseIterable {
         case bg, bg2, side, sunk, ink, ink2, ink3, eyes = "e", mist, line, line2, hover, sel, act, actfg, ok, bad, glass, scrim
+        /// What waits for the person (the sidebar's Needs You): its mark, its words, and its soft fill.
+        case need = "ad-y", needInk = "ad-yt", needSoft = "ad-ys"
 
         /// The day value and its night twin, as 0xRRGGBB with an opacity, the way the mockup writes them.
         var tone: (day: UInt32, dayAlpha: CGFloat, night: UInt32, nightAlpha: CGFloat) {
@@ -35,6 +37,9 @@ enum Look {
             case .bad: (0xC23A35, 1, 0xF07A6E, 1)
             case .glass: (0xF4F4F1, 0.94, 0x1A1C21, 0.93)
             case .scrim: (0x121316, 0.18, 0x000000, 0.42)
+            case .need: (0xE0A21A, 1, 0xF2C14E, 1)
+            case .needInk: (0x7A5300, 1, 0xF2C14E, 1)
+            case .needSoft: (0xE0A21A, 0.14, 0xF2C14E, 0.13)
             }
         }
 
@@ -57,6 +62,15 @@ enum Look {
     static func srgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
         func part(_ shift: UInt32) -> CGFloat { CGFloat((hex >> shift) & 0xFF) / 255 }
         return NSColor(srgbRed: part(16), green: part(8), blue: part(0), alpha: alpha)
+    }
+
+    /// The narrow rail's letter tiles: a white letter on one of these, picked from the space's name, so that no two
+    /// neighbours look alike; the same by day and by night, as the mockup draws them.
+    static let tiles: [UInt32] = [0xC2453A, 0x2F6FB4, 0x2A7D57, 0xB07A1A, 0x7A4FB4, 0xC25A8A, 0x3F8A8C, 0x5C5E66]
+
+    /// The tile colour of the space `name`: the mockup's hash of its name (h = h * 31 + each UTF-16 unit, from 7).
+    static func tile(_ name: String) -> NSColor {
+        srgb(tiles[Int(name.utf16.reduce(UInt32(7)) { $0 &* 31 &+ UInt32($1) } % UInt32(tiles.count))])
     }
 
     // MARK: Sizes

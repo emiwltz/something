@@ -32,7 +32,7 @@ import Testing
         #expect(titles(.recent) == ["My agents", "Pebble", "Logbook"], "three, the open space left out")
         #expect(titles(.spaces) == ["Daily brief", "Project watch", "Oracle", "Stack"], "the others, in the sidebar's order")
         #expect(titles(.actions) == ["New Space", "Talk to Daily brief’s Assistant", "Show Conversation", "Templates", "Enter Full Screen",
-                                     "Put Idle Assistants to Sleep", "Settings", "Keyboard Shortcuts", "Look for Agents Again"])
+                                     "Put Idle Assistants to Sleep", "Settings", "Show Keyboard Shortcuts", "Look for Agents Again"])
         #expect(titles(.templates) == library.templates.map(\.title) && titles(.templates).count == 6)
         #expect(rows.map(\.section) == rows.map(\.section).sorted { order($0) < order($1) }, "the sections in their order")
         let brief = try #require(rows.first { $0.id == "space:brief" }), agents = try #require(rows.first)

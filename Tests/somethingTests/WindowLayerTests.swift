@@ -1,4 +1,4 @@
-// The window's frame: its sizes, the toolbar's items and their state without a space, the window layer that takes the
+// The window's frame: its sizes, the calm toolbar's items and their state with and without a space, the window layer that takes the
 // mouse only on what it holds, and the toast in it. Offscreen: cursor, focus return and what VoiceOver reads over the
 // layer are hand trials.
 import AppKit
@@ -26,18 +26,24 @@ import Testing
             #expect(shell.inspector.minimumThickness == 320 && shell.inspector.maximumThickness == 320 && shell.inspector.isCollapsed)
             #expect(shell.split.splitView.arrangedSubviews[0].frame.width == 236)
             #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title,
-                                                                           .flexibleSpace, Shell.chip, Shell.tools])
+                                                                           .flexibleSpace, Shell.tools])
             let items = shell.toolbarItems
-            #expect(items.suffix(4).map(\.itemIdentifier) == [Shell.point, Shell.reload, Shell.info, Shell.full])
+            #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full], "no Reload, no waiting chip")
             @MainActor func item(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? { items.first { $0.itemIdentifier == id } }
-            // Without a space, what acts on one is greyed, never hidden; the chip's slot is hidden while empty.
+            // Without a space, the calm toolbar: what acts on one is hidden; the name and Page Full Screen stay.
             for id in Shell.onSpace {
                 let control = shell.controls[id]
-                #expect(item(id)?.isHidden == false && item(id)?.isEnabled == false && control?.isEnabled == false, "\(id)")
+                #expect(item(id)?.isEnabled == false && control?.isHidden == true, "\(id)")
             }
-            #expect(item(Shell.chip)?.isHidden == true && item(Shell.full)?.isEnabled == true)
-            #expect(shell.controls[Shell.reload]?.toolTip == "Reload (⌘R)" && shell.controls[Shell.full]?.toolTip == "Full Screen (⌃⌘F)")
+            #expect(item(Shell.full)?.isEnabled == true && shell.controls[Shell.full]?.isHidden == false)
+            #expect(shell.controls[Shell.info]?.toolTip == "Info (⌘I)" && shell.controls[Shell.full]?.toolTip == "Page Full Screen (⌃⌘F)")
             #expect(shell.window.title == "New Space" && shell.window.titleVisibility == .hidden)
+            #expect(shell.titleLine.accessibilityRole() == .staticText && shell.titleLine.toolTip == nil, "New Space's name opens nothing")
+            // Over a space they show, and the name is a button that opens Info.
+            shell.heading("Daily brief", "", space: true)
+            #expect(Shell.onSpace.allSatisfy { shell.controls[$0]?.isHidden == false && item($0)?.isEnabled == true })
+            #expect(shell.titleLine.accessibilityRole() == .button && shell.titleLine.accessibilityLabel() == "Daily brief")
+            #expect(shell.titleLine.toolTip == "Show Info (⌘I)" && shell.titleLine.line.string == "Daily brief")
             // Window › Zoom acts on this window.
             let zoom = NSMenuItem(title: "Zoom", action: Keys.command("zoom")?.action, keyEquivalent: "")
             #expect(shell.window.validateUserInterfaceItem(zoom))
@@ -79,19 +85,20 @@ import Testing
         }
     }
 
-    /// The mockup's right-hand cluster: 28-point buttons 4 points apart, the line 8 points from Point and from Reload,
-    /// Full Screen 10 points from the window's edge (the mockup's centres: 1176, 1144, 1112; the line at 1089).
+    /// The mockup's right-hand cluster (X9.1): Point, Info and Page Full Screen, 28-point buttons 4 points apart, Page
+    /// Full Screen 10 points from the window's edge (the mockup's centres: 1176, 1143).
     @Test func theToolsSitAsTheMockupsDo() throws {
         try window { shell in
+            shell.heading("Daily brief", "", space: true)
             shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
             @MainActor func frame(_ id: NSToolbarItem.Identifier) throws -> NSRect {
                 let view = try #require(shell.controls[id])
                 return view.superview?.convert(view.alignmentRect(forFrame: view.frame), to: nil) ?? .zero
             }
-            let (point, reload, info, full) = (try frame(Shell.point), try frame(Shell.reload), try frame(Shell.info), try frame(Shell.full))
-            #expect([reload, info, full].allSatisfy { $0.size == NSSize(width: 28, height: 28) }, "\(point) \(reload) \(info) \(full)")
-            #expect(abs(full.midX - 1176) <= 2 && abs(info.midX - full.midX + 32) <= 0.5 && abs(reload.midX - info.midX + 32) <= 0.5, "\(reload) \(info) \(full)")
-            #expect(abs(reload.minX - point.maxX - 17) <= 0.5, "\(point) \(reload)")
+            let (point, info, full) = (try frame(Shell.point), try frame(Shell.info), try frame(Shell.full))
+            #expect([info, full].allSatisfy { $0.size == NSSize(width: 28, height: 28) }, "\(point) \(info) \(full)")
+            #expect(abs(full.midX - 1176) <= 2 && abs(info.midX - full.midX + 32) <= 0.5, "\(info) \(full)")
+            #expect(abs(info.minX - point.maxX - 4) <= 0.5, "\(point) \(info)")
         }
     }
 
@@ -100,7 +107,7 @@ import Testing
     @Test func aLongTitleNeverPushesTheToolsOut() throws {
         try window { shell in
             shell.window.setContentSize(shell.window.contentMinSize)
-            shell.heading("A morning brief with every feed I read before work", "a-morning-brief-with-every-feed.html", space: true)
+            shell.heading("A morning brief with every feed, newsletter and calendar I read before work starts", "", space: true)
             let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent
             // The toolbar lays its items out again on a later turn of the run loop, later under load: turned until
             // `done`, at least 0.2 s; the minute only stops a hang.

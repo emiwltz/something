@@ -1,7 +1,7 @@
 // The one queue of the agents' requests the person has not answered: in the order they came, the one on screen, the
-// steps between them, which wrap, and the counts the window shows: all of them for the Dock and the toolbar's chip, a
-// space's own for its sticker. A request answered stays in the state until its agent takes the answer; it never comes
-// back into the queue meanwhile.
+// steps between them, which wrap, and the counts the window shows: all of them for the Dock, their spaces for Needs
+// You, a space's own for its sticker's label. A request answered stays in the state until its agent takes the answer;
+// it never comes back into the queue meanwhile.
 import Observation
 import SomethingCore
 

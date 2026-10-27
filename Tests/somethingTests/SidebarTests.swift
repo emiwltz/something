@@ -1,7 +1,8 @@
 // The sidebar's groups and names, in a throwaway home: moving a space to a group writes only the preferences, a new
 // group takes the first free name, a name another group has is refused, a folded group keeps its count and its rows
 // leave ↑ and ↓, renaming in place keeps the name on Return and none on Esc, a space's new name is only shown (its
-// file and declaration stay), and a row's menu is the mockup's; the rail's keys go through every space, folded or not,
+// file and declaration stay), and a row's menu is the mockup's; the rows are names only, Needs You mirrors the spaces
+// that wait; the rail's keys go through every space, folded or not, its tiles are a letter on the colour of the name,
 // and the window takes the rail below 860 points and keeps it until 880. No window is shown.
 import AppKit
 import Foundation
@@ -176,7 +177,7 @@ import Testing
         return (side, offscreen)
     }
 
-    /// The dark pixels in the sidebar from `left` points on: past 200, the rows' eyes at their trailing end.
+    /// The dark pixels in the sidebar from `left` points on: past 200, where the rows' eyes were.
     func inked(_ side: NSView, from left: Double = 200) async throws -> Int {
         await wait(0.5)
         side.layoutSubtreeIfNeeded()
@@ -193,80 +194,46 @@ import Testing
         return count
     }
 
-    /// Settings' "Show each assistant’s eyes in the sidebar": off, the rows draw no eyes at their trailing end.
-    @Test func theEyesFollowTheSetting() async throws {
+    /// v6.2's list of names: whatever the assistants do, no row draws eyes at its trailing end, folded or not; the
+    /// state stays in each row's VoiceOver label.
+    @Test func theRowsAreNamesOnly() async throws {
         let test = Home(prefix: "something-sidebar-")
         defer { test.remove() }
         let library = try library(test)
-        let (side, offscreen) = side(library, test, eyes: .listen)
-        defer { _ = offscreen }
-        library.preferences.sidebarEyes = true
-        let on = try await inked(side)
-        library.preferences.sidebarEyes = false
-        let off = try await inked(side)
-        #expect(on > off + 40, "eyes drawn: \(on) dark pixels, hidden: \(off)")
-    }
-
-    /// Every group folded, so no row shows: the headers' eyes, the most urgent of their rows, are all the switch hides.
-    @Test func theSettingHidesAFoldedGroupsEyes() async throws {
-        let test = Home(prefix: "something-sidebar-")
-        defer { test.remove() }
-        let library = try library(test)
-        library.preferences.groups[2].spaces.append("oracle")
-        for group in ["Agents", "Notes", "Breaks"] { library.preferences.fold(group, true) }
-        library.relist()
         let (side, offscreen) = side(library, test, eyes: .wait)
         defer { _ = offscreen }
-        library.preferences.sidebarEyes = true
-        let on = try await inked(side, from: 0)
-        library.preferences.sidebarEyes = false
-        let off = try await inked(side, from: 0)
-        #expect(on > off + 20, "headers' eyes drawn: \(on) dark pixels, hidden: \(off)")
+        #expect(try await inked(side) < 20, "no eyes at the rows' end")
+        for group in ["Agents", "Notes", "Breaks"] { library.preferences.fold(group, true) }
+        #expect(try await inked(side, from: 120) < 20, "no eyes on a folded group's header")
+        #expect(Library.label(try #require(library.entry("agents")), .wait) == "My agents, Waiting for you")
     }
 
-    /// The ring of a row whose eyes changed: at full ink when calm, none under Reduced motion.
-    @Test func theRingIsStillUnderReducedMotion() {
-        #expect(Ping.peak(still: false) == 1 && Ping.peak(still: true) == 0)
+    /// Needs You lists the spaces whose requests wait, in the order the window gave (oldest first), a space the
+    /// sidebar no longer lists left out; each stays in its group, so the stops and ⌘1–9 never move.
+    @Test func needsYouMirrorsTheWaitingSpaces() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        let order = library.order().map(\.id), stops = library.stops()
+        #expect(library.needing().isEmpty)
+        library.sidebar.needs = ["oracle", "gone", "agents"]
+        #expect(library.needing().map(\.title) == ["Oracle", "My agents"])
+        #expect(library.order().map(\.id) == order && library.stops() == stops, "mirrored, never moved")
+        #expect(library.preferences.group(of: "agents") == "Agents")
     }
 
-    /// The rows' eyes come from each space's own session: no session reads asleep, never ready; a folded group shows
-    /// waiting before working, and nothing for quieter states.
-    @Test func eyesComeFromSessionsAndAFoldedGroupShowsTheMostUrgent() throws {
+    /// The rows' eyes, which VoiceOver says, come from each space's own session: no session reads asleep, never
+    /// ready; the unknown is said.
+    @Test func eyesComeFromSessions() throws {
         let test = Home(prefix: "something-sidebar-")
         defer { test.remove() }
         let library = try library(test)
         let model = AssistantModel(engine: test.engine(), places: test.places)
         #expect(library.entries.filter(\.isSpace).allSatisfy { model.eyes(of: $0.id) == .sleep }, "no session is asleep, not ready")
-        #expect(Library.urgent([.listen, .think, .wait, .done]) == .wait)
-        #expect(Library.urgent([.listen, .think, .sleep]) == .think)
-        #expect(Library.urgent([.listen, .done, .sleep, .unknown, .limit]) == nil)
         library.preferences.fold("Agents", true)
-        #expect(library.label(group: "Agents", count: 2, urgent: .wait) == "Agents, 2 spaces, folded, waiting for you")
-        #expect(library.label(group: "Notes", count: 1, urgent: .think) == "Notes, 1 space, open", "an open group shows its rows' eyes")
+        #expect(library.label(group: "Agents", count: 2) == "Agents, 2 spaces, folded")
+        #expect(library.label(group: "Notes", count: 1) == "Notes, 1 space, open")
         #expect(Library.label(try #require(library.entry("pet")), .unknown) == "Pebble, Unknown", "unknown is said, never idle")
-    }
-
-    /// The chip goes where the request is and never answers: one request opens its space, or the panel when that space
-    /// is open or it has none; several open the menu of assistants by state, waiting first, ready and asleep left out.
-    @Test func theChipGoesToTheRequestAndNeverAnswers() throws {
-        let rows: [(String, String, Sign.State)] = [("brief", "Daily brief", .think), ("agents", "My agents", .wait), ("project", "Project watch", .listen),
-                                                    ("logbook", "Logbook", .sleep), ("oracle", "Oracle", .wait), ("pet", "Pebble", .done),
-                                                    ("stack", "Stack", .unknown)]
-        guard case .space("agents") = WaitingChip.goes(["agents"], open: "logbook", assistants: rows) else { Issue.record("opens its space"); return }
-        guard case .request = WaitingChip.goes(["agents"], open: "agents", assistants: rows) else { Issue.record("the panel"); return }
-        guard case .request = WaitingChip.goes([nil], open: "agents", assistants: rows) else { Issue.record("no space: the panel"); return }
-        guard case .request = WaitingChip.goes([nil, nil], open: nil, assistants: rows.filter { $0.2 == .sleep }) else { Issue.record("none to list"); return }
-        guard case .menu(let menu) = WaitingChip.goes(["agents", "oracle"], open: "logbook", assistants: rows) else { Issue.record("a menu"); return }
-        #expect(menu.items.first?.isSectionHeader == true && menu.items.first?.title == "Assistants")
-        let items = menu.items.dropFirst()
-        #expect(items.map(\.title) == ["My agents", "Oracle", "Daily brief", "Pebble", "Stack"])
-        #expect(items.map { $0.attributedTitle?.string.components(separatedBy: "\t").last } == ["Waiting for you", "Waiting for you", "Working", "Done", "Unknown"])
-        #expect(items.allSatisfy { $0.action == #selector(App.goToSpace(_:)) && $0.image != nil }, "each opens its space, with its eyes")
-        #expect(!items.contains { ["Allow", "Deny"].contains(where: $0.title.contains) }, "the chip never answers")
-        let chip = WaitingChip()
-        #expect(chip.action == #selector(App.chipClicked(_:)))
-        chip.count = 2
-        #expect(chip.accessibilityLabel() == "2 wait for you")
     }
 
     /// Go lists each space with its assistant's still eyes and state word, the name alone as its title.
@@ -300,6 +267,11 @@ import Testing
         #expect(library.step(1) == .space("agents") && library.sidebar.cursor == nil)
         let brief = try #require(library.entry("brief"))
         #expect(Rail.tip(brief, .think) == "Daily brief · Working" && Library.label(brief, .think) == "Daily brief, Working")
+        // The tiles: the first letter of the name, the colour of the file's name, by the mockup's hash, the same for a
+        // space renamed; two neighbours of the stage differ.
+        #expect(Rail.letter("Daily brief") == "D" && Rail.letter("  pebble") == "P" && Rail.letter("") == "?" && Rail.letter("élan") == "É")
+        #expect(Look.tile("brief") == Look.tile("brief") && Look.tile("brief") != Look.tile("agents"))
+        #expect(Look.srgb(Look.tiles[Int((7 &* 31 &+ 97) % 8)]) == Look.tile("a"), "h = 7 * 31 + 'a'")
         for (width, now, rail) in [(859.0, false, true), (860, false, false), (879, true, true), (880, true, false), (870, false, false), (870, true, true)] {
             #expect(Shell.rail(width, now: now) == rail, "\(width) \(now)")
         }

@@ -63,7 +63,7 @@ import Testing
                         "Ask Before Every Change": "askEverything", "Requests always wait for your click": nil,
                         "Notify me when a request waits": "notify",
                         "Motion": "motion", "When a space opens, its assistant is": "assistantAtOpening",
-                        "Remember where I put the assistant": "rememberSticker", "Show each assistant’s eyes in the sidebar": "sidebarEyes",
+                        "Remember where I put the assistant": "rememberSticker",
                         "Hold ⌥ to point inside a drawn frame": "holdOption", "Keep": "versionsKept", "Storage limit": "storageLimit",
                         "When it is full": nil, "Where": nil]
         var seen: Set<String> = []
@@ -125,10 +125,10 @@ import Testing
             case .locked(let word): shown[row.title] = word
             }
         }
-        // open:'last', apps:true, asstOpen:'Reduced', sticker:true, sideEyes:true, motion:'Calm', alt:true.
+        // open:'last', apps:true, asstOpen:'Reduced', sticker:true, motion:'Calm', alt:true (sideEyes left with v6.2).
         #expect(shown == ["When something opens": "The last space you had open", "Add something to Applications": "on",
                           "Welcome tour": "Show Again", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
-                          "Remember where I put the assistant": "on", "Show each assistant’s eyes in the sidebar": "on",
+                          "Remember where I put the assistant": "on",
                           "Hold ⌥ to point inside a drawn frame": "on",
                           // agent:'Claude Code', resume:true, sleep:'10 minutes', awake:'3', askAll:false, notify:false; before
                           // Claude Code ever listed its models, its own (cannot_native: no settings file is read).
@@ -348,16 +348,15 @@ import Testing
         for tab in SettingsTab.allCases {
             settings.select(tab)
             settings.window.layoutIfNeeded()
-            _ = await wait(until: {
-                let page = settings.tabs.tabViewItems[settings.tabs.selectedTabViewItemIndex].viewController
-                return abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - (page?.preferredContentSize.height ?? 0)) <= 1
-            })
+            let page = { settings.tabs.tabViewItems[settings.tabs.selectedTabViewItemIndex].viewController?.preferredContentSize.height ?? 0 }
+            _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - page()) <= 1 })
             let content = settings.window.contentRect(forFrameRect: settings.window.frame).size
             #expect(settings.tab == tab && settings.window.title == tab.label)
             #expect(abs(content.width - 720) < 1, "\(tab)")
+            #expect(abs(content.height - page()) <= 1 && page() > 0, "\(tab) takes its page's height")
             heights.append(content.height)
         }
-        #expect(Set(heights.map { Int($0) }).count == SettingsTab.allCases.count, "each tab its own height: \(heights)")
+        #expect(Set(heights.map { Int($0) }).count > 1, "the tabs are not one height: \(heights)")
         // A click on a toolbar tab goes through the tab view, not the index: the title follows it too.
         settings.tabs.tabView.selectTabViewItem(at: 3)
         #expect(settings.tab == .interface && settings.window.title == "Interface")

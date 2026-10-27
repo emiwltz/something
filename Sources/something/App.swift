@@ -259,9 +259,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         }
     }
 
-    /// The requests waiting: all of them in the toolbar's chip, as in the Dock, and the open space's own on its sticker.
+    /// The requests waiting: their spaces in the sidebar's Needs You (the Dock counts them all), and the open space's
+    /// own in its sticker's label.
     func counted() {
-        shell.waiting(panels.queue.waiting.count + panels.elsewhere.count, mine: current.map { panels.queue.count(in: $0.space.name) } ?? 0)
+        shell.waiting(panels.requestSpaces { library.entry($0) != nil }.compactMap { $0 },
+                      mine: current.map { panels.queue.count(in: $0.space.name) } ?? 0)
     }
 
     /// Who asks in the panel: the agent, and the title of the space its request belongs to.
@@ -326,23 +328,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func stopAssistant(_ sender: Any?) { assistant.stop() }
     @objc func showRequest(_ sender: Any?) { panels.present(in: current?.space.name) }
 
-    /// The toolbar's chip. With one request, its space opens; the panel comes in front when that space is open, or
-    /// when the request belongs to none. With more, a menu of the assistants by state, each opening its space. It never
-    /// answers: Allow and Deny are only the panel's (rule 2). The sender may be the chip, its overflow menu item or
-    /// nil: the menu opens under the chip all the same.
-    @objc func chipClicked(_ sender: Any?) {
-        let spaces = panels.requestSpaces { library.entry($0) != nil }
-        let rows = library.order().filter(\.isSpace).map { ($0.id, $0.title, assistant.eyes(of: $0.id)) }
-        switch WaitingChip.goes(spaces, open: current?.space.name, assistants: rows) {
-        case .space(let name):
-            library.select(.space(name))
-            front()
-        case .request: showRequest(sender)
-        case .menu(let menu):
-            let (point, view) = shell.chip.menuPlace
-            menu.popUp(positioning: nil, at: point, in: view)
-        }
-    }
     @objc func newConversation(_ sender: Any?) { assistant.newConversation() }
     /// Put Idle Assistants to Sleep, said in a toast.
     @objc func putIdleToSleep(_ sender: Any?) {
@@ -369,9 +354,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         menu.addItem(NSMenuItem(title: AssistantModel.defaultsTitle, action: Keys.command("defaults")?.action, keyEquivalent: ""))
     }
 
-    /// Greyed, never hidden: Keys says when each command can act.
+    /// Greyed, never hidden: Keys says when each command can act. Show Info says "Hide Info" while it shows.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
+        if id == "insp" { item.title = shell.infoWords }
         return Keys.enabled(id, situation)
     }
 

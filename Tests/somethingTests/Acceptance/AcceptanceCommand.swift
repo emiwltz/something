@@ -20,7 +20,7 @@ struct AcceptanceCommand {
         library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
         try stage.moment(shell)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         // The mockup's recent spaces (CM_RECENT): Daily brief, open, is left out of Recent.
@@ -69,7 +69,7 @@ struct AcceptanceCommand {
         library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
         try stage.moment(shell)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         library.preferences.change { $0.recents = ["brief", "agents", "pet", "logbook", "project", "oracle", "stack"] }
@@ -151,15 +151,16 @@ struct AcceptanceCommand {
             if case .toggle(let on, _, _) = rows[2].control { #expect(!on()) } else { Issue.record("not a switch") }
         }
     }
-    /// Interface: Auto, Light and Dark (Light chosen, as in the mockup's picture), Motion, the assistant, the sidebar.
+    /// Interface: Auto, Light and Dark (Light chosen, as in the mockup's picture), Motion, the assistant, pointing. The
+    /// sidebar's eyes left with v6.2's list of names (S5).
     @Test("g6: Settings, Interface") func g6() async throws {
         let shows = ["Auto", "Light", "Dark", "Calm", "Reduced", "Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
-                     "Show each assistant's eyes in the sidebar", "to point inside a drawn frame"]
+                     "to point inside a drawn frame"]
         try await settings(.interface, "g6", shows: shows) { settings, _ in
             let sections = settings.model.sections(.interface)
-            #expect(sections.map(\.title) == ["Appearance", "The assistant", "Sidebar and show"] && sections[0].appearance)
+            #expect(sections.map(\.title) == ["Appearance", "The assistant", "Show"] && sections[0].appearance)
             #expect(sections.flatMap(\.rows).map(\.title) == ["Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
-                                                              "Show each assistant’s eyes in the sidebar", "Hold ⌥ to point inside a drawn frame"])
+                                                              "Hold ⌥ to point inside a drawn frame"])
         }
     }
     /// Shortcuts: Keys' lines in two columns, and the way to System Settings › Keyboard.
@@ -271,7 +272,7 @@ struct AcceptanceCommand {
         let (fixture, _) = try Mockup.menus()
         #expect(bar.menu.items.compactMap(\.submenu).map { Mockup.lines($0) } == fixture.map(\.lines))
         let closed = Mockup.dump(bar.menu, Keys.Situation())
-        for line in ["  # No space open", "  Space Info  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P",
+        for line in ["  # No space open", "  Show Info  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P",
                      "  New Space  ⌘N", "  Daily brief  ⌘1"] {
             #expect(closed.contains(line + "\n"), "\(line)")
         }
@@ -283,8 +284,8 @@ struct AcceptanceCommand {
         #expect(go.count == library.entries.filter(\.isSpace).count && go.count == 7)
         #expect(go.filter { $0.state == .on }.map(\.title) == ["Daily brief"])
         let opened = Mockup.dump(bar.menu, Keys.Situation(space: true))
-        for line in ["  # Daily brief", "  # Daily brief’s assistant", "  Space Info  ⌘I", "  Ask…  ⌘K", "  ✓ Daily brief  ⌘1",
-                     "  Versions…", "  Put Idle Assistants to Sleep"] {
+        for line in ["  # Daily brief", "  # Daily brief’s assistant", "  Show Info  ⌘I", "  Ask…  ⌘K", "  ✓ Daily brief  ⌘1",
+                     "  Show History…", "  Put Idle Assistants to Sleep"] {
             #expect(opened.contains(line + "\n"), "\(line)")
         }
         #expect(Keys.about(.main)[.applicationVersion] as? String == Resources.version(of: .main))
@@ -303,7 +304,7 @@ struct AcceptanceCommand {
         library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
         try stage.moment(shell)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         #expect(Keys.command("keys")?.action == #selector(App.showKeys(_:)) && Keys.enabled("keys", Keys.Situation(space: true)))

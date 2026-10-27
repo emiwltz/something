@@ -1,8 +1,9 @@
 // The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), the window layer
-// over all three, a toolbar with the sidebar toggle at the sidebar's edge, the title and file, a slot for the chip of
-// waiting requests, Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change
-// leaves its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Reload,
-// Info and Full Screen. Its backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
+// over all three, and a calm toolbar: the sidebar toggle at the sidebar's edge, the space's name alone (a click on it
+// opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
+// its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
+// while it shows) and Page Full Screen. Off the spaces only the name and Page Full Screen show. Reload is in the View
+// menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
 // holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
 // the templates; over a space, the glass, which holds the assistant (Glass.swift). Off the spaces the assistant is
 // away: New Space has its own field. While the welcome is open over it, the window steps back under a veil that takes
@@ -11,7 +12,7 @@
 // the sidebar steps aside and the space starts at the screen's top; ⌃⌘S lays the sidebar over it (SidebarOver).
 // A window narrower than 860 points has the rail in place of its sidebar (Rail.swift), until it is 880 wide again, so
 // that a window resized about the line does not flicker between the two: ⌃⌘S lays the whole sidebar over the space
-// there too, the toolbar's own toggle goes (the rail has one), the title drops the file and the chip its words.
+// there too, and the toolbar's own toggle goes (the rail has one).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -38,16 +39,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// What covers the whole window: the toast, the palette and the shortcut sheet.
     let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
-               chip = NSToolbarItem.Identifier("chip"), tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
-               reload = NSToolbarItem.Identifier("reload"), info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
-    /// The items that act on the open space, greyed (never hidden) while none is open.
-    static let onSpace = [point, reload, info]
+               tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
+               info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
+    /// The items that act on the open space, hidden while none is open.
+    static let onSpace = [point, info]
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
-    /// The title and the file, on one line: the system's title would put the file under it.
+    /// The space's name, which opens Info.
     let titleLine = TitleLine()
-    /// How many requests wait, all spaces together; hidden while none does.
-    let chip = WaitingChip()
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
@@ -125,6 +124,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         fit()
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
+        titleLine.opened = { [weak self] in self.map { $0.toggleInfo(spaceOpen: $0.space != nil) } }
         info.showHistory = { [weak self] in self?.showHistory() }
         info.converse = { [weak self] in self?.converse() }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
@@ -254,7 +254,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                 for id in Shell.head { if let at = toolbar.items.firstIndex(where: { $0.itemIdentifier == id }) { toolbar.removeItem(at: at) } }
             } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
         }
-        (titleLine.bare, chip.compact) = (on, on)
     }
 
     /// ⌃⌘S in full screen or beside the rail: lays the sidebar over the space, or takes it away; beside the rail, under
@@ -279,13 +278,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let head: [NSToolbarItem.Identifier] = [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator]
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Shell.head + [Shell.title, .flexibleSpace, Shell.chip, Shell.tools]
+        Shell.head + [Shell.title, .flexibleSpace, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
 
     /// The mockup's toolbar items: plain icons in `ink2`, with the words of its tooltips and the keys of the command
-    /// table; the chip's slot stays hidden while empty.
+    /// table.
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
             let item = NSToolbarItem(itemIdentifier: id)
@@ -312,10 +311,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let item = NSToolbarItem(itemIdentifier: id)
             (item.view, item.isBordered) = (titleLine, false)
             return item
-        case Shell.chip:
-            let item = NSToolbarItem(itemIdentifier: id)
-            (item.view, item.isBordered, item.isHidden, item.label) = (chip, false, chip.count == 0, "Waiting")
-            return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
         case Shell.sidebar:
             let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Sidebar"), Keys.command("sidebar")?.action)
@@ -323,25 +318,19 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             sidebar.target = split
             return sidebar
         case Shell.tools:
-            // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart, and a
-            // thin line parts Point, which closes the group of what reads the space, from Reload.
+            // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart. Page
+            // Full Screen enters the Mac's full screen until the page's own mode is built (S6).
             let tools = [item(Shell.point, "Point", "scope", Keys.tooltip("pointpart", "Point"), Keys.command("pointpart")?.action, words: "Point"),
-                         item(Shell.reload, "Reload", "arrow.clockwise", Keys.tooltip("reload", "Reload"), #selector(App.reloadSpace(_:))),
                          item(Shell.info, "Info", "info.circle", Keys.tooltip("insp", "Info"), #selector(App.toggleInfo(_:))),
-                         item(Shell.full, "Full Screen", "viewfinder", Keys.tooltip("full", "Full Screen"), #selector(NSWindow.toggleFullScreen(_:)))]
-            let line = NSBox()
-            (line.boxType, line.borderWidth, line.fillColor) = (.custom, 0, Look.Token.line2.color)
-            NSLayoutConstraint.activate([line.widthAnchor.constraint(equalToConstant: 1), line.heightAnchor.constraint(equalToConstant: 18)])
-            let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: [buttons[0], line] + buttons.dropFirst().map { $0 as NSView })
+                         item(Shell.full, "Page Full Screen", "viewfinder", Keys.tooltip("full", "Page Full Screen"), #selector(NSWindow.toggleFullScreen(_:)))]
+            let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: buttons)
             tools.forEach { $0.view = nil }
-            // The mockup draws Reload's arrow smaller and Full Screen's corners heavier than the other icons.
-            buttons[1].symbolConfiguration = .init(pointSize: 11.5, weight: .semibold)
-            buttons[3].symbolConfiguration = .init(pointSize: 13, weight: .bold)
+            // The mockup draws Full Screen's corners heavier than the other icons.
+            buttons[2].symbolConfiguration = .init(pointSize: 13, weight: .bold)
             self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
             row.spacing = 4
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
             row.edgeInsets.right = 2
-            [buttons[0], line].forEach { row.setCustomSpacing(8, after: $0) }
             titleLine.reserve = row.fittingSize.width + 24
             let group = NSToolbarItemGroup(itemIdentifier: id)
             (group.subitems, group.view, group.isBordered, group.autovalidates) = (tools, row, false, false)
@@ -353,38 +342,35 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The toolbar's items, those of the group of tools one by one.
     var toolbarItems: [NSToolbarItem] { (window.toolbar?.items ?? []).flatMap { ($0 as? NSToolbarItemGroup)?.subitems ?? [$0] } }
 
-    /// Writes the title and the file in the toolbar, for the window menu and VoiceOver too, and greys what acts on a
-    /// space when none is open (Point too when `point` is false: the page stopped).
-    func heading(_ title: String, _ file: String, space: Bool, point: Bool = true) {
-        (window.title, window.subtitle) = (title, file)
-        let line = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
-                                                                         .foregroundColor: Look.Token.ink.color, .kern: -0.135])
-        titleLine.titleLength = line.length
-        if !file.isEmpty {
-            line.append(NSAttributedString(string: "  " + file, attributes: [.font: Look.font(.ui, size: 11.5),
-                                                                              .foregroundColor: Look.Token.ink3.color]))
-        }
-        titleLine.line = line
-        titleLine.setAccessibilityLabel(file.isEmpty ? title : "\(title), \(file)")
+    /// Writes the name in the toolbar, alone, for the window menu and VoiceOver too (`subtitle` only for the window's
+    /// own, which nothing draws), and shows what acts on a space only while one is open: off the spaces, the toolbar
+    /// holds the name and Page Full Screen. Point is greyed when `point` is false: the page stopped.
+    func heading(_ title: String, _ subtitle: String, space: Bool, point: Bool = true) {
+        (window.title, window.subtitle) = (title, subtitle)
+        titleLine.line = NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
+                                                                        .foregroundColor: Look.Token.ink.color, .kern: -0.135])
+        titleLine.space = space
         // Point is greyed while the page is stopped or cannot be shown: nothing to point at.
         assistant.pointable = space && point
         toolbarItems.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
             let control = controls[$0.itemIdentifier]
             $0.isEnabled = space && control?.action != nil && (point || $0.itemIdentifier != Shell.point)
             control?.isEnabled = $0.isEnabled
+            control?.isHidden = !space
             // A borderless button with a tint draws the same enabled or not; the mockup's disabled .ib is at .32.
             control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
     }
 
-    /// Says in the toolbar's chip that `count` requests wait, every space's (the chip goes away at 0), and on the
-    /// sticker's badge that `mine` are the open space's.
-    func waiting(_ count: Int, mine: Int) {
+    /// What View's Info item says: what it will do.
+    var infoWords: String { infoShown && info.content == .info ? "Hide Info" : "Show Info" }
+
+    /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You; `mine`,
+    /// the open space's own, to the sticker's label.
+    func waiting(_ spaces: [String], mine: Int) {
         glass.mine = mine
-        guard chip.count != count else { return }
-        chip.count = count
-        window.toolbar?.items.first { $0.itemIdentifier == Shell.chip }?.isHidden = count == 0
-        titleLine.invalidateIntrinsicContentSize()
+        let needs = spaces.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        if library.sidebar.needs != needs { library.sidebar.needs = needs }
     }
 
     /// Shows `words` at the bottom of the center for a moment; see Toast.
@@ -561,7 +547,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Heads the toolbar with `space`: the name the person gave it in the sidebar, else its declared title.
     private func heading(_ space: SpaceView) {
-        heading(library.entry(space.space.name)?.title ?? space.title, space.space.location.lastPathComponent, space: true, point: space.pointable)
+        heading(library.entry(space.space.name)?.title ?? space.title, "", space: true, point: space.pointable)
     }
 
     /// Opens `tour`'s welcome over this window, where Welcome.place puts it, and steps this window back as the mockup
@@ -636,7 +622,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                                     CIFilter(name: "CIColorControls", parameters: [kCIInputSaturationKey: 0.6])].compactMap { $0 } : []
     }
 
-    /// The toolbar's title and subtitle when no space is shown, its space's items greyed, and Info closed.
+    /// The toolbar's title and subtitle when no space is shown, its space's items hidden, and Info closed.
     private func bare(_ title: String, _ subtitle: String) {
         heading(title, subtitle, space: false)
         showInfo(false)
@@ -699,11 +685,13 @@ final class Split: NSSplitViewController {
     override func toggleSidebar(_ sender: Any?) {
         if !over() { super.toggleSidebar(sender) }
     }
-    /// ⌃⌘S stays on beside the rail, whose column cannot collapse, and says what it does to the sidebar laid over.
+    /// ⌃⌘S says what it does: "Hide Sidebar" while the sidebar shows, as a column or laid over, else "Show Sidebar".
+    /// It stays on beside the rail, whose column cannot collapse.
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        guard item.action == #selector(toggleSidebar(_:)), let laid = laid() else { return super.validateUserInterfaceItem(item) }
-        (item as? NSMenuItem)?.title = laid ? "Hide Sidebar" : "Show Sidebar"
-        return true
+        guard item.action == #selector(toggleSidebar(_:)) else { return super.validateUserInterfaceItem(item) }
+        let laid = laid(), shown = laid ?? !(splitViewItems.first?.isCollapsed ?? true)
+        (item as? NSMenuItem)?.title = shown ? "Hide Sidebar" : "Show Sidebar"
+        return laid != nil || super.validateUserInterfaceItem(item)
     }
 }
 
@@ -748,21 +736,28 @@ final class Veil: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// The toolbar's title: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It
-/// gives way first when the window narrows, the file cut with an ellipsis, so that the tools never leave the toolbar.
+/// The toolbar's name: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It
+/// gives way first when the window narrows, cut with an ellipsis, so that the tools never leave the toolbar. Over a
+/// space it is a button: a click, or VoiceOver's press, opens Info or closes it, as ⌘I does.
 final class TitleLine: NSView {
     /// 18 points from the sidebar's edge, as the mockup's toolbar starts; the toolbar gives the other 8.
     static let indent: CGFloat = 10
     var line = NSAttributedString() {
-        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+        didSet {
+            setAccessibilityLabel(line.string)
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
+        }
     }
-    /// How much of `line` is the title: beside the rail, `bare`, only the title is drawn.
-    var titleLength = 0
-    var bare = false {
-        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
+    /// Whether it names an open space, and so opens Info.
+    var space = false {
+        didSet {
+            setAccessibilityRole(space ? .button : .staticText)
+            setAccessibilityHelp(space ? Keys.tooltip("insp") : nil)
+            toolTip = space ? Keys.tooltip("insp") : nil
+            window?.invalidateCursorRects(for: self)
+        }
     }
-    /// What is drawn: the line, or its title alone.
-    var shown: NSAttributedString { bare && titleLength < line.length ? line.attributedSubstring(from: NSRange(location: 0, length: titleLength)) : line }
 
     /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
     /// menu than narrow a view that asks for more.
@@ -771,96 +766,35 @@ final class TitleLine: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        let whole = ceil(shown.size().width) + TitleLine.indent
+        let whole = ceil(line.size().width) + TitleLine.indent
         let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
-        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(shown.size().height))
+        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(line.size().height))
     }
     override func draw(_ dirtyRect: NSRect) {
-        let cut = NSMutableAttributedString(attributedString: shown), style = NSMutableParagraphStyle()
+        let cut = NSMutableAttributedString(attributedString: line), style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         cut.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cut.length))
         cut.draw(in: NSRect(x: TitleLine.indent, y: 0, width: bounds.width - TitleLine.indent, height: bounds.height))
     }
+    override func resetCursorRects() {
+        if space { addCursorRect(bounds, cursor: .pointingHand) }
+    }
+    // Over a space a press is the button's, not the window's to drag.
+    override var mouseDownCanMoveWindow: Bool { !space }
+    override func mouseDown(with event: NSEvent) {
+        if !space { super.mouseDown(with: event) }
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard space, bounds.contains(convert(event.locationInWindow, from: nil)) else { return super.mouseUp(with: event) }
+        opened()
+    }
+    /// Opens Info, or closes it, as ⌘I does: the Shell's.
+    var opened: () -> Void = {}
     override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityRole() -> NSAccessibility.Role? { .staticText }
-}
-
-/// The toolbar's chip: the eyes of a request, how many wait and "wait for you", in a pill with a hairline and no
-/// shadow, hidden at 0. One meaning only, the count of every request, as the Dock's; a click goes to the request, or,
-/// with several, opens the menu of the assistants by state (`goes`).
-final class WaitingChip: NSButton {
-    /// Where a click goes: a space to open, the request panel, or the assistants' menu.
-    enum Go { case space(String), request, menu(NSMenu) }
-
-    /// The states the menu lists, in its order: who waits, who works, who is done, stopped or unknown. Ready and
-    /// asleep are left out: nothing to look at.
-    static let listed: [Sign.State] = [.wait, .think, .done, .limit, .unknown]
-
-    /// Where a click goes, `spaces` being each waiting request's space (nil for none or one no longer listed): one
-    /// request opens its space, or shows the panel when it is `open` or has none; several open the menu of
-    /// `assistants` (id, title, state) in `listed`, by state then in the sidebar's order, or the panel when none is.
-    static func goes(_ spaces: [String?], open: String?, assistants: [(String, String, Sign.State)]) -> Go {
-        if spaces.count == 1 { return spaces[0].map { $0 == open ? .request : .space($0) } ?? .request }
-        let rows = listed.flatMap { state in assistants.filter { $0.2 == state } }
-        guard !rows.isEmpty else { return .request }
-        let menu = NSMenu(title: "Assistants"), tab = NSMenuItem.tab(rows.map { ($0.1, $0.2) })
-        menu.addItem(.sectionHeader(title: "Assistants"))
-        rows.forEach { menu.addItem(.space($0.0, $0.1, $0.2, tab: tab)) }
-        return .menu(menu)
-    }
-
-    /// Where the assistants' menu opens: just under the chip in its window, or at the pointer when the chip is in no
-    /// window (the toolbar sent it to its overflow menu).
-    var menuPlace: (NSPoint, NSView?) {
-        window == nil ? (NSEvent.mouseLocation, nil) : (NSPoint(x: 0, y: isFlipped ? bounds.height + 4 : -4), self)
-    }
-
-    var count = 0 {
-        didSet {
-            setAccessibilityLabel("\(count) \(said)")
-            invalidateIntrinsicContentSize()
-            needsDisplay = true
-        }
-    }
-    /// Beside the rail, the eyes and the count alone; the label still says the words.
-    var compact = false {
-        didSet { invalidateIntrinsicContentSize(); needsDisplay = true }
-    }
-    private var said: String { count == 1 ? "waits for you" : "wait for you" }
-    /// The count, then the words unless `compact`, as drawn.
-    private var parts: [NSAttributedString] {
-        ([("\(count)", NSFont.Weight.semibold)] + (compact ? [] : [(said, .medium)])).map { words, weight in
-            NSAttributedString(string: words, attributes: [.font: Look.font(.ui, size: 12, weight: weight), .foregroundColor: Look.Token.ink.color])
-        }
-    }
-
-    init() {
-        super.init(frame: .zero)
-        (isBordered, title, target, action) = (false, "", nil, #selector(App.chipClicked(_:)))
-        toolTip = Keys.tooltip("showreq", "Show Request")
-    }
-    required init?(coder: NSCoder) { nil }
-
-    // The mockup's .wn-chip: 26 high, 8 before the eyes, 6 between the pieces, 10 after the words; compact, 7 and 9.
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: lead + 16 + parts.reduce(0) { $0 + 6 + ceil($1.size().width) } + (compact ? 9 : 10), height: 26)
-    }
-    private var lead: CGFloat { compact ? 7 : 8 }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let pill = bounds.insetBy(dx: 0.5, dy: (bounds.height - 26) / 2 + 0.5), path = NSBezierPath(roundedRect: pill, xRadius: 12.5, yRadius: 12.5)
-        Look.Token.bg2.color.setFill()
-        path.fill()
-        Look.Token.line2.color.setStroke()
-        path.lineWidth = 1
-        path.stroke()
-        Sign.miniEyes(.wait, template: false).draw(in: NSRect(x: lead, y: bounds.midY - 5, width: 16, height: 10))
-        var x: CGFloat = lead + 16
-        for piece in parts {
-            let size = piece.size()
-            piece.draw(at: NSPoint(x: x + 6, y: bounds.midY - size.height / 2))
-            x += 6 + ceil(size.width)
-        }
+    override func accessibilityPerformPress() -> Bool {
+        guard space else { return false }
+        opened()
+        return true
     }
 }
 

@@ -20,7 +20,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let point = try #require(shell.controls[Shell.point] as? ToolButton)
         #expect(point.isEnabled && !point.pressed && shell.assistant.pointable && !shell.assistant.pointing)
         #expect(Keys.enabled("pointpart", Keys.Situation(space: true)) && !Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)))
@@ -67,7 +67,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.point()
         let overlay = try #require(brief.pointer)
         let frame = try #require(brief.frame)
@@ -123,7 +123,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         model.choose(model: "opus")
         // Long enough to draw Done and the end in both appearances.
@@ -215,7 +215,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         model.choose(model: "opus")
         let changes = Changes(places: stage.home.places, undo: shell.undo)
@@ -337,7 +337,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         let changes = Changes(places: stage.home.places, undo: shell.undo)
         changes.follow(shell.assistant, in: shell, library: library)
@@ -407,7 +407,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         info.clock = { Stage.local }
         info.current = { brief }
@@ -528,7 +528,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         info.clock = { Stage.local }
         info.current = { brief }
         let all = try await Self.keepVersions(of: brief, info) { $0.replacingOccurrences(of: "<h1>The Daily Brief</h1>", with: "<h1>Daily Brief</h1>") }
@@ -591,7 +591,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         var announced: [String] = []
         shell.layer.announce = { announced.append($0) }
         info.clock = { Stage.local }
@@ -727,7 +727,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.point()
         let overlay = try #require(brief.pointer)
         var parts: [Pointing.Part] = []
@@ -783,7 +783,7 @@ struct AcceptanceShow {
         try stage.moment(shell)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         model.choose(model: "opus")
         library.preferences.motion = .reduced

@@ -40,7 +40,7 @@ The same contract as data, for tests: `share/contract/` (`state-example.json`, `
 
 Finished spaces, each one HTML file in `templates/` next to this guide, each passing `something check` with no
 problem, with every right it declares and with each one refused. Copy the closest one and change it; the person can
-also start from one in something's Templates (⇧⌘T, or File › New from Template…).
+also start from one in something's Templates (⇧⌘T, or File › Templates).
 
 | Template | What it is | Rights |
 |---|---|---|

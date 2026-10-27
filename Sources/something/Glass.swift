@@ -1,12 +1,12 @@
-// The glass: a pass-through layer over the center that holds the open space's assistant, either the 44-point sticker
-// or the card grown from it. The sticker is the sign on a surface with the hard offset shadow (it is grabbed): its
-// eyes say the assistant's state, a badge counts only this space's requests (the Dock and the toolbar's chip count
-// every one), and a label beside it says in words what it does, on hover or focus. It drags, its eyes leaning with the
-// motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for every space,
-// kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the sticker's corner;
-// ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the card stays open
-// and fades to that space's own conversation. The glass is only over a space: off the spaces (New Space, the
-// templates, the tour) it is hidden, and New Space is its own composer.
+// The glass: a pass-through layer over the center that holds the open space's assistant, either the 44-point sticker or
+// the card grown from it. The sticker is the sign on a surface with the hard offset shadow (it is grabbed): its eyes
+// say the assistant's state, and a label beside it says in words what it does, or that this space's requests wait, on
+// hover or focus. It carries no badge: the panel, Needs You and the Dock say what waits. It drags, its eyes leaning
+// with the motion; let go, it goes to the nearest side and clings to the top or the bottom when near: one place for
+// every space, kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the
+// sticker's corner; ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the
+// card stays open and fades to that space's own conversation. The glass is only over a space: off the spaces (New
+// Space, the templates, the tour) it is hidden, and New Space is its own composer.
 import AppKit
 import Observation
 
@@ -20,9 +20,9 @@ final class Glass: WindowLayer {
     let model: AssistantModel
     let sticker = Sticker(), label = Tag()
     let card: CardHost
-    /// How many of the open space's own requests wait: the sticker's badge.
+    /// How many of the open space's own requests wait: the label says so.
     var mine = 0 {
-        didSet { if mine != oldValue { sticker.mine = mine; say() } }
+        didSet { if mine != oldValue { say() } }
     }
     /// The person's Motion: Reduced, the card is in place at once and the sticker's eyes hold still. `update` reads
     /// it, so a change of the preference reaches the eyes.
@@ -62,7 +62,6 @@ final class Glass: WindowLayer {
         sticker.hovered = { [weak self] in self?.say() }
         sticker.dragged = { [weak self] total, step in self?.drag(total, step) }
         sticker.dropped = { [weak self] in self?.drop() }
-        (sticker.badge.target, sticker.badge.action) = (self, #selector(showRequest))
         card.resized = { [weak self] in self?.place() }
         watch()
     }
@@ -142,8 +141,6 @@ final class Glass: WindowLayer {
     /// Whether the sticker is shown: over a space, the card closed.
     var stickerShown: Bool { !sticker.isHidden && sticker.alphaValue > 0 }
 
-    @objc private func showRequest() { model.showRequest() }
-
     /// Follows the model: each change it reads calls `update` again, on the next turn of the main loop.
     private func watch() {
         withObservationTracking { update() } onChange: { [weak self] in
@@ -176,8 +173,8 @@ final class Glass: WindowLayer {
 
     private var onSpace: Bool { model.place.space != nil }
 
-    /// The sticker is there only over a space, and not under the grown card: hidden, neither a click on its badge
-    /// nor VoiceOver finds it. It shows while the card grows from it or shrinks into it.
+    /// The sticker is there only over a space, and not under the grown card: hidden, neither a click nor VoiceOver
+    /// finds it. It shows while the card grows from it or shrinks into it.
     private func hideSticker() {
         sticker.isHidden = !onSpace || (grown == true && !morphing)
     }
@@ -255,7 +252,7 @@ final class Glass: WindowLayer {
                       width: width, height: height)
     }
 
-    /// The sticker's frame: its surface and the room around it for the shadow and the badge.
+    /// The sticker's frame: its surface and the room around it for the shadow.
     private var stickerFrame: NSRect { corner.insetBy(dx: -Sticker.room, dy: -Sticker.room) }
 
     /// Places the sticker, its label and the card, except while the card moves between them.
@@ -282,12 +279,11 @@ final class Glass: WindowLayer {
     }
 }
 
-/// The sticker: the sign on a 44-point surface with the hard offset shadow, lifted under the pointer, and the badge of
-/// its space's requests at its top right corner. A click, Return or Space opens the card; the badge shows the request.
-/// It is drawn `room` points inside its frame, which holds the shadow and the badge.
+/// The sticker: the sign on a 44-point surface with the hard offset shadow, lifted under the pointer. A click, Return or
+/// Space opens the card. It is drawn `room` points inside its frame, which holds the shadow.
 final class Sticker: NSView {
     static let room: CGFloat = 12, radius: CGFloat = Look.card + 6
-    let sign = SignView(.unknown, side: 30), badge = Badge()
+    let sign = SignView(.unknown, side: 30)
     /// Called to open the card, and when the pointer or the focus comes or goes.
     var opened: () -> Void = {}
     var hovered: () -> Void = {}
@@ -298,10 +294,6 @@ final class Sticker: NSView {
     /// a drag rather than a click.
     private var press: NSPoint?, last = NSPoint.zero
     private(set) var dragging = false
-    /// How many of its space's requests wait; the badge hides at 0.
-    var mine = 0 {
-        didSet { badge.count = mine; badge.isHidden = mine == 0; place() }
-    }
     private(set) var pointed = false, focused = false
     /// What it shows: its assistant's presence and its space's title.
     private(set) var presence: Presence?, title = ""
@@ -313,8 +305,6 @@ final class Sticker: NSView {
         super.init(frame: .zero)
         sign.name = ""
         addSubview(sign)
-        addSubview(badge)
-        badge.isHidden = true
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
     }
@@ -342,24 +332,15 @@ final class Sticker: NSView {
         place()
     }
 
-    /// The sign 7 points inside the surface; the badge over its top right corner, 8 points out.
-    private func place() {
-        let surface = surface
-        sign.frame = surface.insetBy(dx: 7, dy: 7)
-        let size = badge.intrinsicContentSize
-        badge.frame = NSRect(x: surface.maxX + 8 - size.width, y: surface.minY - 8, width: size.width, height: size.height)
-    }
+    /// The sign 7 points inside the surface.
+    private func place() { sign.frame = surface.insetBy(dx: 7, dy: 7) }
 
     override func draw(_ dirtyRect: NSRect) {
         Sign.grab(surface, radius: Sticker.radius, lift: pointed || dragging ? .held : .rest)
     }
 
-    /// The badge answers for itself, the surface for the sticker; the shadow and the room around let the page have it.
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        let inside = convert(point, from: superview)
-        if !badge.isHidden, badge.frame.contains(inside) { return badge }
-        return surface.contains(inside) ? self : nil
-    }
+    /// The surface answers for the sticker; the shadow and the room around let the page have it.
+    override func hitTest(_ point: NSPoint) -> NSView? { surface.contains(convert(point, from: superview)) ? self : nil }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -433,42 +414,6 @@ final class Sticker: NSView {
     override func accessibilityPerformPress() -> Bool {
         opened()
         return true
-    }
-}
-
-/// The sticker's badge: how many of its space's requests wait, white on ink in a pill ringed with the surface's colour.
-/// A click shows the request.
-final class Badge: NSButton {
-    var count = 0 {
-        didSet {
-            setAccessibilityLabel("\(count) \(count == 1 ? "request" : "requests") from this space waiting for your answer")
-            toolTip = "\(accessibilityLabel() ?? "") · \(Keys.tooltip("showreq", "Show Request"))"
-            invalidateIntrinsicContentSize()
-            needsDisplay = true
-        }
-    }
-    private var number: NSAttributedString {
-        NSAttributedString(string: "\(count)", attributes: [.font: Look.font(.ui, size: 11, weight: .bold), .foregroundColor: Look.Token.bg.color])
-    }
-
-    init() {
-        super.init(frame: .zero)
-        (isBordered, title, refusesFirstResponder) = (false, "", true)
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    // The mockup's .abadge: 19 high, at least 19 wide, 5 on each side of the number, a 2-point ring of bg2.
-    override var intrinsicContentSize: NSSize { NSSize(width: max(19, ceil(number.size().width) + 10), height: 19) }
-
-    override func draw(_ dirtyRect: NSRect) {
-        Look.Token.bg2.color.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
-        let pill = bounds.insetBy(dx: 2, dy: 2)
-        Look.Token.ink.color.setFill()
-        NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
-        let size = number.size()
-        number.draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2))
     }
 }
 

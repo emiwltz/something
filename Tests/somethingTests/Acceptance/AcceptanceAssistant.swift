@@ -11,7 +11,7 @@ import Testing
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-assistant-"))
 struct AcceptanceAssistant {
     /// Daily brief open, its assistant at work on the weather corner, reduced to the sticker; the pointer over it shows
-    /// the label. Nothing of Daily brief waits, so no badge, while My agents' request is in the toolbar's chip.
+    /// the label. Nothing of Daily brief waits, and the sticker has no badge, while My agents' request is in Needs You.
     @Test("c1: the sticker on the glass") func c1() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
@@ -21,10 +21,10 @@ struct AcceptanceAssistant {
         glass.motion = { .reduced }
         // A space opens with its assistant as the sticker, which follows its presence on the next turn of the main loop.
         #expect(await wait { glass.grown == false && glass.card.isHidden && glass.stickerShown && sticker.presence == model.presence })
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
-        #expect(glass.stickerShown && sticker.sign.state == .think && sticker.badge.isHidden && shell.chip.count == 1)
+        #expect(glass.stickerShown && sticker.sign.state == .think && sticker.subviews == [sticker.sign] && library.sidebar.needs == ["agents"])
         #expect(glass.corner == NSRect(x: shell.center.bounds.width - 60, y: 16, width: 44, height: 44))
         #expect(!glass.label.isHidden && glass.label.title == "Daily brief" && glass.label.words == "Editing brief.html…")
         #expect(sticker.accessibilityLabel() == "Assistant of Daily brief, Editing brief.html…. Open with ⌘K")
@@ -109,7 +109,7 @@ struct AcceptanceAssistant {
         let at = Date()
         model.clock = { at }
         // My agents' request waits in the toolbar's chip, as in the mockup's pictures.
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         return (shell, library, brief)
     }
 
@@ -143,7 +143,7 @@ struct AcceptanceAssistant {
         defer { logbook.close() }
         model.focus()
         shell.toggleConversation(nil)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         #expect(model.threadShown && model.asleep && model.id == nil && engine.state.agents.isEmpty, "nothing runs while it sleeps")
         #expect(model.title == "Logbook" && model.presence.state == .sleep && model.presence.word == "Asleep · wakes on your next message")
         #expect(model.rows == [.day(Date(timeIntervalSince1970: 1_792_404_000)), .mine(caption: "about Logbook", text: "Group the entries by day."),
@@ -236,7 +236,7 @@ struct AcceptanceAssistant {
         #expect(model.placeholder == "Ask Project watch's assistant for a change…")
         // This space's alone: the defaults for new spaces are unchanged.
         #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: project.web, "c5" + suffix, root: stage.home.root)
@@ -301,9 +301,9 @@ struct AcceptanceAssistant {
         }
         queue.follow(engine.requests)
         #expect(queue.waiting.count == 1 && queue.count(in: "agents") == 1 && queue.count(in: "brief") == 0)
-        shell.waiting(queue.waiting.count, mine: queue.count(in: "agents"))
+        shell.waiting(queue.waiting.compactMap(queue.space), mine: queue.count(in: "agents"))
         #expect(model.threadShown && model.rows.first.map { if case .day = $0 { true } else { false } } == true)
-        #expect(glass.mine == 1 && glass.sticker.mine == 1 && shell.chip.count == 1, "the badge counts this space's own request")
+        #expect(glass.mine == 1 && library.sidebar.needs == ["agents"], "the label counts this space's own request; Needs You lists it")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: agents.web, "c6" + suffix, root: stage.home.root)
         }
@@ -324,7 +324,7 @@ struct AcceptanceAssistant {
         glass.motion = { .reduced }
         // A space opens with its assistant as the sticker.
         #expect(await wait { glass.grown == false && glass.card.isHidden && glass.stickerShown })
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         sticker.mouseEntered(with: try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                                                     windowNumber: 0, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)))
         let now = Stage.now, at = { (seconds: TimeInterval) in iso8601.string(from: now.addingTimeInterval(-seconds)) }
@@ -373,7 +373,7 @@ struct AcceptanceAssistant {
         let (shell, library, _) = stage.window()
         let model = shell.assistant, engine = model.engine, glass = shell.glass
         glass.motion = { .reduced }
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         var asked = 0
         model.showRequest = { asked += 1 }
         engine.changed = { model.refresh() }
@@ -471,7 +471,7 @@ struct AcceptanceAssistant {
     }
     /// Daily brief open, the sticker in its first corner: a drag takes it across the space, its eyes leaning with the
     /// motion, and lets it go left of the middle; it goes to the leading side at the height it was let go. Logbook
-    /// then opens with the sticker in the same place, the label on its right, while My agents' request is in the chip.
+    /// then opens with the sticker in the same place, the label on its right, while My agents' request is in Needs You.
     @Test("c9: the sticker dragged") func c9() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
@@ -506,10 +506,10 @@ struct AcceptanceAssistant {
         defer { logbook.close() }
         #expect(await wait { glass.stickerShown && sticker.title == "Logbook" })
         #expect(glass.spot == spot && glass.corner.minX == 16)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         sticker.mouseEntered(with: try mouse(.mouseMoved, press))
         #expect(!glass.label.isHidden && glass.label.title == "Logbook" && glass.label.frame.minX == glass.corner.maxX + 10)
-        #expect(glass.label.words == Glass.words(shell.assistant.presence, mine: 0) && sticker.badge.isHidden && shell.chip.count == 1)
+        #expect(glass.label.words == Glass.words(shell.assistant.presence, mine: 0) && library.sidebar.needs == ["agents"])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: logbook.web, "c9" + suffix, root: stage.home.root)
         }

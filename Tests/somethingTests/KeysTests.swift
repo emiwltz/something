@@ -119,7 +119,7 @@ enum Mockup {
         let slice = try Regex("^[A-Z]+[0-9]+[a-z]?$")
         for command in Keys.commands { #expect(command.owner.wholeMatch(of: slice) != nil, "\(command.id) has no owning slice") }
         // Every item of the menus is a command of the table.
-        for case .item(let id, _) in Keys.menus.flatMap(\.entries) { #expect(Keys.command(id) != nil, "\(id)") }
+        for case .item(let id) in Keys.menus.flatMap(\.entries) { #expect(Keys.command(id) != nil, "\(id)") }
         #expect(Keys.tooltip("reload") == "Reload Space (⌘R)")
     }
 
@@ -152,7 +152,7 @@ enum Mockup {
         for command in Keys.commands where command.needsSpace { #expect(greyedSomewhere.contains(command.id), "\(command.id)") }
         let open = Keys.Situation(space: true)
         #expect(["insp", "reload", "finder", "export", "trash", "ask", "convo", "newconvo", "reduce", "buildWith", "pointpart", "rights", "settings",
-                 "history", "versions"].allSatisfy { Keys.enabled($0, open) })
+                 "history"].allSatisfy { Keys.enabled($0, open) })
         #expect(!Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)), "nothing to point at in a stopped page")
         #expect(Keys.enabled("palette", none) && Keys.enabled("palette", open) && !Keys.enabled("palette", Keys.Situation(welcoming: true)))
         #expect(Keys.enabled("keys", none) && Keys.enabled("keys", open) && !Keys.enabled("keys", Keys.Situation(welcoming: true)))

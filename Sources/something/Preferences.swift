@@ -33,7 +33,7 @@ import SomethingCore
         /// "last", "new", or the name of a space.
         var openAtStart = "last"
         var appearance = Appearance.system, motion = Motion.calm, assistantAtOpening = Opening.reduced
-        var sidebarEyes = true, rememberSticker = true, holdOption = true, notify = false
+        var rememberSticker = true, holdOption = true, notify = false
         /// nil while it rests at its first place, the bottom trailing corner; kept only while `rememberSticker`.
         var sticker: StickerPlace?
         /// Minutes; 0 for never.
@@ -44,7 +44,7 @@ import SomethingCore
 
         enum CodingKeys: String, CodingKey, CaseIterable {
             case lastOpen, assistant, model, effort, listed, askEverything, resume, toured, launcherOffered, addToApplications, groups,
-                 folded, names, recents, openAtStart, appearance, motion, assistantAtOpening, sidebarEyes, rememberSticker,
+                 folded, names, recents, openAtStart, appearance, motion, assistantAtOpening, rememberSticker,
                  holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
         }
 

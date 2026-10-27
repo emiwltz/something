@@ -35,7 +35,9 @@ where it goes (this space, a New Space built from it, or another space), Tab cha
 Return. ⌘/ lists the shortcuts.
 
 **One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
-its own space. The sidebar shows each one's eyes; the toolbar counts the requests that wait for you. **something stops
+its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
+whose agents wait for your answer (each stays in its group too). The toolbar holds only the space's name (click it for
+Info), Point, Info and Page Full Screen; Reload is in the View menu (⌘R). **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
 space's, and any that works or waits for you, are never put to sleep). Settings (⌘,), Assistant, changes both: Put
 idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
@@ -133,8 +135,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
-  panel, across the window's top right corner. The Dock's badge and the toolbar count every request waiting, a space's
-  sticker only its own; while something is in the background, its icon bounces once for each new one. A notification of
+  panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
+  lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
   the Mac says who waits and in which space only if you turn on "Notify me when a request waits", and never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.

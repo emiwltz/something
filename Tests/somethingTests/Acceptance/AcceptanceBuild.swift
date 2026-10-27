@@ -23,7 +23,7 @@ struct AcceptanceBuild {
             try FileManager.default.removeItem(at: file)
         }
         let (shell, library, host) = try await Self.newSpace(stage, builder: true)
-        shell.waiting(0, mine: 0)
+        shell.waiting([], mine: 0)
         library.relist()
         #expect(App.welcomes(library) && library.entries.allSatisfy { !$0.isSpace })
         #expect(await wait(until: { Arrival.sign(in: shell.center) != nil }), "New Space's sign, under the film")
@@ -379,7 +379,7 @@ struct AcceptanceBuild {
         #expect(await wait(until: { builder ? model.kind == "claude" : model.noAgent }))
         library.select(.newSpace)
         shell.show(nil)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let host = try #require(shell.center.subviews.first { $0 is NSHostingView<BlankView> })
         return (shell, library, host)
     }
@@ -539,7 +539,7 @@ struct AcceptanceBuild {
         let room = try await stage.open("waiting-room", in: shell, library)
         defer { room.close() }
         try stage.moment(shell)
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let declaration = try #require(Declaration.read(space, home: stage.home.places.home, kinds: Registry.app.kinds).declaration)
         let question = room.question(declaration, nil)
         #expect(question == RightsQuestion(space: "Waiting room", description: nil, level: .watch, folder: nil,
@@ -598,7 +598,7 @@ struct AcceptanceBuild {
         library.select(.templates)
         shell.show(nil, templates: true)
         shell.glass.isHidden = true
-        shell.waiting(1, mine: 0)
+        shell.waiting(["agents"], mine: 0)
         let host = try #require(shell.center.subviews.first { $0 is NSHostingView<GalleryView> } as? NSHostingView<GalleryView>)
         return (shell, library, host.rootView.model, host)
     }
