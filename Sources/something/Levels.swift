@@ -39,15 +39,18 @@ enum Levels {
     static let fine = "Nothing else to allow when it opens. Whatever an agent asks still waits for you."
     /// What a person must read before choosing Run, when an agent here acts without asking; else nil.
     static var runWarning: String? { Ask.warning(for: "launch").map { $0 + "." } }
+    /// That warning under Run, when there is one.
+    @ViewBuilder static var runNote: some View { if let runWarning { note(runWarning, warns: true) } }
     static let sheetFine = "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."
 
-    /// `text` as a warning under the choice: a quiet line with its mark, read before choosing, never an alarm.
-    static func warning(_ text: String) -> some View {
+    /// `text` under the choice, a quiet line after its mark: a warning, read before choosing, never an alarm; or, by a
+    /// lock, what a level never covers.
+    static func note(_ text: String, warns: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "exclamationmark.triangle").font(.system(size: 9.5)).foregroundStyle(Look.Token.ink2.ui).accessibilityHidden(true)
+            Image(systemName: warns ? "exclamationmark.triangle" : "lock").font(.system(size: 9.5)).accessibilityHidden(true)
             Text(text)
         }
-        .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+        .font(Look.small.font.ui).foregroundStyle((warns ? Look.Token.ink2 : .ink3).ui).fixedSize(horizontal: false, vertical: true)
     }
 
     /// The folders the Mac's agents work in, as `state` knows them, each once, in order: Run's choices.
@@ -161,7 +164,7 @@ struct LevelRow: View {
                 LevelPicker(level: Binding(get: { model.level }, set: { model.chosenLevel = $0 }))
                 if level == .run {
                     Text("in").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-                    FolderChip(folder: model.runFolder, folders: model.knownFolders, home: home) { (model.runFolder, model.chosenLevel) = ($0, .run) }
+                    FolderChip(folder: model.runFolder, folders: Levels.folders(model.engine.state), home: home) { (model.runFolder, model.chosenLevel) = ($0, .run) }
                 }
                 Spacer(minLength: 0)
             }
@@ -171,12 +174,8 @@ struct LevelRow: View {
                 Text(model.chosenLevel == nil ? "Pre-set from your words" : "Your choice").font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
             }
             .accessibilityElement(children: .combine)
-            if level == .run, let warning = Levels.runWarning { Levels.warning(warning) }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "lock").font(.system(size: 9.5)).accessibilityHidden(true)
-                Text(Levels.fine)
-            }
-            .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui)
+            if level == .run { Levels.runNote }
+            Levels.note(Levels.fine)
         }
         .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
         .boxed(RoundedRectangle(cornerRadius: 12, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
@@ -210,7 +209,7 @@ struct LevelSheetView: View {
                     FolderChip(folder: answer.folder, folders: folders, home: home) { answer.folder = $0 }
                     Spacer(minLength: 0)
                 }
-                if let warning = Levels.runWarning { Levels.warning(warning) }
+                Levels.runNote
             }
         }
         // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.

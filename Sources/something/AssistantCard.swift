@@ -462,7 +462,7 @@ struct Monogram: View {
     }
 }
 
-/// The agent chip: a dot of its state's colour and the builder's name, opening the agent menu. New Space shows it too.
+/// The agent chip: a dot of its state's colour and the builder's name, opening the agent menu.
 struct AgentChip: View {
     let model: AssistantModel
 
@@ -474,8 +474,7 @@ struct AgentChip: View {
     }
 }
 
-/// The model chip: the model and, lighter, the effort, opening their menu for this conversation alone. New Space
-/// shows it too.
+/// The model chip: the model and, lighter, the effort, opening their menu for this conversation alone.
 struct ModelChip: View {
     let model: AssistantModel
 
@@ -484,6 +483,26 @@ struct ModelChip: View {
         MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
             Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
         } items: { ModelMenu(model: model) }
+    }
+}
+
+/// The agent and its model in one chip, its monogram first, opening both menus: New Space's bar and Info's Assistant.
+struct AgentModelChip: View {
+    let model: AssistantModel
+
+    var body: some View {
+        let words = model.modelWords
+        MenuChip(label: "Agent and model: \(model.name), \(words.model)") {
+            Monogram(name: model.name)
+            Text(model.name)
+            Text("·").foregroundStyle(Look.Token.ink3.ui)
+            Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
+        } items: {
+            AgentMenu(model: model)
+            Divider()
+            ModelMenu(model: model)
+        }
+        .disabled(model.blocked)
     }
 }
 

@@ -1,7 +1,7 @@
 // The welcome tour, the blank page and the launcher: the first-launch film that opens the welcome, the welcome's keys,
 // its steps with and without a builder and Look Again, its end with no agent started, the welcome over the window that
 // steps back and its menus greyed, the suggestions' whole sentences, the space the assistant made opened or said ready,
-// the rights sheet's first line, and the launcher, made in the test home's Applications only under a Homebrew prefix
+// the level sheet's first line, and the launcher, made in the test home's Applications only under a Homebrew prefix
 // and its switch on, never twice, never registered, removed only when something made it.
 import AppKit
 import Foundation

@@ -34,7 +34,7 @@ import Testing
         return info
     }
 
-    /// A grant as the rights sheet leaves it, for a declaration of `declared`.
+    /// A grant answered right by right, as before levels, for a declaration of `declared`.
     func answered(declared: [String], granted: [String]) -> Grant {
         var declaration = Declaration(name: "invented")
         declaration.rights = declared

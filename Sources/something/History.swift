@@ -245,7 +245,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(spacing: 0) {
             DockHeader(title: "History", sub: "\(title) · \(history.versions.count) version\(history.versions.count == 1 ? "" : "s") · \(Size.words(history.bytes))",
-                        help: nil, close: ("Close History", close))
+                        close: ("Close History", close))
             ScrollViewReader { scroller in
                 ScrollView {
                     VStack(spacing: 1) {

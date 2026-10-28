@@ -198,18 +198,7 @@ struct BuildField: View {
     /// The agent and its model in one chip, ⇧↵ new line, and Build.
     private var bar: some View {
         HStack(spacing: 8) {
-            let words = model.modelWords
-            MenuChip(label: "Agent and model: \(model.name), \(words.model)") {
-                Monogram(name: model.name)
-                Text(model.name)
-                Text("·").foregroundStyle(Look.Token.ink3.ui)
-                Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-            } items: {
-                AgentMenu(model: model)
-                Divider()
-                ModelMenu(model: model)
-            }
-            .disabled(model.blocked)
+            AgentModelChip(model: model)
             Spacer(minLength: 8)
             HStack(spacing: 4) { Key("⇧↵"); Text("new line") }
                 .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)

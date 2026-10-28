@@ -69,7 +69,7 @@ import Testing
                      ("dontAsk", "never asks you, and does only what your settings already allow"),
                      ("never", "never asks you before it runs a command"), ("invented-agent", "asks you less"), ("default", "asks you less")]
         for (mode, words) in cases { #expect(Ask.words(forMode: mode) == words, "\(mode)") }
-        // The rights sheet names every agent that may act without asking: pi and Amp never ask, OMP by its own default.
+        // The level sheet names every agent that may act without asking: pi and Amp never ask, OMP by its own default.
         #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
         #expect(Ask.warning(for: "launch:pi") == "pi runs commands and edits files without asking you first")
         #expect(Ask.warning(for: "launch:amp") == "Amp runs commands and edits files without asking you first")

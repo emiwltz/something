@@ -1,5 +1,5 @@
 // Acceptance scenarios of the first start and making a space: the welcome and the film (a1–a8), New Space, the build
-// ladder, the arrival, templates and the rights sheet (d1–d8). The welcome is drawn over a stated reconstruction of
+// ladder, the arrival, templates and the level sheet (d1–d8). The welcome is drawn over a stated reconstruction of
 // the main window dimmed behind it, as the window server would compose them.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until

@@ -493,7 +493,6 @@ import SomethingCore
     var runFolder: String?
     /// Asks Run's folder when Build finds none; a test answers in its place.
     @ObservationIgnored var chooseFolder: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
-    var knownFolders: [String] { Levels.folders(engine.state) }
 
     /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
     /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.

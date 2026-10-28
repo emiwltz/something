@@ -290,7 +290,7 @@ struct GalleryTests {
     }
 
     /// The blank page (without an agent, idle, building with the conversation open), a space the assistant made said
-    /// ready, the rights sheet of a space it made, and Help › What something Does and Doesn't.
+    /// ready, the level sheet of a space it made, and Help › What something Does and Doesn't.
     func drawOnboarding(suffix: String, _ fixture: Home) async throws {
         /// The window of a home whose PATH has `programs`, the builders looked for.
         func onboarding(_ programs: [String]) async throws -> (shell: Shell, library: Library, home: Home) {

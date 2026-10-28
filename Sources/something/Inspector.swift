@@ -280,7 +280,7 @@ struct InspectorView: View {
                     if info.content == .history {
                         HistoryView(history: info.history, title: title, close: info.close)
                     } else {
-                        DockHeader(title: title, sub: info.about ?? "", help: nil, close: ("Close Info", info.close), titleSize: 19, lines: 3)
+                        DockHeader(title: title, sub: info.about ?? "", close: ("Close Info", info.close), titleSize: 19, lines: 3)
                         details(space)
                     }
                 }
@@ -351,14 +351,10 @@ struct InspectorView: View {
                     Spacer(minLength: 0)
                     FolderChip(folder: info.folder, folders: info.folders, home: info.places.home.path) { info.choose(.run, folder: $0) }
                 }
-                if let warning = Levels.runWarning { Levels.warning(warning) }
+                Levels.runNote
             }
             if level != .none, !info.shown.isEmpty { now }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "lock").font(.system(size: 9.5)).accessibilityHidden(true)
-                Text("Whatever an agent asks still waits for you: Allow Once or Deny.")
-            }
-            .foot()
+            Levels.note("Whatever an agent asks still waits for you: Allow Once or Deny.")
         } else {
             Text("It can't be shown now, so it shows no agent.").foot()
         }
@@ -390,23 +386,13 @@ struct InspectorView: View {
 
     /// Assistant: its eyes, the agent and model in one chip, its last reply, Open Conversation.
     private var yours: some View {
-        let state = assistant.presence.state, words = assistant.modelWords, name = assistant.name(of: assistant.session)
+        let state = assistant.presence.state
         let last = assistant.rows.last { $0.reply != nil }?.reply.map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
         return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
                 PageSign(state: state, side: 22, lands: false, motion: library.preferences.motion)
                     .accessibilityElement().accessibilityLabel("Its assistant: \(state.word)")
-                MenuChip(label: "Agent and model: \(name), \(words.model)") {
-                    Monogram(name: name)
-                    Text(name)
-                    Text("·").foregroundStyle(Look.Token.ink3.ui)
-                    Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-                } items: {
-                    AgentMenu(model: assistant)
-                    Divider()
-                    ModelMenu(model: assistant)
-                }
-                .disabled(assistant.blocked)
+                AgentModelChip(model: assistant)
             }
             if let last {
                 Text("“\(last.count > 110 ? String(last.prefix(108)) + "…" : last)”").font(Look.font(.voice, size: 12).ui).lineSpacing(3)
@@ -452,7 +438,7 @@ struct InspectorView: View {
 /// The panel's header, Info's and History's: its title, a line under it (none when empty; Info's description wraps on
 /// up to `lines`), and ✕ (`close`: its label and action).
 struct DockHeader: View {
-    let title: String, sub: String, help: String?
+    let title: String, sub: String
     let close: (label: String, run: () -> Void)
     var titleSize: CGFloat = 17, lines = 1
 
@@ -462,7 +448,7 @@ struct DockHeader: View {
                 Text(title).font(Look.font(.title, size: titleSize, weight: .semibold).ui).kerning(-0.02 * titleSize).accessibilityAddTraits(.isHeader)
                 if !sub.isEmpty {
                     Text(sub).font(Look.small.font.ui).foregroundStyle((lines > 1 ? Look.Token.ink2 : .ink3).ui).lineLimit(lines)
-                        .fixedSize(horizontal: false, vertical: lines > 1).help(help ?? "")
+                        .fixedSize(horizontal: false, vertical: lines > 1)
                 }
             }
             .padding(.top, 1)

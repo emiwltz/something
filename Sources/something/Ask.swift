@@ -151,22 +151,6 @@ enum Ask {
         return alert
     }
 
-    /// A right as Info says it: its name, what it lets the space do, the warning a person must read before
-    /// allowing it (or nil), and its symbol.
-    static func right(_ right: String) -> (title: String, detail: String, warning: String?, symbol: String) {
-        let (word, kind) = parts(of: right), warning = warning(for: right)
-        switch word {
-        case "state": return ("See your agents", "Which agents run on this Mac, what each one is doing, and its last messages. It only reads.", nil, "eye")
-        case "send": return ("Write to your \(kind.map { $0 + " " } ?? "")agents",
-                             "Send a message to an agent you pick, stop it, or change its settings. It shows in that agent’s own conversation.", nil, "message")
-        case "launch": return ("Start \(kind ?? "agents")",
-                               "Launch \(kind == nil ? "one of your agents" : "it") in a folder." + (warning == nil ? " Anything that agent then needs still asks you." : ""),
-                               warning, "play")
-        case "store": return ("Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.", nil, "note.text")
-        default: return (right, "", nil, "shield")
-        }
-    }
-
     /// The sheet that asks whether `space` may put an agent of `kind` in `mode`; "Allow" is its first button, and takes
     /// no Return: a page can raise this sheet while the person types in it, and a Return meant for the page must not
     /// lower the mode. The folder is shown from `home`.
@@ -244,12 +228,6 @@ enum Ask {
     static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
         alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.", buttons: ["Look Again", "Close"],
               escape: 1, accessory: NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy)))
-    }
-
-    /// A right's word and the name of the agent kind it narrows to, nil for all of them: "launch:pi" is ("launch", "pi").
-    static func parts(of right: String) -> (word: String, kind: String?) {
-        let parts = right.split(separator: ":", maxSplits: 1).map(String.init)
-        return (parts.first ?? right, parts.count == 2 ? Registry.app.name(of: parts[1]) : nil)
     }
 
     /// What the person must know before allowing `right`, or nil when nothing: a launch that may reach an agent that
