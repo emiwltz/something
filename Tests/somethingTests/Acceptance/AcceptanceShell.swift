@@ -382,7 +382,7 @@ struct AcceptanceShell {
         #expect(library.order().map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
         let host = shell.split.splitViewItems[0].viewController.view
         let read = await AcceptanceBuild.read(host) { $0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
-        let rows = read.filter { $0.contains(", ") && !$0.contains("space") }
+        let rows = read.filter { $0.contains(", ") && !$0.lowercased().contains("space") }
         #expect(rows == ["My agents, Waiting for you", "Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready",
                          "Logbook, Asleep", "Oracle, Ready", "Pebble, Done", "Stack, Asleep"], "\(read)")
         #expect(read.contains("Needs You, 1 space") && read.contains("Work, 3 spaces, open") && read.contains("Settings"), "\(read)")
