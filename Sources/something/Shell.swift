@@ -143,15 +143,16 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         library.exported = { [weak self, weak library] url in
-            // What the file holds too: its memory is never in it (Library.export).
-            _ = self?.toast("\(url.lastPathComponent) is in Downloads · its memory stays on this Mac", action: Toast.Action(label: "Show") { library?.reveal(url) })
+            // What the file holds too: its memory only when Settings › Spaces says so (Library.export).
+            let memory = library?.preferences.exportMemory == true ? "its memory with it" : "its memory stays on this Mac"
+            _ = self?.toast("\(url.lastPathComponent) is in Downloads · \(memory)", action: Toast.Action(label: "Show") { library?.reveal(url) })
         }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
-        // One place for the sticker over every space, kept for the next start unless the person asked otherwise.
+        // One place for the sticker over every space, kept for the next start.
         let preferences = library.preferences
-        glass.spot = preferences.rememberSticker ? preferences.sticker : nil
-        glass.moved = { [weak preferences] spot in if preferences?.rememberSticker == true { preferences?.sticker = spot } }
+        glass.spot = preferences.sticker
+        glass.moved = { [weak preferences] in preferences?.sticker = $0 }
         // The toolbar's lower edge, over the center only: the sidebar runs up to the window's top.
         (edge.boxType, edge.borderWidth, edge.fillColor, edge.translatesAutoresizingMaskIntoConstraints) = (.custom, 0, Look.Token.line.color, false)
         center.addSubview(edge)
@@ -493,7 +494,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         space.note?.dismiss()
         let overlay = PointOverlay(space, motion: library.preferences.motion)
         overlay.stopped = { [weak self] in self?.stopPointing() }
-        overlay.holdOption = { [weak self] in self?.library.preferences.holdOption ?? true }
         let name = space.space.name
         overlay.eyes = { [weak self] in self?.assistant.eyes(of: name) ?? .unknown }
         overlay.quickChange = { [weak self, weak space] words, parts in

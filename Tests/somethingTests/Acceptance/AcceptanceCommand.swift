@@ -1,4 +1,5 @@
-// Acceptance scenarios of the palette, Settings, the menus and the shortcuts card (g1–g11).
+// Acceptance scenarios of the palette, the menus and the shortcuts card (g1, g2, g9, g10), Settings' four tabs
+// (x7-1 to x7-4), the picture (x8-1, x8-2, x0-1) and the interface size (6-1, 6-3).
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -105,92 +106,112 @@ struct AcceptanceCommand {
         editor.doCommand(by: #selector(NSResponder.insertNewline(_:)))
         #expect(chosen.map(\.kind) == [.ask(.newSpace, text: sentence, none: false)] && Palette.shown(in: shell.layer) == nil)
     }
-    /// General: the three rows of Start and the version line; the open menu of "When something opens" is a menu the
-    /// window server draws, so its items are checked as text (g3-menu.txt).
-    @Test("g3: Settings, General") func g3() async throws {
-        let shows = ["When something opens", "The last space you had open", "Add something to Applications", "Show Again",
-                     "something 0.3.0", "installed with Homebrew", "nothing leaves this Mac"]
-        try await settings(.general, "g3", shows: shows) { settings, stage in
-            let rows = settings.model.sections(.general).flatMap(\.rows)
-            #expect(rows.map(\.title) == ["When something opens", "Add something to Applications", "Welcome", "Interface size"])
-            guard case .choice(let options, let get, _) = rows[0].control else { Issue.record("not a choice"); return }
-            #expect(get() == "last")
-            let menu = options.map { ($0.heading ? "# " : $0.value == get() ? "✓ " : "  ") + $0.label }
+    /// X7.1, General: the start, then Look (the theme's three pictures, the interface size's tiles and its keys, the
+    /// sidebar Pinned or Floating). The open menu of "When something opens" is a menu the window server draws, so its
+    /// items are checked as text (x7-1-menu.txt).
+    @Test("x7-1: Settings, General") func x7_1() async throws {
+        let shows = ["Start", "When something opens", "The last space you had open", "Look", "Theme", "Auto follows your Mac", "Auto", "Light",
+                     "Dark", "Interface size", "Default", "Large", "Larger", "Sidebar", "Pinned", "Floating"]
+        try await settings(.general, "x7-1", shows: shows, hears: ["When something opens: The last space you had open", "Interface size: Default",
+                                                                   "Sidebar: Pinned", "Light"]) { settings, _ in
+            let sections = settings.model.sections(.general)
+            #expect(sections.map(\.title) == ["Start", "Look"] && sections.flatMap(\.rows).map(\.title) == ["When something opens", "Theme", "Interface size", "Sidebar"])
+            #expect(sections[1].rows.map(\.style) == [.thumbs, .tiles, .segments])
+            guard case .choice(let options, let get, _) = sections[0].rows[0].control else { Issue.record("not a choice"); return }
+            let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
             #expect(menu == ["✓ The last space you had open", "  New Space", "# A space", "  Daily brief", "  My agents", "  Project watch",
                              "  Logbook", "  Oracle", "  Pebble", "  Stack"])
-            if case .toggle(let on, _, let enabled) = rows[1].control { #expect(on() && enabled) } else { Issue.record("not a switch") }
-            #expect(settings.model.versionLine == ("something 0.3.0", " · installed with Homebrew · nothing leaves this Mac"))
-            if let gallery {
-                try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
-                try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("g3-menu.txt"), atomically: true, encoding: .utf8)
-            }
-        }
-    }
-    /// Assistant: the defaults for new spaces (Claude Code with the models it last listed), resume, and rest.
-    @Test("g4: Settings, Assistant") func g4() async throws {
-        let shows = ["Defaults for new spaces", "Agent", "Claude Code", "Model", "Opus 5.5", "Effort", "High", "Conversations",
-                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes", "Keep at most", "assistants awake"]
-        try await settings(.assistant, "g4", shows: shows) { settings, _ in
-            let sections = settings.model.sections(.assistant)
-            #expect(sections.map(\.title) == ["Defaults for new spaces", "Conversations", "Rest"])
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Agent", "Model", "Effort", "Resume each space’s conversation",
-                                                              "Put idle assistants to sleep after", "Keep at most"])
-            #expect(sections[2].rows[1].trail == "assistants awake")
-            #expect(sections[1].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
-            guard case .choice(let agents, let get, _) = sections[0].rows[0].control else { Issue.record("not a choice"); return }
-            #expect(get() == "claude" && agents.map(\.label) == Registry.app.builders.map(\.name))
-        }
-    }
-    /// Permissions: the README's promise, Ask Before Every Change off, the lock, and Notify me off.
-    @Test("g5: Settings, Permissions") func g5() async throws {
-        let shows = ["something never answers for you", "Your assistant", "Ask Before Every Change", "Requests from agents",
-                     "Requests always wait for your click", "Always", "Notify me when a request waits"]
-        try await settings(.permissions, "g5", shows: shows) { settings, _ in
-            let rows = settings.model.sections(.permissions).flatMap(\.rows)
-            #expect(rows.map(\.title) == ["Ask Before Every Change", "Requests always wait for your click", "Notify me when a request waits"])
-            if case .toggle(let on, _, _) = rows[0].control { #expect(!on()) } else { Issue.record("not a switch") }
-            if case .toggle(let on, _, _) = rows[2].control { #expect(!on()) } else { Issue.record("not a switch") }
-        }
-    }
-    /// Interface: Auto, Light and Dark (Light chosen, as in the mockup's picture), Motion, the assistant, pointing. The
-    /// sidebar's eyes left with v6.2's list of names (S5).
-    @Test("g6: Settings, Interface") func g6() async throws {
-        let shows = ["Auto", "Light", "Dark", "Calm", "Reduced", "Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
-                     // Vision reads the night's "frame" as "trame"; the row's whole title is held by the model below.
-                     "Pointing", "to point inside a drawn"]
-        try await settings(.interface, "g6", shows: shows) { settings, _ in
-            let sections = settings.model.sections(.interface)
-            #expect(sections.map(\.title) == ["Appearance", "The assistant", "Pointing"] && sections[0].appearance)
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Motion", "When a space opens, its assistant is", "Remember where I put the assistant",
-                                                              "Hold ⌥ to point inside a drawn frame"])
-        }
-    }
-    /// Shortcuts: Keys' lines in two columns, and the way to System Settings › Keyboard.
-    @Test("g7: Settings, Shortcuts") func g7() async throws {
-        let shows = ["SPACES", "SHOW", "ASSISTANT", "WINDOW", "Go to a space, or ask", "Open Keyboard Settings..."]
-        try await settings(.shortcuts, "g7", shows: shows) { settings, _ in
-            #expect(ShortcutColumns.lines(.spaces).map(\.line) == ["Go to a space, or ask", "New Space", "Templates", "Go to space 1 to 9", "Reload space",
-                                                                    "Space info", "Close Info or History"])
-            #expect(ShortcutColumns.lines(.window).map(\.shown) == ["⇧⌘F", "⌃⌘F", "⌃⌘S", "⌘+", "⌘−", "⌘0", "⌘,", "⌘/", "⌘W"])
-            #expect(settings.model.sections(.shortcuts).isEmpty)
+            try Self.dump(menu, "x7-1-menu.txt")
         }
     }
 
-    /// Settings at `tab` on the Stage's home, run from a Homebrew Cellar with its launcher made, and drawn as `id`
-    /// in both appearances: the window's frame (title, toolbar) by cacheDisplay, its lights in their key colors. Each
-    /// picture is read by Vision and must show every line of `shows`: what the screen shows, not what the model says.
-    /// Drawn at `size`, which is set only while the pictures are drawn (Look.scale is the whole process's), then Default.
-    func settings(_ tab: SettingsTab, _ id: String, shows: [String], size: Look.Size = .standard,
+    /// X7.2, Agents: your assistant (the agent, then the model and the effort in one menu, checked as text in
+    /// x7-2-menu.txt since the window server draws it), what a new space may do (None: the mockup's Watch would let a
+    /// page whose words name no agent see them) and the notifications, each
+    /// space with its level (Run with its folder), and the agents on this Mac, read only.
+    @Test("x7-2: Settings, Agents") func x7_2() async throws {
+        // The page scrolls past 680 points, as the mockup's: what is below is heard, not seen.
+        let shows = ["Your assistant", "Agent", "Claude Code", "Model and effort", "Opus 5.5", "High", "Spaces and your agents", "A new space may",
+                     "None", "Watch", "Talk", "Run", "when an agent asks", "Each space and what it may do", "Daily brief", "Project watch",
+                     // Vision reads ~ and the space before a path in code as anything.
+                     "code/atelier"]
+        try await settings(.agents, "x7-2", shows: shows, hears: ["Agent: Claude Code", "Model and effort: Opus 5.5 · High", "A new space may: None",
+                                                                  "Project watch: Run", "Stack: None", "Look Again"]) { settings, stage in
+            let sections = settings.model.sections(.agents)
+            #expect(sections.map(\.title) == ["Your assistant", "Spaces and your agents", "On this Mac"] && sections[2].block == .found)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Agent", "Model and effort", "A new space may", "Notify me when an agent asks"])
+            #expect(sections[1].lead == "Each space and what it may do. One click changes it.")
+            #expect(sections[1].more.map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
+            #expect(sections[1].more.map(\.note) == ["", "", "in `~/code/atelier`", "", "", "", ""], "\(stage.home.places.home.path)")
+            #expect(settings.model.agents.count == 8 && settings.model.agents.suffix(2).allSatisfy { $0.line == "Seen only" })
+            guard case .choice(let options, let get, _) = sections[0].rows[1].control else { Issue.record("not a choice"); return }
+            let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
+            #expect(menu == ["# Model", "  Default model", "✓ Opus 5.5", "  Sonnet 5.5", "# Effort", "  Default effort", "  Medium", "✓ High"])
+            try Self.dump(menu, "x7-2-menu.txt")
+        }
+    }
+
+    /// X7.3, Spaces: where they live, the export's memory (off), the versions kept (50), then the store's weight in
+    /// three parts against its limit (invented weights, CM_PREFS' used: 312).
+    @Test("x7-3: Settings, Spaces") func x7_3() async throws {
+        // Every value of the legend is read off the picture but Memory's "41 MB", which Vision misreads in the light
+        // picture; VoiceOver hears it.
+        let shows = ["Where they live", "something/spaces", "Show in Finder", "Include a space's memory when you export it", "Keep",
+                     "versions of each space", "Storage", "312 MB", "used of 500 MB", "Limit", "Versions", "248 MB", "Memory", "Spaces", "23 MB",
+                     "Free", "188 MB"]
+        try await settings(.spaces, "x7-3", shows: shows, hears: ["Memory 41 MB", "312 MB used of 500 MB", "Keep: 50"]) { settings, _ in
+            let sections = settings.model.sections(.spaces)
+            #expect(sections.map(\.title) == ["", "Storage"] && sections[1].block == .storage)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Where they live", "Include a space’s memory when you export it", "Keep", "Storage limit"])
+            #expect(sections[0].rows[2].trail == "versions of each space" && settings.model.storage == Self.weights)
+        }
+    }
+
+    /// X7.4, Advanced: whether your assistant asks before every change (off) and the agents a space starts (their own
+    /// settings), the assistants' rest and resume, and the shortcuts.
+    @Test("x7-4: Settings, Advanced") func x7_4() async throws {
+        let shows = ["Permissions", "Your assistant asks before every change", "Agents a space starts", "Their Own Settings",
+                     "something never answers for you", "Assistants",
+                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes", "Keep at most", "assistants awake",
+                     "Keyboard", "Keyboard shortcuts", "Show Shortcuts"]
+        try await settings(.advanced, "x7-4", shows: shows, hears: ["Your assistant asks before every change", "Put idle assistants to sleep after: 10 minutes", "Show Shortcuts"]) { settings, _ in
+            let sections = settings.model.sections(.advanced)
+            #expect(sections.map(\.title) == ["Permissions", "Assistants", "Keyboard"] && sections[0].lead == Promise.sentence)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Your assistant asks before every change", "Agents a space starts",
+                                                              "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most",
+                                                              "Keyboard shortcuts"])
+            #expect(sections[1].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
+        }
+    }
+
+    /// Writes `lines` as `name` in the gallery, when there is one.
+    static func dump(_ lines: [String], _ name: String) throws {
+        guard let gallery else { return }
+        try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
+        try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent(name), atomically: true, encoding: .utf8)
+    }
+
+    /// Settings at `tab` on the Stage's home, its spaces at the mockup's levels, drawn as `id` in both appearances: the
+    /// window's frame (title, toolbar) by cacheDisplay, its lights in their key colors. Each picture is read by Vision
+    /// and must show every line of `shows`: what the screen shows, not what the model says; VoiceOver must hear each
+    /// of `hears` in the page. Drawn at `size`, set only while the pictures are drawn (Look.scale is the whole
+    /// process's), then Default.
+    func settings(_ tab: SettingsTab, _ id: String, shows: [String], hears: [String] = [], size: Look.Size = .standard,
                   _ check: (SettingsWindow, Stage) throws -> Void) async throws {
         let stage = try Stage("command")
         defer { stage.remove() }
         let (_, library, _) = stage.window()
         for (group, spaces) in Stage.groups { spaces.forEach { library.preferences.move($0, to: group) } }
-        try Launcher.make(prefix: "/opt/homebrew", places: stage.home.places, icon: nil)
-        let model = SettingsModel(preferences: library.preferences, places: stage.home.places,
-                                  app: URL(fileURLWithPath: "/opt/homebrew/Cellar/something/0.3.0/something.app"), version: "0.3.0")
+        let model = SettingsModel(preferences: library.preferences, places: stage.home.places)
         model.spaces = { library.order().filter(\.isSpace).map { ($0.id, $0.title) } }
-        model.apply = { _, _ in }
+        model.apply = { _ in }
+        // The mockup's levels (V62.level), Project watch at Run in its folder.
+        let levels: [String: Grant.Level] = ["brief": .watch, "agents": .talk, "project": .run, "logbook": .watch, "pet": .watch]
+        model.levels = {
+            library.order().filter(\.isSpace).map {
+                .init(id: $0.id, title: $0.title, level: levels[$0.id] ?? Grant.Level.none, folder: $0.id == "project" ? stage.home.places.home.appendingPathComponent("code/atelier").path : nil)
+            }
+        }
         // Where each agent was found and what its files name, invented (CM_FOUND); the models Claude Code last listed.
         let found = ["claude": ("/opt/homebrew/bin/claude", "2.1.4"), "codex": ("/opt/homebrew/bin/codex", "0.48.0"),
                      "opencode": ("~/.opencode/bin/opencode", "0.15.2"), "pi": ("/opt/homebrew/bin/pi", "0.9.1"), "omp": ("~/.local/bin/omp", "1.3.0"),
@@ -203,24 +224,26 @@ struct AcceptanceCommand {
         var listed = Options()
         listed.model = [Option(value: "opus", label: "Opus 5.5"), Option(value: "sonnet", label: "Sonnet 5.5")]
         listed.effort = [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")]
-        library.preferences.change { ($0.listed["claude"], $0.model, $0.effort) = (listed, "opus", "high") }
+        library.preferences.change { ($0.listed["claude"], $0.model, $0.effort, $0.appearance) = (listed, "opus", "high", .light) }
+        model.look()
         model.find()
         _ = await wait(until: { model.found != nil })
         model.clock = { Stage.local }
-        if tab == .interface { model.choose(.light) }
-        if tab == .storage {
-            model.weigh = { _, _ in AcceptanceCommand.weights }
-            model.measure()
-            _ = await wait(until: { model.storage != nil })
-        }
+        model.weigh = { _ in AcceptanceCommand.weights }
+        model.measure()
+        _ = await wait(until: { model.storage != nil })
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
-        settings.window.alphaValue = 0
         defer { settings.window.close() }
         settings.select(tab)
         #expect(settings.window.title == tab.label && settings.window.toolbarStyle == .preference)
         #expect(settings.window.toolbar?.items.map(\.label) == SettingsTab.allCases.map(\.label))
         try check(settings, stage)
+        if !hears.isEmpty {
+            let page = try #require(settings.tabs.tabViewItems[settings.tabs.selectedTabViewItemIndex].viewController?.view)
+            let heard = await AcceptanceBuild.read(page) { words in hears.allSatisfy(words.contains) }
+            for words in hears { #expect(heard.contains(words), "\(id) hears “\(words)”; heard: \(heard)") }
+        }
         try await stage.appearances { suffix in
             (Look.scale.size, library.preferences.size) = (size, size)
             defer { (Look.scale.size, library.preferences.size) = (.standard, .standard) }
@@ -244,27 +267,9 @@ struct AcceptanceCommand {
             }
         }
     }
-    /// Versions & Storage: Keep 50, the store's weight in three parts against 500 MB (invented weights, CM_PREFS'
-    /// used:312), Clear Old Versions armed, and where the spaces are.
-    @Test("g8: Settings, Versions and Storage") func g8() async throws {
-        // Every value of the legend is read off the picture but Memory's "41 MB", which Vision misreads in the light
-        // picture; an offscreen window gives VoiceOver nothing to hear, so that one is not read at all.
-        let shows = ["Versions", "Keep", "versions per space", "Storage", "312 MB", "used of 500 MB", "Versions", "248 MB", "Memory", "Spaces", "23 MB",
-                     "Free", "188 MB", "When it is full", "Clear Old Versions...", "Where", "~/something/spaces", "Show in Finder"]
-        try await settings(.storage, "g8", shows: shows) { settings, stage in
-            let sections = settings.model.sections(.storage)
-            #expect(sections.map(\.title) == ["Versions", "Storage"] && sections[1].storage && sections[1].foot == nil)
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Keep", "Storage limit", "When it is full", "Where"])
-            #expect(sections[0].rows[0].trail == "versions per space" && sections[1].rows[2].code)
-            #expect(settings.model.storage == Self.weights && settings.model.storage?.used == 312_000_000)
-            guard case .button(let title, _, let enabled, _) = sections[1].rows[1].control else { Issue.record("not a button"); return }
-            #expect(title == "Clear Old Versions…" && enabled)
-            #expect(sections[1].rows[2].note == "~/something/spaces")
-        }
-    }
 
-    /// The mockup's store: 248 MB of versions, 41 of memory, 23 of spaces; 214 MB of old versions in 7 spaces.
-    nonisolated static let weights = Storage(versions: 248_000_000, memory: 41_000_000, spaces: 23_000_000, old: Versions.Old(bytes: 214_000_000, spaces: 7))
+    /// The mockup's store: 248 MB of versions, 41 of memory, 23 of spaces.
+    nonisolated static let weights = Storage(versions: 248_000_000, memory: 41_000_000, spaces: 23_000_000)
     /// The menu bar is drawn by the window server, which no offscreen drawing reaches: g9 is checked as text, the
     /// menus against the mockup's table with no space open, then Go, the headers and the greyed items with Daily brief
     /// open. g9-menus.txt is the dump of both states.
@@ -358,20 +363,6 @@ struct AcceptanceCommand {
         #expect(shell.escape(escape) && brief.pointer == nil, "the next Esc is point mode's")
         #expect(!shell.escape(escape), "then nothing is left to close: the app nudges the assistant")
     }
-    /// Agents: the six builders found, Claude Code the default, the two agents something only sees with their
-    /// reasons, and when it last looked, by the Stage's clock.
-    @Test("g11: Settings, Agents") func g11() async throws {
-        let shows = ["The coding agents found on this Mac", "Can build spaces", "Claude Code", "Default", "/opt/homebrew/bin/claude", "2.1.4",
-                     "Seen only", "Cursor", "Antigravity", "Looked today at 18:02", "8 agents", "Look Again"]
-        try await settings(.agents, "g11", shows: shows) { settings, _ in
-            let agents = settings.model.agents
-            #expect(agents.filter(\.builds).map(\.name) == ["Claude Code", "Codex", "OpenCode", "pi", "OMP", "Amp"])
-            #expect(agents.filter { !$0.builds }.map(\.name) == ["Antigravity", "Cursor"])
-            #expect(agents.filter(\.isDefault).map(\.id) == ["claude"] && agents.allSatisfy { $0.path != nil && $0.version != nil })
-            #expect(settings.model.sections(.agents).isEmpty && settings.model.lookedLine == "Looked today at 18:02 · 8 agents")
-        }
-    }
-
     /// X8.1, Help › How something Works: the picture in a window of its own, its three parts as buttons under it, none
     /// pressed, the promise and Replay; the item is in the Help menu, under something Help.
     @Test("x8-1: something in one picture") func x8_1() async throws {
@@ -429,11 +420,11 @@ struct AcceptanceCommand {
     @Test("6-1: the interface size") func v6_1() async throws {
         let shows = ["Look", "Interface size", "The whole app grows", "Large"]
         try await settings(.general, "6-1", shows: shows, size: .large) { settings, _ in
-            let look = try #require(settings.model.sections(.general).last)
-            #expect(look.title == "Look" && look.rows.map(\.title) == ["Interface size"])
-            #expect(look.rows[0].tiles && look.rows[0].keys.map(\.key) == ["⌘+", "⌘−", "⌘0"])
-            guard case .choice(let options, let get, _) = look.rows[0].control else { Issue.record("not a choice"); return }
-            #expect(options.map(\.label) == ["Default", "Large", "Larger"] && get() == "default")
+            let look = try #require(settings.model.sections(.general).last), row = look.rows[1]
+            #expect(look.title == "Look" && row.title == "Interface size")
+            #expect(row.style == .tiles && row.keys.map(\.key) == ["⌘+", "⌘−", "⌘0"])
+            guard case .choice(let options, let get, _) = row.control else { Issue.record("not a choice"); return }
+            #expect(options.map(\.label) == ["Default", "Large", "Larger"] && get() == ["default"])
             #expect(Look.Size.allCases.map(\.factor) == [1, 1.12, 1.24])
             let view = try #require(MenuBar(builders: nil).submenu("View"))
             #expect(Mockup.lines(view).contains("# Interface Size · Default"))

@@ -11,8 +11,6 @@ import SomethingCore
 @dynamicMemberLookup @Observable final class Preferences {
     enum Appearance: String, Codable { case system, light, dark }
     typealias Motion = Look.Motion
-    /// How a space's assistant shows when the space opens: the sticker in a corner, or the open composer.
-    enum Opening: String, Codable { case reduced, open }
     /// A group of the sidebar: its name and the names of its spaces, in order. The files never move.
     struct Group: Codable, Equatable { var name: String, spaces: [String] }
     /// Where the sticker rests, the same over every space: against the trailing or the leading side, its surface
@@ -30,15 +28,20 @@ import SomethingCore
         var listed: [String: Options] = [:]
         /// The commands each kind's agent last listed, by kind: "/" in the card offers them before it runs.
         var commands: [String: [Option]] = [:]
-        var askEverything = false, resume = true, toured = false, addToApplications = true
+        var askEverything = false, resume = true, toured = false
         /// The hints already shown (Hint.swift), each once.
         var hinted: [String] = []
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
         /// "last", "new", or the name of a space.
         var openAtStart = "last"
-        var appearance = Appearance.system, motion = Motion.calm, assistantAtOpening = Opening.reduced, size = Look.Size.standard
-        var rememberSticker = true, holdOption = true, notify = false
-        /// nil while it rests at its first place, the bottom trailing corner; kept only while `rememberSticker`.
+        /// Motion is no longer a setting (the Mac's Reduce Motion lowers it, Look.motion); an older file's choice holds.
+        var appearance = Appearance.system, motion = Motion.calm, size = Look.Size.standard, notify = false
+        /// What a new space may do with the agents when its words name none (Grant.Level.guess): None, as before
+        /// Settings had the row, so that a page sees no agent unless asked.
+        var level = Grant.Level.none
+        /// Whether an export carries the space's memory.
+        var exportMemory = false
+        /// nil while it rests at its first place, the bottom trailing corner.
         var sticker: StickerPlace?
         /// Minutes; 0 for never.
         var sleepAfter = 10
@@ -47,9 +50,9 @@ import SomethingCore
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, hinted, addToApplications, groups,
-                 folded, names, recents, openAtStart, appearance, motion, size, assistantAtOpening, rememberSticker,
-                 holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
+            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, hinted, groups, folded, names,
+                 recents, openAtStart, appearance, motion, size, notify, level, exportMemory, sticker, sleepAfter, awakeAtMost,
+                 versionsKept, storageLimit
         }
 
     }

@@ -886,16 +886,6 @@ import WebKit
         await adding.value
         await following.value
         #expect(overlay.picks.map(\.path) == [cell.path, card.path] && overlay.picks.map(\.rect) == [cell.rect, card.rect])
-        // With Hold ⌥ off in Settings, ⌥ adds nothing: an ⌥-click picks again, and the banner no longer offers it.
-        overlay.holdOption = { false }
-        #expect(overlay.banner == ["Say what should change", "Esc", "Back"])
-        let optionClick = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: at, modifierFlags: .option, timestamp: ProcessInfo.processInfo.systemUptime,
-                                                          windowNumber: offscreen.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        overlay.mouseDown(with: optionClick)
-        #expect(await wait(until: { overlay.picks.map(\.path) == [cell.path] }), "an ⌥-click with the setting off replaces the picks")
-        overlay.holdOption = { true }
-        await overlay.click(at: inner, adding: true)
-        #expect(overlay.picks.map(\.path) == [cell.path, card.path])
 
         // A reload keeps the mode and its picks, and the frames ask the new page where their parts are: moved by the
         // page before, back where the file has them after.

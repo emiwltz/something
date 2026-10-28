@@ -136,6 +136,5 @@ import Testing
         }
         let ours = try steps("packaging/homebrew/something.rb")
         #expect(try steps("packaging/homebrew/tap/Formula/something.rb") == ours)
-        #expect(ours.contains("      Start something once: it can add itself to ~/Applications so Spotlight finds it."))
     }
 }

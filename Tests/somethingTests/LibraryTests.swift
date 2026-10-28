@@ -263,6 +263,13 @@ import Testing
         library.export("board")
         #expect(exported.last?.lastPathComponent == "board 2.something" && FileManager.default.fileExists(atPath: saved.path))
         try FileManager.default.removeItem(at: exported[1])
+        // Settings › Spaces' Include a space's memory: the export carries it.
+        library.preferences.exportMemory = true
+        library.export("board")
+        let with = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: exported[2])) as? [String: Any])
+        #expect((with["data"] as? [String: Any])?["seen"] as? [String] == ["a1"] && ask.told.isEmpty)
+        try FileManager.default.removeItem(at: exported[2])
+        library.preferences.exportMemory = false
 
         // A file that carries a memory, as one made elsewhere may: the import keeps it.
         let board = try #require(library.entry("board")?.space)
@@ -291,7 +298,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: Memory(folder: test.places.data, space: "board-3").file.path))
     }
 
-    @Test func anExportNamesTheLinksItLeftOutAndNeverReadsItsMemory() throws {
+    @Test func anExportNamesTheLinksItLeftOutAndNeverFollowsItsMemorysLink() throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
@@ -313,6 +320,10 @@ import Testing
         library.export("board")
         let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
         #expect(without["data"] is NSNull && ask.told.count == 2, "\(ask.told)")
+        // Asked to carry it, the export stops and says why rather than follow the link.
+        library.preferences.exportMemory = true
+        library.export("board")
+        #expect(ask.told.count == 3 && ask.told.last?.hasPrefix("board was not exported.") == true && ask.told.last?.contains("is a link") == true, "\(ask.told)")
     }
 
     @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {

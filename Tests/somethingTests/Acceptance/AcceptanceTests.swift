@@ -28,8 +28,7 @@ enum Catalog {
         ("e9", "T9"), ("e10", "T10"), ("e11", "T10"), ("e12", "T11"), ("e13", "T2"), ("e15", "T9"),
         ("f1", "T14"), ("f2", "T15"), ("f3", "T16"), ("f4", "T17"), ("f5", "T13"), ("f6", "T19"), ("f7", "T20"), ("f8", "T21"),
         ("f9", "T18"), ("f10", "T18"), ("f11", "T18"),
-        ("g1", "G2"), ("g2", "G3"), ("g3", "G4"), ("g4", "G5"), ("g5", "G5"), ("g6", "G4"), ("g7", "G4"), ("g8", "G6"),
-        ("g9", "F5"), ("g10", "G1"), ("g11", "G5"),
+        ("g1", "G2"), ("g2", "G3"), ("g9", "F5"), ("g10", "G1"),
         ("b1_p", "W7"), ("c2_p", "W7"), ("d1_p", "W7"), ("e1_p", "W7"), ("f6_p", "W7"), ("g4_p", "W7"),
     ] + frozen
     /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
@@ -40,13 +39,15 @@ enum Catalog {
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
         ("x2-1", "S12"), ("x2-2", "S12"), ("x2-3", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
-        ("6-1", "S7"), ("6-3", "S7"),
+        ("6-1", "S7"), ("6-3", "S7"), ("x7-1", "S10"), ("x7-2", "S10"), ("x7-3", "S10"), ("x7-4", "S10"),
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3); a1, the film, and
     /// a2–a8, the welcome's five steps, gone with v6.2's one welcome (x2-1); e14, the panel over the welcome that stepped
-    /// the window back (the welcome now stands alone; WelcomeTests keeps the panel floating over it).
-    static let retired: Set<String> = ["d1", "b4", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14"]
+    /// the window back (the welcome now stands alone; WelcomeTests keeps the panel floating over it); g3–g8 and g11,
+    /// Settings' seven tabs, gone with v6.2's four (x7-1 to x7-4).
+    static let retired: Set<String> = ["d1", "b4", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14",
+                                       "g3", "g4", "g5", "g6", "g7", "g8", "g11"]
     /// La page, pending Emi's decision: no scenario is written for these, and the gate does not count them.
     static let excluded: Set<String> = ["b2", "b1_p", "c2_p", "d1_p", "e1_p", "f6_p", "g4_p"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
@@ -61,7 +62,7 @@ enum Catalog {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
         if id.contains("-") {
             let areas: [String: Area] = ["x1": .shell, "x2": .build, "x3": .build, "x5": .shell, "x6": .assistant, "x9": .shell, "j3": .build, "j4": .shell,
-                                         "2": .shell, "6": .command]
+                                         "2": .shell, "6": .command, "x7": .command]
             return areas[String(id.prefix { $0 != "-" })] ?? .command
         }
         switch id.first {

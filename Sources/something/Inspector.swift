@@ -97,13 +97,14 @@ import SwiftUI
         if known != folders { folders = known }
     }
 
-    /// The person chose `level` here: it becomes the space's grant at once, as on New Space, and the open space hears
-    /// it. Run takes `chosen`, else the folder in force, else the one its page declares when it is on this Mac, else
-    /// asks for one; a folder not chosen changes nothing. Says a failure.
-    func choose(_ level: Grant.Level, folder chosen: String? = nil) {
-        guard let space, let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
-        let folder = level == .run ? chosen ?? self.folder ?? Levels.onThisMac(declaration.folder, home: places.home) : nil
-        if level == .run, folder == nil { return pick { [weak self] in self?.choose(.run, folder: $0) } }
+    /// The person chose `level` here, or for `other` in Settings › Agents: it becomes the space's grant at once, as on
+    /// New Space, and the space, when open, hears it. Run takes `chosen`, else the folder in force, else the one its page
+    /// declares when it is on this Mac, else asks for one; a folder not chosen changes nothing. Says a failure.
+    func choose(_ level: Grant.Level, folder chosen: String? = nil, in other: Space? = nil) {
+        guard let space = other ?? space, let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
+        let kept = other == nil ? self.folder : (try? Grants(places.grants).read())?.spaces[space.name]?.folder
+        let folder = level == .run ? chosen ?? kept ?? Levels.onThisMac(declaration.folder, home: places.home) : nil
+        if level == .run, folder == nil { return pick { [weak self] in self?.choose(.run, folder: $0, in: other) } }
         do {
             try Grants(places.grants).update {
                 $0.spaces[space.name] = Rights.leveled(level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: $0.spaces[space.name])
@@ -111,8 +112,8 @@ import SwiftUI
         } catch {
             ask.tell(error.sentence)
         }
-        open()?.regrant()
-        show(space)
+        if let open = open(), open.space.name == space.name { open.regrant() }
+        show(self.space)
     }
 
     /// "Today", "Yesterday", "9 Oct", or "9 Oct 2025" in another year; with `time`, "Today, 18:12".

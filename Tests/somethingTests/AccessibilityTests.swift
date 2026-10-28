@@ -114,10 +114,9 @@ struct AccessibilityTests {
     @Test func settingsAndNotices() async throws {
         let stage = try Stage("ax")
         defer { stage.remove() }
-        let model = SettingsModel(preferences: Preferences(stage.home.places), places: stage.home.places,
-                                  app: SettingsTests.cellar, version: "0.3.0")
+        let model = SettingsModel(preferences: Preferences(stage.home.places), places: stage.home.places)
         model.spaces = { [("brief", "Daily brief")] }
-        model.apply = { _, _ in }
+        model.apply = { _ in }
         let settings = SettingsWindow(model)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
         settings.window.alphaValue = 0

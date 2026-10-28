@@ -7,9 +7,8 @@
 // limits (versions per space, the storage limit) drop the oldest versions first; the latest version of a space is never
 // dropped, nor a space or its memory. A space heavier than an export carries (15 MB of files, 500 files) is not
 // versioned, and says so; restoring it to an older version sends the files it changes to the Trash instead, so a space
-// an agent overfilled can still go back. Clear Old Versions (Settings › Versions & Storage) drops the versions older
-// than a date, each space keeping its newest few. Nothing is read or written through a symbolic link: a restore never
-// writes outside the space.
+// an agent overfilled can still go back. Nothing is read or written through a symbolic link: a restore never writes
+// outside the space.
 import CryptoKit
 import Foundation
 import SomethingCore
@@ -223,41 +222,6 @@ struct Versions {
             weights[oldest] = bytes(oldest)
         }
         keep(all)
-    }
-
-    /// What Clear Old Versions would take: the contents only the versions it drops hold, in bytes, and from how many
-    /// spaces.
-    struct Old: Equatable { var bytes = 0, spaces = 0 }
-
-    /// What `clear(before:keeping:)` would drop, measured without changing anything.
-    func old(before date: Date, keeping latest: Int) -> Old { weigh(trimmed(before: date, keeping: latest)) }
-
-    /// Drops the versions older than `date`, each space keeping its `latest` newest, then the contents no version
-    /// holds. A space whose index does not read is left whole. Returns what it dropped, weighed from the same read.
-    @discardableResult func clear(before date: Date, keeping latest: Int) -> Old {
-        let trimmed = trimmed(before: date, keeping: latest)
-        let dropped = weigh(trimmed)
-        keep(trimmed.mapValues(\.kept))
-        return dropped
-    }
-
-    /// The bytes no kept version holds any more, and in how many spaces.
-    private func weigh(_ trimmed: [String: (was: [Version], kept: [Version])]) -> Old {
-        trimmed.reduce(into: Old()) { old, space in
-            let held = Set(space.value.kept.flatMap(\.files.values))
-            old.bytes += Set(space.value.was.flatMap(\.files.values)).subtracting(held).reduce(0) { $0 + size(space.key, $1) }
-            old.spaces += 1
-        }
-    }
-
-    /// Each space that has versions older than `date` beyond its `latest` newest: all its versions, and those kept.
-    private func trimmed(before date: Date, keeping latest: Int) -> [String: (was: [Version], kept: [Version])] {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
-        return Dictionary(uniqueKeysWithValues: names.compactMap { name -> (String, ([Version], [Version]))? in
-            guard let versions = try? read(name) else { return nil }
-            let kept = versions.enumerated().filter { $0.offset < latest || $0.element.when >= date }.map(\.element)
-            return kept.count < versions.count ? (name, (versions, kept)) : nil
-        })
     }
 
     /// Writes each space's versions as `all` holds them, then removes the contents none of them holds.

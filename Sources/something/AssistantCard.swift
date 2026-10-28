@@ -682,7 +682,7 @@ extension AssistantModel {
         }
     }
 
-    /// The last item of the agent menu and of Build With ▸: Settings › Assistant, once Settings has it (G5).
+    /// The last item of the agent menu and of Build With ▸: Settings › Agents.
     static let defaultsTitle = "Defaults for New Spaces…"
 
     /// One part of the model chip's menu: its header, the values to choose, checked when they are this

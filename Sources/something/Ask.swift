@@ -130,7 +130,7 @@ final class NativeAsk: Asking {
     }
 }
 
-/// The README's promise, word for word (AGENTS.md rule 2): in Settings › Permissions, and the README itself.
+/// The README's promise, word for word (AGENTS.md rule 2): under Settings › Advanced's permissions, and in the README.
 enum Promise {
     static let sentence = "something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
 }

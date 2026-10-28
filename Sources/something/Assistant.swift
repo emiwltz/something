@@ -77,12 +77,11 @@ import SomethingCore
     /// A Quick Change ended having changed nothing, its agent's last words an answer: the window shows them as a note.
     @ObservationIgnored var answered: (_ quick: Quick, _ words: String) -> Void = { _, _ in }
 
-    /// Arriving at the spaces shows the assistant as Settings' "When a space opens, its assistant is" says: the sticker
-    /// (Reduced, the mockup's default) or the open card; from one space to another the card stays as it was, only its
-    /// content changing: each place shows its own conversation.
+    /// Arriving at the spaces shows the assistant as its sticker; from one space to another the card stays as it was,
+    /// only its content changing: each place shows its own conversation.
     var place = Place.blank {
         didSet {
-            if place.space != nil, oldValue.space == nil { open = Preferences.at(places).assistantAtOpening == .open }
+            if place.space != nil, oldValue.space == nil { open = false }
             // The space a build made, arriving: its card opens on the reply.
             if let space = place.space, space == revealing { (open, threadShown, revealing) = (true, true, nil) }
             // Leaving New Space stops nothing: its builds go on, followed from their rows.
@@ -534,9 +533,9 @@ import SomethingCore
     /// The spaces folder as the person reads it: "~/something/spaces".
     var folder: String { Words.path(places.spaces.path, home: places.home.path) }
 
-    /// New Space's level with the person's agents: the one they chose, else the one the field's words suggest. The
-    /// choice is the consent: the space it builds opens with it, nothing asked.
-    var level: Grant.Level { chosenLevel ?? Grant.Level.guess(draft) }
+    /// New Space's level with the person's agents: the one they chose, else the one the field's words suggest, else
+    /// Settings' "A new space may". The choice is the consent: the space it builds opens with it, nothing asked.
+    var level: Grant.Level { chosenLevel ?? Grant.Level.guess(draft, otherwise: Preferences.at(places).level) }
     var chosenLevel: Grant.Level?
     /// The folder agents start in at Run, chosen on New Space.
     var runFolder: String?
@@ -580,7 +579,7 @@ import SomethingCore
     func send(_ sentence: String? = nil) {
         let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, kind != nil, !blocked else { return }
-        let blankBuild = place == .blank && before == nil, level = chosenLevel ?? Grant.Level.guess(text)
+        let blankBuild = place == .blank && before == nil, level = chosenLevel ?? Grant.Level.guess(text, otherwise: Preferences.at(places).level)
         // Run starts agents in a folder: the build waits for one.
         if blankBuild, level == .run, runFolder == nil {
             return chooseFolder { [weak self] folder in

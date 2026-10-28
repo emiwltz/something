@@ -8,23 +8,23 @@ import Testing
 
 @Suite(.serialized, .leavesNothing("something-preferences-")) struct PreferencesTests {
     /// The mockup's CM_PREFS, the keys that are preferences (its `used` and `looked` are measures, not choices; its
-    /// `sideEyes` left with v6.2's sidebar of names, a window.json that has it keeps it unread). Its
+    /// `sideEyes`, `apps`, `asstOpen`, `sticker` and `alt` left with v6.2's Settings, a window.json that has them keeps
+    /// them unread), and v6.2's own: a new space's level (the mockup's Watch; None here, as New Space pre-set it before, so that a page
+    /// sees no agent unless asked) and an export without its memory. Its
     /// agent, model and effort are the made-up agent it found: here they are nil, the first builder found and its
     /// own model and effort.
     static let mockup: [String: Any] = [
-        "open": "last", "apps": true, "resume": true, "sleep": "10 minutes", "awake": "3", "askAll": false, "notify": false,
-        "asstOpen": "Reduced", "sticker": true, "motion": "Calm", "appearance": "System", "alt": true,
-        "versions": "50", "limit": "500 MB",
+        "open": "last", "resume": true, "sleep": "10 minutes", "awake": "3", "askAll": false, "notify": false,
+        "motion": "Calm", "appearance": "System", "level": "None", "memory": false, "versions": "50", "limit": "500 MB",
     ]
 
     /// The mockup's value of each preference, read from `values` in the mockup's words.
     static func inMockupWords(_ values: Preferences.Values) -> [String: Any] {
         let capitalized = { (raw: String) in raw.prefix(1).uppercased() + raw.dropFirst() }
-        return ["open": values.openAtStart, "apps": values.addToApplications, "resume": values.resume,
+        return ["open": values.openAtStart, "resume": values.resume,
                 "sleep": values.sleepAfter == 0 ? "Never" : "\(values.sleepAfter) minutes", "awake": "\(values.awakeAtMost)",
-                "askAll": values.askEverything, "notify": values.notify, "asstOpen": capitalized(values.assistantAtOpening.rawValue),
-                "sticker": values.rememberSticker, "motion": capitalized(values.motion.rawValue),
-                "appearance": capitalized(values.appearance.rawValue), "alt": values.holdOption,
+                "askAll": values.askEverything, "notify": values.notify, "motion": capitalized(values.motion.rawValue),
+                "appearance": capitalized(values.appearance.rawValue), "level": values.level.title, "memory": values.exportMemory,
                 "versions": values.versionsKept == 0 ? "All" : "\(values.versionsKept)", "limit": "\(values.storageLimit) MB"]
     }
 
@@ -82,12 +82,11 @@ import Testing
         (values.lastOpen, values.assistant, values.model, values.effort) = ("garden", "pi", "invented-model", "high")
         values.listed = ["pi": Options()]
         values.commands = ["claude": [Option(value: "review", label: "Review the page")]]
-        (values.askEverything, values.resume, values.toured, values.hinted, values.addToApplications) = (true, false, true, ["ask"], false)
+        (values.askEverything, values.resume, values.toured, values.hinted) = (true, false, true, ["ask"])
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
-        (values.openAtStart, values.appearance, values.motion, values.assistantAtOpening) = ("new", .dark, .reduced, .open)
-        values.size = .larger
-        (values.rememberSticker, values.holdOption, values.notify) = (false, false, true)
+        (values.openAtStart, values.appearance, values.motion, values.size) = ("new", .dark, .reduced, .larger)
+        (values.notify, values.level, values.exportMemory) = (true, .run, true)
         values.sticker = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
         (values.sleepAfter, values.awakeAtMost, values.versionsKept, values.storageLimit) = (0, 5, 0, 2000)
         // Each value differs from its default, so that a key not written would be seen.

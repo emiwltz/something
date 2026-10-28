@@ -27,13 +27,6 @@ class Something < Formula
     bin.write_exec_script prefix/"something.app/Contents/MacOS/something"
   end
 
-  # Spotlight does not index Homebrew's prefix; the tour offers a launcher in ~/Applications instead.
-  def caveats
-    <<~EOS
-      Start something once: it can add itself to ~/Applications so Spotlight finds it.
-    EOS
-  end
-
   test do
     # Homebrew's test sandbox has no window server: no window can open here, so the version and the seal are tested.
     assert_match version.to_s, shell_output("#{bin}/something --version")

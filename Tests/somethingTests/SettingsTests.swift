@@ -1,9 +1,9 @@
-// Settings: each control writes only its own key, the values shown at first are the mockup's (CM_PREFS), Auto lets
-// the Mac choose the appearance and Dark sets darkAqua, the launcher switch removes only the launcher something made,
-// Homebrew is named only under a Cellar, the shortcuts are Keys' own, the window takes each tab's height, and "When
-// something opens" decides the space opened at the start. Permissions holds the README's promise and no Always Allow;
-// Agents splits the registry by builder and looks again once; the menu items open their tabs. Versions & Storage's
-// parts add up to what the folders weigh, and nothing is cleared before the alert's Clear Versions.
+// Settings: each control writes only its own key, the values shown at first are the mockup's (CM_PREFS and v6.2's),
+// the model and the effort share one menu, Auto lets the Mac choose the appearance and Dark sets darkAqua, the shortcuts
+// are Keys' own, the window takes each tab's height, and "When something opens" decides the space opened at the start.
+// Agents lists each space's level as its grant says it and changes it as Info does, and the agents found, read only,
+// looking again once; the default level pre-sets New Space when the words name no agent; the menu items open their
+// tabs. The store's parts add up to what the folders weigh.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -12,43 +12,50 @@ import Testing
 @testable import something
 
 @MainActor @Suite(.serialized, .leavesNothing("something-settings-")) struct SettingsTests {
-    nonisolated static let cellar = URL(fileURLWithPath: "/opt/homebrew/Cellar/something/0.3.0/something.app")
-
     /// A model on a fresh home, its effects recorded rather than applied to this process.
-    func model(_ home: Home, app: URL = SettingsTests.cellar) -> (SettingsModel, Effects) {
-        let model = SettingsModel(preferences: Preferences(home.places), places: home.places, app: app, version: "0.3.0")
+    func model(_ home: Home) -> (SettingsModel, Effects) {
+        let model = SettingsModel(preferences: Preferences(home.places), places: home.places)
         let effects = Effects()
         model.spaces = { [("brief", "Daily brief"), ("logbook", "Logbook")] }
-        model.apply = { effects.applied.append(($0, $1)) }
+        model.apply = { effects.applied.append($0) }
         model.resize = { effects.sized.append($0) }
-        model.welcome = { effects.tours += 1 }
-        model.keyboard = { effects.keyboards += 1 }
-        model.told = { effects.told.append($0) }
+        model.floating = { effects.floats }
+        model.float = { effects.floats = $0 }
+        model.shortcuts = { effects.shortcuts += 1 }
+        model.levels = {
+            [.init(id: "brief", title: "Daily brief", level: .watch, folder: nil),
+             .init(id: "watch", title: "Project watch", level: .run, folder: "/Users/example/code/atelier"),
+             .init(id: "unread", title: "Unread", level: nil, folder: nil)]
+        }
+        model.setLevel = { effects.levels.append(($0, $1)) }
         model.chose = { effects.chosen.append($0) }
         model.asking = { effects.asking.append($0) }
         model.lookAgain = { effects.looks += 1 }
         model.reveal = { effects.revealed.append($0) }
-        model.confirm = { old, then in effects.confirms.append((old, then)) }
         // Invented places; no program is looked for, let alone run.
         let found = ["claude": "/opt/homebrew/bin/claude", "codex": "/Users/example/.local/bin/codex", "cursor": "/Applications/Cursor.app"]
         model.locate = { kind in
             found[kind].map { .success($0) } ?? .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac. To install it, type in Terminal: x"))
         }
         model.versions = { ["claude": "2.1.4", "cursor": "1.8"] }
+        model.look()
         return (model, effects)
     }
 
     final class Effects {
-        var applied: [(Preferences.Appearance, Look.Motion)] = [], tours = 0, keyboards = 0, told: [String] = []
-        var chosen: [String] = [], asking: [Bool] = [], looks = 0, revealed: [URL] = []
-        var confirms: [(Versions.Old, () -> Void)] = []
-        var sized: [Look.Size] = []
+        var applied: [Preferences.Appearance] = [], sized: [Look.Size] = [], floats = false, shortcuts = 0
+        var levels: [(String, Grant.Level)] = [], chosen: [String] = [], asking: [Bool] = [], looks = 0, revealed: [URL] = []
     }
 
     /// The values as the file would hold them, key by key.
     static func keys(_ values: Preferences.Values) throws -> [String: String] {
         let object = try #require(try JSONSerialization.jsonObject(with: JSONEncoder().encode(values)) as? [String: Any])
         return object.mapValues { "\($0)" }
+    }
+
+    /// Every row of every tab: each section's rows, then its more rows.
+    static func rows(_ model: SettingsModel) -> [SettingsRow] {
+        SettingsTab.allCases.flatMap { model.sections($0) }.flatMap { $0.rows + $0.more }
     }
 
     @Test func eachControlWritesOnlyItsKey() throws {
@@ -58,98 +65,104 @@ import Testing
         var listed = Options()
         (listed.model, listed.effort) = ([Option(value: "opus", label: "Opus 5.5")], [Option(value: "high", label: "High")])
         model.preferences.listed["claude"] = listed
-        // The launcher switch writes no key: the disk says whether the launcher is there; the lock writes none.
-        let expected: [String: String?] = ["When something opens": "openAtStart", "Add something to Applications": nil, "Interface size": "size",
-                        "Agent": "assistant", "Model": "model", "Effort": "effort", "Resume each space’s conversation": "resume",
-                        "Put idle assistants to sleep after": "sleepAfter", "Keep at most": "awakeAtMost",
-                        "Ask Before Every Change": "askEverything", "Requests always wait for your click": nil,
-                        "Notify me when a request waits": "notify",
-                        "Motion": "motion", "When a space opens, its assistant is": "assistantAtOpening",
-                        "Remember where I put the assistant": "rememberSticker",
-                        "Hold ⌥ to point inside a drawn frame": "holdOption", "Keep": "versionsKept", "Storage limit": "storageLimit",
-                        "When it is full": nil, "Where": nil]
+        // The sidebar, a space's level, the words and the buttons write no key: the window, the grants or nothing.
+        let expected: [String: String?] = ["When something opens": "openAtStart", "Theme": "appearance", "Interface size": "size", "Sidebar": nil,
+                                           "Agent": "assistant", "Model and effort": "model", "A new space may": "level",
+                                           "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil,
+                                           "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
+                                           "Keep": "versionsKept", "Storage limit": "storageLimit",
+                                           "Your assistant asks before every change": "askEverything", "Agents a space starts": nil,
+                                           "Resume each space’s conversation": "resume", "Put idle assistants to sleep after": "sleepAfter",
+                                           "Keep at most": "awakeAtMost", "Keyboard shortcuts": nil]
         var seen: Set<String> = []
-        for tab in SettingsTab.allCases {
-            for row in model.sections(tab).flatMap(\.rows) {
-                let before = try Self.keys(model.preferences.values)
-                switch row.control {
-                case .choice(let options, let get, let set):
-                    let other = try #require(options.first { !$0.heading && $0.value != get() })
-                    set(other.value)
-                    #expect(get() == other.value, "\(row.title)")
-                case .toggle(let get, let set, let enabled):
-                    #expect(enabled, "\(row.title)")
-                    let was = get()
-                    set(!was)
-                    #expect(get() == !was, "\(row.title)")
-                case .button(let title, _, let enabled, let run):
-                    #expect(["Show Again", "Clear Old Versions…", "Show in Finder"].contains(title))
-                    // Nothing measured yet, so nothing to clear: the button is greyed, and does nothing.
-                    #expect(enabled == (title != "Clear Old Versions…"), "\(title)")
-                    run()
-                    #expect(effects.confirms.isEmpty)
-                case .locked(let word):
-                    #expect(word == "Always")
-                }
-                let after = try Self.keys(model.preferences.values)
-                let changed = Set(after.keys).union(before.keys).filter { before[$0] != after[$0] }
-                let own = Set((expected[row.title] ?? nil).map { [$0] } ?? [])
-                #expect(changed == own, "\(row.title) changed \(changed.sorted())")
-                seen.insert(row.title)
+        for row in Self.rows(model) {
+            let before = try Self.keys(model.preferences.values)
+            switch row.control {
+            case .choice(let options, let get, let set):
+                let other = try #require(options.first { !$0.heading && !get().contains($0.value) })
+                set(other.value)
+                // A space's level is the grants', which the recorded effect does not write.
+                if !["Daily brief", "Project watch"].contains(row.title) { #expect(get().contains(other.value), "\(row.title)") }
+            case .toggle(let get, let set):
+                let was = get()
+                set(!was)
+                #expect(get() == !was, "\(row.title)")
+            case .button(let title, _, let run):
+                #expect(["Show in Finder", "Show Shortcuts"].contains(title))
+                run()
+            case .said(let words):
+                #expect(["Their Own Settings", "Not known"].contains(words), "\(row.title)")
             }
+            let after = try Self.keys(model.preferences.values)
+            let changed = Set(after.keys).union(before.keys).filter { before[$0] != after[$0] }
+            let own = Set((expected[row.title] ?? nil).map { [$0] } ?? [])
+            #expect(changed == own, "\(row.title) changed \(changed.sorted())")
+            seen.insert(row.title)
         }
-        #expect(seen == Set(expected.keys).union(["Welcome"]))
-        #expect(effects.tours == 1 && effects.revealed == [home.places.spaces])
-        #expect(effects.applied.map(\.1) == [.reduced], "Motion applies at once")
-        #expect(effects.sized == [.large], "the interface size applies at once")
+        #expect(seen == Set(expected.keys))
+        #expect(effects.revealed == [home.places.spaces] && effects.shortcuts == 1)
+        #expect(effects.applied == [.light] && effects.sized == [.large], "the theme and the size apply at once")
+        #expect(effects.floats && model.floats, "the sidebar floats at once")
+        #expect(effects.levels.map(\.0) == ["brief", "watch"] && effects.levels.map(\.1) == [.none, .none], "each space's level, as Info changes it")
         #expect(effects.chosen == ["codex"] && effects.asking == [true], "the assistant takes the default agent and Ask Before Every Change")
-        // Appearance, drawn apart from the rows, writes only its key too.
-        let before = try Self.keys(model.preferences.values)
-        model.choose(.dark)
-        let after = try Self.keys(model.preferences.values)
-        #expect(Set(after.keys).filter { before[$0] != after[$0] } == ["appearance"])
-        #expect(effects.applied.last?.0 == .dark)
         #expect(Preferences(home.places).values == model.preferences.values, "each change is on the disk")
-        #expect(effects.told.isEmpty)
     }
 
-    /// What the rows show on a fresh home: the mockup's CM_PREFS.
+    /// What the rows show on a fresh home: the mockup's CM_PREFS and v6.2's.
     @Test func theDefaultsShownAreTheMockups() throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
-        try Launcher.make(prefix: "/opt/homebrew", places: home.places, icon: nil)
         let (model, _) = model(home)
         var shown: [String: String] = [:]
-        for row in SettingsTab.allCases.flatMap({ model.sections($0) }).flatMap(\.rows) {
+        for row in Self.rows(model) {
             switch row.control {
-            case .choice(let options, let get, _): shown[row.title] = options.first { $0.value == get() }?.label
-            case .toggle(let get, _, _): shown[row.title] = get() ? "on" : "off"
-            case .button(let title, _, _, _): shown[row.title] = title
-            case .locked(let word): shown[row.title] = word
+            case .choice(let options, let get, _): shown[row.title] = options.filter { !$0.heading && get().contains($0.value) }.map(\.label).joined(separator: " · ")
+            case .toggle(let get, _): shown[row.title] = get() ? "on" : "off"
+            case .button(let title, _, _), .said(let title): shown[row.title] = title
             }
         }
-        // open:'last', apps:true, asstOpen:'Reduced', sticker:true, motion:'Calm', alt:true (sideEyes left with v6.2).
-        #expect(shown == ["When something opens": "The last space you had open", "Add something to Applications": "on",
-                          "Welcome": "Show Again", "Interface size": "Default", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
-                          "Remember where I put the assistant": "on",
-                          "Hold ⌥ to point inside a drawn frame": "on",
-                          // agent:'Claude Code', resume:true, sleep:'10 minutes', awake:'3', askAll:false, notify:false; before
-                          // Claude Code ever listed its models, its own (cannot_native: no settings file is read).
-                          "Agent": "Claude Code", "Model": "Default model", "Effort": "Default effort", "Resume each space’s conversation": "on",
-                          "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3", "Ask Before Every Change": "off",
-                          "Requests always wait for your click": "Always", "Notify me when a request waits": "off",
-                          // versions:'50', limit:'500 MB'.
-                          "Keep": "50", "Storage limit": "500 MB", "When it is full": "Clear Old Versions…", "Where": "Show in Finder"])
-        #expect(model.preferences.appearance == .system, "appearance:'System'")
-        // A default agent that sets its own effort: the mockup's greyed "Set by the agent".
-        model.preferences.assistant = "amp"
-        let effort = try #require(model.sections(.assistant).flatMap(\.rows).first { $0.title == "Effort" })
-        guard case .locked(let word) = effort.control else { Issue.record("not locked"); return }
-        #expect(word == "Set by the agent" && effort.note == "Amp sets its own effort.")
+        #expect(shown == ["When something opens": "The last space you had open", "Theme": "Auto", "Interface size": "Default", "Sidebar": "Pinned",
+                          // Before Claude Code ever listed its models, nothing is guessed (rule 3).
+                          "Agent": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
+                          "Notify me when an agent asks": "off", "Daily brief": "Watch", "Project watch": "Run", "Unread": "Not known",
+                          "Where they live": "Show in Finder", "Include a space’s memory when you export it": "off", "Keep": "50",
+                          "Storage limit": "500 MB", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
+                          "Resume each space’s conversation": "on", "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3",
+                          "Keyboard shortcuts": "Show Shortcuts"])
+        #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])
+        let run = try #require(model.sections(.agents)[1].more.first { $0.title == "Project watch" })
+        #expect(run.note == "in `/Users/example/code/atelier`" || run.note == "in `~/code/atelier`", "\(run.note)")
         let opening = model.sections(.general)[0].rows[0]
         guard case .choice(let options, _, _) = opening.control else { Issue.record("not a choice"); return }
         #expect(options.map(\.label) == ["The last space you had open", "New Space", "A space", "Daily brief", "Logbook"])
-        #expect(options.map(\.heading) == [false, false, true, false, false])
+        #expect(RowControl.sections(options).map(\.heading) == ["", "A space"])
+    }
+
+    /// The model and the effort in one menu, as Claude Code listed them, "Default" each one's own; an agent that sets
+    /// its own model says so and offers none.
+    @Test func theModelAndTheEffortShareOneMenu() throws {
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let (model, _) = model(home)
+        var listed = Options()
+        (listed.model, listed.effort) = ([Option(value: "opus", label: "Opus 5.5"), Option(value: "sonnet", label: "Sonnet 5.5")],
+                                         [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")])
+        model.preferences.listed["claude"] = listed
+        let row = try #require(model.sections(.agents)[0].rows.last)
+        guard case .choice(let options, let get, let set) = row.control else { Issue.record("not a choice"); return }
+        #expect(row.title == "Model and effort" && row.note == "“Default” follows the agent’s own setting.")
+        #expect(RowControl.sections(options).map(\.heading) == ["Model", "Effort"])
+        #expect(RowControl.sections(options).map { $0.items.map(\.label) } == [["Default model", "Opus 5.5", "Sonnet 5.5"], ["Default effort", "Medium", "High"]])
+        #expect(get() == ["", "effort:"])
+        set("opus")
+        set("effort:high")
+        #expect(get() == ["opus", "effort:high"] && model.preferences.model == "opus" && model.preferences.effort == "high")
+        set("effort:")
+        #expect(model.preferences.effort == nil && model.preferences.model == "opus")
+        model.preferences.assistant = "amp"
+        let amp = try #require(model.sections(.agents)[0].rows.last)
+        guard case .said(let words) = amp.control else { Issue.record("not words"); return }
+        #expect(amp.title == "Model" && words == "Amp chooses its own model")
     }
 
     @Test func autoLetsTheMacChooseAndDarkIsDarkAqua() {
@@ -158,45 +171,7 @@ import Testing
         #expect(Look.appearance(.light)?.name == .aqua)
     }
 
-    /// The switch makes the launcher under Homebrew and removes only the one something made; anything else at its
-    /// place stays, and the switch reads it as off.
-    @Test func theLauncherSwitchRemovesOnlyItsOwnLauncher() throws {
-        let home = Home(prefix: "something-settings-")
-        defer { home.remove() }
-        let (model, effects) = model(home)
-        let toggle = try #require(model.sections(.general)[0].rows.first { $0.title == "Add something to Applications" })
-        guard case .toggle(let get, let set, _) = toggle.control else { Issue.record("not a switch"); return }
-        #expect(!get())
-        set(true)
-        #expect(get() && Launcher.made(places: home.places))
-        set(false)
-        #expect(!get() && !FileManager.default.fileExists(atPath: Launcher.place(home.places).path))
-        // Someone else's something.app at that place.
-        let other = Launcher.place(home.places).appendingPathComponent("Contents")
-        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
-        try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "com.example.other"], format: .xml, options: 0)
-            .write(to: other.appendingPathComponent("Info.plist"))
-        model.look()
-        #expect(!get())
-        set(false)
-        #expect(FileManager.default.fileExists(atPath: other.path), "not something's: kept")
-        #expect(effects.told.isEmpty)
-        // Away from Homebrew there is nothing to add: the switch is greyed while no launcher of something's is there.
-        let (elsewhere, _) = self.model(home, app: URL(fileURLWithPath: "/Applications/something.app"))
-        guard case .toggle(_, _, let enabled) = elsewhere.sections(.general)[0].rows[1].control else { Issue.record("not a switch"); return }
-        #expect(!enabled)
-    }
-
-    @Test func homebrewIsNamedOnlyUnderACellar() {
-        let home = Home(prefix: "something-settings-")
-        defer { home.remove() }
-        let line = { (app: String) in self.model(home, app: URL(fileURLWithPath: app)).0.versionLine }
-        #expect(line(SettingsTests.cellar.path) == ("something 0.3.0", " · installed with Homebrew · nothing leaves this Mac"))
-        #expect(line("/Applications/something.app") == ("something 0.3.0", " · nothing leaves this Mac"))
-        #expect(line("/opt/homebrew/something.app").rest == " · nothing leaves this Mac")
-    }
-
-    /// Settings › Shortcuts lists each command of the sheet once, in Keys' words and keys, Spaces and Show on the left.
+    /// The shortcut sheet lists each command once, in Keys' words and keys, Spaces and Show on the left.
     @Test func theShortcutsAreKeysOwn() {
         let listed = ShortcutColumns.columns.flatMap { $0.flatMap(ShortcutColumns.lines) }
         #expect(listed.map(\.id) == Keys.commands.filter { $0.area != nil && $0.line != nil }.sorted {
@@ -210,103 +185,31 @@ import Testing
         #expect(Keys.command("settings")?.action == #selector(App.showSettings(_:)))
     }
 
-    /// Permissions says the README's promise character for character, and offers no Always Allow: the one mention is
-    /// the sentence that says there is none.
-    @Test func permissionsSayTheReadmesPromiseAndNoAlwaysAllow() throws {
-        let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)
-        #expect(readme.split(whereSeparator: \.isWhitespace).joined(separator: " ").contains(Promise.sentence))
-        let home = Home(prefix: "something-settings-")
-        defer { home.remove() }
-        let (model, _) = model(home)
-        var words: [String] = []
-        for row in SettingsTab.allCases.flatMap({ model.sections($0) }).flatMap(\.rows) {
-            words += [row.title, row.note.replacingOccurrences(of: "There is no Always Allow.", with: "")]
-            switch row.control {
-            case .choice(let options, _, _): words += options.map(\.label)
-            case .button(let title, _, _, _), .locked(let title): words.append(title)
-            case .toggle: break
-            }
-        }
-        #expect(!words.contains { $0.contains("Always Allow") })
-        let lock = try #require(model.sections(.permissions).flatMap(\.rows).first { $0.title == "Requests always wait for your click" })
-        guard case .locked = lock.control else { Issue.record("not locked"); return }
-    }
-
-    /// Agents: the registry's builders, then the agents something only sees, each with where its program was found and
-    /// the version its files name; the default is marked; Look Again looks once and says when, by the clock.
-    @Test func agentsAreTheRegistrysSplitByBuilder() async throws {
+    /// On this Mac: the agents found, the builders first, each with the version its files name or Seen only; Look Again
+    /// looks once and says when, by the clock.
+    @Test func theAgentsFoundAreListedReadOnly() async throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
         let (model, effects) = model(home)
-        #expect(model.lookedLine == "Looking for agents on this Mac…" && model.agents.allSatisfy { $0.path == nil })
+        #expect(model.lookedLine == "Looking for agents on this Mac…" && model.agents.isEmpty)
         let calendar = Calendar.current
         let start = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 17, minute: 40)))
         let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 23, hour: 18, minute: 2)))
         model.clock = { start }
         model.find()
         _ = await wait(until: { model.found != nil })
-        let agents = model.agents
-        #expect(agents.filter(\.builds).map(\.id) == Registry.app.builders.map(\.kind))
-        #expect(agents.filter { !$0.builds }.map(\.id) == Registry.app.agents.filter { $0.builder == nil }.map(\.kind))
-        let claude = try #require(agents.first { $0.id == "claude" }), codex = try #require(agents.first { $0.id == "codex" })
-        #expect(claude.isDefault && claude.path == "/opt/homebrew/bin/claude" && claude.version == "2.1.4")
-        #expect(claude.note == "Resumes each space’s conversation")
-        #expect(!codex.isDefault && codex.version == "version unknown" && codex.note == "Starts each conversation fresh, and says so")
-        let pi = try #require(agents.first { $0.id == "pi" })
-        #expect(pi.path == nil && pi.version == nil && pi.note.hasPrefix("Not found on this Mac. To install it, type in Terminal: "))
-        let cursor = try #require(agents.first { $0.id == "cursor" })
-        #expect(!cursor.builds && cursor.path == "/Applications/Cursor.app" && cursor.note == Registry.app.agent("cursor")?.unavailable)
-        #expect(model.lookedLine == "Looked today at 17:40 · 3 agents", "the time the look ended")
-        // Choosing Codex as the default marks it.
-        model.preferences.assistant = "codex"
-        #expect(model.agents.filter(\.isDefault).map(\.id) == ["codex"])
+        #expect(model.agents == [.init(id: "claude", name: "Claude Code", line: "Version 2.1.4"), .init(id: "codex", name: "Codex", line: "Version unknown"),
+                                 .init(id: "cursor", name: "Cursor", line: "Seen only")])
+        #expect(model.lookedLine == "Found 3 agents · looked today at 17:40. something never installs them or changes their settings.")
         model.clock = { now }
         model.again()
         #expect(effects.looks == 1, "Look Again asks the engine once")
         #expect(model.lookedLine == "Looking for agents on this Mac…", "while the new look runs")
         _ = await wait(until: { model.found != nil })
-        #expect(model.lookedLine == "Looked today at 18:02 · 3 agents")
+        #expect(model.lookedLine.hasPrefix("Found 3 agents · looked today at 18:02."))
     }
 
-    /// A builder not found says why as Programs does: a plain absence briefly, an unread PATH as not known, a missing
-    /// interpreter as such; an app bundle never stands for a builder, so it is neither counted nor the default.
-    @Test func aBuilderNotFoundSaysWhy() async throws {
-        let home = Home(prefix: "something-settings-")
-        defer { home.remove() }
-        let (model, _) = model(home)
-        let unread = "something could not read the PATH of your login shell (/bin/zsh), so it cannot tell whether Codex is on this Mac."
-        let interpreter = "Pi needs node, which was not found on this Mac. To install it, type in Terminal: brew install node"
-        model.locate = { kind in
-            switch kind {
-            case "codex": .failure(CodedError("NOT_INSTALLED", unread))
-            case "pi": .failure(CodedError("INTERPRETER_NOT_FOUND", interpreter))
-            case "cursor": .success("/Applications/Cursor.app")
-            default: .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac. To install it, type in Terminal: x"))
-            }
-        }
-        model.find()
-        _ = await wait(until: { model.found != nil })
-        let agents = model.agents
-        let claude = try #require(agents.first { $0.id == "claude" }), codex = try #require(agents.first { $0.id == "codex" })
-        let pi = try #require(agents.first { $0.id == "pi" })
-        #expect(claude.path == nil && !claude.isDefault && claude.note.hasPrefix("Not found on this Mac. To install it, type in Terminal: "))
-        #expect(codex.path == nil && codex.note == unread)
-        #expect(pi.path == nil && pi.note == interpreter)
-        #expect(model.lookedLine.hasSuffix("· 1 agent"))
-    }
-
-    /// Found: a builder's program is the engine's alone, never its app bundle, which stands only for an agent seen.
-    @Test func anAppBundleNeverStandsForABuilder() throws {
-        let codex = try #require(Registry.app.agent("codex")), cursor = try #require(Registry.app.agent("cursor"))
-        #expect(codex.builder != nil && cursor.builder == nil)
-        let plain = CodedError("NOT_INSTALLED", "Codex was not found on this Mac. To install it, type in Terminal: npm i -g @openai/codex")
-        #expect(Found.note(plain, install: "npm i -g @openai/codex") == "Not found on this Mac. To install it, type in Terminal: npm i -g @openai/codex")
-        let unread = CodedError("NOT_INSTALLED", "something could not read the PATH of your login shell (/bin/zsh), so it cannot tell whether Codex is on this Mac.")
-        #expect(Found.note(unread, install: "x") == unread.message)
-    }
-
-    /// The Assistant menu's Ask Before Every Change… and the assistant's Defaults for New Spaces… send their actions,
-    /// and opening Settings at a tab shows the one window at that tab.
+    /// The Assistant menu's Ask Before Every Change… and the assistant's Defaults for New Spaces… send their actions.
     @Test func theMenuItemsOpenTheirTabs() async throws {
         #expect(Keys.command("askAll")?.action == #selector(App.showPermissions(_:)))
         #expect(Keys.command("defaults")?.action == #selector(App.showNewSpaceDefaults(_:)))
@@ -329,15 +232,15 @@ import Testing
             return settings
         }
         defer { Settings.shown?.window.close(); Settings.shown = nil }
-        Settings.open(.permissions, make: make)
-        #expect(Settings.shown?.tab == .permissions)
-        Settings.open(.assistant, make: make)
-        #expect(Settings.shown?.tab == .assistant && made == 1)
+        Settings.open(.advanced, make: make)
+        #expect(Settings.shown?.tab == .advanced)
+        Settings.open(.agents, make: make)
+        #expect(Settings.shown?.tab == .agents && made == 1)
         Settings.open(nil, make: make)
-        #expect(Settings.shown?.tab == .assistant, "where it was left")
+        #expect(Settings.shown?.tab == .agents, "where it was left")
     }
 
-    /// The window: the preference toolbar with the three tabs, 720 points wide, as high as each tab, titled by it.
+    /// The window: the preference toolbar with the four tabs, 720 points wide, as high as each tab, titled by it.
     @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowTakesEachTabsHeight() async throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
@@ -346,7 +249,7 @@ import Testing
         settings.window.alphaValue = 0
         defer { settings.window.close() }
         #expect(settings.window.toolbarStyle == .preference)
-        #expect(settings.window.toolbar?.items.map(\.label) == ["General", "Assistant", "Permissions", "Interface", "Shortcuts", "Versions & Storage", "Agents"])
+        #expect(settings.window.toolbar?.items.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])
         var heights: [CGFloat] = []
         for tab in SettingsTab.allCases {
             settings.select(tab)
@@ -362,7 +265,7 @@ import Testing
         #expect(Set(heights.map { Int($0) }).count > 1, "the tabs are not one height: \(heights)")
         // A click on a toolbar tab goes through the tab view, not the index: the title follows it too.
         settings.tabs.tabView.selectTabViewItem(at: 3)
-        #expect(settings.tab == .interface && settings.window.title == "Interface")
+        #expect(settings.tab == .advanced && settings.window.title == "Advanced")
         #expect(settings.window.styleMask.contains(.miniaturizable), "three lights, as the Mac's own settings")
     }
 
@@ -384,98 +287,63 @@ import Testing
         #expect(library.atStart() == "today")
     }
 
-    /// "When a space opens, its assistant is": Reduced arrives at a space as the sticker, Open with the card open; from
-    /// one space to another the card stays as it was.
-    @Test func theAssistantAtOpeningFollowsTheSetting() {
+    /// "A new space may": New Space's level when the words name no agent; words that do still pre-set theirs. A space
+    /// arrives as its sticker, the card closed.
+    @Test func theDefaultLevelPresetsNewSpace() {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
         let model = AssistantModel(engine: home.engine(), places: home.places)
-        let brief = AssistantModel.Place.space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/index.html")
-        let logbook = AssistantModel.Place.space(title: "Logbook", name: "logbook", page: "/Users/example/something/spaces/logbook/index.html")
-        #expect(Preferences.at(home.places).assistantAtOpening == .reduced)
-        model.place = brief
-        #expect(!model.open, "Reduced: the sticker")
-        model.place = .blank
-        model.open = false
-        Preferences.at(home.places).assistantAtOpening = .open
-        model.place = brief
-        #expect(model.open, "Open: the card")
-        model.open = false
-        model.place = logbook
-        #expect(!model.open, "from one space to another the card stays as it was")
+        model.draft = "My reading list"
+        #expect(model.level == .none, "Settings' default, None")
+        Preferences.at(home.places).level = .watch
+        #expect(model.level == .watch)
+        model.draft = "A page that starts a reviewer agent in my shop"
+        #expect(model.level == .run)
+        model.place = .space(title: "Daily brief", name: "brief", page: "/Users/example/something/spaces/brief/index.html")
+        #expect(!model.open, "the sticker")
     }
 
-    /// A folder space `name` of `home` holding `text`, a version of it taken at `when`.
-    func version(_ home: Home, _ name: String, _ text: String, at when: Date) throws {
-        let page = home.places.spaces.appendingPathComponent("\(name)/index.html")
-        try FileManager.default.createDirectory(at: page.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try text.write(to: page, atomically: true, encoding: .utf8)
-        let space = try #require(Spaces(root: home.places.spaces).named(name))
-        try Versions(root: home.places.versions, keep: 0, limit: 0).capture(space, kind: .turn, sentence: "An invented change", who: "Claude Code", at: when)
+    /// Each space's level as its grant says it, None when never answered; a choice in Settings is Info's for that
+    /// space, whichever space Info shows, and Run asks for its folder. Grants that do not read leave each unknown.
+    @Test func eachSpacesLevelIsItsGrants() throws {
+        let home = Home(prefix: "something-settings-"), ask = FakeAsk()
+        defer { home.remove() }
+        let shop = try home.space("shop", page(#"{"contract": 1, "title": "Shop", "rights": ["state", "send", "launch"]}"#, ""))
+        let library = Library(places: home.places, ask: ask, share: Home.share)
+        library.relist()
+        #expect(library.levels() == [.init(id: "shop", title: "Shop", level: Grant.Level.none, folder: nil)])
+        let info = Info(places: home.places, ask: ask)
+        info.choose(.talk, in: shop)
+        #expect(library.levels().first?.level == .talk && info.level == nil, "Info, showing no space, shows none")
+        var asked = 0
+        info.pick = { answer in
+            asked += 1
+            answer("/Users/example/code/shop")
+        }
+        info.choose(.run, in: shop)
+        #expect(asked == 1 && library.levels() == [.init(id: "shop", title: "Shop", level: .run, folder: "/Users/example/code/shop")])
+        #expect(ask.told.isEmpty, "\(ask.told)")
+        try "not json".write(to: home.places.grants, atomically: true, encoding: .utf8)
+        #expect(library.levels().first?.level == nil)
     }
 
     /// The three parts are what their folders weigh, file by file, and the used weight is their sum.
     @Test func theStoresPartsAddUpToWhatTheFoldersWeigh() throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
-        let now = Date(timeIntervalSince1970: 1_792_000_000)
-        try version(home, "board", String(repeating: "a", count: 1_000), at: now)
+        let page = home.places.spaces.appendingPathComponent("board/index.html")
+        try FileManager.default.createDirectory(at: page.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try String(repeating: "a", count: 1_000).write(to: page, atomically: true, encoding: .utf8)
+        let space = try #require(Spaces(root: home.places.spaces).named("board"))
+        try Versions(root: home.places.versions, keep: 0, limit: 0).capture(space, kind: .turn, sentence: "An invented change", who: "Claude Code", at: Date())
         try FileManager.default.createDirectory(at: home.places.data, withIntermediateDirectories: true)
         try Data(count: 300).write(to: home.places.data.appendingPathComponent("board.json"))
         try Data(count: 50).write(to: home.places.spaces.appendingPathComponent(".hidden"))
-        let storage = Storage.weigh(home.places, now: now)
+        let storage = Storage.weigh(home.places)
         let index = try #require(try home.places.versions.appendingPathComponent("board/index.json").resourceValues(forKeys: [.fileSizeKey]).fileSize)
         #expect(storage.spaces == 1_050 && storage.memory == 300 && storage.versions == 1_000 + index)
         #expect(storage.used == storage.versions + storage.memory + storage.spaces)
-        #expect(storage.old == Versions.Old(), "one version, today: nothing to clear")
         #expect(Storage.bytes(home.root.appendingPathComponent("nowhere")) == 0)
         #expect(Storage.megabytes(312_400_000) == "312 MB" && Storage.megabytes(0) == "0 MB" && Storage.megabytes(1_000) == "less than 1 MB")
-    }
-
-    /// Clear Old Versions asks first; nothing changes until the alert's Clear Versions, then each space keeps its ten
-    /// latest and the versions of the last 30 days, and the window says what was freed.
-    @Test func nothingIsClearedBeforeTheAlertsClearVersions() async throws {
-        let home = Home(prefix: "something-settings-")
-        defer { home.remove() }
-        let now = Date(timeIntervalSince1970: 1_792_000_000), day = 86_400.0
-        // Twelve versions 49 days old or more, then two of yesterday: the ten latest stay, the four oldest go.
-        for index in 0..<14 {
-            try version(home, "board", "<p>An invented board, take \(index).</p>", at: now.addingTimeInterval(index < 12 ? -Double(60 - index) * day : -day))
-        }
-        try version(home, "notes", "<p>Invented notes.</p>", at: now.addingTimeInterval(-90 * day))
-        let (model, effects) = model(home)
-        model.clock = { now }
-        model.measure()
-        #expect(await wait(until: { model.storage != nil }))
-        let store = Versions(root: home.places.versions, keep: 0, limit: 0)
-        let old = try #require(model.storage?.old)
-        #expect(old.spaces == 1 && old.bytes == 4 * "<p>An invented board, take 0.</p>".utf8.count, "notes keeps its only version")
-        let row = try #require(model.sections(.storage)[1].rows.first { $0.title == "When it is full" })
-        guard case .button(_, _, let enabled, let run) = row.control else { Issue.record("not a button"); return }
-        #expect(enabled)
-        let before = (store.list("board"), try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).sorted())
-        // A weight measured long ago says nothing is old: the click reads the indexes again.
-        model.storage?.old = Versions.Old()
-        run()
-        #expect(effects.confirms.count == 1 && effects.confirms.first?.0 == old)
-        #expect(store.list("board") == before.0 && model.cleared == nil, "the alert is up: nothing changed")
-        #expect(try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).sorted() == before.1)
-        effects.confirms[0].1()
-        #expect(store.list("board") == Array(before.0.prefix(10)) && store.list("notes").count == 1)
-        #expect(try FileManager.default.contentsOfDirectory(atPath: store.folder("board").appendingPathComponent("blobs").path).count == 10)
-        #expect(model.cleared == "Cleared less than 1 MB of versions older than 30 days.")
-        #expect(model.sections(.storage)[1].foot == model.cleared)
-        #expect(await wait(until: { model.storage?.old == Versions.Old() }))
-    }
-
-    /// The alert: the sign, its question, what goes and what stays, Cancel focused and Escape's, Clear Versions in bad.
-    @Test(.enabled(if: windowServer, windowServerMissing)) func theAlertSaysWhatGoesAndCancelIsTheSafeOne() {
-        let sheet = Storage.alert(Versions.Old(bytes: 214_000_000, spaces: 7))
-        defer { sheet.close() }
-        #expect(sheet.isAlert && sheet.title == "Clear versions older than 30 days?")
-        #expect(sheet.buttons.map(\.title) == ["Cancel", "Clear Versions"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
-        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}")
-        let words = PanelsTests.texts(sheet.contentView)
-        #expect(words.contains("This removes 214 MB of versions from 7 spaces. Each space keeps its 10 latest versions. This can’t be undone."))
     }
 }

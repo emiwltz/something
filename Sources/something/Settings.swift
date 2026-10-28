@@ -1,9 +1,9 @@
-// Settings (⌘,): a window of its own whose toolbar holds the tabs, as the Mac's own settings do, sized to each tab.
-// General, Assistant, Permissions, Interface, Shortcuts, Versions & Storage and Agents are here; each settings tab is a
-// list of rows given as data (a title, a note, and a choice, a switch, a button or a lock), so that a test can work
-// every control and see which key it wrote. The Shortcuts tab reads Keys, the one list of the commands; Versions &
-// Storage weighs the store off the main queue (Storage.swift); Agents reads the registry and where each program is,
-// found by a look at files that never runs one. Appearance and Motion apply at once, to every window.
+// Settings (⌘,): a window of its own whose toolbar holds four tabs, as the Mac's own settings do, sized to each tab:
+// General (the start, the theme, the interface size, the sidebar), Spaces (where they live, export, versions and
+// storage, Storage.swift), Agents (your assistant, what a new space may do, each space's level, and the agents on this
+// Mac, found by a look at files that never runs one) and Advanced (how your assistant and the agents a space starts
+// ask, the assistants' rest and resume, the shortcuts). Each tab is a list of rows given as data (a title, a note, a
+// control), so that a test can work every control and see which key it wrote. The theme applies at once, everywhere.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -11,81 +11,83 @@ import SwiftUI
 
 /// The tabs, in the toolbar's order.
 enum SettingsTab: String, CaseIterable {
-    case general, assistant, permissions, interface, shortcuts, storage, agents
+    case general, spaces, agents, advanced
 
-    var label: String { face.label }
-    var symbol: String { face.symbol }
+    var label: String { rawValue.capitalized }
 
-    private var face: (label: String, symbol: String) {
+    var symbol: String {
         switch self {
-        case .general: ("General", "gearshape")
-        case .assistant: ("Assistant", "sparkle")
-        case .permissions: ("Permissions", "checkmark.shield")
-        case .interface: ("Interface", "eye")
-        case .shortcuts: ("Shortcuts", "keyboard")
-        case .storage: ("Versions & Storage", "square.3.layers.3d")
-        case .agents: ("Agents", "powerplug.portrait")
+        case .general: "gearshape"
+        case .spaces: "doc"
+        case .agents: "powerplug.portrait"
+        case .advanced: "checkmark.shield"
         }
     }
 }
 
-/// One row of a settings tab: what it is, a line that says what it does, and its control.
+/// One row of a settings tab: what it is, a line that says what it does (Markdown: `code` is a path), and its control.
 struct SettingsRow: Identifiable {
-    /// One item of a choice's menu; a heading is an item that cannot be chosen.
+    /// One item of a choice; a heading starts a section of its menu and cannot be chosen.
     struct Option: Hashable { let value: String, label: String; var heading = false }
 
     enum Control {
-        case choice([Option], get: () -> String, set: (String) -> Void)
-        case toggle(get: () -> Bool, set: (Bool) -> Void, enabled: Bool)
-        /// A button, its symbol before its title, greyed when not `enabled`.
-        case button(String, symbol: String? = nil, enabled: Bool = true, () -> Void)
-        /// A rule nobody can change, said with a lock and a word.
-        case locked(String)
+        /// A choice; `get` gives the value chosen in each section of the menu.
+        case choice([Option], get: () -> [String], set: (String) -> Void)
+        case toggle(get: () -> Bool, set: (Bool) -> Void)
+        /// A button, its symbol before its title.
+        case button(String, symbol: String? = nil, () -> Void)
+        /// Words in place of a control: what is not chosen here.
+        case said(String)
     }
 
+    /// How a choice is drawn: a menu, "Aa" tiles, the theme's pictures, or segments side by side.
+    enum Style { case menu, tiles, thumbs, segments }
+
     let title: String, note: String, control: Control
-    /// The words after the control when it stands inside the title's sentence: "Keep at most [3] assistants awake".
+    var style = Style.menu
+    /// The control under the words rather than beside them.
+    var wrap = false
+    /// The words after the control when it stands inside the title's sentence: "Keep [50] versions of each space".
     var trail: String?
-    /// The note is a path, in code.
-    var code = false
-    /// A choice drawn as "Aa" tiles that grow with each option (Interface size), and keys said under the note.
-    var tiles = false, keys: [(key: String, words: String)] = []
-    var id: String { title }
+    /// Keys said under the note.
+    var keys: [(key: String, words: String)] = []
+    /// What tells two rows of one title apart (two spaces of one name).
+    var tag: String?
+    var id: String { tag ?? title }
 }
 
-/// A titled group of rows; the Interface tab's first one also holds the three appearances, and Storage the store's
-/// weight, its first row (the limit's choice) drawn in that block's header.
+/// A titled group: its rows in a card, then a line, then more rows in a card of their own; Storage draws the store's
+/// weight with its one row, the limit, and Agents' last group the agents found.
 struct SettingsSection: Identifiable {
+    enum Block { case storage, found }
     let title: String, rows: [SettingsRow]
-    var appearance = false, storage = false
-    /// A line under the group that says what was just done.
-    var foot: String?
+    var lead: String?
+    var more: [SettingsRow] = []
+    var block: Block?
     var id: String { title }
 }
 
 /// What Settings shows and changes: the preferences, and the few things a row does beyond writing its key.
 @MainActor @Observable final class SettingsModel {
+    /// A space and its level as its grant says it; nil when not known.
+    struct SpaceLevel: Equatable { let id: String, title: String, level: Grant.Level?, folder: String? }
+
     let preferences: Preferences
     @ObservationIgnored let places: Places
-    /// The something.app that runs, and its version: under a Homebrew Cellar, it says so and can add its launcher.
-    @ObservationIgnored let app: URL
-    @ObservationIgnored let version: String
     /// The spaces "When something opens" offers, by name and title.
     @ObservationIgnored var spaces: () -> [(id: String, title: String)] = { [] }
-    /// Applies the appearance and the motion to the whole app; tests record it instead.
-    @ObservationIgnored var apply: (Preferences.Appearance, Look.Motion) -> Void = Settings.apply
+    /// Applies the appearance to the whole app; tests record it instead.
+    @ObservationIgnored var apply: (Preferences.Appearance) -> Void = { NSApp.appearance = Look.appearance($0) }
     /// Applies the interface size to the whole app (Look.scale); tests record it instead.
     @ObservationIgnored var resize: (Look.Size) -> Void = { Look.scale.size = $0 }
-    /// Shows the welcome again (App.showWelcome).
-    @ObservationIgnored var welcome: () -> Void = {}
-    /// Opens System Settings › Keyboard; tests record it instead.
-    @ObservationIgnored var keyboard: () -> Void = {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") { NSWorkspace.shared.open(url) }
-    }
-    /// Says what went wrong, in a sentence.
-    @ObservationIgnored var told: (String) -> Void = { _ in }
-    /// Whether something's launcher stands in ~/Applications: the disk says it, read again as the window shows.
-    var launcher = false
+    /// Whether the window's sidebar floats (its column hidden), and making it so: the window's.
+    @ObservationIgnored var floating: () -> Bool = { false }
+    @ObservationIgnored var float: (Bool) -> Void = { _ in }
+    /// Shows the shortcuts (⌘/) over the window.
+    @ObservationIgnored var shortcuts: () -> Void = {}
+    /// Each space's level, and the person's choice of one (Info.choose, which asks for Run's folder).
+    @ObservationIgnored var levels: () -> [SpaceLevel] = { [] }
+    @ObservationIgnored var setLevel: (String, Grant.Level) -> Void = { _, _ in }
     /// The builders the assistant offers now (AssistantModel); every builder until the window says otherwise.
     @ObservationIgnored var offered: () -> [String] = { Registry.app.builders.map(\.kind) }
     /// The default agent just chosen, for the assistant to take (Build With's own path, AssistantModel.buildNew).
@@ -105,26 +107,25 @@ struct SettingsSection: Identifiable {
     private(set) var seen: [String: String] = [:]
     /// When the last look ended, by `clock`; nil while none has.
     private(set) var looked: Date?
+    private(set) var floats = false
+    private(set) var spaceLevels: [SpaceLevel] = []
+    /// How tall each tab's rows are, as last drawn: its page is as tall, up to SettingsPage.most.
+    var heights: [SettingsTab: CGFloat] = [:]
     /// What the store weighs (Storage.swift); nil until it was first measured.
     var storage: Storage?
-    /// What the last Clear Old Versions freed, said under Storage; nil until one ran.
-    var cleared: String?
-    /// Weighs the store at a date, off the main queue; tests give invented weights.
-    @ObservationIgnored var weigh: @Sendable (Places, Date) -> Storage = Storage.weigh
-    /// Asks before Clear Old Versions, then runs the closure only on the alert's Clear Versions; tests record it.
-    @ObservationIgnored var confirm: (Versions.Old, @escaping () -> Void) -> Void = Storage.confirm
+    /// Weighs the store, off the main queue; tests give invented weights.
+    @ObservationIgnored var weigh: @Sendable (Places) -> Storage = Storage.weigh
     /// Show in Finder; tests record it.
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
 
-    init(preferences: Preferences, places: Places, app: URL = Bundle.main.bundleURL, version: String = Resources.version) {
-        (self.preferences, self.places, self.app, self.version) = (preferences, places, app, version)
+    init(preferences: Preferences, places: Places) {
+        (self.preferences, self.places) = (preferences, places)
         look()
     }
 
-    /// Reads again what lives on the disk rather than in the preferences.
+    /// Reads again what lives elsewhere than in the preferences: the window's sidebar, the levels, the versions seen.
     func look() {
-        launcher = Launcher.made(places: places)
-        seen = versions()
+        (floats, spaceLevels, seen) = (floating(), levels(), versions())
     }
 
     /// Look Again: the engine looks for the programs again, and so does this window, which says it is looking meanwhile.
@@ -147,165 +148,170 @@ struct SettingsSection: Identifiable {
         }
     }
 
-    /// Where the program of `kind` was found; nil while a look runs and when it was not found.
-    func path(_ kind: String) -> String? { try? found?[kind]?.get() }
-
-    /// The version line under General: Homebrew is named only when something runs from its Cellar.
-    var versionLine: (name: String, rest: String) {
-        let rest = (Launcher.prefix(of: app) == nil ? [] : ["installed with Homebrew"]) + ["nothing leaves this Mac"]
-        return ("something \(version)", rest.map { " · " + $0 }.joined())
-    }
-
-    /// The rows of `tab`; Shortcuts has none, it draws Keys.
+    /// The rows of `tab`.
     func sections(_ tab: SettingsTab) -> [SettingsSection] {
-        let preferences = preferences
-        func toggle(_ key: WritableKeyPath<Preferences.Values, Bool>) -> SettingsRow.Control {
-            .toggle(get: { preferences.values[keyPath: key] }, set: { value in preferences.change { $0[keyPath: key] = value } }, enabled: true)
-        }
-        func choice<T: RawRepresentable>(_ key: WritableKeyPath<Preferences.Values, T>, _ options: [(T, String)], then: @escaping () -> Void = {})
-            -> SettingsRow.Control where T.RawValue == String {
-            .choice(options.map { SettingsRow.Option(value: $0.0.rawValue, label: $0.1) }, get: { preferences.values[keyPath: key].rawValue }, set: { raw in
-                guard let value = T(rawValue: raw) else { return }
-                preferences.change { $0[keyPath: key] = value }
-                then()
-            })
-        }
         switch tab {
-        case .general:
-            return [SettingsSection(title: "Start", rows: [
-                SettingsRow(title: "When something opens", note: "The page you see first.", control: opening()),
-                SettingsRow(title: "Add something to Applications", note: "A link in ~/Applications, so Spotlight and Launchpad find it.",
-                            control: .toggle(get: { [weak self] in self?.launcher ?? false }, set: { [weak self] in self?.addToApplications($0) },
-                                             enabled: launcher || Launcher.prefix(of: app) != nil)),
-                SettingsRow(title: "Welcome", note: "The first screen, as on the first day.",
-                            control: .button("Show Again") { [weak self] in self?.welcome() }),
-            ]), SettingsSection(title: "Look", rows: [
-                SettingsRow(title: "Interface size",
-                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages.",
-                            control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }, then: { [weak self] in self?.resize(preferences.size) }),
-                            tiles: true, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
-            ])]
-        case .assistant:
-            return assistantSections()
-        case .permissions:
-            return [
-                SettingsSection(title: "Your assistant", rows: [
-                    SettingsRow(title: "Ask Before Every Change", note: "Your assistant asks you before each change to a space too.",
-                                control: .toggle(get: { preferences.askEverything }, set: { [weak self] value in
-                                    preferences.askEverything = value
-                                    self?.asking(value)
-                                }, enabled: true)),
-                ]),
-                SettingsSection(title: "Requests from agents", rows: [
-                    SettingsRow(title: "Requests always wait for your click",
-                                note: "Allow Once or Deny, in a panel of the Mac that a space cannot draw. There is no Always Allow.", control: .locked("Always")),
-                    SettingsRow(title: "Notify me when a request waits", note: "A banner of the Mac when something is in the background. Off unless you turn it on.",
-                                control: toggle(\.notify)),
-                ]),
-            ]
-        case .interface:
-            let applied = { [weak self] in self.map { $0.apply($0.preferences.appearance, $0.preferences.motion) } ?? () }
-            return [
-                SettingsSection(title: "Appearance", rows: [
-                    SettingsRow(title: "Motion", note: "Calm follows the identity. Reduced keeps only fades.",
-                                control: choice(\.motion, [(.calm, "Calm"), (.reduced, "Reduced")], then: applied)),
-                ], appearance: true),
-                SettingsSection(title: "The assistant", rows: [
-                    SettingsRow(title: "When a space opens, its assistant is", note: "Reduced keeps the space clear: a small sign in a corner.",
-                                control: choice(\.assistantAtOpening, [(.reduced, "Reduced"), (.open, "Open")])),
-                    SettingsRow(title: "Remember where I put the assistant", note: "One place for every space.", control: toggle(\.rememberSticker)),
-                ]),
-                SettingsSection(title: "Pointing", rows: [
-                    SettingsRow(title: "Hold ⌥ to point inside a drawn frame",
-                                note: "Showing a part of a space stays a visible mode; ⌥ only works once a frame is drawn.", control: toggle(\.holdOption)),
-                ]),
-            ]
-        case .storage:
-            return storageSections()
-        case .shortcuts, .agents:
-            return []
+        case .general: general()
+        case .spaces: storageSections()
+        case .agents: agentSections()
+        case .advanced: advancedSections()
         }
     }
 
-    /// Assistant: what a new space's conversation starts with, whether conversations resume, and when assistants rest.
-    private func assistantSections() -> [SettingsSection] {
-        let preferences = preferences, registry = Registry.app
-        let first = offered().first ?? registry.builders.first?.kind ?? "", kind = preferences.assistant ?? first
-        let kinds = offered() + (offered().contains(kind) || kind.isEmpty ? [] : [kind])
-        // The model and effort that kind last listed; before any, the agent's own, which "" stands for.
-        func listed(_ key: KeyPath<Options, [Option]?>, _ own: String, _ value: WritableKeyPath<Preferences.Values, String?>) -> SettingsRow.Control {
-            let options = [SettingsRow.Option(value: "", label: own)]
-                + (preferences.listed[kind]?[keyPath: key] ?? []).map { SettingsRow.Option(value: $0.value, label: $0.label) }
-            return .choice(options, get: { preferences.values[keyPath: value] ?? "" }, set: { chosen in
-                preferences.change { $0[keyPath: value] = chosen.isEmpty ? nil : chosen }
-            })
-        }
-        let resuming = registry.builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
-        let fresh = registry.builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
-        let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
-        return [
-            SettingsSection(title: "Defaults for new spaces", rows: [
-                SettingsRow(title: "Agent", note: "Each space can change its own, from its assistant.",
-                            control: .choice(kinds.map { SettingsRow.Option(value: $0, label: registry.name(of: $0)) }, get: { preferences.assistant ?? first }, set: { [weak self] chosen in
-                                // Another agent's model and effort mean nothing to this one (AssistantModel.keepDefault).
-                                preferences.change { if $0.assistant != chosen { ($0.assistant, $0.model, $0.effort) = (chosen, nil, nil) } }
-                                self?.chose(chosen)
-                            })),
-                SettingsRow(title: "Model", note: "", control: listed(\.model, registry.limits[kind]?.contains("model") == true ? "Its own model" : "Default model", \.model)),
-                registry.limits[kind]?.contains("effort") == true
-                    ? SettingsRow(title: "Effort", note: "\(registry.name(of: kind)) sets its own effort.", control: .locked("Set by the agent"))
-                    : SettingsRow(title: "Effort", note: "Higher is slower and uses your limits faster.", control: listed(\.effort, "Default effort", \.effort)),
-            ]),
-            SettingsSection(title: "Conversations", rows: [
-                SettingsRow(title: "Resume each space’s conversation",
-                            note: "\(Words.list(resuming, "and")) can. \(Words.list(fresh, "and")) start fresh, and say so.",
-                            control: .toggle(get: { preferences.resume }, set: { value in preferences.resume = value }, enabled: true)),
-            ]),
-            SettingsSection(title: "Rest", rows: [
-                SettingsRow(title: "Put idle assistants to sleep after", note: "The open space’s assistant and working ones stay awake.",
-                            control: number(\.sleepAfter, minutes)),
-                SettingsRow(title: "Keep at most", note: "When one more wakes, the one idle the longest goes to sleep. A sleeping assistant wakes on your next message.",
-                            control: number(\.awakeAtMost, (1...5).map { ($0, String($0)) }), trail: "assistants awake"),
-            ]),
-        ]
+    func toggle(_ key: WritableKeyPath<Preferences.Values, Bool>) -> SettingsRow.Control {
+        let preferences = preferences
+        return .toggle(get: { preferences.values[keyPath: key] }, set: { value in preferences.change { $0[keyPath: key] = value } })
+    }
+
+    func choice<T: RawRepresentable>(_ key: WritableKeyPath<Preferences.Values, T>, _ options: [(T, String)], then: @escaping () -> Void = {})
+        -> SettingsRow.Control where T.RawValue == String {
+        let preferences = preferences
+        return .choice(options.map { SettingsRow.Option(value: $0.0.rawValue, label: $0.1) }, get: { [preferences.values[keyPath: key].rawValue] }, set: { raw in
+            guard let value = T(rawValue: raw) else { return }
+            preferences.change { $0[keyPath: key] = value }
+            then()
+        })
     }
 
     /// A choice among numbers, written to `key`.
     func number(_ key: WritableKeyPath<Preferences.Values, Int>, _ options: [(Int, String)]) -> SettingsRow.Control {
         let preferences = preferences
-        return .choice(options.map { SettingsRow.Option(value: String($0.0), label: $0.1) }, get: { String(preferences.values[keyPath: key]) }, set: { raw in
+        return .choice(options.map { SettingsRow.Option(value: String($0.0), label: $0.1) }, get: { [String(preferences.values[keyPath: key])] }, set: { raw in
             if let value = Int(raw) { preferences.change { $0[keyPath: key] = value } }
         })
     }
 
-    /// One agent of the Agents tab: where it was found and the version its files name, or why something only sees it.
-    struct AgentLine: Identifiable, Equatable {
-        let id: String, name: String, builds: Bool, isDefault: Bool
-        let path: String?, version: String?, note: String
+    /// General: the start; the theme, the interface size and the sidebar.
+    private func general() -> [SettingsSection] {
+        let preferences = preferences
+        let sidebar = SettingsRow.Control.choice([.init(value: "pinned", label: "Pinned"), .init(value: "floating", label: "Floating")],
+                                                 get: { [self.floats ? "floating" : "pinned"] }, set: { [weak self] in
+            guard let self else { return }
+            float($0 == "floating")
+            floats = floating()
+        })
+        return [
+            SettingsSection(title: "Start", rows: [SettingsRow(title: "When something opens", note: "The page you see first.", control: opening())]),
+            SettingsSection(title: "Look", rows: [
+                SettingsRow(title: "Theme", note: "Auto follows your Mac, day and night.",
+                            control: choice(\.appearance, [(.system, "Auto"), (.light, "Light"), (.dark, "Dark")]) { [weak self] in self?.apply(preferences.appearance) },
+                            style: .thumbs),
+                SettingsRow(title: "Interface size",
+                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages.",
+                            control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }) { [weak self] in self?.resize(preferences.size) },
+                            style: .tiles, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
+                SettingsRow(title: "Sidebar", note: floats ? "Over the page when the pointer rests on the window’s left edge."
+                                : "Always beside your spaces. ⌃⌘S hides it for a while.", control: sidebar, style: .segments),
+            ]),
+        ]
     }
 
-    /// The agents of the registry, the builders first, each found or not; the default is the one new spaces build with.
+    /// Agents: your assistant, what a new space may do and each space's level, then the agents on this Mac.
+    private func agentSections() -> [SettingsSection] {
+        let preferences = preferences, registry = Registry.app
+        let first = offered().first ?? registry.builders.first?.kind ?? "", kind = preferences.assistant ?? first
+        let kinds = offered() + (offered().contains(kind) || kind.isEmpty ? [] : [kind])
+        let levels = Grant.Level.allCases.map { ($0, $0.title) }
+        return [
+            SettingsSection(title: "Your assistant", rows: [
+                SettingsRow(title: "Agent", note: "It builds and changes your spaces, only in `~/something/spaces`. Anything else, it asks you.",
+                            control: .choice(kinds.map { SettingsRow.Option(value: $0, label: registry.name(of: $0)) }, get: { [preferences.assistant ?? first] }, set: { [weak self] chosen in
+                                // Another agent's model and effort mean nothing to this one (AssistantModel.keepDefault).
+                                preferences.change { if $0.assistant != chosen { ($0.assistant, $0.model, $0.effort) = (chosen, nil, nil) } }
+                                self?.chose(chosen)
+                            })),
+                model(of: kind),
+            ]),
+            SettingsSection(title: "Spaces and your agents", rows: [
+                SettingsRow(title: "A new space may", note: preferences.level.sentence + " New Space starts here when your words name no agent.",
+                            control: choice(\.level, levels), style: .segments, wrap: true),
+                SettingsRow(title: "Notify me when an agent asks", note: "A banner of the Mac when something is in the background. It never shows the command.",
+                            control: toggle(\.notify)),
+            ], lead: "Each space and what it may do. One click changes it.", more: spaceLevels.map { space in
+                SettingsRow(title: space.title, note: space.level == .run ? space.folder.map { "in `\(Words.path($0, home: places.home.path))`" } ?? "" : "",
+                            control: space.level.map { level in
+                                .choice(levels.map { SettingsRow.Option(value: $0.0.rawValue, label: $0.1) }, get: { [level.rawValue] }, set: { [weak self] in
+                                    self?.setLevel(space.id, Grant.Level(rawValue: $0) ?? .none)
+                                    self?.look()
+                                })
+                            } ?? .said("Not known"), tag: space.id)
+            }),
+            SettingsSection(title: "On this Mac", rows: [], block: .found),
+        ]
+    }
+
+    /// The model, and the effort when the agent takes one, in one menu: the names the agent last listed for `kind`,
+    /// "Default" its own setting; before any list, what is known.
+    private func model(of kind: String) -> SettingsRow {
+        let preferences = preferences, limits = Registry.app.limits[kind] ?? [], listed = preferences.listed[kind]
+        guard !limits.contains("model"), let models = listed?.model else {
+            return SettingsRow(title: "Model", note: "", control: .said(limits.contains("model") ? "\(Registry.app.name(of: kind)) chooses its own model"
+                                                                                                    : "Its models show after its first run"))
+        }
+        let effort = !limits.contains("effort")
+        func options(_ prefix: String, _ own: String, _ listed: [Option]) -> [SettingsRow.Option] {
+            [SettingsRow.Option(value: prefix, label: own)] + listed.map { SettingsRow.Option(value: prefix + $0.value, label: $0.label) }
+        }
+        let all = (effort ? [SettingsRow.Option(value: "", label: "Model", heading: true)] : []) + options("", "Default model", models)
+            + (effort ? [SettingsRow.Option(value: "", label: "Effort", heading: true)] + options("effort:", "Default effort", listed?.effort ?? []) : [])
+        return SettingsRow(title: effort ? "Model and effort" : "Model", note: "“Default” follows the agent’s own setting.", control: .choice(all, get: {
+            [preferences.model ?? "", "effort:" + (preferences.effort ?? "")]
+        }, set: { value in
+            let effort = value.hasPrefix("effort:"), chosen = effort ? String(value.dropFirst(7)) : value
+            preferences.change { $0[keyPath: effort ? \Preferences.Values.effort : \.model] = chosen.isEmpty ? nil : chosen }
+        }))
+    }
+
+    /// Advanced: who asks, the assistants' rest and resume, and the shortcuts.
+    private func advancedSections() -> [SettingsSection] {
+        let preferences = preferences, builders = Registry.app.builders
+        let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
+        let fresh = builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
+        let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
+        return [
+            SettingsSection(title: "Permissions", rows: [
+                SettingsRow(title: "Your assistant asks before every change", note: "Off: it changes your spaces freely and asks for anything else.",
+                            control: .toggle(get: { preferences.askEverything }, set: { [weak self] value in
+                                preferences.askEverything = value
+                                self?.asking(value)
+                            })),
+                SettingsRow(title: "Agents a space starts", note: "Each agent asks you as it usually does.", control: .said("Their Own Settings")),
+            ], lead: Promise.sentence),
+            SettingsSection(title: "Assistants", rows: [
+                SettingsRow(title: "Resume each space’s conversation",
+                            note: "\(Words.list(resuming, "and")) can. \(Words.list(fresh, "and")) start fresh, and say so.", control: toggle(\.resume)),
+                SettingsRow(title: "Put idle assistants to sleep after", note: "The open space’s assistant and working ones stay awake.",
+                            control: number(\.sleepAfter, minutes)),
+                SettingsRow(title: "Keep at most", note: "When one more wakes, the one idle the longest goes to sleep. A sleeping assistant wakes on your next message.",
+                            control: number(\.awakeAtMost, (1...5).map { ($0, String($0)) }), trail: "assistants awake"),
+            ]),
+            SettingsSection(title: "Keyboard", rows: [
+                SettingsRow(title: "Keyboard shortcuts", note: "⌘/ shows them all, wherever you are.",
+                            control: .button("Show Shortcuts", symbol: "keyboard") { [weak self] in self?.shortcuts() }),
+            ]),
+        ]
+    }
+
+    /// One agent found on this Mac: its name and what its files say of its version, or that something only sees it.
+    struct AgentLine: Identifiable, Equatable { let id: String, name: String, line: String }
+
+    /// The agents found, the builders first.
     var agents: [AgentLine] {
-        let preferred = preferences.assistant ?? offered().first, all = Registry.app.agents
-        return (all.filter { $0.builder != nil } + all.filter { $0.builder == nil }).map { agent in
-            let path = path(agent.kind), builds = agent.builder != nil
-            let note: String
-            if !builds { note = agent.unavailable ?? "something only sees \(agent.name)." }
-            else if case .failure(let error) = found?[agent.kind] { note = Found.note(error, install: agent.install ?? agent.kind) }
-            else { note = Registry.resumesAsBuilt.contains(agent.kind) ? "Resumes each space’s conversation" : "Starts each conversation fresh, and says so" }
-            return AgentLine(id: agent.kind, name: agent.name, builds: builds, isDefault: builds && agent.kind == preferred && path != nil,
-                             path: path.map { ($0 as NSString).abbreviatingWithTildeInPath },
-                             version: path == nil ? nil : seen[agent.kind] ?? "version unknown", note: note)
+        let all = Registry.app.agents
+        return (all.filter { $0.builder != nil } + all.filter { $0.builder == nil }).compactMap { agent in
+            guard (try? found?[agent.kind]?.get()) != nil else { return nil }
+            return AgentLine(id: agent.kind, name: agent.name,
+                             line: agent.builder == nil ? "Seen only" : seen[agent.kind].map { "Version \($0)" } ?? "Version unknown")
         }
     }
 
-    /// The footer of Agents: when something last looked, and how many agents it found.
+    /// Under the agents: how many were found and when something last looked, and what it never does to them.
     var lookedLine: String {
-        guard let found, let looked else { return "Looking for agents on this Mac…" }
-        let count = found.values.filter { (try? $0.get()) != nil }.count, agents = "\(count) agent\(count == 1 ? "" : "s")"
-        let day = Info.day(looked, now: clock())
+        guard found != nil, let looked else { return "Looking for agents on this Mac…" }
+        let count = agents.count, day = Info.day(looked, now: clock())
         let when = ["Today", "Yesterday"].contains(day) ? day.lowercased() : "on " + day
-        return "Looked \(when) at \(Presence.clock.string(from: looked)) · \(agents)"
+        return "Found \(count) agent\(count == 1 ? "" : "s") · looked \(when) at \(Presence.clock.string(from: looked)). "
+            + "something never installs them or changes their settings."
     }
 
     /// "When something opens": the last space, New Space, or one space. A space no longer there reads as the last.
@@ -315,27 +321,8 @@ struct SettingsSection: Identifiable {
                        SettingsRow.Option(value: "", label: "A space", heading: true)] + spaces.map { SettingsRow.Option(value: $0.id, label: $0.title) }
         return .choice(options, get: {
             let chosen = preferences.openAtStart
-            return chosen == "new" || spaces.contains { $0.id == chosen } ? chosen : "last"
+            return [chosen == "new" || spaces.contains { $0.id == chosen } ? chosen : "last"]
         }, set: { value in preferences.openAtStart = value })
-    }
-
-    /// The Appearance choice: applied to every window at once.
-    func choose(_ appearance: Preferences.Appearance) {
-        preferences.appearance = appearance
-        apply(appearance, preferences.motion)
-    }
-
-    /// Makes or removes the launcher; only the one something made is ever removed.
-    private func addToApplications(_ on: Bool) {
-        // The disk is the truth (Launcher.made): no key is written, so none can contradict it.
-        do {
-            if on, let prefix = Launcher.prefix(of: app) {
-                try Launcher.make(prefix: prefix, places: places, icon: Bundle.main.url(forResource: "something", withExtension: "icns"))
-            } else if !on {
-                try Launcher.remove(places: places)
-            }
-        } catch { told(error.sentence) }
-        look()
     }
 }
 
@@ -354,7 +341,7 @@ struct SettingsSection: Identifiable {
         return window
     }
 
-    /// Applies the person's appearance and motion to the whole app: at the start, and as Interface changes them.
+    /// Applies the person's appearance and motion to the whole app, at the start.
     static func apply(_ appearance: Preferences.Appearance, _ motion: Look.Motion) {
         NSApp.appearance = Look.appearance(appearance)
         Look.chosen = motion
@@ -386,13 +373,19 @@ extension App {
         Settings.open(tab) {
             let model = SettingsModel(preferences: library.preferences, places: places)
             model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
-            model.welcome = { [weak self] in self?.showWelcome(nil) }
-            model.told = { [weak self] in self?.ask.tell($0) }
+            model.floating = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed ?? false }
+            model.float = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed = $0 }
+            model.shortcuts = { [weak self] in self?.showKeys(nil) }
+            model.levels = { [weak self] in self?.library.levels() ?? [] }
+            model.setLevel = { [weak self] name, level in
+                if let space = self?.library.entry(name)?.space { self?.info.choose(level, in: space) }
+            }
             model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
             model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
             model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
             model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
             model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
+            model.look()
             model.find()
             let made = SettingsWindow(model)
             made.window.center()
@@ -400,16 +393,27 @@ extension App {
         }
     }
 
-    /// Assistant › Ask Before Every Change…: Settings › Permissions, where the switch and what it means are.
-    @MainActor @objc func showPermissions(_ sender: Any?) { settings(.permissions) }
+    /// Assistant › Ask Before Every Change…: Settings › Advanced, where the switch and what it means are.
+    @MainActor @objc func showPermissions(_ sender: Any?) { settings(.advanced) }
 
-    /// Defaults for New Spaces…, under the agent chip and Build With ▸: Settings › Assistant.
-    @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(.assistant) }
+    /// Defaults for New Spaces…, under the agent chip and Build With ▸: Settings › Agents.
+    @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(.agents) }
 
     /// Look for Agents Again, from the assistant's menu: as Agents' Look Again; a Settings window made later looks itself.
     @MainActor @objc func lookForAgentsAgain(_ sender: Any?) {
         if let model = Settings.shown?.model { return model.again() }
         assistant.lookAgain()
+    }
+}
+
+extension Library {
+    /// Each space's level as its grant says it (None when never answered); grants that do not read leave each unknown.
+    func levels() -> [SettingsModel.SpaceLevel] {
+        let grants = try? Grants(places.grants).read()
+        return order().filter(\.isSpace).map { entry in
+            let grant = grants?.spaces[entry.id]
+            return .init(id: entry.id, title: entry.title, level: grants.map { _ in grant.map(Rights.level(of:)) ?? .none }, folder: grant?.folder)
+        }
     }
 }
 
@@ -427,13 +431,6 @@ enum Found {
         guard case .failure = found, Registry.app.agent(kind)?.builder == nil else { return found }
         let app = "/Applications/\(Registry.app.name(of: kind)).app"
         return FileManager.default.fileExists(atPath: app) ? .success(app) : found
-    }
-
-    /// What a builder's row says when it was not found: the short sentence for a plain absence, else Programs' own,
-    /// which says what is not known or what is missing.
-    static func note(_ error: CodedError, install: String) -> String {
-        error.code == "NOT_INSTALLED" && error.message.contains("was not found on this Mac")
-            ? "Not found on this Mac. To install it, type in Terminal: \(install)" : error.message
     }
 }
 
@@ -500,133 +497,186 @@ enum Found {
 
 // MARK: The pages
 
-/// One tab's page: its sections of rows, or the shortcuts.
+/// One tab's page: its sections, each its title, its rows in a card, a line, and more rows or its block. As tall as
+/// they are up to `most` points, as the mockup's window; past it, they scroll.
 struct SettingsPage: View {
     let model: SettingsModel
     let tab: SettingsTab
+    static let most: CGFloat = 680
 
     var body: some View {
+        let factor = Look.scale.size.factor
+        ScrollView {
+            sections.frame(width: 720 * factor, alignment: .topLeading).fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.heights[tab] = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: 720 * factor, height: min(max(model.heights[tab] ?? 0, 1), Self.most * factor))
+        .background(Look.Token.bg.ui)
+    }
+
+    private var sections: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if tab == .shortcuts {
-                ShortcutColumns().padding(.vertical, 14).padding(.horizontal, 16).card()
-                HStack(spacing: 8) {
-                    Image(systemName: "info.circle").font(.system(size: 11))
-                    Text("To change a menu’s key, use System Settings › Keyboard › App Shortcuts.").frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Open Keyboard Settings…", action: model.keyboard).buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui)
-                }
-                .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 4)
-            }
-            if tab == .permissions {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "checkmark.shield").font(.system(size: 14)).foregroundStyle(Look.Token.ink2.ui).padding(.top, 2)
-                    Text(Promise.sentence).font(Look.font(.ui, size: 13.5, weight: .medium).ui).lineSpacing(3).foregroundStyle(Look.Token.ink.ui)
-                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.vertical, 14).padding(.horizontal, 16)
-                .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: Look.card, style: .continuous))
-            }
-            if tab == .agents { AgentsList(model: model) }
             ForEach(model.sections(tab)) { section in
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(section.title).font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink3.ui)
-                        .padding(.horizontal, 2).padding(.top, 2)
-                    VStack(spacing: 0) {
-                        if section.appearance { Appearances(model: model) }
-                        if section.storage, let limit = section.rows.first { StorageBlock(storage: model.storage, megabytes: model.preferences.values.storageLimit, limit: limit) }
-                        ForEach(Array(section.rows.dropFirst(section.storage ? 1 : 0).enumerated()), id: \.element.id) { index, row in
-                            if index > 0 || section.appearance || section.storage { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
-                            RowView(row: row)
-                        }
+                    if !section.title.isEmpty {
+                        Text(section.title).font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink3.ui)
+                            .padding(.horizontal, 2).padding(.top, 2)
                     }
-                    .card()
-                    if let foot = section.foot {
-                        Label(foot, systemImage: "checkmark").font(Look.small.font.ui).foregroundStyle(Look.Token.ok.ui).padding(.horizontal, 4)
+                    if section.block == .storage, let limit = section.rows.first {
+                        StorageBlock(storage: model.storage, megabytes: model.preferences.values.storageLimit, limit: limit).card()
+                    } else if !section.rows.isEmpty {
+                        Rows(rows: section.rows)
                     }
+                    if let lead = section.lead {
+                        Text(lead).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 2).padding(.top, 4)
+                    }
+                    if !section.more.isEmpty { Rows(rows: section.more) }
+                    if section.block == .found { AgentsFound(model: model) }
                 }
-            }
-            if tab == .general {
-                HStack(spacing: 10) {
-                    PageSign(state: .listen, side: 22, lands: false, motion: model.preferences.motion).frame(width: 22, height: 22)
-                    (Text(model.versionLine.name).font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundColor(Look.Token.ink2.ui)
-                        + Text(model.versionLine.rest))
-                        .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
-                }
-                .padding(.horizontal, 4).padding(.vertical, 2)
             }
         }
         .padding(.top, 16).padding(.horizontal, 28).padding(.bottom, 24)
-        .frame(width: 720 * Look.scale.size.factor, alignment: .topLeading)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Look.Token.bg.ui)
     }
 }
 
-/// A row: its title and note on the left, its control on the right.
+/// Rows in a card, a line between two.
+private struct Rows: View {
+    let rows: [SettingsRow]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                if index > 0 { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+                RowView(row: row)
+            }
+        }
+        .card()
+    }
+}
+
+/// A row: its title and note, its control on the right or under them.
 private struct RowView: View {
     let row: SettingsRow
 
     var body: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 1) {
-                if let trail = row.trail {
-                    // The control inside the sentence, as the mockup's .cm-inl.
-                    HStack(spacing: 7) { Text(row.title); RowControl(row: row); Text(trail) }.font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
-                } else {
-                    Text(row.title).font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
-                }
-                if row.code {
-                    Text(row.note).font(Look.font(.code, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui)
-                } else if !row.note.isEmpty {
-                    Text(row.note).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
-                }
-                if !row.keys.isEmpty {
-                    HStack(spacing: 5) {
-                        ForEach(Array(row.keys.enumerated()), id: \.offset) { index, pair in
-                            Keycap(words: pair.key, boxed: true)
-                            Text(pair.words + (index < row.keys.count - 1 ? " ·" : ""))
-                        }
+        let words = VStack(alignment: .leading, spacing: 1) {
+            if let trail = row.trail {
+                // The control inside the sentence, as the mockup's .sf-inl.
+                HStack(spacing: 7) { Text(row.title); RowControl(row: row); Text(trail) }.font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
+            } else {
+                Text(row.title).font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
+            }
+            if !row.note.isEmpty {
+                Text(LocalizedStringKey(row.note)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
+            }
+            if !row.keys.isEmpty {
+                HStack(spacing: 5) {
+                    ForEach(Array(row.keys.enumerated()), id: \.offset) { index, pair in
+                        Keycap(words: pair.key, boxed: true)
+                        Text(pair.words + (index < row.keys.count - 1 ? " ·" : ""))
                     }
-                    .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 5)
+                }
+                .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 5)
+            }
+        }
+        Group {
+            if row.wrap {
+                VStack(alignment: .leading, spacing: 8) { words; RowControl(row: row) }.frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 16) {
+                    words.frame(maxWidth: .infinity, alignment: .leading)
+                    if row.trail == nil { RowControl(row: row) }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if row.trail == nil { RowControl(row: row) }
         }
         .padding(.horizontal, 14).padding(.vertical, 9 * Look.density).frame(minHeight: Look.row + 17)
-        .accessibilityElement(children: .contain)
     }
 }
 
-/// A row's control: a choice in the mockup's popup button, a switch, a button or a lock.
+/// A row's control: a choice in the mockup's popup button, its tiles, pictures or segments; a switch; a button; words.
 struct RowControl: View {
     let row: SettingsRow
 
     var body: some View {
         switch row.control {
-        case .choice(let options, let get, let set) where row.tiles:
-            Tiles(title: row.title, options: options, get: get, set: set)
         case .choice(let options, let get, let set):
-            // The menu itself is the system's, a heading as a section.
-            let shown = options.first { !$0.heading && $0.value == get() }?.label ?? ""
-            PopMenu(title: row.title, shown: shown, minWidth: row.trail == nil ? 96 : 0) {
-                let cut = options.firstIndex(where: \.heading) ?? options.count
-                Picker(row.title, selection: Binding(get: get, set: set)) {
-                    ForEach(options[..<cut], id: \.self) { Text($0.label).tag($0.value) }
-                    if cut < options.count {
-                        Section(options[cut].label) { ForEach(options[(cut + 1)...], id: \.self) { Text($0.label).tag($0.value) } }
+            switch row.style {
+            case .tiles: Tiles(title: row.title, options: options, chosen: get().first ?? "", set: set)
+            case .thumbs: Appearances(options: options, chosen: get().first ?? "", set: set)
+            case .segments: Segments(title: row.title, options: options, chosen: get().first ?? "", set: set)
+            case .menu:
+                let chosen = get()
+                PopMenu(title: row.title, shown: options.filter { !$0.heading && chosen.contains($0.value) }.map(\.label).joined(separator: " · "),
+                        minWidth: row.trail == nil ? 96 : 0) {
+                    // The menu itself is the system's, a heading as a section, each chosen item checked.
+                    ForEach(Array(Self.sections(options).enumerated()), id: \.offset) { _, section in
+                        Section(section.heading) {
+                            ForEach(section.items, id: \.self) { option in
+                                Toggle(option.label, isOn: Binding(get: { get().contains(option.value) }, set: { _ in set(option.value) }))
+                            }
+                        }
                     }
                 }
             }
-        case .toggle(let get, let set, let enabled):
-            Toggle(row.title, isOn: Binding(get: get, set: set)).toggleStyle(SwitchStyle()).labelsHidden().disabled(!enabled)
-                .opacity(enabled ? 1 : 0.45)
-        case .button(let title, let symbol, let enabled, let run):
+        case .toggle(let get, let set):
+            Toggle(row.title, isOn: Binding(get: get, set: set)).toggleStyle(SwitchStyle()).labelsHidden()
+        case .button(let title, let symbol, let run):
             Button(action: run) {
                 if let symbol { Label(title, systemImage: symbol) } else { Text(title) }
             }
-            .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui).disabled(!enabled).opacity(enabled ? 1 : 0.45)
-        case .locked(let word):
-            Label(word, systemImage: "lock").labelStyle(Locked()).accessibilityLabel("\(row.title): \(word), cannot be changed")
+            .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui)
+        case .said(let words):
+            Text(words).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel("\(row.title): \(words)")
+        }
+    }
+
+    /// The options in the menu's sections: those before the first heading, then each heading's.
+    static func sections(_ options: [SettingsRow.Option]) -> [(heading: String, items: [SettingsRow.Option])] {
+        options.reduce(into: []) { sections, option in
+            if option.heading || sections.isEmpty { sections.append((option.heading ? option.label : "", [])) }
+            if !option.heading { sections[sections.count - 1].items.append(option) }
+        }
+    }
+}
+
+/// Options side by side, as the mockup's .xc-seg: a sunk track, the chosen one a raised pill of the page's colour, no
+/// dividers; read by VoiceOver as one adjustable control that says the choice. As wide as its words, or as its column
+/// (`wide`).
+struct Segments: View {
+    let title: String, options: [SettingsRow.Option], chosen: String, set: (String) -> Void
+    var wide = false
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.self) { option in
+                let on = option.value == chosen
+                Button { set(option.value) } label: {
+                    Text(option.label).font(Look.font(.ui, size: 12, weight: on ? .semibold : .medium).ui)
+                        .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                        .padding(.horizontal, wide ? 4 : 10).frame(minWidth: wide ? 0 : 58, maxWidth: wide ? .infinity : nil).frame(height: 24)
+                        .background {
+                            if on {
+                                RoundedRectangle(cornerRadius: 6).fill(Look.Token.bg.ui).shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+                                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui) }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .boxed(RoundedRectangle(cornerRadius: 8), Look.Token.sunk.ui, ring: Look.Token.line.ui)
+        .fixedSize(horizontal: !wide, vertical: true)
+        // One control to VoiceOver, the choice in its label: offscreen and on, the words read are the same.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title): \(options.first { $0.value == chosen }?.label ?? "")")
+        .accessibilityHint(Words.list(options.map(\.label), "or"))
+        .accessibilityAdjustableAction { direction in
+            let at = options.firstIndex { $0.value == chosen } ?? 0
+            let next = direction == .increment ? min(at + 1, options.count - 1) : direction == .decrement ? max(at - 1, 0) : at
+            set(options[next].value)
         }
     }
 }
@@ -634,12 +684,12 @@ struct RowControl: View {
 /// A choice in tiles, each "Aa" a size larger than the one before over two lines of text; the chosen one ringed in
 /// ink, its label in semibold.
 private struct Tiles: View {
-    let title: String, options: [SettingsRow.Option], get: () -> String, set: (String) -> Void
+    let title: String, options: [SettingsRow.Option], chosen: String, set: (String) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-                let on = get() == option.value
+                let on = chosen == option.value
                 Button { set(option.value) } label: {
                     VStack(spacing: 6) {
                         VStack(alignment: .leading, spacing: 3) {
@@ -660,26 +710,26 @@ private struct Tiles: View {
 
 /// Auto, Light and Dark, each a small picture of the window in it; the chosen one ringed in ink.
 private struct Appearances: View {
-    let model: SettingsModel
+    let options: [SettingsRow.Option], chosen: String, set: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 18) {
-            ForEach([(Preferences.Appearance.system, "Auto"), (.light, "Light"), (.dark, "Dark")], id: \.0) { choice, label in
-                let on = model.preferences.appearance == choice
-                Button { model.choose(choice) } label: {
+        HStack(spacing: 10) {
+            ForEach(options, id: \.self) { option in
+                let on = chosen == option.value
+                Button { set(option.value) } label: {
                     VStack(spacing: 6) {
-                        Thumb(choice: choice).frame(width: 76, height: 50).clipShape(RoundedRectangle(cornerRadius: Look.control, style: .continuous))
+                        Thumb(choice: Preferences.Appearance(rawValue: option.value) ?? .system).frame(width: 76, height: 50)
+                            .clipShape(RoundedRectangle(cornerRadius: Look.control, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: Look.control, style: .continuous)
                                 .strokeBorder((on ? Look.Token.ink : .line2).ui, lineWidth: on ? 2 : 1).padding(on ? -2 : -1))
-                        Text(label).font(Look.font(.ui, size: 11.5, weight: on ? .semibold : .regular).ui).foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                        Text(option.label).font(Look.font(.ui, size: 11.5, weight: on ? .semibold : .regular).ui).foregroundStyle((on ? Look.Token.ink : .ink2).ui)
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(label).accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                .accessibilityLabel(option.label).accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
             }
         }
-        .padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
     }
 }
 
@@ -723,35 +773,33 @@ private struct Thumb: View {
     }
 }
 
-/// A lock and its word, small, in ink3.
-private struct Locked: LabelStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        HStack(spacing: 6) { configuration.icon.font(.system(size: 10)); configuration.title }
-            .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
-    }
-}
-
-/// Agents: what something never does to them, the builders and the agents it only sees, and Look Again.
-private struct AgentsList: View {
+/// On this Mac: the agents found, three to a line, each its tile, its name and its version, read only; then how many
+/// were found and when, and Look Again.
+private struct AgentsFound: View {
     let model: SettingsModel
 
     var body: some View {
         let agents = model.agents
-        Text("The coding agents found on this Mac. something never installs them, signs them in or changes their settings.")
-            .font(Look.medium.font.ui).foregroundStyle(Look.Token.ink2.ui).padding(.horizontal, 4)
-        ForEach([true, false], id: \.self) { builds in
-            let shown = agents.filter { $0.builds == builds }
-            VStack(alignment: .leading, spacing: 7) {
-                Text(builds ? "Can build spaces · \(shown.filter { $0.path != nil }.count)" : "Seen only · \(shown.count)")
-                    .font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 2).padding(.top, 2)
-                VStack(spacing: 0) {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, agent in
-                        if index > 0 { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
-                        AgentRow(agent: agent, motion: model.preferences.motion)
+        if !agents.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(stride(from: 0, to: agents.count, by: 3)), id: \.self) { start in
+                    HStack(spacing: 12) {
+                        ForEach(start..<start + 3, id: \.self) { index in
+                            HStack(spacing: 9) {
+                                if index < agents.count {
+                                    Monogram(name: agents[index].name, side: 22)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(agents[index].name).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                                        Text(agents[index].line).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading).accessibilityElement(children: .combine)
+                        }
                     }
                 }
-                .card()
             }
+            .padding(14).card()
         }
         HStack(spacing: 10) {
             Text(model.lookedLine).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).frame(maxWidth: .infinity, alignment: .leading)
@@ -759,120 +807,6 @@ private struct AgentsList: View {
                 .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui).disabled(model.found == nil)
         }
         .padding(.horizontal, 4)
-    }
-}
-
-/// One agent: its sign, its name, Default, where it is and its version, then what it does or why it is only seen.
-private struct AgentRow: View {
-    let agent: SettingsModel.AgentLine
-    let motion: Look.Motion
-
-    var body: some View {
-        HStack(spacing: 12) {
-            PageSign(state: agent.builds ? .listen : .sleep, side: 22, lands: false, motion: motion).frame(width: 26, height: 26)
-                .opacity(agent.builds && agent.path != nil ? 1 : 0.4)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(agent.name).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                    if agent.isDefault {
-                        Text("Default").font(Look.font(.ui, size: 10, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui).padding(.horizontal, 6)
-                            .padding(.vertical, 1).overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Look.Token.line2.ui))
-                    }
-                    if let path = agent.path { Text(path).font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1) }
-                    if let version = agent.version { Text(version).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui) }
-                }
-                Text(agent.note).font(Look.small.font.ui).foregroundStyle((agent.builds ? Look.Token.ink3 : .ink2).ui)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if !agent.builds {
-                Label("Seen only", systemImage: "eye").labelStyle(Badge())
-            }
-        }
-        .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)
-        .accessibilityElement(children: .combine)
-    }
-
-    /// The mockup's .cm-badge: hover's fill, 22 high, ink2.
-    private struct Badge: LabelStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            HStack(spacing: 5) { configuration.icon.font(.system(size: 10)); configuration.title }
-                .font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
-                .padding(.horizontal, 8).frame(height: 22).background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 6))
-        }
-    }
-}
-
-// MARK: The shortcuts
-
-/// The shortcut list in two columns, Spaces and Show on the left, Assistant and Window on the right, read from Keys.
-struct ShortcutColumns: View {
-    /// What a key reads as: a keycap, or a word between them ("hold", "to").
-    enum Cap: Equatable { case key(String), word(String) }
-
-    static let columns: [[Keys.Command.Area]] = [[.spaces, .show], [.assistant, .window]]
-
-    /// The commands the sheet lists in `area`, in Keys' order.
-    static func lines(_ area: Keys.Command.Area) -> [Keys.Command] { Keys.commands.filter { $0.area == area && $0.line != nil } }
-
-    /// "⇧⌘T" as one keycap per symbol; "esc" one keycap; "hold ⌥" the word, then ⌥; "⌘1 … ⌘9" ⌘ 1 to ⌘ 9.
-    static func caps(_ shown: String) -> [Cap] {
-        if shown == "esc" { return [.key(shown)] }
-        return shown.split(separator: " ").flatMap { part -> [Cap] in
-            if part == "…" { return [.word("to")] }
-            if part.allSatisfy(\.isLowercase) { return [.word(String(part))] }
-            return part.map { .key(String($0)) }
-        }
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 28) {
-            ForEach(Self.columns, id: \.self) { areas in
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(areas, id: \.self) { area in
-                        Text(area.rawValue.uppercased()).font(Look.font(.ui, size: 11, weight: .semibold).ui).tracking(0.44)
-                            .foregroundStyle(Look.Token.ink3.ui).padding(.top, area == areas[0] ? 0 : 10).padding(.bottom, 4)
-                        ForEach(Array(Self.lines(area).enumerated()), id: \.element.id) { index, command in
-                            if index > 0 { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
-                            HStack(spacing: 12) {
-                                Text(command.line ?? command.title).font(Look.medium.font.ui).foregroundStyle(Look.Token.ink.ui)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                KeyCaps(caps: Self.caps(command.shown))
-                            }
-                            .frame(minHeight: 27)
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-}
-
-/// Keycaps: each a small rounded square ringed in line2, with a line under it; words between them in ink3.
-struct KeyCaps: View {
-    let caps: [ShortcutColumns.Cap]
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(caps.enumerated()), id: \.offset) { _, cap in
-                switch cap {
-                case .word(let word): Text(word).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 3)
-                case .key(let key):
-                    let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    // One stack, back to front: the line under the cap, the cap, its ring, its symbol.
-                    ZStack {
-                        shape.fill(Look.Token.line2.ui).offset(y: 1)
-                        shape.fill(Look.Token.bg2.ui)
-                        shape.strokeBorder(Look.Token.line2.ui)
-                        Text(key).font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui).padding(.horizontal, 5)
-                    }
-                    .frame(minWidth: 21, minHeight: 21).fixedSize()
-                }
-            }
-        }
-        .fixedSize()
     }
 }
 

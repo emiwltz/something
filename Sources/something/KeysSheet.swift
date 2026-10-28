@@ -1,6 +1,6 @@
 // The shortcut sheet (⌘/): a card on a scrim in the window layer (ScrimCard, WindowLayer.swift), "Keyboard Shortcuts"
-// and ✕, Keys' lines in the two columns Settings › Shortcuts draws too, and a footer that says where the menu keys are
-// changed. Esc, ✕, a click on the scrim or ⌘/ again closes it.
+// and ✕, Keys' lines in two columns (ShortcutColumns), and a footer that says where the menu keys are changed. Esc, ✕,
+// a click on the scrim or ⌘/ again closes it; Settings › Advanced's Show Shortcuts opens it too.
 import AppKit
 import SwiftUI
 
@@ -65,5 +65,76 @@ extension App {
     @objc func showKeys(_ sender: Any?) {
         shell.front()
         KeysSheet.toggle(in: shell.layer, motion: library.preferences.motion)
+    }
+}
+
+/// The shortcut list in two columns, Spaces and Show on the left, Assistant and Window on the right, read from Keys.
+struct ShortcutColumns: View {
+    /// What a key reads as: a keycap, or a word between them ("hold", "to").
+    enum Cap: Equatable { case key(String), word(String) }
+
+    static let columns: [[Keys.Command.Area]] = [[.spaces, .show], [.assistant, .window]]
+
+    /// The commands the sheet lists in `area`, in Keys' order.
+    static func lines(_ area: Keys.Command.Area) -> [Keys.Command] { Keys.commands.filter { $0.area == area && $0.line != nil } }
+
+    /// "⇧⌘T" as one keycap per symbol; "esc" one keycap; "hold ⌥" the word, then ⌥; "⌘1 … ⌘9" ⌘ 1 to ⌘ 9.
+    static func caps(_ shown: String) -> [Cap] {
+        if shown == "esc" { return [.key(shown)] }
+        return shown.split(separator: " ").flatMap { part -> [Cap] in
+            if part == "…" { return [.word("to")] }
+            if part.allSatisfy(\.isLowercase) { return [.word(String(part))] }
+            return part.map { .key(String($0)) }
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 28) {
+            ForEach(Self.columns, id: \.self) { areas in
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(areas, id: \.self) { area in
+                        Text(area.rawValue.uppercased()).font(Look.font(.ui, size: 11, weight: .semibold).ui).tracking(0.44)
+                            .foregroundStyle(Look.Token.ink3.ui).padding(.top, area == areas[0] ? 0 : 10).padding(.bottom, 4)
+                        ForEach(Array(Self.lines(area).enumerated()), id: \.element.id) { index, command in
+                            if index > 0 { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+                            HStack(spacing: 12) {
+                                Text(command.line ?? command.title).font(Look.medium.font.ui).foregroundStyle(Look.Token.ink.ui)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                KeyCaps(caps: Self.caps(command.shown))
+                            }
+                            .frame(minHeight: 27)
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+/// Keycaps: each a small rounded square ringed in line2, with a line under it; words between them in ink3.
+struct KeyCaps: View {
+    let caps: [ShortcutColumns.Cap]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(caps.enumerated()), id: \.offset) { _, cap in
+                switch cap {
+                case .word(let word): Text(word).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 3)
+                case .key(let key):
+                    let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    // One stack, back to front: the line under the cap, the cap, its ring, its symbol.
+                    ZStack {
+                        shape.fill(Look.Token.line2.ui).offset(y: 1)
+                        shape.fill(Look.Token.bg2.ui)
+                        shape.strokeBorder(Look.Token.line2.ui)
+                        Text(key).font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui).padding(.horizontal, 5)
+                    }
+                    .frame(minWidth: 21, minHeight: 21).fixedSize()
+                }
+            }
+        }
+        .fixedSize()
     }
 }

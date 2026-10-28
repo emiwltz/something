@@ -483,7 +483,7 @@ struct PaletteCard: View {
     }
 
     /// `image`, which resolves its colours where it is drawn, drawn in the card's appearance: SwiftUI draws an image
-    /// in the app's, which Settings › Interface may have made the other one.
+    /// in the app's, which Settings › General may have made the other one.
     private func drawn(_ image: NSImage) -> NSImage {
         let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         return NSImage(size: image.size, flipped: false) { rect in

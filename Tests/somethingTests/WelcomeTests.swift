@@ -1,8 +1,6 @@
 // The welcome and the blank page: the welcome alone on the screen, done by keyboard, Look Again with no builder,
 // its end on New Space with no agent started, and the menus greyed while it is open, the request panel over it; the
-// space the assistant made opened or said ready, the level sheet's first line; the hints, each once; and the launcher,
-// made in the test home's Applications only under a Homebrew prefix, never twice, never registered, removed only when
-// something made it.
+// space the assistant made opened or said ready, the level sheet's first line; and the hints, each once.
 import AppKit
 import Foundation
 import SomethingCore
@@ -198,41 +196,6 @@ import Testing
         let question = RightsQuestion(space: "Second", description: "Invented.", level: .watch, folder: nil, made: true)
         let said = PanelsTests.texts(Ask.rights(question).sheet.contentView)
         #expect(Array(said.prefix(3)) == ["Second would like to work with your agents", "Your agent made this space.", "Invented."])
-    }
-
-    /// Under a Homebrew prefix, the launcher is made in the home's Applications: a bundle of its own, never shown in the
-    /// Dock, never registered with LaunchServices.
-    @Test func theLauncherIsMadeOnceUnderHomebrew() async throws {
-        let home = Home(prefix: "something-tour-")
-        defer { home.remove() }
-        #expect(Launcher.prefix(of: URL(fileURLWithPath: "/opt/homebrew/Cellar/something/HEAD-0a1b2c3/something.app")) == "/opt/homebrew")
-        #expect(Launcher.prefix(of: URL(fileURLWithPath: "/Users/example/code/something/.build/debug/something")) == nil)
-        // The launcher's script quotes the path: a quote in it would break the script.
-        #expect(Launcher.prefix(of: URL(fileURLWithPath: "/Users/example/it's/Cellar/something/0.2.0/something.app")) == nil)
-        let brew = home.root.appendingPathComponent("brew/Cellar/something/0.2.0/something.app")
-        try Launcher.make(prefix: try #require(Launcher.prefix(of: brew)), places: home.places, icon: nil)
-        let launcher = Launcher.place(home.places)
-        let info = try #require(try PropertyListSerialization.propertyList(
-            from: Data(contentsOf: launcher.appendingPathComponent("Contents/Info.plist")), format: nil) as? [String: Any])
-        #expect(info["CFBundleIdentifier"] as? String == "io.github.emiwltz.something.launcher" && info["LSUIElement"] as? Bool == true)
-        // What Spotlight shows of an app: its name, its kind and its icon.
-        #expect(info["CFBundleName"] as? String == "something" && info["CFBundlePackageType"] as? String == "APPL" && info["CFBundleIconFile"] as? String == "something")
-        let script = try String(contentsOf: launcher.appendingPathComponent("Contents/MacOS/something"), encoding: .utf8)
-        #expect(script.contains("exec /usr/bin/open '\(home.root.path)/brew/opt/something/something.app'"))
-        #expect(FileManager.default.isExecutableFile(atPath: launcher.appendingPathComponent("Contents/MacOS/something").path))
-
-        // Never made twice.
-        try "kept".write(to: launcher.appendingPathComponent("Contents/kept"), atomically: true, encoding: .utf8)
-        try Launcher.make(prefix: home.root.appendingPathComponent("brew").path, places: home.places, icon: nil)
-        #expect(FileManager.default.fileExists(atPath: launcher.appendingPathComponent("Contents/kept").path))
-        // Removed only when it is the one something made.
-        #expect(try Launcher.remove(places: home.places) && !FileManager.default.fileExists(atPath: launcher.path))
-        try FileManager.default.createDirectory(at: launcher.appendingPathComponent("Contents"), withIntermediateDirectories: true)
-        #expect(try !Launcher.remove(places: home.places) && FileManager.default.fileExists(atPath: launcher.path))
-
-        // Nothing registered it with LaunchServices. (Spotlight's importer, mdimport, would: a test never runs it.)
-        let known = try await offMain { try PackagingTests.registered() }
-        #expect(!known.contains { $0.contains(home.root.path) || $0.contains(home.root.resolvingSymlinksInPath().path) })
     }
 
     /// The window of `home`, never shown, with `model` as its assistant.

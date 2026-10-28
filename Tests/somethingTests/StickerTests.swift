@@ -321,8 +321,8 @@ struct StickerTests {
         }
     }
 
-    @Test(arguments: [true, false])
-    func theRememberedPlaceComesBackAndADragKeepsItOnlyWhenAsked(remember: Bool) async throws {
+    /// The place kept comes back at the next start, and a drag keeps the new one.
+    @Test func theRememberedPlaceComesBackAndADragKeepsIt() async throws {
         let stage = try Stage("sticker")
         defer { stage.remove() }
         let ask = FakeAsk(), places = stage.home.places
@@ -330,7 +330,6 @@ struct StickerTests {
         library.relist()
         // Saved before the window opens, as at the next start.
         let saved = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
-        library.preferences.rememberSticker = remember
         library.preferences.sticker = saved
         let shell = Shell(library: library, info: Info(places: places, ask: ask),
                           assistant: AssistantModel(engine: stage.home.engine(), places: places), autosave: false)
@@ -342,15 +341,11 @@ struct StickerTests {
         let glass = shell.glass
         #expect(await wait { glass.stickerShown })
         let room = NSSize(width: glass.bounds.width, height: glass.bounds.height - shell.center.safeAreaInsets.top)
-        #expect(glass.spot == (remember ? saved : nil))
-        #expect(glass.corner.origin == Glass.origin(of: remember ? saved : Glass.first, in: room))
-        #expect(glass.corner.minX == (remember ? 16 : room.width - 60))
-        // A drag moves it; Preferences keep the new place only when asked to remember it.
-        let before = glass.spot
-        try drag(glass.sticker, in: shell.window, [CGSize(width: remember ? 700 : -700, height: -150)])
+        #expect(glass.spot == saved && glass.corner.origin == Glass.origin(of: saved, in: room) && glass.corner.minX == 16)
+        // A drag moves it, and Preferences keep the new place.
+        try drag(glass.sticker, in: shell.window, [CGSize(width: 700, height: -150)])
         let spot = try #require(glass.spot)
-        #expect(spot != before && spot.trailing == remember)
-        #expect(library.preferences.sticker == (remember ? spot : saved))
+        #expect(spot != saved && spot.trailing && library.preferences.sticker == spot)
     }
 
     @Test func theStickersEyesFollowThePersonsMotion() async throws {

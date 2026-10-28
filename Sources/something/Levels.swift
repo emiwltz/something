@@ -20,11 +20,11 @@ extension Grant.Level {
     }
 
     /// The level a description in English suggests: starting an agent, then writing to one, then only seeing them.
-    /// A hint the person sees and changes in one click; words it does not know suggest None.
-    static func guess(_ words: String) -> Grant.Level {
+    /// A hint the person sees and changes in one click; words it does not know suggest `otherwise` (Settings › Agents).
+    static func guess(_ words: String, otherwise: Grant.Level = .none) -> Grant.Level {
         func says(_ pattern: String) -> Bool { words.range(of: "\\b(\(pattern))\\b", options: [.regularExpression, .caseInsensitive]) != nil }
         return says("start|starts|launch|launches|run|runs|spin up") ? .run : says("talk|tell|send|write to|ask|nudge") ? .talk
-            : says("agent|agents") ? .watch : .none
+            : says("agent|agents") ? .watch : otherwise
     }
 
     /// The line something adds to the first message of a build, for the assistant to declare exactly these rights. Run's
@@ -77,45 +77,15 @@ enum Levels {
     }
 }
 
-/// The four levels side by side, as the mockup's .xc-seg: a sunk track, the chosen level a raised pill of the page's
-/// colour, no dividers; read by VoiceOver as one adjustable control that says the level. As wide as its words, or as its column
-/// (`wide`, Info's).
+/// The four levels side by side (Segments), read by VoiceOver as "With your agents: Watch". As wide as its words, or
+/// as its column (`wide`, Info's).
 struct LevelPicker: View {
     let level: Binding<Grant.Level>
     var wide = false
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(Grant.Level.allCases, id: \.self) { choice in
-                let on = choice == level.wrappedValue
-                Button { level.wrappedValue = choice } label: {
-                    Text(choice.title).font(Look.font(.ui, size: 12, weight: on ? .semibold : .medium).ui)
-                        .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
-                        .padding(.horizontal, wide ? 4 : 10).frame(minWidth: wide ? 0 : 58, maxWidth: wide ? .infinity : nil).frame(height: 24)
-                        .background {
-                            if on {
-                                RoundedRectangle(cornerRadius: 6).fill(Look.Token.bg.ui).shadow(color: .black.opacity(0.08), radius: 1, y: 1)
-                                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui) }
-                            }
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(2)
-        .boxed(RoundedRectangle(cornerRadius: 8), Look.Token.sunk.ui, ring: Look.Token.line.ui)
-        .fixedSize(horizontal: !wide, vertical: true)
-        // One control to VoiceOver: its level said as its value, changed by the adjust gesture, as a slider is.
-        .accessibilityElement(children: .ignore)
-        // The level in the label itself: offscreen and on, the words read are the same.
-        .accessibilityLabel("With your agents: \(level.wrappedValue.title)")
-        .accessibilityHint("None, Watch, Talk or Run")
-        .accessibilityAdjustableAction { direction in
-            let all = Grant.Level.allCases, at = all.firstIndex(of: level.wrappedValue) ?? 0
-            let next = direction == .increment ? min(at + 1, all.count - 1) : direction == .decrement ? max(at - 1, 0) : at
-            level.wrappedValue = all[next]
-        }
+        Segments(title: "With your agents", options: Grant.Level.allCases.map { .init(value: $0.rawValue, label: $0.title) },
+                 chosen: level.wrappedValue.rawValue, set: { level.wrappedValue = Grant.Level(rawValue: $0) ?? .none }, wide: wide)
     }
 }
 

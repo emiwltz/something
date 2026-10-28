@@ -22,14 +22,13 @@ something
 `something` opens with one welcome screen, alone on your desktop: a space (a page of your own), your agents, and your
 assistant, beside one picture of how they meet. The coding agent found on your Mac is already chosen to build your
 spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
-the window. Notifications (Settings › Permissions) and, when installed with Homebrew, a small launcher in
-`~/Applications` so that Spotlight finds something (Settings › General) stay off until you turn them on. Help › Welcome
-shows the welcome again, and Help › How something Works the picture, one part at a time if you like.
+the window. Notifications (Settings › Agents) stay off until you turn them on. Help › Welcome shows the welcome
+again, and Help › How something Works the picture, one part at a time if you like.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example), choose under it what it may do with your agents (None, Watch, Talk or Run, pre-set from
-your words), and Build: your agent builds it, and it opens by itself when ready, with nothing more to allow. The space
-appears in the sidebar at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build
+your words, else from Settings › Agents, None at first), and Build: your agent builds it, and it opens by itself when
+ready, with nothing more to allow. The space appears in the sidebar at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build
 several at a time: nothing stops them, and a click on the row shows the build again. A space that finishes while you
 are elsewhere says "… is ready · Open" (and a notification of the Mac too while something is in the background, if you
 turned notifications on). Its assistant is asked to answer in two sentences, what is ready and one thing to try;
@@ -56,10 +55,10 @@ leaves); Reload is in the View menu (⌘R), and so is the interface size: ⌘+ a
 pages included, to Large or Larger, ⌘0 brings it back (also in Settings › General). Hide the sidebar (⌃⌘S) and it
 floats: rest the pointer on the window's left edge and it comes over the page, its pin keeps it. **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
-space's, and any that works or waits for you, are never put to sleep). Settings (⌘,), Assistant, changes both: Put
+space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Advanced changes both: Put
 idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
 sleeping assistant wakes on your next message and picks its conversation up, unless Resume each space's conversation is
-off in the same pane, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
+off in the same tab, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
 60 items. An agent that cannot resume a conversation (all but Claude Code for now) is never put to sleep on its own; put
 to sleep by you, it starts a new conversation, and says so.
 
@@ -131,10 +130,10 @@ runs them in its shell instead. What "without asking" means for each:
   refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
   space's Run, where you choose it and in Info.
 
-"Ask Before Every Change", in the assistant card's menu or Settings › Permissions, turns the exception off from the next
-conversation. No space can see what you say to your assistant, or write to it. something writes `AGENTS.md` and
-`CLAUDE.md` in `~/something/spaces` to tell your assistant what something is; a copy whose first line you removed is
-yours and left alone.
+"Ask Before Every Change", in the assistant card's menu or Settings › Advanced (Your assistant asks before every
+change), turns the exception off from the next conversation. No space can see what you say to your assistant, or write
+to it. something writes `AGENTS.md` and `CLAUDE.md` in `~/something/spaces` to tell your assistant what something is;
+a copy whose first line you removed is yours and left alone.
 
 ## Permissions
 
@@ -142,19 +141,21 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 
 - **Rights.** A space works with your agents at one level: **None**; **Watch**, it sees them (their state, folder and
   last messages); **Talk**, it also writes to them (a message, stop one, change its model); **Run**, it also starts one
-  in a folder you pick. On New Space you choose it before Build, pre-set from your words: that choice is your consent,
-  and the space opens without asking. A space made elsewhere (a template, an import, an agent outside something) asks
-  for its level in a sheet at its first opening, pre-set to what it declares. What a space declares above its level
-  stays refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel
-  beside the space, says it all in three parts: the space (its file, its size, Export, History), your agents (its
-  level, one control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent
-  and model, its last reply, Open Conversation).
+  in a folder you pick. On New Space you choose it before Build, pre-set from your words (else from Settings › Agents,
+  None at first): that choice is your consent, and the space opens without asking. A space made elsewhere (a template,
+  an import, an agent outside something) asks for its level in a sheet at its first opening, pre-set to what it
+  declares. What a space declares above its level stays refused, without asking again. Its memory needs no permission:
+  it stays with the space. Info (⌘I), a panel beside the space, says it all in three parts: the space (its file, its
+  size, Export, History), your agents (its level, one control that changes it at once, Run's folder, and the agents it
+  shows now) and its assistant (its agent and model, its last reply, Open Conversation). Settings › Agents lists every
+  space with its level, and changes one the same way.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
   the panel's); its permissions still open the panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
-  the Mac says who waits and in which space only if you turn on "Notify me when a request waits", and never the command.
+  the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Agents), and
+  never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.
 - **Links.** Each link a space opens asks you first.
@@ -162,14 +163,14 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   [the guide](share/guide.md#what-the-person-sees-of-your-space) lists) reach its menus even while a space has the
   focus: a page cannot keep them, so it cannot stop you from stopping your assistant.
 - **Export.** An exported space carries its memory only if you choose so. Export, in Info or the Space menu, writes the
-  space in one click as one `.something` file in your Downloads folder, without its memory, its level or its journal.
+  space in one click as one `.something` file in your Downloads folder, without its level or its journal, and without
+  its memory unless Settings › Spaces › Include a space's memory when you export it is on.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
 or the agent's channel, for that launch only. It writes only in `~/something/` and
-`~/Library/Application Support/something/`, plus the exports you ask for in `~/Downloads`, the launcher in
-`~/Applications` if you turn it on and the snapshots `something check` takes in `$TMPDIR/something-check`; what it
-removes goes to the Trash.
+`~/Library/Application Support/something/`, plus the exports you ask for in `~/Downloads` and the snapshots
+`something check` takes in `$TMPDIR/something-check`; what it removes goes to the Trash.
 
 ## No network for spaces
 
@@ -195,7 +196,7 @@ Quit something first (⌘Q): quitting stops the agents it launched.
 ```sh
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
-rm -rf ~/Applications/something.app                  # the launcher, if you turned it on in Settings
+rm -rf ~/Applications/something.app                  # the launcher an earlier version made, if you turned it on
 rm -rf ~/Library/Application\ Support/something      # your settings, your spaces' levels, journals, versions and assistants' conversations
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
