@@ -219,16 +219,6 @@ struct Hero: View {
     }
 }
 
-/// The picture fitted to `width`, at its own proportions.
-struct FittedHero: View {
-    let hero: Hero, width: CGFloat
-
-    var body: some View {
-        let k = width / Hero.size.width
-        hero.scaleEffect(k, anchor: .topLeading).frame(width: width, height: Hero.size.height * k, alignment: .topLeading)
-    }
-}
-
 /// Which part is lit, and the cycle that lights each in turn as the picture opens.
 @Observable final class HeroLight {
     var lit: Hero.Part?
@@ -310,7 +300,7 @@ private struct Dots: Shape {
 
 @MainActor extension App {
     @objc func showHowItWorks(_ sender: Any?) {
-        HowItWorks.show(builder: "\(assistant.name) · \(assistant.modelWords.model)", motion: library.preferences.motion)
+        HowItWorks.made(builder: "\(assistant.name) · \(assistant.modelWords.model)", motion: library.preferences.motion).makeKeyAndOrderFront(nil)
     }
 }
 
@@ -322,12 +312,7 @@ enum HowItWorks {
     private static var window: NSWindow?
     static let light = HeroLight()
 
-    /// Shows the window, made once and kept, with `lit` lit (nil: all of it).
-    static func show(builder: String, motion: Look.Motion, lit: Hero.Part? = nil) {
-        made(builder: builder, motion: motion, lit: lit).makeKeyAndOrderFront(nil)
-    }
-
-    /// The window, made once and kept, not shown yet, `lit` lit.
+    /// The window, made once and kept, not shown yet, `lit` lit (nil: all of it).
     static func made(builder: String, motion: Look.Motion, lit: Hero.Part? = nil) -> NSWindow {
         let made = window ?? NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
                                       backing: .buffered, defer: false)

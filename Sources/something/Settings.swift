@@ -77,7 +77,7 @@ struct SettingsSection: Identifiable {
     /// Applies the interface size to the whole app (Look.scale); tests record it instead.
     @ObservationIgnored var resize: (Look.Size) -> Void = { Look.scale.size = $0 }
     /// Shows the welcome again (App.showWelcome).
-    @ObservationIgnored var tour: () -> Void = {}
+    @ObservationIgnored var welcome: () -> Void = {}
     /// Opens System Settings › Keyboard; tests record it instead.
     @ObservationIgnored var keyboard: () -> Void = {
         if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") { NSWorkspace.shared.open(url) }
@@ -178,7 +178,7 @@ struct SettingsSection: Identifiable {
                             control: .toggle(get: { [weak self] in self?.launcher ?? false }, set: { [weak self] in self?.addToApplications($0) },
                                              enabled: launcher || Launcher.prefix(of: app) != nil)),
                 SettingsRow(title: "Welcome", note: "The first screen, as on the first day.",
-                            control: .button("Show Again") { [weak self] in self?.tour() }),
+                            control: .button("Show Again") { [weak self] in self?.welcome() }),
             ]), SettingsSection(title: "Look", rows: [
                 SettingsRow(title: "Interface size",
                             note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages.",
@@ -386,7 +386,7 @@ extension App {
         Settings.open(tab) {
             let model = SettingsModel(preferences: library.preferences, places: places)
             model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
-            model.tour = { [weak self] in self?.showWelcome(nil) }
+            model.welcome = { [weak self] in self?.showWelcome(nil) }
             model.told = { [weak self] in self?.ask.tell($0) }
             model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
             model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }

@@ -223,7 +223,7 @@ struct LadderView: View {
             }
         }
         .padding(.vertical, 4)
-        .plate()
+        .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
     }
 
     private func row(_ step: Ladder.Step, now: Date) -> some View {

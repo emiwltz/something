@@ -315,8 +315,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         for item in toolbarItems {
             guard let button = controls[item.itemIdentifier] ?? item.view as? NSButton else { continue }
             button.constraints.filter { [.width, .height].contains($0.firstAttribute) }.forEach { $0.constant *= now.factor / size.factor }
-            button.symbolConfiguration = .init(pointSize: (item.itemIdentifier == Shell.point ? 12 : 13) * now.factor,
-                                               weight: item.itemIdentifier == Shell.full ? .bold : .regular)
+            button.symbolConfiguration = Shell.symbol(item.itemIdentifier)
             if item.itemIdentifier == Shell.point { button.font = Look.font(.ui, size: 12, weight: .medium) }
         }
         glass.place()
@@ -346,9 +345,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
             let button = ToolButton(image: image, target: nil, action: action)
             (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, Look.Token.ink2.color, tip)
-            // The mockup's icons are thin strokes, Point's target a size below the others'; all at the interface size.
             let k = Look.scale.size.factor
-            button.symbolConfiguration = .init(pointSize: (id == Shell.point ? 12 : 13) * k, weight: .regular)
+            button.symbolConfiguration = Shell.symbol(id)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
             var width = 28 * k
             if let words {
@@ -380,8 +378,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                          item(Shell.full, "Page Full Screen", "viewfinder", Keys.tooltip("pagefull", "Page Full Screen"), Keys.command("pagefull")?.action)]
             let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: buttons)
             tools.forEach { $0.view = nil }
-            // The mockup draws Full Screen's corners heavier than the other icons.
-            buttons[2].symbolConfiguration = .init(pointSize: 13 * Look.scale.size.factor, weight: .bold)
             self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
             row.spacing = 4
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
@@ -392,6 +388,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return group
         default: return nil
         }
+    }
+
+    /// A tool's icon at the interface size: thin strokes as the mockup's, Point's target a size below the others', Full
+    /// Screen's corners heavier.
+    static func symbol(_ id: NSToolbarItem.Identifier) -> NSImage.SymbolConfiguration {
+        .init(pointSize: (id == point ? 12 : 13) * Look.scale.size.factor, weight: id == full ? .bold : .regular)
     }
 
     /// The toolbar's items, those of the group of tools one by one.
@@ -612,7 +614,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     private func pressPoint(_ on: Bool) {
         (controls[Shell.point] as? ToolButton)?.pressed = on
-        if on, HintBubble.shown(in: layer)?.kind == .point { HintBubble.close(in: layer) }
+        if on { HintBubble.close(in: layer, only: .point) }
         space.flatMap(Comments.of)?.changed()
     }
 

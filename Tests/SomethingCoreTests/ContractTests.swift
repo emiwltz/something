@@ -141,7 +141,7 @@ enum Frozen {
         }
     }
 
-    /// AGENTS.md rule 2: the assistant's promise is the same words in the README, AGENTS.md and the app's tour.
+    /// AGENTS.md rule 2: the assistant's promise is the same words in the README, AGENTS.md and the app (Ask.swift).
     @Test func theAssistantsPromiseIsTheSameWordsEverywhere() throws {
         let promise = "something never answers for you. Your assistant may change your spaces and run something's own "
             + "commands without asking; everything else it does asks you, as your agent's own settings decide."

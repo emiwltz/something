@@ -89,7 +89,10 @@ struct WelcomeView: View {
                     if none { self.none } else { rows }
                 }
                 .frame(width: 348, alignment: .leading)
-                FittedHero(hero: Hero(light: model.light, builder: builder, motion: motion), width: 420).padding(.top, 94)
+                // The picture at 420 points wide, in its own proportions.
+                let k = 420 / Hero.size.width
+                Hero(light: model.light, builder: builder, motion: motion).scaleEffect(k, anchor: .topLeading)
+                    .frame(width: 420, height: Hero.size.height * k, alignment: .topLeading).padding(.top, 94)
             }
             .padding(EdgeInsets(top: 48, leading: 52, bottom: 0, trailing: 40))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -199,13 +202,6 @@ struct WelcomeView: View {
         }
         .font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink3.ui)
         .padding(.leading, 52).padding(.trailing, 16).frame(height: 59)
-    }
-}
-
-extension View {
-    /// A plate: bg2 in a hairline, at the card's radius (the ladder's steps).
-    func plate() -> some View {
-        boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
     }
 }
 

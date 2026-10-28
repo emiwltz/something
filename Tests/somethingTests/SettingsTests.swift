@@ -21,7 +21,7 @@ import Testing
         model.spaces = { [("brief", "Daily brief"), ("logbook", "Logbook")] }
         model.apply = { effects.applied.append(($0, $1)) }
         model.resize = { effects.sized.append($0) }
-        model.tour = { effects.tours += 1 }
+        model.welcome = { effects.tours += 1 }
         model.keyboard = { effects.keyboards += 1 }
         model.told = { effects.told.append($0) }
         model.chose = { effects.chosen.append($0) }

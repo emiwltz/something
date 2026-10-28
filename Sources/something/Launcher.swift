@@ -31,7 +31,7 @@ enum Launcher {
         let target = (prefix as NSString).appendingPathComponent("opt/something/something.app")
         let script = """
             #!/bin/sh
-            # Made by something's tour: opens something as Homebrew installed it.
+            # Made by something's Settings: opens something as Homebrew installed it.
             if [ -d '\(target)' ]; then exec /usr/bin/open '\(target)'; fi
             exec /usr/bin/osascript -e 'display dialog "something is no longer installed. You can move this launcher to the Trash." buttons {"OK"} default button 1 with title "something"'
 

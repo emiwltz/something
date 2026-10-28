@@ -35,11 +35,11 @@ final class Arrival: NSView {
     /// The clock in seconds; a seam for tests.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
 
-    /// The frame's shape `progress` of the way (in time) from `start` to `room` inset by `inset`.
-    static func shape(_ start: Start, to room: CGRect, inset: CGFloat = Arrival.inset, progress: CGFloat) -> Shape {
+    /// The frame's shape `progress` of the way (in time) from `start` to `room` inset by `Arrival.inset`.
+    static func shape(_ start: Start, to room: CGRect, progress: CGFloat) -> Shape {
         let p = min(max(progress, 0), 1), e = CGFloat(Look.douce.value(at: Double(p)))
         func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * e }
-        let end = room.insetBy(dx: inset, dy: inset), from = start.rect
+        let end = room.insetBy(dx: Arrival.inset, dy: Arrival.inset), from = start.rect
         let rect = CGRect(x: mix(from.minX, end.minX), y: mix(from.minY, end.minY),
                           width: mix(from.width, end.width), height: mix(from.height, end.height))
         let face = CGPoint(x: rect.minX + mix(from.width / 2, corner.x), y: rect.minY + mix(from.height / 2, corner.y))

@@ -25,6 +25,9 @@ enum Hint: String, CaseIterable {
         case .point: ("To change one part, point at it, then say what should change there. ", Keys.shown("pointpart"), "")
         }
     }
+
+    /// Its title and sentence, as VoiceOver says them.
+    var spoken: String { "\(title). \(words.before)\(words.key)\(words.after)" }
 }
 
 extension Shell {
@@ -60,7 +63,7 @@ extension Shell {
         let bubble = HintBubble(kind, assistant: assistant)
         layer.hold(bubble)
         bubble.place(by: layer.convert(anchor.convert(anchor.bounds, to: nil), from: nil), in: layer.bounds)
-        layer.announce("\(kind.title). \(kind.words.before)\(kind.words.key)\(kind.words.after)")
+        layer.announce(kind.spoken)
         return bubble
     }
 }
@@ -74,7 +77,7 @@ final class HintBubble: NSView {
     init(_ kind: Hint, assistant: AssistantModel) {
         (self.kind, self.assistant) = (kind, assistant)
         super.init(frame: .zero)
-        let host = NSHostingView(rootView: HintView(kind: kind, arrow: kind == .ask ? .trailing : kind == .info ? .leading : .center) { [weak self] in
+        let host = NSHostingView(rootView: HintView(kind: kind) { [weak self] in
             self?.removeFromSuperview()
         })
         frame.size = host.fittingSize
@@ -84,7 +87,7 @@ final class HintBubble: NSView {
         // One group for VoiceOver, said as a whole: its title and sentence, Got It inside it.
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("\(kind.title). \(kind.words.before)\(kind.words.key)\(kind.words.after)")
+        setAccessibilityLabel(kind.spoken)
         watch()
     }
 
@@ -92,7 +95,10 @@ final class HintBubble: NSView {
 
     /// The hint `layer` shows, if any.
     static func shown(in layer: NSView) -> HintBubble? { layer.subviews.lazy.compactMap { $0 as? HintBubble }.first }
-    static func close(in layer: NSView) { shown(in: layer)?.removeFromSuperview() }
+    /// Closes the hint `layer` shows, or only `kind`'s.
+    static func close(in layer: NSView, only kind: Hint? = nil) {
+        if let shown = shown(in: layer), kind == nil || shown.kind == kind { shown.removeFromSuperview() }
+    }
 
     /// Lays it beside `anchor`, in the layer's coordinates (`room`), inside the room by 8 points: the assistant's left
     /// of the sticker, at its foot, its arrow level with the sticker's middle; the others under their control.
@@ -123,8 +129,7 @@ final class HintBubble: NSView {
 }
 
 struct HintView: View {
-    enum Arrow { case leading, center, trailing }
-    let kind: Hint, arrow: Arrow, gotIt: () -> Void
+    let kind: Hint, gotIt: () -> Void
     @Environment(\.colorScheme) private var scheme
     @Environment(\.displayScale) private var scale
 
@@ -155,11 +160,11 @@ struct HintView: View {
         .frame(width: HintBubble.width, alignment: .leading)
         .background(shape.fill(Look.Token.bg2.ui).shadow(color: .black.opacity(0.14), radius: 12, y: 4))
         .overlay(shape.strokeBorder(Look.Token.line2.ui))
-        .overlay(alignment: arrow == .trailing ? .bottomTrailing : arrow == .leading ? .topLeading : .top) {
+        .overlay(alignment: kind == .ask ? .bottomTrailing : kind == .info ? .topLeading : .top) {
             // A small square turned, half out of the bubble, toward what it is about: by the sticker, 34 points up from
             // the bubble's foot, the middle of the sticker's place.
             Rectangle().fill(Look.Token.bg2.ui).frame(width: 10, height: 10).rotationEffect(.degrees(45))
-                .offset(x: arrow == .trailing ? 5 : arrow == .leading ? 22 : 0, y: arrow == .trailing ? -23 : -5)
+                .offset(x: kind == .ask ? 5 : kind == .info ? 22 : 0, y: kind == .ask ? -23 : -5)
         }
         .padding(6)
         .accessibilityElement(children: .contain)
