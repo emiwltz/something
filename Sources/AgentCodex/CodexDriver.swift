@@ -148,13 +148,13 @@ final class CodexDriver: Driver {
         case ("item/tool/requestUserInput", _):
             reply = ["answers": [String: Any]()]
             allowed = false
-        case ("item/permissions/requestApproval", .once), ("item/permissions/requestApproval", .rule):
+        case ("item/permissions/requestApproval", _) where answer.allows:
             reply = ["permissions": ask.params["permissions"] ?? [:], "scope": "turn"]
             allowed = true
         case ("item/permissions/requestApproval", _):
             reply = ["permissions": [String: Any]()]
             allowed = false
-        case (_, .once), (_, .rule):
+        case _ where answer.allows:
             reply = ["decision": "accept"]
             allowed = true
         default:

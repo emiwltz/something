@@ -186,7 +186,7 @@ final class ClaudeDriver: Driver {
         }
         var allowed: [String: Any]?   // nil: a deny, or an answer that does not fit the request
         switch (answer, question) {
-        case (.once, false), (.rule, false): allowed = input
+        case (_, false) where answer.allows: allowed = input
         case (.choice(let chosen), true):
             // Several labels of one question are joined as Claude's own panel joins them.
             let texts = ask.prompt.questions.map(\.text)

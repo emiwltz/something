@@ -221,11 +221,6 @@ struct Versions {
             all[oldest]?.removeLast()
             weights[oldest] = bytes(oldest)
         }
-        keep(all)
-    }
-
-    /// Writes each space's versions as `all` holds them, then removes the contents none of them holds.
-    private func keep(_ all: [String: [Version]]) {
         for (name, versions) in all {
             if versions.count != list(name).count { try? save(name, versions) }
             let held = Set(versions.flatMap(\.files.values))

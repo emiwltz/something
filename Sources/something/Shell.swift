@@ -3,15 +3,15 @@
 // opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
 // its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
 // while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on, its orange mark, which
-// turns it off (Rules.swift). Off the spaces only the name shows. Reload is in the View
-// menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its
-// backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
-// holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
-// the templates; over a space, the glass, which holds the assistant (Glass.swift). Off the spaces the assistant is
-// away: New Space has its own field. While the welcome is open, the window is out of sight; it arrives once it ends.
-// In full screen the space is alone: the system hides the toolbar and the menu bar until the pointer reaches the top,
-// the sidebar steps aside and the space starts at the screen's top; ⌃⌘S lays the sidebar over it (SidebarOver). Page
-// Full Screen does the same inside the window, and a hidden sidebar floats (PageFull.swift).
+// turns it off (Rules.swift). Off the spaces only the name shows. Reload is in the View menu; what waits for the person
+// is said by the panel, the sidebar's Needs You and the Dock, never here. Its backgrounds are the identity's, opaque:
+// no vibrancy lets the desktop through. The center holds the open space's web view edge to edge under the toolbar, what
+// keeps a space from being shown, New Space or the templates; over a space, the glass, which holds the assistant
+// (Glass.swift). Off the spaces the assistant is away: New Space has its own field. While the welcome is open, the
+// window is out of sight; it arrives once it ends. In full screen the space is alone: the system hides the toolbar and
+// the menu bar until the pointer reaches the top, the sidebar steps aside and the space starts at the screen's top; ⌃⌘S
+// lays the sidebar over it (SidebarOver). Page Full Screen does the same inside the window, and a hidden sidebar floats
+// (PageFull.swift).
 // A window narrower than 860 points has the rail in place of its sidebar (Rail.swift), until it is 880 wide again, so
 // that a window resized about the line does not flicker between the two: ⌃⌘S lays the whole sidebar over the space
 // there too, and the toolbar's own toggle goes (the rail has one).

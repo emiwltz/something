@@ -1,13 +1,13 @@
 // The request panel: a window of the Mac of its own, beside the main window, that no space can draw, imitate or answer.
 // It shows the queue's request on screen (Requests.swift), with "‹ 1 of 3 ›" while more wait: who asks, the effect in
 // words first, where it runs, the exact text, for a plain command of an agent a space started the checkbox "Always for
-// this space" (kept as a lasting rule once Allow Once answers: Rules.swift), then Deny and Allow Once. It never takes the keys when it arrives: a key
-// typed in a page must never answer it. Allow Once arms 0.5 s after a request appears, and then answers a click, or
-// VoiceOver's press once the person made the panel key themselves (a click on it, or Show Request); no key, Return and
-// Space included, ever presses it. Show Request (⌥⌘P) gives it the keys, ringed, with one pulse; when it goes away
-// they go back to the window that had them. Closing it denies, and so does Escape while it has the keys. The exact
-// command is folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger, its footer always in
-// sight.
+// this space" (kept as a lasting rule once Allow Once answers: Rules.swift), then Deny and Allow Once. It never takes
+// the keys when it arrives: a key typed in a page must never answer it. Allow Once arms 0.5 s after a request appears,
+// and then answers a click, or VoiceOver's press once the person made the panel key themselves (a click on it, or Show
+// Request); no key, Return and Space included, ever presses it. Show Request (⌥⌘P) gives it the keys, ringed, with one
+// pulse; when it goes away they go back to the window that had them. Closing it denies, and so does Escape while it has
+// the keys. The exact command is folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger,
+// its footer always in sight.
 // A question shows in the same panel: its numbered options, a field for one's own answer, and Don't Answer. An option
 // that answers a lone question by one click is armed like Allow Once: a click meant for the space may land on it.
 import AppKit
@@ -418,7 +418,6 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         let box = NSButton(checkboxWithTitle: "", target: nil, action: nil)
         box.attributedTitle = NSAttributedString(string: "Always for this space", attributes: [.font: Look.font(.ui, size: 12.5, weight: .semibold),
                                                                                              .foregroundColor: Look.Token.ink.color])
-        box.setAccessibilityLabel("Always for this space")
         let what = Self.text("Keeps exactly this command, for \(program), in \(folder). You can revoke it in the space’s Info.", Look.small, .ink3)
         // Under the box's title, as the mockup sets it: the panel's insets, the box's, and the checkbox's width.
         what.preferredMaxLayoutWidth = widthRule.constant - 32 - 22 - 20

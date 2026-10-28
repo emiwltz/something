@@ -13,9 +13,9 @@ final class Toast: NSView {
     private static let pad: CGFloat = 9
     private var action: Action?
     private var timer: Timer?
-    /// Its distance from the center's bottom edge, `rest` once in place.
+    /// Its distance from the center's bottom edge, `rest` once in place: 22 points above it.
     private(set) var bottom: NSLayoutConstraint?
-    let rest: CGFloat = -22
+    private static let rest: CGFloat = -22
     private var motion = Look.Motion.calm
     private let button: NSButton?
     /// Whether it is in place or arriving, false once it starts to leave.
@@ -30,13 +30,13 @@ final class Toast: NSView {
         layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         let toast = Toast(words, action: action, quiet: quiet)
         layer.hold(toast)
-        // 22 points above the center's edge; it starts below its place (170% of its height, as the mockup's) and rises.
-        let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: toast.rest + 68)
+        // It starts below its place (170% of its height, as the mockup's) and rises to it.
+        let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: rest + 68)
         NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor),
                                      toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -32)])
         (toast.bottom, toast.motion) = (bottom, motion)
         layer.layoutSubtreeIfNeeded()
-        toast.move(to: toast.rest)
+        toast.move(to: rest)
         toast.shown = true
         toast.timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak toast] _ in toast?.leave() }
         layer.announce(words)
@@ -99,7 +99,7 @@ final class Toast: NSView {
         timer?.invalidate()
         shown = false
         if now { return removeFromSuperview() }
-        move(to: rest + 68) { [weak self] in self?.removeFromSuperview() }
+        move(to: Toast.rest + 68) { [weak self] in self?.removeFromSuperview() }
     }
 
     private func move(to constant: CGFloat, then done: (() -> Void)? = nil) {

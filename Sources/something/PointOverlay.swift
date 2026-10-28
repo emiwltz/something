@@ -97,7 +97,7 @@ final class PointOverlay: NSView {
         hover(nil)
     }
 
-    /// Whether `event` adds a part: ⌥ is held and the setting lets it.
+    /// Whether `event` adds a part: ⌥ is held.
     private func adds(_ event: NSEvent) -> Bool { event.modifierFlags.contains(.option) }
 
     override func mouseDown(with event: NSEvent) {

@@ -3,12 +3,10 @@
 // once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
 // parts that follow what a space is (X5.1): Space (its file, its size and last change, Export in one click, History),
 // Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now)
-// and Assistant (its eyes, the
-// agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits quietly at the foot. A level
-// chosen here is the person's answer: kept in the grants file, it reaches the open space at once as a `granted`
-// event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window would take it from
-// every page and field.
-import AppKit
+// and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
+// quietly at the foot. A level chosen here is the person's answer: kept in the grants file, it reaches the open space
+// at once as a `granted` event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
+// would take it from every page and field. port AppKit
 import Observation
 import SomethingAgents
 import SomethingCore

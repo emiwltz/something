@@ -2,8 +2,9 @@
 // General (the start, the theme, the interface size, the sidebar), Spaces (where they live, export, versions and
 // storage, Storage.swift), Agents (your assistant, what a new space may do, each space's level, and the agents on this
 // Mac, found by a look at files that never runs one) and Advanced (Full Access, how your assistant and the agents a
-// space starts ask, the lasting rules with Revoke, the assistants' rest and resume, the shortcuts). Each tab is a list of rows given as data (a title, a note, a
-// control), so that a test can work every control and see which key it wrote. The theme applies at once, everywhere.
+// space starts ask, the lasting rules with Revoke, the assistants' rest and resume, the shortcuts). Each tab is a list
+// of rows given as data (a title, a note, a control), so that a test can work every control and see which key it wrote.
+// The theme applies at once, everywhere.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -404,7 +405,7 @@ extension App {
             model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
             model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
             let grants = Grants(places.grants)
-            model.rules = { [weak self] in Rules.all(grants, spaces: self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? []) }
+            model.rules = { [weak model] in Rules.all(grants, spaces: model?.spaces() ?? []) }
             model.revoke = { [weak self] kept in self?.info.revoke(kept.rule, in: kept.space) }
             model.fullAccess = { [weak self] in self?.fullAccess($0, over: Settings.shown?.window) }
             model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
