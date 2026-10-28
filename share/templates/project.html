@@ -157,7 +157,7 @@
         <circle class="fill" id="ring" cx="90" cy="90" r="74" fill="none" stroke-width="10" pathLength="1"
                 stroke-dasharray="1" stroke-dashoffset="1" transform="rotate(-90 90 90)"/>
         <text id="ring-count" x="90" y="96" text-anchor="middle" font-family="Avenir Next Condensed, sans-serif" font-weight="600" font-size="40">0/0</text>
-        <text x="90" y="120" text-anchor="middle" font-family="Menlo, monospace" font-size="9.5" letter-spacing="1.5">MILESTONES</text>
+        <text id="ring-label" x="90" y="120" text-anchor="middle" font-family="Menlo, monospace" font-size="9.5" letter-spacing="1.5">MILESTONES</text>
       </svg>
       <ul class="milestones" id="milestones"></ul>
       <form class="add" id="add"><input type="text" id="milestone" placeholder="Add a milestone…" aria-label="New milestone"><button class="quiet">Add</button></form>
@@ -241,7 +241,10 @@
     const list = memory.milestones;
     const done = list.filter((m) => m.done).length;
     $("ring").style.strokeDashoffset = list.length ? 1 - done / list.length : 1;
-    $("ring-count").textContent = `${done}/${list.length}`;
+    // An empty ring says there is none yet: "0/0" would read as a broken counter.
+    $("ring-count").textContent = list.length ? `${done}/${list.length}` : "";
+    $("ring-label").textContent = list.length ? "MILESTONES" : "NO MILESTONE YET";
+    $("ring-label").setAttribute("y", list.length ? 120 : 94);
     $("milestones").replaceChildren(...list.map((m) => {
       const item = make("li", m.done ? "done" : "");
       const box = Object.assign(make("input"), { type: "checkbox", checked: m.done });
@@ -253,7 +256,7 @@
       item.append(line, remove);
       return item;
     }));
-    if (!list.length) $("milestones").append(make("li", "why", "No milestone yet. Name the next step of this project."));
+    if (!list.length) $("milestones").append(make("li", "why", "Name the next step of this project."));
   }
   function keep(list) {
     memory.milestones = list;

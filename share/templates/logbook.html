@@ -39,10 +39,10 @@
   body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 var(--type); overflow: hidden; }
 
   /* The open notebook: the index on the plain paper at left, the day pages as a dotted sheet at right, and the
-     elastic band crossing the sheet's right edge, from the top of the window to the bottom. */
+     elastic band along the sheet's right edge, held inside the sheet. */
   .spread { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; height: 100%; }
   .index { padding: 34px 30px 28px 38px; display: flex; flex-direction: column; gap: 22px; overflow: auto; }
-  .page { min-width: 0; padding: 28px 72px 28px 12px; display: flex; justify-content: center; }
+  .page { min-width: 0; padding: 28px 40px 28px 12px; display: flex; justify-content: center; }
   .frame { position: relative; width: 100%; max-width: 1000px; height: 100%; }
   /* The margin rule and the dots are the sheet's background: they stay put and run its full height while the days
      scroll over them. The rule sits between the times (58 px) and the text, 56 + 64 px from the sheet's edge. */
@@ -50,7 +50,7 @@
            background: linear-gradient(var(--rule), var(--rule)) 120px 0 / 1px 100% no-repeat,
                        radial-gradient(var(--dots) 1.1px, transparent 1.3px) 0 0 / 20px 20px, var(--sheet);
            box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 22px 44px -20px var(--shadow), inset 10px 0 14px -12px var(--gutter); }
-  .band { position: absolute; top: -28px; bottom: -28px; right: 44px; width: 16px; background: var(--band); opacity: .94;
+  .band { position: absolute; top: 0; bottom: 0; right: 0; width: 16px; border-radius: 0 14px 14px 0; background: var(--band); opacity: .94;
           box-shadow: inset 3px 0 0 rgba(255, 255, 255, .12), inset -3px 0 0 rgba(0, 0, 0, .18), 2px 0 6px rgba(0, 0, 0, .14); }
 
   h1 { font: 700 34px/1.1 var(--type); margin: 0; letter-spacing: -.01em; }
@@ -91,7 +91,7 @@
            gap: 14px; align-items: center;
            background: linear-gradient(var(--rule), var(--rule)) 64px 0 / 1px 100% no-repeat,
                        linear-gradient(var(--sheet) 78%, transparent); }
-  #write time { font: 13px/1 var(--type); color: var(--soft); font-variant-numeric: tabular-nums; }
+  #write time { font: 13px/1 var(--type); color: var(--soft); font-variant-numeric: tabular-nums; background: var(--sheet); padding: 4px 0; }
   #write input { font: 16px/1.4 var(--type); padding: 12px 16px; }
   #write kbd { font: 600 12px/1 var(--round); color: var(--soft); white-space: nowrap; }
   /* Sentences on the sheet that are not lines start on the text column, right of the margin rule. */
@@ -105,7 +105,9 @@
          padding: 6px 16px 6px 56px; margin: 6px 0 12px -56px; border-radius: 0 12px 12px 0; letter-spacing: .02em; }
   .tab small { font-weight: 600; opacity: .7; margin-left: 6px; }
   .line { display: grid; grid-template-columns: 58px 1fr 24px; gap: 14px; padding: 3px 0; position: relative; }
-  .line time { font: 13px/1.6 var(--type); color: var(--soft); padding-top: 2px; font-variant-numeric: tabular-nums; }
+  /* The times sit on plain paper: the dots would strike through them. */
+  .line time { font: 13px/1.6 var(--type); color: var(--soft); padding-top: 2px; font-variant-numeric: tabular-nums;
+               background: var(--sheet); align-self: start; }
   .line.agent .text { color: var(--rust-text); }
   /* An agent that waited for the person is the line that matters: a rust tick at the rule, and bold. */
   .line.ask .text { font-weight: 700; }
@@ -125,9 +127,8 @@
   @keyframes caret { 50% { opacity: 0; } }
 
   @media (max-width: 1100px) {
-    .page { padding: 20px 40px 20px 0; }
+    .page { padding: 20px 24px 20px 0; }
     .sheet { padding-right: 76px; }
-    .band { right: 30px; top: -20px; bottom: -20px; }
   }
   @media (max-width: 760px) {
     body { overflow: auto; }
@@ -138,7 +139,7 @@
     .sheet { overflow: visible; padding: 0 48px 30px 32px; background-position: 96px 0, 0 0, 0 0; }
     #write { background-position: 64px 0, 0 0; }
     .tab { padding-left: 32px; margin-left: -32px; }
-    .band { right: 16px; width: 10px; }
+    .band { width: 10px; }
   }
   @media (prefers-reduced-motion: reduce) { .typing::after { animation: none; } }
 </style>

@@ -289,7 +289,8 @@
     $("zz").hidden = !asleep;
     $("sleep").textContent = asleep ? "Wake" : "Sleep";
     meter("food", pet.food, ["hungry", "peckish", "full"]);
-    meter("joy", pet.joy, ["bored", "content", "happy"]);
+    // A worry weighs on Joy while it lasts, so the bar and the line under the device never disagree.
+    meter("joy", worried && !asleep ? Math.min(pet.joy, 45) : pet.joy, ["bored", "content", "happy"]);
     meter("energy", pet.energy, ["sleepy", "awake", "bouncy"]);
     const days = pet.born ? Math.floor((now() - Date.parse(pet.born)) / 86400000) : 0;
     // The snacks are said once there are some: "0 snacks" would be the first thing a new Pebble says.

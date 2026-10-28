@@ -1,7 +1,8 @@
 <!doctype html>
-<!-- Template "My agents", for something (contract 1). A control room: every coding agent on this Mac, who waits for
-     the person first, who works, and a word to each one this space may write to. Rights: "state" over every agent,
-     "send". "/" in a reply box opens that agent's own commands, as it lists them. It keeps no memory: what it shows
+<!-- Template "My agents", for something (contract 1). Every coding agent on this Mac as a card: who waits for the
+     person first, who works, and, for one this space may write to, its conversation opened in place to talk to it in
+     full: "/" for its own commands as it lists them, its model and its mode for its next turn, its helpers, and a
+     message sent now or after this turn. Rights: "state" over every agent, "send". It keeps no memory: what it shows
      is rebuilt from the state each time it opens. -->
 <html lang="en">
 <head>
@@ -19,246 +20,241 @@
 </script>
 <style>
   [hidden] { display: none !important; }
-  /* Night shift (dark) is the room's natural light; day shift (light) keeps the same instruments on pale glass, under
-     the room's dark header band. --faint is for text and stays readable (4.5:1); --dim only for dots, rules, DONE. */
+  /* A calm control room: deep green-black by night, pale sage by day; amber for what waits, green for what works.
+     --soft stays readable (4.5:1) on the cards; --edge only draws lines. */
   :root {
     color-scheme: light dark;
-    --room: #e8ede9; --panel: #f6f9f6; --edge: #c9d3cc; --ink: #10261a; --soft: #4f5c54; --faint: #68746c; --dim: #8b978f;
-    --work: #12873e; --wait: #b86b00; --fail: #c62828; --done: #6f7a73; --scan: rgba(16, 38, 26, .025);
-    --band: #0b0d0c; --band-ink: #7cff9b; --band-soft: #8c9a92;
-    --glow: 0;
-    font: 13px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+    --room: #eef2ef; --card: #fafcfa; --sunk: #e6ece8; --edge: #d3ddd6; --ink: #142019; --soft: #56645b; --faint: #6b786f;
+    --work: #1f7a43; --work-bg: #dcefe2; --wait: #9a5b00; --wait-bg: #fbecc9; --amber: #f2c14e; --amber-ink: #241a00;
+    --fail: #b3261e; --you: #e1e9e4;
+    font: 14px/1.45 -apple-system, system-ui, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --room: #0b0d0c; --panel: #141816; --edge: #232b26; --ink: #d6ecdc; --soft: #a3b3a9; --faint: #8c9a92; --dim: #5d6661;
-      --work: #7cff9b; --wait: #ffb547; --fail: #ff5c5c; --done: #5d6661; --scan: rgba(124, 255, 155, .025);
-      --band: transparent; --band-ink: #7cff9b; --band-soft: #8c9a92;
-      --glow: 1;
+      --room: #0e1411; --card: #141b17; --sunk: #19221d; --edge: #26312b; --ink: #e8efe9; --soft: #a3b0a7; --faint: #8b988f;
+      --work: #7bd88f; --work-bg: #1d3a26; --wait: #f2c14e; --wait-bg: #3a2e12; --fail: #ff7b72; --you: #1f2b25;
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; background: var(--room); color: var(--ink);
-    background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px); /* faint scan lines */
-  }
-  main { min-height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 24px 28px 20px; }
-  .label { text-transform: uppercase; letter-spacing: .12em; font-size: 10.5px; color: var(--faint); }
+  body { margin: 0; min-height: 100vh; background: var(--room); color: var(--ink); }
+  main { max-width: 1100px; margin: 0 auto; padding: 26px 30px 30px; display: flex; flex-direction: column; gap: 16px; }
+  button, select, textarea { font: inherit; color: inherit; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
-  /* The header band: dark in both lights, so the day shift still reads as the same room. */
-  header { display: flex; align-items: baseline; gap: 18px; margin: -24px -28px 0; padding: 16px 28px 14px; background: var(--band);
-           border-bottom: 1px solid var(--edge); }
-  header .label { color: var(--band-soft); }
-  h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .24em; color: var(--band-ink);
-       text-shadow: 0 0 10px color-mix(in srgb, var(--band-ink) 45%, transparent); }
-  header .clock { margin-left: auto; }
-  .live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-                  background: var(--band-ink); margin-right: 7px; vertical-align: 1px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+  .live { color: var(--work); font-size: 12.5px; }
+  .live::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+                  margin-right: 6px; vertical-align: 1px; }
+  #read { margin-left: auto; color: var(--faint); font-size: 12.5px; }
 
-  /* Four counters: waiting first, because waiting is what needs the person. */
-  /* Each counter is a numeral with its label on the same baseline: an instrument, not an empty box. */
-  /* Two by two in a narrow window, one row of four in a wide one. */
-  .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-  .counter { min-width: 0; display: flex; align-items: baseline; gap: 14px; background: var(--panel); border: 1px solid var(--edge);
-             border-radius: 6px; padding: 10px 18px 12px; }
-  .counter b { font-size: 56px; line-height: 1; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .counter.zero b { opacity: .35; }
-  .counter:not(.zero) b { text-shadow: 0 0 calc(var(--glow) * 22px) color-mix(in srgb, currentColor 45%, transparent); }
-  .t-waiting { color: var(--wait); } .t-working { color: var(--work); } .t-idle { color: var(--soft); }
-  .t-done, .t-unknown, .t-interrupted { color: var(--done); } .t-error { color: var(--fail); }
-  #others { flex: none; margin-left: 10px; }
+  /* Four counts, waiting first: a numeral and what it counts, equal tiles on one row that wrap two by two. */
+  .counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .count { background: var(--card); border: 1px solid var(--edge); border-radius: 10px; padding: 12px 16px 14px; }
+  .count b { display: block; font-size: 34px; line-height: 1.1; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .count span { color: var(--soft); font-size: 12.5px; }
+  .count.zero b { opacity: .4; }
+  .count[data-count=waiting]:not(.zero) b { color: var(--amber); }
+  #others { color: var(--faint); font-size: 12.5px; margin-top: -6px; }
 
-  /* The deck takes the room's height: the log runs to the floor, the board fills from the top. */
-  .deck { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: stretch; min-height: 0; }
-  /* Tiles share each row (320 px at least, half the board at most); a waiting tile takes a row of its own. */
-  .board { display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start; align-items: stretch; }
-  .board > * { flex: 1 1 320px; max-width: calc(50% - 6px); }
-  .board > .waiting, .board > .empty { flex-basis: 100%; max-width: none; }
-  .tile { background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px;
-          display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  /* Only a tile that arrives after the first paint slides in: the first paint (the gallery's preview) is complete. */
-  .tile.fresh { animation: arrive 120ms ease-out; }
+  /* The cards: two by two; the open one takes a whole row. */
+  #board { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+  .agent { background: var(--card); border: 1px solid var(--edge); border-radius: 12px; padding: 14px 16px; min-width: 0;
+           display: flex; flex-direction: column; gap: 10px; }
+  .agent.st-waiting { border-color: var(--amber); box-shadow: inset 3px 0 0 var(--amber); }
+  .agent.open { grid-column: 1 / -1; }
+  .agent.fresh { animation: arrive 140ms ease-out; }
   @keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
-  .tile.unknown { border-style: dashed; }
-  .tile.error { border-color: var(--fail); }
-  /* A waiting tile spans the board and breathes amber until the person answers. The glow is drawn once, on a layer
-     whose opacity alone moves: animating a shadow itself would paint it again at every frame. */
-  .tile.waiting { position: relative; border-color: var(--wait);
-                  box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 8%, transparent), 0 0 calc(var(--glow) * 8px) color-mix(in srgb, var(--wait) 5%, transparent); }
-  .tile.waiting::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none;
-                         box-shadow: 0 0 0 1px color-mix(in srgb, var(--wait) 30%, transparent), 0 0 calc(var(--glow) * 26px) color-mix(in srgb, var(--wait) 16%, transparent);
-                         animation: breathe 2.4s ease-in-out infinite; }
-  @keyframes breathe { 50% { opacity: 0; } }
-  .tile .top { display: flex; justify-content: space-between; gap: 10px; }
-  .tile .body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }   /* "why" sits at the tile's foot */
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 7px; vertical-align: 1px; }
-  .working .dot { box-shadow: 0 0 calc(var(--glow) * 8px) currentColor; animation: pulse 1s ease-in-out infinite; } /* 1 Hz */
-  @keyframes pulse { 50% { opacity: .25; } }
-  .idle .dot, .unknown .dot { background: transparent; border: 1px solid currentColor; }
-  .t-done .dot { background: var(--dim); }
-  .name { font-size: 16px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .folder { color: var(--faint); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .last { color: var(--soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .last .age { color: var(--faint); }
-  .ask { background: color-mix(in srgb, var(--wait) 12%, transparent); color: var(--wait); border-radius: 4px; padding: 7px 9px; }
-  .fault { background: color-mix(in srgb, var(--fail) 12%, transparent); color: var(--fail); border-radius: 4px; padding: 7px 9px; }
-  .held { color: var(--soft); font-size: 12px; }
-  .why { color: var(--faint); font-size: 11.5px; border-top: 1px dashed var(--edge); padding-top: 6px; margin-top: auto; }
-  .why::before { content: "WRITE · "; letter-spacing: .12em; }
+  .head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .tile { flex: none; display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 6px;
+          background: var(--sunk); border: 1px solid var(--edge); font-size: 10.5px; font-weight: 600; color: var(--soft); }
+  .name { font-weight: 600; font-size: 15px; white-space: nowrap; }
+  .folder { color: var(--faint); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .pill { flex: none; margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px;
+          color: var(--soft); background: var(--sunk); }
+  .st-working .pill { color: var(--work); background: var(--work-bg); }
+  .st-waiting .pill { color: var(--wait); background: var(--wait-bg); }
+  .st-error .pill { color: var(--fail); }
+  .open .pill { margin-left: 4px; }
+  .line { margin: 0; color: var(--soft); overflow-wrap: anywhere; }
+  .fault { margin: 0; color: var(--fail); }
+  .why { margin: 0; color: var(--faint); font-size: 12.5px; }
+  .acts { display: flex; gap: 8px; }
+  .btn { border: 1px solid var(--edge); background: var(--sunk); border-radius: 7px; padding: 5px 11px; cursor: pointer; font-size: 13px; }
+  .btn:hover { border-color: var(--faint); }
+  .btn.go { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
 
-  /* The reply box lives in its tile and is never redrawn: a change that arrives while the person types keeps the text. */
-  .reply { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 4px; }
-  /* A typed "/command words" reads whole: the box has its own row and grows with its text, the buttons under it. */
-  .reply textarea, .reply .said { flex: 1 1 100%; box-sizing: border-box; }
-  .reply .buttons { margin-left: auto; }
-  .waiting .body:has(form:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 1.1fr); gap: 6px 22px; }
-  .waiting .reply { grid-column: 2; grid-row: 1 / span 5; margin: 0; flex-direction: column; }
-  textarea { flex: 1; min-height: 34px; resize: none; font: inherit; color: var(--ink); background: transparent;
-             border: 1px solid var(--edge); border-radius: 4px; padding: 7px 9px; }
-  textarea:focus { outline: none; border-color: var(--work); }
-  .buttons { display: flex; gap: 6px; justify-content: flex-end; }
-  button { font: inherit; font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
-           background: transparent; border: 1px solid var(--edge); border-radius: 4px; padding: 6px 10px; cursor: pointer; }
-  button:hover { border-color: var(--work); color: var(--work); }
-  button.stop:hover { border-color: var(--fail); color: var(--fail); }
-  .said { color: var(--work); font-size: 11.5px; min-height: 1em; }
-  /* The agent's own commands, over its reply box while the text starts with "/"; its helpers under its last line. */
-  .reply { position: relative; }
-  .cmds { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 2; list-style: none; margin: 0; padding: 4px;
-          background: var(--panel); border: 1px solid var(--work); border-radius: 4px; max-height: 220px; overflow: auto; }
-  .cmds li { display: flex; gap: 10px; padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; }
-  .cmds li b { color: var(--work); font-weight: 500; flex: none; }
+  /* The open card's chips: its model and effort, its mode, each as the agent reported it, for its next turn. */
+  .chips { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--edge); border-radius: 7px; background: var(--sunk);
+          font-size: 12.5px; padding: 0 4px; height: 26px; }
+  .chip select { appearance: none; border: 0; background: none; padding: 0 3px; cursor: pointer; font-size: 12.5px; }
+  .chip select + select { color: var(--soft); }
+  .chip::after { content: "⌄"; color: var(--faint); padding: 0 3px 4px 0; }
+  .chip.fixed::after { content: none; }
+  .chip.fixed { padding: 0 8px; color: var(--soft); }
+  .close { border: 0; background: none; color: var(--faint); font-size: 16px; cursor: pointer; padding: 0 4px; }
+
+  /* Its conversation, the latest lines: what you asked on the right, what it said with its tile, its steps quiet. */
+  .thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .thread .you { align-self: flex-end; max-width: 72%; background: var(--you); border-radius: 9px; padding: 7px 11px; }
+  .thread .it { display: flex; gap: 8px; align-items: baseline; }
+  .thread .it .tile { height: 18px; min-width: 18px; font-size: 9px; }
+  .thread .step { color: var(--faint); font-size: 12.5px; padding-left: 8px; }
+  .thread .step::before { content: "○"; margin-right: 8px; }
+  .helpers { display: flex; gap: 8px; align-items: center; border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px;
+             font-size: 12.5px; color: var(--soft); }
+  .helpers b { color: var(--ink); font-weight: 600; }
+  .helpers::before { content: "⌥"; color: var(--work); }
+  .held { margin: 0; color: var(--soft); font-size: 12.5px; }
+
+  /* The reply: "/" opens its commands, the field, then Send Now and After This Turn. */
+  .reply { position: relative; display: flex; gap: 8px; align-items: center; border: 1px solid var(--edge); border-radius: 10px;
+           padding: 6px 6px 6px 8px; background: var(--room); }
+  .reply:focus-within { border-color: var(--faint); }
+  .slash { flex: none; width: 30px; height: 28px; border-radius: 7px; border: 1px solid var(--edge); background: var(--sunk); color: var(--amber);
+           cursor: pointer; font-weight: 600; }
+  .reply textarea { flex: 1; min-height: 28px; resize: none; border: 0; background: none; outline: none; padding: 4px 2px; line-height: 20px; }
+  .hint { margin: 0; display: flex; gap: 10px; align-items: baseline; background: var(--sunk); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; }
+  .hint b { color: var(--amber); }
+  .hint span { color: var(--faint); }
+  .cmds { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 2; list-style: none; margin: 0; padding: 5px;
+          background: var(--card); border: 1px solid var(--edge); border-radius: 10px; max-height: 240px; overflow: auto;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, .25); }
+  .cmds li { display: flex; gap: 12px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  .cmds li b { color: var(--amber); font-weight: 600; flex: none; min-width: 90px; }
   .cmds li span { color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmds li[aria-selected=true] { background: color-mix(in srgb, var(--work) 14%, transparent); }
-  .helpers { color: var(--soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .helpers::before { content: "HELPERS · "; color: var(--faint); letter-spacing: .12em; font-size: 10.5px; }
+  .cmds li[aria-selected=true] { background: var(--sunk); }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--faint); font-size: 11.5px; }
+  .keys kbd { font: inherit; border: 1px solid var(--edge); border-radius: 4px; padding: 0 5px; margin-right: 5px; }
+  .keys .from { margin-left: auto; }
+  .said { margin: 0; color: var(--work); font-size: 12.5px; min-height: 1em; }
 
-  .empty { border: 1px dashed var(--edge); border-radius: 6px; padding: 28px; text-align: center; color: var(--soft); }
-  #problem { border: 1px solid var(--fail); color: var(--fail); border-radius: 6px; padding: 8px 12px; margin: 0; }
-
-  /* The signal log: the latest lines of every conversation, newest first, rebuilt from the threads. */
-  .log { background: var(--panel); border: 1px solid var(--edge); border-radius: 6px; padding: 12px 14px; overflow: hidden; }
-  .log ol { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-  .log li { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 2px 10px; font-size: 12px; }
-  .log time { color: var(--faint); font-variant-numeric: tabular-nums; }
-  .log .who { color: var(--soft); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; grid-column: 2; }
-  .log .what { grid-column: 2; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .log li.ask .what { color: var(--wait); }
-  .log li.quiet { display: block; color: var(--faint); }
-
-  footer { margin-top: auto; border-top: 1px solid var(--edge); padding-top: 12px; display: flex; flex-wrap: wrap; gap: 6px 26px; }
-  footer .kind b { color: var(--soft); font-weight: 500; }
-  footer .note { flex-basis: 100%; color: var(--wait); font-size: 11.5px; }
-
-  @media (max-width: 1080px) { .deck { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 760px) {
-    .counter b { font-size: 40px; }
-    .board > * { max-width: none; }
-    .deck { grid-template-columns: minmax(0, 1fr); }
-    .waiting .body { display: flex; flex-direction: column; }
-  }
-  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  .empty { grid-column: 1 / -1; border: 1px dashed var(--edge); border-radius: 12px; padding: 28px; text-align: center; color: var(--soft); }
+  #problem { border: 1px solid var(--fail); color: var(--fail); border-radius: 8px; padding: 8px 12px; margin: 0; }
+  #notes { color: var(--wait); font-size: 12.5px; margin: 0; }
+  @media (max-width: 700px) { main { padding: 18px; } .thread .you { max-width: 90%; } .keys .from { margin-left: 0; } }
+  @media (prefers-reduced-motion: reduce) { .agent.fresh { animation: none; } }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <h1>MY AGENTS</h1>
-    <span class="label live" id="link">LIVE</span>
-    <span class="label clock" id="clock"></span>
-  </header>
-  <section class="counters" aria-label="Counts">
-    <div class="counter" data-count="waiting"><b class="t-waiting">–</b><span class="label">Waiting</span></div>
-    <div class="counter" data-count="working"><b class="t-working">–</b><span class="label">Working</span></div>
-    <div class="counter" data-count="idle"><b class="t-idle">–</b><span class="label">Idle</span></div>
-    <div class="counter" data-count="unknown"><b class="t-unknown">–</b><span class="label">Unknown</span></div>
-    <div class="label" id="others" hidden></div>
+  <header><h1>My agents</h1><span class="live">live</span><span id="read"></span></header>
+  <section class="counts" aria-label="Counts">
+    <div class="count" data-count="waiting"><b>–</b><span>waiting for you</span></div>
+    <div class="count" data-count="working"><b>–</b><span>working</span></div>
+    <div class="count" data-count="idle"><b>–</b><span>idle</span></div>
+    <div class="count" data-count="unknown"><b>–</b><span>unknown</span></div>
   </section>
+  <div id="others" hidden></div>
   <p id="problem" role="alert" hidden></p>
-  <div class="deck">
-    <section class="board" id="board" aria-live="polite"></section>
-    <aside class="log"><span class="label">Signal log</span><ol id="log"></ol></aside>
-  </div>
-  <footer id="kinds"></footer>
+  <section id="board" aria-live="polite"></section>
+  <p id="notes" hidden></p>
 </main>
 <script>
   // something.js is injected before this script: window.something is here. Every call returns a promise; a rejection
   // carries .code and .message, one sentence for the person. This page shows it in #problem and never swallows it.
   const $ = (id) => document.getElementById(id);
   const NAMES = { claude: "Claude Code", codex: "Codex", opencode: "OpenCode", pi: "pi", omp: "OMP", antigravity: "Antigravity", amp: "Amp" };
+  const TILES = { claude: "CC", codex: "Cx", opencode: "OC", pi: "π", omp: "Om", antigravity: "Ag", amp: "A" };
   const label = (kind) => NAMES[kind] || "other agent";        // a kind this page does not know is "other agent"
   const WORDS = ["waiting", "working", "idle", "done", "error", "interrupted", "unknown"];
   const word = (state) => WORDS.includes(state) ? state : "unknown";
   // A right counts when granted plainly ("send") or for this kind ("send:claude"). Read granted, never the declaration.
   const has = (right, kind) => something.granted.rights.some((r) => r === right || r === right + ":" + kind);
   const make = (tag, className, text) => Object.assign(document.createElement(tag), { className, textContent: text ?? "" });
-  // Folders are shown from the home folder; null stays "unknown", never a guess.
-  const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : "folder unknown";
+  // Folders are shown from the home folder; null stays unknown, never a guess.
+  const tilde = (path) => path ? path.replace(/^\/Users\/[^/]+/, "~") : null;
 
   // Ages are measured on the state's own clock (its "at"), so they stay true whatever this Mac's clock says.
-  let skew = 0;
+  let skew = 0, received = Date.now();
   const now = () => Date.now() + skew;
   function age(iso) {
-    if (!iso) return "";
     const s = Math.max(0, Math.round((now() - Date.parse(iso)) / 1000));
     return s < 60 ? `${s} s` : s < 3600 ? `${Math.floor(s / 60)} min` : s < 86400 ? `${Math.floor(s / 3600)} h` : `${Math.floor(s / 86400)} d`;
   }
-
   function problem(error) {
     $("problem").hidden = !error;
     $("problem").textContent = error ? error.message : "";
   }
 
-  // What each agent did last, rebuilt from its thread: the newest item of its newest turn.
-  function lastLine(state, agent) {
+  // The latest items of an agent's thread, oldest first.
+  function lines(state, agent, n) {
     const thread = state.threads.find((t) => t.id === agent.thread);
-    const turn = thread && thread.turns[thread.turns.length - 1];
-    const item = turn && turn.items[turn.items.length - 1];
-    if (!item) return null;
-    const text = item.text.split("\n")[0];
-    const line = item.kind === "tool" ? `› ${item.tool ? item.tool.name + ": " : ""}${text}`
-      : item.author === "person" ? `you: ${text}` : text;
-    return { line, at: item.at };
+    return thread ? thread.turns.flatMap((t) => t.items).filter((i) => i.kind === "message" || i.kind === "tool").slice(-n) : [];
   }
+  // What a closed card says under its name: the request it waits on, else its last line.
+  function summary(state, agent) {
+    const request = state.requests.find((r) => r.agent === agent.id);
+    if (request) return (request.kind === "permission" ? `Asks to run ${request.tool ?? "a tool"}${request.about ? ": " + request.about : ""}.`
+      : `Asks you a question${request.about ? ": " + request.about : ""}.`) + " Answer in something's window.";
+    const last = lines(state, agent, 1)[0], text = last ? last.text.split("\n")[0] : "";
+    // Waiting on a permission where it runs: the step it stopped at is what it asks to run.
+    if (word(agent.state) === "waiting") return (last && last.kind === "tool" && agent.waiting === "permission"
+      ? `Asks to run ${last.tool ? last.tool.name + ": " : ""}${text}. ` : text ? text.replace(/[.?!]?$/, ". ") : "") + "It waits for you where it runs.";
+    return text || (agent.kind === "other" ? "something sees only its process." : "Nothing said yet.");
+  }
+  const pill = (agent) => word(agent.state) === "waiting" && agent.updated ? `waits ${age(agent.updated)}` : word(agent.state);
 
-  // One tile per agent, made once and then updated in place (see .reply in the style).
-  const tiles = new Map();
-  let painted = false, menus = 0;                  // true once the first state was drawn; menus made, for their ids
-  function tile(agent) {
-    const node = make("article", "tile");
-    node.innerHTML = `<div class="top label"><span class="status"></span><span class="kind"></span></div>
-      <div class="body"><div class="name"></div><div class="folder"></div><div class="last"></div><div class="helpers" hidden></div>
-      <div class="ask" hidden></div><div class="fault" hidden></div><div class="held" hidden></div>
-      <form class="reply" hidden><ul class="cmds" role="listbox" hidden></ul><textarea rows="1" aria-label="Message"
-        role="combobox" aria-autocomplete="list" aria-expanded="false"></textarea>
-        <div class="buttons"><button type="button" class="stop">Interrupt</button>
-        <button type="submit" value="now">Steer now</button><button type="submit" value="next">Send</button></div>
-        <div class="said" aria-live="polite"></div></form>
-      <div class="why" hidden></div></div>`;
+  // One card per agent, made once and updated in place: a message being typed survives every change.
+  const cards = new Map();
+  let painted = false, open = null, menus = 0, state = null;
+  function card(agent) {
+    const node = make("article", "agent");
+    node.dataset.id = agent.id;
+    node.innerHTML = `<div class="head"><span class="tile"></span><span class="name"></span><span class="folder mono"></span>
+        <span class="pill"></span><span class="chips" hidden></span></div>
+      <p class="line"></p><p class="fault" hidden></p>
+      <ol class="thread" hidden></ol><div class="helpers" hidden></div><p class="held" hidden></p>
+      <div class="acts"><button type="button" class="btn write">Write to It</button></div>
+      <div class="talk" hidden><p class="hint" hidden></p>
+        <form class="reply"><ul class="cmds" role="listbox" hidden></ul>
+          <button type="button" class="slash" aria-label="Its commands">/</button>
+          <textarea rows="1" aria-label="Message" role="combobox" aria-autocomplete="list" aria-expanded="false"></textarea>
+          <button type="submit" class="btn go" value="now">Send Now</button><button type="submit" class="btn" value="next">After This Turn</button>
+        </form>
+        <div class="keys"><span class="now"><kbd>↩</kbd>now, it reads it at its next step</span><span class="after"><kbd>⌥↩</kbd>after this turn</span>
+          <span class="own"></span><span class="from">through something · this page may write to your agents</span></div>
+        <p class="said" aria-live="polite"></p></div>
+      <p class="why" hidden></p>`;
     const form = node.querySelector("form"), box = form.querySelector("textarea");
+    node.querySelector(".write").onclick = () => { open = agent.id; render(state); box.focus(); };
     commandMenu(node, box);
-    const fit = () => { box.style.height = ""; box.style.height = box.value ? box.scrollHeight + 2 + "px" : ""; };
-    box.addEventListener("input", fit);
-    form.onsubmit = (event) => {
+    const fit = () => { box.style.height = ""; box.style.height = box.value ? box.scrollHeight + "px" : ""; };
+    box.addEventListener("input", () => { fit(); hint(node, box); });
+    // ↩ sends now when the agent is at work and takes it, else for its next turn; ⌥↩ after this turn; ⇧↩ a new line.
+    // The "/" menu's own ↩ comes first and is marked as used.
+    box.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.defaultPrevented) return;
       event.preventDefault();
-      const text = box.value.trim();
-      if (!text) return;
-      // "next" waits for the running turn to end (on a waiting agent: until the person answered in something's
-      // window); "now" steers into the running turn. The button pressed says which.
-      const when = event.submitter && event.submitter.value === "now" ? "now" : "next";
-      // "/name words", name one of the agent's own commands: sent as that command, the words its argument.
-      const [, name, words] = text.match(/^\/(\S+)\s*([\s\S]*)$/) || [];
-      const listed = name && (node.agent.commands || []).some((c) => c.value === name);
-      something.send(agent.id, listed ? words : text, listed ? { when, command: name } : { when }).then(({ delivery }) => {
-        box.value = ""; fit();
-        form.querySelector(".said").textContent = DELIVERY[delivery] || `Message ${delivery}.`;
-        problem(null);
-      }).catch(problem);
-    };
-    form.querySelector(".stop").onclick = () => something.interrupt(agent.id).then(({ interrupted }) => {
-      form.querySelector(".said").textContent = interrupted ? "Interrupted. Its queue was emptied." : "No turn was running. Its queue was emptied.";
-    }).catch(problem);
+      send(node, box, event.altKey || form.querySelector("[value=now]").hidden ? "next" : "now");
+    });
+    form.onsubmit = (event) => { event.preventDefault(); send(node, box, event.submitter && event.submitter.value === "now" ? "now" : "next"); };
+    form.querySelector(".slash").onclick = () => { box.value = "/"; box.focus(); box.dispatchEvent(new Event("input")); };
     return node;
+  }
+  function send(node, box, when) {
+    const text = box.value.trim(), agent = node.agent;
+    if (!text) return;
+    // "/name words", name one of the agent's own commands: sent as that command, the words its argument.
+    const [, name, words] = text.match(/^\/(\S+)\s*([\s\S]*)$/) || [];
+    const listed = name && (agent.commands || []).some((c) => c.value === name);
+    something.send(agent.id, listed ? words : text, listed ? { when, command: name } : { when }).then(({ delivery }) => {
+      box.value = ""; box.style.height = ""; hint(node, box);
+      node.querySelector(".said").textContent = DELIVERY[delivery] || `Message ${delivery}.`;
+      problem(null);
+    }).catch(problem);
+  }
+  const DELIVERY = {
+    started: "Sent. It opens a new turn.", steered: "Sent into the running turn.",
+    queued: "Held. It goes in when this turn ends.", unconfirmed: "Sent into the running turn.",
+  };
+  // Over the field while its text starts with one of the agent's commands: what that command does.
+  function hint(node, box) {
+    const typed = box.value.match(/^\/(\S+)\s/), command = typed && (node.agent.commands || []).find((c) => c.value === typed[1]);
+    const line = node.querySelector(".hint");
+    line.hidden = !command;
+    if (command) line.replaceChildren(make("b", "mono", "/" + command.value), make("span", "", command.label));
   }
   // The "/" menu: the commands the agent lists whose name starts with what follows "/", until a space; ↑↓ choose, ↩ or
   // a click puts "/name " in the box, Esc closes. Drawn from node.agent, the latest state's.
@@ -268,7 +264,7 @@
     // VoiceOver follows the chosen row through the box: aria-activedescendant names it while the menu is open.
     menu.id = "cmds-" + ++menus;
     box.setAttribute("aria-controls", menu.id);
-    const open = (on) => {
+    const show = (on) => {
       menu.hidden = !on;
       box.setAttribute("aria-expanded", String(on));
       if (on) box.setAttribute("aria-activedescendant", `${menu.id}-${at}`); else box.removeAttribute("aria-activedescendant");
@@ -280,78 +276,99 @@
       menu.setAttribute("aria-label", `${label(node.agent.kind)}'s commands`);
       menu.replaceChildren(...shown.map((c, i) => {
         const row = make("li", "");
-        row.id = `${menu.id}-${i}`;
+        Object.assign(row, { id: `${menu.id}-${i}`, onmousedown: (event) => { event.preventDefault(); at = i; pick(); } });
         row.setAttribute("role", "option");
         row.setAttribute("aria-selected", String(i === at));
-        row.append(make("b", "", "/" + c.value), make("span", "", c.label));
-        row.onmousedown = (event) => { event.preventDefault(); at = i; pick(); };
+        row.append(make("b", "mono", "/" + c.value), make("span", "", c.label));
         return row;
       }));
-      open(shown.length > 0);
+      show(shown.length > 0);
     };
-    const pick = () => { box.value = "/" + shown[at].value + " "; open(false); shown = []; };
+    const pick = () => { box.value = "/" + shown[at].value + " "; show(false); shown = []; hint(node, box); };
     box.addEventListener("input", () => { at = 0; draw(); });
-    box.addEventListener("blur", () => open(false));
+    box.addEventListener("blur", () => show(false));
     box.addEventListener("keydown", (event) => {
       if (menu.hidden || !shown.length) return;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") at = (at + (event.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length;
       else if (event.key === "Enter" || event.key === "Tab") pick();
-      else if (event.key === "Escape") open(false);
+      else if (event.key === "Escape") show(false);
       else return;
       event.preventDefault();
       if (!menu.hidden) draw();
     });
   }
 
-  const DELIVERY = {
-    started: "Sent. It opens a new turn.", steered: "Sent into the running turn.",
-    queued: "Held. It goes in when this turn ends.", unconfirmed: "Sent into the running turn.",
-  };
-
-  function update(node, agent, state) {
-    node.agent = agent;
-    const status = word(agent.state);
-    node.className = "tile " + status + (node.dataset.fresh ? " fresh" : "");
-    const q = (selector) => node.querySelector(selector);
-    const show = (selector, text) => { q(selector).hidden = !text; q(selector).textContent = text || ""; };
-    q(".status").className = "status t-" + status;
-    q(".status").innerHTML = `<span class="dot"></span>`;
-    q(".status").append(status + (agent.waiting === "permission" || agent.waiting === "answer" ? " · " + agent.waiting : ""));
-    q(".kind").textContent = label(agent.kind) + (agent.origin === "elsewhere" ? " · elsewhere" : "");
-    q(".name").textContent = agent.name ?? "unknown";
-    q(".folder").textContent = tilde(agent.folder);
-    const last = lastLine(state, agent);
-    q(".last").textContent = last ? last.line + "  " : "";
-    if (last) {
-      const when = make("span", "age", age(last.at));
-      when.dataset.at = last.at;                                 // the clock below keeps it current
-      q(".last").append(when);
-    }
-    // A request is answered in a window of the Mac, never here: say what it asks and where to answer.
-    const request = state.requests.find((r) => r.agent === agent.id);
-    show(".ask", request ? (request.kind === "permission"
-      ? `Asks to run ${request.tool ?? "a tool"}${request.about ? ": " + request.about : ""}. Answer in something's window.`
-      : `Asks you a question${request.about ? ": " + request.about : ""}. Answer in something's window.`)
-      : status === "waiting" ? "Waits for you. Answer where it runs." : "");
-    // Its own sub-agents, as its stream marks them: how many work now, and what each was asked.
-    const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running");
-    show(".helpers", helpers.length ? (busy.length ? `${busy.length} at work: ${busy.map((h) => h.name).join(" · ")}`
-      : `${helpers.length} finished, the last: ${helpers[helpers.length - 1].name}`) : "");
-    show(".fault", agent.error ? agent.error.message : "");
-    show(".held", agent.queue.length ? `${agent.queue.length} held for after this turn: “${agent.queue[0].text}”` : "");
-    // `can` says what a call would do now and `because` why not; the person's grant says whether this space may.
-    const may = has("send", agent.kind);
-    const form = q("form");
-    form.hidden = !(agent.can.send && may);
-    q("textarea").placeholder = (status === "waiting" ? "Message for after the answer…" : `A word to ${label(agent.kind)}…`)
-      + (agent.commands && agent.commands.length ? " · / for its commands" : "");
-    q("button[value=now]").hidden = !agent.can.steer || status === "idle";
-    q(".stop").hidden = !agent.can.interrupt || !["working", "waiting"].includes(status);
-    show(".why", !agent.can.send ? (agent.because.send || "This agent cannot take a message now.")
-      : !may ? `You did not allow this space to write to ${label(agent.kind)}. Allow it in the space's Info.` : "");
+  // A chip that sets one of the agent's settings for its next turn, from the values it offers; its own word when it
+  // offers none ("No modes"), and "Default model" while it has not said its model.
+  function chooser(agent, key, fallback) {
+    const options = (agent.options && agent.options[key]) || [], current = options.find((o) => o.value === agent[key]);
+    if (!options.length || !agent.can[key]) return make("span", "", current ? current.label : agent[key] ?? fallback);
+    const pick = make("select", "");
+    pick.setAttribute("aria-label", { model: "Model", mode: "Mode", effort: "Effort" }[key]);
+    if (!current) pick.append(Object.assign(make("option", "", agent[key] ?? fallback), { value: agent[key] ?? "" }));
+    pick.append(...options.map((o) => Object.assign(make("option", "", o.label), { value: o.value })));
+    pick.value = agent[key] ?? "";
+    pick.onchange = () => something.set(agent.id, { [key]: pick.value }).then(() => problem(null), (error) => { problem(error); render(state); });
+    return pick;
+  }
+  function chips(agent) {
+    const model = make("span", "chip"), mode = make("span", "chip");
+    model.append(chooser(agent, "model", "Default model"));
+    if (agent.effort !== null || (agent.options && agent.options.effort)) model.append(chooser(agent, "effort", "Default effort"));
+    mode.append(chooser(agent, "mode", "No modes"));
+    [model, mode].forEach((c) => c.classList.toggle("fixed", !c.querySelector("select")));
+    const close = Object.assign(make("button", "close", "×"), { type: "button", title: "Close", onclick: () => { open = null; render(state); } });
+    close.setAttribute("aria-label", "Close its conversation");
+    return [model, mode, close];
   }
 
-  function render(state) {
+  function update(node, agent) {
+    node.agent = agent;
+    const status = word(agent.state), q = (selector) => node.querySelector(selector);
+    const shown = (selector, text) => { q(selector).hidden = !text; q(selector).textContent = text || ""; };
+    // `can` says what a call would do now and `because` why not; the person's grant says whether this space may.
+    const may = agent.can.send && has("send", agent.kind), opened = open === agent.id && may;
+    node.className = `agent st-${status}${opened ? " open" : ""}${node.dataset.fresh ? " fresh" : ""}`;
+    q(".tile").textContent = TILES[agent.kind] || "?";
+    q(".name").textContent = label(agent.kind);
+    q(".folder").textContent = tilde(agent.folder) ?? agent.name ?? "folder unknown";
+    q(".pill").textContent = pill(agent);
+    q(".chips").hidden = !opened;
+    if (opened) q(".chips").replaceChildren(...chips(agent));
+    shown(".line", opened ? "" : summary(state, agent));
+    shown(".fault", agent.error ? agent.error.message : "");
+    // Opened: its latest lines, its helpers as its stream marks them, and what waits for after this turn.
+    q(".thread").hidden = !opened;
+    if (opened) q(".thread").replaceChildren(...lines(state, agent, 6).map((i) => {
+      if (i.kind === "tool") return make("li", "step", (i.tool && !i.text.startsWith(i.tool.name) ? i.tool.name + " " : "") + i.text.split("\n")[0]);
+      if (i.author === "person") return make("li", "you", i.text);
+      const said = make("li", "it");
+      said.append(make("span", "tile", TILES[agent.kind] || "?"), make("span", "", i.text));
+      return said;
+    }));
+    const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running");
+    q(".helpers").hidden = !opened || !helpers.length;
+    if (opened && helpers.length) q(".helpers").replaceChildren(make("b", "", "Its helpers"), busy.length
+      ? `${busy.map((h) => h.name).join(" · ")} · ${busy.length} sub-agent${busy.length === 1 ? "" : "s"} at work`
+      : `${helpers.length} finished, the last: ${helpers[helpers.length - 1].name}`);
+    shown(".held", opened && agent.queue.length ? `${agent.queue.length} held for after this turn: “${agent.queue[0].text}”` : "");
+    q(".acts").hidden = opened || !may;
+    q(".talk").hidden = !opened;
+    q(".slash").hidden = !(agent.commands && agent.commands.length);
+    q(".own").textContent = agent.commands && agent.commands.length ? `/ ${label(agent.kind)}'s own commands` : "";
+    // Send Now steers into a running turn; to an agent not at work there is one send, for its next turn.
+    const steer = agent.can.steer && status === "working";
+    q("[value=now]").hidden = !steer;
+    q("[value=next]").textContent = steer ? "After This Turn" : "Send";
+    q(".now").hidden = q(".after").hidden = !steer;
+    q("textarea").placeholder = `Write to ${label(agent.kind)}…`;
+    shown(".why", agent.can.send ? (may ? "" : `You did not allow this space to write to ${label(agent.kind)}. Allow it in the space's Info.`)
+      : agent.because.send || "");
+  }
+
+  function render(next) {
+    state = next;
+    received = Date.now();
     if (state.at) skew = Date.parse(state.at) - Date.now();
     const counts = {};
     state.agents.forEach((a) => { const w = word(a.state); counts[w] = (counts[w] || 0) + 1; });
@@ -364,19 +381,20 @@
     $("others").hidden = !others.length;
     $("others").textContent = "Also " + others.join(" · ");
 
-    // Waiting first, then working, then the rest; newest activity first within each.
-    const rank = (a) => ["waiting", "error", "working", "idle", "interrupted", "unknown", "done"].indexOf(word(a.state));
+    // The open card first, then waiting, then working, then the rest; newest activity first within each.
+    if (!state.agents.some((a) => a.id === open)) open = null;
+    const rank = (a) => (a.id === open ? -1 : ["waiting", "error", "working", "idle", "interrupted", "unknown", "done"].indexOf(word(a.state)));
     const order = state.agents.slice().sort((a, b) => rank(a) - rank(b) || (b.updated || "").localeCompare(a.updated || ""));
-    for (const id of tiles.keys()) if (!order.some((a) => a.id === id)) { tiles.get(id).remove(); tiles.delete(id); }
+    for (const id of cards.keys()) if (!order.some((a) => a.id === id)) { cards.get(id).remove(); cards.delete(id); }
     const board = $("board");
     order.forEach((agent, index) => {
-      if (!tiles.has(agent.id)) {
-        tiles.set(agent.id, tile(agent));
-        if (painted) tiles.get(agent.id).dataset.fresh = "1";
+      if (!cards.has(agent.id)) {
+        cards.set(agent.id, card(agent));
+        if (painted) cards.get(agent.id).dataset.fresh = "1";
       }
-      const node = tiles.get(agent.id);
-      update(node, agent, state);
-      // Move a tile only when its place changed: moving a node takes the focus away from its reply box.
+      const node = cards.get(agent.id);
+      update(node, agent);
+      // Move a card only when its place changed: moving a node takes the focus away from its reply box.
       if (board.children[index] !== node) board.insertBefore(node, board.children[index] || null);
     });
     board.querySelectorAll(".empty").forEach((n) => n.remove());
@@ -385,52 +403,19 @@
         ? "No agent on this Mac right now. Start one in a terminal, and it appears here."
         : "This space may not see your agents. Allow “See your agents” in the space's Info."));
     }
-
-    // The signal log: every item of every thread in scope, and the requests, newest first.
-    const lines = [];
-    state.threads.forEach((thread) => {
-      const agent = state.agents.find((a) => a.id === thread.agent);
-      const who = agent ? `${label(agent.kind)} · ${agent.name ?? "unknown"}` : thread.title ?? "unknown";
-      thread.turns.forEach((turn) => turn.items.forEach((item) => lines.push({ at: item.at, who,
-        what: (item.kind === "tool" ? "› " + (item.tool ? item.tool.name + " " : "") : item.author === "person" ? "you: " : "") + item.text.split("\n")[0] })));
-    });
-    state.requests.forEach((r) => {
-      const agent = state.agents.find((a) => a.id === r.agent);
-      lines.push({ at: r.at, ask: true, who: agent ? `${label(agent.kind)} · ${agent.name ?? "unknown"}` : "unknown",
-        what: r.kind === "permission" ? `asks to run ${r.tool ?? "a tool"}${r.about ? ": " + r.about : ""}` : "asks you a question" });
-    });
-    lines.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-    $("log").replaceChildren(...lines.slice(0, 40).map((line) => {
-      const item = make("li", line.ask ? "ask" : ""), what = make("span", "what", line.what);
-      what.title = line.what;                                   // two lines at most on screen; the whole line on hover
-      item.append(make("time", "", line.at ? clock(Date.parse(line.at), true) : "--:--"), make("span", "who", line.who), what);
-      return item;
-    }));
-    if (!lines.length) $("log").append(make("li", "quiet", "Nothing said yet in the conversations this space sees."));
-
+    // A program whose files changed shape says so once, under the cards.
+    const notes = Object.values(state.kinds).map((k) => k.note).filter(Boolean);
+    $("notes").hidden = !notes.length;
+    $("notes").textContent = notes.map((n) => "⚠ " + n).join("  ");
     painted = true;
-    // Each program something knows: found or not, and its note when its files changed shape. One it does not launch (it
-    // only sees its process) is here only while one of its agents is listed.
-    const kinds = Object.entries(state.kinds).filter(([kind, k]) => k.launch || state.agents.some((a) => a.kind === kind));
-    $("kinds").replaceChildren(...kinds.map(([kind, k]) => {
-      const node = make("span", "label kind", label(kind) + "  ");
-      node.append(make("b", "", k.installed === null ? "unknown" : k.installed ? (k.reader === "changed" ? "⚠ found" : "found") : "not found"));
-      return node;
-    }), ...kinds.filter(([, k]) => k.note).map(([, k]) => make("span", "note", "⚠ " + k.note)));
+    tick();
   }
 
-  // "SAT 17 OCT · 09:00:04", or the time alone; in this Mac's time zone.
-  const pad = (n) => String(n).padStart(2, "0");
-  function clock(ms, timeOnly) {
-    const d = new Date(ms), time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    if (timeOnly) return time;
-    return `${"SUN MON TUE WED THU FRI SAT".split(" ")[d.getDay()]} ${d.getDate()} ${"JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split(" ")[d.getMonth()]} · ${time}`;
-  }
-
-  // The clock and every age tick each second, without redrawing the tiles; not while the page is hidden.
+  // "read 4 seconds ago" and the waiting ages tick each second, without redrawing the cards; not while hidden.
   function tick() {
-    $("clock").textContent = clock(now());
-    document.querySelectorAll(".age[data-at]").forEach((n) => { if (n.dataset.at) n.textContent = age(n.dataset.at); });
+    const s = Math.round((Date.now() - received) / 1000);
+    $("read").textContent = `read ${s < 2 ? "just now" : s < 60 ? s + " seconds ago" : Math.floor(s / 60) + " min ago"}`;
+    cards.forEach((node) => { if (node.agent) node.querySelector(".pill").textContent = pill(node.agent); });
   }
   let ticking = setInterval(tick, 1000);
   document.addEventListener("visibilitychange", () => {
@@ -438,7 +423,7 @@
     if (!document.hidden) { tick(); ticking = setInterval(tick, 1000); }
   });
 
-  const load = () => something.state().then((state) => { render(state); tick(); problem(null); }, problem);
+  const load = () => something.state().then((next) => { render(next); problem(null); }, problem);
   something.on("change", render);
   something.on("granted", load);   // a right given or revoked while the space is open
   load();

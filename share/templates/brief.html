@@ -55,7 +55,8 @@
   h3 { font-size: 18px; line-height: 1.2; margin: 0 0 4px; }
   .byline { font-style: italic; color: var(--soft); font-size: 13px; margin-bottom: 10px; }
   p { margin: 0 0 10px; text-align: justify; hyphens: auto; }
-  .cols > section + section p { text-align: left; }      /* narrow columns: no rivers between words */
+  /* Narrow columns: no rivers between words, and a smaller body than the lead's, which stays the first read. */
+  .cols > section + section p { text-align: left; font-size: .92em; }
   .drop::first-letter { float: left; font: 700 64px/.82 var(--display); padding: 6px 8px 0 0; }
   blockquote { margin: 12px 0; padding: 8px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
                font-style: italic; font-size: 17px; line-height: 1.4; }
@@ -157,9 +158,10 @@
     const over = ["done", "error", "interrupted"].includes(agent.state), n = turns(agent).length;
     const lines = [`${label(agent.kind)} ${over ? "worked" : "has been at work"}${where}${agent.started ? (over ? " from " : " since ") + time(agent.started) : ""}.`];
     if (agent.origin === "elsewhere") lines.push("It was started outside something, which only reads it.");
-    if (asked) lines.push(`You asked it: “${clip(asked.text, 160)}”`);
+    if (asked) lines.push(`You asked it: “${clip(asked.text, 160).replace(/[.!?]$/, "")}”.`);
     if (n > 1) lines.push(`${n} turns of this conversation are in view.`);
-    if (tools.length) lines.push(`Its latest step: ${tools.at(-1).tool ? tools.at(-1).tool.name + ", " : ""}“${clip(tools.at(-1).text, 60)}”.`);
+    const step = tools.at(-1), named = step && step.tool && !step.text.startsWith(step.tool.name) ? step.tool.name + ", " : "";
+    if (step) lines.push(`Its latest step: ${named}“${clip(step.text, 60)}”.`);
     if (!n && agent.origin === "elsewhere") lines.push("Its conversation is not in view.");
     lines.push(standing(agent));
     return {
@@ -203,7 +205,9 @@
         const list = make("ol", "record");
         record.forEach((i) => {
           const li = make("li");
-          li.append(make("time", "", time(i.at)), make("span", "", (i.kind === "tool" ? (i.tool ? i.tool.name + ": " : "") : i.author === "person" ? "You: " : "")
+          // A step that already starts with its tool's name ("Read cart.js") is not named twice.
+          const tool = i.tool && !i.text.startsWith(i.tool.name) ? i.tool.name + ": " : "";
+          li.append(make("time", "", time(i.at)), make("span", "", (i.kind === "tool" ? tool : i.author === "person" ? "You: " : "")
             + clip(i.text.split("\n")[0], 110) + (i.tool && i.tool.status === "running" ? " (running)" : "")));
           list.append(li);
         });
@@ -259,7 +263,8 @@
     const notes = Object.entries(state.kinds).filter(([kind, k]) => k.note && inView(kind, k));
     if (notes.length) {
       nodes.push(make("h4", "label", "Notices"));
-      notes.forEach(([kind, k]) => nodes.push(make("p", "notice", `${label(kind)}: ${k.note}`)));
+      // A note that names its program already is not prefixed with the name again.
+      notes.forEach(([kind, k]) => nodes.push(make("p", "notice", k.note.startsWith(label(kind)) ? k.note : `${label(kind)}: ${k.note}`)));
     }
     return nodes;
   }

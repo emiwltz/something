@@ -110,15 +110,12 @@
   }
   const baseWidth = () => Math.round(Math.min(W * 0.34, 440));
 
-  // Before a game the tower is a still poster: eight floors on the ground block, slightly off, as if someone had
-  // played. The numeral is the score, and no floor is built yet: it reads 0, whatever the poster shows.
+  // Before a game the tower is a still poster of what the numeral says: the ground block alone, nothing built yet,
+  // and the first block waiting above it, off to the right, ready to be dropped.
   function demo() {
-    const w = baseWidth(), offsets = [0, 10, 18, 22, 36, 38, 50, 50, 58], cut = [0, 12, 20, 34, 56, 64, 82, 82, 96];
-    tower = offsets.map((o, i) => ({ x: W / 2 - w / 2 + o, w: w - cut[i], colour: i }));
-    tower[0] = { x: W / 2 - w / 2, w, colour: 3 };
-    // and one block waiting above it, off to the right, the way the poster in the gallery shows it
-    const top = tower[tower.length - 1];
-    hover = { x: top.x + w * 0.22, w: top.w, colour: 0 };
+    const w = baseWidth();
+    tower = [{ x: W / 2 - w / 2, w, colour: 3 }];
+    hover = { x: W / 2 - w / 2 + w * 0.22, w, colour: 0 };
     mover = null; camera = 0;
     floors = 0;
     score();

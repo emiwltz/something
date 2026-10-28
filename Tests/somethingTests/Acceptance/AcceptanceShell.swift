@@ -478,11 +478,12 @@ struct AcceptanceShell {
         #expect(SidebarOver.close(in: shell.layer))
     }
 
-    /// Talking to an agent in full from a page (S8, J4.2): My agents, its Claude Code in pacman launched by the space,
-    /// listing its own commands and three sub-agents. "/" in its reply box opens its commands as it lists them, ↓
-    /// chooses, ↩ puts "/plan " in the box; the helpers line says which sub-agents work; the picture shows "/goal" and
-    /// its argument typed, as the mockup does. The page draws all this from
-    /// the contract's `commands` and `subagents`; something only passes "/plan …" on as the agent's own command.
+    /// Talking to an agent in full from a page (S8, J4.2; the page's look S14a): My agents, its Claude Code in pacman
+    /// launched by the space, listing its own commands, three sub-agents, its model, effort and mode. Write to It opens
+    /// its conversation in place: the chips say Sonnet 5.5 · Medium and Ask; "/" (typed, or its button) opens its
+    /// commands as it lists them, ↓ chooses, ↩ puts "/plan " in the box and says what the command does over it; the
+    /// helpers line says which sub-agents work; Send Now and After This Turn, since it works. The picture shows "/goal"
+    /// and its argument typed, as the mockup does. something only passes "/plan …" on as the agent's own command.
     @Test("j4-2: talk to an agent, in full") func j4_2() async throws {
         let stage = try Stage("shell-j4-2")
         defer { stage.remove() }
@@ -494,34 +495,52 @@ struct AcceptanceShell {
         #expect(board.granted.rights.contains("send"), "\(board.granted.rights)")
         board.engine.update(outside: Self.inFull)
         board.push()   // the app's timer pushes four times a second; no timer runs here
-        let tile = #"[...document.querySelectorAll(".tile")].find((t) => t.querySelector(".name").textContent === "pacman")"#
+        let card = #"document.querySelector('.agent[data-id="claude-pacman"]')"#
         func run(_ script: String) async throws -> [String: Any] {
-            try #require(try await board.web.callAsyncJavaScript("const tile = \(tile), box = tile && tile.querySelector('textarea'); \(script)",
+            try #require(try await board.web.callAsyncJavaScript("const card = \(card), box = card && card.querySelector('textarea'); \(script)",
                                                                   in: try #require(board.frame), contentWorld: .defaultClient) as? [String: Any])
         }
         var ready = false
         for _ in 0..<100 where !ready {
-            ready = (try? await run("return { ok: !!tile && !tile.querySelector('form').hidden };"))?["ok"] as? Bool == true
+            ready = (try? await run("return { ok: !!card && !card.querySelector('.acts').hidden };"))?["ok"] as? Bool == true
             if !ready { _ = await wait(0.05) }
         }
-        #expect(ready, "pacman's reply box shows once the space may write to it")
+        #expect(ready, "pacman's Write to It shows once the space may write to it")
+        // The board as the mockup counts it, and the cards the space may not write to say why, with no button.
+        let counted = try await run("""
+            card.querySelector('.write').click();
+            return { counts: [...document.querySelectorAll('.count')].map((c) => [...c.children].map((n) => n.textContent).join(' ')),
+                     first: document.querySelector('#board').firstElementChild.dataset.id, open: card.classList.contains('open'),
+                     chips: [...card.querySelectorAll('.chips select')].map((s) => s.selectedOptions[0].textContent),
+                     labels: [...card.querySelectorAll('.chips select')].map((s) => s.getAttribute('aria-label')),
+                     amp: document.querySelector('.agent[data-id="amp-shop"] .pill').textContent,
+                     ampWrite: document.querySelector('.agent[data-id="amp-shop"] .acts').hidden,
+                     thread: [...card.querySelectorAll('.thread li')].map((li) => li.className),
+                     buttons: [...card.querySelectorAll('form button')].filter((b) => !b.hidden).map((b) => b.getAttribute('aria-label') || b.textContent) };
+            """)
+        #expect(counted["counts"] as? [String] == ["1 waiting for you", "2 working", "1 idle", "1 unknown"], "\(counted)")
+        #expect(counted["first"] as? String == "claude-pacman" && counted["open"] as? Bool == true, "\(counted)")
+        #expect(counted["chips"] as? [String] == ["Sonnet 5.5", "Medium", "Ask"] && counted["labels"] as? [String] == ["Model", "Effort", "Mode"], "\(counted)")
+        #expect((counted["amp"] as? String)?.hasPrefix("waits ") == true && counted["ampWrite"] as? Bool == true, "\(counted)")
+        #expect(counted["thread"] as? [String] == ["you", "step", "it", "step"], "\(counted)")
+        #expect(counted["buttons"] as? [String] == ["Its commands", "Send Now", "After This Turn"], "\(counted)")
         let read = """
-            const menu = tile.querySelector(".cmds");
+            const menu = card.querySelector(".cmds"), hint = card.querySelector(".hint");
             return { hidden: menu.hidden, label: menu.getAttribute("aria-label"), role: menu.getAttribute("role"), box: box.value,
                      names: [...menu.querySelectorAll("li b")].map((b) => b.textContent), roles: [...menu.children].map((li) => li.getAttribute("role")),
                      chosen: [...menu.children].findIndex((li) => li.getAttribute("aria-selected") === "true"), place: box.placeholder,
-                     helpers: tile.querySelector(".helpers").textContent, expanded: box.getAttribute("aria-expanded"),
+                     helpers: card.querySelector(".helpers").textContent, expanded: box.getAttribute("aria-expanded"),
                      active: box.getAttribute("aria-activedescendant"), chosenID: menu.querySelector("[aria-selected=true]")?.id ?? null,
-                     controls: box.getAttribute("aria-controls") === menu.id };
+                     controls: box.getAttribute("aria-controls") === menu.id, hint: hint.hidden ? null : hint.textContent };
             """
         func key(_ name: String) -> String { #"box.dispatchEvent(new KeyboardEvent("keydown", { key: "\#(name)", bubbles: true, cancelable: true }));"# }
         let type = #"box.focus(); box.value = "/"; box.dispatchEvent(new Event("input"));"#
-        var seen = try await run(type + read)
+        var seen = try await run(#"card.querySelector(".slash").click();"# + read)
         #expect(seen["hidden"] as? Bool == false && seen["label"] as? String == "Claude Code's commands" && seen["role"] as? String == "listbox", "\(seen)")
         #expect(seen["names"] as? [String] == ["/goal", "/plan", "/review", "/agents", "/compact"] && seen["chosen"] as? Int == 0, "\(seen)")
         #expect((seen["roles"] as? [String])?.allSatisfy { $0 == "option" } == true)
-        #expect(seen["place"] as? String == "A word to Claude Code… · / for its commands")
-        #expect(seen["helpers"] as? String == "2 at work: Writer: chase for Blinky · Writer: chase for Pinky", "\(seen)")
+        #expect(seen["place"] as? String == "Write to Claude Code…")
+        #expect(seen["helpers"] as? String == "Its helpersWriter: chase for Blinky · Writer: chase for Pinky · 2 sub-agents at work", "\(seen)")
         seen = try await run(#"box.value = "/re"; box.dispatchEvent(new Event("input"));"# + read)
         #expect(seen["names"] as? [String] == ["/review"])
         seen = try await run(type + key("ArrowDown") + read)
@@ -529,19 +548,19 @@ struct AcceptanceShell {
         #expect(seen["active"] as? String != nil && seen["active"] as? String == seen["chosenID"] as? String, "\(seen)")
         seen = try await run(key("Enter") + read)
         #expect(seen["box"] as? String == "/plan " && seen["hidden"] as? Bool == true && seen["expanded"] as? String == "false", "\(seen)")
+        #expect(seen["hint"] as? String == "/planIt proposes before it touches a file", "\(seen)")
         // Esc closes the menu, and a text that is no command's name shows none.
         seen = try await run(type + key("Escape") + read)
         #expect(seen["hidden"] as? Bool == true)
         seen = try await run(#"box.value = "/deploy"; box.dispatchEvent(new Event("input"));"# + read)
-        #expect(seen["hidden"] as? Bool == true)
+        #expect(seen["hidden"] as? Bool == true && seen["hint"] is NSNull)
         // As the mockup draws it: a command chosen, its argument typed, the helpers at work in view.
         seen = try await run(#"box.value = "/goal Each ghost chases its own way, and the tests pass"; box.dispatchEvent(new Event("input"));"# + read)
-        #expect(seen["hidden"] as? Bool == true)
+        #expect(seen["hidden"] as? Bool == true && seen["hint"] as? String == "/goalA goal it keeps working toward, checking as it goes", "\(seen)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: board.web, "j4-2" + suffix, root: stage.home.root)
         }
-        // And "/" alone, its commands open as the agent lists them: the step's point. The page's own look (the mockup's
-        // dark board, the card's model menu, Send Now and After This Turn) is the template's, redrawn in S14a.
+        // And "/" alone, its commands open as the agent lists them: the step's point.
         seen = try await run(type + read)
         #expect(seen["hidden"] as? Bool == false)
         try await stage.appearances { suffix in
@@ -549,13 +568,20 @@ struct AcceptanceShell {
         }
     }
 
-    /// The mockup's agents, Claude Code in pacman launched by My agents, with its own commands and its sub-agents.
+    /// The mockup's agents, Claude Code in pacman launched by My agents, with its own commands, its sub-agents, and
+    /// its model, effort and mode as its driver offers them.
     static var inFull: (agents: [Agent], threads: [AgentThread]) {
         var world = Stage.world
         guard let index = world.agents.firstIndex(where: { $0.id == "claude-pacman" }) else { return world }
         world.agents[index].origin = "launched"
         (world.agents[index].can.send, world.agents[index].can.steer, world.agents[index].can.queue, world.agents[index].can.interrupt) = (true, true, true, true)
+        (world.agents[index].can.model, world.agents[index].can.mode, world.agents[index].can.effort) = (true, true, true)
         world.agents[index].because = [:]
+        (world.agents[index].model, world.agents[index].effort, world.agents[index].mode) = ("sonnet", "medium", "default")
+        world.agents[index].options.model = [Option(value: "sonnet", label: "Sonnet 5.5"), Option(value: "opus", label: "Opus 5.5")]
+        world.agents[index].options.effort = [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")]
+        world.agents[index].options.mode = [Option(value: "default", label: "Ask"), Option(value: "plan", label: "Plan"),
+                                            Option(value: "acceptEdits", label: "Accept Edits")]
         world.agents[index].commands = [("goal", "A goal it keeps working toward, checking as it goes"), ("plan", "It proposes before it touches a file"),
                                         ("review", "Reads the recent changes and comments on them"), ("agents", "See its helpers, or ask it to start one"),
                                         ("compact", "Shortens the conversation, keeps the gist")].map { Option(value: $0, label: $1) }
@@ -594,23 +620,38 @@ struct AcceptanceShell {
         <script type="application/json" id="something">{"contract": 1, "title": "Week-end", "agents": {"see": "all"}, "rights": ["state", "store"],
           "description": "A countdown to Saturday, your plans, and what your agents still have to finish."}</script>
         <style>
-          body { margin: 0; min-height: 100vh; box-sizing: border-box; padding: 56px 60px; color: #fff; font: 15px -apple-system, sans-serif;
-                 background: linear-gradient(180deg, #2b3363 0%, #5f4a86 40%, #c27587 68%, #f2a676 100%); }
-          small { letter-spacing: .18em; font-size: 11.5px; font-weight: 600; opacity: .85; }
-          .count { font: 300 92px Georgia, serif; margin: 10px 0 0; letter-spacing: -.02em; }
-          h2 { font: 600 24px Georgia, serif; margin: 26px 0 30px; }
-          .cards { display: flex; gap: 18px; flex-wrap: wrap; }
-          .card { width: 230px; padding: 20px; border-radius: 14px; background: rgba(255, 255, 255, .92); color: #3a2b45; }
-          .card.dark { background: rgba(60, 40, 80, .5); color: #fff; }
-          .card p { margin: 10px 0 0; line-height: 1.45; }
+          body { margin: 0; min-height: 100vh; box-sizing: border-box; padding: 56px 64px; color: #fff; font: 14px -apple-system, sans-serif;
+                 background: radial-gradient(circle at 50% 108%, #ffe0a3 0, #f6b27c 22%, transparent 48%),
+                             linear-gradient(180deg, #2b3363 0%, #5f4a86 38%, #c27587 66%, #f2a676 100%); }
+          small { display: block; letter-spacing: .18em; font-size: 11px; font-weight: 600; opacity: .85; }
+          .count { display: flex; gap: 22px; margin: 18px 0 0; }
+          .count b { display: block; font: 400 88px/1 Georgia, serif; letter-spacing: -.03em; font-variant-numeric: lining-nums; }
+          .count span { font-size: 13px; opacity: .85; }
+          h2 { font: 600 22px Georgia, serif; margin: 30px 0 34px; }
+          .cards { display: flex; gap: 18px; align-items: flex-start; }
+          .card { box-sizing: border-box; flex: 1 1 0; max-width: 270px; padding: 20px; border-radius: 14px; background: rgba(255, 255, 255, .92); color: #3a2b45; }
+          .card.dark { max-width: 230px; background: rgba(60, 40, 80, .5); color: #fff; }
+          .card p { margin: 12px 0 0; line-height: 1.45; }
+          .plans p { font: 600 18px/1.35 Georgia, serif; padding-bottom: 14px; border-bottom: 1px dashed rgba(58, 43, 69, .3); }
+          .plans i { display: block; margin-top: 12px; font-style: normal; opacity: .5; }
         </style></head><body>
-        <small>UNTIL THE WEEKEND</small><div class="count">1 05 40</div><h2>Saturday 24 October.</h2>
-        <div class="cards"><div class="card"><small>SATURDAY PLANS</small><p>Market at nine. Call the bike shop.</p></div>
-        <div class="card dark"><small>BEFORE SATURDAY</small><p id="list">No agent shown.</p></div></div>
+        <small>UNTIL THE WEEKEND</small>
+        <div class="count"><div><b>1</b><span>day</span></div><div><b>05</b><span>hours</span></div><div><b>40</b><span>minutes</span></div></div>
+        <h2>Saturday 24 October.</h2>
+        <div class="cards"><div class="card plans"><small>SATURDAY PLANS</small><p>Market at nine. Call Léa about the bikes.</p><i>Write your plans…</i></div>
+        <div class="card dark"><small>BEFORE SATURDAY · ~/CODE/SHOP</small><div id="list">No agent shown.</div></div></div>
         <script>
-          const list = document.getElementById("list");
-          const render = (state) => { const shown = (state.agents || []).filter((a) => a.kind !== "other");
-            list.textContent = shown.length ? shown.map((a) => `${a.name}: ${a.state}`).join(" · ") : "No agent shown."; };
+          const list = document.getElementById("list"), NAMES = { claude: "Claude Code", amp: "Amp", codex: "Codex" };
+          // What the agents in ~/code/shop still do: who waits for the person, who works, in their own last words.
+          const line = (state, a) => { const thread = (state.threads || []).find((t) => t.agent === a.id), turn = thread && thread.turns.at(-1);
+            const said = ((turn && turn.items.at(-1) || {}).text || "").replace(/^./, (c) => c.toLowerCase());
+            const p = document.createElement("p"), who = document.createElement("b");
+            who.textContent = NAMES[a.kind] || a.kind;
+            p.append(who, a.state === "waiting" ? ` waits for you: ${said}` : ` is at work: ${said}.`);
+            return p; };
+          const render = (state) => { const shown = (state.agents || []).filter((a) => (a.folder || "").endsWith("/code/shop")
+              && ["waiting", "working"].includes(a.state)).sort((a, b) => (a.state === "waiting" ? -1 : 0) - (b.state === "waiting" ? -1 : 0));
+            if (shown.length) list.replaceChildren(...shown.map((a) => line(state, a))); else list.textContent = "No agent shown."; };
           const again = () => something.state().then(render).catch(() => render({}));
           again(); something.on("change", render); something.on("granted", again);
         </script></body></html>
