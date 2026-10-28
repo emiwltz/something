@@ -111,7 +111,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.ended = { [weak self] in
             guard let self else { return }
             library.relist()
-            if let new = assistant.appeared(library.entries, open: library.selection.space) { library.select(.space(new)) }
+            if let new = assistant.appeared(library.entries) { library.select(.space(new)) }
         }
         // Before any reading: the conversations there are the person's with their assistant, never a space's to see.
         engine.assistantFolder = places.spaces.path

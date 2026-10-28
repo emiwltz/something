@@ -496,7 +496,7 @@ struct AcceptanceBuild {
         var made: String?
         model.ended = {
             library.relist()
-            made = model.appeared(library.entries, open: nil)
+            made = model.appeared(library.entries)
         }
         try "".write(to: stage.home.root.appendingPathComponent("out/finish"), atomically: true, encoding: .utf8)
         #expect(await wait(until: { made != nil }))

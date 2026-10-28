@@ -363,7 +363,7 @@ import WebKit
         model.ended = {
             _ = try? home.space("garden", page(#"{"contract": 1, "title": "Garden notes"}"#, ""))
             library.relist()
-            opened = model.appeared(library.entries, open: nil)
+            opened = model.appeared(library.entries)
             if let opened { model.place = place("Garden notes", opened) }
         }
         // A garden deleted earlier in this run launched an agent: the new garden is another space and never drives it.

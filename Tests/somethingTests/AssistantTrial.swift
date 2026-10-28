@@ -99,7 +99,7 @@ struct AssistantTrial {
             library.opened = { opened.append($0) }
             model.ended = {
                 library.relist()
-                if let new = model.appeared(library.entries, open: library.selection.space) { library.select(.space(new)) }
+                if let new = model.appeared(library.entries) { library.select(.space(new)) }
             }
             library.watch()
             // The tools are lent as the app lends them, by this clone's real program (AssistantBuild.placeProgram).

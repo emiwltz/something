@@ -929,9 +929,9 @@ import SomethingCore
 
     /// The space the build that just ended made: the page it wrote, which may have been there before; else, when it
     /// wrote none, the first space listed since it began that no other build writes and none made. Returns it to open
-    /// while the person follows that build, or is on New Space with nothing written, or no space is open elsewhere;
-    /// otherwise it is said `ready` (`arrived`), and nil returned.
-    func appeared(_ entries: [Library.Entry], open: String?) -> String? {
+    /// while the person is on New Space following that build, or with nothing written; anywhere else, Templates
+    /// included, it is said `ready` (`arrived`), and nil returned.
+    func appeared(_ entries: [Library.Entry]) -> String? {
         guard let (before, shown) = ending else { return nil }
         // Several builds run at once: a page another one writes is new to this one too, and is never its to take.
         let others = Set(builds.compactMap(space(of:)))
@@ -943,7 +943,7 @@ import SomethingCore
         made.insert(new.id)
         consent(new.id, before.level, folder: before.folder)
         hand(before.session, to: new.id)
-        let free = place == .blank ? shown || (watched == nil && sessions[.new]?.draft.isEmpty != false) : open == nil
+        let free = place == .blank ? shown || (watched == nil && sessions[.new]?.draft.isEmpty != false) : false
         if free {
             revealing = new.id
             return new.id
@@ -986,16 +986,27 @@ import SomethingCore
         if watched == build.id { watched = nil }
     }
 
-    /// A build that made no space, or that the person stopped: its conversation becomes New Space's again, its agent
-    /// going on there, when New Space's has not begun; else it ends. A failed build's words are back in New Space's field.
+    /// A build that made no space, or that the person stopped: its conversation becomes New Space's, its agent going
+    /// on there; one New Space had is stopped and its turns kept above, or, while it still works or waits, goes on and
+    /// keeps the build's turns above its own. Either way no reply is lost. A failed build's words are back in New
+    /// Space's field.
     private func back(_ build: Build) {
         let built = build.session, failed = trouble(built)
-        let new = sessions[.new]
-        if let new, new !== built, new.id == nil, !new.launching, new.rows.isEmpty {
-            built.draft = [built.draft, new.draft].filter { !$0.isEmpty }.joined(separator: "\n")
-            sessions[.new] = built
-        } else if new !== built {
-            halt(built)
+        if let new = sessions[.new], new !== built {
+            let busy = new.launching || !new.held.isEmpty || (new.agent?.alive != false && ["working", "waiting"].contains(new.agent?.state))
+            if busy {
+                halt(built)
+                built.fold(engine.state)
+                new.kept = built.kept + new.kept
+                new.read(engine.state)
+            } else {
+                halt(new)
+                new.fold(engine.state)
+                built.kept = new.kept + built.kept
+                built.read(engine.state)
+                built.draft = [built.draft, new.draft].filter { !$0.isEmpty }.joined(separator: "\n")
+                sessions[.new] = built
+            }
         }
         if failed, let target = sessions[.new], !target.draft.contains(build.sentence) {
             target.draft = [build.sentence, target.draft].filter { !$0.isEmpty }.joined(separator: "\n")

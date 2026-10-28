@@ -170,10 +170,11 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
-    /// A build that ends while the person is in another space: its space, there before (a rebuild), is found by the
-    /// page it wrote, takes the build's conversation and is said ready, not opened; one that ends while New Space shows
-    /// it opens, its card to open on the reply.
-    @Test(arguments: [false, true]) func aBuildEndsWhereverThePersonIs(away: Bool) async throws {
+    /// A build that ends while the person is in another space or on Templates: its space, there before (a rebuild), is
+    /// found by the page it wrote, takes the build's conversation and is said ready, not opened; one that ends while
+    /// New Space shows it opens, its card to open on the reply.
+    @Test(arguments: ["blank", "templates", "space"]) func aBuildEndsWhereverThePersonIs(where place: String) async throws {
+        let away = place != "blank"
         let (home, model) = try await assistant("fail")
         let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
         _ = try home.space("waiting-room", page(#"{"contract": 1, "title": "Waiting room", "rights": ["state", "store"]}"#, ""))
@@ -182,11 +183,12 @@ import Testing
         model.arrived = { arrived.append("\($0) · \($1)") }
         model.ended = {
             library.relist()
-            opened = model.appeared(library.entries, open: away ? "agents" : nil)
+            opened = model.appeared(library.entries)
         }
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.ladder?.done == true }))
-        if away { model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html") }
+        if place == "space" { model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html") }
+        if place == "templates" { model.place = .templates }
         try Data().write(to: home.root.appendingPathComponent("out/finish"))
         #expect(await wait(until: { model.builds.isEmpty }))
         #expect(opened == (away ? nil : "waiting-room") && arrived == (away ? ["waiting-room · Waiting room"] : []))
@@ -195,6 +197,42 @@ import Testing
         #expect(model.session(for: room).rows.contains(.mine(caption: "on the blank page", text: "Who is waiting for me")))
         model.place = room
         #expect(away || (model.open && model.threadShown))
+        await AssistantTests().finish(home, model)
+    }
+
+    /// Builds that end without a page, while the person is elsewhere, each give their conversation back to New Space
+    /// and no reply is lost: the first takes New Space's empty one; the next takes over an idle one, its turns kept
+    /// above; one ending while New Space's own still works is kept above it, which goes on. Each says so truthfully.
+    @Test func buildsWithoutAPageKeepEveryReply() async throws {
+        let (home, model) = try await assistant()
+        var told: [String] = []
+        model.told = { told.append($0) }
+        model.ended = { _ = model.appeared([]) }
+        for name in ["alpha", "beta", "delta"] {
+            model.watch(nil)
+            model.send("Page of two: \(name)")
+            #expect(await wait(until: { model.builds.last.flatMap(model.space(of:)) == name }))
+        }
+        model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+        let replies = { Set((model.sessions[.new]?.rows ?? []).compactMap(\.reply)) }
+        try Data().write(to: home.root.appendingPathComponent("out/finish-alpha"))
+        #expect(await wait(until: { model.builds.count == 2 && replies() == ["alpha is ready."] }))
+        try Data().write(to: home.root.appendingPathComponent("out/finish-beta"))
+        #expect(await wait(until: { model.builds.count == 1 && replies() == ["alpha is ready.", "beta is ready."] }))
+        let beta = try #require(model.sessions[.new])
+        // New Space's own conversation works when the last build ends: it goes on, the build's turns kept above.
+        model.place = .templates
+        model.send("Page of two: gamma")
+        #expect(await wait(until: { beta.agent?.state == "working" }))
+        try Data().write(to: home.root.appendingPathComponent("out/finish-delta"))
+        #expect(await wait(until: { model.builds.isEmpty }))
+        #expect(model.sessions[.new] === beta && beta.agent?.state == "working")
+        #expect(await wait(until: { replies().isSuperset(of: ["alpha is ready.", "beta is ready.", "delta is ready."]) }))
+        for name in ["alpha", "beta", "delta"] {
+            #expect(beta.rows.contains(.mine(caption: "on the blank page", text: "Page of two: \(name)")))
+        }
+        #expect(told == Array(repeating: "Your assistant answered on New Space", count: 3))
+        try Data().write(to: home.root.appendingPathComponent("out/finish-gamma"))
         await AssistantTests().finish(home, model)
     }
 
@@ -208,7 +246,7 @@ import Testing
         model.arrived = { name, _ in arrived.append(name) }
         model.ended = {
             library.relist()
-            _ = model.appeared(library.entries, open: "agents")
+            _ = model.appeared(library.entries)
         }
         model.chosenLevel = .watch
         model.send("Page of two: first-room")

@@ -30,8 +30,8 @@ your words), and Build: your agent builds it, and it opens by itself when ready,
 appears in the sidebar at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build
 several at a time: nothing stops them, and a click on the row shows the build again. A space that finishes while you
 are elsewhere says "… is ready · Open" (and a notification of the Mac too while something is in the background, if you
-turned notifications on). Its assistant answers in two sentences, what is ready and one thing to try, its details
-folded; a build that fails keeps your words on New Space to try again. Each space's
+turned notifications on). Its assistant is asked to answer in two sentences, what is ready and one thing to try;
+anything longer is folded under Details; a build that fails keeps your words on New Space to try again. Each space's
 assistant rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is
 in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. ⌘J shows the conversation,
 ⌘\ makes it small again, ⌘. stops the assistant. Templates (⇧⌘T) are six finished spaces to start from, and need no

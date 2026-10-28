@@ -664,6 +664,23 @@ final class FakeNotifier: Notifier {
         #expect(Attention.banner(source.permission("r5", about: "ls").request, who: Asker(program: "pi")) == ("pi is waiting for you", "Wants to run a command"))
     }
 
+    /// A space a build made is notified only in the background with "Notify me" on, named after the space so that its
+    /// click opens it; a request's notification is never mistaken for one.
+    @Test func aReadySpaceIsNotifiedOnlyInTheBackground() {
+        let dock = FakeDock(), notifier = FakeNotifier(), attention = Attention(dock: dock, notifier: notifier)
+        var notify = false
+        attention.notify = { notify }
+        attention.ready("stack", title: "Stack")
+        notify = true
+        dock.isActive = true
+        attention.ready("stack", title: "Stack")
+        #expect(notifier.posted.isEmpty, "off, or in front where the toast says it")
+        dock.isActive = false
+        attention.ready("stack", title: "Stack")
+        #expect(notifier.posted.map(\.id) == ["ready:stack"] && notifier.posted.map(\.title) == ["Stack is ready"])
+        #expect(Attention.readySpace("ready:stack") == "stack" && Attention.readySpace("r1") == nil)
+    }
+
     /// The notification center is never reached outside an app bundle: in swift test, as under swift run, it would
     /// stop the process.
     @Test func noNotifierWithoutAnAppBundle() {

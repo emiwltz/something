@@ -198,14 +198,14 @@ import Testing
         #expect(await wait(until: { model.kind == "claude" }))
         // What App does when a build ends, with the space the agent made written just before.
         let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
-        var making: (name: String, title: String)?, open: String?, opened: [String?] = [], answers: [Int] = [], arrived: [String] = []
+        var making: (name: String, title: String)?, opened: [String?] = [], answers: [Int] = [], arrived: [String] = []
         model.arrived = { arrived.append("\($0) · \($1)") }
         model.ended = {
             // Never before the agent answered: a build ends with its turn, not with its launch.
             answers.append(model.rows.filter { $0 == .reply("Invented reply.") }.count)
             if let making { _ = try? home.space(making.name, page(#"{"contract": 1, "title": "\#(making.title)"}"#, "")) }
             library.relist()
-            opened.append(model.appeared(library.entries, open: open))
+            opened.append(model.appeared(library.entries))
         }
         let sentence = BlankView.chips[0].1
         making = ("waiting", "Who waits")
@@ -225,7 +225,7 @@ import Testing
         #expect(opened == ["waiting", nil] && model.ready.isEmpty && model.light == .ready)
 
         // Made while the person was on another space: said ready, never opened.
-        (making, open) = (("second", "Second"), "waiting")
+        making = ("second", "Second")
         model.send("A second one.")
         model.place = .space(title: "Who waits", name: "waiting", page: home.places.spaces.appendingPathComponent("waiting.html").path)
         #expect(await wait(until: { model.builds.isEmpty }))
