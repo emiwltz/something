@@ -95,10 +95,9 @@ struct BlankView: View {
     /// What the build may do with the person's agents, chosen before Build: one chip under its words.
     private func chosen(_ build: AssistantModel.Build) -> some View {
         let folder = build.level == .run ? build.folder.map { " in " + Words.path($0, home: library.places.home.path) } ?? "" : ""
-        let words = "\(build.level.title) · your agents\(folder)"
         return HStack(spacing: 6) {
             Image(systemName: "person.2").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-            Text(words)
+            Text("\(build.level.title) · your agents\(folder)")
         }
         .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
         .padding(.horizontal, 10).frame(height: 26)

@@ -355,10 +355,7 @@ import SomethingCore
     func answersInline(_ request: Request) -> Bool { request.id == dropped || inlineQuestion()?.request == request.id }
 
     /// The ladder New Space shows: the build's it follows as it goes, or the one stopped there; nil when there is neither.
-    var ladder: Ladder? {
-        if let halted { return halted }
-        return before.map(ladder)
-    }
+    var ladder: Ladder? { halted ?? before.map(ladder) }
 
     /// The ladder of `build` as it goes; its question only while New Space shows it, where it is answered.
     func ladder(_ build: Build) -> Ladder {
@@ -944,8 +941,7 @@ import SomethingCore
         made.insert(new.id)
         consent(new.id, before.level, folder: before.folder)
         hand(before.session, to: new.id)
-        let free = place == .blank ? shown || (watched == nil && sessions[.new]?.draft.isEmpty != false) : false
-        if free {
+        if place == .blank, shown || (watched == nil && sessions[.new]?.draft.isEmpty != false) {
             revealing = new.id
             return new.id
         }

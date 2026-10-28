@@ -18,8 +18,7 @@ extension Shell {
     /// go, and a hint at the top says how to leave.
     func pageFullScreen(_ on: Bool) {
         pageAfterFull = false
-        guard on != pageFull else { return }
-        guard !on || space != nil else { return }
+        guard on != pageFull, !on || space != nil else { return }
         if on, full {
             pageAfterFull = true
             return window.toggleFullScreen(nil)
@@ -75,16 +74,18 @@ extension Shell {
     /// window's top in Page Full Screen.
     func float() {
         guard floats, SidebarOver.shown(in: layer) == nil else { return }
-        layOver(under: pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY, floating: true)
+        layOver(floating: true)
     }
 
-    /// Lays the window's sidebar list over the page `under` points from the top, or takes it away; `floating`, it is
-    /// the floating sidebar, inset with its pin. The column's own eyes, so that both lists always say the same.
-    func layOver(under: CGFloat, floating: Bool) {
+    /// Lays the window's sidebar list over the page, under the toolbar or in either full screen from the window's top,
+    /// or takes it away; `floating`, it is the floating sidebar with its pin. The column's own eyes, so that both lists
+    /// always say the same.
+    func layOver(floating: Bool) {
         guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return }
+        let under = full || pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY
         _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            let list = SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false)
-            return floating ? SidebarOver(list, under: under, inset: 8, pin: { [weak self] in self?.keepSidebar() }) : SidebarOver(list, under: under)
+            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false), under: under,
+                        pin: floating ? { [weak self] in self?.keepSidebar() } : nil)
         }
     }
 
@@ -143,20 +144,8 @@ final class Reveal: NSView {
     var filled = false {
         didSet {
             needsDisplay = true
-            // The band brought back lies over the page with a soft shadow under it (the mockup's 0 12 30 -16).
-            wantsLayer = true
-            layer?.masksToBounds = false
-            layer?.shadowColor = NSColor.black.cgColor
-            layer?.shadowRadius = 15
-            layer?.shadowOffset = CGSize(width: 0, height: -12)
-            layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
             layer?.shadowOpacity = filled ? 0.35 : 0
         }
-    }
-
-    override func layout() {
-        super.layout()
-        layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
     }
     private var timer: Timer?
 
@@ -164,6 +153,17 @@ final class Reveal: NSView {
         (self.delay, self.leave, self.clicks) = (delay, leave, clicks)
         super.init(frame: .zero)
         setAccessibilityElement(false)
+        // The band brought back lies over the page with a soft shadow under it (the mockup's 0 12 30 -16).
+        wantsLayer = true
+        layer?.masksToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowRadius = 15
+        layer?.shadowOffset = CGSize(width: 0, height: -12)
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
     }
 
     required init?(coder: NSCoder) { nil }

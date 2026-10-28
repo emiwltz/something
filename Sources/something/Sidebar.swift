@@ -386,14 +386,12 @@ struct SidebarView: View {
     }
 
     func newSpace() {
-        state.cursor = nil
-        library.select(.newSpace)
-        assistant.watch(nil)
+        follow(nil)
         assistant.focus()
     }
 
-    /// Shows the build `number` on New Space: a click on its row.
-    private func follow(_ number: Int) {
+    /// Shows the build `number` on New Space, a click on its row, or its own field for nil.
+    private func follow(_ number: Int?) {
         state.cursor = nil
         library.select(.newSpace)
         assistant.watch(number)

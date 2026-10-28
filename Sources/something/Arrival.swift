@@ -52,32 +52,32 @@ final class Arrival: NSView {
         return Shape(rect: rect, arm: start.arm, stroke: mix(start.stroke, thin), face: face, eyes: eyes)
     }
 
-    /// The arrival of the space `name` that `shell` is about to open, laid on its glass over a still of the page shown:
-    /// from New Space's sign when that page is the one the space was built from, or from the card Use pressed on the
-    /// templates; nil for any other opening.
+    /// The arrival of the space `name` that `shell` is about to open, laid on its glass: from New Space's sign, over the
+    /// bare page, when that page is the one the space was built from, or from the card Use pressed on the templates,
+    /// over their still; nil for any other opening.
     static func made(_ name: String, in shell: Shell) -> Arrival? {
         let glass = shell.glass
         guard let host = shell.center.subviews.first(where: { $0 is NSHostingView<BlankView> || $0 is NSHostingView<GalleryView> }) else { return nil }
         let blank = (host as? NSHostingView<BlankView>)?.rootView
         let gallery = blank?.gallery ?? (host as? NSHostingView<GalleryView>)?.rootView.model
-        var start: Start, sign: NSView?
+        var start: Start, still: NSBitmapImageRep?
         if let used = gallery?.used, name == used || name.hasPrefix("\(used)-"), let card = gallery?.drawn[used] {
-            // The card's frame, in the page's coordinates as SwiftUI gave them, without a face.
+            // The card's frame, in the page's coordinates as SwiftUI gave them, without a face, over the templates' still.
             let rect = glass.convert(host.convert(card, to: nil), from: nil)
-            (start, sign) = (Start(rect: rect, arm: min(rect.width, rect.height) * 0.3, stroke: 22, face: false), nil)
+            start = Start(rect: rect, arm: min(rect.width, rect.height) * 0.3, stroke: 22, face: false)
+            still = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+            still.map { host.cacheDisplay(in: host.bounds, to: $0) }
         } else if let blank, let built = shell.assistant.sessions[.space(name)], ObjectIdentifier(built) == blank.opened,
                   let hero = Arrival.sign(in: host) {
+            // New Space's form is not drawn under the new space's title: the frame grows on the bare page, as the space
+            // it brings.
             let g = hero.geometry, side = hero.bounds.width
             start = Start(rect: glass.convert(hero.bounds.insetBy(dx: g.inset * side, dy: g.inset * side), from: hero),
                           arm: g.arm * side, stroke: g.stroke, face: true)
-            sign = hero
+            still = nil
         } else {
             return nil
         }
-        // The templates' still under the card's frame; New Space's form is not drawn under the new space's title: the
-        // frame grows on the bare page, as the space it brings.
-        let still = sign == nil ? host.bitmapImageRepForCachingDisplay(in: host.bounds) : nil
-        still.map { host.cacheDisplay(in: host.bounds, to: $0) }
         // The glass is not flipped and the arrival is: its rectangles are turned over once, here.
         let height = glass.bounds.height
         func flip(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: height - r.maxY, width: r.width, height: r.height) }

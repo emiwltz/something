@@ -236,7 +236,6 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
-    /// A build's reply is said short: its first paragraph, the rest under Details; other replies are whole.
     /// Two builds at once, each writing its own page, the second ending first, while the person is elsewhere: each is
     /// handed its own page, its grant at its own level, and its own conversation; neither ends the other's.
     @Test func twoBuildsEndInReverseOrder() async throws {

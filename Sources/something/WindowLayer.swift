@@ -1,8 +1,8 @@
 // The layer above the whole window's split view, for what covers the window rather than one column: the toast, and
 // the cards on a scrim, the shortcut sheet (KeysSheet.swift) and the palette (Palette.swift); and the sidebar laid
-// over the space in full screen, beside the rail, or floating (SidebarOver). It takes the mouse only on what it holds, so the columns, their dividers and the toolbar's separators
-// under it behave as if it were not there, and it is hidden while it holds nothing. The glass over the center, which
-// holds the assistant, is one too (Glass.swift).
+// over the space in full screen, beside the rail, or floating (SidebarOver). It takes the mouse only on what it holds,
+// so the columns, their dividers and the toolbar's separators under it behave as if it were not there, and it is
+// hidden while it holds nothing. The glass over the center, which holds the assistant, is one too (Glass.swift).
 import AppKit
 import SwiftUI
 
@@ -173,10 +173,10 @@ class ScrimCard: NSView {
 }
 
 /// The sidebar laid over the space at the window's left edge, full height, where full screen leaves no column for it:
-/// the mockup's .wn-sideov, its float shadow and ring, no scrim; floating, frosted glass with the page seen through. It arrives from the edge, takes the focus for ↑ and ↓,
-/// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it. Floating (PageFull.swift), it stands
-/// `inset` points inside the window's edges with rounded corners and a pin at its top, and leaves soon after the
-/// pointer does, unless a field in it is being edited.
+/// the mockup's .wn-sideov, its float shadow and ring, no scrim. It arrives from the edge, takes the focus for ↑ and ↓,
+/// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it. Floating (PageFull.swift), it is
+/// frosted glass with the page seen through, 8 points inside the window's edges with rounded corners and a pin at its
+/// top, and leaves soon after the pointer does, unless a field in it is being edited.
 final class SidebarOver: ScrimCard {
     static let width: CGFloat = 236
     private let host: NSView
@@ -190,34 +190,33 @@ final class SidebarOver: ScrimCard {
     /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar beside
     /// the rail), its first row just under them. `pin`, when given, makes it the floating sidebar, its head 40 points
     /// high holding the pin.
-    init(_ list: SidebarView, under: CGFloat = 0, inset: CGFloat = 0, pin: (() -> Void)? = nil) {
+    init(_ list: SidebarView, under: CGFloat = 0, pin: (() -> Void)? = nil) {
         var list = list
         list.glass = pin != nil
-        let host = NSHostingView(rootView: list.padding(.top, pin == nil ? max(52 - under, 8) : 40).background(Look.Token.side.ui.opacity(list.glass ? 0.76 : 1)))
+        // The mockup's floating panel: 8 points in, 8 wider, 14-point corners.
+        let inset: CGFloat = list.glass ? 8 : 0, radius = list.glass ? Look.card + 4 : 0
+        let host = NSHostingView(rootView: list.padding(.top, list.glass ? 40 : max(52 - under, 8)).background(Look.Token.side.ui.opacity(list.glass ? 0.76 : 1)))
         (host.safeAreaRegions, host.sizingOptions) = ([], [])
-        (self.host, floats) = (host, pin != nil)
-        // The mockup's floating panel: 14-point corners.
-        super.init(card: host, radius: pin == nil ? 0 : Look.card + 4, label: "Sidebar")
+        (self.host, floats) = (host, list.glass)
+        super.init(card: host, radius: radius, label: "Sidebar")
         let place = host.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset)
         NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor, constant: under + inset),
                                      host.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
-                                     host.widthAnchor.constraint(equalToConstant: SidebarOver.width + (pin == nil ? 0 : 8))])
+                                     host.widthAnchor.constraint(equalToConstant: SidebarOver.width + inset)])
         arrival = (place, -SidebarOver.width - 2 * inset, 0.5)
-        if pin != nil {
-            host.wantsLayer = true
-            host.layer?.cornerRadius = Look.card + 4
-            host.layer?.masksToBounds = true
-            // The mockup's frosted glass: the page blurred behind the panel, the sidebar's colour at 76 % over it.
-            let blur = NSVisualEffectView()
-            (blur.material, blur.blendingMode, blur.state) = (.underWindowBackground, .withinWindow, .active)
-            (blur.wantsLayer, blur.translatesAutoresizingMaskIntoConstraints) = (true, false)
-            blur.layer?.cornerRadius = Look.card + 4
-            blur.layer?.masksToBounds = true
-            addSubview(blur, positioned: .below, relativeTo: host)
-            NSLayoutConstraint.activate([blur.leadingAnchor.constraint(equalTo: host.leadingAnchor), blur.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-                                         blur.topAnchor.constraint(equalTo: host.topAnchor), blur.bottomAnchor.constraint(equalTo: host.bottomAnchor)])
-        }
         guard let pin else { return }
+        host.wantsLayer = true
+        host.layer?.cornerRadius = radius
+        host.layer?.masksToBounds = true
+        // The mockup's frosted glass: the page blurred behind the panel, the sidebar's colour at 76 % over it.
+        let blur = NSVisualEffectView()
+        (blur.material, blur.blendingMode, blur.state) = (.underWindowBackground, .withinWindow, .active)
+        (blur.wantsLayer, blur.translatesAutoresizingMaskIntoConstraints) = (true, false)
+        blur.layer?.cornerRadius = radius
+        blur.layer?.masksToBounds = true
+        addSubview(blur, positioned: .below, relativeTo: host)
+        NSLayoutConstraint.activate([blur.leadingAnchor.constraint(equalTo: host.leadingAnchor), blur.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+                                     blur.topAnchor.constraint(equalTo: host.topAnchor), blur.bottomAnchor.constraint(equalTo: host.bottomAnchor)])
         for (name, open) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
             menus.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.menuOpen = open }

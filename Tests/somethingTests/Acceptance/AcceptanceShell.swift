@@ -200,8 +200,7 @@ struct AcceptanceShell {
         #expect(side.isCollapsed && laid.card.frame == NSRect(x: 0, y: 0, width: SidebarOver.width, height: height), "\(laid.card.frame)")
         #expect(laid.accessibilityLabel() == "Sidebar" && shell.window.firstResponder === laid.card)
         #expect(shell.layer.hitTest(NSPoint(x: 600, y: 300)) === laid, "a click outside lands on the layer, which closes it")
-        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
-                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        let escape = try Self.escape(shell)
         #expect(shell.escape(escape) && over() == nil && shell.window.firstResponder === brief.web, "Esc")
         shell.split.toggleSidebar(nil)
         shell.split.toggleSidebar(nil)
@@ -319,8 +318,7 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b7-sidebar" + suffix, root: stage.home.root)
         }
-        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
-                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        let escape = try Self.escape(shell)
         #expect(shell.escape(escape) && SidebarOver.shown(in: shell.layer) == nil)
         // The line, both ways: 20 points of hysteresis.
         shell.window.setContentSize(NSSize(width: 870, height: 680))
@@ -894,7 +892,7 @@ struct AcceptanceShell {
     }
 
     /// Page Full Screen (2.6), ⇧⌘F or the toolbar's last button: the sidebar and Info step aside, the toolbar and the
-    /// lights go, the page fills the window from its top, the sticker discreet; a toast says how to leave. The pointer
+    /// lights go, the page fills the window from its top, the sticker discreet; a hint says how to leave. The pointer
     /// at the top edge brings the toolbar back over the page (the picture), until it leaves it; ⌃⌘S floats the sidebar
     /// from the window's top; Esc leaves, everything back as it was. 2-6-alone is the page alone.
     @Test("2-6: Page Full Screen") func v2_6() async throws {
@@ -921,7 +919,6 @@ struct AcceptanceShell {
         #expect(top() == height && view.web.frame.width == shell.window.frame.width, "the page fills the window")
         #expect(!button.pressed && button.toolTip == "Exit Page Full Screen (esc)" && button.accessibilityLabel() == "Exit Page Full Screen")
         #expect(said == ["Page Full Screen · esc to leave · ⌘K assistant"] && shell.layer.subviews.contains { $0 is NSHostingView<PageFullHint> }, "\(said)")
-        shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         // The sticker, discreet: smaller, toward the window's corner, faded until the pointer comes.
         let glass = shell.glass, sticker = glass.sticker
         #expect(glass.discreet && glass.corner.width == 32 && glass.corner.maxX == glass.bounds.width - Glass.margin && sticker.sign.alphaValue == 0.4)
@@ -988,7 +985,6 @@ struct AcceptanceShell {
         defer { view.close() }
         let model = shell.assistant
         shell.pageFullScreen(true)
-        shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         model.focus()
         #expect(model.cardShown && shell.pageFull)
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")

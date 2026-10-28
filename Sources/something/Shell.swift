@@ -2,8 +2,9 @@
 // over all three, and a calm toolbar: the sidebar toggle at the sidebar's edge, the space's name alone (a click on it
 // opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
 // its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
-// while it shows) and Page Full Screen (PageFull.swift). Off the spaces only the name and Page Full Screen, greyed, show. Reload is in the View
-// menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
+// while it shows) and Page Full Screen (PageFull.swift). Off the spaces only the name shows. Reload is in the View
+// menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its
+// backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
 // holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
 // the templates; over a space, the glass, which holds the assistant (Glass.swift). Off the spaces the assistant is
 // away: New Space has its own field. While the welcome is open over it, the window steps back under a veil that takes
@@ -42,8 +43,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
                tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
                info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
-    /// The items that act on the open space, hidden while none is open; Page Full Screen stays, greyed.
-    static let onSpace = [point, info]
+    /// The items that act on the open space, hidden while none is open.
+    static let onSpace = [point, info, full]
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// The space's name, which opens Info.
@@ -293,7 +294,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             _ = SidebarOver.close(in: layer)
             return false
         }
-        layOver(under: full ? 0 : window.frame.height - window.contentLayoutRect.maxY, floating: false)
+        layOver(floating: false)
         return true
     }
 
@@ -386,8 +387,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             // A borderless button with a tint draws the same enabled or not; the mockup's disabled .ib is at .32.
             control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
-        toolbarItems.first { $0.itemIdentifier == Shell.full }?.isEnabled = space
-        if let full = controls[Shell.full] { (full.isEnabled, full.isHidden) = (space, !space) }
     }
 
     /// What View's and Space's Info items say: what they will do.

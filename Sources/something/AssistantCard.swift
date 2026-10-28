@@ -1,10 +1,9 @@
 // The assistant's card, 412 points at the bottom right of the center, over the space: its header (the eyes of its
-// state in the whole sign, "<space>'s assistant" as the conversation menu, the state word, Fold, Reduce and the grip), the conversation (⌘J: your
-// bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days, the messages held for the
-// turn's end outlined with Take Back; a finished build said short: what was made, the reply's first paragraph, the steps and
-// the rest folded under Details),
-// one notice when it is stuck or waits for you, the present-tense line while it
-// works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
+// state in the whole sign, "<space>'s assistant" as the conversation menu, the state word, Fold, Reduce and the grip),
+// the conversation (⌘J: your bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days,
+// the messages held for the turn's end outlined with Take Back; a finished build said short: what was made, the reply's
+// first paragraph, the steps and the rest folded under Details), one notice when it is stuck or waits for you, the
+// present-tense line while it works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
 // while the conversation is folded, and a flat field whose Send turns into Stop (New Space reuses it and the notice).
 // Its words are the model's and Presence's; the card keeps only the field's focus. A request is never answered here:
 // the notice leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it
