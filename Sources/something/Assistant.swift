@@ -122,16 +122,15 @@ import SomethingCore
     /// What the field holds: the open place's own, so a message half written goes to the agent it was written for.
     var draft: String {
         get { session.draft }
-        set { session.draft = newValue }
+        set { if newValue != session.draft { commandPick = 0 }; session.draft = newValue }
     }
+    /// The command chosen in the "/" list; -1 once Esc closed it, until the field changes.
+    var commandPick = 0
     /// Whether the card is open (Reduce and ⌘\ close it), and whether it shows the conversation (⌘J).
     var open = true
     var threadShown = false
     /// The rows of the card's conversation whose Details are unfolded; folded again with another conversation.
     var unfolded: Set<Int> = []
-    /// Whether the open space has a page to point at, and whether the person points at it now: the card's Point.
-    var pointable = false
-    var pointing = false
     /// The height the card takes at the bottom of the center, set by the glass: the blank page keeps clear of it.
     var floating: CGFloat = 0
     /// Whether the card, closed, is still shrinking into the sticker: it is drawn until it is there.
@@ -274,6 +273,7 @@ import SomethingCore
             if let kind = each.kind, let options = each.agent?.options, options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options {
                 Preferences.at(places).listed[kind] = options
             }
+            if let kind = each.kind, let commands = each.agent?.commands, Preferences.at(places).commands[kind] != commands { Preferences.at(places).commands[kind] = commands }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
         rest()
@@ -525,7 +525,7 @@ import SomethingCore
             if presence.stuck == .cannotReachModel { return "Write your next request · it waits until the model answers" }
             // Waiting for an answer, the way on is the request's own window, not this field: it reads as usual.
             if light == .working { return "Write your next request · it waits for this one" }
-            return presence.state == .sleep ? "Ask for a change · it wakes up" : "Ask \(AssistantModel.clean(title))'s assistant for a change…"
+            return presence.state == .sleep ? "Ask for a change · it wakes up" : commands.isEmpty ? "Ask for a change…" : "Ask for a change · / for \(name)'s commands"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
         }
@@ -596,9 +596,9 @@ import SomethingCore
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
         // Behind messages already held it waits too, so they leave in the order they were written; and while a Quick
         // Change works on this space, until it ends.
-        if quickWorks(on: place.space) || (session.id != nil && !launching && (working || !session.held.isEmpty)) {
-            return session.held.append(AssistantModel.context(place, home: places.home.path) + "\n" + text)
-        }
+        // One of the agent's own commands goes as written, which the agent reads only at a message's start.
+        let message = commands.contains { text == "/" + $0.value || text.hasPrefix("/\($0.value) ") } ? text : AssistantModel.context(place, home: places.home.path) + "\n" + text
+        if quickWorks(on: place.space) || (session.id != nil && !launching && (working || !session.held.isEmpty)) { return session.held.append(message) }
         if blankBuild {
             // The build is watched from its first message, in a conversation of its own: New Space shows it, and starts
             // afresh for the next one. The level goes with it, said to the agent on a line of its own.
@@ -613,7 +613,7 @@ import SomethingCore
             (watched, threadShown, chosenLevel) = (numbered, true, nil)
             return deliver([AssistantModel.context(place, home: places.home.path), level.line(folder: folder, home: places.home.path), text].joined(separator: "\n"), to: built)
         }
-        deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
+        deliver(message)
     }
 
     /// Ask to Fix: only something's own words, the space's validated title and name and the codes.

@@ -35,7 +35,7 @@ struct AcceptanceStopped {
         defer { brief.close() }
         // Point: enabled on a page that runs, greyed only by the stop.
         let point = { shell.toolbarItems.first { $0.itemIdentifier == Shell.point }?.isEnabled }
-        #expect(point() == true && shell.assistant.pointable)
+        #expect(point() == true && brief.pointable)
         Self.stop(brief, at: -1)
         let cover = try #require(brief.area.subviews.last as? Stopped)
         #expect(brief.stopped && !brief.paused && cover.frame == brief.web.frame)
@@ -46,7 +46,7 @@ struct AcceptanceStopped {
         #expect(cover.subviews.first?.accessibilityLabel() == "This space stopped")
         // Nothing to point at in a page that stopped; Info and the View menu's Reload still act.
         let items = shell.toolbarItems
-        #expect(point() == false && !shell.assistant.pointable && !brief.pointable)
+        #expect(point() == false && !brief.pointable)
         #expect(items.first { $0.itemIdentifier == Shell.info }?.isEnabled == true && Keys.enabled("reload", Keys.Situation(space: true)))
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "e10" + suffix, root: stage.home.root)

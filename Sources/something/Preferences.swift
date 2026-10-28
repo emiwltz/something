@@ -28,6 +28,8 @@ import SomethingCore
         var assistant: String?, model: String?, effort: String?
         /// The models and efforts each kind's agent last listed, by kind: the model chip offers them before it runs.
         var listed: [String: Options] = [:]
+        /// The commands each kind's agent last listed, by kind: "/" in the card offers them before it runs.
+        var commands: [String: [Option]] = [:]
         var askEverything = false, resume = true, toured = false, launcherOffered = false, addToApplications = true
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
         /// "last", "new", or the name of a space.
@@ -43,7 +45,7 @@ import SomethingCore
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, listed, askEverything, resume, toured, launcherOffered, addToApplications, groups,
+            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, launcherOffered, addToApplications, groups,
                  folded, names, recents, openAtStart, appearance, motion, assistantAtOpening, rememberSticker,
                  holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
         }

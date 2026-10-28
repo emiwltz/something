@@ -9,7 +9,7 @@ extension AgentDescriptor {
     /// never asks: none is listed, and the bridge refuses a mode pi does not take before any confirmation.
     package static let pi = AgentDescriptor(kind: "pi", name: "pi", install: "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
                                             runsOn: "node", bundled: "pi-node/current/bin", driving: .pi, reader: { PiReader(environment: $0) },
-                                            builder: Builder(), neverAsks: true)
+                                            builder: Builder(), neverAsks: true, monogram: "π")
 }
 
 /// OMP's files, for its descriptor (AgentDescriptor.omp, in AgentACP).

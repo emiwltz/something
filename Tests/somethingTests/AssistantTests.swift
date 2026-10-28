@@ -28,8 +28,9 @@ import WebKit
     /// which way the page should read (AskUserQuestion, then another permission once "permission" is in that file too)
     /// and writes once answered; with "fail" it writes, a check fails, two edits fix it and a second check passes, then
     /// it says so and ends only once $HOME/out/finish appears. "Page of two: <name>" writes <name>.html and ends once
-    /// $HOME/out/finish-<name> appears, for builds that end in any order. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
-    /// effort is taken.
+    /// $HOME/out/finish-<name> appears, for builds that end in any order. `initialize` lists Opus, Sonnet and Haiku with their efforts, and five commands; a new model or
+    /// effort is taken. For X6, "24-hour like the masthead" reads and edits brief.html with Sonnet 5.5 and answers, and
+    /// "/review", sent as is, reads it and answers.
     static let fake = #"""
     #!/bin/sh
     mkdir -p "$HOME/out"
@@ -52,7 +53,7 @@ import WebKit
       echo "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"tool_use_id\":\"toolu_$1\",\"type\":\"tool_result\",\"content\":\"Invented.\",\"is_error\":$2}]},\"parent_tool_use_id\":null,\"uuid\":\"r$1\",\"session_id\":\"s1\"}"
     }
     words() {
-      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"opus\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$2\"}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
+      echo "{\"type\":\"assistant\",\"message\":{\"id\":\"msg_$1\",\"model\":\"${3:-opus}\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"$2\"}]},\"parent_tool_use_id\":null,\"uuid\":\"a$1\",\"session_id\":\"s1\"}"
     }
     room='{"file_path":"/Users/example/something/spaces/waiting-room.html"}'
     check='{"command":"something check waiting-room"}'
@@ -133,6 +134,16 @@ import WebKit
           words e2 'No change made. The weather shows the time of day, because nothing leaves your Mac.'
           echo "$done"
           echo "$idle" ;;
+        *'24-hour like the masthead'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"init","model":"sonnet","effort":"medium","permissionMode":"default","uuid":"i1","session_id":"s1"}'
+          tool t1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          tool t2 Edit '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          words t3 'Done. The weather corner now shows the time, 18:20, in 24-hour format like the masthead. It reads nothing from the Internet.' sonnet
+          echo "$done" ;;
+        *'"/review"'*)
+          tool v1 Read '{"file_path":"/Users/example/something/spaces/brief.html"}'
+          words v2 'Two notes: the weather corner has no label for VoiceOver, and its time is in 12-hour format while the masthead uses 24. Shall I fix both?' sonnet
+          echo "$done" ;;
         *'weather corner'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_w0","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w0","name":"Read","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw0","session_id":"s1"}'
@@ -170,7 +181,7 @@ import WebKit
           words L10 'One card per agent. Writing it now.'
           ( sleep 0.7; begin L3 Write "$room" ) & ;;
         *'"subtype":"initialize"'*)
-          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"sonnet","displayName":"Sonnet 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}]}}}' ;;
+          echo '{"type":"control_response","response":{"subtype":"success","request_id":"something-1","response":{"current_permission_mode":"default","models":[{"value":"opus","displayName":"Opus 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"sonnet","displayName":"Sonnet 5.5","supportedEffortLevels":["low","medium","high","max"]},{"value":"haiku","displayName":"Haiku 5.5","supportedEffortLevels":["low","medium","high"]}],"commands":[{"name":"compact","description":"Summarize the conversation to make room","argumentHint":"<what to keep>"},{"name":"explain","description":"Explain a part of the page","argumentHint":"<part>"},{"name":"init","description":"Write the notes this folder keeps for me","argumentHint":""},{"name":"review","description":"Review the page for problems","argumentHint":""},{"name":"tidy","description":"Tidy the page without changing it","argumentHint":""}]}}}' ;;
         *'"subtype":"set_model"'*|*'"subtype":"apply_flag_settings"'*)
           id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
           echo "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"$id\"}}" ;;
@@ -1030,7 +1041,7 @@ import WebKit
         let agents = AssistantModel.Place.space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
         model.place = agents
         #expect(model.modelWords.model == "Default model" && model.modelWords.effort == nil)
-        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Default model · Claude Code lists its models once it runs.")])
+        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Its models show after its first run.")])
         model.draft = "Make the tiles wider."
         model.send()
         #expect(await wait(until: { model.rows.contains(.reply("Invented reply.")) && model.light == .ready }))
@@ -1076,7 +1087,7 @@ import WebKit
         await look(model)
         model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
         #expect(model.kind == "amp" && model.ownModel && model.modelWords == ("Its own model", nil))
-        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Amp picks its own model. Change it in Amp's settings.")])
+        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Amp chooses its own model. Change it in Amp's settings.")])
         model.choose(model: "anything")
         #expect(model.session.model == nil)
         home.remove()

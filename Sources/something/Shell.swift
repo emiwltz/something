@@ -378,7 +378,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                                                                         .foregroundColor: Look.Token.ink.color, .kern: -0.135])
         titleLine.space = space
         // Point is greyed while the page is stopped or cannot be shown: nothing to point at.
-        assistant.pointable = space && point
         toolbarItems.filter { Shell.onSpace.contains($0.itemIdentifier) }.forEach {
             let control = controls[$0.itemIdentifier]
             $0.isEnabled = space && control?.action != nil && (point || $0.itemIdentifier != Shell.point)
@@ -583,7 +582,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     private func pressPoint(_ on: Bool) {
         (controls[Shell.point] as? ToolButton)?.pressed = on
-        assistant.pointing = on
         space.flatMap(Comments.of)?.changed()
     }
 

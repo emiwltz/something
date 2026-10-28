@@ -8,5 +8,5 @@ extension AgentDescriptor {
     /// them under ~/.gemini/antigravity-cli in a shape Google documents nowhere.
     package static let antigravity = AgentDescriptor(kind: "antigravity", name: "Antigravity",
                                                      reader: { _ in OtherReader(kind: "antigravity", names: ["agy"]) },
-                                                     unavailable: "Antigravity needs its own Google sign-in, so something shows it but doesn't build with it.")
+                                                     unavailable: "Antigravity needs its own Google sign-in, so something shows it but doesn't build with it.", monogram: "Ag")
 }

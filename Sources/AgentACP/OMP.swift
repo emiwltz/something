@@ -13,7 +13,7 @@ extension AgentDescriptor {
     package static func omp(reader: @escaping @Sendable ([String: String]) -> any Reader) -> AgentDescriptor {
         AgentDescriptor(kind: "omp", name: "OMP", install: "curl -fsSL https://omp.sh/install | sh", asksAsMuch: ["default", "plan"],
                         driving: ACPProfile.omp.driving, reader: reader, builder: Builder(lent: LentTool.all),
-                        asksNothingByDefault: true, tools: ACPProfile.tools)
+                        asksNothingByDefault: true, tools: ACPProfile.tools, monogram: "Om")
     }
 }
 

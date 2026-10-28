@@ -3,8 +3,9 @@
 // the conversation (⌘J: your bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days,
 // the messages held for the turn's end outlined with Take Back; a finished build said short: what was made, the reply's
 // first paragraph, the steps and the rest folded under Details), one notice when it is stuck or waits for you, the
-// present-tense line while it works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
-// while the conversation is folded, and a flat field whose Send turns into Stop (New Space reuses it and the notice).
+// present-tense line while it works, and the composer: the agent's own commands while "/" starts the field, one chip
+// for the agent, its model and effort, the held messages' strip while the conversation is folded, and a flat field
+// whose Send turns into Stop (New Space reuses it and the notice).
 // Its words are the model's and Presence's; the card keeps only the field's focus. A request is never answered here:
 // the notice leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it
 // reach the space.
@@ -218,7 +219,8 @@ struct AssistantCard: View {
 
     /// A message of the person's, held or sent, and the shape of its bubble.
     private static func mine(_ text: String) -> some View {
-        Text(text).font(Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).bubble()
+        // A command of the agent's, sent as is, reads as code.
+        Text(text).font(text.hasPrefix("/") ? Look.font(.code, size: 12, weight: .semibold).ui : Look.font(.ui, size: 12.8).ui).lineSpacing(2.8).bubble()
     }
     private static let mineShape = UnevenRoundedRectangle(topLeadingRadius: 18, bottomLeadingRadius: 18, bottomTrailingRadius: 4, topTrailingRadius: 18)
 
@@ -300,26 +302,9 @@ struct AssistantCard: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 1) {
-                AgentChip(model: model)
-                ModelChip(model: model)
-                PointChip(model: model)
-                Spacer(minLength: 0)
-                Button { model.threadShown.toggle() } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bubble.left").font(.system(size: 11.5))
-                        Text("\(model.messageCount)").foregroundStyle(Look.Token.ink.ui).monospacedDigit()
-                        Image(systemName: "chevron.up").font(.system(size: 8, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 180 : 0))
-                    }
-                    .chip(pressed: model.threadShown)
-                    .fixedSize()
-                }
-                .buttonStyle(.plain)
-                .help(Keys.tooltip("convo", "Conversation")).accessibilityLabel("Conversation")
-                .accessibilityAddTraits(model.threadShown ? .isSelected : [])
-            }
-            .padding(.bottom, 4)
+        VStack(alignment: .leading, spacing: 0) {
+            if let shown = model.slashed { CommandList(model: model, shown: shown).padding(.bottom, 6) }
+            AgentModelChip(model: model).padding(.bottom, 4)
             if !model.threadShown, !model.held.isEmpty { heldStrip }
             Field(model: model)
         }
@@ -348,6 +333,7 @@ struct Field: View {
                 .padding(.horizontal, 2).padding(.vertical, 5)
                 .frame(minHeight: 30)
                 .accessibilityLabel("Message")
+                .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab], phases: .down) { Field.slash($0.key, model) }
                 .composing(model, $typing)
             let stop = model.stops
             Button { stop ? model.stop() : model.send() } label: {
@@ -373,6 +359,18 @@ struct Field: View {
         // A calm 1.5-point line when it has the focus; no shadow, no ring.
         .overlay(RoundedRectangle(cornerRadius: Look.control + 5, style: .continuous)
             .strokeBorder(typing ? Look.Token.ink2.ui : Look.Token.line.ui, lineWidth: typing ? 1.5 : 1))
+    }
+
+    /// A key while the "/" list shows (else ignored): ↑↓ move the choice, Return sends the command chosen as is, Tab
+    /// leaves it in the field for its text; handled then.
+    static func slash(_ key: KeyEquivalent, _ model: AssistantModel) -> KeyPress.Result {
+        guard let shown = model.slashed, !shown.isEmpty else { return .ignored }
+        let at = min(model.commandPick, shown.count - 1)
+        switch key {
+        case .upArrow, .downArrow: model.commandPick = (at + (key == .upArrow ? shown.count - 1 : 1)) % shown.count
+        default: model.use(shown[at], send: key == .return)
+        }
+        return .handled
     }
 
     /// What Return does in the field.
@@ -409,6 +407,54 @@ extension View {
                 let marked = (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
                 return Field.returned(shift: press.modifiers.contains(.shift), marked: marked, model)
             }
+    }
+}
+
+/// The agent's own commands over the field while "/" starts it, as the mockup's .ag-cm: those whose name starts as
+/// typed, the chosen one marked; a click uses one as Return does.
+struct CommandList: View {
+    let model: AssistantModel, shown: [Option]
+
+    var body: some View {
+        let at = min(model.commandPick, shown.count - 1)
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 7) {
+                Monogram(name: model.name)
+                Text("\(model.name)'s commands").font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                Spacer(minLength: 4)
+                Text("as \(model.name) lists them").font(Look.xs.font.ui)
+            }
+            .padding(EdgeInsets(top: 4, leading: 7, bottom: 6, trailing: 7))
+            ScrollViewReader { list in ScrollView {
+                VStack(spacing: 1) {
+                    ForEach(Array(shown.enumerated()), id: \.offset) { index, command in
+                        Button { model.use(command, send: true) } label: {
+                            HStack(spacing: 8) {
+                                Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).frame(width: 96, alignment: .leading)
+                                Text(command.label).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 8).frame(height: 30).contentShape(Rectangle())
+                            .background(index == at ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+                        }
+                        .buttonStyle(.plain).id(index)
+                        .accessibilityLabel("/\(command.value), \(command.label)").accessibilityAddTraits(index == at ? .isSelected : [])
+                    }
+                    if shown.isEmpty { Text(model.noCommands).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(8).frame(maxWidth: .infinity, alignment: .leading) }
+                }
+            }
+            .onChange(of: at) { list.scrollTo(at) } }
+            .frame(height: CGFloat(min(max(shown.count, 1), 6)) * 31)
+            HStack(spacing: 12) {
+                Text("↑↓ choose"); Text("↩ send"); Text("⇥ add text"); Spacer(minLength: 4); Text("Passed to \(model.name) as is")
+            }
+            .font(Look.xs.font.ui).padding(EdgeInsets(top: 7, leading: 8, bottom: 2, trailing: 8))
+            .overlay(alignment: .top) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }.padding(.top, 4)
+        }
+        .foregroundStyle(Look.Token.ink3.ui)
+        .padding(6)
+        .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg.ui, ring: Look.Token.line2.ui)
+        .accessibilityElement(children: .contain).accessibilityLabel("\(model.name)'s commands")
     }
 }
 
@@ -459,32 +505,15 @@ struct NoticeView: View {
 
 // MARK: Chips
 
-/// A chip that opens a menu: what it shows and a chevron. The agent's (a dot of its state's colour and its name) and
-/// the model's (the effort lighter).
-struct MenuChip<Shown: View, Items: View>: View {
-    let label: String
-    @ViewBuilder let shown: () -> Shown
-    @ViewBuilder let items: () -> Items
-
-    var body: some View {
-        Menu { items() } label: {
-            HStack(spacing: 6) {
-                shown()
-                Chevron()
-            }
-            .chip()
-        }
-        .plainMenu()
-        .accessibilityLabel(label)
-    }
-}
-
-/// An agent's monogram, as the mockup's .cc-mono: its initials on a sunk tile ("CC" for two words, the capitals of one
-/// word written in two, "OC", else its first letter). Drawn from its name alone, so that no line here names an agent.
+/// An agent's monogram, as the mockup's .xg-mono: its letters on a sunk tile, its descriptor's ("CC", "π"), else
+/// its name's initials ("GC" for two words, the capitals of one word written in two, else its first letter), so that
+/// no line here names an agent.
 struct Monogram: View {
     let name: String
+    var side: CGFloat = 18
 
     static func letters(_ name: String) -> String {
+        if let mark = Registry.app.agents.first(where: { $0.name == name })?.monogram { return mark }
         let words = name.split(separator: " ").filter { !$0.isEmpty }
         if words.count > 1 { return words.prefix(2).compactMap { $0.first.map { String($0).uppercased() } }.joined() }
         let capitals = name.filter(\.isUppercase)
@@ -492,55 +521,52 @@ struct Monogram: View {
         return name.first.map { String($0).uppercased() } ?? "?"
     }
 
+    /// The tile for a menu item, which draws only text and images: a template, tinted as the menu's text.
+    @MainActor static func image(_ name: String) -> NSImage? {
+        let image = ImageRenderer(content: Text(letters(name)).font(Look.font(.ui, size: 9, weight: .semibold).ui).frame(width: 18, height: 18)
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(lineWidth: 1))).nsImage
+        image?.isTemplate = true
+        return image
+    }
+
     var body: some View {
-        Text(Monogram.letters(name)).font(Look.font(.ui, size: 9.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
-            .frame(width: 18, height: 18)
-            .boxed(RoundedRectangle(cornerRadius: 5), Look.Token.sunk.ui, ring: Look.Token.line.ui)
+        Text(Monogram.letters(name)).font(Look.font(.ui, size: side * 0.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
+            .frame(width: side, height: side)
+            .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: side * 0.28))
             .accessibilityHidden(true)
     }
 }
 
-/// The agent chip: a dot of its state's colour and the builder's name, opening the agent menu.
-struct AgentChip: View {
-    let model: AssistantModel
-
-    var body: some View {
-        MenuChip(label: "Agent: \(model.name)") {
-            Circle().fill(model.dot.ui).frame(width: 7, height: 7)
-            Text(model.name)
-        } items: { AgentMenu(model: model) }
-    }
-}
-
-/// The model chip: the model and, lighter, the effort, opening their menu for this conversation alone.
-struct ModelChip: View {
-    let model: AssistantModel
-
-    var body: some View {
-        let words = model.modelWords
-        MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
-            Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-        } items: { ModelMenu(model: model) }
-    }
-}
-
-/// The agent and its model in one chip, its monogram first, opening both menus: New Space's bar and Info's Assistant.
+/// The agent and its model in one chip, its monogram first, opening one menu: the agents, the model and the effort
+/// (the card, New Space's bar and Info's Assistant).
 struct AgentModelChip: View {
     let model: AssistantModel
 
     var body: some View {
         let words = model.modelWords
-        MenuChip(label: "Agent and model: \(model.name), \(words.model)") {
-            Monogram(name: model.name)
-            Text(model.name)
-            Text("·").foregroundStyle(Look.Token.ink3.ui)
-            Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-        } items: {
+        Menu {
             AgentMenu(model: model)
-            Divider()
             ModelMenu(model: model)
+            Divider()
+            Button(AssistantModel.defaultsTitle) { Keys.send("defaults") }
+        } label: {
+            HStack(spacing: 6) {
+                Monogram(name: model.name, side: 16)
+                Text("\(model.name) · \(words.model)").lineLimit(1)
+                Chevron()
+            }
+            .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
+            .padding(.leading, 4).padding(.trailing, 8).frame(height: 26).contentShape(Rectangle())
         }
+        .plainMenu()
+        .accessibilityLabel(AgentModelChip.label(model))
         .disabled(model.blocked)
+    }
+
+    /// Its VoiceOver label: the agent, the model and the effort, and what it changes.
+    static func label(_ model: AssistantModel) -> String {
+        let words = model.modelWords
+        return "\(model.name), \(words.model)\(words.effort.map { ", effort \($0)" } ?? ""). Change agent, model or effort"
     }
 }
 
@@ -562,28 +588,6 @@ struct ModelMenu: View {
     }
 }
 
-/// Point in the composer row: point mode, as the toolbar's Point and ⌥⌘S start it; greyed while the page cannot be
-/// pointed at.
-struct PointChip: View {
-    let model: AssistantModel
-    var body: some View {
-        Button { Keys.send("pointpart") } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "scope").font(.system(size: 11.5))
-                Text("Point")
-            }
-            .chip(pressed: model.pointing)
-        }
-        .buttonStyle(.plain)
-        // Whole beside a long model name: the row's spacer gives way first.
-        .fixedSize()
-        .disabled(!model.pointable)
-        .opacity(model.pointable ? 1 : 0.32)
-        .help(Keys.tooltip("pointpart", "Point"))
-        .accessibilityLabel("Point")
-    }
-}
-
 private struct Chevron: View {
     var body: some View { Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui) }
 }
@@ -594,15 +598,6 @@ extension View {
 
     /// A bubble's room around its words.
     func bubble() -> some View { padding(.horizontal, 11).padding(.vertical, 8 * Look.density) }
-
-    /// The mockup's .chip: 26 points high, 9 on each side, Onest 12 medium in ink2; `pressed` has the selection's fill.
-    func chip(pressed: Bool = false) -> some View {
-        font(Look.font(.ui, size: 12, weight: .medium).ui)
-            .foregroundStyle(Look.Token.ink2.ui)
-            .padding(.horizontal, 9).frame(height: 26)
-            .background(pressed ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control + 1))
-            .contentShape(Rectangle())
-    }
 }
 
 // MARK: Menus
@@ -626,15 +621,18 @@ struct ConversationMenu: View {
     }
 }
 
-/// The agent chip's menu: the builders found, then the agents something only sees, greyed with their reason.
+/// The chip's agents: the builders found, each with its monogram, then the agents something only sees, greyed with
+/// their reason.
 struct AgentMenu: View {
     let model: AssistantModel
 
     var body: some View {
         Section("Builds this space") {
             ForEach(model.entries) { entry in
-                Toggle(entry.title, isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) }))
-                    .disabled(!entry.enabled).help(entry.note ?? "")
+                Toggle(isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) })) {
+                    Label { Text(entry.title) } icon: { Monogram.image(Registry.app.name(of: entry.id)).map { Image(nsImage: $0) } }
+                }
+                .disabled(!entry.enabled).help(entry.note ?? "")
             }
         }
         Section("Seen only") {
@@ -642,8 +640,6 @@ struct AgentMenu: View {
                 Button("\(seen.name) · Can't build yet") {}.disabled(true).help(seen.why)
             }
         }
-        Divider()
-        Button(AssistantModel.defaultsTitle) { Keys.send("defaults") }
     }
 }
 
@@ -692,11 +688,11 @@ extension AssistantModel {
         let offered = offered, chosen = (model: session.model ?? agent?.model, effort: session.effort ?? agent?.effort)
         var model = ModelPart(header: "Model · this space")
         if ownModel {
-            model.note = "\(name) picks its own model. Change it in \(name)'s settings."
+            model.note = "\(name) chooses its own model. Change it in \(name)'s settings."
         } else if let models = offered.model, !models.isEmpty {
             model.choices = models.map { .init(title: $0.label, value: $0.value, effort: false, checked: $0.value == chosen.model) }
         } else {
-            model.note = "Default model · \(name) lists its models once it runs."
+            model.note = "Its models show after its first run."
         }
         guard let efforts = offered.effort, !efforts.isEmpty, Registry.app.limits[kind ?? ""]?.contains("effort") != true else { return [model] }
         return [model, ModelPart(header: "Effort", choices: efforts.map { .init(title: $0.label, value: $0.value, effort: true, checked: $0.value == chosen.effort) })]
@@ -706,6 +702,27 @@ extension AssistantModel {
     var offered: Options {
         if let live = agent?.options, agent?.alive != false, live.model?.isEmpty == false { return live }
         return kind.flatMap { Preferences.at(places).listed[$0] } ?? Options()
+    }
+
+    /// Its agent's own commands as it lists them now, else as its kind last listed them (Preferences.commands).
+    var commands: [Option] { agent?.commands ?? kind.flatMap { Preferences.at(places).commands[$0] } ?? [] }
+
+    /// What "/" offers while the field holds "/" and the start of a name: the commands whose name starts so; nil when
+    /// it holds anything else, on New Space (its field has no list), or once Esc closed the list.
+    var slashed: [Option]? {
+        guard place != .blank, commandPick >= 0, draft.first == "/", !draft.contains(where: \.isWhitespace) else { return nil }
+        return commands.filter { $0.value.lowercased().hasPrefix(draft.dropFirst().lowercased()) }
+    }
+
+    /// Puts `command` in the field, and sends it as is with `send`, else leaves a space after it for its text.
+    func use(_ command: Option, send: Bool) {
+        draft = "/" + command.value + (send ? "" : " ")
+        if send { self.send() }
+    }
+
+    /// The list's line when no command shows: none starts so, or none is known yet.
+    var noCommands: String {
+        commands.isEmpty ? (agent == nil ? "Its commands show once it has started." : "\(name) lists no commands here.") : "No command of \(name) starts with that."
     }
 
     /// The agents something sees but does not launch, each with why.
@@ -739,15 +756,6 @@ extension AssistantModel {
 
     /// The caption of a message written here, which the conversation leaves out.
     var here: String? { AssistantModel.shown(AssistantModel.context(place, home: places.home.path) + "\n").caption }
-
-    /// The colour of the agent chip's dot: ok while it can listen or works, red when stopped, ink3 asleep or unknown.
-    var dot: Look.Token {
-        switch presence.state {
-        case .limit: .bad
-        case .sleep, .unknown: .ink3
-        default: .ok
-        }
-    }
 
     /// The model chosen for this conversation, else the one its agent reported, by the name its options give; and its
     /// effort likewise. The choice comes first: an agent reports a new model only with its next turn.
@@ -838,8 +846,10 @@ final class CardHost: NSHostingView<AssistantCard> {
         resized()
     }
 
-    /// Esc in the card reduces it, as Reduce does.
-    override func cancelOperation(_ sender: Any?) { rootView.model.escape() }
+    /// Esc in the card closes the "/" list when it shows, else reduces the card, as Reduce does.
+    override func cancelOperation(_ sender: Any?) {
+        if rootView.model.slashed != nil { rootView.model.commandPick = -1 } else { rootView.model.escape() }
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let inside = convert(point, from: superview), card = bounds.insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)

@@ -12,7 +12,7 @@ import Testing
 struct AcceptanceShow {
     /// Daily brief open, its card folded to the sticker; ⌥⌘S starts point mode: Point pressed in the toolbar, the space
     /// dimmed but for the part under the pointer, the sign's corners around it with its kind, and the banner saying
-    /// the mode and Esc. The card's Point is greyed only when there is nothing to point at; a reload keeps the mode.
+    /// the mode and Esc. Point is greyed only when there is nothing to point at; a reload keeps the mode.
     @Test("f1: pointing") func f1() async throws {
         let stage = try Stage("show")
         defer { stage.remove() }
@@ -22,13 +22,13 @@ struct AcceptanceShow {
         defer { brief.close() }
         shell.waiting(["agents"], mine: 0)
         let point = try #require(shell.controls[Shell.point] as? ToolButton)
-        #expect(point.isEnabled && !point.pressed && shell.assistant.pointable && !shell.assistant.pointing)
+        #expect(point.isEnabled && !point.pressed && brief.pointable)
         #expect(Keys.enabled("pointpart", Keys.Situation(space: true)) && !Keys.enabled("pointpart", Keys.Situation(space: true, pointable: false)))
         #expect(Keys.command("pointpart")?.shown == "⌥⌘S" && point.toolTip == "Point (⌥⌘S)")
 
         shell.point()
         let overlay = try #require(brief.pointer)
-        #expect(point.pressed && shell.assistant.pointing && !shell.assistant.open && overlay.frame == brief.web.frame)
+        #expect(point.pressed && !shell.assistant.open && overlay.frame == brief.web.frame)
         #expect(overlay.accessibilityLabel() == "Point at a part of the space" && overlay.accessibilityHelp() == "Esc to stop. Tab frames the next part, Return picks it")
         // The pointer over the waiting box: its frame and kind.
         let frame = try #require(brief.frame)
@@ -45,14 +45,14 @@ struct AcceptanceShow {
 
         // Esc stops it, the page's keys back; ⌥⌘S again starts it, and a stopped page cannot be pointed at.
         #expect(overlay.escape() == true)
-        #expect(brief.pointer == nil && !point.pressed && !shell.assistant.pointing)
+        #expect(brief.pointer == nil && !point.pressed)
         shell.point()
         #expect(brief.pointer != nil)
         // A reload (⌘R, a change of the assistant, an undo) keeps the mode: the window shows the space again, as the
         // app does at each load, and Point stays pressed and enabled while the page loads.
         brief.load()
         shell.show(brief)
-        #expect(brief.frame == nil && brief.pointer != nil && point.pressed && point.isEnabled && shell.assistant.pointable)
+        #expect(brief.frame == nil && brief.pointer != nil && point.pressed && point.isEnabled && brief.pointable)
         #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
         shell.point()
         #expect(brief.pointer == nil)
@@ -150,7 +150,7 @@ struct AcceptanceShow {
 
         // The mode closed; the frame stays, at work, and takes no click.
         let point = try #require(shell.controls[Shell.point] as? ToolButton)
-        #expect(brief.pointer == nil && !point.pressed && !model.pointing)
+        #expect(brief.pointer == nil && !point.pressed)
         let quick = try #require(model.quicks["brief"])
         let drawn = try #require(brief.area.subviews.compactMap { $0 as? QuickFrame }.first)
         #expect(drawn.quick === quick && quick.parts == [part] && drawn.hitTest(NSPoint(x: 50, y: 50)) == nil && drawn.frame == brief.web.frame)

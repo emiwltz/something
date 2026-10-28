@@ -14,5 +14,5 @@ extension AgentDescriptor {
         driving: .claude, reader: { ClaudeReader(environment: $0) }, builder: Builder(preAllowed: true, lent: LentTool.all),
         tools: ["Bash": .command, "Edit": .file, "Write": .file, "MultiEdit": .file, "NotebookEdit": .file],
         modeWords: ["acceptEdits": "edits files without asking you", "auto": "decides by itself what to ask you",
-                    "dontAsk": "never asks you, and does only what your settings already allow"])
+                    "dontAsk": "never asks you, and does only what your settings already allow"], monogram: "CC")
 }

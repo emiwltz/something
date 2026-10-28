@@ -39,7 +39,7 @@ enum Catalog {
         ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
         ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
-        ("j4-2", "S8"),
+        ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3).
@@ -57,7 +57,7 @@ enum Catalog {
     static func area(_ id: String) -> Area {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
         if id.contains("-") {
-            return ["x1": .shell, "x3": .build, "x5": .shell, "x9": .shell, "j3": .build, "j4": .shell, "2": .shell][String(id.prefix { $0 != "-" })] ?? .command
+            return ["x1": .shell, "x3": .build, "x5": .shell, "x6": .assistant, "x9": .shell, "j3": .build, "j4": .shell, "2": .shell][String(id.prefix { $0 != "-" })] ?? .command
         }
         switch id.first {
         case "a", "d": return .build

@@ -81,6 +81,7 @@ import Testing
         var values = Preferences.Values()
         (values.lastOpen, values.assistant, values.model, values.effort) = ("garden", "pi", "invented-model", "high")
         values.listed = ["pi": Options()]
+        values.commands = ["claude": [Option(value: "review", label: "Review the page")]]
         (values.askEverything, values.resume, values.toured, values.launcherOffered, values.addToApplications) = (true, false, true, true, false)
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])

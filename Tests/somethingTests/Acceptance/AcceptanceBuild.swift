@@ -556,7 +556,7 @@ struct AcceptanceBuild {
             try await Picture.window(shell, library: library, web: room.web, "x3-3" + suffix, root: stage.home.root)
             let card = try #require(shell.glass.subviews.first { $0 is CardHost })
             // The conversation's texts are selectable, which offscreen SwiftUI reads no label of: Details is the card's own.
-            let says = { (words: [String]) in words.contains("Details") && words.contains("Conversation") && !words.contains("Hide Details") }
+            let says = { (words: [String]) in words.contains("Details") && words.contains("Fold Conversation") && !words.contains("Hide Details") }
             let words = await Self.read(card, until: says)
             #expect(says(words), "\(words)")
         }

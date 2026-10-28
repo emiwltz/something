@@ -48,7 +48,7 @@ struct AcceptanceAssistant {
         // The space opened with the sticker; ⌘K opens the card.
         model.focus()
         #expect(model.cardShown && !model.threadShown && model.title == "Daily brief" && model.presence.header == "Working")
-        #expect(model.presence.state == .think && model.dot == .ok && model.notice == nil)
+        #expect(model.presence.state == .think && model.notice == nil)
         #expect(model.name == "Claude Code" && model.modelWords.model == "Opus 5.5" && model.modelWords.effort == "High")
         #expect(model.messageCount == 3 && model.placeholder == "Write your next request · it waits for this one")
         #expect(model.stops && !model.canSend, "Send is Stop while it works and nothing is written")
@@ -151,7 +151,7 @@ struct AcceptanceAssistant {
                                .reply("Grouped. Each day now starts with a small heading, newest first.")])
         #expect(AssistantCard.day(Date(timeIntervalSince1970: 1_792_404_000), now: Stage.now) == "Monday")
         #expect(model.firstLines.isEmpty && model.messageCount == 2 && model.placeholder == "Ask for a change · it wakes up")
-        #expect(model.dot == .ink3 && model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
+        #expect(model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: logbook.web, "c3" + suffix, root: stage.home.root)
@@ -231,9 +231,9 @@ struct AcceptanceAssistant {
                                               Choice(title: "High", value: "high", effort: true, checked: false),
                                               Choice(title: "Max", value: "max", effort: true, checked: false)]),
         ])
-        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code" && model.dot == .ok)
+        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code")
         #expect(model.title == "Project watch" && model.presence.header == "Listening" && !model.threadShown)
-        #expect(model.placeholder == "Ask Project watch's assistant for a change…")
+        #expect(model.placeholder == "Ask for a change · / for Claude Code's commands")
         // This space's alone: the defaults for new spaces are unchanged.
         #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
         shell.waiting(["agents"], mine: 0)
@@ -393,7 +393,7 @@ struct AcceptanceAssistant {
         model.draft = "One line per hour."
         model.send()
         #expect(await wait(until: { model.presence.stuck == .crashed }), "said: \(model.presence.word)")
-        #expect(model.presence.header == "Stopped unexpectedly" && model.presence.state == .limit && model.dot == .bad)
+        #expect(model.presence.header == "Stopped unexpectedly" && model.presence.state == .limit)
         let crashed = try #require(model.notice)
         #expect(crashed.title == "The assistant stopped" && crashed.bad && crashed.actions.map(\.title) == ["Start Again"])
         #expect(crashed.text.hasPrefix("Claude Code quit unexpectedly at ") && crashed.text.hasSuffix("Your conversation is kept; starting again picks it up."))
@@ -415,7 +415,7 @@ struct AcceptanceAssistant {
         #expect(model.presence.state == .unknown && model.presence.header == "State unknown · something cannot read it")
         #expect(unknown.title == "State unknown · something cannot read it" && !unknown.bad && unknown.actions.isEmpty)
         #expect(unknown.text == "Claude Code gave no sign for 4 minutes. It may still be working; something will not guess.")
-        #expect(!model.blocked && model.placeholder == "Ask Logbook's assistant for a change…")
+        #expect(!model.blocked && model.placeholder == "Ask for a change · / for Claude Code's commands")
         try await draw(logbook, ["c8-unknown"])
         (engine.changed, model.clock) = ({ model.refresh() }, Date.init)
         model.refresh()
@@ -556,6 +556,142 @@ struct AcceptanceAssistant {
         #expect(model.placeholder == "Write your next request · it waits for this one")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
+
+    /// Daily brief open with its card, as X6 starts: its assistant answered a first message, then the person asked
+    /// for the time in the weather corner; the fake claude read and edited brief.html with Sonnet 5.5 and answered. The
+    /// card is minimal: one chip for the agent and its model (the effort in its menu), no Point, mode or count chip, and
+    /// a field that says "/" opens Claude Code's own commands, which its initialize listed.
+    static func x6(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let brief = try await stage.open("brief", in: shell, library)
+        #expect(model.commands.isEmpty && model.placeholder == "Ask for a change · it wakes up", "no command is known before Claude Code first runs")
+        for (sent, count) in [("Put the agents that wait for me first.", 2), ("Show the time in the weather corner, 24-hour like the masthead.", 4)] {
+            model.draft = sent
+            model.send()
+            #expect(await wait(until: { model.messageCount == count && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        }
+        model.focus()
+        shell.waiting(["agents"], mine: 0)
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
+        return (shell, library, brief)
+    }
+
+    /// X6.1: the card has asked for a change and just answered it: the conversation above, the line of what changed,
+    /// the chip and the field.
+    @Test("x6-1: ask for a change") func x6_1() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.x6(stage)
+        defer { brief.close() }
+        let model = shell.assistant
+        shell.toggleConversation(nil)
+        #expect(model.cardShown && model.threadShown && model.title == "Daily brief" && model.notice == nil)
+        #expect(model.presence.now == .changed("brief.html"), "said: \(String(describing: model.presence.now))")
+        #expect(model.name == "Claude Code" && model.modelWords == ("Sonnet 5.5", "Medium"))
+        #expect(AgentModelChip.label(model) == "Claude Code, Sonnet 5.5, effort Medium. Change agent, model or effort")
+        #expect(Monogram.letters(model.name) == "CC" && model.commands.map(\.value) == ["compact", "explain", "init", "review", "tidy"])
+        #expect(model.placeholder == "Ask for a change · / for Claude Code's commands" && model.slashed == nil)
+        let field = try #require(AcceptanceTrust.fields(shell.glass.card).first)
+        #expect(field.placeholderString == model.placeholder || field.placeholderAttributedString?.string == model.placeholder)
+        #expect(AcceptanceTrust.fields(shell.glass.card).count == 1, "one field, and no other control drawn as one")
+        // Kept for the next launch: "/" offers them before Claude Code runs again.
+        #expect(Preferences(stage.home.places).commands["claude"]?.count == 5)
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x6-1" + suffix, root: stage.home.root)
+        }
+        try await AcceptanceAssistant.stop(model)
+    }
+
+    /// X6.2: the reply, the conversation unfolded above the field (⌘J); the fold arrow in the header folds it again.
+    @Test("x6-2: its reply") func x6_2() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.x6(stage)
+        defer { brief.close() }
+        let model = shell.assistant
+        // A minute later: no longer "Just finished".
+        let later = Date().addingTimeInterval(60)
+        model.clock = { later }
+        model.tick()
+        shell.toggleConversation(nil)
+        #expect(model.threadShown && model.presence.header == "Listening" && model.presence.now == nil)
+        #expect(model.rows.contains(.mine(caption: "about Daily brief", text: "Show the time in the weather corner, 24-hour like the masthead.")))
+        #expect(model.rows.suffix(3) == [.tool(failed: false, words: "Read brief.html", command: nil), .tool(failed: false, words: "Edited brief.html", command: nil),
+                                         .reply("Done. The weather corner now shows the time, 18:20, in 24-hour format like the masthead. It reads nothing from the Internet.")])
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x6-2" + suffix, root: stage.home.root)
+        }
+        try await AcceptanceAssistant.stop(model)
+    }
+
+    /// X6.3: "/" in the field opens Claude Code's own commands, as it listed them; ↓ three times reaches /review, and
+    /// Return sends it as is, without the line that says which space is open, so Claude Code reads it as a command.
+    /// Esc closes the list and leaves the card open; a word after the name closes it too.
+    @Test("x6-3: a \"/\" command") func x6_3() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAssistant.x6(stage)
+        defer { brief.close() }
+        let model = shell.assistant, window = shell.window
+        shell.toggleConversation(nil)
+        #expect(await wait { window.firstResponder is NSTextView && !model.wantsFocus }, "the card's field has the keys")
+        model.draft = "/"
+        #expect(model.slashed?.map(\.value) == ["compact", "explain", "init", "review", "tidy"] && model.commandPick == 0)
+        #expect(model.slashed?.first?.label == "Summarize the conversation to make room")
+        for _ in 0..<3 { window.sendEvent(try AcceptanceTrust.key("\u{F701}", 125)) }
+        #expect(await wait { model.commandPick == 3 }, "↓ moves the choice: \(model.commandPick)")
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x6-3-list" + suffix, root: stage.home.root)
+        }
+        // Typing filters; nothing matches, and the list says so.
+        model.draft = "/zz"
+        #expect(model.slashed == [] && model.noCommands == "No command of Claude Code starts with that.")
+        model.draft = "/re"
+        #expect(model.slashed?.map(\.value) == ["review"])
+        shell.glass.card.cancelOperation(nil)
+        #expect(model.slashed == nil && model.cardShown, "Esc closes the list, not the card")
+        model.draft = "/r"
+        #expect(model.slashed?.map(\.value) == ["review"] && Field.slash(.upArrow, model) == .handled && model.commandPick == 0)
+        model.draft = "/review now"
+        #expect(model.slashed == nil && Field.slash(.return, model) == .ignored)
+        model.draft = "/rev"
+        #expect(Field.slash(.tab, model) == .handled && model.draft == "/review ", "Tab leaves it for its text")
+        model.draft = "/"
+        for _ in 0..<3 { _ = Field.slash(.downArrow, model) }
+        #expect(Field.slash(.return, model) == .handled && model.draft.isEmpty)
+        #expect(await wait(until: { model.messageCount == 6 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        #expect(model.rows.contains(.mine(caption: nil, text: "/review")))
+        #expect(model.rows.last == .reply("Two notes: the weather corner has no label for VoiceOver, and its time is in 12-hour format while the masthead uses 24. Shall I fix both?"))
+        let input = try String(contentsOf: stage.home.root.appendingPathComponent("out/input"), encoding: .utf8)
+        #expect(input.contains(#""content":"/review""#), "sent as is")
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x6-3" + suffix, root: stage.home.root)
+        }
+        try await AcceptanceAssistant.stop(model)
+    }
+
+    /// Lets the card take the size of what it now shows before a picture: SwiftUI asks for it a turn later.
+    static func fit(_ shell: Shell) async throws {
+        try await Task.sleep(for: .milliseconds(400))
+        shell.glass.place()
+        shell.window.layoutIfNeeded()
+    }
+
+    /// Stops every agent of `model`'s engine, waiting at most 6 s.
+    static func stop(_ model: AssistantModel) async throws {
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
     }
 

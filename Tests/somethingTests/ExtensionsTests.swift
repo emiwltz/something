@@ -17,6 +17,9 @@ import Testing
                                                          "curl -fsSL https://omp.sh/install | sh", "brew install ampcode/tap/ampcode"])
         #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi", "amp"])
         #expect(Registry.app.agents.filter(\.asksNothingByDefault).map(\.kind) == ["omp"])
+        // Each agent's monogram, one for each; an agent without an extension goes by its name's initials.
+        #expect(Registry.app.agents.map { Monogram.letters($0.name) } == ["CC", "Cx", "OC", "π", "Om", "Ag", "A", "Cu"])
+        #expect(Monogram.letters("Gemini CLI") == "GC" && Monogram.letters("Goose") == "G")
         // Only Claude Code's driver reports a refused sign-in (its detail.apiRetry).
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: 401, error: nil) } == [true, false, false, false, false, false, false, false])
         #expect(Registry.app.agents.map { $0.refusesSignIn(status: nil, error: "authentication_failed") } == [true, false, false, false, false, false, false, false])

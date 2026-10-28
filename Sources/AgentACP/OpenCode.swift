@@ -11,7 +11,7 @@ extension AgentDescriptor {
     package static let opencode = AgentDescriptor(
         kind: "opencode", name: "OpenCode", install: "brew install opencode", homeFolders: [".opencode/bin"],
         asksAsMuch: ["build", "plan"], driving: ACPProfile.opencode.driving, reader: { OpenCodeReader(environment: $0) },
-        builder: Builder(lent: LentTool.all), tools: ACPProfile.tools)
+        builder: Builder(lent: LentTool.all), tools: ACPProfile.tools, monogram: "OC")
 }
 
 extension ACPProfile {
