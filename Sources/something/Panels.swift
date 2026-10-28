@@ -17,8 +17,9 @@ protocol PromptSource: AnyObject {
     var requests: [Request] { get }
     /// The details of an open request, or nil once it closed.
     func prompt(_ request: String) -> Prompt?
-    /// Throws, in words for the person, when the answer did not reach the agent.
-    func answer(_ request: String, _ answer: Answer) throws
+    /// Returns whether the answer was sent (false when the request closed meanwhile); throws, in words for the
+    /// person, when the answer did not reach the agent.
+    @discardableResult func answer(_ request: String, _ answer: Answer) throws -> Bool
 }
 
 extension Engine: PromptSource {
@@ -74,7 +75,7 @@ final class Panels {
         elsewhere = requests.filter(inline)
         // A new one something answers by itself never joins the queue; one whose answer did not go through does.
         for request in requests where !inline(request) && !queue.knows(request.id) {
-            guard let prompt = source.prompt(request.id), alone(request, prompt), (try? source.answer(request.id, .rule)) != nil else { continue }
+            guard let prompt = source.prompt(request.id), alone(request, prompt), (try? source.answer(request.id, .rule)) == true else { continue }
             queue.answer(request.id)
             allowed(request, prompt)
         }

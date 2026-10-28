@@ -119,10 +119,11 @@ import SwiftUI
         show(self.space)
     }
 
-    /// Revoke: `rule` goes from the open space's grant; the next request for its command asks again. Says a failure.
-    func revoke(_ rule: Rule) {
-        guard let space else { return }
-        do { try Rules.revoke(rule, in: space.name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
+    /// Revoke, in Info or Settings: `rule` goes from the grant of the space `name` (the open one by default), the next
+    /// request for its command asks again, and Info shows it gone. Says a failure.
+    func revoke(_ rule: Rule, in name: String? = nil) {
+        guard let name = name ?? space?.name else { return }
+        do { try Rules.revoke(rule, in: name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
         show(space)
     }
 

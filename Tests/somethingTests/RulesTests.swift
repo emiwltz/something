@@ -44,6 +44,8 @@ struct RulesTests {
         #expect(!Rules.alone(request(), input: "npm test -- --watch", agent: agent, assistant: false, fullAccess: true, grant: kept),
                 "Full Access never covers an agent a space started")
         #expect(!Rules.alone(request("question"), input: "npm test", agent: agent, assistant: false, fullAccess: false, grant: kept))
+        #expect(!Rules.alone(request(tool: "Edit"), input: "npm test", agent: agent, assistant: false, fullAccess: false, grant: kept),
+                "a rule keeps a command, never another tool whose input reads the same")
         #expect(Rules.alone(request(), input: "rm -rf build", agent: agent, assistant: true, fullAccess: true, grant: nil))
         #expect(!Rules.alone(request(), input: "npm test", agent: agent, assistant: true, fullAccess: false, grant: kept),
                 "a rule never covers the assistant")

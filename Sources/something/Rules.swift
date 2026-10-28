@@ -27,11 +27,12 @@ enum Rules {
     }
 
     /// Whether something answers a request by itself: a permission of the person's assistant while Full Access is on,
-    /// or a command, `input`, that a lasting rule of `grant` keeps exactly for `agent`. Never a question.
+    /// or a command, `input`, of a command tool, that a lasting rule of `grant` keeps exactly for `agent`. Never a
+    /// question, and never another tool whose input reads the same.
     static func alone(_ request: Request, input: String?, agent: Agent?, assistant: Bool, fullAccess: Bool, grant: Grant?) -> Bool {
         guard request.kind == "permission" else { return false }
         if assistant { return fullAccess }
-        guard let agent, let input else { return false }
+        guard Words.isCommand(request.tool), let agent, let input else { return false }
         return Rights.rule(in: grant, kind: agent.kind, command: input, folder: agent.folder) != nil
     }
 
@@ -131,18 +132,15 @@ extension App {
                                grant: space(ofAgent: request.agent).flatMap { try? Grants(self.places.grants).read().spaces[$0] })
         }
         panels.allowed = { [weak self] request, prompt in
-            guard let self, !engine.assistants.contains(request.agent), let name = space(ofAgent: request.agent), let command = prompt.input else { return }
+            guard let self else { return }
+            // The assistant has no space journal: Full Access leaves only this quiet trace on screen.
+            if engine.assistants.contains(request.agent) { return _ = shell.toast("Allowed by Full Access · \(prompt.input ?? request.tool ?? "a permission")", quiet: true) }
+            guard let name = space(ofAgent: request.agent), let command = prompt.input else { return }
             let kind = engine.state.agents.first { $0.id == request.agent }?.kind
             try? Journal(folder: places.journals).append(JournalLine(at: iso8601.string(from: Date()), action: "allow", agent: request.agent, kind: kind,
                                                                      text: command, result: "ok"), space: name)
             _ = shell.toast("Allowed by your rule · \(command)", quiet: true)
         }
-    }
-
-    /// Revoke, in Info or Settings: the rule goes from the space's grant, and Info shows it gone.
-    func revoke(_ rule: Rule, in name: String) {
-        do { try Rules.revoke(rule, in: name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
-        if shell.infoShown { info.show(info.space) }
     }
 
     /// Settings › Advanced's Full Access: turning it on asks once, in a sheet over Settings; turning it off does not.

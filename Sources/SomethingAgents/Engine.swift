@@ -156,9 +156,10 @@ public final class Engine {
 
     /// The person's answer, from a native window; a request that closed meanwhile is left as it is. Throws the driver's
     /// error for an answer that does not fit, and AGENT_STOPPED, in words for the person, when the agent no longer reads.
-    public func answer(_ request: String, _ answer: Answer) throws {
-        guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return }
-        do { _ = try agent.answer(request, answer) } catch let error as CodedError where error.code == "AGENT_STOPPED" {
+    /// Returns whether the answer was sent: false when no launched agent holds the request any more.
+    @discardableResult public func answer(_ request: String, _ answer: Answer) throws -> Bool {
+        guard let agent = launched.first(where: { $0.agent.prompt(request) != nil })?.agent else { return false }
+        do { return try agent.answer(request, answer) } catch let error as CodedError where error.code == "AGENT_STOPPED" {
             throw CodedError("AGENT_STOPPED", "\(registry.name(of: agent.agent.kind)) did not receive your answer: it stopped listening.")
         }
     }

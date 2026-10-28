@@ -21,9 +21,10 @@ final class FakePrompts: PromptSource {
     var gone: [Request] = []
     var requests: [Request] { gone + prompts.map(\.request) }
     func prompt(_ request: String) -> Prompt? { prompts.first { $0.request.id == request } }
-    func answer(_ request: String, _ answer: Answer) throws {
+    func answer(_ request: String, _ answer: Answer) throws -> Bool {
         answers.append((request, answer))
         if let lost { throw lost }
+        return true
     }
 
     func permission(_ id: String, about: String) -> Prompt {

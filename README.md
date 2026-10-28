@@ -165,7 +165,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   Info and in Settings › Advanced, each with Revoke, and go with the space when it is renamed, imported or deleted.
   Nothing is written into the agent's own settings. Your assistant's requests are never kept this way.
 - **Full Access.** Settings › Advanced › Full Access, after one confirmation, lets something allow every permission your
-  assistant asks, by itself; an orange mark stays in the toolbar while it is on, and a click on it turns it off. The
+  assistant asks, by itself, each said in a quiet notice; an orange mark stays in the toolbar while it is on, and a click
+  on it turns it off. The
   agents your spaces start keep their own settings and still ask, and a question still waits for you.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.

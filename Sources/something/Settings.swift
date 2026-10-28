@@ -405,7 +405,7 @@ extension App {
             model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
             let grants = Grants(places.grants)
             model.rules = { [weak self] in Rules.all(grants, spaces: self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? []) }
-            model.revoke = { [weak self] kept in self?.revoke(kept.rule, in: kept.space) }
+            model.revoke = { [weak self] kept in self?.info.revoke(kept.rule, in: kept.space) }
             model.fullAccess = { [weak self] in self?.fullAccess($0, over: Settings.shown?.window) }
             model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
             model.look()
