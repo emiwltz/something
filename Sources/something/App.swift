@@ -68,6 +68,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         library.opened = { [weak self] name in self?.open(name) }
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
         library.used = { [weak self] name in self?.assistant.fromTemplate = name }
+        library.building = { [weak self] name in self?.assistant.build(writing: name) != nil }
         info.current = { [weak self] in self?.current }
         // The space stays selected, so that it opens again with the window.
         shell.closed = { [weak self] in self?.open(nil) }

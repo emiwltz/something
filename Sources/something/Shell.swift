@@ -445,8 +445,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Shows `words` at the bottom of the center for a moment; see Toast.
     @discardableResult
     func toast(_ words: String, action: Toast.Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2) -> Toast {
-        Toast.show(words, action: action, quiet: quiet, seconds: seconds, motion: library.preferences.motion, in: layer, under: center,
-                   clearOf: glass.grown == true && !glass.isHidden ? glass.card : nil)
+        Toast.show(words, action: action, quiet: quiet, seconds: seconds, motion: library.preferences.motion, in: layer, under: center)
     }
 
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file

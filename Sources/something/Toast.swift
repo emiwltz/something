@@ -15,33 +15,25 @@ final class Toast: NSView {
     private var timer: Timer?
     /// Its distance from the center's bottom edge, `rest` once in place.
     private(set) var bottom: NSLayoutConstraint?
-    private(set) var rest: CGFloat = -22
+    let rest: CGFloat = -22
     private var motion = Look.Motion.calm
     private let button: NSButton?
     /// Whether it is in place or arriving, false once it starts to leave.
     private(set) var shown = false
 
-    /// Shows `words` in `layer`, centred at the bottom of `center`, in place of any toast there, and returns it; while
-    /// `card` (the assistant's open card) stands at the bottom right, it sits just above the card, centred on it, so it
-    /// covers neither the card's composer nor what lies left of it (the comments tray). It leaves after `seconds`, or
-    /// when its action is clicked, which acts once; it slides only under Calm `motion`.
+    /// Shows `words` in `layer`, centred at the bottom of `center`, in place of any toast there, and returns it. It
+    /// always stands in that one place, as the mockup's does, over the open card if there is one: it leaves after
+    /// `seconds`, or when its action is clicked, which acts once; it slides only under Calm `motion`.
     @discardableResult
     static func show(_ words: String, action: Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2,
-                     motion: Look.Motion = .calm, in layer: WindowLayer, under center: NSView, clearOf card: NSView? = nil) -> Toast {
+                     motion: Look.Motion = .calm, in layer: WindowLayer, under center: NSView) -> Toast {
         layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         let toast = Toast(words, action: action, quiet: quiet)
         layer.hold(toast)
-        let over = card.flatMap { $0.isHiddenOrHasHiddenAncestor || $0.window == nil ? nil : center.convert($0.bounds, from: $0) }
-        // Its place: 22 points above the center's edge, or 12 above the card's top.
-        toast.rest = over.map { -((center.isFlipped ? center.bounds.height - $0.minY : $0.maxY) + 12) } ?? -22
-        // It starts below its place (170% of its height, as the mockup's) and rises to it.
+        // 22 points above the center's edge; it starts below its place (170% of its height, as the mockup's) and rises.
         let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: toast.rest + 68)
-        let middle = over.map { toast.centerXAnchor.constraint(equalTo: center.leadingAnchor, constant: $0.midX) }
-            ?? toast.centerXAnchor.constraint(equalTo: center.centerXAnchor)
-        // Centred on the card as far as the center's right edge lets it.
-        middle.priority = .defaultHigh
-        NSLayoutConstraint.activate([bottom, middle, toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -32),
-                                     toast.trailingAnchor.constraint(lessThanOrEqualTo: center.trailingAnchor, constant: -16)])
+        NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor),
+                                     toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -32)])
         (toast.bottom, toast.motion) = (bottom, motion)
         layer.layoutSubtreeIfNeeded()
         toast.move(to: toast.rest)

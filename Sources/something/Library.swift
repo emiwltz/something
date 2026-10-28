@@ -56,6 +56,8 @@ import SomethingCore
     @ObservationIgnored var renamed: (String) -> Void = { _ in }
     /// Says a sentence for a moment: the window's toast, quiet.
     @ObservationIgnored var told: (String) -> Void = { _ in }
+    /// Whether a space is being built: it comes first in its group, drawn and walked by the keys alike.
+    @ObservationIgnored var building: (String) -> Bool = { _ in false }
     /// Told where an export was written: the window's toast, with Show.
     @ObservationIgnored var exported: (URL) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
@@ -106,14 +108,15 @@ import SomethingCore
     /// by title. A space two groups name shows in the first.
     func order() -> [Entry] { sections().flatMap(\.entries) }
 
-    /// The sidebar's sections: each group, even empty, with its spaces by title, then the spaces in no group under no
-    /// name (nil), when there are any.
+    /// The sidebar's sections: each group, even empty, with its spaces by title (those being built first), then the
+    /// spaces in no group under no name (nil), when there are any.
     func sections() -> [(group: String?, entries: [Entry])] {
         var placed = Set<String>()
+        let ordered = entries.filter { building($0.id) } + entries.filter { !building($0.id) }
         let grouped = preferences.groups.map { group in
-            (Optional(group.name), entries.filter { group.spaces.contains($0.id) && placed.insert($0.id).inserted })
+            (Optional(group.name), ordered.filter { group.spaces.contains($0.id) && placed.insert($0.id).inserted })
         }
-        let rest = entries.filter { !placed.contains($0.id) }
+        let rest = ordered.filter { !placed.contains($0.id) }
         return grouped + (rest.isEmpty ? [] : [(nil, rest)])
     }
 

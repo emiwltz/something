@@ -254,7 +254,13 @@ enum Picture {
         disguise(frame, root.path)
         frame.layoutSubtreeIfNeeded()
         let rep = try bitmap(frame.bounds.size)
+        // The window layer is drawn once, over everything, with `over` below: drawn here too, its scrim would dim the
+        // title bar's band twice (the columns and the page, drawn apart, hide the first one everywhere else).
+        // Made clear rather than hidden: hiding it would take the keys from what it holds (the palette's field).
+        let alpha = shell.layer.alphaValue
+        shell.layer.alphaValue = 0
         frame.cacheDisplay(in: frame.bounds, to: rep)
+        shell.layer.alphaValue = alpha
         let apart = try columns.map { column in
             disguise(column.view, root.path)
             let drawn = try bitmap(column.view.bounds.size)

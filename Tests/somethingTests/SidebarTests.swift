@@ -1,10 +1,10 @@
 // The sidebar's groups and names, in a throwaway home: moving a space to a group writes only the preferences, a new
 // group takes the first free name, a name another group has is refused, a folded group keeps its count and its rows
-// leave ↑ and ↓, renaming in place keeps the name on Return and none on Esc, a space's new name is only shown (its
-// file and declaration stay), and a row's menu is the mockup's; the rows are names only, Needs You mirrors the spaces
-// that wait and a click on one goes to what waits, never answering; the rail's keys go through every space, folded or
-// not, its tiles are a letter on the colour of the name, and the window takes the rail below 860 points and keeps it
-// until 880. No window is shown.
+// leave ↑ and ↓, a space being built leads its group for the keys as it is drawn, renaming in place keeps the name on
+// Return and none on Esc, a space's new name is only shown (its file and declaration stay), and a row's menu is the
+// mockup's; the rows are names only, Needs You mirrors the spaces that wait and a click on one goes to what waits,
+// never answering; the rail's keys go through every space, folded or not, its tiles are a letter on the colour of the
+// name, and the window takes the rail below 860 points and keeps it until 880. No window is shown.
 import AppKit
 import Foundation
 import SomethingCore
@@ -116,6 +116,22 @@ import Testing
         #expect(library.step(-1) == nil, "on the Templates page the keys are not in the list")
         library.select(.space("agents"))
         #expect(library.step(-1) == .space("brief") && library.step(-1) == .group("Agents") && library.step(-1) == .newSpace)
+    }
+
+    @Test func aSpaceBeingBuiltLeadsItsGroupForTheKeysToo() throws {
+        let test = Home(prefix: "something-sidebar-")
+        defer { test.remove() }
+        let library = try library(test)
+        library.building = { $0 == "agents" }
+        // Drawn first in its group (Sidebar draws the sections), and ↑ ↓, ⌘1–9 and the rail follow the same order.
+        #expect(library.sections()[0].entries.map(\.id) == ["agents", "brief"])
+        #expect(library.order().map(\.id) == ["agents", "brief", "logbook", "pet", "oracle"])
+        #expect(library.stops().prefix(4) == [.newSpace, .group("Agents"), .space("agents"), .space("brief")])
+        #expect(library.railStops().prefix(3) == [.newSpace, .space("agents"), .space("brief")])
+        library.select(.space("agents"))
+        #expect(library.step(1) == .space("brief") && library.step(1) == .group("Notes"))
+        library.building = { _ in false }
+        #expect(library.order().map(\.id) == ["brief", "agents", "logbook", "pet", "oracle"])
     }
 
     @Test func renamingInPlaceKeepsTheNameAndEscCancels() throws {

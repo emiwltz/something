@@ -663,9 +663,9 @@ struct AcceptanceBuild {
         let (shell, library, gallery, host) = try Self.templates(stage)
         #expect(shell.window.title == "Templates" && shell.window.subtitle == "Start from one, then make it yours")
         #expect(gallery.cards(library.templates).map(\.title) == ["My agents", "Project watch", "Daily brief", "Logbook", "Stack", "Pebble"])
-        #expect(library.templates.map(\.needs) == ["Sees and writes to your agents", "Sees, writes to and starts agents · Remembers",
-                                                   "Sees your agents · Remembers", "Sees your agents · Remembers", "Remembers",
-                                                   "Sees your agents · Remembers"])
+        #expect(library.templates.map(\.needs) == ["Sees and writes to your agents", "Sees, writes to and starts agents\u{00A0}· Remembers",
+                                                   "Sees your agents\u{00A0}· Remembers", "Sees your agents\u{00A0}· Remembers", "Remembers",
+                                                   "Sees your agents\u{00A0}· Remembers"])
         gallery.hovered = "agents"
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d5" + suffix, root: stage.home.root)

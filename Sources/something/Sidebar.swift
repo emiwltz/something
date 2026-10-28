@@ -278,10 +278,17 @@ struct SidebarView: View {
             }
             .foregroundStyle(Look.Token.ink3.ui)
             .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2))
+            // A list longer than the sidebar fades out above Templates rather than being cut through a row; scrolled to
+            // its end, the last row clears the fade.
             ScrollView {
-                list.padding(.bottom, 4)
+                list.padding(.bottom, 16)
             }
             .scrollIndicators(.never)
+            .mask(VStack(spacing: 0) {
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
+            })
+            .padding(.bottom, 6)
             Spacer(minLength: 0)
             nav("tpls", label: "Templates", on: library.selection == .templates && !library.previewing, open: { library.select(.templates) }) {
                 Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
@@ -325,9 +332,7 @@ struct SidebarView: View {
                             header(group, count: section.entries.count)
                         }
                         if section.group.map(library.folded) != true {
-                            // A space being built first in its group, as the mockup's.
-                            let first = section.entries.filter { assistant.build(writing: $0.id) != nil }
-                            ForEach(first + section.entries.filter { assistant.build(writing: $0.id) == nil }) { space($0) }
+                            ForEach(section.entries) { space($0) }
                             if section.entries.isEmpty {
                                 Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
                                     .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8))

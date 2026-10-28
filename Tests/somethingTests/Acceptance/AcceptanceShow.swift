@@ -828,11 +828,12 @@ struct AcceptanceShow {
         #expect(made.map(\.kind) == [.turn, .outside] && made.first?.sentence == "3 comments" && shell.undo.undoMenuItemTitle == "Undo “3 comments”")
         #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
         await Picture.settle(brief)
-        // The toast stands just above the open card, over neither its composer nor the tray.
+        // The toast stands where every toast does, at the bottom centre of the center, whatever the card or the tray.
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.first)
         shell.layer.layoutSubtreeIfNeeded()
-        let card = shell.glass.card.convert(shell.glass.card.bounds, to: nil), placed = toast.convert(toast.bounds, to: nil)
-        #expect(placed.minY >= card.maxY && !placed.intersects(tray.convert(tray.bounds, to: nil)), "\(placed) \(card)")
+        let center = shell.center.convert(shell.center.bounds, to: nil), placed = toast.convert(toast.bounds, to: nil)
+        #expect(abs(placed.midX - center.midX) < 1 && toast.bottom?.secondItem === shell.center, "\(placed) \(center)")
+        #expect(await wait { toast.bottom?.constant == -22 })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "f11-done" + suffix, root: stage.home.root)
         }

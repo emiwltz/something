@@ -176,7 +176,7 @@ import WebKit
         defer { home.remove() }
         let ask = FakeAsk(), library = Library(places: home.places, ask: ask, share: Home.share)
         let project = try #require(library.templates.first { $0.id == "project" })
-        #expect(project.follows && project.needs == "Sees, writes to and starts agents · Remembers")
+        #expect(project.follows && project.needs == "Sees, writes to and starts agents\u{00A0}· Remembers")
         // Cancel makes nothing.
         library.use(project)
         #expect(ask.folderMessages == ["Choose the project folder this space follows"] && Spaces(root: home.places.spaces).list().isEmpty)
