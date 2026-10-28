@@ -83,7 +83,7 @@ import Testing
         await helper.look(model)
         model.place = place(home, "Stack", "stack")
         model.send("Hello.")
-        #expect(await wait(until: { model.agent?.state == "idle" && model.messageCount == 2 }))
+        #expect(await wait(until: { model.agent?.state == "idle" && AssistantModel.messages(model.rows) == 2 }))
         let first = try #require(model.id)
         model.place = .blank
         now += 2 * 60 * 60
@@ -100,7 +100,7 @@ import Testing
             && arguments(home).contains("--session-id") }), "\(arguments(home))")
         #expect(!arguments(home).contains("--resume"))
         #expect(model.firstLines.contains("Claude Code cannot resume a conversation. Started a new conversation."), "\(model.firstLines)")
-        #expect(await wait(until: { model.messageCount == 2 }))
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 2 }))
         #expect(!model.rows.contains(.mine(caption: "about Stack", text: "Hello.")), "the old conversation is gone")
         await helper.finish(home, model)
     }
@@ -117,7 +117,7 @@ import Testing
         await helper.look(model)
         model.place = place(home, "Stack", "stack")
         model.send("Hello.")
-        #expect(await wait(until: { model.agent?.state == "idle" && model.messageCount == 2 }))
+        #expect(await wait(until: { model.agent?.state == "idle" && AssistantModel.messages(model.rows) == 2 }))
         let stack = model.session, first = try #require(model.id)
         now += 60
         model.place = .blank

@@ -388,7 +388,7 @@ import WebKit
         #expect(model.session.space == "garden" && model.rows.contains(.mine(caption: "on the blank page", text: "Make me a page for my garden notes.")))
         #expect(model.session(for: .blank).id == nil && model.session(for: .blank).rows.isEmpty, "New Space starts afresh")
         model.send("Add a row per plant.")
-        #expect(await wait(until: { model.messageCount == 4 }))
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 4 }))
         #expect(model.id == builder && model.engine.assistants == [builder], "the build's agent goes on in its space")
         #expect(model.eyes(of: "garden") == model.presence.state && [.listen, .done].contains(model.presence.state) && model.eyes(of: "agents") == .sleep)
         // New Conversation: the garden's agent stops, and its card shows a fresh thread.
@@ -625,7 +625,7 @@ import WebKit
         model.draft = "Third message."
         model.send()
         #expect(model.held == ["Second message, go-slow.", "Third message."])
-        #expect(model.messageCount == 1, "a held message is not yet in the conversation")
+        #expect(AssistantModel.messages(model.rows) == 1, "a held message is not yet in the conversation")
         try await Task.sleep(for: .milliseconds(500))
         #expect(sent("Second message") == 0 && sent("Third message.") == 0, "held while the turn runs")
         // The turn ends: the oldest held message leaves, once, with the context line of where it was written; the

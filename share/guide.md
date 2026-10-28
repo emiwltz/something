@@ -61,7 +61,8 @@ also start from one in something's Templates (⇧⌘T, or File › Templates).
 ## If you are something's assistant
 
 When something's own window started you, you work in `~/something/spaces` and each message starts with one line from
-something, `[something] …`, saying which space is open: "this space" means that one. A message the person sent from
+something, `[something] …`, saying which space is open: "this space" means that one. A message that is one of your own commands, chosen from "/",
+comes as the person wrote it, without that line. A message the person sent from
 ⌘P reaches you the same way, the space it was meant for opened first; one sent to a New Space reaches you on the blank
 page, as a space to build: something opens it by itself once your turn ends, wherever the person went meanwhile
 (several may build at once, each its own conversation). The folder's `AGENTS.md`, which

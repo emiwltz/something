@@ -50,7 +50,7 @@ struct AcceptanceAssistant {
         #expect(model.cardShown && !model.threadShown && model.title == "Daily brief" && model.presence.header == "Working")
         #expect(model.presence.state == .think && model.notice == nil)
         #expect(model.name == "Claude Code" && model.modelWords.model == "Opus 5.5" && model.modelWords.effort == "High")
-        #expect(model.messageCount == 3 && model.placeholder == "Write your next request · it waits for this one")
+        #expect(AssistantModel.messages(model.rows) == 3 && model.placeholder == "Write your next request · it waits for this one")
         #expect(model.stops && !model.canSend, "Send is Stop while it works and nothing is written")
         let host = shell.glass.card
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
@@ -102,7 +102,7 @@ struct AcceptanceAssistant {
         let brief = try await stage.open("brief", in: shell, library)
         model.draft = "Put the agents that wait for me first."
         model.send()
-        #expect(await wait(until: { model.messageCount == 2 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 2 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
         model.draft = "Add a small weather corner, top right."
         model.send()
         #expect(await wait(until: { model.presence.now == .working("Editing brief.html…", late: false) }), "said: \(model.presence.word)")
@@ -150,7 +150,7 @@ struct AcceptanceAssistant {
                                .tool(failed: false, words: "Edited logbook.html", command: nil),
                                .reply("Grouped. Each day now starts with a small heading, newest first.")])
         #expect(AssistantCard.day(Date(timeIntervalSince1970: 1_792_404_000), now: Stage.now) == "Monday")
-        #expect(model.firstLines.isEmpty && model.messageCount == 2 && model.placeholder == "Ask for a change · it wakes up")
+        #expect(model.firstLines.isEmpty && AssistantModel.messages(model.rows) == 2 && model.placeholder == "Ask for a change · it wakes up")
         #expect(model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
@@ -181,7 +181,7 @@ struct AcceptanceAssistant {
         model.clock = { later }
         model.tick()
         #expect(model.presence.now == .working("Checking the page…", late: true) && model.presence.header == "Working")
-        #expect(model.messageCount == 4 && model.placeholder == "Write your next request · it waits for this one")
+        #expect(AssistantModel.messages(model.rows) == 4 && model.placeholder == "Write your next request · it waits for this one")
         #expect(model.stops && !model.canSend && model.presence.stopHelp == Keys.tooltip("stop"))
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
@@ -212,7 +212,7 @@ struct AcceptanceAssistant {
         #expect(model.modelWords == ("Default model", nil), "before Claude Code ever ran")
         model.draft = "Mark the evaluation page done."
         model.send()
-        #expect(await wait(until: { model.light == .ready && model.agent?.state == "idle" && model.messageCount == 2 }), "rows: \(model.rows)")
+        #expect(await wait(until: { model.light == .ready && model.agent?.state == "idle" && AssistantModel.messages(model.rows) == 2 }), "rows: \(model.rows)")
         // A minute later, by the card's clock: no longer "Just finished".
         let later = Date().addingTimeInterval(60)
         model.clock = { later }
@@ -286,7 +286,7 @@ struct AcceptanceAssistant {
         defer { agents.close() }
         model.send("Check that the counters match what the terminal says.")
         #expect(await wait(until: { model.presence.state == .wait }), "said: \(model.presence.word)")
-        #expect(model.cardShown && model.title == "My agents" && model.messageCount == 2 && model.engine.assistants.count == 2)
+        #expect(model.cardShown && model.title == "My agents" && AssistantModel.messages(model.rows) == 2 && model.engine.assistants.count == 2)
         #expect(model.rows.contains(.reply("I can compare them, but I need to run the check script once. I asked you below.")))
         #expect(!model.rows.contains { "\($0)".contains("weather corner") }, "only My agents' rows")
         let notice = try #require(model.notice)
@@ -397,13 +397,13 @@ struct AcceptanceAssistant {
         let crashed = try #require(model.notice)
         #expect(crashed.title == "The assistant stopped" && crashed.bad && crashed.actions.map(\.title) == ["Start Again"])
         #expect(crashed.text.hasPrefix("Claude Code quit unexpectedly at ") && crashed.text.hasSuffix("Your conversation is kept; starting again picks it up."))
-        #expect(model.blocked && !model.canSend && model.placeholder == "Start Again to send a message" && model.messageCount == 2)
+        #expect(model.blocked && !model.canSend && model.placeholder == "Start Again to send a message" && AssistantModel.messages(model.rows) == 2)
         try await draw(logbook, ["c8", "c8-crashed"])
 
         // Start Again picks it up; then a state no source gives is said unknown, with nothing to click.
         crashed.actions[0].run()
         #expect(await wait(until: { model.agent?.alive == true && model.agent?.state == "idle" && !model.launching }))
-        #expect(model.notice == nil && model.messageCount == 2)
+        #expect(model.notice == nil && AssistantModel.messages(model.rows) == 2)
         engine.changed = {}
         var state = engine.state
         let index = try #require(state.agents.firstIndex { $0.id == model.id })
@@ -528,7 +528,7 @@ struct AcceptanceAssistant {
         model.draft = "Also make the date bigger."
         model.send()
         #expect(model.held == ["Also make the date bigger."] && model.draft.isEmpty)
-        #expect(model.placeholder == "Write another request…" && model.messageCount == 3)
+        #expect(model.placeholder == "Write another request…" && AssistantModel.messages(model.rows) == 3)
         #expect(model.stops && model.presence.now == .working("Editing brief.html…", late: false))
         // Above the held message, the turn's tool lines so far, as the reference draws them.
         let turn = Array(model.rows.suffix(2))
@@ -575,7 +575,7 @@ struct AcceptanceAssistant {
         for (sent, count) in [("Put the agents that wait for me first.", 2), ("Show the time in the weather corner, 24-hour like the masthead.", 4)] {
             model.draft = sent
             model.send()
-            #expect(await wait(until: { model.messageCount == count && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+            #expect(await wait(until: { AssistantModel.messages(model.rows) == count && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
         }
         model.focus()
         shell.waiting(["agents"], mine: 0)
@@ -635,7 +635,7 @@ struct AcceptanceAssistant {
 
     /// X6.3: "/" in the field opens Claude Code's own commands, as it listed them; ↓ three times reaches /review, and
     /// Return sends it as is, without the line that says which space is open, so Claude Code reads it as a command.
-    /// Esc closes the list and leaves the card open; a word after the name closes it too.
+    /// Esc closes the list and leaves the card open; a word after the name closes it too. The keys are real events.
     @Test("x6-3: a \"/\" command") func x6_3() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
@@ -658,18 +658,22 @@ struct AcceptanceAssistant {
         #expect(model.slashed == [] && model.noCommands == "No command of Claude Code starts with that.")
         model.draft = "/re"
         #expect(model.slashed?.map(\.value) == ["review"])
-        shell.glass.card.cancelOperation(nil)
-        #expect(model.slashed == nil && model.cardShown, "Esc closes the list, not the card")
+        window.sendEvent(try AcceptanceTrust.key("\u{1B}", 53))
+        #expect(await wait { model.slashed == nil && model.cardShown }, "Esc closes the list, not the card")
         model.draft = "/r"
         #expect(model.slashed?.map(\.value) == ["review"] && Field.slash(.upArrow, model) == .handled && model.commandPick == 0)
         model.draft = "/review now"
         #expect(model.slashed == nil && Field.slash(.return, model) == .ignored)
         model.draft = "/rev"
-        #expect(Field.slash(.tab, model) == .handled && model.draft == "/review ", "Tab leaves it for its text")
+        window.sendEvent(try AcceptanceTrust.key("\t", 48))
+        #expect(await wait { model.draft == "/review " }, "Tab leaves it for its text: \(model.draft)")
+        #expect(window.firstResponder is NSTextView, "Tab kept the field")
         model.draft = "/"
-        for _ in 0..<3 { _ = Field.slash(.downArrow, model) }
-        #expect(Field.slash(.return, model) == .handled && model.draft.isEmpty)
-        #expect(await wait(until: { model.messageCount == 6 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        for _ in 0..<3 { window.sendEvent(try AcceptanceTrust.key("\u{F701}", 125)) }
+        #expect(await wait { model.commandPick == 3 })
+        window.sendEvent(try AcceptanceTrust.key("\r", 36))
+        #expect(await wait { model.draft.isEmpty })
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 6 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
         #expect(model.rows.contains(.mine(caption: nil, text: "/review")))
         #expect(model.rows.last == .reply("Two notes: the weather corner has no label for VoiceOver, and its time is in 12-hour format while the masthead uses 24. Shall I fix both?"))
         let input = try String(contentsOf: stage.home.root.appendingPathComponent("out/input"), encoding: .utf8)

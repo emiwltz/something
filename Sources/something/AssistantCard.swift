@@ -333,8 +333,9 @@ struct Field: View {
                 .padding(.horizontal, 2).padding(.vertical, 5)
                 .frame(minHeight: 30)
                 .accessibilityLabel("Message")
-                .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab], phases: .down) { Field.slash($0.key, model) }
                 .composing(model, $typing)
+                // Outside composing's Return, which would send the "/" typed: the outer handler is asked first.
+                .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab], phases: .down) { Field.slash($0.key, model) }
             let stop = model.stops
             Button { stop ? model.stop() : model.send() } label: {
                 Group {
@@ -511,6 +512,7 @@ struct NoticeView: View {
 struct Monogram: View {
     let name: String
     var side: CGFloat = 18
+    @Environment(\.colorScheme) private var scheme
 
     static func letters(_ name: String) -> String {
         if let mark = Registry.app.agents.first(where: { $0.name == name })?.monogram { return mark }
@@ -521,18 +523,23 @@ struct Monogram: View {
         return name.first.map { String($0).uppercased() } ?? "?"
     }
 
-    /// The tile for a menu item, which draws only text and images: a template, tinted as the menu's text.
+    /// The tile for a menu item, which draws only text and images: a template, tinted as the menu's text. Drawn once
+    /// per letters, since the menu's body is asked again at every refresh.
     @MainActor static func image(_ name: String) -> NSImage? {
-        let image = ImageRenderer(content: Text(letters(name)).font(Look.font(.ui, size: 9, weight: .semibold).ui).frame(width: 18, height: 18)
+        let mark = letters(name)
+        if let image = images[mark] { return image }
+        let image = ImageRenderer(content: Text(mark).font(Look.font(.ui, size: 9, weight: .semibold).ui).frame(width: 18, height: 18)
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(lineWidth: 1))).nsImage
         image?.isTemplate = true
+        images[mark] = image
         return image
     }
+    @MainActor private static var images: [String: NSImage] = [:]
 
     var body: some View {
         Text(Monogram.letters(name)).font(Look.font(.ui, size: side * 0.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
             .frame(width: side, height: side)
-            .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: side * 0.28))
+            .background((scheme == .dark ? Look.Token.mist : .sunk).ui, in: RoundedRectangle(cornerRadius: side * 0.28))
             .accessibilityHidden(true)
     }
 }
@@ -775,9 +782,6 @@ extension AssistantModel {
         if kind == self.kind { return modelWords }
         return (Registry.app.limits[kind]?.contains("model") == true ? "Its own model" : "Default model", nil)
     }
-
-    /// The messages of the conversation, the person's and the agent's.
-    var messageCount: Int { AssistantModel.messages(rows) }
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
     var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
