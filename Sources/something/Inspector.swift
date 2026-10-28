@@ -240,6 +240,7 @@ extension Shell {
         }
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
+        titleLine.held = shown && info.content == .info
     }
 
     /// Shows History in the panel, in Info's place, while a space is open, with the keys: ↑ ↓, Space and Esc are
@@ -250,6 +251,7 @@ extension Shell {
         info.content = .history
         inspector.isCollapsed = false
         (controls[Shell.info] as? ToolButton)?.pressed = false
+        titleLine.held = false
         window.makeFirstResponder(inspector.viewController.view)
     }
 

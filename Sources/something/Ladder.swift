@@ -135,8 +135,9 @@ struct BuildRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(Look.Token.line2.ui, lineWidth: 1.6)
-            Circle().trim(from: 0, to: max(0.04, progress)).stroke(Look.Token.ink.ui, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+            // A closed dark ring, as the mockup's: ink over a track of ink, never a system spinner's pale one.
+            Circle().stroke(Look.Token.ink.ui.opacity(0.28), lineWidth: 1.6)
+            Circle().trim(from: 0, to: max(0.04, progress)).stroke(Look.Token.ink.ui.opacity(0.78), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
                 .rotationEffect(.degrees(-90)).animation(.easeOut(duration: 0.4), value: progress)
         }
         .frame(width: 12, height: 12)

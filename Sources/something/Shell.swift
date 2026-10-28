@@ -370,7 +370,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Writes the name in the toolbar, alone, for the window menu and VoiceOver too (`subtitle` only for the window's
     /// own, which nothing draws), and shows what acts on a space only while one is open: off the spaces, the toolbar
-    /// holds the name and Page Full Screen, greyed. Point is greyed when `point` is false: the page stopped.
+    /// holds the name alone. Point is greyed when `point` is false: the page stopped.
     func heading(_ title: String, _ subtitle: String, space: Bool, point: Bool = true) {
         (window.title, window.subtitle) = (title, subtitle)
         titleLine.line = NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
@@ -387,7 +387,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
         toolbarItems.first { $0.itemIdentifier == Shell.full }?.isEnabled = space
-        if let full = controls[Shell.full] { (full.isEnabled, full.alphaValue) = (space, space ? 1 : 0.32) }
+        if let full = controls[Shell.full] { (full.isEnabled, full.isHidden) = (space, !space) }
     }
 
     /// What View's and Space's Info items say: what they will do.
@@ -781,14 +781,14 @@ final class Veil: NSView {
 
 /// The toolbar's name: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It
 /// gives way first when the window narrows, cut with an ellipsis, so that the tools never leave the toolbar. Over a
-/// space it is a button, drawn as the mockup's chip (a light fill, darker under the pointer, and a chevron): a click,
-/// or VoiceOver's press, opens Info or closes it, as ⌘I does.
+/// space it is a button, plain words as the mockup's, its chip drawn only under the pointer or while Info is open: a
+/// click, or VoiceOver's press, opens Info or closes it, as ⌘I does.
 final class TitleLine: NSView {
     /// 18 points from the sidebar's edge, as the mockup's toolbar starts; the toolbar gives the other 8. The chip starts
     /// 8 points before the words.
     static let indent: CGFloat = 10
-    /// The chip's height, and what its chevron takes after the words.
-    static let chip: CGFloat = 26, chevron: CGFloat = 20
+    /// The chip's height, and how far it reaches after the words.
+    static let chip: CGFloat = 26, trail: CGFloat = 8
     var line = NSAttributedString() {
         didSet {
             setAccessibilityLabel(line.string)
@@ -807,8 +807,11 @@ final class TitleLine: NSView {
             needsDisplay = true
         }
     }
-    /// Whether the pointer is over the chip.
+    /// Whether the pointer is over the chip, and whether Info is open: either draws it.
     private var lit = false {
+        didSet { needsDisplay = true }
+    }
+    var held = false {
         didSet { needsDisplay = true }
     }
 
@@ -819,7 +822,7 @@ final class TitleLine: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        let whole = ceil(line.size().width) + TitleLine.indent + (space ? TitleLine.chevron : 0)
+        let whole = ceil(line.size().width) + TitleLine.indent + (space ? TitleLine.trail : 0)
         let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
         return NSSize(width: max(TitleLine.indent, min(whole, room)), height: max(ceil(line.size().height), space ? TitleLine.chip : 0))
     }
@@ -827,15 +830,11 @@ final class TitleLine: NSView {
         let cut = NSMutableAttributedString(attributedString: line), style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         cut.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cut.length))
-        let height = ceil(line.size().height), words = bounds.width - TitleLine.indent - (space ? TitleLine.chevron : 0)
-        if space {
-            (lit ? Look.Token.sel : .hover).color.setFill()
+        let height = ceil(line.size().height), words = bounds.width - TitleLine.indent - (space ? TitleLine.trail : 0)
+        if space, lit || held {
+            (held ? Look.Token.sel : .hover).color.setFill()
             let chip = NSRect(x: TitleLine.indent - 8, y: (bounds.height - TitleLine.chip) / 2, width: bounds.width - TitleLine.indent + 8, height: TitleLine.chip)
             NSBezierPath(roundedRect: chip, xRadius: Look.control, yRadius: Look.control).fill()
-            if let mark = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: 8, weight: .semibold).applying(.init(paletteColors: [Look.Token.ink3.color]))) {
-                mark.draw(in: NSRect(x: TitleLine.indent + words + 5, y: (bounds.height - mark.size.height) / 2, width: mark.size.width, height: mark.size.height))
-            }
         }
         cut.draw(in: NSRect(x: TitleLine.indent, y: (bounds.height - height) / 2, width: words, height: height))
     }

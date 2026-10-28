@@ -274,11 +274,23 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
+    /// A finished build said short: one line of what was made, the reply's first paragraph, the steps and the rest
+    /// under Details; nothing folds while its turn goes on, nor a reply that does not answer a build.
     @Test func aBuildsReplyFoldsItsDetails() {
         let rows: [AssistantModel.Row] = [.mine(caption: "on the blank page", text: "A countdown"), .reply("Week-end is ready. Try: write your plans.\n\nIt reads the state.")]
-        #expect(AssistantModel.folded(rows, at: 1)! == ("Week-end is ready. Try: write your plans.", "It reads the state."))
-        #expect(AssistantModel.folded([.mine(caption: "about Week-end", text: "Bigger"), rows[1]], at: 1) == nil)
-        #expect(AssistantModel.folded([rows[0], .reply("One paragraph.")], at: 1) == nil)
+        #expect(AssistantModel.built(rows, at: 1, ended: true) == .init(steps: 1..<1, made: nil, short: "Week-end is ready. Try: write your plans.", rest: "It reads the state."))
+        #expect(AssistantModel.built(rows, at: 1, ended: false) == nil)
+        #expect(AssistantModel.built([.mine(caption: "about Week-end", text: "Bigger"), rows[1]], at: 1, ended: true) == nil)
+        #expect(AssistantModel.built([rows[0], .reply("One paragraph.")], at: 1, ended: true) == nil)
+        let steps: [AssistantModel.Row] = [
+            rows[0], .reply("I’ll make it."), .tool(failed: false, words: "Edited week-end.html", command: nil),
+            .tool(failed: true, words: " · failed", command: "something check week-end"), .reply("Check found 2 problems."),
+            .tool(failed: false, words: "Edited week-end.html · checked", command: nil), .reply("Week-end is ready."),
+        ]
+        #expect(AssistantModel.built(steps, at: 6, ended: true) == .init(steps: 1..<6, made: "Made week-end.html · checked, 0 errors", short: "Week-end is ready.", rest: nil))
+        #expect(AssistantModel.built(steps, at: 4, ended: true) == nil, "an interim reply is a step")
+        #expect(AssistantModel.made(steps[1..<4]) == "Made week-end.html · check found errors")
+        #expect(AssistantModel.made(steps[1..<3]) == "Made week-end.html · unchecked")
     }
 
     /// The row's name until the page has one, and the ring's progress.

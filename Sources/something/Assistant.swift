@@ -672,6 +672,7 @@ import SomethingCore
             (asked, nudged) = (nil, false)
             remove(build)
             back(build)
+            keepLevel(build)
             halted = left
         }
         takeBack()
@@ -1011,7 +1012,15 @@ import SomethingCore
         if failed, let target = sessions[.new], !target.draft.contains(build.sentence) {
             target.draft = [build.sentence, target.draft].filter { !$0.isEmpty }.joined(separator: "\n")
         }
+        // Its words back, the level it was built with comes with them: never a fresh guess that would seem to change it.
+        if failed { keepLevel(build) }
         resolve()
+    }
+
+    /// The level `build` was chosen with, on New Space again with its words.
+    private func keepLevel(_ build: Build) {
+        chosenLevel = build.level
+        if build.level == .run, let folder = build.folder { runFolder = folder }
     }
 
     /// Writes the level chosen on New Space as the grant of the space `name` it built: the choice is the consent, so
@@ -1056,13 +1065,35 @@ import SomethingCore
         (sessions[.space(name)] ?? Session.restored(name, in: places.assistants)).map { AssistantModel.messages($0.rows) } ?? 0
     }
 
-    /// The reply at `index` said short: its first paragraph and the rest, when it answers a build asked on the blank
-    /// page and holds more than one paragraph; nil otherwise.
-    static func folded(_ rows: [Row], at index: Int) -> (short: String, rest: String)? {
-        guard rows.indices.contains(index), let text = rows[index].reply, case .mine(let caption, _)? = rows[..<index].last(where: { $0.mine != nil }),
-              caption == "on the blank page", let cut = text.range(of: "\n\n") else { return nil }
-        let rest = text[cut.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-        return rest.isEmpty ? nil : (String(text[..<cut.lowerBound]), rest)
+    /// A build asked on the blank page, said short once its turn ended, as the mockup's: the person's sentence, one line
+    /// of what was made, the reply's first paragraph, and under Details what came between (`steps`) and the reply's rest.
+    struct Built: Equatable { var steps: Range<Int>, made: String?, short: String, rest: String? }
+
+    /// The reply at `index` as a finished build: nil when it is not the last reply of a turn asked on the blank page,
+    /// while that turn goes on (`ended` false and nothing asked since), or when it has nothing to fold.
+    static func built(_ rows: [Row], at index: Int, ended: Bool) -> Built? {
+        guard rows.indices.contains(index), let text = rows[index].reply, let asked = rows[..<index].lastIndex(where: { $0.mine != nil }),
+              case .mine(let caption, _) = rows[asked], caption == "on the blank page" else { return nil }
+        let next = rows[(index + 1)...].firstIndex { $0.mine != nil }
+        guard next != nil || ended, !rows[(index + 1)..<(next ?? rows.endIndex)].contains(where: { $0.reply != nil }) else { return nil }
+        let steps = (asked + 1)..<index, cut = text.range(of: "\n\n")
+        let rest = cut.map { text[$0.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines) }.flatMap { $0.isEmpty ? nil : $0 }
+        guard !steps.isEmpty || rest != nil else { return nil }
+        return Built(steps: steps, made: made(rows[steps]), short: cut.map { String(text[..<$0.lowerBound]) } ?? text, rest: rest)
+    }
+
+    /// "Made week-end.html · checked, 0 errors": the page last edited and what its last check said; nil when no page
+    /// was edited. An edit after a check leaves it unchecked.
+    static func made(_ steps: ArraySlice<Row>) -> String? {
+        var file: String?, checked: Bool?
+        for case .tool(let failed, let words, let command) in steps {
+            if words.hasPrefix("Edited ") {
+                (file, checked) = (String(words.dropFirst(7).prefix { $0 != " " }), words.hasSuffix(" · checked") ? true : nil)
+            } else if command?.contains("something check") == true || words.hasPrefix("Used something_check") {
+                checked = !failed
+            }
+        }
+        return file.map { "Made \($0) · " + (checked == true ? "checked, 0 errors" : checked == false ? "check found errors" : "unchecked") }
     }
 
     static func messages(_ rows: [Row]) -> Int {

@@ -181,10 +181,17 @@ enum Look {
     /// The ring that goes with the float shadow.
     static let floatRing = (token: Token.line2, width: CGFloat(1))
 
-    /// The float shadow under a card of `box` in `appearance`, cast by a shape of `fill`, with its ring when `ring`.
-    static func drawFloat(_ box: CGRect, radius: CGFloat, fill: Token, ring: Bool, appearance: NSAppearance) {
+    /// The float shadow under a card of `box` in `appearance`, cast by a shape of `fill`, with its ring when `ring`;
+    /// `hollow`, only around it, for a card of glass that the page shows through.
+    static func drawFloat(_ box: CGRect, radius: CGFloat, fill: Token, ring: Bool, appearance: NSAppearance, hollow: Bool = false) {
         for shade in float(appearance) {
             NSGraphicsContext.saveGraphicsState()
+            if hollow {
+                let outside = NSBezierPath(rect: box.insetBy(dx: -80, dy: -80))
+                outside.append(NSBezierPath(roundedRect: box, xRadius: radius, yRadius: radius))
+                outside.windingRule = .evenOdd
+                outside.addClip()
+            }
             let shadow = NSShadow()
             (shadow.shadowColor, shadow.shadowBlurRadius, shadow.shadowOffset) = (shade.color, shade.blur / 2, NSSize(width: 0, height: -shade.y))
             shadow.set()

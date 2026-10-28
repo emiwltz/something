@@ -1,9 +1,10 @@
-// The arrival: a space just made comes out of what made it. On the glass, over a still of the page left, four corners
-// and the eyes stand on New Space's sign (or a frame on the template card Use pressed), then grow to the center's
-// edges, 14 points in, in 820 ms on the douce curve, their stroke thinning and the eyes going to the corner as they
-// fade; then it all fades and the space is there, its row ringed a moment in the sidebar, and only then its rights
-// sheet. Reduced motion skips the growth: the still fades. A new opening ends an arrival still playing. It is drawn in
-// draw(_:), so cacheDisplay pictures it. The first-launch film (Film.swift) grows the same frame to the window's edges.
+// The arrival: a space just made comes out of what made it. On the glass, over the bare page (or the templates'
+// still), four corners and the eyes stand on New Space's sign (or a frame on the template card Use pressed), then grow
+// to the center's edges, 14 points in, in 820 ms on the douce curve, their stroke thinning and the eyes going to the
+// corner as they fade; then it all fades and the space is there, its row ringed a moment in the sidebar, and only then
+// its rights sheet. Reduced motion skips the growth: the still fades. A new opening ends an arrival still playing. It
+// is drawn in draw(_:), so cacheDisplay pictures it. The first-launch film (Film.swift) grows the same frame to the
+// window's edges.
 import AppKit
 import SwiftUI
 
@@ -73,11 +74,10 @@ final class Arrival: NSView {
         } else {
             return nil
         }
-        // The page's still without the sign, which the frame takes from there.
-        sign?.isHidden = true
-        let still = host.bitmapImageRepForCachingDisplay(in: host.bounds)
+        // The templates' still under the card's frame; New Space's form is not drawn under the new space's title: the
+        // frame grows on the bare page, as the space it brings.
+        let still = sign == nil ? host.bitmapImageRepForCachingDisplay(in: host.bounds) : nil
         still.map { host.cacheDisplay(in: host.bounds, to: $0) }
-        sign?.isHidden = false
         // The glass is not flipped and the arrival is: its rectangles are turned over once, here.
         let height = glass.bounds.height
         func flip(_ r: CGRect) -> CGRect { CGRect(x: r.minX, y: height - r.maxY, width: r.width, height: r.height) }
@@ -138,7 +138,8 @@ final class Arrival: NSView {
     var shape: Shape { Arrival.shape(start, to: room, inset: reach?.inset ?? Arrival.inset, progress: progress) }
 
     override func draw(_ dirtyRect: NSRect) {
-        still?.draw(in: stillRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        if let still { still.draw(in: stillRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
+        else { Look.Token.bg.color.setFill(); stillRect.fill() }
         guard progress < 1 || playing || holds, let c = NSGraphicsContext.current?.cgContext else { return }
         let shape = shape
         PointOverlay.corners(shape.rect, ink: .ink, arm: shape.arm, width: shape.stroke, halo: false)

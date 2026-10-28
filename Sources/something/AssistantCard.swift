@@ -1,7 +1,8 @@
 // The assistant's card, 412 points at the bottom right of the center, over the space: its header (the eyes of its
-// state, the space's title as the conversation menu, the state word, Reduce and the grip), the conversation (⌘J: your
+// state in the whole sign, "<space>'s assistant" as the conversation menu, the state word, Fold, Reduce and the grip), the conversation (⌘J: your
 // bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days, the messages held for the
-// turn's end outlined with Take Back; a build's reply said short, what follows its first paragraph folded under Details),
+// turn's end outlined with Take Back; a finished build said short: what was made, the reply's first paragraph, the steps and
+// the rest folded under Details),
 // one notice when it is stuck or waits for you, the present-tense line while it
 // works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
 // while the conversation is folded, and a flat field whose Send turns into Stop (New Space reuses it and the notice).
@@ -54,7 +55,7 @@ struct AssistantCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Menu { ConversationMenu(model: model) } label: {
                     HStack(spacing: 5) {
-                        Text(model.title).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                        Text(heading).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                         Chevron()
                     }
                     .padding(.horizontal, 6).frame(height: 22).contentShape(Rectangle())
@@ -64,6 +65,12 @@ struct AssistantCard: View {
                 Text(presence.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
             }
             Spacer(minLength: 0)
+            // Fold: the conversation folds away, the card keeping its header and field (⌘J).
+            Button { model.threadShown.toggle() } label: {
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 0 : 180))
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel(model.threadShown ? "Fold Conversation" : "Unfold Conversation")
             Button { model.open = false } label: {
                 Image(systemName: "minus").font(.system(size: 12, weight: .medium)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
@@ -78,18 +85,16 @@ struct AssistantCard: View {
         .padding(.leading, 42).padding(.trailing, 8)
         .frame(height: 54)
         .overlay(alignment: .topLeading) {
-            // Quiet eyes in ink3, red only when stuck; while it works they stay level, the line below moving instead.
-            Group {
-                if presence.state == .think {
-                    HStack(spacing: 3) { ForEach(0..<2, id: \.self) { _ in RoundedRectangle(cornerRadius: 1).frame(width: 5, height: 2) } }
-                } else {
-                    Image(nsImage: Sign.miniEyes(presence.state)).renderingMode(.template)
-                }
-            }
-            .foregroundStyle(presence.state == .limit ? Look.Token.bad.ui : Look.Token.ink3.ui)
-            .frame(width: 16, height: 10).position(x: 27, y: 27)
-            .accessibilityElement().accessibilityLabel(presence.state.word)
+            // The whole sign, its corners and the eyes of its state, as the mockup's header.
+            Image(nsImage: Sign.image(presence.state, side: 28))
+                .frame(width: 28, height: 28).position(x: 25, y: 27)
+                .accessibilityElement().accessibilityLabel(presence.state.word)
         }
+    }
+
+    /// "Week-end's assistant" in a space; where the person is elsewhere.
+    private var heading: String {
+        if case .space = model.place { "\(model.title)'s assistant" } else { model.title }
     }
 
     // MARK: The conversation
@@ -104,9 +109,13 @@ struct AssistantCard: View {
                     Text($0).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, 4)
-                let rows = model.rows
+                let rows = model.rows, ended = !model.working
+                // A finished build's steps are its Details': drawn there, not in the thread.
+                let built = rows.indices.compactMap { at in AssistantModel.built(rows, at: at, ended: ended).map { (at, $0) } }
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                    if let (short, rest) = AssistantModel.folded(rows, at: index) { reply(short, details: rest, index) } else { line(row) }
+                    if let build = built.first(where: { $0.0 == index })?.1 { reply(build, rows, index) }
+                    else if built.contains(where: { $0.1.steps.lowerBound - 1 == index }), let text = row.mine { line(.mine(caption: nil, text: text)) }
+                    else if !built.contains(where: { $0.1.steps.contains(index) }) { line(row) }
                 }
                 ForEach(Array(model.held.enumerated()), id: \.offset) { _, text in
                     AssistantCard.mine(text).foregroundStyle(Look.Token.ink2.ui).overlay(AssistantCard.mineShape.strokeBorder(Look.Token.line2.ui))
@@ -170,11 +179,13 @@ struct AssistantCard: View {
         }
     }
 
-    /// A build's reply: its first paragraph, then Details, which unfolds the rest.
-    private func reply(_ short: String, details: String, _ index: Int) -> some View {
+    /// A finished build: what was made in one line, the reply's first paragraph, then Details, which unfolds the steps
+    /// and the reply's rest.
+    private func reply(_ build: AssistantModel.Built, _ rows: [AssistantModel.Row], _ index: Int) -> some View {
         let open = model.unfolded.contains(index)
         return VStack(alignment: .leading, spacing: 4) {
-            line(.reply(short))
+            if let made = build.made { line(.tool(failed: made.hasSuffix("found errors"), words: made, command: nil)) }
+            line(.reply(build.short))
             Button { if open { model.unfolded.remove(index) } else { model.unfolded.insert(index) } } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold)).rotationEffect(.degrees(open ? 90 : 0))
@@ -185,8 +196,11 @@ struct AssistantCard: View {
             .buttonStyle(.plain)
             .accessibilityLabel(open ? "Hide Details" : "Details")
             if open {
-                Text(AssistantCard.markdown(details)).font(Look.font(.voice, size: 12).ui).lineSpacing(1.5).foregroundStyle(Look.Token.ink2.ui)
-                    .padding(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 50))
+                ForEach(Array(build.steps), id: \.self) { line(rows[$0]) }
+                if let rest = build.rest {
+                    Text(AssistantCard.markdown(rest)).font(Look.font(.voice, size: 12).ui).lineSpacing(1.5).foregroundStyle(Look.Token.ink2.ui)
+                        .padding(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 50))
+                }
             }
         }
     }

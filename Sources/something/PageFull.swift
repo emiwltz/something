@@ -15,7 +15,7 @@ extension Shell {
 
     /// Puts the page in Page Full Screen (`on`) or back, only while a space is open; from the Mac's full screen, once
     /// the window has left it. Info closes, the sidebar steps aside and comes back as it was, the toolbar and the lights
-    /// go, and a toast says how to leave.
+    /// go, and a hint at the top says how to leave.
     func pageFullScreen(_ on: Bool) {
         pageAfterFull = false
         guard on != pageFull else { return }
@@ -41,13 +41,25 @@ extension Shell {
         glass.discreet = on
         toolbar(!on)
         let button = controls[Shell.full] as? ToolButton
-        button?.pressed = on
+        // Never drawn pressed, as the mockup's: its tooltip and label say how to leave.
         button?.toolTip = on ? "Exit Page Full Screen (esc)" : Keys.tooltip("pagefull", "Page Full Screen")
         button?.setAccessibilityLabel(on ? "Exit Page Full Screen" : "Page Full Screen")
-        if on {
-            toast("Page Full Screen · esc to leave · \(Keys.shown("ask")) for your assistant", quiet: true)
-        } else { fit() }
+        layer.subviews.filter { $0 is NSHostingView<PageFullHint> }.forEach { $0.removeFromSuperview() }
+        if on { hint() } else { fit() }
         reveals()
+    }
+
+    /// The hint of its first moments, at the page's top centre, 14 points down, gone after 2.6 s; VoiceOver reads it.
+    private func hint() {
+        let ask = Keys.shown("ask"), hint = NSHostingView(rootView: PageFullHint(ask: ask))
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        layer.hold(hint)
+        NSLayoutConstraint.activate([hint.topAnchor.constraint(equalTo: center.topAnchor, constant: 14), hint.centerXAnchor.constraint(equalTo: center.centerXAnchor)])
+        layer.announce("Page Full Screen · esc to leave · \(ask) assistant")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) { [weak hint, motion = library.preferences.motion] in
+            guard let hint else { return }
+            Look.animate(Look.duration(0.5, Look.motion(motion)), Look.douce, { hint.moving.alphaValue = 0 }, done: { hint.removeFromSuperview() })
+        }
     }
 
     /// Shows the toolbar and the lights (`shown`) or hides them; in Page Full Screen the top edge then holds the
@@ -121,14 +133,31 @@ extension Shell {
 
 /// A strip at an edge of the page that brings something back: the pointer resting on it for `delay`, or a click, calls
 /// `came`; leaving it for `leave` calls `went`. Empty, it lets every click but its own through; `filled`, it is the
-/// band behind the toolbar brought back over the page, the window's background and its lower edge.
+/// band behind the toolbar brought back over the page, the window's background, its lower edge and a soft shadow.
 final class Reveal: NSView {
     let delay: TimeInterval, leave: TimeInterval
     var came: () -> Void = {}, went: () -> Void = {}
     var height: NSLayoutConstraint?
     /// Whether a click on the empty strip is its own: the left edge's; the top edge lets every click through.
     let clicks: Bool
-    var filled = false { didSet { needsDisplay = true } }
+    var filled = false {
+        didSet {
+            needsDisplay = true
+            // The band brought back lies over the page with a soft shadow under it (the mockup's 0 12 30 -16).
+            wantsLayer = true
+            layer?.masksToBounds = false
+            layer?.shadowColor = NSColor.black.cgColor
+            layer?.shadowRadius = 15
+            layer?.shadowOffset = CGSize(width: 0, height: -12)
+            layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
+            layer?.shadowOpacity = filled ? 0.35 : 0
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
+    }
     private var timer: Timer?
 
     init(delay: TimeInterval, leave: TimeInterval = 0, clicks: Bool) {
@@ -169,4 +198,32 @@ final class Reveal: NSView {
 
     /// The band takes nothing: the toolbar over it has the clicks. The strip at the left edge takes its click.
     override func hitTest(_ point: NSPoint) -> NSView? { filled || !clicks ? nil : super.hitTest(point) }
+}
+
+/// Page Full Screen's hint, as the mockup's: a dark pill, its keys in caps.
+struct PageFullHint: View {
+    let ask: String
+
+    var body: some View {
+        let dot = Circle().frame(width: 3, height: 3).opacity(0.45)
+        HStack(spacing: 7) {
+            Text("Page Full Screen").font(Look.font(.ui, size: 12, weight: .semibold).ui)
+            dot
+            key("esc")
+            Text("to leave").opacity(0.72)
+            dot
+            key(ask)
+            Text("assistant").opacity(0.72)
+        }
+        .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.bg.ui)
+        .padding(.horizontal, 13).frame(height: 32)
+        .background(Capsule().fill(Look.Token.ink.ui.opacity(0.84)))
+        .fixedSize()
+        .accessibilityHidden(true)
+    }
+
+    private func key(_ word: String) -> some View {
+        Text(word).font(Look.font(.ui, size: 11, weight: .medium).ui).padding(.horizontal, 6).padding(.vertical, 3)
+            .background(Look.Token.bg.ui.opacity(0.18), in: RoundedRectangle(cornerRadius: 5))
+    }
 }

@@ -173,7 +173,7 @@ class ScrimCard: NSView {
 }
 
 /// The sidebar laid over the space at the window's left edge, full height, where full screen leaves no column for it:
-/// the mockup's .wn-sideov, its float shadow and ring, no scrim. It arrives from the edge, takes the focus for ↑ and ↓,
+/// the mockup's .wn-sideov, its float shadow and ring, no scrim; floating, frosted glass with the page seen through. It arrives from the edge, takes the focus for ↑ and ↓,
 /// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it. Floating (PageFull.swift), it stands
 /// `inset` points inside the window's edges with rounded corners and a pin at its top, and leaves soon after the
 /// pointer does, unless a field in it is being edited.
@@ -191,7 +191,9 @@ final class SidebarOver: ScrimCard {
     /// the rail), its first row just under them. `pin`, when given, makes it the floating sidebar, its head 40 points
     /// high holding the pin.
     init(_ list: SidebarView, under: CGFloat = 0, inset: CGFloat = 0, pin: (() -> Void)? = nil) {
-        let host = NSHostingView(rootView: list.padding(.top, pin == nil ? max(52 - under, 8) : 40).background(Look.Token.side.ui))
+        var list = list
+        list.glass = pin != nil
+        let host = NSHostingView(rootView: list.padding(.top, pin == nil ? max(52 - under, 8) : 40).background(Look.Token.side.ui.opacity(list.glass ? 0.76 : 1)))
         (host.safeAreaRegions, host.sizingOptions) = ([], [])
         (self.host, floats) = (host, pin != nil)
         // The mockup's floating panel: 14-point corners.
@@ -205,6 +207,15 @@ final class SidebarOver: ScrimCard {
             host.wantsLayer = true
             host.layer?.cornerRadius = Look.card + 4
             host.layer?.masksToBounds = true
+            // The mockup's frosted glass: the page blurred behind the panel, the sidebar's colour at 76 % over it.
+            let blur = NSVisualEffectView()
+            (blur.material, blur.blendingMode, blur.state) = (.underWindowBackground, .withinWindow, .active)
+            (blur.wantsLayer, blur.translatesAutoresizingMaskIntoConstraints) = (true, false)
+            blur.layer?.cornerRadius = Look.card + 4
+            blur.layer?.masksToBounds = true
+            addSubview(blur, positioned: .below, relativeTo: host)
+            NSLayoutConstraint.activate([blur.leadingAnchor.constraint(equalTo: host.leadingAnchor), blur.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+                                         blur.topAnchor.constraint(equalTo: host.topAnchor), blur.bottomAnchor.constraint(equalTo: host.bottomAnchor)])
         }
         guard let pin else { return }
         for (name, open) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
@@ -280,6 +291,6 @@ final class SidebarOver: ScrimCard {
 
     /// No scrim: the space stays as it is beside the sidebar, which casts the float shadow.
     override func draw(_ dirtyRect: NSRect) {
-        Look.drawFloat(card.frame, radius: floats ? Look.card + 4 : 0, fill: .side, ring: true, appearance: effectiveAppearance)
+        Look.drawFloat(card.frame, radius: floats ? Look.card + 4 : 0, fill: .side, ring: true, appearance: effectiveAppearance, hollow: floats)
     }
 }

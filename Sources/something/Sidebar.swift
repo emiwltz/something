@@ -233,6 +233,8 @@ struct SidebarView: View {
     /// Whether this is the window's column, which turns into the rail in a narrow window; the sidebar laid over the
     /// space is never one.
     var column = true
+    /// Whether it is the floating sidebar's glass: its colour at 76 % over the blur behind it (SidebarOver).
+    var glass = false
 
     var state: SidebarState { library.sidebar }
     /// What the list says while there is no space, and no group header shows: the center invites to make one.
@@ -298,33 +300,34 @@ struct SidebarView: View {
         // A right click or "…" opens a menu over the row under the pointer; SwiftUI says neither, the menu's tracking does.
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in state.menuOpened() }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in state.menued = nil }
-        // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through.
-        .background(Look.Token.side.ui.ignoresSafeArea())
+        // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through; the floating one is glass.
+        .background(Look.Token.side.ui.opacity(glass ? 0.76 : 1).ignoresSafeArea())
     }
 
     /// The groups and their rows, or, with no space at all, only the words that say where they will be.
     @ViewBuilder private var list: some View {
-        // The builds whose space has no file yet, first.
+        // The builds whose space has no file yet: first among the spaces, under Needs You.
         let pending = assistant.builds.filter { build in assistant.space(of: build).map { library.entry($0) == nil } ?? true }
-        if !pending.isEmpty {
-            VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0) } }.padding(.bottom, library.entries.isEmpty ? 0 : 8)
-        }
+        let builds = VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0) } }
         if library.entries.isEmpty {
             if pending.isEmpty {
                 Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
                     .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
-            }
+            } else { builds }
         } else {
             let sections = library.sections()
             VStack(alignment: .leading, spacing: 8) {
                 needs
+                if !pending.isEmpty { builds }
                 ForEach(sections, id: \.group) { section in
                     VStack(alignment: .leading, spacing: 1) {
                         if let group = section.group {
                             header(group, count: section.entries.count)
                         }
                         if section.group.map(library.folded) != true {
-                            ForEach(section.entries) { space($0) }
+                            // A space being built first in its group, as the mockup's.
+                            let first = section.entries.filter { assistant.build(writing: $0.id) != nil }
+                            ForEach(first + section.entries.filter { assistant.build(writing: $0.id) == nil }) { space($0) }
                             if section.entries.isEmpty {
                                 Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
                                     .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8))

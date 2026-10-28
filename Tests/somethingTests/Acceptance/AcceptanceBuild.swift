@@ -414,10 +414,10 @@ struct AcceptanceBuild {
             let side = await Self.read(shell.split.splitViewItems[0].viewController.view) { $0.contains("Who is waiting for me, building, 50 %") }
             #expect(side.contains("Who is waiting for me, building, 50 %"), "\(side)")
         }
-        // j3-4-stopped: Stop mid-Write leaves the ladder saying what stays on disk, the sentence back in the field, and
-        // its row gone.
+        // j3-4-stopped: Stop mid-Write leaves the ladder saying what stays on disk, the sentence back in the field with the
+        // level it was built with, and its row gone.
         model.stop()
-        #expect(!model.building && model.builds.isEmpty && model.draft == "Who is waiting for me" && model.ladder?.steps.map(\.mark) == [.done, .off, .off])
+        #expect(!model.building && model.builds.isEmpty && model.draft == "Who is waiting for me" && model.level == .watch && model.ladder?.steps.map(\.mark) == [.done, .off, .off])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "j3-4-stopped" + suffix, root: stage.home.root)
             let says = { (words: [String]) in
@@ -544,10 +544,11 @@ struct AcceptanceBuild {
         #expect(await wait(until: { room.web.url != nil }), "\(String(describing: room.web.url))")
         let grant = try #require(try AppFile.read(stage.home.places.grants).spaces[name])
         #expect(ask.questions.isEmpty && grant.level == .watch && room.granted.rights == ["state", "store"] && library.selection == .space(name))
-        // The card, open on its conversation: the sentence, the build's tool lines, the reply's first paragraph, Details.
+        // The card, open on its conversation: the sentence, what was made, the reply's first paragraph, Details folding the steps.
         #expect(model.open && model.threadShown && model.session.space == name && model.cardShown)
         let at = try #require(model.rows.lastIndex { $0.reply != nil })
-        let folded = try #require(AssistantModel.folded(model.rows, at: at))
+        let folded = try #require(AssistantModel.built(model.rows, at: at, ended: !model.working))
+        #expect(folded.made == "Made waiting-room.html · checked, 0 errors" && folded.steps.lowerBound > 0)
         #expect(folded.short == "Waiting room is ready. It shows who waits for you, oldest first; try answering Amp, then reopen it.")
         #expect(folded.rest == "Checked twice: the first check found 2 problems, both fixed.")
         #expect(model.rows.contains(.mine(caption: "on the blank page", text: "Who is waiting for me")))
@@ -632,7 +633,7 @@ struct AcceptanceBuild {
         <!doctype html><html><head><meta charset="utf-8"><title>Waiting room</title>
         <script type="application/json" id="something">{"contract": 1, "title": "Waiting room", "rights": ["state", "store"]}</script><style>
         body{margin:0;padding:34px 46px;background:#F4F4F1;color:#121316;font:13.5px -apple-system,sans-serif}
-        @media (prefers-color-scheme:dark){body{background:#15171C;color:#F1F1EE}.w{background:#1F2126!important}button{background:rgba(241,241,238,.08)!important}}
+        @media (prefers-color-scheme:dark){body{background:#15171C;color:#F1F1EE}.w{background:#1F2126!important}button{background:rgba(241,241,238,.08)!important}span,.lead{color:#B4B6BC!important}.none,.age small{color:#9A9CA2!important}}
         h2{font:600 31px/1.1 Georgia,serif;letter-spacing:-.025em;margin:0}
         .lead{color:#5C5E66;margin:8px 0 22px}
         .w{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;background:#fff;border-radius:10px;

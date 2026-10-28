@@ -919,8 +919,8 @@ struct AcceptanceShell {
         shell.window.layoutIfNeeded()
         #expect(shell.pageFull && side.isCollapsed && !shell.infoShown && shell.window.toolbar?.isVisible == false && lights() == [true, true, true])
         #expect(top() == height && view.web.frame.width == shell.window.frame.width, "the page fills the window")
-        #expect(button.pressed && button.toolTip == "Exit Page Full Screen (esc)" && button.accessibilityLabel() == "Exit Page Full Screen")
-        #expect(said == ["Page Full Screen · esc to leave · ⌘K for your assistant"], "\(said)")
+        #expect(!button.pressed && button.toolTip == "Exit Page Full Screen (esc)" && button.accessibilityLabel() == "Exit Page Full Screen")
+        #expect(said == ["Page Full Screen · esc to leave · ⌘K assistant"] && shell.layer.subviews.contains { $0 is NSHostingView<PageFullHint> }, "\(said)")
         shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         // The sticker, discreet: smaller, toward the window's corner, faded until the pointer comes.
         let glass = shell.glass, sticker = glass.sticker
