@@ -67,7 +67,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var pageFull = false, pageAfterFull = false
     /// The strips at the center's top and left edges that bring back the toolbar in Page Full Screen and the floating
     /// sidebar (PageFull.swift); the toolbar's height, measured while it shows.
-    let topEdge = Reveal(delay: 0, leave: 0.6), leftEdge = Reveal(delay: 0.2)
+    let topEdge = Reveal(delay: 0, leave: 0.6, clicks: false), leftEdge = Reveal(delay: 0.2, clicks: true)
     var bar: CGFloat = 52
     /// The watch on the sidebar column's collapse, which makes it float or not.
     var collapse: NSKeyValueObservation?
@@ -293,12 +293,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             _ = SidebarOver.close(in: layer)
             return false
         }
-        let under = full ? 0 : window.frame.height - window.contentLayoutRect.maxY
-        // The column's own eyes, so that both lists always say the same.
-        guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return true }
-        _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false), under: under)
-        }
+        layOver(under: full ? 0 : window.frame.height - window.contentLayoutRect.maxY, floating: false)
         return true
     }
 
@@ -572,7 +567,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             assistant.escape()
             return true
         }
-        // Page Full Screen is under everything else.
+        // Page Full Screen is under everything else, and an input method's Esc ends its composition, not the page's.
+        if let typing = window.firstResponder as? NSTextInputClient, typing.hasMarkedText() { return false }
         guard pageFull else { return false }
         pageFullScreen(false)
         return true

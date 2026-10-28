@@ -831,6 +831,12 @@ struct AcceptanceShell {
                                                                        windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0,
                                                                        clickCount: 1, pressure: 1)))
         #expect(over() != nil, "a click on the edge, at once")
+        // A row's menu open keeps it, past the leaving delay, until the menu closes.
+        try #require(over()).mouseExited(with: try Self.pointer(false, laid))
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: NSMenu())
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(over() != nil, "a menu is open")
+        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: NSMenu())
         #expect(shell.escape(try Self.escape(shell)) && over() == nil, "Esc")
         // Shown again, the column has no edge.
         side.isCollapsed = false
@@ -945,6 +951,15 @@ struct AcceptanceShell {
         #expect(laid.floats && Self.inWindow(laid, laid.card.frame).minY == 8)
         shell.split.toggleSidebar(nil)
         #expect(SidebarOver.shown(in: shell.layer) == nil)
+        // An input method's Esc ends its composition, not Page Full Screen.
+        let typing = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
+        shell.center.addSubview(typing)
+        shell.window.makeFirstResponder(typing)
+        typing.setMarkedText("か", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        let composing = try Self.escape(shell)
+        #expect(typing.hasMarkedText() && !shell.escape(composing) && shell.pageFull, "composing")
+        typing.unmarkText()
+        typing.removeFromSuperview()
         // Esc leaves: the sidebar and the toolbar back, the page under the toolbar, the sticker as it was.
         #expect(shell.escape(try Self.escape(shell)))
         shell.window.layoutIfNeeded()

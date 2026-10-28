@@ -183,6 +183,8 @@ final class SidebarOver: ScrimCard {
     /// Whether it leaves with the pointer: the floating sidebar's.
     let floats: Bool
     private var leaving: Timer?
+    /// Whether one of the app's menus is open (a row's), and what tells it.
+    private var menuOpen = false, menus: [NSObjectProtocol] = []
 
     /// Lays out `list`, the window's own sidebar list: its first row 49 points down, under the 50-point band of the
     /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar beside
@@ -205,6 +207,11 @@ final class SidebarOver: ScrimCard {
             host.layer?.masksToBounds = true
         }
         guard let pin else { return }
+        for (name, open) in [(NSMenu.didBeginTrackingNotification, true), (NSMenu.didEndTrackingNotification, false)] {
+            menus.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.menuOpen = open }
+            })
+        }
         let image = NSImage(systemSymbolName: "pin", accessibilityDescription: "Keep Sidebar") ?? NSImage()
         let button = Pin(image: image, target: nil, action: nil)
         (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, Keys.tooltip("sidebar", "Keep Sidebar"))
@@ -234,10 +241,11 @@ final class SidebarOver: ScrimCard {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        // From the window's edge, where the pointer brought it, to its right side: it leaves once the pointer leaves that.
-        let room = NSRect(x: 0, y: card.frame.minY, width: card.frame.maxX, height: card.frame.height)
         if floats { addTrackingArea(NSTrackingArea(rect: room, options: [.mouseEnteredAndExited, .activeInKeyWindow, .assumeInside], owner: self)) }
     }
+
+    /// From the window's edge, where the pointer brought it, to its right side: it leaves once the pointer leaves that.
+    private var room: NSRect { NSRect(x: 0, y: card.frame.minY, width: card.frame.maxX, height: card.frame.height) }
 
     override func layout() {
         super.layout()
@@ -246,16 +254,26 @@ final class SidebarOver: ScrimCard {
 
     override func mouseEntered(with event: NSEvent) { leaving?.invalidate() }
     /// The floating sidebar leaves a third of a second after the pointer, unless a name in it is being edited.
-    override func mouseExited(with event: NSEvent) {
+    override func mouseExited(with event: NSEvent) { leave(menu: false) }
+
+    /// Closes after a third of a second; while a menu is open (a row's) it waits for the menu, then stays if the
+    /// pointer is back over it (`menu`). The timer also runs in the menu's tracking mode, to see it.
+    private func leave(menu: Bool) {
         leaving?.invalidate()
-        leaving = Timer.scheduledTimer(withTimeInterval: 0.32, repeats: false) { [weak self] _ in
-            guard let self, superview != nil else { return }
-            if let editing = window?.firstResponder as? NSView, editing is NSText, editing.isDescendant(of: self) { return }
+        let timer = Timer(timeInterval: 0.32, repeats: false) { [weak self] _ in
+            guard let self, superview != nil, let window else { return }
+            if let editing = window.firstResponder as? NSView, editing is NSText, editing.isDescendant(of: self) { return }
+            if menuOpen { return leave(menu: true) }
+            if menu, room.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)) { return }
             close()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        leaving = timer
     }
 
     override func removeFromSuperview() {
+        menus.forEach(NotificationCenter.default.removeObserver)
+        menus = []
         leaving?.invalidate()
         super.removeFromSuperview()
     }

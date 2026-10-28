@@ -17,8 +17,8 @@ extension Shell {
     /// the window has left it. Info closes, the sidebar steps aside and comes back as it was, the toolbar and the lights
     /// go, and a toast says how to leave.
     func pageFullScreen(_ on: Bool) {
-        guard on != pageFull else { return }
         pageAfterFull = false
+        guard on != pageFull else { return }
         guard !on || space != nil else { return }
         if on, full {
             pageAfterFull = true
@@ -62,17 +62,22 @@ extension Shell {
     /// Lays the floating sidebar over the page from the left edge, its pin at the top; under the toolbar, or from the
     /// window's top in Page Full Screen.
     func float() {
-        guard floats, SidebarOver.shown(in: layer) == nil,
-              let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return }
-        let under = pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY
+        guard floats, SidebarOver.shown(in: layer) == nil else { return }
+        layOver(under: pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY, floating: true)
+    }
+
+    /// Lays the window's sidebar list over the page `under` points from the top, or takes it away; `floating`, it is
+    /// the floating sidebar, inset with its pin. The column's own eyes, so that both lists always say the same.
+    func layOver(under: CGFloat, floating: Bool) {
+        guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return }
         _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false), under: under,
-                        inset: 8, pin: { [weak self] in self?.pin() })
+            let list = SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false)
+            return floating ? SidebarOver(list, under: under, inset: 8, pin: { [weak self] in self?.keepSidebar() }) : SidebarOver(list, under: under)
         }
     }
 
     /// The pin: the floating sidebar becomes a column again, Page Full Screen ending for it.
-    func pin() {
+    func keepSidebar() {
         _ = SidebarOver.close(in: layer)
         sideHidden = false
         if pageFull { return pageFullScreen(false) }
@@ -121,11 +126,13 @@ final class Reveal: NSView {
     let delay: TimeInterval, leave: TimeInterval
     var came: () -> Void = {}, went: () -> Void = {}
     var height: NSLayoutConstraint?
+    /// Whether a click on the empty strip is its own: the left edge's; the top edge lets every click through.
+    let clicks: Bool
     var filled = false { didSet { needsDisplay = true } }
     private var timer: Timer?
 
-    init(delay: TimeInterval, leave: TimeInterval = 0) {
-        (self.delay, self.leave) = (delay, leave)
+    init(delay: TimeInterval, leave: TimeInterval = 0, clicks: Bool) {
+        (self.delay, self.leave, self.clicks) = (delay, leave, clicks)
         super.init(frame: .zero)
         setAccessibilityElement(false)
     }
@@ -161,5 +168,5 @@ final class Reveal: NSView {
     }
 
     /// The band takes nothing: the toolbar over it has the clicks. The strip at the left edge takes its click.
-    override func hitTest(_ point: NSPoint) -> NSView? { filled || height != nil ? nil : super.hitTest(point) }
+    override func hitTest(_ point: NSPoint) -> NSView? { filled || !clicks ? nil : super.hitTest(point) }
 }
