@@ -439,6 +439,36 @@ struct AcceptanceCommand {
             #expect(Mockup.lines(view).contains("# Interface Size · Default"))
             #expect(["bigger", "smaller", "defaultSize"].map { Keys.enabled($0, Keys.Situation(size: .large)) } == [true, true, true])
         }
+        // The header itself, read past Mockup.lines (which writes it at Default), under the lock that sizes the app.
+        try await Stage.alone {
+            defer { Look.scale.size = .standard }
+            let bar = MenuBar(builders: nil)
+            func header() -> String? { bar.submenu("View")?.items.first { $0.identifier?.rawValue == "header.size" }?.title }
+            for size in [Look.Size.large, .larger] {
+                Look.scale.size = size
+                bar.refresh()
+                #expect(header() == "Interface Size · " + ["Large", "Larger"][size == .large ? 0 : 1])
+            }
+        }
+    }
+
+    /// ⌘+ ⌘− ⌘0 step the size the person keeps, clamped at Larger, and Look with it, and say it in a toast.
+    @Test("The size keys step, clamp and say the size") func sizeKeys() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        try await Stage.alone {
+            defer { (Look.scale.size, library.preferences.size) = (.standard, .standard) }
+            func now() -> [Look.Size] { [library.preferences.size, Look.scale.size] }
+            shell.resize(by: 1)
+            let toast = shell.resize(by: 1)
+            #expect(now() == [.larger, .larger] && toast.words == "Interface: Larger · ⌘+ bigger · ⌘− smaller · ⌘0 default")
+            shell.resize(by: 1)
+            #expect(now() == [.larger, .larger], "Larger is the largest")
+            #expect(shell.resize(by: -1).words == "Interface: Large · ⌘+ bigger · ⌘− smaller · ⌘0 default" && now() == [.large, .large])
+            shell.resize(by: nil)
+            #expect(now() == [.standard, .standard])
+        }
     }
 
     /// 6.3, the same window at Larger (124 %): the sidebar's rows and width, Info's width, the toolbar's name and the

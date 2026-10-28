@@ -276,6 +276,10 @@ enum Mockup {
         let copy = try Self.event("c", .command, keyCode: 8, window: window.windowNumber)
         #expect(bar.intercept(copy, window: window) === copy)
         #expect(acted.count == 3)
+        // ⌘= (Bigger) and ⌘0 work from any of the app's windows, Settings included.
+        #expect(bar.intercept(try Self.event("=", .command, keyCode: 24, window: other.windowNumber), window: window) == nil)
+        #expect(bar.intercept(try Self.event("0", .command, keyCode: 29, window: other.windowNumber), window: window) == nil)
+        #expect(acted.suffix(2) == ["bigger", "defaultSize"])
     }
 
     /// The ⌘/ sheet: over all of the window layer, every line of Keys once in its two columns, the focus taken from

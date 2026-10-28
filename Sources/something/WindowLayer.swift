@@ -178,7 +178,8 @@ class ScrimCard: NSView {
 /// frosted glass with the page seen through, 8 points inside the window's edges with rounded corners and a pin at its
 /// top, and leaves soon after the pointer does, unless a field in it is being edited.
 final class SidebarOver: ScrimCard {
-    static let width: CGFloat = 236
+    /// The mockup's 236 points, grown with the interface size as the pinned sidebar is.
+    static var width: CGFloat { 236 * Look.scale.size.factor }
     private let host: NSView
     /// Whether it leaves with the pointer: the floating sidebar's.
     let floats: Bool

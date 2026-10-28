@@ -330,10 +330,13 @@ final class MenuBar: NSObject, NSMenuDelegate {
     }
 
     /// The key monitor's work: a key something claims, typed in `window`, acts through its menu item and never reaches
-    /// the page (nil); any other key, or one typed in another window, is returned to go on its way. The item is found
-    /// by the command, not by its key equivalent, so a key typed with ⇧ on a layout that needs it still finds it.
+    /// the page (nil); any other key, or one typed in another window, is returned to go on its way, but the size keys,
+    /// which work from any of the app's windows (⌘= has no menu item of its own). The item is found by the command, not
+    /// by its key equivalent, so a key typed with ⇧ on a layout that needs it still finds it.
     func intercept(_ event: NSEvent, window: NSWindow?) -> NSEvent? {
-        guard let window, event.window === window, let claim = Keys.claim(event) else { return event }
+        guard let window, let claim = Keys.claim(event) else { return event }
+        guard event.window === window || (event.window != nil && [.command("bigger"), .command("smaller"), .command("defaultSize")].contains(claim))
+        else { return event }
         refresh()
         let items = menu.items.compactMap(\.submenu).flatMap(\.items)
         switch claim {

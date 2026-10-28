@@ -358,22 +358,26 @@ struct SettingsSection: Identifiable {
     }
 }
 
+extension Shell {
+    /// The size `step` sizes from the person's, clamped at the ends, or Default for nil: kept, followed by Look, and
+    /// said in the toast it returns.
+    @discardableResult func resize(by step: Int?) -> Toast {
+        let sizes = Look.Size.allCases, now = sizes.firstIndex(of: library.preferences.size) ?? 0
+        let size = step.map { sizes[max(0, min(sizes.count - 1, now + $0))] } ?? .standard
+        // The views that read Look follow it, and Shell the rest.
+        (library.preferences.size, Look.scale.size) = (size, size)
+        return toast("Interface: \(size.label) · ⌘+ bigger · ⌘− smaller · ⌘0 default", quiet: true)
+    }
+}
+
 extension App {
     /// Settings… (⌘,): the window, made the first time, at `tab` when given, else where it was left.
     @MainActor @objc func showSettings(_ sender: Any?) { settings(nil) }
 
     /// View › Make Interface Bigger (⌘+), Smaller (⌘−) and Default Size (⌘0): the next size, said in a toast.
-    @MainActor @objc func biggerInterface(_ sender: Any?) { resize(by: 1) }
-    @MainActor @objc func smallerInterface(_ sender: Any?) { resize(by: -1) }
-    @MainActor @objc func defaultInterfaceSize(_ sender: Any?) { resize(by: nil) }
-
-    @MainActor private func resize(by step: Int?) {
-        let sizes = Look.Size.allCases, now = sizes.firstIndex(of: library.preferences.size) ?? 0
-        let size = step.map { sizes[max(0, min(sizes.count - 1, now + $0))] } ?? .standard
-        // The views that read Look follow it, and Shell the rest.
-        (library.preferences.size, Look.scale.size) = (size, size)
-        _ = shell.toast("Interface: \(size.label) · ⌘+ bigger · ⌘− smaller · ⌘0 default", quiet: true)
-    }
+    @MainActor @objc func biggerInterface(_ sender: Any?) { shell.resize(by: 1) }
+    @MainActor @objc func smallerInterface(_ sender: Any?) { shell.resize(by: -1) }
+    @MainActor @objc func defaultInterfaceSize(_ sender: Any?) { shell.resize(by: nil) }
 
     @MainActor func settings(_ tab: SettingsTab?) {
         Settings.open(tab) {

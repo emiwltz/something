@@ -186,6 +186,15 @@ struct GalleryTests {
                                           Question(header: "Scope", text: "Which folders should it cover?",
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
         try draw(try #require(panel(question).contentView), "question-panel" + suffix, fixture)
+        // At Larger, the panel's fixed frame holds type 24 % larger: every word read at Default is read there too.
+        let standard = try words(try #require(panel(permission).contentView))
+        Look.scale.size = .larger
+        defer { Look.scale.size = .standard }
+        let larger = try #require(panel(permission).contentView)
+        let cut = standard.subtracting(try words(larger))
+        #expect(cut.isEmpty, "the panel at Larger loses \(cut)")
+        try draw(larger, "permission-panel-larger" + suffix, fixture)
+        Look.scale.size = .standard
 
         try await drawAssistant(suffix: suffix, fixture)
         try await drawOnboarding(suffix: suffix, fixture)
@@ -246,6 +255,13 @@ struct GalleryTests {
         try await draw(model, "assistant-ready" + suffix, fixture)
         model.threadShown = true
         try await draw(model, "assistant-conversation" + suffix, height: 748, fixture)
+        // At Larger, the card's fixed frames (its head, chips and composer) hold type 24 % larger, uncut; the thread
+        // scrolls, so its first lines may be out of sight.
+        Look.scale.size = .larger
+        let larger = try await draw(model, "assistant-conversation-larger" + suffix, height: 748, fixture)
+        Look.scale.size = .standard
+        let fixed: Set = ["agents", "assistant", "claude", "code", "haiku", "point", "ask", "for", "change"]
+        #expect(fixed.isSubset(of: larger), "the card at Larger loses \(fixed.subtracting(larger))")
         // As narrow as the center of the smallest window with the sidebar and Info open.
         try await draw(model, "assistant-conversation-narrow" + suffix, width: 340, height: 560, fixture)
         model.threadShown = false
@@ -366,7 +382,9 @@ struct GalleryTests {
     }
 
     /// The assistant alone at the bottom of a center `width` by `height` points, on the glass as the window holds it.
-    func draw(_ model: AssistantModel, _ name: String, width: CGFloat = 760, height: CGFloat = 150, _ fixture: Home) async throws {
+    /// Returns the words Vision reads in it.
+    @discardableResult
+    func draw(_ model: AssistantModel, _ name: String, width: CGFloat = 760, height: CGFloat = 150, _ fixture: Home) async throws -> Set<String> {
         let center = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         let offscreen = Offscreen(center)
         offscreen.window.setContentSize(NSSize(width: width, height: height))
@@ -374,7 +392,18 @@ struct GalleryTests {
         let glass = Glass(over: center, model: model)
         await wait(1)
         try draw(center, name, fixture)
-        withExtendedLifetime((offscreen, glass)) {}
+        defer { withExtendedLifetime((offscreen, glass)) {} }
+        return try words(center)
+    }
+
+    /// The words Vision reads in `view` drawn, without their punctuation: a word cut by a fixed frame is missing.
+    func words(_ view: NSView) throws -> Set<String> {
+        if view.frame.isEmpty { view.frame.size = view.fittingSize }
+        view.layoutSubtreeIfNeeded()
+        let rep = try Picture.bitmap(view.bounds.size)
+        view.cacheDisplay(in: view.bounds, to: rep)
+        let read = try Picture.text(rep).joined(separator: " ").lowercased()
+        return Set(read.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count > 2 })
     }
 
     /// The invented state, with agents started in a terminal as the readers show them: a Claude Code waiting for the
