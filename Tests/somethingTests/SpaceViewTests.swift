@@ -516,6 +516,26 @@ import WebKit
         #expect(ask.questions.count == 1 && third.granted.rights == ["state", "store", "send:codex", "launch:codex"])
     }
 
+    /// A grant answered right by right, before levels, asked again for a right declared since: the sheet starts from the
+    /// level its answers reached when that is above what the page needs.
+    @Test func anOlderGrantStartsFromItsLevel() async throws {
+        let home = Home(prefix: "something-window-"), ask = FakeAsk()
+        defer { home.remove() }
+        let before = #"{"contract": 1, "title": "Older", "rights": ["state", "send:codex", "launch:codex"]}"#
+        let space = try home.space("older", page(before, "<script>window.done = true</script>"))
+        var grant = Grant(declared: Asked(try #require(Declaration.read(space, home: home.places.home, kinds: Registry.app.kinds).declaration)),
+                          at: "2026-10-17T09:00:00Z")
+        grant.granted = ["state", "send:codex", "launch:codex"]
+        try Grants(home.places.grants).update { $0.spaces["older"] = grant }
+        try page(#"{"contract": 1, "title": "Older", "rights": ["state", "send:claude"]}"#, "<script>window.done = true</script>")
+            .write(to: space.location, atomically: true, encoding: .utf8)
+        let window = try await home.window(space, ask)
+        defer { window.close() }
+        window.open()
+        try await ready(window)
+        #expect(ask.questions.map(\.level) == [.run], "Run, which its answers reached, rather than Talk, which the page needs")
+    }
+
     /// Memory alone is never asked; a right above the level chosen stays refused, silently.
     @Test func aRightAboveTheLevelIsRefusedSilently() async throws {
         let home = Home(prefix: "something-window-"), ask = FakeAsk()

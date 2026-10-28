@@ -172,7 +172,7 @@ import SomethingCore
 
     /// Goes to `destination`, once: selecting where the window already is does nothing. A space is remembered for the
     /// next start. It opens just after: the sidebar calls this while it changes its selection, and opening may wait for
-    /// the rights sheet.
+    /// the level sheet.
     func select(_ destination: Destination) {
         guard destination != selection else { return }
         selection = destination
@@ -302,7 +302,7 @@ import SomethingCore
             relist()
             used(space.name)
             select(.space(space.name))
-            // Queued after the opening select asked for, which runs first and may wait for the rights sheet.
+            // Queued after the opening select asked for, which runs first and may wait for the level sheet.
             using = true
             DispatchQueue.main.async { [weak self] in self?.using = false }
         } catch {

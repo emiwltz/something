@@ -89,7 +89,7 @@ final class Arrival: NSView {
     }
 
     /// Opens `view` after `arrival` played, and then only if `isCurrent` still says it is the space shown, so the
-    /// rights sheet comes once the space is there; without an arrival, at once.
+    /// level sheet comes once the space is there; without an arrival, at once.
     static func open(_ view: SpaceView, after arrival: Arrival?, library: Library, motion: Look.Motion,
                      isCurrent: @escaping () -> Bool) {
         guard let arrival else { return view.open() }

@@ -1,7 +1,7 @@
 // What the app's windows say about a path and a journal line, as a newcomer reads them: a path with ~ for the home
 // folder, cut between two names when it is too long, never inside one; a journal line as one short sentence in local
 // time; a request's title, effect, age, place in the queue and who asks; what quitting ends. The words are made apart
-// from the views, so that tests read exactly what Info, the rights sheet and the request panel show.
+// from the views, so that tests read exactly what Info, the level sheet and the request panel show.
 import AppKit
 import SomethingAgents
 import SomethingCore

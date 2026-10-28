@@ -19,7 +19,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     let launches = Launches()
     lazy var library = Library(places: places, ask: ask, share: Resources.share)
     lazy var info = Info(places: places, ask: ask)
-    lazy var assistant = AssistantModel(engine: engine, places: places)
+    lazy var assistant = AssistantModel(engine: engine, places: places, launches: launches)
     lazy var shell = Shell(library: library, info: info, assistant: assistant, autosave: true)
     lazy var panels = Panels(source: engine)
     lazy var menuBar = MenuBar(builders: self)
@@ -252,7 +252,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             view.unkept = { [weak self] in self?.assistant.unkept = true }
             view.changed = { [weak self] in self?.changes.seen(name) }
             current = view
-            // Blank behind the rights sheet, which the first load may show before the page runs. A space just made
+            // Blank behind the level sheet, which the first load may show before the page runs. A space just made
             // arrives first, from what made it, and asks for its rights after.
             let arrival = Arrival.made(name, in: shell)
             shell.show(view)
@@ -405,6 +405,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             if self?.library.entry(entry.id) == nil {
                 self?.assistant.forget(entry.id)
                 self?.shell.forget(entry.id)
+                self?.launches.ids[entry.id] = nil
             }
         }
     }

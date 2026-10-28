@@ -170,7 +170,7 @@ import SomethingCore
     var ready: Library.Entry?
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
     var fromTemplate: String?
-    /// The spaces made while the person waited for one: their rights sheet says the agent made them.
+    /// The spaces made while the person waited for one: their level sheet says the agent made them.
     private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
@@ -181,9 +181,13 @@ import SomethingCore
     @ObservationIgnored private var beatTimer: Timer?
     @ObservationIgnored private(set) var beatAt: Date?
 
-    init(engine: Engine, places: Places) {
+    /// The agents each space launched, kept by the app: a space this build makes is new, whatever its name was before.
+    @ObservationIgnored let launches: Launches
+
+    init(engine: Engine, places: Places, launches: Launches = Launches()) {
         self.engine = engine
         self.places = places
+        self.launches = launches
         let kept = Preferences.at(places)
         preferred = kept.assistant
         askEverything = kept.askEverything
@@ -864,6 +868,9 @@ import SomethingCore
     /// Writes the level chosen on New Space as the grant of the space `name` it built: the choice is the consent, so
     /// its first opening asks nothing. A page that cannot be read yet is asked at its opening instead.
     private func consent(_ name: String, _ level: Grant.Level, folder: String?) {
+        // The name was free when the build began: agents kept under it were launched by a space since deleted, and
+        // the grant written here would hide that from the opening, which drops them only when it finds no grant.
+        launches.ids[name] = nil
         guard let space = Spaces(root: places.spaces).list().first(where: { $0.name == name }),
               let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
         try? Grants(places.grants).update {

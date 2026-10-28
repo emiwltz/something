@@ -27,9 +27,10 @@ extension Grant.Level {
             : says("agent|agents") ? .watch : .none
     }
 
-    /// The line something adds to the first message of a build, for the assistant to declare exactly these rights.
+    /// The line something adds to the first message of a build, for the assistant to declare exactly these rights. Run's
+    /// folder is always known by then: New Space sends only once it is chosen.
     func line(folder: String?, home: String) -> String {
-        "[something] With your agents: \(title)\(self == .run ? folder.map { ", in " + Words.path($0, home: home) } ?? ", in a folder still to choose" : "")."
+        "[something] With your agents: \(title)\(self == .run ? folder.map { ", in " + Words.path($0, home: home) } ?? "" : "")."
     }
 }
 

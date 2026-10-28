@@ -74,7 +74,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private var looking = false
     private var pushed: State?
     /// The declaration as the last load read it: the one the person was asked about. A switch in Info applies
-    /// new answers to it, never to a newer file that no rights sheet has shown yet.
+    /// new answers to it, never to a newer file that no level sheet has shown yet.
     private var reading: DeclarationReading?
     /// The frame that holds the space, once the app's page has asked to load it: pushes and `granted` go to it. The
     /// bridge and the link sheet answer the frame `isSpace` recognizes, which the navigation policy makes this same
@@ -82,7 +82,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     private(set) var frame: WKFrameInfo?
     /// One more at each load and at the close: a call answered late is refused when the page it came from is gone.
     private(set) var loads = 0
-    /// Whether the person's assistant made this space while they waited for it: the rights sheet says so.
+    /// Whether the person's assistant made this space while they waited for it: the level sheet says so.
     var made = false
     /// Where the person last scrolled the space's page to, and which page of the space it was, from something's own
     /// world; nil until they scroll. A reload goes back there.
@@ -370,12 +370,14 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// What the level sheet shows: the level in force, else the one the page needs; Run's folder in force, else the
     /// declared one when it is on this Mac; and the folders the Mac's agents work in.
     func question(_ declaration: Declaration, _ grant: Grant?) -> RightsQuestion {
+        // An older grant, answered right by right, starts from the level it reached, never below what the page needs.
+        let needed = Grant.Level.needed(by: declaration.rights)
         var found: String?
         var folder: ObjCBool = false
         if let path = declaration.folder.flatMap({ Declaration.expand($0, home: places.home) }),
            FileManager.default.fileExists(atPath: path, isDirectory: &folder), folder.boolValue { found = path }
         return RightsQuestion(space: declaration.title, description: declaration.description,
-                              level: grant?.level ?? Grant.Level.needed(by: declaration.rights), folder: grant?.folder ?? found,
+                              level: grant.map { max(Rights.level(of: $0), needed) } ?? needed, folder: grant?.folder ?? found,
                               folders: Levels.folders(engine.state), made: made, page: space.location.path)
     }
 

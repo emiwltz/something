@@ -358,9 +358,13 @@ import WebKit
             opened = model.appeared(library.entries, open: nil)
             if let opened { model.place = place("Garden notes", opened) }
         }
+        // A garden deleted earlier in this run launched an agent: the new garden is another space and never drives it.
+        model.launches.ids["garden"] = ["launched-by-the-deleted-garden"]
         model.place = .blank
         model.send("Make me a page for my garden notes.")
         #expect(await wait(until: { opened == "garden" }))
+        let grants = try AppFile.read(home.places.grants)
+        #expect(model.launches.ids["garden"] == nil && grants.spaces["garden"] != nil, "its grant written, the agents kept under its name are dropped")
         let builder = try #require(model.id)
         #expect(model.session.space == "garden" && model.rows.contains(.mine(caption: "on the blank page", text: "Make me a page for my garden notes.")))
         #expect(model.session(for: .blank).id == nil && model.session(for: .blank).rows.isEmpty, "New Space starts afresh")

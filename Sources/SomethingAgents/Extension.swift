@@ -35,9 +35,9 @@ public struct AgentDescriptor: Sendable {
     package var reader: (@Sendable (_ environment: [String: String]) -> any Reader)?
     /// How it builds spaces as the person's assistant; nil for a kind that cannot.
     public var builder: Builder?
-    /// Whether, launched, it acts without ever asking the person: the rights sheet and the assistant say so.
+    /// Whether, launched, it acts without ever asking the person: the level sheet and the assistant say so.
     public var neverAsks: Bool
-    /// Whether, launched as the person's own settings leave it by default, it acts without asking: the rights sheet
+    /// Whether, launched as the person's own settings leave it by default, it acts without asking: the level sheet
     /// and the assistant say so too, with "by default".
     public var asksNothingByDefault: Bool
     /// What its tools and requests do, by the name its driver gives them, for the permission panel's title.

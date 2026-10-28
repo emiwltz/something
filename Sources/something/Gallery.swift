@@ -61,7 +61,7 @@ struct Template: Identifiable {
     var category: Category { Self.table.first { $0.name == id }?.category ?? .play }
 
     /// The rights it asks for, every one, in one line: "Sees and writes to your agents", "Sees your agents ·
-    /// Remembers". The rights sheet asks for each when the copy first opens.
+    /// Remembers". The copy asks for its level at its first opening.
     var needs: String {
         let has = { (right: String) in rights.contains { Rights.covers([right], $0) } }
         let verbs = [("state", "sees"), ("send", "writes to"), ("launch", "starts")].filter { has($0.0) }.map(\.1)
