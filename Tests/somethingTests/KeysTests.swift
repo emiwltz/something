@@ -51,6 +51,8 @@ enum Mockup {
         var lines: [String] = []
         for item in menu.items {
             if item.isSeparatorItem { lines.append("---"); continue }
+            // The interface size is the whole process's, and 6-1 sets it while other suites run: its word is checked there.
+            if item.identifier?.rawValue == "header.size" { lines.append("# Interface Size · Default"); continue }
             if item.isSectionHeader { lines.append("# " + item.title); continue }
             let key = item.keyEquivalent.isEmpty ? "" : Keys.symbols(item.keyEquivalentModifierMask) + Keys.name(item.keyEquivalent)
             if item.identifier?.rawValue.hasPrefix("space:") == true, !spaces {
@@ -159,6 +161,11 @@ enum Mockup {
         #expect(Keys.enabled("sleep", none) && Keys.enabled("sleep", open) && Keys.enabled("askAll", none))
         #expect(Keys.enabled("stop", Keys.Situation(working: true)), "a build on the New Space page can be stopped")
         #expect(!Keys.enabled("showreq", open) && Keys.enabled("showreq", Keys.Situation(waiting: true)), "Show Request while one waits")
+        // The interface size: the largest greys Bigger, the default Smaller and Default Size (the mockup's 6.2).
+        #expect(Keys.enabled("bigger", none) && !Keys.enabled("smaller", none) && !Keys.enabled("defaultSize", none))
+        let larger = Keys.Situation(size: .larger)
+        #expect(!Keys.enabled("bigger", larger) && Keys.enabled("smaller", larger) && Keys.enabled("defaultSize", larger))
+        #expect(Keys.claim(try KeysTests.event("=", .command)) == .command("bigger"), "⌘= is ⌘+ without ⇧")
     }
 
     @Test func moveToTrashStepsAsideWhileTextIsEdited() throws {
@@ -203,10 +210,10 @@ enum Mockup {
         let kept: [(String, NSEvent.ModifierFlags)] = [("p", .command), ("k", .command), ("j", .command), ("i", .command), ("n", .command),
             (",", .command), ("/", .command), ("\\", .command), (".", .command), ("K", [.command, .shift]), ("T", [.command, .shift]),
             ("p", [.command, .option]), ("s", [.command, .option]), ("1", .command), ("9", .command), ("f", [.command, .control]),
-            ("s", [.command, .control]), ("r", .command)]
+            ("s", [.command, .control]), ("r", .command), ("+", [.command, .shift]), ("=", .command), ("-", .command), ("0", .command)]
         for (key, modifiers) in kept { #expect(Keys.claim(try Self.event(key, modifiers)) != nil, "\(Keys.symbols(modifiers))\(key)") }
         let left: [(String, NSEvent.ModifierFlags)] = [("z", .command), ("Z", [.command, .shift]), ("c", .command), ("v", .command),
-            ("a", .command), ("w", .command), ("0", .command), ("P", [.command, .shift]), ("p", []), ("1", [.command, .option])]
+            ("a", .command), ("w", .command), ("0", [.command, .option]), ("P", [.command, .shift]), ("p", []), ("1", [.command, .option])]
         for (key, modifiers) in left { #expect(Keys.claim(try Self.event(key, modifiers)) == nil, "\(Keys.symbols(modifiers))\(key)") }
         // The guide tells a page which keys it cannot keep: exactly those, no more, no fewer.
         let guide = try String(contentsOf: Home.share.appendingPathComponent("guide.md"), encoding: .utf8)
@@ -284,7 +291,7 @@ enum Mockup {
         #expect(window.makeFirstResponder(page) && KeysSheet.shown(in: layer) == nil && !KeysSheet.close(in: layer))
         let listed = ShortcutColumns.columns.flatMap { $0.flatMap(ShortcutColumns.lines) }.map(\.id)
         #expect(Set(listed) == Set(Keys.commands.filter { $0.area != nil }.map(\.id)) && Set(listed).count == listed.count, "every command once")
-        #expect(listed.count == 22 && ShortcutColumns.caps(Keys.shown("tpls")) == [.key("⇧"), .key("⌘"), .key("T")])
+        #expect(listed.count == 25 && ShortcutColumns.caps(Keys.shown("tpls")) == [.key("⇧"), .key("⌘"), .key("T")])
 
         func show() throws -> KeysSheet {
             let sheet = try #require(KeysSheet.toggle(in: layer, motion: .reduced))

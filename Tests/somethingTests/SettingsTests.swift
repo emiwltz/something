@@ -20,6 +20,7 @@ import Testing
         let effects = Effects()
         model.spaces = { [("brief", "Daily brief"), ("logbook", "Logbook")] }
         model.apply = { effects.applied.append(($0, $1)) }
+        model.resize = { effects.sized.append($0) }
         model.tour = { effects.tours += 1 }
         model.keyboard = { effects.keyboards += 1 }
         model.told = { effects.told.append($0) }
@@ -41,6 +42,7 @@ import Testing
         var applied: [(Preferences.Appearance, Look.Motion)] = [], tours = 0, keyboards = 0, told: [String] = []
         var chosen: [String] = [], asking: [Bool] = [], looks = 0, revealed: [URL] = []
         var confirms: [(Versions.Old, () -> Void)] = []
+        var sized: [Look.Size] = []
     }
 
     /// The values as the file would hold them, key by key.
@@ -57,7 +59,7 @@ import Testing
         (listed.model, listed.effort) = ([Option(value: "opus", label: "Opus 5.5")], [Option(value: "high", label: "High")])
         model.preferences.listed["claude"] = listed
         // The launcher switch writes no key: the disk says whether the launcher is there; the lock writes none.
-        let expected: [String: String?] = ["When something opens": "openAtStart", "Add something to Applications": nil,
+        let expected: [String: String?] = ["When something opens": "openAtStart", "Add something to Applications": nil, "Interface size": "size",
                         "Agent": "assistant", "Model": "model", "Effort": "effort", "Resume each space’s conversation": "resume",
                         "Put idle assistants to sleep after": "sleepAfter", "Keep at most": "awakeAtMost",
                         "Ask Before Every Change": "askEverything", "Requests always wait for your click": nil,
@@ -99,6 +101,7 @@ import Testing
         #expect(seen == Set(expected.keys).union(["Welcome"]))
         #expect(effects.tours == 1 && effects.revealed == [home.places.spaces])
         #expect(effects.applied.map(\.1) == [.reduced], "Motion applies at once")
+        #expect(effects.sized == [.large], "the interface size applies at once")
         #expect(effects.chosen == ["codex"] && effects.asking == [true], "the assistant takes the default agent and Ask Before Every Change")
         // Appearance, drawn apart from the rows, writes only its key too.
         let before = try Self.keys(model.preferences.values)
@@ -127,7 +130,7 @@ import Testing
         }
         // open:'last', apps:true, asstOpen:'Reduced', sticker:true, motion:'Calm', alt:true (sideEyes left with v6.2).
         #expect(shown == ["When something opens": "The last space you had open", "Add something to Applications": "on",
-                          "Welcome": "Show Again", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
+                          "Welcome": "Show Again", "Interface size": "Default", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
                           "Remember where I put the assistant": "on",
                           "Hold ⌥ to point inside a drawn frame": "on",
                           // agent:'Claude Code', resume:true, sleep:'10 minutes', awake:'3', askAll:false, notify:false; before

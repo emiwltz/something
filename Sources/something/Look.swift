@@ -1,8 +1,9 @@
 // The look of something's own windows, the identity "smt1" Emi kept (Encre on Lin, a monochrome night): its colours
 // with their night twins, radii, rows, type scale, shadows, curves, and whether motion is calm or reduced. Views read
-// these tokens instead of naming a colour or a size, so night, the person's Motion choice and the system's Reduce
-// Motion reach every window the same way. The values are the mockup's, exactly; spaces keep their own colours.
+// these tokens instead of naming a colour or a size, so night, the person's Motion choice, the system's Reduce Motion
+// and the interface size reach every window the same way. The values are the mockup's, exactly; spaces keep their own colours.
 import AppKit
+import Observation
 import SwiftUI
 
 enum Look {
@@ -77,8 +78,23 @@ enum Look {
 
     /// Corner radii: cards and panels, controls, windows.
     static let card: CGFloat = 10, control: CGFloat = 7, window: CGFloat = 12
-    /// A list row in Emi's compact density, and the factor the mockup applies to a menu item's padding with it.
-    static let row: CGFloat = 25, density: CGFloat = 0.75
+    /// A list row in Emi's compact density, at the interface size, and the factor the mockup applies to a menu item's
+    /// padding with it.
+    static var row: CGFloat { 25 * scale.size.factor }
+    static let density: CGFloat = 0.75
+
+    /// Default, Large or Larger (Settings › General, ⌘+ ⌘− ⌘0): the app's type, rows and columns, and the pages' zoom,
+    /// grow by its factor; the window's lights and the system's controls keep theirs.
+    enum Size: String, CaseIterable, Codable {
+        case standard = "default", large, larger
+
+        var factor: CGFloat { [1, 1.12, 1.24][Size.allCases.firstIndex(of: self) ?? 0] }
+        var label: String { rawValue.capitalized }
+    }
+
+    /// The size applied now. Observed, so a SwiftUI view that reads a font or a row draws again when it changes.
+    @Observable final class Scale { var size = Size.standard }
+    static let scale = Scale()
 
     // MARK: Type
 
@@ -142,8 +158,9 @@ enum Look {
     /// The font of `face` at `size` and `weight`. The bundled families are variable: the weight is set on their wght
     /// axis exactly, and Fraunces's optical size follows the size as the mockup's `font-optical-sizing: auto` does.
     /// When a family is not registered it is the system's: New York for titles and the agent's voice (the mockup falls
-    /// back to a serif), San Francisco for the interface, SF Mono for code.
+    /// back to a serif), San Francisco for the interface, SF Mono for code. `size` is the mockup's, at the interface size.
     static func font(_ face: Face, size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        let size = size * scale.size.factor
         if let family = face.family {
             let wght = 0x7767_6874, opsz = 0x6F70_737A   // the axes' four-letter tags
             let axes: [Int: CGFloat] = face == .title ? [wght: css(weight), opsz: size] : [wght: css(weight)]

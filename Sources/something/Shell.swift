@@ -91,11 +91,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         (self.assistant, self.library, self.info, self.autosave) = (assistant, library, info, autosave)
         let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
-        (sidebar.minimumThickness, sidebar.maximumThickness) = (190, 320)
+        (sidebar.minimumThickness, sidebar.maximumThickness) = Shell.sideRange
         let content = NSViewController()
         content.view = center
         inspector = NSSplitViewItem(inspectorWithViewController: InfoController(rootView: InspectorView(info: info, library: library, assistant: assistant)))
-        (inspector.minimumThickness, inspector.maximumThickness) = (320, 320)
+        (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
         // The toolbar stays one band across the window: the panel begins under it, as the mockup draws it.
         inspector.allowsFullHeightLayout = false
         [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
@@ -134,6 +134,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         // A frame kept narrow from the last time starts with the rail.
         fit()
         watchRailTip()
+        followSize(Look.scale.size)
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
         titleLine.opened = { [weak self] in self.map { $0.toggleInfo(spaceOpen: $0.space != nil) } }
@@ -262,7 +263,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             side.isCollapsed = false
             split.splitView.setPosition(Rail.width, ofDividerAt: 0)
         } else {
-            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (190, 320, true)
+            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Shell.sideRange.0, Shell.sideRange.1, true)
             split.splitView.setPosition(sideBefore.width, ofDividerAt: 0)
             side.isCollapsed = sideBefore.hidden
             split.splitView.autosaveName = autosave ? "main" : nil
@@ -296,6 +297,27 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
+
+    /// The sidebar's least and greatest widths, and Info's width, at the interface size.
+    static var sideRange: (CGFloat, CGFloat) { (190 * Look.scale.size.factor, 320 * Look.scale.size.factor) }
+    static var infoWidth: CGFloat { 320 * Look.scale.size.factor }
+
+    /// Follows the interface size from `size`: the views that read Look draw again by themselves; the toolbar's name,
+    /// the columns' widths and the page's zoom are set here.
+    private func followSize(_ size: Look.Size) {
+        let now = Look.scale.size
+        withObservationTracking { _ = Look.scale.size } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.followSize(now) }
+        }
+        guard now != size else { return }
+        heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
+        space?.web.pageZoom = now.factor
+        let side = split.splitViewItems[0], width = side.viewController.view.frame.width
+        (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
+        guard !rail else { return }
+        (side.minimumThickness, side.maximumThickness) = Shell.sideRange
+        if !side.isCollapsed { split.splitView.setPosition(width * now.factor / size.factor, ofDividerAt: 0) }
+    }
 
     /// The toolbar's items over the sidebar column, which the rail has not.
     static let head: [NSToolbarItem.Identifier] = [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator]

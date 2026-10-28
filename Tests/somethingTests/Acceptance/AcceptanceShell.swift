@@ -406,6 +406,7 @@ struct AcceptanceShell {
         infos.forEach(shell.retitle)
         let lines = Mockup.lines(view)
         #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
+                          "# Interface Size · Default", "Make Interface Bigger  ⌘+", "Make Interface Smaller  ⌘−", "Default Size  ⌘0", "---",
                           "Enter Page Full Screen  ⇧⌘F", "Enter Full Screen  ⌃⌘F"], "\(lines)")
         #expect(!space.items.contains { $0.identifier?.rawValue == "reload" }, "Reload lives in View only")
         if let gallery {
@@ -955,6 +956,7 @@ struct AcceptanceShell {
         shell.retitle(full)
         let lines = Mockup.lines(view)
         #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
+                          "# Interface Size · Default", "Make Interface Bigger  ⌘+", "Make Interface Smaller  ⌘−", "Default Size  ⌘0", "---",
                           "Enter Page Full Screen  ⇧⌘F", "Enter Full Screen  ⌃⌘F"], "\(lines)")
         #expect(Keys.enabled("pagefull", Keys.Situation(space: true)) && !Keys.enabled("pagefull", Keys.Situation(space: false)))
         if let gallery {

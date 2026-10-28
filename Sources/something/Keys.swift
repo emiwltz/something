@@ -72,6 +72,13 @@ enum Keys {
                 owner: "W5", area: .window, line: "Full screen", mine: true),
         Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control],
                 action: #selector(NSSplitViewController.toggleSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
+        // ⌘+ is ⇧= on a US layout; ⌘= is taken for it too (claim).
+        Command(id: "bigger", title: "Make Interface Bigger", key: "+", action: #selector(App.biggerInterface(_:)), owner: "S7", area: .window,
+                line: "Bigger interface", mine: true),
+        Command(id: "smaller", title: "Make Interface Smaller", key: "-", action: #selector(App.smallerInterface(_:)), owner: "S7", area: .window,
+                line: "Smaller interface", mine: true),
+        Command(id: "defaultSize", title: "Default Size", key: "0", action: #selector(App.defaultInterfaceSize(_:)), owner: "S7", area: .window,
+                line: "Default interface size", mine: true),
         Command(id: "settings", title: "Settings…", key: ",", action: #selector(App.showSettings(_:)), owner: "G4", area: .window, line: "Settings", mine: true),
         Command(id: "keys", title: "Show Keyboard Shortcuts", key: "/", action: #selector(App.showKeys(_:)), owner: "G1", area: .window,
                 line: "Keyboard shortcuts", mine: true),
@@ -137,7 +144,7 @@ enum Keys {
             .filter { modifiers.contains($0.0) }.map(\.1).joined()
     }
 
-    static func name(_ key: String) -> String { key == "\u{8}" ? "⌫" : key.uppercased() }
+    static func name(_ key: String) -> String { ["\u{8}": "⌫", "-": "−"][key] ?? key.uppercased() }
 
     // MARK: The menus
 
@@ -159,7 +166,8 @@ enum Keys {
                   .item("finder"), .item("trash"), .separator, .item("close")]),
         ("Edit", [.item("undo"), .item("redo"), .separator, .item("cut"), .item("copy"), .item("paste"), .item("selectAll")]),
         ("View", [.item("sidebar"), .item("insp"), .separator, .item("history"), .item("keys"), .separator,
-                  .item("reload"), .separator, .item("pagefull"), .item("full")]),
+                  .item("reload"), .separator, .header("size"), .item("bigger"), .item("smaller"), .item("defaultSize"), .separator,
+                  .item("pagefull"), .item("full")]),
         ("Go", [.item("palette"), .separator, .header("Spaces"), .spaces, .separator, .item("new"), .item("tpls")]),
         ("Space", [.header("space"), .item("insp"), .item("rights"), .item("history"), .separator,
                    .item("finder"), .item("export"), .separator, .item("trash")]),
@@ -187,8 +195,9 @@ enum Keys {
                     services.submenu = NSMenu(title: "Services")
                     menu.addItem(services)
                 case .header(let words):
-                    let header = NSMenuItem.sectionHeader(title: words == "space" || words == "assistant" ? "No space open" : words)
-                    if words == "space" || words == "assistant" { header.identifier = NSUserInterfaceItemIdentifier("header." + words) }
+                    let named = ["space": "No space open", "assistant": "No space open", "size": MenuBar.size]
+                    let header = NSMenuItem.sectionHeader(title: named[words] ?? words)
+                    if named[words] != nil { header.identifier = NSUserInterfaceItemIdentifier("header." + words) }
                     menu.addItem(header)
                 case .item(let id):
                     guard let command = command(id) else { continue }
@@ -211,6 +220,8 @@ enum Keys {
         var space = false, working = false, agent = true, welcoming = false, editingText = false, waiting = false
         /// Whether the open space has a page to point at: displayed and running.
         var pointable = true
+        /// The interface size: the largest greys Bigger, the default Smaller and Default Size.
+        var size = Look.Size.standard
     }
 
     /// What still acts while the welcome is open: the app's own items, Show Request (the panel then takes the keys) and
@@ -224,6 +235,8 @@ enum Keys {
         guard let command = command(id) else { return true }
         guard command.action != nil, !(command.needsSpace && !situation.space) else { return false }
         switch id {
+        case "bigger": return situation.size != .larger
+        case "smaller", "defaultSize": return situation.size != .standard
         case "stop": return situation.working
         case "ask": return situation.agent
         case "showreq": return situation.waiting
@@ -243,7 +256,8 @@ enum Keys {
     /// What `event` asks of something before the page, nil when the key is the page's. A layout may need ⇧ for a
     /// character: AZERTY's digits (the bare top row types &, é …) and its . and /, so ⇧ is then part of the key.
     static func claim(_ event: NSEvent) -> Claim? {
-        guard event.type == .keyDown, let key = event.charactersIgnoringModifiers?.lowercased() else { return nil }
+        guard event.type == .keyDown, var key = event.charactersIgnoringModifiers?.lowercased() else { return nil }
+        if key == "=" { key = "+" }
         let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
         if let index = digitKeys.firstIndex(of: event.keyCode),
            modifiers == .command || (modifiers == [.command, .shift] && key == "\(index + 1)") { return .space(index + 1) }
@@ -289,11 +303,14 @@ final class MenuBar: NSObject, NSMenuDelegate {
     /// `builders` fills Build With ▸ each time it opens.
     init(builders: NSMenuDelegate?) {
         super.init()
-        ["Go", "Space", "Assistant", "File"].forEach { submenu($0)?.delegate = self }
+        ["Go", "Space", "Assistant", "File", "View"].forEach { submenu($0)?.delegate = self }
         submenu("Assistant")?.items.first { $0.identifier?.rawValue == "buildWith" }?.submenu?.delegate = builders
     }
 
     func submenu(_ title: String) -> NSMenu? { menu.item(withTitle: title)?.submenu }
+
+    /// View's header: the interface size now.
+    static var size: String { "Interface Size · " + Look.scale.size.label }
 
     /// Gives the app its menus, and the system its Window, Help and Services menus to fill.
     func install() {
@@ -336,6 +353,7 @@ final class MenuBar: NSObject, NSMenuDelegate {
         for (menu, title) in [("Space", open?.title), ("Assistant", possessive)] {
             submenu(menu)?.items.first { $0.identifier?.rawValue == "header.\(menu.lowercased())" }?.title = title ?? "No space open"
         }
+        submenu("View")?.items.first { $0.identifier?.rawValue == "header.size" }?.title = MenuBar.size
         let trash = Keys.command("trash")?.key ?? ""
         for item in ["File", "Space"].compactMap({ submenu($0) }).flatMap(\.items) where item.identifier?.rawValue == "trash" {
             item.keyEquivalent = editingText() ? "" : trash

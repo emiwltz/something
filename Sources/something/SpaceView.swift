@@ -111,6 +111,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         title = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration?.title ?? space.name
         scheme = Scheme(space: space)
         web = SpaceView.webView(scheme, rules: rules)
+        // The page grows with the app's interface (Look.Size); the check's stays at 100 %.
+        web.pageZoom = Look.scale.size.factor
         super.init()
         area.frame = web.frame
         web.autoresizingMask = [.width, .height]

@@ -27,6 +27,9 @@
       ["pagefull", "Page full screen", "⇧⌘F"],
       ["full", "Full screen", "⌃⌘F"],
       ["sidebar", "Show or hide the sidebar", "⌃⌘S"],
+      ["bigger", "Bigger interface", "⌘+"],
+      ["smaller", "Smaller interface", "⌘−"],
+      ["defaultSize", "Default interface size", "⌘0"],
       ["settings", "Settings", "⌘,"],
       ["keys", "Keyboard shortcuts", "⌘/"],
       ["close", "Close window", "⌘W"]

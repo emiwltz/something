@@ -112,7 +112,7 @@ struct AcceptanceCommand {
                      "something 0.3.0", "installed with Homebrew", "nothing leaves this Mac"]
         try await settings(.general, "g3", shows: shows) { settings, stage in
             let rows = settings.model.sections(.general).flatMap(\.rows)
-            #expect(rows.map(\.title) == ["When something opens", "Add something to Applications", "Welcome"])
+            #expect(rows.map(\.title) == ["When something opens", "Add something to Applications", "Welcome", "Interface size"])
             guard case .choice(let options, let get, _) = rows[0].control else { Issue.record("not a choice"); return }
             #expect(get() == "last")
             let menu = options.map { ($0.heading ? "# " : $0.value == get() ? "✓ " : "  ") + $0.label }
@@ -171,7 +171,7 @@ struct AcceptanceCommand {
         try await settings(.shortcuts, "g7", shows: shows) { settings, _ in
             #expect(ShortcutColumns.lines(.spaces).map(\.line) == ["Go to a space, or ask", "New Space", "Templates", "Go to space 1 to 9", "Reload space",
                                                                     "Space info", "Close Info or History"])
-            #expect(ShortcutColumns.lines(.window).map(\.shown) == ["⇧⌘F", "⌃⌘F", "⌃⌘S", "⌘,", "⌘/", "⌘W"])
+            #expect(ShortcutColumns.lines(.window).map(\.shown) == ["⇧⌘F", "⌃⌘F", "⌃⌘S", "⌘+", "⌘−", "⌘0", "⌘,", "⌘/", "⌘W"])
             #expect(settings.model.sections(.shortcuts).isEmpty)
         }
     }
@@ -179,7 +179,9 @@ struct AcceptanceCommand {
     /// Settings at `tab` on the Stage's home, run from a Homebrew Cellar with its launcher made, and drawn as `id`
     /// in both appearances: the window's frame (title, toolbar) by cacheDisplay, its lights in their key colors. Each
     /// picture is read by Vision and must show every line of `shows`: what the screen shows, not what the model says.
-    func settings(_ tab: SettingsTab, _ id: String, shows: [String], _ check: (SettingsWindow, Stage) throws -> Void) async throws {
+    /// Drawn at `size`, which is set only while the pictures are drawn (Look.scale is the whole process's), then Default.
+    func settings(_ tab: SettingsTab, _ id: String, shows: [String], size: Look.Size = .standard,
+                  _ check: (SettingsWindow, Stage) throws -> Void) async throws {
         let stage = try Stage("command")
         defer { stage.remove() }
         let (_, library, _) = stage.window()
@@ -220,9 +222,13 @@ struct AcceptanceCommand {
         #expect(settings.window.toolbar?.items.map(\.label) == SettingsTab.allCases.map(\.label))
         try check(settings, stage)
         try await stage.appearances { suffix in
+            (Look.scale.size, library.preferences.size) = (size, size)
+            defer { (Look.scale.size, library.preferences.size) = (.standard, .standard) }
             settings.window.layoutIfNeeded()
             await wait(1.2)
-            #expect(abs(settings.window.contentRect(forFrameRect: settings.window.frame).width - 720) < 1)
+            // The page grows with the size on SwiftUI's time, and the window with it on the tab view's.
+            _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).width - 720 * size.factor) < 1 })
+            #expect(abs(settings.window.contentRect(forFrameRect: settings.window.frame).width - 720 * size.factor) < 1)
             let frame = try #require(settings.window.contentView?.superview)
             frame.layoutSubtreeIfNeeded()
             let rep = try Picture.bitmap(frame.bounds.size)
@@ -415,6 +421,49 @@ struct AcceptanceCommand {
             try Picture.view(view, "x0-1" + suffix, root: stage.home.root)
             #expect(await AcceptanceBuild.read(view) == [Hero.label])
         }
+    }
+
+    /// 6.1, the interface size, in Settings › General's Look at Large: the row says what grows and the three keys, and
+    /// Settings grows with the app (a page 806 points wide, its type 12 % larger). The View menu says the size and greys
+    /// what cannot act there (6.2); ⌘+ ⌘− ⌘0 reach the menu before a page (KeysTests), and say the size in a toast.
+    @Test("6-1: the interface size") func v6_1() async throws {
+        let shows = ["Look", "Interface size", "The whole app grows", "Large"]
+        try await settings(.general, "6-1", shows: shows, size: .large) { settings, _ in
+            let look = try #require(settings.model.sections(.general).last)
+            #expect(look.title == "Look" && look.rows.map(\.title) == ["Interface size"])
+            #expect(look.rows[0].note.contains("⌘+ bigger · ⌘− smaller · ⌘0 default"))
+            guard case .choice(let options, let get, _) = look.rows[0].control else { Issue.record("not a choice"); return }
+            #expect(options.map(\.label) == ["Default", "Large", "Larger"] && get() == "default")
+            #expect(Look.Size.allCases.map(\.factor) == [1, 1.12, 1.24])
+            let view = try #require(MenuBar(builders: nil).submenu("View"))
+            #expect(Mockup.lines(view).contains("# Interface Size · Default"))
+            #expect(["bigger", "smaller", "defaultSize"].map { Keys.enabled($0, Keys.Situation(size: .large)) } == [true, true, true])
+        }
+    }
+
+    /// 6.3, the same window at Larger (124 %): the sidebar's rows and width, Info's width, the toolbar's name and the
+    /// page's zoom grow together, so the page's CSS viewport narrows; the window's lights do not. Default brings it back.
+    @Test("6-3: the window at Larger") func v6_3() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceShell.calm(stage)
+        defer { brief.close() }
+        let side = shell.split.splitViewItems[0]
+        func width() -> CGFloat { side.viewController.view.frame.width }
+        func inner() async -> Double { (try? await brief.web.evaluateJavaScript("innerWidth")) as? Double ?? 0 }
+        let before = (width(), await inner())
+        try await stage.appearances { suffix in
+            Look.scale.size = .larger
+            defer { Look.scale.size = .standard }
+            #expect(await wait(until: { abs(width() - before.0 * 1.24) <= 1 }), "the sidebar grows: \(width()) from \(before.0)")
+            let title = shell.titleLine.line.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
+            #expect(abs(Look.row - 31) < 0.01 && brief.web.pageZoom == 1.24 && abs(shell.inspector.minimumThickness - 396.8) < 0.01)
+            #expect(abs((title?.pointSize ?? 0) - 13.5 * 1.24) < 0.01, "\(String(describing: title))")
+            let narrowed = await inner()
+            #expect(narrowed > 0 && narrowed <= before.1 / 1.24 + 1, "the page's viewport narrows: \(narrowed) from \(before.1)")
+            try await Picture.window(shell, library: library, web: brief.web, "6-3" + suffix, root: stage.home.root)
+        }
+        #expect(await wait(until: { abs(width() - before.0) <= 1 }) && brief.web.pageZoom == 1, "Default brings it back")
     }
 
     static let howWords = ["A page, your agents, your assistant", Hero.label] + HowItWorksView.parts.map { "\($0.1): \($0.2)" } + ["Replay"]

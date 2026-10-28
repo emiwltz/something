@@ -368,7 +368,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     var situation: Keys.Situation {
         Keys.Situation(space: current != nil, working: assistant.stoppable, agent: !assistant.noAgent,
                        welcoming: shell.welcoming != nil, editingText: shell.window.firstResponder is NSText,
-                       waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
+                       waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true, size: library.preferences.size)
     }
 
     /// Shows `alert` as a sheet on the window; `then` runs when its first button is clicked.

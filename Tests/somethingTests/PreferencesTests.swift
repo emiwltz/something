@@ -86,6 +86,7 @@ import Testing
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.assistantAtOpening) = ("new", .dark, .reduced, .open)
+        values.size = .larger
         (values.rememberSticker, values.holdOption, values.notify) = (false, false, true)
         values.sticker = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
         (values.sleepAfter, values.awakeAtMost, values.versionsKept, values.storageLimit) = (0, 5, 0, 2000)

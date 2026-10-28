@@ -11,9 +11,12 @@ func runApp(opening: String?) -> Never {
     let delegate = App(opening: opening)
     NSApplication.shared.delegate = delegate
     NSApplication.shared.setActivationPolicy(.regular)
-    // Before any window: the appearance and the motion chosen in Settings.
+    // Before any window: the appearance, the motion and the interface size chosen in Settings.
     let preferences = Preferences.at(.person)
-    MainActor.assumeIsolated { Settings.apply(preferences.appearance, preferences.motion) }
+    MainActor.assumeIsolated {
+        Settings.apply(preferences.appearance, preferences.motion)
+        Look.scale.size = preferences.size
+    }
     NSApplication.shared.run()
     exit(0)
 }

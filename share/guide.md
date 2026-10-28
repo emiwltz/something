@@ -479,9 +479,12 @@ await something.store.set("seen", [...seen, "a1"]);
   view: it reads today's state and memory, and every other call is refused with `NOT_SUPPORTED` ("This is an older
   version of the space, shown to compare: it cannot act.") before it reaches your journal. Do not count on how many
   times your page loads. A Quick Change's answer may open a 284-point margin at the right edge the same way.
+- **Interface size.** The person may grow the whole app to Large (112 %) or Larger (124 %), with ⌘+, ⌘− and ⌘0 or in
+  Settings › General: your page is zoomed by the same factor, so its CSS viewport narrows (`innerWidth` is the area's
+  width divided by 1.12 or 1.24). Lay your page out for narrow widths and size it as usual; never undo the zoom.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
-  ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⇧⌘F, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them,
-  and `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
+  ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⇧⌘F, ⌃⌘F, ⌃⌘S, ⌘+, ⌘−, ⌘0, ⌘, and ⌘/. They go to something's menus before your page sees
+  them, and `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
   something's notes shows over it, Escape closes it; in Page Full Screen (⇧⌘F), where your space fills the window,
   Escape ends it. Every other key is your page's.
 

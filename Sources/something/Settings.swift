@@ -72,6 +72,8 @@ struct SettingsSection: Identifiable {
     @ObservationIgnored var spaces: () -> [(id: String, title: String)] = { [] }
     /// Applies the appearance and the motion to the whole app; tests record it instead.
     @ObservationIgnored var apply: (Preferences.Appearance, Look.Motion) -> Void = Settings.apply
+    /// Applies the interface size to the whole app (Look.scale); tests record it instead.
+    @ObservationIgnored var resize: (Look.Size) -> Void = { Look.scale.size = $0 }
     /// Shows the welcome again (App.showWelcome).
     @ObservationIgnored var tour: () -> Void = {}
     /// Opens System Settings › Keyboard; tests record it instead.
@@ -175,6 +177,10 @@ struct SettingsSection: Identifiable {
                                              enabled: launcher || Launcher.prefix(of: app) != nil)),
                 SettingsRow(title: "Welcome", note: "The first screen, as on the first day.",
                             control: .button("Show Again") { [weak self] in self?.tour() }),
+            ]), SettingsSection(title: "Look", rows: [
+                SettingsRow(title: "Interface size",
+                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages. ⌘+ bigger · ⌘− smaller · ⌘0 default, from anywhere.",
+                            control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }, then: { [weak self] in self?.resize(preferences.size) })),
             ])]
         case .assistant:
             return assistantSections()
@@ -356,6 +362,19 @@ extension App {
     /// Settings… (⌘,): the window, made the first time, at `tab` when given, else where it was left.
     @MainActor @objc func showSettings(_ sender: Any?) { settings(nil) }
 
+    /// View › Make Interface Bigger (⌘+), Smaller (⌘−) and Default Size (⌘0): the next size, said in a toast.
+    @MainActor @objc func biggerInterface(_ sender: Any?) { resize(by: 1) }
+    @MainActor @objc func smallerInterface(_ sender: Any?) { resize(by: -1) }
+    @MainActor @objc func defaultInterfaceSize(_ sender: Any?) { resize(by: nil) }
+
+    @MainActor private func resize(by step: Int?) {
+        let sizes = Look.Size.allCases, now = sizes.firstIndex(of: library.preferences.size) ?? 0
+        let size = step.map { sizes[max(0, min(sizes.count - 1, now + $0))] } ?? .standard
+        // The views that read Look follow it, and Shell the rest.
+        (library.preferences.size, Look.scale.size) = (size, size)
+        _ = shell.toast("Interface: \(size.label) · ⌘+ bigger · ⌘− smaller · ⌘0 default", quiet: true)
+    }
+
     @MainActor func settings(_ tab: SettingsTab?) {
         Settings.open(tab) {
             let model = SettingsModel(preferences: library.preferences, places: places)
@@ -449,6 +468,20 @@ enum Found {
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
         window.title = SettingsTab.general.label
+        follow()
+    }
+
+    /// Takes the page's size at a new interface size: the tab view takes a page's size only as its tab is chosen, and
+    /// the page's own measure follows on SwiftUI's time, so a page made now measures it.
+    private func follow() {
+        withObservationTracking { _ = Look.scale.size } onChange: { [weak self] in
+            DispatchQueue.main.async { [weak self] in self?.refit() }
+        }
+    }
+
+    private func refit() {
+        follow()
+        window.setContentSize(NSHostingView(rootView: SettingsPage(model: model, tab: tab)).fittingSize)
     }
 
     var tab: SettingsTab { SettingsTab.allCases[max(0, tabs.selectedTabViewItemIndex)] }
@@ -515,7 +548,7 @@ struct SettingsPage: View {
             }
         }
         .padding(.top, 16).padding(.horizontal, 28).padding(.bottom, 24)
-        .frame(width: 720, alignment: .topLeading)
+        .frame(width: 720 * Look.scale.size.factor, alignment: .topLeading)
         .fixedSize(horizontal: false, vertical: true)
         .background(Look.Token.bg.ui)
     }
