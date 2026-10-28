@@ -26,7 +26,12 @@ Spotlight finds something.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example), choose under it what it may do with your agents (None, Watch, Talk or Run, pre-set from
-your words), and Build: your agent builds it, and it opens by itself when ready, with nothing more to allow. Each space's
+your words), and Build: your agent builds it, and it opens by itself when ready, with nothing more to allow. The space
+appears in the sidebar at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build
+several at a time: nothing stops them, and a click on the row shows the build again. A space that finishes while you
+are elsewhere says "… is ready · Open" (a notification of the Mac instead while something is in the background, if you
+turned notifications on). Its assistant answers in two sentences, what is ready and one thing to try, its details
+folded; a build that fails keeps your words on New Space to try again. Each space's
 assistant rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is
 in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. ⌘J shows the conversation,
 ⌘\ makes it small again, ⌘. stops the assistant. Templates (⇧⌘T) are six finished spaces to start from, and need no
@@ -134,8 +139,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   and model, its last reply, Open Conversation).
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
-  assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
-  panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
+  assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
+  the panel's); its permissions still open the panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
   the Mac says who waits and in which space only if you turn on "Notify me when a request waits", and never the command.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's

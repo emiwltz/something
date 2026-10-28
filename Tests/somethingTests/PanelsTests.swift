@@ -667,8 +667,8 @@ final class FakeNotifier: Notifier {
     /// The notification center is never reached outside an app bundle: in swift test, as under swift run, it would
     /// stop the process.
     @Test func noNotifierWithoutAnAppBundle() {
-        #expect(SystemNotifier.make(bundle: .main) { } == nil)
-        #expect(SystemNotifier.make(bundle: Bundle(for: FakeDock.self)) { } == nil)
+        #expect(SystemNotifier.make(bundle: .main) { _ in } == nil)
+        #expect(SystemNotifier.make(bundle: Bundle(for: FakeDock.self)) { _ in } == nil)
     }
 
     /// A request still in the state whose details are gone has closed: it gets no panel and is not counted.

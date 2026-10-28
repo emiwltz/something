@@ -2,10 +2,11 @@
 // Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model and Build; under it, the
 // space's level with your agents (Levels.swift), pre-set from the words, which is the consent; and three suggestions
 // that each fill the field. Without a coding agent, the notice takes the field's place.
-// While the assistant builds, the field holds the sentence sent, the ladder under it says what it does (Ladder.swift),
-// and the rest steps aside; a build stopped leaves its ladder and the sentence back in the field. The assistant's card
-// stays away here (the page is its own composer), so when a build asked here ends without a new space while the page
-// is shown, its reply stays above the field, to be answered there; a template's preview fills the page.
+// Build makes it a build of its own, which the page then shows: its name for now as the title, the sentence sent held
+// in the field with the level chosen under it, the ladder saying what it does (Ladder.swift); the person may leave, it
+// goes on, and its row in the sidebar brings it back here. A build stopped leaves its ladder and the sentence back in
+// the field. The assistant's card stays away here (the page is its own composer), so when a build ends without a new
+// space, its reply stays above the field, to be answered there; a template's preview fills the page.
 import AppKit
 import SwiftUI
 
@@ -53,6 +54,7 @@ struct BlankView: View {
                     } else {
                         if let reply, ladder == nil { answer(reply).frame(width: field).padding(.top, 30) }
                         BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 30 : 14)
+                        if let build = model.before { chosen(build).frame(width: field, alignment: .leading).padding(.top, 10) }
                         if !model.building { LevelRow(model: model).frame(width: field).padding(.top, 12) }
                         if let ladder { LadderView(ladder: ladder, model: model, motion: library.preferences.motion).frame(width: field).padding(.top, 22) }
                         // The question the page answers needs no notice sending the person to the panel.
@@ -73,7 +75,7 @@ struct BlankView: View {
         VStack(spacing: 10) {
             PageSign(state: model.building ? ladder?.eyes == .wait ? .listen : ladder?.eyes ?? .think : .listen, joy: ladder?.done == true,
                      side: 52, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
-            Text("What do you want to make?").font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
+            Text(title).font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
                 .multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
                 // The mockup's line is 1.04 of the size; Fraunces's own leading is taller.
                 .padding(.vertical, -6)
@@ -82,6 +84,27 @@ struct BlankView: View {
                 Text(BlankView.where(model.folder)).font(Look.font(.ui, size: 14).ui).foregroundStyle(Look.Token.ink2.ui).multilineTextAlignment(.center)
             }
         }
+    }
+
+    /// The question, or the name of the space the page shows building: its page's title once written, else its words.
+    private var title: String {
+        guard let build = model.before else { return "What do you want to make?" }
+        return model.space(of: build).flatMap { library.entry($0)?.title } ?? AssistantModel.provisional(build.sentence)
+    }
+
+    /// What the build may do with the person's agents, chosen before Build: one chip under its words.
+    private func chosen(_ build: AssistantModel.Build) -> some View {
+        let folder = build.level == .run ? build.folder.map { " in " + Words.path($0, home: library.places.home.path) } ?? "" : ""
+        let words = "\(build.level.title) · your agents\(folder)"
+        return HStack(spacing: 6) {
+            Image(systemName: "person.2").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
+            Text(words)
+        }
+        .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
+        .padding(.horizontal, 10).frame(height: 26)
+        .background(Capsule(style: .circular).strokeBorder(Look.Token.line2.ui))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("With your agents: \(build.level.title)\(folder)")
     }
 
     /// "Describe it in your words…", the folder `path` drawn as code.

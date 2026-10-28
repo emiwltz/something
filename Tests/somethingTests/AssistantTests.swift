@@ -153,7 +153,7 @@ import WebKit
               words L5 'Check found 2 problems. Fixing them…'
               begin L6 Edit "$room"; sleep 0.8; ended L6 false; begin L7 Edit "$room"; sleep 0.8; ended L7 false
               begin L8 Bash "$check"; sleep 0.8; ended L8 false
-              words L9 'Fixed both, and the check passes. Ready. Opening Waiting room.'
+              words L9 'Waiting room is ready. It shows who waits for you, oldest first; try answering Amp, then reopen it.\\n\\nChecked twice: the first check found 2 problems, both fixed.'
               later "$done" "$idle" ) & ;;
             *) ( sleep 0.9; begin L3 Write "$room" ) & ;;
           esac ;;
@@ -855,8 +855,7 @@ import WebKit
     }
 
     /// A build from New Space: its request belongs to no space until the hand-off, so a space's own count stays 0;
-    /// leaving New Space stops the build (LadderTests), its sentence back in its field before what was half written
-    /// there; and what each place's field holds stays with that place.
+    /// leaving New Space stops nothing (LadderTests); and what each place's field holds stays with that place.
     @Test func aBuildsRequestIsNoSpacesOwn() async throws {
         let (home, model) = try assistant()
         defer { home.remove() }
@@ -872,12 +871,13 @@ import WebKit
         }
         queue.follow(model.engine.requests)
         #expect(model.space(of: builder) == nil && queue.waiting.map(\.agent) == [builder] && queue.count(in: "waiting") == 0)
+        model.watch(nil)
         model.draft = "Half written for New Space"
         model.place = .space(title: "Who waits", name: "waiting", page: "index.html")
-        #expect(model.draft.isEmpty && !model.building)
+        #expect(model.draft.isEmpty && !model.building && model.builds.count == 1)
         model.draft = "For Who waits"
         model.place = .blank
-        #expect(model.draft == "ask-first\nHalf written for New Space")
+        #expect(model.draft == "Half written for New Space" && model.space(of: builder) == nil)
         await finish(home, model)
     }
 

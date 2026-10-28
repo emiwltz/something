@@ -82,9 +82,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         panels.beside = { [weak self] in self?.shell.window }
         panels.counted = { [weak self] _ in self?.counted() }
         panels.inline = { [weak self] in self?.assistant.answersInline($0) == true }
-        panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] in
+        panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] id in
             self?.front()
-            self?.showRequest(nil)
+            // A space said ready opens; any other notification is a request's.
+            if let name = Attention.readySpace(id) { self?.library.select(.space(name)) } else { self?.showRequest(nil) }
         })
         panels.attention?.notify = { [weak self] in self?.library.preferences.notify == true }
         panels.queue.space = { [weak self] request in self?.space(ofAgent: request.agent) }
@@ -101,7 +102,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.told = { [weak self] words in
             _ = self?.shell.toast(words, action: Toast.Action(label: "Back to New Space") { self?.library.select(.newSpace) })
         }
-        assistant.openReady = { [weak self] in self?.library.select(.space($0)) }
+        assistant.arrived = { [weak self] name, title in
+            guard let self else { return }
+            _ = shell.toast("\(title) is ready", action: Toast.Action(label: "Open") { [weak self] in self?.library.select(.space(name)) }, seconds: 6)
+            panels.attention?.ready(name, title: title)
+        }
         changes.follow(assistant, in: shell, library: library)
         assistant.ended = { [weak self] in
             guard let self else { return }
@@ -182,6 +187,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     @objc func newSpace(_ sender: Any?) {
         library.select(.newSpace)
+        assistant.watch(nil)
         askAssistant(sender)
     }
 

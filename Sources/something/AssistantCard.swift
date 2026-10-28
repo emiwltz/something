@@ -1,7 +1,8 @@
 // The assistant's card, 412 points at the bottom right of the center, over the space: its header (the eyes of its
 // state, the space's title as the conversation menu, the state word, Reduce and the grip), the conversation (⌘J: your
 // bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days, the messages held for the
-// turn's end outlined with Take Back), one notice when it is stuck or waits for you, the present-tense line while it
+// turn's end outlined with Take Back; a build's reply said short, what follows its first paragraph folded under Details),
+// one notice when it is stuck or waits for you, the present-tense line while it
 // works, and the composer: the agent and model chips, Point's slot, the conversation toggle, the held messages' strip
 // while the conversation is folded, and a flat field whose Send turns into Stop (New Space reuses it and the notice).
 // Its words are the model's and Presence's; the card keeps only the field's focus. A request is never answered here:
@@ -103,7 +104,10 @@ struct AssistantCard: View {
                     Text($0).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.bottom, 4)
-                ForEach(Array(model.rows.enumerated()), id: \.offset) { _, row in line(row) }
+                let rows = model.rows
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    if let (short, rest) = AssistantModel.folded(rows, at: index) { reply(short, details: rest, index) } else { line(row) }
+                }
                 ForEach(Array(model.held.enumerated()), id: \.offset) { _, text in
                     AssistantCard.mine(text).foregroundStyle(Look.Token.ink2.ui).overlay(AssistantCard.mineShape.strokeBorder(Look.Token.line2.ui))
                         .padding(.leading, 50)
@@ -163,6 +167,27 @@ struct AssistantCard: View {
             }
             .font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink2.ui)
             .padding(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 4))
+        }
+    }
+
+    /// A build's reply: its first paragraph, then Details, which unfolds the rest.
+    private func reply(_ short: String, details: String, _ index: Int) -> some View {
+        let open = model.unfolded.contains(index)
+        return VStack(alignment: .leading, spacing: 4) {
+            line(.reply(short))
+            Button { if open { model.unfolded.remove(index) } else { model.unfolded.insert(index) } } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold)).rotationEffect(.degrees(open ? 90 : 0))
+                    Text("Details")
+                }
+                .font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui).padding(.leading, 6).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(open ? "Hide Details" : "Details")
+            if open {
+                Text(AssistantCard.markdown(details)).font(Look.font(.voice, size: 12).ui).lineSpacing(1.5).foregroundStyle(Look.Token.ink2.ui)
+                    .padding(EdgeInsets(top: 0, leading: 18, bottom: 0, trailing: 50))
+            }
         }
     }
 
@@ -771,10 +796,6 @@ extension AssistantModel {
             return Notice(symbol: "checkmark.shield", title: "\(name) is waiting for your answer",
                           text: "The request is in its own window, outside the space. Only you can answer it there.", bad: false,
                           actions: [.init(title: "Show Request \(Keys.shown("showreq"))", run: showRequest)])
-        }
-        if let ready, !working {
-            return Notice(symbol: "checkmark", title: "“\(ready.title)” is ready.", text: "", bad: false,
-                          actions: [.init(title: "Open", run: { [weak self] in self?.openReady(ready.id) })])
         }
         if unkept {
             return Notice(symbol: "exclamationmark.triangle", title: "Couldn't keep this space's journal",

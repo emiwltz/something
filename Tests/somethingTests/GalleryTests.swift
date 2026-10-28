@@ -289,8 +289,8 @@ struct GalleryTests {
         try draw(Ask.howToGetOne { _ in }, "how-to-get-one" + suffix, fixture)
     }
 
-    /// The blank page (without an agent, idle, building with the conversation open), a space the assistant made said
-    /// ready, the level sheet of a space it made, and Help › What something Does and Doesn't.
+    /// The blank page (without an agent, idle, building with the conversation open), the row of a space the assistant
+    /// made while the person was elsewhere, the level sheet of a space it made, and Help › What something Does and Doesn't.
     func drawOnboarding(suffix: String, _ fixture: Home) async throws {
         /// The window of a home whose PATH has `programs`, the builders looked for.
         func onboarding(_ programs: [String]) async throws -> (shell: Shell, library: Library, home: Home) {
@@ -336,14 +336,12 @@ struct GalleryTests {
         shell.inspector.isCollapsed = true
         shell.window.setContentSize(NSSize(width: 1200, height: 760))
 
-        // The space it made appeared while the person was on another one.
+        // The space it made appeared while the person was on another one: its row's dot (the toast said it).
         try fixture.space("stack", page(#"{"contract": 1, "title": "Stack", "rights": ["store"]}"#, ""))
         library.relist()
-        _ = model.appeared(library.entries, open: "garden-notes")
         model.newConversation()
         (model.ready, model.threadShown) = (library.entry("stack"), false)
         model.place = .space(title: "Garden notes", name: "garden-notes", page: fixture.places.spaces.appendingPathComponent("garden-notes.html").path)
-        try await draw(model, "assistant-space-ready" + suffix, fixture)
         let side = NSHostingView(rootView: SidebarView(library: library, assistant: model, eyes: model.eyes))
         let offscreen = Offscreen(side)
         offscreen.window.setContentSize(NSSize(width: 232, height: 320))

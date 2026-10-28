@@ -17,15 +17,17 @@ the person's and yours; the contract is in the guide.
 2. **Start from the closest template:** `something new <name> --from <template>`, or from the empty one with
    `something new <name>` (lowercase letters, digits and `-`; `--folder` for several files). Then make it the page
    the person asked for.
-3. **Declare only the rights the page uses**, in its `<script type="application/json" id="something">` block:
-   `state` to see agents, `send` to write to them, `launch` to start them, `store` for a memory, each with
-   `:claude`, `:codex`, `:opencode`, `:pi`, `:omp` or `:amp` to limit it to one kind. The person allows or refuses each one.
+3. **Declare the rights of one level**, in its `<script type="application/json" id="something">` block. If the
+   person's words do not say it, ask one question only: "Should agents appear in it? None · Watch · Talk · Run" (and,
+   for Run, which folder). None: no agent right. Watch: `state`. Talk: `state`, `send`. Run: `state`, `send`, `launch`
+   with that `folder`. `store`, for a memory, needs no permission. Each right may end with `:claude`, `:codex`,
+   `:opencode`, `:pi`, `:omp` or `:amp` to limit it to one kind. Ask nothing else: pick the name and the rest yourself.
 4. **Run `something check <name>` until it says `0 errors, 0 warnings`**, then once with `--refuse <right>` for each
    right you declared. Look at the snapshot it writes after each run. Fix each problem with the sentence it gives.
    Check by name, not by a path elsewhere: a space outside `~/something/spaces` has no memory. The check clicks
    nothing: what a button does is proven by reading it against the guide, and by the person in the app.
-5. **Tell the person how to open it:** a click on it in something's sidebar, or `something open <name>`. The first
-   opening asks them for the rights.
+5. **Answer in two sentences:** what is ready and one thing to try, then how to open it: a click on it in something's
+   sidebar, or `something open <name>`. The first opening asks them for its level, in one line.
 
 ## Traps
 

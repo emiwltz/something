@@ -4,8 +4,9 @@
 // Settings. Groups are only a view, kept in the preferences: the files never move. A row is a name: the title, and "…"
 // under the pointer for the menu a right click also gives; its assistant's state lives on the sticker and its card,
 // and in the row's VoiceOver label, which `eyes` gives. A page whose declaration does not read is listed too, in
-// secondary color: "not a space yet". A space the assistant made while the person was elsewhere has a dot, one that
-// just arrived a ring of ink fading out.
+// secondary color: "not a space yet". A space being built has a ring that fills, at once under the build's words and
+// then under its name, and a click shows its build on New Space; a space the assistant made while the person was
+// elsewhere has a dot, one that just arrived a ring of ink fading out.
 // Rename… gives a space a name shown in place of its title, since its file is its name and its grants are keyed by
 // it; a group is renamed in place too, or by a double click. Its rows are drawn here, not by a List: the mockup's
 // 25-point rows and the identity's quiet selection, which a sidebar List's own 32-point rows and highlight would
@@ -303,8 +304,13 @@ struct SidebarView: View {
 
     /// The groups and their rows, or, with no space at all, only the words that say where they will be.
     @ViewBuilder private var list: some View {
+        // The builds whose space has no file yet, first.
+        let pending = assistant.builds.filter { build in assistant.space(of: build).map { library.entry($0) == nil } ?? true }
+        if !pending.isEmpty {
+            VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0) } }.padding(.bottom, library.entries.isEmpty ? 0 : 8)
+        }
         if library.entries.isEmpty {
-            if !assistant.building {
+            if pending.isEmpty {
                 Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
                     .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -379,8 +385,39 @@ struct SidebarView: View {
     func newSpace() {
         state.cursor = nil
         library.select(.newSpace)
+        assistant.watch(nil)
         assistant.focus()
     }
+
+    /// Shows the build `number` on New Space: a click on its row.
+    private func follow(_ number: Int) {
+        state.cursor = nil
+        library.select(.newSpace)
+        assistant.watch(number)
+    }
+
+    /// The row of a build whose space has no name yet: its ring and its words, shortened.
+    private func building(_ build: AssistantModel.Build) -> some View {
+        let on = library.selection == .newSpace && assistant.watched == build.id, progress = assistant.ladder(build).progress
+        let title = AssistantModel.provisional(build.sentence)
+        return HStack(spacing: 7) {
+            BuildRing(progress: progress)
+            Text(title).font(Self.title(on: on).ui).foregroundStyle(Look.Token.ink2.ui)
+            Spacer(minLength: 0)
+        }
+        .lineLimit(1)
+        .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
+        .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .contentShape(Rectangle())
+        .onTapGesture { follow(build.id) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.building(title, progress))
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { follow(build.id) }
+    }
+
+    /// What VoiceOver says of a building row.
+    static func building(_ title: String, _ progress: Double) -> String { "\(title), building, \(Int((progress * 100).rounded())) %" }
 
     func step(_ by: Int) -> KeyPress.Result {
         guard let stop = library.step(by) else { return .ignored }
@@ -453,15 +490,18 @@ struct SidebarView: View {
     private func space(_ entry: Library.Entry, needs: Bool = false) -> some View {
         let on = library.selection == .space(entry.id), fresh = library.fresh == entry.id, key = needs ? SidebarState.Hover.needs(entry.id) : .space(entry.id),
             menued = state.menued == key, hovered = state.hovered == key || menued
-        let menu = library.menu(for: entry)
+        let menu = library.menu(for: entry), build = needs ? nil : assistant.build(writing: entry.id)
         let open = {
+            if let build { return follow(build.id) }
             state.cursor = nil
             switch needs ? library.needsGo(entry.id) : .space(entry.id) {
             case .request: Keys.send("showreq")
             case let .space(id): library.select(.space(id))
             }
         }
+        let progress = build.map { assistant.ladder($0).progress }
         return HStack(spacing: 6) {
+            if let progress { BuildRing(progress: progress).padding(.trailing, 1) }
             if state.renaming == .space(entry.id) && !needs {
                 RenameField(state: state, target: .space(entry.id), commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
@@ -494,7 +534,7 @@ struct SidebarView: View {
         .onHover { hover(key, $0) }
         .contextMenu { Self.items(menu) }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Library.label(entry, needs ? .wait : eyes(entry.id)))
+        .accessibilityLabel(progress.map { Self.building(entry.title, $0) } ?? Library.label(entry, needs ? .wait : eyes(entry.id)))
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { open() }
         // The mockup's .fresh: the ring at once, then gone in 1.6 s on the "out" curve; a row it leaves goes 0 to 0.

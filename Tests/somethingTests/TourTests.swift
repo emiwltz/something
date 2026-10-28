@@ -190,7 +190,7 @@ import Testing
     /// A sentence sent from the blank page builds, with the conversation open, and leaves the draft as it was; once
     /// the turn ended, the space the agent made opens by itself, its level the one New Space pre-set, and its level
     /// sheet, shown elsewhere, says the agent made it. A turn that made no space ends the build too. One made while the
-    /// person is on another space is said ready, and has its dot until it is opened.
+    /// person is on another space is said ready (the window's toast), and has its dot until it is opened.
     @Test func aBuildFromTheBlankPageOpensWhatItMade() async throws {
         let (home, model) = try assistants.assistant(prefix: "something-tour-")
         defer { home.remove() }
@@ -198,7 +198,8 @@ import Testing
         #expect(await wait(until: { model.kind == "claude" }))
         // What App does when a build ends, with the space the agent made written just before.
         let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
-        var making: (name: String, title: String)?, open: String?, opened: [String?] = [], answers: [Int] = []
+        var making: (name: String, title: String)?, open: String?, opened: [String?] = [], answers: [Int] = [], arrived: [String] = []
+        model.arrived = { arrived.append("\($0) · \($1)") }
         model.ended = {
             // Never before the agent answered: a build ends with its turn, not with its launch.
             answers.append(model.rows.filter { $0 == .reply("Invented reply.") }.count)
@@ -210,7 +211,7 @@ import Testing
         making = ("waiting", "Who waits")
         model.draft = "Half written"
         model.send(sentence)
-        #expect(model.building && model.threadShown && model.draft == "Half written")
+        #expect(model.building && model.threadShown && model.sessions[.new]?.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: sentence)) }))
         #expect(await wait(until: { !model.building }))
         #expect(opened == ["waiting"] && model.made == ["waiting"] && model.ready == nil)
@@ -226,10 +227,13 @@ import Testing
         // Made while the person was on another space: said ready, never opened.
         (making, open) = (("second", "Second"), "waiting")
         model.send("A second one.")
-        #expect(await wait(until: { !model.building }))
+        model.place = .space(title: "Who waits", name: "waiting", page: home.places.spaces.appendingPathComponent("waiting.html").path)
+        #expect(await wait(until: { model.builds.isEmpty }))
         #expect(opened == ["waiting", nil, nil] && model.ready?.id == "second" && model.made.contains("second"))
-        #expect(answers == [1, 1, 2], "the space made keeps its build's conversation; New Space begins a new one")
-        #expect(model.notice?.title == "“Second” is ready." && model.notice?.actions.map(\.title) == ["Open"])
+        let second = model.session(for: .space(title: "Second", name: "second", page: home.places.spaces.appendingPathComponent("second.html").path))
+        #expect(answers.prefix(2) == [1, 1] && second.rows.filter { $0 == .reply("Invented reply.") }.count == 2,
+                "the space made keeps its build's conversation, the question's before it; New Space begins a new one")
+        #expect(arrived == ["second · Second"] && model.notice == nil)
         await assistants.finish(home, model)
 
         let question = RightsQuestion(space: "Second", description: "Invented.", level: .watch, folder: nil, made: true)

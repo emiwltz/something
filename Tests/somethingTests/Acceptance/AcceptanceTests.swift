@@ -23,7 +23,7 @@ enum Catalog {
         ("b1", "W3"), ("b2", "W7"), ("b3", "W2"), ("b5", "W5"), ("b6", "W2"), ("b7", "W6"),
         ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c5", "AB11"), ("c6", "AB09b"), ("c7", "AB05"),
         ("c8", "AB08"), ("c9", "AB06"), ("c10", "AB07"),
-        ("d2", "AB14"), ("d3", "AB15"), ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
+        ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
         ("e1", "T2"), ("e2", "T3"), ("e3", "T2"), ("e4", "T5"), ("e5", "T6"), ("e6", "T4"), ("e7", "T7"), ("e8", "T8"),
         ("e9", "T9"), ("e10", "T10"), ("e11", "T10"), ("e12", "T11"), ("e13", "T2"), ("e14", "AB17w"), ("e15", "T9"),
         ("f1", "T14"), ("f2", "T15"), ("f3", "T16"), ("f4", "T17"), ("f5", "T13"), ("f6", "T19"), ("f7", "T20"), ("f8", "T21"),
@@ -36,11 +36,11 @@ enum Catalog {
     /// x3_1), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
         ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
-        ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"),
+        ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
-    /// gone with v6.2's list of names (x9-1).
-    static let retired: Set<String> = ["d1", "b4", "b8"]
+    /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3).
+    static let retired: Set<String> = ["d1", "b4", "b8", "d2", "d3"]
     /// La page, pending Emi's decision: no scenario is written for these, and the gate does not count them.
     static let excluded: Set<String> = ["b2", "b1_p", "c2_p", "d1_p", "e1_p", "f6_p", "g4_p"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
@@ -54,7 +54,7 @@ enum Catalog {
     static func area(_ id: String) -> Area {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
         if id.contains("-") {
-            return ["x1": .shell, "x3": .build, "x5": .shell, "x9": .shell, "j4": .shell][String(id.prefix { $0 != "-" })] ?? .command
+            return ["x1": .shell, "x3": .build, "x5": .shell, "x9": .shell, "j3": .build, "j4": .shell][String(id.prefix { $0 != "-" })] ?? .command
         }
         switch id.first {
         case "a", "d": return .build

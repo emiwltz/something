@@ -63,7 +63,8 @@ also start from one in something's Templates (⇧⌘T, or File › Templates).
 When something's own window started you, you work in `~/something/spaces` and each message starts with one line from
 something, `[something] …`, saying which space is open: "this space" means that one. A message the person sent from
 ⌘P reaches you the same way, the space it was meant for opened first; one sent to a New Space reaches you on the blank
-page, as a space to build. The folder's `AGENTS.md`, which
+page, as a space to build: something opens it by itself once your turn ends, wherever the person went meanwhile
+(several may build at once, each its own conversation). The folder's `AGENTS.md`, which
 something writes there, says how to work in it: read it after this guide. something may lend you `something new`,
 `check` and `guide` as tools (`something_new`, `something_check`, `something_guide`): use them when you have them. As
 Claude Code, changing the files of that folder and those tools do not ask the person, unless they chose Ask Before

@@ -1,8 +1,9 @@
 // The signs of a request outside the window: the Dock's badge counts every request waiting; while something is in
 // the background, its icon bounces once per new request and, only if the person turned on "Notify me when a request
 // waits", a notification of the Mac says who waits and in which space. It never carries the command: that stays in
-// the panel, where the person decides. A click on the notification is Show Request. The Dock and the notifications
-// are seams, so that a test bounces nothing and never reaches the notification center.
+// the panel, where the person decides. A click on the notification is Show Request. A space a build made while
+// something was in the background is said the same way, and its click opens it. The Dock and the notifications are
+// seams, so that a test bounces nothing and never reaches the notification center.
 import AppKit
 import SomethingCore
 import UserNotifications
@@ -60,6 +61,17 @@ final class Attention {
         }
     }
 
+    /// Says that the space `name`, titled `title`, a build made, is ready: a notification only while something is in
+    /// the background and the person turned them on (in front, the window's toast says it).
+    func ready(_ name: String, title: String) {
+        guard !dock.isActive, notify(), let notifier else { return }
+        notifier.post(Self.readyPrefix + name, title: "\(title) is ready", body: "Your assistant built it. Click to open it.")
+    }
+
+    /// The notification of a space said ready is named after it, apart from a request's.
+    static let readyPrefix = "ready:"
+    static func readySpace(_ id: String) -> String? { id.hasPrefix(readyPrefix) ? String(id.dropFirst(readyPrefix.count)) : nil }
+
     /// The notification's words: who waits, then the space and what it wants, never the command.
     static func banner(_ request: Request, who: Asker) -> (title: String, body: String) {
         let what = request.kind == "question" ? "asks you a question" : "wants to \(Words.wants(request.tool))"
@@ -70,15 +82,16 @@ final class Attention {
 /// The Mac's notification center, asked for permission at the first notification. It can only be reached from an
 /// app bundle: elsewhere UNUserNotificationCenter stops the process, so `make` returns nil there.
 final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate {
-    let clicked: () -> Void
+    /// Hears a click on the notification of this id.
+    let clicked: (String) -> Void
 
-    private init(clicked: @escaping () -> Void) {
+    private init(clicked: @escaping (String) -> Void) {
         self.clicked = clicked
     }
 
     /// The notifier of `bundle`, which hears the clicks (`clicked`, on the main queue); nil when `bundle` is not an
     /// app with an identifier.
-    static func make(bundle: Bundle = .main, clicked: @escaping () -> Void) -> SystemNotifier? {
+    static func make(bundle: Bundle = .main, clicked: @escaping (String) -> Void) -> SystemNotifier? {
         guard bundle.bundleURL.pathExtension == "app", bundle.bundleIdentifier != nil else { return nil }
         let notifier = SystemNotifier(clicked: clicked)
         UNUserNotificationCenter.current().delegate = notifier
@@ -98,7 +111,8 @@ final class SystemNotifier: NSObject, Notifier, UNUserNotificationCenterDelegate
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler done: @escaping () -> Void) {
-        DispatchQueue.main.async { self.clicked() }
+        let id = response.notification.request.identifier
+        DispatchQueue.main.async { self.clicked(id) }
         done()
     }
 

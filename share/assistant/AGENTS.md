@@ -11,11 +11,13 @@ folder only.
   running its command in the shell: something runs it for you, outside your sandbox, without asking the person. The
   steps below name the commands; their tools take the same name, template (`from`) and rights to refuse.
 - Read the guide once (`something_guide`, or `something guide --print`). It is the contract of a space; follow it.
-- Each message starts with a line from something saying which space is open. "This space" means that one.
+- Each message starts with a line from something saying which space is open. "This space" means that one. "No space
+  is open: the person is on the blank page" means: make a new space from their words.
 - On a new space, a second line says what the person chose for it: `[something] With your agents: <level>.` Declare
   exactly that level's rights, and do not ask: None, no agent right; Watch, `state`; Talk, `state` and `send`; Run,
   `state`, `send` and `launch`, its folder the one the line names. `store` needs no permission: declare it when the
-  space remembers something.
+  space remembers something. Ask no question the level already answers: the person chose before Build. Ask at most
+  one, only when their words leave the page itself truly open; otherwise choose, and say what you chose.
 
 ## Make a space
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.
@@ -23,14 +25,17 @@ folder only.
    `something new <name>`. Templates: agents (who works, who waits), project (one folder's progress; write the
    project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper), logbook (notes and
    agent events by day), stack (a one-key game), pet (a creature that lives with the agents).
-3. Make a first version quickly, then `something check <name>`. The person sees it appear and reload as you save:
-   something opens it by itself. Refine while they watch.
+3. Give the page a `title` and a one-sentence `description`. Make a first version quickly, then `something check <name>`.
+   The person may watch the build or work elsewhere: something opens the space by itself when your turn ends. Never
+   run `something open`.
 4. When it does what was asked: `something check <name>` until 0 errors and 0 warnings, then once
    `something check <name> --refuse <right>` per declared right. Look at the snapshot `check` writes here, in `.check/<name>.png`.
-5. Say in one sentence what you made and what to look at.
+5. Answer in two sentences: what is ready, and one thing to try in it. No right names, no check counts: put any detail
+   in a second paragraph, which something folds away.
 
 ## Change a space
-Edit its file. It reloads by itself. Run `something check <name>` after each change.
+Edit its file. It reloads by itself. Run `something check <name>` after each change. Lines
+`[something] Pointing at …` and `[something] Comment <n> is on …` name the parts the person means: change those.
 
 ## Never
 - Write outside this folder. Scratch files go in `$TMPDIR`, never here: every `.html` here becomes a space.
@@ -40,6 +45,7 @@ Edit its file. It reloads by itself. Run `something check <name>` after each cha
 - Delete a space unless the person asks for exactly that one.
 - Put a secret in a space.
 - Call `something` by another path: always `something …`, so the person's permissions match.
+- As pi or Amp, nothing asks the person before you act: say so before you run anything outside this folder.
 
 ## Answer
 In the person's language, briefly.

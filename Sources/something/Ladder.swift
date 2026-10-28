@@ -5,8 +5,8 @@
 // (the lent tool reports a page with problems as done, so it says "Checked"). Above the steps, the agent's last words
 // in its own voice, or the question it asks while it builds, answered here (keys 1 to 9 while no text is edited,
 // Ladder.choice) while its permissions still go to the panel (AssistantModel.inlineQuestion). Below, where it is built
-// and Stop (⌘.), which says what stays on disk. The times are when something saw each step: agents stamp theirs to the
-// second.
+// and Stop (⌘.), which says what stays on disk; leaving stops nothing. The times are when something saw each step:
+// agents stamp theirs to the second. Its progress fills the ring of the building space's row in the sidebar.
 import AppKit
 import SomethingAgents
 import SomethingCore
@@ -32,6 +32,12 @@ struct Ladder: Equatable {
     var stopped = false
 
     var done: Bool { steps.allSatisfy { $0.mark == .done } }
+
+    /// How far the build is, for its row's ring: a third per step done, half of one for the step under way.
+    var progress: Double {
+        let done = steps.filter { $0.mark == .done }.count, under = steps.contains { [.now, .waits].contains($0.mark) }
+        return min(1, (Double(done) + (under ? 0.5 : 0)) / Double(steps.count))
+    }
 
     /// The ladder of a build begun at `start` whose turn holds `items`, the times taken from `seen` (when something
     /// saw an item, or `<id>/<status>` its tool's end) or else the item's own; `asked` is the question waiting since
@@ -105,11 +111,6 @@ struct Ladder: Equatable {
         return ladder
     }
 
-    /// The toast when leaving New Space stopped the build.
-    var left: String {
-        wrote.map { "Stopped building · \($0) stays unchecked" } ?? (ran ? "Stopped building · what it changed stays" : "Stopped building · nothing was saved")
-    }
-
     /// The choice a key answers: a digit from 1 to 9 typed with no modifier while no text is edited, which keeps a
     /// digit typed in Go to or a sheet's field from answering the agent; nil otherwise.
     static func choice(_ characters: String?, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Int? {
@@ -118,15 +119,33 @@ struct Ladder: Equatable {
         return digit - 1
     }
 
-    /// The time a step took, or has taken by `now` while it runs; nil when it has none to say.
+    /// The time a step took, or has taken by `now` while it runs; nil when it has none to say, as a step just begun.
+    /// Under a tenth of a second, a step done says so rather than "0.0 s".
     static func took(_ step: Step, now: Date) -> String? {
         guard let from = step.from, [.now, .done, .failed].contains(step.mark) else { return nil }
-        return String(format: "%.1f s", max(0, (step.to ?? now).timeIntervalSince(from)))
+        let seconds = max(0, (step.to ?? now).timeIntervalSince(from))
+        if seconds < 0.05 { return step.mark == .now ? nil : "<0.1 s" }
+        return String(format: "%.1f s", seconds)
+    }
+}
+
+/// The ring a building space's row shows in place of nothing: a circle of line2 that fills with ink as the build goes.
+struct BuildRing: View {
+    let progress: Double
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Look.Token.line2.ui, lineWidth: 1.6)
+            Circle().trim(from: 0, to: max(0.04, progress)).stroke(Look.Token.ink.ui, style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                .rotationEffect(.degrees(-90)).animation(.easeOut(duration: 0.4), value: progress)
+        }
+        .frame(width: 12, height: 12)
+        .accessibilityHidden(true)
     }
 }
 
 /// The ladder as the mockup draws it under New Space's field: the agent's words, the question's choices, the three
-/// steps in a card, and the foot with Stop, or Build Again once stopped.
+/// steps in a card, and the foot that says the person may leave, with Stop, or Build Again once stopped.
 struct LadderView: View {
     let ladder: Ladder
     @Bindable var model: AssistantModel
@@ -285,6 +304,8 @@ struct LadderView: View {
                     .foregroundStyle((nudged ? Look.Token.ink : .ink3).ui)
             }
             Spacer(minLength: 0)
+            // Leaving stops nothing: the row in the sidebar brings it back.
+            if !ladder.stopped, !ladder.done, !nudged { Text("You can leave: it keeps building.").lineLimit(1) }
             if ladder.stopped {
                 Button { model.send() } label: {
                     HStack(spacing: 6) { Text("Build Again"); Key("↵") }.font(Look.font(.ui, size: 12, weight: .medium).ui)

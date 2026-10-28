@@ -87,11 +87,11 @@ import Testing
     @Test func stopSaysWhatStaysOnDisk() {
         let writing = Ladder.read([tool("w", "Write", Self.room, "running")], seen: seen(["w": 1]), from: Self.start).halted()
         #expect(writing.steps.map(\.mark) == [.done, .off, .off] && writing.stopped && writing.eyes == .sleep)
-        #expect(writing.say == "Stopped. waiting-room.html stays in your spaces folder, unchecked." && writing.left == "Stopped building · waiting-room.html stays unchecked")
+        #expect(writing.say == "Stopped. waiting-room.html stays in your spaces folder, unchecked.")
         let ran = Ladder.read([tool("b", "Bash", "npm install")], seen: [:], from: Self.start).halted()
         #expect(ran.say == "Stopped. What it changed stays in your spaces folder." && ran.steps.map(\.mark) == [.off, .off, .off])
         let nothing = Ladder.read([], seen: [:], from: Self.start).halted()
-        #expect(nothing.say == "Stopped before writing. Nothing was saved." && nothing.left == "Stopped building · nothing was saved")
+        #expect(nothing.say == "Stopped before writing. Nothing was saved.")
     }
 
     // MARK: Through the fake claude
@@ -126,19 +126,93 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
-    /// Leaving New Space mid-build stops it, keeps the words in its field and says so; no ladder waits on return.
-    @Test func leavingNewSpaceStopsTheBuild() async throws {
+    /// Leaving New Space mid-build stops nothing: it goes on, told nowhere, New Space shows its own field again (what
+    /// was half written there kept), and the build's row brings its ladder back. A second build runs beside it, each
+    /// with its own agent, and neither sleeps however low the cap of awake assistants is.
+    @Test func leavingNewSpaceKeepsBuilding() async throws {
         let (home, model) = try await assistant()
         var told: [String] = []
         model.told = { told.append($0) }
         model.draft = "Half written"
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now }))
+        let first = try #require(model.watched)
+        #expect(model.building && model.sessions[.new]?.draft == "Half written" && model.space(of: model.builds[0]) == "waiting-room")
         model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
-        #expect(!model.building && told == ["Stopped building · waiting-room.html stays unchecked"])
+        #expect(!model.building && model.builds.map(\.id) == [first] && told.isEmpty && model.watched == nil)
         model.place = .blank
-        #expect(model.ladder == nil && model.draft == "Who is waiting for me\nHalf written")
+        #expect(model.ladder == nil && model.draft == "Half written" && !model.building)
+        model.watch(first)
+        #expect(model.building && model.ladder?.steps[1].mark == .now && model.ladder?.say?.hasPrefix("I’ll make") == true)
+        // A second build, from New Space's field, while the first goes on.
+        model.watch(nil)
+        Preferences.at(home.places).awakeAtMost = 1
+        model.send("Who is waiting for me")
+        #expect(await wait(until: { model.builds.count == 2 && model.engine.assistants.count == 2 }))
+        #expect(model.watched == model.builds[1].id && model.builds.map(\.session.asleep) == [false, false])
+        model.tick()
+        #expect(model.builds.allSatisfy { $0.session.agent?.alive != false && !$0.session.asleep }, "a building assistant never sleeps")
         await AssistantTests().finish(home, model)
+    }
+
+    /// A build that fails while the person is elsewhere: its words are back in New Space's field, the toast says so,
+    /// and New Space says why, with its notice.
+    @Test func aFailedBuildKeepsTheWords() async throws {
+        let (home, model) = try await assistant()
+        var told: [String] = []
+        model.told = { told.append($0) }
+        model.send("sign-in-please, a page of my plans")
+        model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+        #expect(await wait(until: { model.builds.isEmpty }))
+        #expect(told == ["Your new space didn't build · your words are back"])
+        model.place = .blank
+        #expect(model.draft == "sign-in-please, a page of my plans" && !model.building && model.notice != nil)
+        await AssistantTests().finish(home, model)
+    }
+
+    /// A build that ends while the person is in another space: its space, there before (a rebuild), is found by the
+    /// page it wrote, takes the build's conversation and is said ready, not opened; one that ends while New Space shows
+    /// it opens, its card to open on the reply.
+    @Test(arguments: [false, true]) func aBuildEndsWhereverThePersonIs(away: Bool) async throws {
+        let (home, model) = try await assistant("fail")
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
+        _ = try home.space("waiting-room", page(#"{"contract": 1, "title": "Waiting room", "rights": ["state", "store"]}"#, ""))
+        library.relist()
+        var arrived: [String] = [], opened: String?
+        model.arrived = { arrived.append("\($0) · \($1)") }
+        model.ended = {
+            library.relist()
+            opened = model.appeared(library.entries, open: away ? "agents" : nil)
+        }
+        model.send("Who is waiting for me")
+        #expect(await wait(until: { model.ladder?.done == true }))
+        if away { model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html") }
+        try Data().write(to: home.root.appendingPathComponent("out/finish"))
+        #expect(await wait(until: { model.builds.isEmpty }))
+        #expect(opened == (away ? nil : "waiting-room") && arrived == (away ? ["waiting-room · Waiting room"] : []))
+        #expect(model.ready?.id == (away ? "waiting-room" : nil) && model.revealing == (away ? nil : "waiting-room"))
+        let room = AssistantModel.Place.space(title: "Waiting room", name: "waiting-room", page: home.places.spaces.appendingPathComponent("waiting-room.html").path)
+        #expect(model.session(for: room).rows.contains(.mine(caption: "on the blank page", text: "Who is waiting for me")))
+        model.place = room
+        #expect(away || (model.open && model.threadShown))
+        await AssistantTests().finish(home, model)
+    }
+
+    /// A build's reply is said short: its first paragraph, the rest under Details; other replies are whole.
+    @Test func aBuildsReplyFoldsItsDetails() {
+        let rows: [AssistantModel.Row] = [.mine(caption: "on the blank page", text: "A countdown"), .reply("Week-end is ready. Try: write your plans.\n\nIt reads the state.")]
+        #expect(AssistantModel.folded(rows, at: 1)! == ("Week-end is ready. Try: write your plans.", "It reads the state."))
+        #expect(AssistantModel.folded([.mine(caption: "about Week-end", text: "Bigger"), rows[1]], at: 1) == nil)
+        #expect(AssistantModel.folded([rows[0], .reply("One paragraph.")], at: 1) == nil)
+    }
+
+    /// The row's name until the page has one, and the ring's progress.
+    @Test func aBuildingRowIsNamedFromItsWords() {
+        #expect(AssistantModel.provisional("A countdown to Saturday, with what my agents still have to finish.") == "A countdown to Saturday…")
+        #expect(AssistantModel.provisional("Who is waiting for me") == "Who is waiting for me")
+        let writing = Ladder.read([tool("w", "Write", Self.room, "running")], seen: seen(["w": 1]), from: Self.start)
+        #expect(writing.progress == 0.5 && Ladder.read([], seen: [:], from: Self.start).progress == 1.0 / 6)
+        #expect(SidebarView.building("Week-end", 0.5) == "Week-end, building, 50 %")
     }
 
     /// SP8: the build's question is answered on the page and never queued for the panel; the answer reaches the agent,
@@ -173,7 +247,8 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
-    /// Stopping, or leaving New Space, while the build asks: the question it withdraws later never reaches the panel.
+    /// Stopping while the build asks: the question it withdraws later never reaches the panel. Leaving New Space stops
+    /// nothing: away, the question goes to the panel.
     @Test(arguments: [false, true]) func aStoppedBuildsQuestionNeverReachesThePanel(leaving: Bool) async throws {
         let (home, model) = try await assistant("ask")
         let panels = Panels(source: model.engine, shows: false)
@@ -186,7 +261,13 @@ import Testing
         }
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.asked != nil }))
-        if leaving { model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html") } else { model.stop() }
+        if leaving {
+            model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+            panels.refresh()
+            #expect(model.asked == nil && panels.queue.waiting.map(\.kind) == ["question"] && model.builds.count == 1)
+            return await AssistantTests().finish(home, model)
+        }
+        model.stop()
         panels.refresh()
         #expect(model.engine.state.requests.count == 1 && panels.queue.waiting.isEmpty && panels.panel == nil)
         #expect(await wait(until: { model.engine.state.requests.isEmpty }))
