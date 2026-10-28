@@ -238,7 +238,8 @@ final class ACPDriver: Driver {
             session = launch.resume ? launch.thread : result["sessionId"] as? String
             emit(.started(pid: nil, thread: session))
             read(result["configOptions"])
-            if let listed, listed["sessionId"] as? String == session { update(listed["update"] as? [String: Any] ?? [:]) }
+            if let held = listed, held["sessionId"] as? String == session { update(held["update"] as? [String: Any] ?? [:]) }
+            listed = nil
             // Before the effort, which depends on the model; a resumed conversation keeps its own model.
             if !modelAsked, !launch.resume, let recent, recent != model, models.contains(recent) {
                 settings.insert(("model", recent), at: settings.firstIndex { $0.key == "effort" } ?? settings.endIndex)

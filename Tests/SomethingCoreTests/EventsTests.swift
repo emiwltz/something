@@ -141,6 +141,13 @@ struct EventsTests {
         #expect(fold.agent.subagents?.count == Limits.items && fold.agent.subagents?.first?.name == "Invented 11")
         fold.apply(.subagent(id: "s60", name: "Invented 60", status: "failed"), at: "2026-10-17T09:00:04Z")
         #expect(fold.agent.subagents?.last == Tool(name: "Invented 60", status: "failed"))
+        fold.apply(.turnStarted(id: nil), at: "2026-10-17T09:00:05Z")
+        fold.apply(.subagent(id: "s60", name: "Invented 60", status: "running"), at: "2026-10-17T09:00:05Z")
+        fold.apply(.turnEnded(.interrupted), at: "2026-10-17T09:00:05Z")
+        #expect(fold.agent.subagents?.last == Tool(name: "Invented 60", status: nil))
+        fold.apply(.subagent(id: "s61", name: "Invented 61", status: "running"), at: "2026-10-17T09:00:05Z")
+        fold.apply(.stopped(nil), at: "2026-10-17T09:00:06Z")
+        #expect(fold.agent.subagents?.last == Tool(name: "Invented 61", status: nil) && fold.agent.subagents?.count == Limits.items)
     }
 
     @Test func anItemBeforeAnyTurnGoesInATurnNobodySawStart() {

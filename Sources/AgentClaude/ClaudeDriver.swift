@@ -523,8 +523,6 @@ final class ClaudeDriver: Driver {
 
     private func id(_ claudeID: String) -> String { "\(launch.agent):\(claudeID)" }
 
-    /// The efforts are those of the model in use, as `initialize` listed them; nil until it did and the model is
-    /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
     /// The tools that start a sub-agent.
     static let starters: Set = ["Agent", "Task"]
 
@@ -535,6 +533,8 @@ final class ClaudeDriver: Driver {
         }
     }
 
+    /// The efforts are those of the model in use, as `initialize` listed them; nil until it did and the model is
+    /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
     private func options() -> Options {
         var options = Options()
         options.mode = Driving.claude.modes

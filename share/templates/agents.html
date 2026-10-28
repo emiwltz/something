@@ -107,7 +107,10 @@
   .why::before { content: "WRITE · "; letter-spacing: .12em; }
 
   /* The reply box lives in its tile and is never redrawn: a change that arrives while the person types keeps the text. */
-  .reply { display: flex; gap: 8px; align-items: stretch; margin-top: 4px; }
+  .reply { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-top: 4px; }
+  /* A typed "/command words" reads whole: the box has its own row and grows with its text, the buttons under it. */
+  .reply textarea, .reply .said { flex: 1 1 100%; box-sizing: border-box; }
+  .reply .buttons { margin-left: auto; }
   .waiting .body:has(form:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 1.1fr); gap: 6px 22px; }
   .waiting .reply { grid-column: 2; grid-row: 1 / span 5; margin: 0; flex-direction: column; }
   textarea { flex: 1; min-height: 34px; resize: none; font: inherit; color: var(--ink); background: transparent;
@@ -220,19 +223,22 @@
 
   // One tile per agent, made once and then updated in place (see .reply in the style).
   const tiles = new Map();
-  let painted = false;                             // true once the first state was drawn
+  let painted = false, menus = 0;                  // true once the first state was drawn; menus made, for their ids
   function tile(agent) {
     const node = make("article", "tile");
     node.innerHTML = `<div class="top label"><span class="status"></span><span class="kind"></span></div>
       <div class="body"><div class="name"></div><div class="folder"></div><div class="last"></div><div class="helpers" hidden></div>
       <div class="ask" hidden></div><div class="fault" hidden></div><div class="held" hidden></div>
-      <form class="reply" hidden><ul class="cmds" role="listbox" hidden></ul><textarea rows="1" aria-label="Message"></textarea>
+      <form class="reply" hidden><ul class="cmds" role="listbox" hidden></ul><textarea rows="1" aria-label="Message"
+        role="combobox" aria-autocomplete="list" aria-expanded="false"></textarea>
         <div class="buttons"><button type="button" class="stop">Interrupt</button>
         <button type="submit" value="now">Steer now</button><button type="submit" value="next">Send</button></div>
         <div class="said" aria-live="polite"></div></form>
       <div class="why" hidden></div></div>`;
     const form = node.querySelector("form"), box = form.querySelector("textarea");
     commandMenu(node, box);
+    const fit = () => { box.style.height = ""; box.style.height = box.value ? box.scrollHeight + 2 + "px" : ""; };
+    box.addEventListener("input", fit);
     form.onsubmit = (event) => {
       event.preventDefault();
       const text = box.value.trim();
@@ -244,7 +250,7 @@
       const [, name, words] = text.match(/^\/(\S+)\s*([\s\S]*)$/) || [];
       const listed = name && (node.agent.commands || []).some((c) => c.value === name);
       something.send(agent.id, listed ? words : text, listed ? { when, command: name } : { when }).then(({ delivery }) => {
-        form.querySelector("textarea").value = "";
+        box.value = ""; fit();
         form.querySelector(".said").textContent = DELIVERY[delivery] || `Message ${delivery}.`;
         problem(null);
       }).catch(problem);
@@ -259,29 +265,38 @@
   function commandMenu(node, box) {
     const menu = node.querySelector(".cmds");
     let shown = [], at = 0;
+    // VoiceOver follows the chosen row through the box: aria-activedescendant names it while the menu is open.
+    menu.id = "cmds-" + ++menus;
+    box.setAttribute("aria-controls", menu.id);
+    const open = (on) => {
+      menu.hidden = !on;
+      box.setAttribute("aria-expanded", String(on));
+      if (on) box.setAttribute("aria-activedescendant", `${menu.id}-${at}`); else box.removeAttribute("aria-activedescendant");
+    };
     const draw = () => {
       const typed = box.value.match(/^\/(\S*)$/);
       shown = typed ? (node.agent.commands || []).filter((c) => c.value.startsWith(typed[1])) : [];
       at = Math.min(at, Math.max(0, shown.length - 1));
-      menu.hidden = !shown.length;
       menu.setAttribute("aria-label", `${label(node.agent.kind)}'s commands`);
       menu.replaceChildren(...shown.map((c, i) => {
         const row = make("li", "");
+        row.id = `${menu.id}-${i}`;
         row.setAttribute("role", "option");
         row.setAttribute("aria-selected", String(i === at));
         row.append(make("b", "", "/" + c.value), make("span", "", c.label));
         row.onmousedown = (event) => { event.preventDefault(); at = i; pick(); };
         return row;
       }));
+      open(shown.length > 0);
     };
-    const pick = () => { box.value = "/" + shown[at].value + " "; menu.hidden = true; shown = []; };
+    const pick = () => { box.value = "/" + shown[at].value + " "; open(false); shown = []; };
     box.addEventListener("input", () => { at = 0; draw(); });
-    box.addEventListener("blur", () => { menu.hidden = true; });
+    box.addEventListener("blur", () => open(false));
     box.addEventListener("keydown", (event) => {
       if (menu.hidden || !shown.length) return;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") at = (at + (event.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length;
       else if (event.key === "Enter" || event.key === "Tab") pick();
-      else if (event.key === "Escape") menu.hidden = true;
+      else if (event.key === "Escape") open(false);
       else return;
       event.preventDefault();
       if (!menu.hidden) draw();
@@ -321,7 +336,7 @@
     // Its own sub-agents, as its stream marks them: how many work now, and what each was asked.
     const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running");
     show(".helpers", helpers.length ? (busy.length ? `${busy.length} at work: ${busy.map((h) => h.name).join(" · ")}`
-      : `${helpers.length} done, the last: ${helpers[helpers.length - 1].name}`) : "");
+      : `${helpers.length} finished, the last: ${helpers[helpers.length - 1].name}`) : "");
     show(".fault", agent.error ? agent.error.message : "");
     show(".held", agent.queue.length ? `${agent.queue.length} held for after this turn: “${agent.queue[0].text}”` : "");
     // `can` says what a call would do now and `because` why not; the person's grant says whether this space may.

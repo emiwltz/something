@@ -509,7 +509,9 @@ struct AcceptanceShell {
             return { hidden: menu.hidden, label: menu.getAttribute("aria-label"), role: menu.getAttribute("role"), box: box.value,
                      names: [...menu.querySelectorAll("li b")].map((b) => b.textContent), roles: [...menu.children].map((li) => li.getAttribute("role")),
                      chosen: [...menu.children].findIndex((li) => li.getAttribute("aria-selected") === "true"), place: box.placeholder,
-                     helpers: tile.querySelector(".helpers").textContent };
+                     helpers: tile.querySelector(".helpers").textContent, expanded: box.getAttribute("aria-expanded"),
+                     active: box.getAttribute("aria-activedescendant"), chosenID: menu.querySelector("[aria-selected=true]")?.id ?? null,
+                     controls: box.getAttribute("aria-controls") === menu.id };
             """
         func key(_ name: String) -> String { #"box.dispatchEvent(new KeyboardEvent("keydown", { key: "\#(name)", bubbles: true, cancelable: true }));"# }
         let type = #"box.focus(); box.value = "/"; box.dispatchEvent(new Event("input"));"#
@@ -522,9 +524,10 @@ struct AcceptanceShell {
         seen = try await run(#"box.value = "/re"; box.dispatchEvent(new Event("input"));"# + read)
         #expect(seen["names"] as? [String] == ["/review"])
         seen = try await run(type + key("ArrowDown") + read)
-        #expect(seen["chosen"] as? Int == 1)
+        #expect(seen["chosen"] as? Int == 1 && seen["expanded"] as? String == "true" && seen["controls"] as? Bool == true, "\(seen)")
+        #expect(seen["active"] as? String != nil && seen["active"] as? String == seen["chosenID"] as? String, "\(seen)")
         seen = try await run(key("Enter") + read)
-        #expect(seen["box"] as? String == "/plan " && seen["hidden"] as? Bool == true, "\(seen)")
+        #expect(seen["box"] as? String == "/plan " && seen["hidden"] as? Bool == true && seen["expanded"] as? String == "false", "\(seen)")
         // Esc closes the menu, and a text that is no command's name shows none.
         seen = try await run(type + key("Escape") + read)
         #expect(seen["hidden"] as? Bool == true)

@@ -212,8 +212,8 @@ Call `something.open` for a link your code opens, not from the click handler of 
   Neither answers the request. So a reply box on a waiting agent can stay, if it says the message comes after the answer.
 
 **`command` in `send`:** the `value` of one of the agent's `commands`, without its "/". The text is that command's
-argument and may be empty; something sends "/command text" to the agent as it is, held or steered as `when` says, and
-the agent runs it as its own. A command the agent does not list (or an agent whose `commands` is `null`) gives
+argument and may be empty; something sends "/command text" to the agent as it is, held or steered as `when` says;
+what the agent does with it is the agent's own (a command it lists in this mode is meant to run). A command the agent does not list (or an agent whose `commands` is `null`) gives
 `VALUE_NOT_OFFERED`. Text that starts with "/" without `command` goes as plain text, which most agents also run.
 
 What each `delivery` means today:
@@ -350,7 +350,7 @@ sentence for the person when something is off (for a kind something does not lau
 | `options` | `{model, mode, effort}`: each a list of `{value, label}` the agent offers, or `null`. |
 | `commands` | The agent's own commands, as it lists them: `[{value, label}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does. `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
 | `queue` | `[{id, text, at}]`: messages something holds for the agent's next turn. |
-| `subagents` | The sub-agents it started that its stream marks, oldest first, the last 50: `[{name, status}]`, `name` what it asked each to do, `status` `running`, `done`, `failed` or `null`. `null` until one shows. Their work is in the thread, as items of kind `subagent`. |
+| `subagents` | The sub-agents it started that its stream marks, oldest first, the last 50: `[{name, status}]`, `name` what it asked each to do, `status` `running`, `done`, `failed` or `null`, `null` when its end was not seen (its turn broke off or its agent stopped). `null` until one shows. Their work is in the thread, as items of kind `subagent`. |
 | `can` | `send steer queue interrupt model mode effort resume`: what a call would do now. Always booleans. |
 | `because` | For a false entry of `can` worth explaining: one sentence. Show it next to the hidden button. |
 | `error` | `{code, message}` or `null`: the agent's last error, in its own words when they are clear. |
@@ -421,7 +421,8 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
 - **Their own commands and sub-agents**: Claude Code lists its `commands` as it starts, OpenCode as it opens its
   conversation (and any agent over ACP that sends them); Codex, pi and Amp give something no list, so theirs stay
   `null`, and so do an agent's started elsewhere. `subagents` lists Claude Code's Agent calls and Codex's spawned
-  agents; OpenCode's and Amp's sub-agents show only as items of kind `subagent`. something only shows them and passes
+  agents; OpenCode's and Amp's sub-agents show only as items of kind `subagent`. The call that starts a sub-agent
+  (Claude Code's Agent, Codex's collaboration calls) is itself an item of kind `subagent`, no longer `tool`. something only shows them and passes
   the commands a page sends: it never starts, stops or chains a sub-agent.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. Only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`

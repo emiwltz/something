@@ -69,9 +69,9 @@ public struct Fold: Sendable {
         case .options(let options): agent.options = options
         case .commands(let commands): agent.commands = commands
         case .subagent(let id, let name, let status):
-            if !subagents.contains(id) { subagents.append(id); agent.subagents = (agent.subagents ?? []) + [Tool(name: name, status: status)] }
-            if subagents.count > Limits.items { subagents.removeFirst(); agent.subagents?.removeFirst() }
-            if let index = subagents.firstIndex(of: id) { agent.subagents?[index] = Tool(name: name, status: status) }
+            if let index = subagents.firstIndex(of: id) { agent.subagents?[index] = Tool(name: name, status: status) } else {
+                (subagents, agent.subagents) = (Array((subagents + [id]).suffix(Limits.items)), Array(((agent.subagents ?? []) + [Tool(name: name, status: status)]).suffix(Limits.items)))
+            }
         case .turnStarted(let id):
             count += 1
             add(Turn(id: id ?? "\(agent.thread ?? agent.id)#\(count)", state: "working", started: at, ended: nil, items: []))
@@ -83,6 +83,7 @@ public struct Fold: Sendable {
             case .failed(let error): close("error", at: at); facts.failed = true; agent.error = error
             }
             facts.turnOpen = false
+            if outcome != .done { unseenEnds() }
             if outcome == .interrupted { agent.queue = [] } else if !agent.queue.isEmpty { next = agent.queue.removeFirst() }
         case .itemAppended(let item):
             // An item before any turn (a resumed conversation's history) goes in a turn nobody saw start.
@@ -101,6 +102,7 @@ public struct Fold: Sendable {
         case .stopped(let error):
             // A process gone mid-turn did not end normally: the open turn makes StateMap say "interrupted".
             if facts.turnOpen == true { close("interrupted", at: at) }
+            unseenEnds()
             // The last turn's outcome stays: a failed or interrupted turn is not undone by a clean exit after it.
             (facts.alive, facts.failed) = (false, facts.failed || error != nil)
             facts.ended = !facts.failed && !facts.aborted && facts.turnOpen != true
@@ -128,6 +130,9 @@ public struct Fold: Sendable {
         guard let last = turns.indices.last, turns[last].state == "working" else { return }
         (turns[last].state, turns[last].ended) = (state, at)
     }
+
+    /// A sub-agent still running when its turn broke off or its agent stopped has an end nobody saw: its status is unknown.
+    private mutating func unseenEnds() { agent.subagents = agent.subagents?.map { $0.status == "running" ? Tool(name: $0.name, status: nil) : $0 } }
 
     /// A permission outweighs a question: an agent asking both cannot go on until the permission is answered.
     private mutating func waitingFromRequests() {
