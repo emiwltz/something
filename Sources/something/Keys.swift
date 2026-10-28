@@ -110,7 +110,8 @@ enum Keys {
         Command(id: "help", title: "something Help", action: #selector(App.openHelp(_:)), owner: "G7"),
         Command(id: "promise", title: "What something Does and Doesn’t", action: #selector(App.showPromise(_:)), owner: "G7"),
         Command(id: "guide", title: "Guide for Coding Agents", action: #selector(App.showGuide(_:)), owner: "G7"),
-        Command(id: "tour", title: "Welcome Tour", action: #selector(App.showTour(_:)), owner: "F5"),
+        Command(id: "tour", title: "Welcome", action: #selector(App.showWelcome(_:)), owner: "S12"),
+        Command(id: "how", title: "How something Works", action: #selector(App.showHowItWorks(_:)), owner: "S12"),
         Command(id: "send", title: "Send Comments", owner: "T18", words: "⌘↵"),
     ]
 
@@ -166,7 +167,7 @@ enum Keys {
                        .item("showreq"), .separator, .item("pointpart"), .separator, .item("buildWith"), .item("askAll"), .separator,
                        .item("sleep")]),
         ("Window", [.item("minimize"), .item("zoom"), .separator, .item("front")]),
-        ("Help", [.item("help"), .item("keys"), .item("promise"), .item("guide"), .separator, .item("tour")]),
+        ("Help", [.item("help"), .item("how"), .item("keys"), .item("promise"), .item("guide"), .separator, .item("tour")]),
     ]
 
     /// The menu bar made from `menus`, every item acting through the responder chain. Each command's item carries

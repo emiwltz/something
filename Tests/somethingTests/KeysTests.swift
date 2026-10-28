@@ -325,7 +325,7 @@ enum Mockup {
     /// where the card ends, not where it was on the first frame.
     @Test(.enabled(if: windowServer, windowServerMissing)) func theCardsShadowFollowsItWhileItRises() async throws {
         // Shown, out of sight: only a window on a screen draws.
-        let window = TourTests.shown(NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760), styleMask: [.titled], backing: .buffered, defer: false))
+        let window = WelcomeTests.shown(NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760), styleMask: [.titled], backing: .buffered, defer: false))
         window.isReleasedWhenClosed = false
         defer { window.close() }
         let layer = WindowLayer(over: try #require(window.contentView))

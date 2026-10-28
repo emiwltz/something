@@ -1,6 +1,6 @@
 // The launcher: a small something.app in ~/Applications that opens the one Homebrew installed, so that Spotlight finds
-// something (it indexes nothing under Homebrew's prefix). The tour offers it once, only when something runs from a
-// Homebrew prefix and no launcher is there; it is made only when the person turns its switch on, and never registered
+// something (it indexes nothing under Homebrew's prefix). Settings › General offers it when something runs from a
+// Homebrew prefix; it is made only when the person turns its switch on, and never registered
 // by something: Spotlight and Finder find it as they find any app put in Applications. Settings can remove it again.
 import Foundation
 import SomethingCore
@@ -20,13 +20,6 @@ enum Launcher {
 
     /// ~/Applications/something.app under the places' home.
     static func place(_ places: Places) -> URL { places.home.appendingPathComponent("Applications/something.app") }
-
-    /// Whether the tour offers the launcher: something runs from a Homebrew prefix, the tour never offered it, and
-    /// no launcher is there.
-    static func offered(app: URL, places: Places) -> Bool {
-        prefix(of: app) != nil && !Preferences.at(places).launcherOffered
-            && !FileManager.default.fileExists(atPath: place(places).path)
-    }
 
     /// Makes the launcher of the something.app Homebrew keeps under `prefix`, with `icon` when there is one; a
     /// launcher already there is kept as it is. Its program opens something, or says it is no longer installed.

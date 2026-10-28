@@ -45,7 +45,7 @@ import Testing
         // At any side, it is the same sign scaled.
         #expect(near(g.cornerRect(1, side: 88), CGRect(x: 55.44, y: 5.28, width: 27.28, height: 27.28)))
         #expect(near(g.eyes(.think, side: 88)[1], g.eyes(.think, side: 44)[1].applying(CGAffineTransform(scaleX: 2, y: 2))))
-        // The welcome's big sticker widens the joy eyes.
+        // A sign may widen its joy eyes.
         var big = Sign.Geometry()
         big.joy = 1.5
         #expect(abs(big.eyes(.done, side: 118)[0].width - 1.5 * 14.75) < 0.01)

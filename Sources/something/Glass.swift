@@ -6,7 +6,7 @@
 // every space, kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the
 // sticker's corner; ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the
 // card stays open and fades to that space's own conversation. The glass is only over a space: off the spaces (New
-// Space, the templates, the tour) it is hidden, and New Space is its own composer. In either full screen the sticker is
+// Space, the templates) it is hidden, and New Space is its own composer. In either full screen the sticker is
 // discreet: smaller, from its corner toward the window's, and faded until the pointer or the focus comes; ⌘K is the same.
 import AppKit
 import Observation

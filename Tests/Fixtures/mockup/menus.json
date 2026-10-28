@@ -53,9 +53,9 @@
     ]},
     {"title": "Help", "items": [
       {"title": "Search", "system": true}, {"separator": true, "system": true},
-      {"title": "something Help"}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"title": "What something Does and Doesn’t"},
-      {"title": "Guide for Coding Agents"}, {"separator": true},
-      {"title": "Welcome Tour"}
+      {"title": "something Help"}, {"title": "How something Works"}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"},
+      {"title": "What something Does and Doesn’t"}, {"title": "Guide for Coding Agents"}, {"separator": true},
+      {"title": "Welcome"}
     ]}
   ]
 }

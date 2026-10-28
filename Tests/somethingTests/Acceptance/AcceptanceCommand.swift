@@ -5,6 +5,7 @@
 import AppKit
 import SomethingAgents
 import SomethingCore
+import SwiftUI
 import Testing
 @testable import something
 
@@ -111,7 +112,7 @@ struct AcceptanceCommand {
                      "something 0.3.0", "installed with Homebrew", "nothing leaves this Mac"]
         try await settings(.general, "g3", shows: shows) { settings, stage in
             let rows = settings.model.sections(.general).flatMap(\.rows)
-            #expect(rows.map(\.title) == ["When something opens", "Add something to Applications", "Welcome tour"])
+            #expect(rows.map(\.title) == ["When something opens", "Add something to Applications", "Welcome"])
             guard case .choice(let options, let get, _) = rows[0].control else { Issue.record("not a choice"); return }
             #expect(get() == "last")
             let menu = options.map { ($0.heading ? "# " : $0.value == get() ? "✓ " : "  ") + $0.label }
@@ -364,6 +365,59 @@ struct AcceptanceCommand {
             #expect(settings.model.sections(.agents).isEmpty && settings.model.lookedLine == "Looked today at 18:02 · 8 agents")
         }
     }
+
+    /// X8.1, Help › How something Works: the picture in a window of its own, its three parts as buttons under it, none
+    /// pressed, the promise and Replay; the item is in the Help menu, under something Help.
+    @Test("x8-1: something in one picture") func x8_1() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        #expect(Keys.command("how")?.title == "How something Works" && Keys.command("how")?.action == #selector(App.showHowItWorks(_:)))
+        let help = try #require(Keys.menus.first { $0.title == "Help" }).entries
+        #expect(help.prefix(3).map { if case .item(let id) = $0 { id } else { "" } } == ["help", "how", "keys"])
+        let window = HowItWorks.made(builder: "Claude Code · Sonnet 5.5", motion: .reduced)
+        defer { window.close() }
+        #expect(window.title == "How something Works" && window.contentView?.frame.size == HowItWorks.size && HowItWorks.light.lit == nil)
+        try await stage.appearances { suffix in
+            try await Picture.alone(window, "x8-1" + suffix, root: stage.home.root)
+            let words = await AcceptanceBuild.read(try #require(window.contentView))
+            #expect(words == Self.howWords, "\(words)")
+        }
+    }
+
+    /// X8.2, one part lit: Your assistant's button pressed (its number dark), the picture faded but for the assistant
+    /// and the panel, the page half; pressed again, all of it again. The welcome lights its parts the same way.
+    @Test("x8-2: one part lit") func x8_2() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let window = HowItWorks.made(builder: "Claude Code · Sonnet 5.5", motion: .reduced, lit: .assistant)
+        defer { window.close() }
+        #expect(HowItWorks.light.lit == .assistant)
+        try await stage.appearances { suffix in
+            try await Picture.alone(window, "x8-2" + suffix, root: stage.home.root)
+            let words = await AcceptanceBuild.read(try #require(window.contentView))
+            #expect(words == Self.howWords, "\(words)")
+        }
+        HowItWorks.light.light(nil)
+        HowItWorks.light.cycle(.reduced)
+        #expect(HowItWorks.light.lit == nil, "under Reduced motion Replay lights nothing in turn")
+    }
+
+    /// X0.1, the picture alone, 720 by 420, as the welcome and Help draw it: one image for VoiceOver, its three agents
+    /// the first three the app knows.
+    @Test("x0-1: the picture") func x0_1() async throws {
+        let stage = try Stage("command")
+        defer { stage.remove() }
+        let hero = Hero(light: HeroLight(), builder: "Claude Code · Sonnet 5.5", motion: .reduced)
+        #expect(hero.agents == ["Claude Code", "Codex", "OpenCode"])
+        let view = NSHostingView(rootView: hero)
+        view.frame.size = Hero.size
+        try await stage.appearances { suffix in
+            try Picture.view(view, "x0-1" + suffix, root: stage.home.root)
+            #expect(await AcceptanceBuild.read(view) == [Hero.label])
+        }
+    }
+
+    static let howWords = ["A page, your agents, your assistant", Hero.label] + HowItWorksView.parts.map { "\($0.1): \($0.2)" } + ["Replay"]
 
     /// The palette by its keys, VoiceOver on its field: ↓ and ↑ move the keys from row to row and say the row, Tab
     /// says where a sentence goes, Return opens; the shortcut sheet takes the keys and Esc closes it.

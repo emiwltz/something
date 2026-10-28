@@ -232,6 +232,7 @@ extension Shell {
     /// Opens Info, or closes the panel, at once: the page is laid out again a single time, never through an animation.
     func showInfo(_ shown: Bool) {
         if shown { info.content = .info }
+        if shown, HintBubble.shown(in: layer)?.kind == .info { HintBubble.close(in: layer) }
         info.history.closed()
         // Keys that were in the panel go back to the page as it closes, or to point mode's overlay while it is on.
         let panel = inspector.viewController.view

@@ -305,7 +305,7 @@ struct GalleryTests {
             #expect(await wait(until: { shell.assistant.installed.count == Registry.app.builders.count }))
             return (shell, library, home)
         }
-        // The welcome's steps are drawn by AcceptanceBuild (a2–a8), over the window they step back.
+        // The welcome is drawn by AcceptanceBuild (x2-1, x2-2).
         let none = try await onboarding([])
         defer { none.home.remove() }
         none.shell.show(nil)

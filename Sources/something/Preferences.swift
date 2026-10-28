@@ -1,7 +1,7 @@
 // What the app remembers for the person apart from the grants, in window.json: the window's memory (the last space
 // open, the recent ones, the groups of the sidebar and their folding, the names Rename… shows in place of a space's
 // title, since a space's own name is its file and its grants are keyed by it),
-// whether the tour was seen, and the settings, whose defaults are the approved mockup's. One copy per file, read once
+// whether the welcome and each hint were seen, and the settings, whose defaults are the approved mockup's. One copy per file, read once
 // and shared by every model of the window, so that no write undoes another's; each change is written at once,
 // atomically, over the keys this version knows: a key it does not know is kept as it was.
 import Foundation
@@ -30,7 +30,9 @@ import SomethingCore
         var listed: [String: Options] = [:]
         /// The commands each kind's agent last listed, by kind: "/" in the card offers them before it runs.
         var commands: [String: [Option]] = [:]
-        var askEverything = false, resume = true, toured = false, launcherOffered = false, addToApplications = true
+        var askEverything = false, resume = true, toured = false, addToApplications = true
+        /// The hints already shown (Hint.swift), each once.
+        var hinted: [String] = []
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
         /// "last", "new", or the name of a space.
         var openAtStart = "last"
@@ -45,7 +47,7 @@ import SomethingCore
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, launcherOffered, addToApplications, groups,
+            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, hinted, addToApplications, groups,
                  folded, names, recents, openAtStart, appearance, motion, assistantAtOpening, rememberSticker,
                  holdOption, notify, sticker, sleepAfter, awakeAtMost, versionsKept, storageLimit
         }

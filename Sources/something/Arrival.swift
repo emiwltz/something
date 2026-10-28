@@ -3,8 +3,7 @@
 // to the center's edges, 14 points in, in 820 ms on the douce curve, their stroke thinning and the eyes going to the
 // corner as they fade; then it all fades and the space is there, its row ringed a moment in the sidebar, and only then
 // its rights sheet. Reduced motion skips the growth: the still fades. A new opening ends an arrival still playing. It
-// is drawn in draw(_:), so cacheDisplay pictures it. The first-launch film (Film.swift) grows the same frame to the
-// window's edges.
+// is drawn in draw(_:), so cacheDisplay pictures it.
 import AppKit
 import SwiftUI
 
@@ -32,11 +31,7 @@ final class Arrival: NSView {
     /// How far it grew, from 0 to 1, in time: the curve is applied in `shape`.
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
     private(set) var playing = false
-    /// Whether the frame stays drawn once grown, until it fades: the film's frame holds at the window's edges.
-    var holds = false { didSet { needsDisplay = true } }
     private var timer: Timer?
-    /// How long it grows: `grows`, or the film's at its pace.
-    var span = Arrival.grows
     /// The clock in seconds; a seam for tests.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
 
@@ -126,21 +121,18 @@ final class Arrival: NSView {
     /// It never takes a click: what is under it answers, as on the rest of the glass.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    /// Where the frame grows to, and how far in: the center under the toolbar, or `reach` when it is set (the film's
-    /// whole window).
-    var reach: (room: CGRect, inset: CGFloat)?
+    /// Where the frame grows to: the center under the toolbar.
     var room: CGRect {
-        if let reach { return reach.room }
         let top = superview?.superview?.safeAreaInsets.top ?? 0
         return CGRect(x: 0, y: top, width: bounds.width, height: max(0, bounds.height - top))
     }
 
-    var shape: Shape { Arrival.shape(start, to: room, inset: reach?.inset ?? Arrival.inset, progress: progress) }
+    var shape: Shape { Arrival.shape(start, to: room, progress: progress) }
 
     override func draw(_ dirtyRect: NSRect) {
         if let still { still.draw(in: stillRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
         else { Look.Token.bg.color.setFill(); stillRect.fill() }
-        guard progress < 1 || playing || holds, let c = NSGraphicsContext.current?.cgContext else { return }
+        guard progress < 1 || playing, let c = NSGraphicsContext.current?.cgContext else { return }
         let shape = shape
         PointOverlay.corners(shape.rect, ink: .ink, arm: shape.arm, width: shape.stroke, halo: false)
         guard shape.eyes > 0 else { return }
@@ -165,14 +157,14 @@ final class Arrival: NSView {
         grow { [weak self] in self?.fade(Arrival.fades, arrived) }
     }
 
-    /// Grows the frame in `span` seconds, and calls `grown` once it is at its end.
+    /// Grows the frame in `grows` seconds, and calls `grown` once it is at its end.
     func grow(_ grown: @escaping () -> Void) {
         playing = true
         let began = clock()
         timer = .frames(1.0 / 60) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return false }
-                self.progress = min(1, CGFloat((self.clock() - began) / self.span))
+                self.progress = min(1, CGFloat((self.clock() - began) / Arrival.grows))
                 guard self.progress >= 1 else { return true }
                 self.playing = false
                 grown()

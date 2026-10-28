@@ -539,50 +539,6 @@ struct AcceptanceTrust {
             try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e13" + suffix, root: stage.home.root, fullScreen: screen)
         }
     }
-    /// A request arrives while the welcome, opened again from Help, stands over My agents: Show Request, which the menus
-    /// leave while they grey every command of the window behind, brings the panel in front of the welcome, holding the
-    /// keys, the welcome's lights gray. Escape there denies the request and leaves the tour at its step. That the keys
-    /// then go back to the welcome is a hand trial: a window never shown never becomes key.
-    @Test("e14: the panel over the welcome") func e14() async throws {
-        let stage = try Stage("trust")
-        defer { stage.remove() }
-        let (shell, library, _) = stage.window()
-        shell.window.setFrameOrigin(Self.large)
-        let agents = try await stage.open("agents", in: shell, library)
-        defer { agents.close() }
-        let tour = Tour(places: stage.home.places)
-        let welcome = shell.welcome(tour, onScreen: false)
-        defer { shell.welcomed() }
-        #expect(shell.welcoming === welcome && shell.window.frame.maxY - welcome.frame.maxY == 152)
-        let source = FakePrompts()
-        Self.request("r", [0], in: source)
-        var time: TimeInterval = 100
-        let panels = Self.panels(source, shell, open: "agents")
-        panels.clock = { time }
-        panels.refresh()
-        // The window is inert under the welcome, not its state: My agents' row keeps the eyes of its assistant asking.
-        Self.asks(shell)
-        #expect(shell.assistant.eyes(of: "agents") == .wait)
-        let situation = Keys.Situation(space: true, welcoming: true, waiting: !panels.queue.waiting.isEmpty)
-        #expect(Keys.enabled("showreq", situation) && !Keys.enabled("new", situation) && !Keys.enabled("reload", situation))
-        #expect(panels.present(in: "agents"))
-        let panel = try #require(panels.panel)
-        panel.place(beside: shell.window, screen: Self.desk)
-        #expect(panel.held && panel.ring.lit && panel.title == "Codex wants to run a command")
-        #expect(panel.level.rawValue > welcome.level.rawValue, "the panel floats over the welcome")
-        time += 1
-        panel.tick()
-        try await stage.appearances { suffix in
-            try await Picture.welcome(welcome, over: shell, library: library, web: agents.web, "e14-welcome" + suffix, root: stage.home.root, keyed: false)
-            let file = gallery.map { $0.appendingPathComponent("e14-welcome\(suffix).png") }
-            defer { file.map { try? FileManager.default.removeItem(at: $0) } }
-            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "e14" + suffix, root: stage.home.root,
-                                    page: file.flatMap { NSImage(contentsOf: $0) })
-        }
-        panel.cancelOperation(nil)
-        #expect(source.answers.map(\.1) == [.deny] && panels.panel == nil)
-        #expect(tour.step == .welcome && shell.welcoming === welcome, "Escape at the panel answers it, not the tour")
-    }
     /// ⌘Q while two requests wait and one assistant works: each request is named, "will be denied"; Cancel is the default.
     @Test("e15: quit with requests") func e15() async throws {
         let leaving = Leaving(requests: [.init(id: "r1", space: "My agents", program: "Codex"), .init(id: "r2", space: "Project watch", program: "Claude Code")],

@@ -38,7 +38,7 @@ import Testing
             #expect("\(words[key] ?? "missing")" == "\(value)", "\(key)")
         }
         #expect(preferences.assistant == nil && preferences.model == nil && preferences.effort == nil)
-        #expect(preferences.lastOpen == nil && preferences.sticker == nil && !preferences.toured && !preferences.launcherOffered)
+        #expect(preferences.lastOpen == nil && preferences.sticker == nil && !preferences.toured && preferences.hinted.isEmpty)
         #expect(preferences.groups.isEmpty && preferences.folded.isEmpty && preferences.names.isEmpty && preferences.recents.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: home.places.window.path), "reading writes nothing")
     }
@@ -82,7 +82,7 @@ import Testing
         (values.lastOpen, values.assistant, values.model, values.effort) = ("garden", "pi", "invented-model", "high")
         values.listed = ["pi": Options()]
         values.commands = ["claude": [Option(value: "review", label: "Review the page")]]
-        (values.askEverything, values.resume, values.toured, values.launcherOffered, values.addToApplications) = (true, false, true, true, false)
+        (values.askEverything, values.resume, values.toured, values.hinted, values.addToApplications) = (true, false, true, ["ask"], false)
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.assistantAtOpening) = ("new", .dark, .reduced, .open)

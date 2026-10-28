@@ -299,8 +299,7 @@ enum Picture {
         // In Page Full Screen the toolbar brought back lies over the page, on its band.
         let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.topEdge].filter(\.filled)
             + [shell.layer].filter { !$0.isHidden }
-        // The first-launch film plays in its own window over the whole of this one, toolbar included.
-        let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) } + (shell.film.map { [($0 as NSView, frame.bounds)] } ?? [])
+        let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) }
         let over = try placed.map { view, place in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)

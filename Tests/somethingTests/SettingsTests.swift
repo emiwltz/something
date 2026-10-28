@@ -96,7 +96,7 @@ import Testing
                 seen.insert(row.title)
             }
         }
-        #expect(seen == Set(expected.keys).union(["Welcome tour"]))
+        #expect(seen == Set(expected.keys).union(["Welcome"]))
         #expect(effects.tours == 1 && effects.revealed == [home.places.spaces])
         #expect(effects.applied.map(\.1) == [.reduced], "Motion applies at once")
         #expect(effects.chosen == ["codex"] && effects.asking == [true], "the assistant takes the default agent and Ask Before Every Change")
@@ -127,7 +127,7 @@ import Testing
         }
         // open:'last', apps:true, asstOpen:'Reduced', sticker:true, motion:'Calm', alt:true (sideEyes left with v6.2).
         #expect(shown == ["When something opens": "The last space you had open", "Add something to Applications": "on",
-                          "Welcome tour": "Show Again", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
+                          "Welcome": "Show Again", "Motion": "Calm", "When a space opens, its assistant is": "Reduced",
                           "Remember where I put the assistant": "on",
                           "Hold ⌥ to point inside a drawn frame": "on",
                           // agent:'Claude Code', resume:true, sleep:'10 minutes', awake:'3', askAll:false, notify:false; before

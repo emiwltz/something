@@ -111,13 +111,18 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.ended = { [weak self] in
             guard let self else { return }
             library.relist()
-            if let new = assistant.appeared(library.entries) { library.select(.space(new)) }
+            if let new = assistant.appeared(library.entries) {
+                shell.made = new
+                library.select(.space(new))
+            }
         }
         // Before any reading: the conversations there are the person's with their assistant, never a space's to see.
         engine.assistantFolder = places.spaces.path
         engine.start(often: false)
-        shell.front()
+        // A first start shows the welcome alone: the window comes once it ends.
+        if library.preferences.toured { shell.front() }
         Task { @MainActor in
+            defer { if shell.welcoming == nil { shell.front() } }
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
             do { try Library.prepare(places) } catch { fail(error.sentence) }
             do { try AssistantModel.writeKnowledge(places, share: Resources.share) } catch { ask.tell(error.sentence) }
@@ -139,7 +144,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
             } else if let last = library.atStart() {
                 library.select(.space(last))
             } else if App.welcomes(library) {
-                showTour(nil)
+                showWelcome(nil)
             }
         }
     }
@@ -168,21 +173,12 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// Whether the welcome opens at the start: it was never ended, and there is no space yet.
     static func welcomes(_ library: Library) -> Bool { !library.preferences.toured && !library.entries.contains(where: \.isSpace) }
 
-    /// Help › Welcome Tour, and the first start: the film (Film.swift), then the welcome over the window, which steps
-    /// back until it ends (Shell.welcomed(skipped:)), saying what went wrong when the launcher could not be made.
-    @objc func showTour(_ sender: Any?) {
-        shell.front()
-        Film.play(in: shell, library: library) { [weak self] in self?.welcome() }
-    }
-
-    private func welcome() {
-        let tour = Tour(places: places)
-        tour.finished = { [weak self] problem, skipped in
-            guard let self else { return }
-            shell.welcomed(skipped: skipped)
-            if let problem { ask.tell(problem) }
-        }
-        shell.welcome(tour)
+    /// Help › Welcome, and the first start: the welcome alone on the screen, then the window on New Space.
+    @objc func showWelcome(_ sender: Any?) {
+        let welcome = WelcomeModel(places: places)
+        welcome.finished = { [weak self] in self?.shell.welcomed() }
+        shell.welcome(welcome)
+        NSApp.activate()
     }
 
     @objc func newSpace(_ sender: Any?) {
@@ -371,7 +367,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     /// What the menu items' and ⌘P's actions depend on, now.
     var situation: Keys.Situation {
         Keys.Situation(space: current != nil, working: assistant.stoppable, agent: !assistant.noAgent,
-                       welcoming: shell.welcoming != nil || shell.film != nil, editingText: shell.window.firstResponder is NSText,
+                       welcoming: shell.welcoming != nil, editingText: shell.window.firstResponder is NSText,
                        waiting: !panels.queue.waiting.isEmpty, pointable: current?.pointable == true)
     }
 

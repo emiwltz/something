@@ -19,10 +19,12 @@ something
 
 ## The first minutes
 
-`something` opens its window. A short welcome, "Ready to build something today?", asks which of your installed coding
-agents builds your spaces with you (it starts none of them). It also offers, each off until you turn it on, a
-notification when a request waits and, when installed with Homebrew, a small launcher in `~/Applications` so that
-Spotlight finds something.
+`something` opens with one welcome screen, alone on your desktop: a space (a page of your own), your agents, and your
+assistant, beside one picture of how they meet. The coding agent found on your Mac is already chosen to build your
+spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
+the window. Notifications and, when installed with Homebrew, a small launcher in `~/Applications` so that Spotlight
+finds something stay off until you turn them on in Settings › General. Help › Welcome shows the welcome again, and
+Help › How something Works the picture, one part at a time if you like.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example), choose under it what it may do with your agents (None, Watch, Talk or Run, pre-set from
@@ -35,7 +37,8 @@ the card then shows your words, one line of what was made and checked, and that 
 are folded under Details. A build that fails, or that you stop, keeps your words and their level on New Space to try
 again. Each space's
 assistant rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is
-in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. ⌘J shows the conversation,
+in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small
+hint says so beside it; Info and Point each have one too, once, at a later opening. ⌘J shows the conversation,
 ⌘\ makes it small again, ⌘. stops the assistant. Its one chip, "Claude Code · Sonnet 5.5", changes the agent, the model
 and the effort of that space's conversation: models go by the names the agent gives them, and a kind something has not
 run yet says "Its models show after its first run". "/" at the start of its field lists the agent's own commands as
@@ -191,7 +194,7 @@ Quit something first (⌘Q): quitting stops the agents it launched.
 ```sh
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
-rm -rf ~/Applications/something.app                  # the launcher, if the welcome added it
+rm -rf ~/Applications/something.app                  # the launcher, if you turned it on in Settings
 rm -rf ~/Library/Application\ Support/something      # your settings, your spaces' levels, journals, versions and assistants' conversations
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere

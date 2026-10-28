@@ -32,7 +32,7 @@ enum Sign {
 
     /// The proportions, as fractions of the sign's side: the corner's arm, the stroke (in a 100-unit corner, as the
     /// mockup's SVG has it), the eye unit, and the frame's inset. Emi's defaults: arm .31, stroke 35, eye .125. The
-    /// joy eye's width and stroke are in eye units; the welcome's big sticker draws them 1.5 and .34.
+    /// joy eye's width and stroke are in eye units.
     struct Geometry: Equatable {
         var arm: CGFloat = 0.31, stroke: CGFloat = 35, eye: CGFloat = 0.125, inset: CGFloat = 0.06
         var joy: CGFloat = 1.3, joyStroke: CGFloat = 0.46

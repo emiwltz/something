@@ -72,7 +72,7 @@ struct SettingsSection: Identifiable {
     @ObservationIgnored var spaces: () -> [(id: String, title: String)] = { [] }
     /// Applies the appearance and the motion to the whole app; tests record it instead.
     @ObservationIgnored var apply: (Preferences.Appearance, Look.Motion) -> Void = Settings.apply
-    /// Plays the welcome tour again (App.showTour).
+    /// Shows the welcome again (App.showWelcome).
     @ObservationIgnored var tour: () -> Void = {}
     /// Opens System Settings › Keyboard; tests record it instead.
     @ObservationIgnored var keyboard: () -> Void = {
@@ -173,7 +173,7 @@ struct SettingsSection: Identifiable {
                 SettingsRow(title: "Add something to Applications", note: "A link in ~/Applications, so Spotlight and Launchpad find it.",
                             control: .toggle(get: { [weak self] in self?.launcher ?? false }, set: { [weak self] in self?.addToApplications($0) },
                                              enabled: launcher || Launcher.prefix(of: app) != nil)),
-                SettingsRow(title: "Welcome tour", note: "The short film and the first steps, as on the first day.",
+                SettingsRow(title: "Welcome", note: "The first screen, as on the first day.",
                             control: .button("Show Again") { [weak self] in self?.tour() }),
             ])]
         case .assistant:
@@ -360,7 +360,7 @@ extension App {
         Settings.open(tab) {
             let model = SettingsModel(preferences: library.preferences, places: places)
             model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
-            model.tour = { [weak self] in self?.showTour(nil) }
+            model.tour = { [weak self] in self?.showWelcome(nil) }
             model.told = { [weak self] in self?.ask.tell($0) }
             model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
             model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
