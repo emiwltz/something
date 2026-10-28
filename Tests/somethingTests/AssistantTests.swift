@@ -27,7 +27,8 @@ import WebKit
     /// starts writing waiting-room.html 0.9 s later, never ending its turn; with "ask" in $HOME/out/ladder it asks
     /// which way the page should read (AskUserQuestion, then another permission once "permission" is in that file too)
     /// and writes once answered; with "fail" it writes, a check fails, two edits fix it and a second check passes, then
-    /// it says so and ends only once $HOME/out/finish appears. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
+    /// it says so and ends only once $HOME/out/finish appears. "Page of two: <name>" writes <name>.html and ends once
+    /// $HOME/out/finish-<name> appears, for builds that end in any order. `initialize` lists Opus, Sonnet and Haiku with their efforts; a new model or
     /// effort is taken.
     static let fake = #"""
     #!/bin/sh
@@ -138,6 +139,13 @@ import WebKit
           echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w0","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw0","session_id":"s1"}'
           echo '{"type":"assistant","message":{"id":"msg_w1","model":"opus","role":"assistant","content":[{"type":"tool_use","id":"toolu_w1","name":"Edit","input":{"file_path":"/Users/example/something/spaces/brief.html"}}]},"parent_tool_use_id":null,"uuid":"aw1","session_id":"s1"}'
           later '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_w1","type":"tool_result","content":"Invented.","is_error":false}]},"parent_tool_use_id":null,"uuid":"rw1","session_id":"s1"}' "$done" "$idle" ;;
+        *'Page of two: '*'"type":"user"'*)
+          name=$(printf '%s' "$line" | sed 's/.*Page of two: \([a-z-]*\).*/\1/')
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          begin P1 Write "{\"file_path\":\"/Users/example/something/spaces/$name.html\"}"; ended P1 false
+          words P2 "$name is ready."
+          ( while kill -0 $$ 2>/dev/null && [ ! -f "$HOME/out/finish-$name" ]; do sleep 0.1; done
+            if [ -f "$HOME/out/finish-$name" ]; then printf '%s\n' "$done" "$idle"; fi ) & ;;
         *'Who is waiting for me'*'"type":"user"'*)
           mode=$(cat "$HOME/out/ladder" 2>/dev/null)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'

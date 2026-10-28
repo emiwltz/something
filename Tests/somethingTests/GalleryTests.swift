@@ -311,7 +311,7 @@ struct GalleryTests {
         none.shell.show(nil)
         try await draw(none.shell, library: none.library, web: nil, "blank-no-agent" + suffix, none.home)
 
-        // The blank page of a home with spaces: idle, then building the third suggestion.
+        // The blank page of a home with spaces: idle, then building the second suggestion, the one the fake builds.
         let (shell, library, _) = window(fixture)
         let model = shell.assistant
         model.engine.changed = { model.refresh() }
@@ -323,7 +323,7 @@ struct GalleryTests {
         shell.window.setContentSize(NSSize(width: 640, height: 480))
         try await draw(shell, library: library, web: nil, "blank-smallest" + suffix, fixture)
         shell.window.setContentSize(NSSize(width: 1200, height: 760))
-        model.draft = BlankView.chips[2].1
+        model.draft = BlankView.chips[1].1
         model.send()
         #expect(await wait(until: { model.rows.count >= 4 && model.light == .working }), "the fake did not start building")
         try await draw(shell, library: library, web: nil, "blank-building" + suffix, fixture)
@@ -340,12 +340,12 @@ struct GalleryTests {
         try fixture.space("stack", page(#"{"contract": 1, "title": "Stack", "rights": ["store"]}"#, ""))
         library.relist()
         model.newConversation()
-        (model.ready, model.threadShown) = (library.entry("stack"), false)
+        (model.ready, model.threadShown) = (["stack"], false)
         model.place = .space(title: "Garden notes", name: "garden-notes", page: fixture.places.spaces.appendingPathComponent("garden-notes.html").path)
         let side = NSHostingView(rootView: SidebarView(library: library, assistant: model, eyes: model.eyes))
         let offscreen = Offscreen(side)
-        offscreen.window.setContentSize(NSSize(width: 232, height: 320))
-        side.frame.size = NSSize(width: 232, height: 320)
+        offscreen.window.setContentSize(NSSize(width: 232, height: 400))
+        side.frame.size = NSSize(width: 232, height: 400)
         await wait(1)
         try draw(side, "sidebar-ready" + suffix, fixture)
         let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", level: .watch, folder: nil, made: true)

@@ -198,7 +198,8 @@ import SomethingCore
     @ObservationIgnored private var commenting: [String: Commenting] = [:]
     /// Says a sentence in a toast: the window's.
     @ObservationIgnored var told: (String) -> Void = { _ in }
-    var ready: Library.Entry?
+    /// The spaces builds made while the person was elsewhere, until each is opened: their rows carry a dot.
+    var ready: Set<String> = []
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
     var fromTemplate: String?
     /// The spaces made while the person waited for one: their level sheet says the agent made them.
@@ -699,7 +700,7 @@ import SomethingCore
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
         save(session)
-        ready = nil
+        ready = []
     }
 
     /// New Space's next conversation after `built` began building: the same builder, model and effort, or the builder
@@ -926,14 +927,18 @@ import SomethingCore
 
     private func save(_ session: Session) { session.save(in: places.assistants) }
 
-    /// The space the build that just ended made: the first new space listed since it began, else the page it wrote,
-    /// which may have been there before. Returns it to open while the person follows that build, or is on New Space
-    /// with nothing written, or no space is open elsewhere; otherwise it is said `ready` (`arrived`), and nil returned.
+    /// The space the build that just ended made: the page it wrote, which may have been there before; else, when it
+    /// wrote none, the first space listed since it began that no other build writes and none made. Returns it to open
+    /// while the person follows that build, or is on New Space with nothing written, or no space is open elsewhere;
+    /// otherwise it is said `ready` (`arrived`), and nil returned.
     func appeared(_ entries: [Library.Entry], open: String?) -> String? {
         guard let (before, shown) = ending else { return nil }
+        // Several builds run at once: a page another one writes is new to this one too, and is never its to take.
+        let others = Set(builds.compactMap(space(of:)))
         let wrote = space(of: before)
-        guard let new = entries.first(where: { $0.isSpace && !before.spaces.contains($0.id) }) ?? entries.first(where: { $0.isSpace && $0.id == wrote })
-        else { return nil }
+        let found = wrote != nil ? entries.first { $0.isSpace && $0.id == wrote }
+            : entries.first { $0.isSpace && !before.spaces.contains($0.id) && !others.contains($0.id) && !made.contains($0.id) }
+        guard let new = found else { return nil }
         ending = nil
         made.insert(new.id)
         consent(new.id, before.level, folder: before.folder)
@@ -943,7 +948,7 @@ import SomethingCore
             revealing = new.id
             return new.id
         }
-        ready = new
+        ready.insert(new.id)
         arrived(new.id, new.title)
         return nil
     }

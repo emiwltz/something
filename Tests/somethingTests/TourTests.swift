@@ -214,7 +214,7 @@ import Testing
         #expect(model.building && model.threadShown && model.sessions[.new]?.draft == "Half written")
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: sentence)) }))
         #expect(await wait(until: { !model.building }))
-        #expect(opened == ["waiting"] && model.made == ["waiting"] && model.ready == nil)
+        #expect(opened == ["waiting"] && model.made == ["waiting"] && model.ready.isEmpty)
         #expect(try AppFile.read(home.places.grants).spaces["waiting"]?.level == .watch, "the level its words pre-set is its consent")
 
         // A question makes no space: the build ends with its answer all the same.
@@ -222,14 +222,14 @@ import Testing
         model.send("What can you do?")
         #expect(model.building)
         #expect(await wait(until: { !model.building }))
-        #expect(opened == ["waiting", nil] && model.ready == nil && model.light == .ready)
+        #expect(opened == ["waiting", nil] && model.ready.isEmpty && model.light == .ready)
 
         // Made while the person was on another space: said ready, never opened.
         (making, open) = (("second", "Second"), "waiting")
         model.send("A second one.")
         model.place = .space(title: "Who waits", name: "waiting", page: home.places.spaces.appendingPathComponent("waiting.html").path)
         #expect(await wait(until: { model.builds.isEmpty }))
-        #expect(opened == ["waiting", nil, nil] && model.ready?.id == "second" && model.made.contains("second"))
+        #expect(opened == ["waiting", nil, nil] && model.ready == ["second"] && model.made.contains("second"))
         let second = model.session(for: .space(title: "Second", name: "second", page: home.places.spaces.appendingPathComponent("second.html").path))
         #expect(answers.prefix(2) == [1, 1] && second.rows.filter { $0 == .reply("Invented reply.") }.count == 2,
                 "the space made keeps its build's conversation, the question's before it; New Space begins a new one")

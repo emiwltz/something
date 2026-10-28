@@ -190,7 +190,7 @@ import Testing
         try Data().write(to: home.root.appendingPathComponent("out/finish"))
         #expect(await wait(until: { model.builds.isEmpty }))
         #expect(opened == (away ? nil : "waiting-room") && arrived == (away ? ["waiting-room · Waiting room"] : []))
-        #expect(model.ready?.id == (away ? "waiting-room" : nil) && model.revealing == (away ? nil : "waiting-room"))
+        #expect(model.ready == (away ? ["waiting-room"] : []) && model.revealing == (away ? nil : "waiting-room"))
         let room = AssistantModel.Place.space(title: "Waiting room", name: "waiting-room", page: home.places.spaces.appendingPathComponent("waiting-room.html").path)
         #expect(model.session(for: room).rows.contains(.mine(caption: "on the blank page", text: "Who is waiting for me")))
         model.place = room
@@ -199,6 +199,43 @@ import Testing
     }
 
     /// A build's reply is said short: its first paragraph, the rest under Details; other replies are whole.
+    /// Two builds at once, each writing its own page, the second ending first, while the person is elsewhere: each is
+    /// handed its own page, its grant at its own level, and its own conversation; neither ends the other's.
+    @Test func twoBuildsEndInReverseOrder() async throws {
+        let (home, model) = try await assistant()
+        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share)
+        var arrived: [String] = []
+        model.arrived = { name, _ in arrived.append(name) }
+        model.ended = {
+            library.relist()
+            _ = model.appeared(library.entries, open: "agents")
+        }
+        model.chosenLevel = .watch
+        model.send("Page of two: first-room")
+        #expect(await wait(until: { model.builds.count == 1 && model.space(of: model.builds[0]) == "first-room" }))
+        model.watch(nil)
+        model.chosenLevel = .talk
+        model.send("Page of two: second-room")
+        #expect(await wait(until: { model.builds.count == 2 && model.space(of: model.builds[1]) == "second-room" }))
+        let (first, second) = (model.builds[0].session, model.builds[1].session)
+        // Both pages appear after both builds began: each is new to both.
+        for (name, title) in [("first-room", "First room"), ("second-room", "Second room")] {
+            _ = try home.space(name, page(#"{"contract": 1, "title": "\#(title)"}"#, ""))
+        }
+        model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
+        try Data().write(to: home.root.appendingPathComponent("out/finish-second-room"))
+        #expect(await wait(until: { model.builds.count == 1 }))
+        #expect(arrived == ["second-room"] && model.sessions[.space("second-room")] === second && model.made == ["second-room"])
+        try Data().write(to: home.root.appendingPathComponent("out/finish-first-room"))
+        #expect(await wait(until: { model.builds.isEmpty }))
+        #expect(arrived == ["second-room", "first-room"] && model.ready == ["first-room", "second-room"])
+        #expect(model.sessions[.space("first-room")] === first && model.sessions[.space("second-room")] === second)
+        let grants = try AppFile.read(home.places.grants).spaces
+        #expect(grants["first-room"]?.level == .watch && grants["second-room"]?.level == .talk)
+        #expect(!AssistantTests().input(home).contains { $0.contains("end_session") }, "neither build's agent was ended")
+        await AssistantTests().finish(home, model)
+    }
+
     @Test func aBuildsReplyFoldsItsDetails() {
         let rows: [AssistantModel.Row] = [.mine(caption: "on the blank page", text: "A countdown"), .reply("Week-end is ready. Try: write your plans.\n\nIt reads the state.")]
         #expect(AssistantModel.folded(rows, at: 1)! == ("Week-end is ready. Try: write your plans.", "It reads the state."))

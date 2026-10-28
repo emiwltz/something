@@ -212,7 +212,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         current?.close()
         current = nil
         assistant.unkept = false
-        if assistant.ready?.id == name { assistant.ready = nil }
+        if let name { assistant.ready.remove(name) }
         defer {
             assistant.place = (destination ?? library.selection) == .templates ? .templates : AssistantModel.place(current)
             info.show(current?.space)

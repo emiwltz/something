@@ -123,7 +123,7 @@ struct Rail: View {
                 }
             }
             .overlay(alignment: .topTrailing) {
-                if side.assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 4, y: -4) }
+                if side.assistant.ready.contains(entry.id) { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 4, y: -4) }
             }
             .frame(width: 44, height: 38)
             .background(TileAnchor(id: entry.id, state: state))

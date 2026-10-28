@@ -506,7 +506,7 @@ struct SidebarView: View {
                 RenameField(state: state, target: .space(entry.id), commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
                 Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
-                if assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).accessibilityHidden(true) }
+                if assistant.ready.contains(entry.id) { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).accessibilityHidden(true) }
                 Spacer(minLength: 4)
                 if hovered && !needs {
                     Menu { Self.items(menu, live: false) } label: {
