@@ -253,16 +253,20 @@ import Testing
         var exported: [URL] = []
         library.exported = { exported.append($0) }
 
-        // One click: no question, no panel; its memory inside; a Downloads folder made when there is none.
+        // One click: no question, no panel; its memory stays on the Mac; a Downloads folder made when there is none.
         #expect(!FileManager.default.fileExists(atPath: test.places.downloads.path))
         library.export("board")
         #expect(exported == [saved] && ask.told.isEmpty && ask.folderMessages.isEmpty, "\(ask.told)")
-        let with = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
-        #expect(with["data"] as? NSDictionary == ["seen": ["a1"]] && with["name"] as? String == "board")
+        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
+        #expect(without["data"] is NSNull && without["name"] as? String == "board")
         // Never over a file: the next one takes the next free name, as Finder's copies do.
         library.export("board")
         #expect(exported.last?.lastPathComponent == "board 2.something" && FileManager.default.fileExists(atPath: saved.path))
         try FileManager.default.removeItem(at: exported[1])
+
+        // A file that carries a memory, as one made elsewhere may: the import keeps it.
+        let board = try #require(library.entry("board")?.space)
+        try Export.document(board, data: ["seen": ["a1"]], app: "test").write(to: saved)
 
         // Answers kept under the name the import will give: the received space must not inherit them.
         var file = try AppFile.read(test.places.grants)
@@ -287,7 +291,7 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: Memory(folder: test.places.data, space: "board-3").file.path))
     }
 
-    @Test func anExportNamesTheLinksItLeftOutAndRefusesALinkedMemory() throws {
+    @Test func anExportNamesTheLinksItLeftOutAndNeverReadsItsMemory() throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
@@ -302,12 +306,13 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: saved.path))
         #expect(ask.told == ["board was exported without notes.json: a link to somewhere else is never exported. Replace a link with the file itself to export it."])
 
+        // A memory that is a link is never read: the export leaves the memory out.
         try FileManager.default.removeItem(at: saved)
         try FileManager.default.createDirectory(at: test.places.data, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: Memory(folder: test.places.data, space: "board").file, withDestinationURL: outside)
         library.export("board")
-        #expect(!FileManager.default.fileExists(atPath: saved.path), "a linked memory is never read")
-        #expect(ask.told.count == 2 && ask.told[1].hasPrefix("board was not exported.") && ask.told[1].contains("is a link"), "\(ask.told)")
+        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
+        #expect(without["data"] is NSNull && ask.told.count == 2, "\(ask.told)")
     }
 
     @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {

@@ -256,13 +256,14 @@ import SomethingCore
         relist()
     }
 
-    /// Saves the space `name` as one .something file in Downloads, its memory inside, in one click (X5.3): under its
-    /// name, or "name 2" and on when that is taken, never over a file. Grants and journal never go. The window says
-    /// where it is (`exported`), or what failed.
+    /// Saves the space `name` as one .something file in Downloads in one click (X5.3): under its name, or "name 2" and
+    /// on when that is taken, never over a file. Its memory stays on the Mac, as the README promises, until the person
+    /// can choose to include it (Settings › Spaces); grants and journal never go. The window says where it is
+    /// (`exported`), or what failed.
     func export(_ name: String) {
         guard let space = entry(name)?.space else { return }
         do {
-            let document = try Export.document(space, data: try Export.memory(space.name, in: places.data), app: Resources.version)
+            let document = try Export.document(space, data: nil, app: Resources.version)
             let folder = places.downloads
             let url = ([""] + (2...999).map { " \($0)" }).lazy.map { folder.appendingPathComponent("\(space.name)\($0).something") }
                 .first { !FileManager.default.fileExists(atPath: $0.path) } ?? folder.appendingPathComponent("\(space.name) \(UUID().uuidString).something")

@@ -71,10 +71,9 @@ enum Levels {
 }
 
 /// The four levels side by side: the Mac's segmented control, read by VoiceOver as one choice among four; as wide as
-/// its words; in Info (`fills`) it starts its row, which it leaves to nothing else.
+/// its words.
 struct LevelPicker: View {
     let level: Binding<Grant.Level>
-    var fills = false
 
     var body: some View {
         Picker("With your agents", selection: level) {
@@ -82,8 +81,7 @@ struct LevelPicker: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .fixedSize(horizontal: !fills, vertical: true)
-        .frame(maxWidth: fills ? .infinity : nil, alignment: .leading)
+        .fixedSize()
     }
 }
 

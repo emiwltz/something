@@ -142,9 +142,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 - **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others
   [the guide](share/guide.md#what-the-person-sees-of-your-space) lists) reach its menus even while a space has the
   focus: a page cannot keep them, so it cannot stop you from stopping your assistant.
-- **Export.** Export, in Info or the Space menu, writes the space in one click as one `.something` file in your
-  Downloads folder, its memory inside (whoever receives the file can read it), never its level, its journal or what it
-  read from an agent.
+- **Export.** An exported space carries its memory only if you choose so. Export, in Info or the Space menu, writes the
+  space in one click as one `.something` file in your Downloads folder, without its memory, its level or its journal.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line

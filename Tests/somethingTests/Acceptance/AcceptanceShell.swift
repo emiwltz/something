@@ -40,7 +40,7 @@ struct AcceptanceShell {
             // The old composer goes until the sticker's slice: the mockup's toast sits over the page alone.
             shell.glass.isHidden = true
             defer { shell.glass.isHidden = false }
-            let toast = shell.toast("Daily brief exported to Downloads, with its memory", action: Toast.Action(label: "Show") {}, seconds: 60)
+            let toast = shell.toast("brief.something is in Downloads", action: Toast.Action(label: "Show") {}, seconds: 60)
             #expect(toast.shown && shell.window.firstResponder !== toast)
             try await Picture.window(shell, library: library, web: brief.web, "b1-frame-toast" + suffix, root: stage.home.root)
             toast.leave(now: true)
@@ -616,8 +616,8 @@ struct AcceptanceShell {
         #expect(info.level == .watch && info.folder == nil && picks == 1)
     }
 
-    /// Export in one click (X5.3): one .something file in Downloads, its memory inside, no sheet; the toast says where
-    /// with Show. History beside it opens the versions in Info's place.
+    /// Export in one click (X5.3): one .something file in Downloads, without its memory until the person can choose to
+    /// include it, no sheet; the toast says where with Show. History beside it opens the versions in Info's place.
     @Test("x5-3: Export in one click") func x5_3() async throws {
         let stage = try Stage("shell-x5-3")
         defer { stage.remove() }
@@ -628,21 +628,27 @@ struct AcceptanceShell {
         library.reveal = { revealed.append($0) }
         let command = try #require(Keys.command("export"))
         #expect(command.title == "Export Space" && command.key == "e" && command.action == #selector(App.exportSpace(_:)))
+        // The toast in place at once, so that the pictures show it whole.
+        library.preferences.motion = .reduced
         library.export("week-end")
         let file = stage.home.places.downloads.appendingPathComponent("week-end.something")
         let exported = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
-        #expect(exported["name"] as? String == "week-end" && exported["data"] as? NSDictionary == ["plans": "Market at nine."])
+        #expect(exported["name"] as? String == "week-end" && exported["data"] is NSNull, "its memory stays on the Mac")
         let ask = try #require(view.ask as? FakeAsk)
         #expect(ask.told.isEmpty && ask.folderMessages.isEmpty, "no sheet, no panel: \(ask.told)")
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
         #expect(toast.words == "week-end.something is in Downloads")
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         let show = try #require(buttons(toast).first { $0.title == "Show" })
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: view.web, "x5-3" + suffix, root: stage.home.root)
-        }
         show.performClick(nil)
         #expect(revealed == [file])
+        // The pictures take longer than the toast stays: the same words held for them, as b1-frame-toast does.
+        try await stage.appearances { suffix in
+            let held = shell.toast(toast.words, action: Toast.Action(label: "Show") {}, seconds: 60)
+            try await Picture.window(shell, library: library, web: view.web, "x5-3" + suffix, root: stage.home.root)
+            #expect(held.shown && held.superview != nil, "the toast is in the picture")
+            held.leave(now: true)
+        }
         // History, beside Export: the versions in Info's place.
         info.showHistory()
         #expect(shell.infoShown && info.content == .history)

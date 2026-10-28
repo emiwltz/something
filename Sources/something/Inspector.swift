@@ -319,7 +319,7 @@ struct InspectorView: View {
         if let problem = info.problem {
             Text(problem).foot()
         } else if let level = info.level {
-            LevelPicker(level: Binding(get: { level }, set: { info.choose($0) }), fills: true)
+            LevelPicker(level: Binding(get: { level }, set: { info.choose($0) }))
             Text(level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
             if level == .run {
                 HStack(spacing: 8) {
@@ -447,25 +447,6 @@ struct DockHeader: View {
         }
         .padding(EdgeInsets(top: 14, leading: 16, bottom: 11, trailing: 12))
         .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
-    }
-}
-
-/// The mockup's switch: 30 by 18, ink when on, mist when off, its knob bg2.
-struct SwitchTrack: View {
-    let on: Bool
-
-    var body: some View {
-        Capsule().fill((on ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)
-            .overlay(alignment: on ? .trailing : .leading) { Circle().fill(Look.Token.bg2.ui).frame(width: 14, height: 14).padding(2) }
-    }
-}
-
-/// A toggle drawn as the mockup's switch.
-struct SwitchStyle: ToggleStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        Button { configuration.isOn.toggle() } label: { SwitchTrack(on: configuration.isOn) }
-        .buttonStyle(.plain)
-        .accessibilityRepresentation { Toggle(isOn: configuration.$isOn) { configuration.label } }
     }
 }
 
