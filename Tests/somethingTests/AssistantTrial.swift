@@ -202,7 +202,7 @@ struct AssistantTrial {
                                        rules: try await Lockdown.ruleList(), launches: Launches())
             defer { window.close() }
             window.open()
-            #expect(ask.questions.map(\.rights) == [template.rights] && ask.questions.first?.made == false)
+            #expect(ask.questions.map(\.level) == [Grant.Level.needed(by: template.rights)] && ask.questions.first?.made == false)
             #expect(await wait(until: { !window.web.isLoading && window.frame != nil }))
             model.place = AssistantModel.place(window)
             #expect(model.placeholder == "Ask Claude Code to make it yours: colors, sections, anything.")
@@ -227,7 +227,7 @@ struct AssistantTrial {
             #expect(ask.questions.count == 1, "the edit asks nothing again")
             let info = Info(places: places, ask: ask)
             info.show(space)
-            #expect(info.rights.map(\.right) == template.rights && info.rights.allSatisfy { $0.standing == .allowed })
+            #expect(info.rights.map(\.right) == template.rights.filter { $0 != "store" } && info.rights.allSatisfy { $0.standing == .allowed })
             #expect(info.problem == nil)
 
             let assistant = try #require(model.id)

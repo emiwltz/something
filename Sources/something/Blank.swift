@@ -1,6 +1,7 @@
 // New Space (⌘N), the center when no space is open: the sign lands, "What do you want to make?", a flat field whose
-// Return builds (⇧Return adds a line), who builds it and with which model, three suggestions that each send a whole
-// sentence, and the first three templates with See All. Without a coding agent, the notice takes the field's place.
+// Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model and Build; under it, the
+// space's level with your agents (Levels.swift), pre-set from the words, which is the consent; and three suggestions
+// that each fill the field. Without a coding agent, the notice takes the field's place.
 // While the assistant builds, the field holds the sentence sent, the ladder under it says what it does (Ladder.swift),
 // and the rest steps aside; a build stopped leaves its ladder and the sentence back in the field. The assistant's card
 // stays away here (the page is its own composer), so when a build asked here ends without a new space while the page
@@ -9,15 +10,15 @@ import AppKit
 import SwiftUI
 
 struct BlankView: View {
-    /// Each suggestion, the sentence it sends and its plain icon.
+    /// Each suggestion, the sentence it puts in the field and its plain icon.
     static let chips = [
-        ("Who is waiting for me", "Make me a space that shows which of my agents are waiting for me, and lets me answer the ones I can.", "bell"),
-        ("A morning brief of my agents", "Make me a space like a morning newspaper: what each of my agents did since yesterday.", "doc"),
-        ("A small game for my breaks", "Make me a small game I can play in a minute between two tasks, with my best score kept.", "play"),
+        ("A countdown to Saturday", "A countdown to Saturday, with what my agents still have to finish before the weekend.", "sun.max"),
+        ("A small game for my breaks", "A small game I can play in a minute between two tasks, with my best score kept.", "play"),
+        ("My reading list", "My reading list: what I want to read, a line on each, the ones I finished folded away.", "note.text"),
     ]
     static let placeholder = "A page that shows who is waiting for me, oldest first…"
-    /// The field's width, and the page's widest, as the mockup's.
-    static let width: CGFloat = 640, widest: CGFloat = 1010
+    /// The field's width, as the mockup's.
+    static let width: CGFloat = 640
 
     @Bindable var model: AssistantModel
     let library: Library, gallery: Gallery
@@ -51,18 +52,13 @@ struct BlankView: View {
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 30) }
                     } else {
                         if let reply, ladder == nil { answer(reply).frame(width: field).padding(.top, 30) }
-                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 33.5 : 14)
-                        // While it builds, Built by keeps its place unseen, as the mockup's.
-                        meta.frame(width: field).padding(.top, 8).opacity(model.building ? 0 : 1)
-                            .allowsHitTesting(!model.building).accessibilityHidden(model.building)
+                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 30 : 14)
+                        if !model.building { LevelRow(model: model).frame(width: field).padding(.top, 12) }
                         if let ladder { LadderView(ladder: ladder, model: model, motion: library.preferences.motion).frame(width: field).padding(.top, 22) }
                         // The question the page answers needs no notice sending the person to the panel.
                         if let notice = model.notice, model.asked == nil { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
                     }
-                    if !model.building {
-                        if !model.noAgent { suggestions.padding(.top, 22) }
-                        templates(min(BlankView.widest, inner))
-                    }
+                    if !model.building, !model.noAgent { suggestions.padding(.top, 20) }
                 }
                 .padding(EdgeInsets(top: ladder != nil ? 40 : 64, leading: 40, bottom: 64, trailing: 40))
                 .frame(maxWidth: .infinity)
@@ -94,7 +90,7 @@ struct BlankView: View {
         code.font = Look.font(.code, size: 11.5).ui
         code.foregroundColor = Look.Token.ink.ui
         code.backgroundColor = Look.Token.hover.ui
-        return AttributedString("Describe it in your words. Your assistant builds it with you, in ") + code + AttributedString(".")
+        return AttributedString("Describe it in your words. Your assistant builds it in ") + code + AttributedString(".")
     }
 
     /// The sentence the build started with: the person's last message.
@@ -129,34 +125,14 @@ struct BlankView: View {
             .accessibilityLabel("Your assistant: \(text)")
     }
 
-    /// Who builds it, the model and its effort, and what Return does.
-    private var meta: some View {
-        HStack(spacing: 1) {
-            Text("Built by").padding(.trailing, 3)
-            MenuChip(label: "Agent that builds: \(model.name)") {
-                Image(nsImage: Sign.miniEyes(.listen)).renderingMode(.template).frame(width: 16, height: 10)
-                Text(model.name)
-            } items: { AgentMenu(model: model) }
-            Text("·").padding(.horizontal, 3)
-            ModelChip(model: model)
-            Spacer(minLength: 8)
-            HStack(spacing: 4) {
-                Key("↵"); Text("to build")
-                Text("·").padding(.horizontal, 3)
-                Key("⇧↵"); Text("new line")
-            }
-            .accessibilityElement(children: .combine)
-        }
-        .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-        .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 2))
-        .disabled(model.blocked)
-    }
-
     private var suggestions: some View {
         HStack(spacing: 8) {
             ForEach(BlankView.chips, id: \.0) { chip in
-                // The whole sentence is sent, the draft kept.
-                Button { model.send(chip.1) } label: {
+                // The sentence fills the field, to change or build: its words pre-set the level unless one was chosen.
+                Button {
+                    model.draft = chip.1
+                    model.wantsFocus = true
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: chip.2).font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui)
                         Text(chip.0)
@@ -173,26 +149,6 @@ struct BlankView: View {
             }
         }
     }
-
-    /// "Or start from a template", See All, and the first three cards, in rows that fit `width`.
-    private func templates(_ width: CGFloat) -> some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 10) {
-                Text("Or start from a template").font(Look.font(.title, size: 19, weight: .semibold).ui).kerning(-0.285)
-                    .foregroundStyle(Look.Token.ink.ui).accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                Button { library.select(.templates) } label: {
-                    HStack(spacing: 6) { Text("See All"); Key(Keys.shown("tpls")) }.chip()
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("See All Templates")
-            }
-            TemplateGrid(cards: Array(library.templates.prefix(3)), columns: GalleryView.columns(width), library: library, model: gallery)
-        }
-        .frame(width: width)
-        .padding(.top, 54)
-        .opacity(library.templates.isEmpty ? 0 : 1)
-    }
 }
 
 /// A key as the mockup draws it: Onest 10.5 medium in ink3, on the hover fill.
@@ -207,17 +163,18 @@ struct Key: View {
     }
 }
 
-/// New Space's field: flat, bg2 in a line2 ring that turns ink2 with the focus, no shadow; Onest 16, two lines high,
-/// and Build, a disc greyed while nothing is written. Return builds, ⇧Return adds a line, and Return that confirms
-/// what an input method composes builds nothing. While it builds it holds `sent`, read only.
+/// New Space's field: flat, bg2 in a line2 ring that turns ink2 with the focus, no shadow; Onest 16, two lines high;
+/// its bar under the words: who builds it and with which model in one chip, what ⇧Return does, and Build, greyed while
+/// nothing is written. Return builds, ⇧Return adds a line, and Return that confirms what an input method composes
+/// builds nothing. While it builds it holds `sent`, read only, and its bar steps aside.
 struct BuildField: View {
     @Bindable var model: AssistantModel
     let sent: String?
     @FocusState private var typing: Bool
 
     var body: some View {
-        let busy = sent != nil, shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-        HStack(alignment: .bottom, spacing: 10) {
+        let busy = sent != nil, shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        VStack(alignment: .leading, spacing: 4) {
             Group {
                 if let sent {
                     Text(sent).foregroundStyle(Look.Token.ink2.ui).lineLimit(1...3).frame(maxWidth: .infinity, minHeight: 26, alignment: .topLeading)
@@ -232,20 +189,46 @@ struct BuildField: View {
                 }
             }
             .font(Look.font(.ui, size: 16).ui).kerning(-0.16).lineSpacing(4.5)
-            .padding(.vertical, 2)
-            if !busy {
-                Button { model.send() } label: {
-                    Image(systemName: "arrow.up").font(.system(size: 13, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
-                        .frame(width: 32, height: 32)
-                        .background(Look.Token.act.ui.opacity(model.canSend ? 1 : 0.18), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .disabled(!model.canSend)
-                .help("Build (Return)")
-                .accessibilityLabel("Build")
-            }
+            .padding(EdgeInsets(top: 12, leading: 16, bottom: busy ? 12 : 0, trailing: 16))
+            if !busy { bar }
         }
-        .padding(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 12))
         .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink2.ui : Look.Token.line2.ui)
+    }
+
+    /// The agent and its model in one chip, ⇧↵ new line, and Build.
+    private var bar: some View {
+        HStack(spacing: 8) {
+            let words = model.modelWords
+            MenuChip(label: "Agent and model: \(model.name), \(words.model)") {
+                Image(nsImage: Sign.miniEyes(.listen)).renderingMode(.template).frame(width: 16, height: 10)
+                Text(model.name)
+                Text("·").foregroundStyle(Look.Token.ink3.ui)
+                Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
+            } items: {
+                AgentMenu(model: model)
+                Divider()
+                ModelMenu(model: model)
+            }
+            .disabled(model.blocked)
+            Spacer(minLength: 8)
+            HStack(spacing: 4) { Key("⇧↵"); Text("new line") }
+                .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
+                .accessibilityElement(children: .combine)
+            Button { model.send() } label: {
+                HStack(spacing: 6) {
+                    Text("Build")
+                    Text("↵").opacity(0.7)
+                }
+                .font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.actfg.ui)
+                .padding(.leading, 12).padding(.trailing, 10).frame(height: 28)
+                .background(Look.Token.act.ui.opacity(model.canSend ? 1 : 0.45), in: RoundedRectangle(cornerRadius: Look.control + 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canSend)
+            .help("Build (Return)")
+            .accessibilityLabel("Build")
+        }
+        .padding(EdgeInsets(top: 0, leading: 10, bottom: 8, trailing: 8))
     }
 }

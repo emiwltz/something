@@ -142,6 +142,8 @@ import SomethingCore
     struct Build {
         let spaces: Set<String>, session: Session, turn: String?, at: Date, sentence: String
         var seen: [String: Date] = [:]
+        /// What the space may do with the person's agents, chosen before Build: written as its grant once it appears.
+        var level = Grant.Level.none, folder: String?
     }
     /// The build watched until the turn that followed ends (answered, stopped, failed, or never started).
     private(set) var before: Build?
@@ -479,6 +481,16 @@ import SomethingCore
     /// The spaces folder as the person reads it: "~/something/spaces".
     var folder: String { Words.path(places.spaces.path, home: places.home.path) }
 
+    /// New Space's level with the person's agents: the one they chose, else the one the field's words suggest. The
+    /// choice is the consent: the space it builds opens with it, nothing asked.
+    var level: Grant.Level { chosenLevel ?? Grant.Level.guess(draft) }
+    var chosenLevel: Grant.Level?
+    /// The folder agents start in at Run, chosen on New Space.
+    var runFolder: String?
+    /// Asks Run's folder when Build finds none; a test answers in its place.
+    @ObservationIgnored var chooseFolder: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
+    var knownFolders: [String] { Levels.folders(engine.state) }
+
     /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
     /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     var firstLines: [String] {
@@ -516,6 +528,16 @@ import SomethingCore
     func send(_ sentence: String? = nil) {
         let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, kind != nil, !blocked else { return }
+        let blankBuild = place == .blank && before == nil, level = chosenLevel ?? Grant.Level.guess(text)
+        // Run starts agents in a folder: the build waits for one.
+        if blankBuild, level == .run, runFolder == nil {
+            return chooseFolder { [weak self] folder in
+                guard let self else { return }
+                (runFolder, chosenLevel) = (folder, .run)
+                send(sentence)
+            }
+        }
+        let folder = level == .run ? runFolder : nil
         if sentence == nil { draft = "" }
         fromTemplate = nil
         halted = nil
@@ -525,10 +547,13 @@ import SomethingCore
         if quickWorks(on: place.space) || (session.id != nil && !launching && (working || !session.held.isEmpty)) {
             return session.held.append(AssistantModel.context(place, home: places.home.path) + "\n" + text)
         }
-        if place == .blank, before == nil {
-            // The build is watched from its first message: the conversation shows what the agent does.
+        if blankBuild {
+            // The build is watched from its first message: the conversation shows what the agent does. The level goes
+            // with it, said to the agent on a line of its own; New Space's next build starts from its words again.
             let spaces = Set(Spaces(root: places.spaces).list().map(\.name))
-            (before, threadShown) = (Build(spaces: spaces, session: session, turn: session.turn?.id, at: clock(), sentence: text), true)
+            (before, threadShown) = (Build(spaces: spaces, session: session, turn: session.turn?.id, at: clock(), sentence: text, level: level, folder: folder), true)
+            chosenLevel = nil
+            return deliver([AssistantModel.context(place, home: places.home.path), level.line(folder: folder, home: places.home.path), text].joined(separator: "\n"))
         }
         deliver(AssistantModel.context(place, home: places.home.path) + "\n" + text)
     }
@@ -743,7 +768,7 @@ import SomethingCore
     /// without the context line, which goes with every message.
     func cannotBuild(_ kind: String, _ because: String) {
         refused[kind] = because
-        if draft.isEmpty, agent?.thread == nil, let last = session.last, let line = last.firstIndex(of: "\n") { draft = String(last[last.index(after: line)...]) }
+        if draft.isEmpty, agent?.thread == nil, let last = session.last { draft = AssistantModel.shown(last).text }
         refresh()
     }
 
@@ -829,10 +854,21 @@ import SomethingCore
         guard let before, let new = entries.first(where: { $0.isSpace && !before.spaces.contains($0.id) }) else { return nil }
         self.before = nil
         made.insert(new.id)
+        consent(new.id, before.level, folder: before.folder)
         hand(before.session, to: new.id)
         if open == nil { return new.id }
         ready = new
         return nil
+    }
+
+    /// Writes the level chosen on New Space as the grant of the space `name` it built: the choice is the consent, so
+    /// its first opening asks nothing. A page that cannot be read yet is asked at its opening instead.
+    private func consent(_ name: String, _ level: Grant.Level, folder: String?) {
+        guard let space = Spaces(root: places.spaces).list().first(where: { $0.name == name }),
+              let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
+        try? Grants(places.grants).update {
+            $0.spaces[name] = Rights.leveled(level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: nil)
+        }
     }
 
     /// The build's conversation becomes the space `name`'s own, its agent going on there rather than another being
@@ -1128,7 +1164,7 @@ import SomethingCore
         // Only something's own forms: a line the person wrote stays, whatever it starts with.
         let ours = { (line: Substring) in
             let number = line.dropFirst("[something] Comment ".count)
-            return line.hasPrefix("[something] Pointing at ")
+            return line.hasPrefix("[something] Pointing at ") || line.hasPrefix("[something] With your agents: ")
                 || (line.hasPrefix("[something] Comment ") && number.first?.isNumber == true && number.drop { $0.isNumber }.hasPrefix(" is on "))
         }
         while ours(after) { after = after.drop { $0 != "\n" }.dropFirst() }

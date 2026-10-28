@@ -150,19 +150,16 @@ struct GalleryTests {
         let empty = window(bare)
         try await draw(empty.shell, library: empty.library, web: nil, "window-empty" + suffix, bare)
 
-        // Five folders, two of them long and one not on this Mac: the sheet must still fit a small screen.
-        let folders = ["~/code/shop", "~/code/garden", "~/code/clients/example-agency/website-redesign-2026",
-                       "~/code/tools/a-rather-long-folder-name-for-the-build-scripts", "~/Documents/notes"]
+        // The level sheet of a space made elsewhere, pre-set to what it needs: Watch; Run with its folder found, the
+        // Mac's agents' folders offered, one of them long; Run with none yet, pi on this Mac (it never asks).
+        let folders = ["/Users/example/code/shop", "/Users/example/code/garden", "/Users/example/code/clients/example-agency/website-redesign-2026"]
         let opening = RightsQuestion(space: "Morning review", description: "Reads what the agents said overnight and asks each one for a summary.",
-                                   rights: ["state", "send:claude", "launch:claude", "store"], scope: .folders(folders),
-                                   missing: [folders[2]], folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
+                                     level: .watch, folder: nil, folders: folders)
         try draw(try #require(Ask.rights(opening, home: "/Users/example").sheet.contentView), "rights-first-opening" + suffix, fixture)
-        let pi = RightsQuestion(space: "Morning review", description: nil, rights: ["launch:pi"], scope: nil, missing: [],
-                                folder: FolderQuestion(declared: "~/code/garden", found: nil))
-        try draw(try #require(Ask.rights(pi, home: "/Users/example").sheet.contentView), "rights-launch-pi" + suffix, fixture)
-        let any = RightsQuestion(space: "Morning review", description: nil, rights: ["launch", "launch:omp"], scope: nil, missing: [],
-                                 folder: FolderQuestion(declared: "~/code/garden", found: nil))
-        try draw(try #require(Ask.rights(any, home: "/Users/example").sheet.contentView), "rights-launch-any-and-omp" + suffix, fixture)
+        let run = RightsQuestion(space: "Morning review", description: nil, level: .run, folder: folders[2], folders: folders)
+        try draw(try #require(Ask.rights(run, home: "/Users/example").sheet.contentView), "rights-run-folder" + suffix, fixture)
+        let pi = RightsQuestion(space: "Morning review", description: nil, level: .run, folder: nil, folders: [])
+        try draw(try #require(Ask.rights(pi, home: "/Users/example").sheet.contentView), "rights-run-no-folder" + suffix, fixture)
         try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review", home: "/Users/example"), "lowering-mode" + suffix, fixture)
         let link = try #require(URL(string: "https://example.com/notes/overnight"))
         try Picture.view(try #require(Ask.link(link, space: "Morning review").contentView), "link" + suffix, root: fixture.root)
@@ -355,8 +352,7 @@ struct GalleryTests {
         side.frame.size = NSSize(width: 232, height: 320)
         await wait(1)
         try draw(side, "sidebar-ready" + suffix, fixture)
-        let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", rights: ["store"], scope: nil, missing: [],
-                                  folder: nil, made: true)
+        let made = RightsQuestion(space: "Stack", description: "A one-key game for your breaks.", level: .watch, folder: nil, made: true)
         try draw(try #require(Ask.rights(made, home: "/Users/example").sheet.contentView), "rights-made-by-agent" + suffix, fixture)
         let promise = try #require(Help.page("promise", share: Home.share).flatMap { Help.window($0) })
         promise.appearance = NSAppearance(named: suffix.isEmpty ? .aqua : .darkAqua)

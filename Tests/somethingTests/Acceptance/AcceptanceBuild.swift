@@ -38,7 +38,7 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             // The mockup has no night of this screen.
             if suffix.isEmpty { try await Picture.window(shell, library: library, web: nil, "a1", root: stage.home.root) }
-            let shown = Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], words = await Self.read(host) { $0 == shown }
+            let shown = Self.newSpaceWords(), words = await Self.read(host) { $0 == shown }
             #expect(words == shown, "\(words)")
         }
         film.leave()
@@ -231,57 +231,82 @@ struct AcceptanceBuild {
         return WelcomeScene(stage: stage, shell: shell, library: library, tour: tour, window: Welcome.window(tour, assistant: model, motion: .reduced))
     }
 
-    /// New Space with Claude Code as its builder: the sign, the question, the field with Build greyed until something
-    /// is written, Built by and the model, the three suggestions, the first three templates and See All; the assistant
-    /// away. d1-smallest in the smallest window; d1-no-agent: the notice in the field's place, no suggestion.
-    @Test("d1: New Space") func d1() async throws {
+    /// X3.1, New Space (d1 retired): the sign, the question, where it is built; the field with, in its bar, the agent
+    /// and its model in one chip, ⇧↵ and Build greyed until something is written; under it the level row, pre-set from
+    /// the words, Run's folder after it, then "Your choice"; three suggestions that fill the field; no template. x3-1:
+    /// the countdown typed, Run chosen in ~/code/shop, as the mockup's. x3-1-empty, x3-1-smallest, x3-1-answer,
+    /// x3-1-building, x3-1-no-agent.
+    @Test("x3-1: New Space, one field and the level") func x3_1() async throws {
         let stage = try Stage("build")
         defer { stage.remove() }
         let (shell, library, host) = try await Self.newSpace(stage, builder: true)
         let model = shell.assistant
         #expect(shell.window.title == "New Space" && shell.window.subtitle == "" && shell.glass.isHidden && !model.cardShown)
-        #expect(model.kind == "claude" && model.draft.isEmpty && !model.canSend)
+        #expect(model.kind == "claude" && model.draft.isEmpty && !model.canSend && model.level == .none && model.chosenLevel == nil)
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: nil, "d1" + suffix, root: stage.home.root)
-            let shown = Self.newSpaceWords + ["My agents", "Project watch", "Daily brief"], words = await Self.read(host) { $0 == shown }
-            #expect(words == shown, "\(words)")
+            try await Picture.window(shell, library: library, web: nil, "x3-1-empty" + suffix, root: stage.home.root)
+            let words = await Self.read(host) { $0 == Self.newSpaceWords() }
+            #expect(words == Self.newSpaceWords(), "\(words)")
         }
         // Build is greyed while the field is empty or blank, and only then. (An offscreen SwiftUI view gives VoiceOver only
         // its descriptions: neither a control's enabled state nor its press can be reached here, so the model's are read.)
         model.draft = "  \n "
         #expect(!model.canSend)
         model.draft = "A page of my agents."
-        #expect(model.canSend)
+        #expect(model.canSend && model.level == .watch)
         model.draft = ""
+
+        // The words pre-set the level while nothing was chosen; a suggestion fills the field with words of its own.
+        #expect(BlankView.chips.map(\.0) == ["A countdown to Saturday", "A small game for my breaks", "My reading list"])
+        #expect(BlankView.chips.map { Grant.Level.guess($0.1) } == [.watch, .none, .none])
+        model.draft = BlankView.chips[0].1
+        #expect(model.level == .watch && model.chosenLevel == nil)
+        let shop = stage.home.root.appendingPathComponent("code/shop")
+        try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
+        (model.chosenLevel, model.runFolder) = (.run, shop.path)
+        #expect(model.level == .run)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "x3-1" + suffix, root: stage.home.root)
+            let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1) }
+            #expect(words == Self.newSpaceWords(BlankView.chips[0].1), "\(words)")
+        }
+        (model.chosenLevel, model.draft) = (nil, "")
 
         shell.window.setContentSize(NSSize(width: 640, height: 480))
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: nil, "d1-smallest" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: nil, "x3-1-smallest" + suffix, root: stage.home.root)
         }
-        // Each suggestion sends its whole sentence, the draft kept, and so does Return in the field (the draft sent); an
-        // input method's Return builds nothing. The fake answers the first two and the field in words: each build ends
-        // without a new space, and its reply stays on the page above the field, to be answered there, since the
-        // assistant's card stays away. (A plain text is out of reach offscreen: the page's own choice is read, and
-        // d1-answer shows it.)
+        // Return in the field builds (the draft sent); an input method's Return builds nothing. The fake answers in words:
+        // each build ends without a new space, and its reply stays on the page above the field, to be answered there,
+        // since the assistant's card stays away. (A plain text is out of reach offscreen: the page's own choice is read,
+        // and x3-1-answer shows it.)
         shell.window.setContentSize(Stage.Size.main)
         let since = try #require((host as? NSHostingView<BlankView>)?.rootView.since)
         model.draft = "Half written"
-        for chip in BlankView.chips.prefix(2) {
-            model.send(chip.1)
-            #expect(model.building && model.draft == "Half written")
-            #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: chip.1), .reply("Invented reply.")] }))
-            #expect(BlankView.reply(in: model, since: since) == "Invented reply.")
-        }
         #expect(Field.returned(shift: false, marked: true, model) == .ignored && !model.building && model.draft == "Half written")
         model.draft = "A page for my mornings."
         #expect(Field.returned(shift: false, marked: false, model) == .handled && model.building && model.draft.isEmpty)
         #expect(await wait(until: { !model.building && model.rows.suffix(2) == [.mine(caption: "on the blank page", text: "A page for my mornings."), .reply("Invented reply.")] }))
         #expect(BlankView.reply(in: model, since: since) == "Invented reply." && !model.blocked)
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: nil, "d1-answer" + suffix, root: stage.home.root)
-            let answered = await Self.read(host) { $0.contains("Who is waiting for me") }
-            #expect(shell.glass.isHidden && answered.contains("Who is waiting for me"), "\(answered)")
+            try await Picture.window(shell, library: library, web: nil, "x3-1-answer" + suffix, root: stage.home.root)
+            let answered = await Self.read(host) { $0.contains(BlankView.chips[0].0) }
+            #expect(shell.glass.isHidden && answered.contains(BlankView.chips[0].0), "\(answered)")
         }
+        // Run without a folder: Build asks one first, then builds with it; the level goes with the build, said to the
+        // agent on a line of its own that the conversation does not show, and the next build starts from its words.
+        var asked = 0
+        model.chooseFolder = { chosen in
+            asked += 1
+            chosen(shop.path)
+        }
+        model.draft = "A page that starts a reviewer agent in my shop."
+        #expect(model.level == .run && model.runFolder == shop.path, "the folder chosen earlier stays")
+        model.runFolder = nil
+        model.send()
+        #expect(asked == 1 && model.building && model.before?.level == .run && model.before?.folder == shop.path && model.chosenLevel == nil)
+        #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
+        #expect(model.rows.contains(.mine(caption: "on the blank page", text: "A page that starts a reviewer agent in my shop.")))
         // A reply older than the page belongs to another moment: back on New Space (as after a space made opens, or a
         // conversation in a space), the page shows none, whether or not the conversation is shown.
         model.threadShown = true
@@ -303,16 +328,17 @@ struct AcceptanceBuild {
         #expect(await wait(until: { model.rows.count >= count + 2 && model.rows.last == .reply("Invented reply.") && !model.working }))
         model.place = .blank
         #expect(model.rows == blank && BlankView.reply(in: model, since: fresh.rootView.start) == "Invented reply.")
-        // The game: the build starts (the fake keeps working on it), the field holds the sentence read only, the
-        // suggestions and templates step aside, Stop is offered, the assistant stays away.
+        // The game: the build starts (the fake keeps working on it), the field holds the sentence read only, the level
+        // row and the suggestions step aside, Stop is offered, the assistant stays away.
         model.draft = "Half written"
-        model.send(BlankView.chips[2].1)
+        model.send(BlankView.chips[1].1)
         #expect(model.building && model.draft == "Half written")
-        #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[2].1)) && model.light == .working }))
+        #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: BlankView.chips[1].1)) && model.light == .working }))
         try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: nil, "d1-building" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: nil, "x3-1-building" + suffix, root: stage.home.root)
             let building = await Self.read(fresh)
-            #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains("Who is waiting for me") && building.contains("Stop"), "\(building)")
+            #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains(BlankView.chips[0].0) && building.contains("Stop")
+                    && !building.contains("With your agents"), "\(building)")
         }
         var stopped = false
         model.engine.stopAll(within: 6) { stopped = true }
@@ -323,16 +349,17 @@ struct AcceptanceBuild {
         let (bare, alone, page) = try await Self.newSpace(none, builder: false)
         #expect(bare.assistant.noAgent && bare.assistant.notice?.title == "No coding agent found.")
         try await none.appearances { suffix in
-            try await Picture.window(bare, library: alone, web: nil, "d1-no-agent" + suffix, root: none.home.root)
+            try await Picture.window(bare, library: alone, web: nil, "x3-1-no-agent" + suffix, root: none.home.root)
             let words = await Self.read(page)
-            #expect(!words.contains("Build") && !words.contains("Who is waiting for me") && words.contains("How to Get One"), "\(words)")
+            #expect(!words.contains("Build") && !words.contains(BlankView.chips[0].0) && words.contains("How to Get One"), "\(words)")
         }
     }
 
-    /// What VoiceOver reads of New Space before the templates' cards, as far as an offscreen SwiftUI view gives it (its
-    /// field, menus and the sign are out of reach here).
-    static let newSpaceWords = ["What do you want to make?", "Build", "Who is waiting for me", "A morning brief of my agents", "A small game for my breaks", "Or start from a template",
-                                "See All Templates"]
+    /// What VoiceOver reads of New Space with `draft` in its field, as far as an offscreen SwiftUI view gives it (its
+    /// menus, plain texts and the sign are out of reach here; the level, its sentence and Run's folder are the model's).
+    static func newSpaceWords(_ draft: String = "") -> [String] {
+        ["What do you want to make?"] + (draft.isEmpty ? [] : [draft]) + ["Build"] + Grant.Level.allCases.map(\.title) + BlankView.chips.map(\.0)
+    }
 
     /// New Space in a window of `stage`, the toolbar's chip at the mockup's one request; with `builder`, AssistantTests'
     /// fake claude is the builder found, else none is.
@@ -401,6 +428,8 @@ struct AcceptanceBuild {
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         try mode.write(to: out.appendingPathComponent("ladder"), atomically: true, encoding: .utf8)
         let (shell, library, host) = try await newSpace(stage, builder: true)
+        // The page watches the person's agents: chosen on New Space, before Build.
+        shell.assistant.chosenLevel = .watch
         shell.assistant.send("Who is waiting for me")
         return (stage, shell, library, host)
     }
@@ -469,9 +498,10 @@ struct AcceptanceBuild {
         // The mockup's d3 is the end of it: the space arrived, its row selected and fresh (let go 1.6 s after, however
         // long the page then takes to load on a busy Mac).
         #expect(library.fresh == name && library.selection == .space(name))
-        // Once it is gone: the page loads and asks for its rights.
-        #expect(await wait(until: { room.web.url != nil && !ask.questions.isEmpty }), "\(String(describing: room.web.url))")
-        #expect(ask.questions.first?.rights == ["state", "store"] && library.selection == .space(name))
+        // Once it is gone: the page loads with the level chosen on New Space, which was the consent: nothing is asked.
+        #expect(await wait(until: { room.web.url != nil }), "\(String(describing: room.web.url))")
+        let grant = try #require(try AppFile.read(stage.home.places.grants).spaces[name])
+        #expect(ask.questions.isEmpty && grant.level == .watch && room.granted.rights == ["state", "store"] && library.selection == .space(name))
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: room.web, "d3" + suffix, root: stage.home.root)
         }
@@ -497,9 +527,11 @@ struct AcceptanceBuild {
         #expect(ended.superview == nil && !shell.glass.subviews.contains { $0 is Arrival })
         await Self.finish(model)
     }
-    /// The rights sheet over the space just made: "Waiting room would like to", where its page is, one row per right
-    /// with its switch off, the fine print, Don't Allow holding the focus and Allow greyed until a switch is on.
-    @Test("d4: the rights sheet") func d4() async throws {
+    /// The level sheet over a space made elsewhere (by an agent outside something, a template, an import), at its first
+    /// opening: "Waiting room would like to work with your agents", where its page is, the four levels pre-set to what
+    /// it declares (Watch) and its sentence, the fine print; Don't Allow holding the focus, Allow ready. d4-run: Run,
+    /// its folder still to choose, Allow greyed.
+    @Test("d4: the level sheet") func d4() async throws {
         let stage = try Stage("build")
         defer { stage.remove() }
         let space = try stage.home.space("waiting-room", Self.waitingRoom)
@@ -508,36 +540,37 @@ struct AcceptanceBuild {
         defer { room.close() }
         try stage.moment(shell)
         shell.waiting(1, mine: 0)
-        // The build's conversation, handed to the space it made (AssistantModel.hand): its agent alive and listening, the
-        // row's eyes awake until the Preferences' delay.
-        var builder = Agent(id: "a1", kind: "claude", origin: "launched")
-        (builder.state, builder.alive) = ("idle", true)
-        let handed = shell.assistant.session(for: shell.assistant.place)
-        handed.id = builder.id
-        handed.read(SomethingCore.State(at: iso8601.string(from: Stage.now), kinds: [:], agents: [builder]))
-        #expect(shell.assistant.eyes(of: "waiting-room") == .listen)
-        let question = RightsQuestion(space: "Waiting room", description: nil, rights: ["state", "store"], scope: nil, missing: [],
-                                      folder: nil, made: true, page: space.location.path, declared: ["state", "store"])
-        let sheet = Ask.rights(question, home: stage.home.root.path).sheet
-        #expect(sheet.title == "Waiting room would like to" && sheet.frame.width == 440 && !sheet.isAlert)
-        #expect(PanelsTests.texts(sheet.contentView) == [
-            "Waiting room would like to", "~/something/spaces/waiting-room.html · made just now",
-            "See your agents", "Which agents run on this Mac, what each one is doing, and its last messages. It only reads.",
-            "Remember things", "Keep a small memory in its own folder, so it knows what you saw last time.",
-            "It does not ask to write to your agents or start agents. Each right starts off; change it later in its Info."])
-        let switches = SpaceViewTests.switches(sheet.contentView)
-        #expect(switches.map(\.state) == [.off, .off] && switches.map { $0.accessibilityLabel() } == ["See your agents", "Remember things"])
+        let declaration = try #require(Declaration.read(space, home: stage.home.places.home, kinds: Registry.app.kinds).declaration)
+        let question = room.question(declaration, nil)
+        #expect(question == RightsQuestion(space: "Waiting room", description: nil, level: .watch, folder: nil,
+                                           folders: Levels.folders(room.engine.state), page: space.location.path))
+        #expect(question.folders == ["/Users/example/code/pacman", "/Users/example/code/portfolio", "/Users/example/code/shop", "/Users/example/notes"],
+                "the folders the stage's agents work in")
+        let (sheet, answer) = Ask.rights(question, home: stage.home.root.path)
+        #expect(sheet.title == "Waiting room would like to work with your agents" && sheet.frame.width == 440 && !sheet.isAlert)
+        #expect(PanelsTests.texts(sheet.contentView) == ["Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html",
+                                                         "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."])
         #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.hint) == ["esc", nil])
-        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && !sheet.buttons[1].isEnabled)
-        #expect(sheet.accessibilitySubrole() == .dialog)
+        #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].isEnabled)
+        #expect(sheet.accessibilitySubrole() == .dialog && answer() == RightsAnswer(level: .watch, folder: nil))
+        // What VoiceOver reads (the level's sentence, a plain text of SwiftUI, is out of reach offscreen).
+        let said = ["Two people", "Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html"] + Grant.Level.allCases.map(\.title)
+            + [Levels.sheetFine, "Don't Allow", "Allow"]
+        let words = await Self.read(try #require(sheet.contentView)) { $0 == said }
+        #expect(words == said, "\(words)")
         // Under the toolbar, centred over the space beside the sidebar.
         let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
         #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == shell.split.splitViewItems[0].viewController.view.frame.width)
         try await stage.appearances { suffix in
             try await Picture.sheet(sheet, over: shell, library: library, web: room.web, "d4" + suffix, root: stage.home.root)
         }
-        switches[1].performClick(nil)
-        #expect(sheet.buttons[1].isEnabled)
+        var run = question
+        run.level = .run
+        let (runSheet, runAnswer) = Ask.rights(run, home: stage.home.root.path)
+        #expect(!runSheet.buttons[1].isEnabled && runAnswer() == RightsAnswer(level: .run, folder: nil))
+        try await stage.appearances { suffix in
+            try await Picture.sheet(runSheet, over: shell, library: library, web: room.web, "d4-run" + suffix, root: stage.home.root)
+        }
     }
 
     /// The space the assistant just made in the mockup, its words invented: one agent waiting in its terminal.

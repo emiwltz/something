@@ -462,16 +462,23 @@ struct ModelChip: View {
         let words = model.modelWords
         MenuChip(label: "Model: \(words.model)\(words.effort.map { ", effort \($0)" } ?? "")") {
             Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
-        } items: {
-            ForEach(model.modelMenu, id: \.header) { part in
-                Section(part.header) {
-                    ForEach(part.choices, id: \.value) { choice in
-                        Toggle(choice.title, isOn: Binding(get: { choice.checked }, set: { _ in
-                            choice.effort ? model.choose(effort: choice.value) : model.choose(model: choice.value)
-                        }))
-                    }
-                    if let note = part.note { Button(note) {}.disabled(true) }
+        } items: { ModelMenu(model: model) }
+    }
+}
+
+/// The model chip's menu: each part's choices for this conversation alone, or its sentence when there is none.
+struct ModelMenu: View {
+    let model: AssistantModel
+
+    var body: some View {
+        ForEach(model.modelMenu, id: \.header) { part in
+            Section(part.header) {
+                ForEach(part.choices, id: \.value) { choice in
+                    Toggle(choice.title, isOn: Binding(get: { choice.checked }, set: { _ in
+                        choice.effort ? model.choose(effort: choice.value) : model.choose(model: choice.value)
+                    }))
                 }
+                if let note = part.note { Button(note) {}.disabled(true) }
             }
         }
     }

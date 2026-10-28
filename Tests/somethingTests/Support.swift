@@ -61,8 +61,8 @@ func page(_ declaration: String?, _ body: String) -> String {
 /// The person, played by the test: every window it is shown is recorded and answered as told.
 final class FakeAsk: Asking {
     var questions: [RightsQuestion] = [], links: [URL] = [], modes: [String] = [], told: [String] = []
-    /// nil answers "Not now"; otherwise the rights to allow (the others are refused), the folder and the remap.
-    var answer: (([String]) -> RightsAnswer?)? = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
+    /// nil answers "Don't Allow"; otherwise the level and Run's folder. By default the level pre-set, as Allow does.
+    var answer: ((RightsQuestion) -> RightsAnswer?)? = { RightsAnswer(level: $0.level, folder: $0.folder) }
     /// The link sheet's answer: nil when it could not be shown.
     var link: Bool? = false
     /// Runs while the link window would be open.
@@ -78,7 +78,7 @@ final class FakeAsk: Asking {
 
     func rights(_ question: RightsQuestion) -> RightsAnswer? {
         questions.append(question)
-        return answer?(question.rights)
+        return answer?(question)
     }
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool {
         modes.append(mode)

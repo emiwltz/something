@@ -360,7 +360,7 @@ import Testing
     @Test func aRevokedRightReachesTheOpenSpace() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"]}"#, """
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send", "store"]}"#, """
             <script>window.heard = []; something.on("granted", (g) => heard.push(g.rights.join(","))); window.done = true</script>
             """))
         let window = try await test.window(space, ask)
@@ -370,20 +370,20 @@ import Testing
         #expect(try await run(window, "await something.store.set('word', 'invented'); return await something.store.get('word')") as? String == "invented")
 
         let info = info(test, ask, space, view: window)
-        #expect(info.rights.map(\.right) == ["state", "store"] && info.rights.allSatisfy { $0.standing == .allowed })
+        #expect(info.rights.map(\.right) == ["state", "send"] && info.rights.allSatisfy { $0.standing == .allowed }, "its memory has no switch")
 
-        info.set("store", allowed: false)
+        info.set("send", allowed: false)
         for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 1 { await wait(0.05) }
-        #expect(try await run(window, "return heard") as? [String] == ["state"])
-        #expect(try await run(window, "return something.granted.refused") as? [String] == ["store"])
-        #expect(try await run(window, "try { await something.store.get('word') } catch (e) { return e.code }") as? String == "RIGHT_NOT_GRANTED")
+        #expect(try await run(window, "return heard") as? [String] == ["state,store"])
+        #expect(try await run(window, "return something.granted.refused") as? [String] == ["send"])
         let grant = try #require(try AppFile.read(test.places.grants).spaces["notes"])
-        #expect(grant.granted == ["state"] && grant.refused == ["store"])
+        #expect(grant.granted == ["state"] && grant.refused == ["launch", "send"] && grant.level == nil, "answered right by right: no level now")
         #expect(info.rights.map(\.standing) == [.allowed, .refused])
 
-        // Switched on again: the memory answers again, with what it kept.
-        info.set("store", allowed: true)
+        // Switched on again: it writes again; its memory never stopped answering.
+        info.set("send", allowed: true)
         for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 2 { await wait(0.05) }
+        #expect(try await run(window, "return heard") as? [String] == ["state,store", "state,send,store"])
         #expect(try await run(window, "return await something.store.get('word')") as? String == "invented")
         #expect(ask.questions.count == 1, "a switch is the person's answer: nothing more is asked")
     }
@@ -391,30 +391,30 @@ import Testing
     @Test func askAgainClearsTheRefusalsOnlyAndAsksThemNow() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("board", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
+        let space = try test.space("board", page(#"{"contract": 1, "rights": ["state", "send"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
         defer { window.close() }
-        ask.answer = { _ in RightsAnswer(allowed: ["state"], refused: ["store"], folder: nil, remap: [:]) }
+        ask.answer = { _ in RightsAnswer(level: .watch, folder: nil) }
         window.load()
         let info = info(test, ask, space, view: window)
         #expect(info.rights.map(\.standing) == [.allowed, .refused])
 
-        // "Not Now": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
+        // "Don't Allow": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
         ask.answer = nil
         info.askAgain()
         #expect(await wait(30, until: { ask.questions.count == 2 }), "asked after the click")
-        #expect(ask.questions.map(\.rights) == [["state", "store"], ["store"]])
+        #expect(ask.questions.map(\.level) == [.talk, .talk], "pre-set to what the page needs")
         let grant = try #require(try AppFile.read(test.places.grants).spaces["board"])
-        #expect(grant.granted == ["state"] && grant.refused.isEmpty)
+        #expect(grant.granted == ["state"] && grant.refused.isEmpty && grant.level == nil)
         #expect(window.granted.rights == ["state"])
         #expect(info.rights.map(\.standing) == [.allowed, .notAnswered(inForce: [])])
 
         // Answered: Info shows the new answer at once.
-        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: nil, remap: [:]) }
+        ask.answer = { RightsAnswer(level: $0.level, folder: nil) }
         info.askAgain()
         #expect(await wait(30, until: { ask.questions.count == 3 }))
         #expect(info.rights.map(\.standing) == [.allowed, .allowed])
-        #expect(window.granted.rights == ["state", "store"])
+        #expect(window.granted.rights == ["state", "send"])
     }
 
     @Test func aSwitchChangesOnlyItsOwnRight() throws {
@@ -442,6 +442,8 @@ import Testing
         let info = info(test, ask, plain)
         #expect(info.asksNothing && info.rights.isEmpty && info.problem == nil)
         info.show(try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "")))
+        #expect(info.asksNothing && info.rights.isEmpty, "its memory needs no permission")
+        info.show(try test.space("board", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "")))
         #expect(!info.asksNothing && info.rights.isEmpty, "declared, never answered: it asks when it opens")
     }
 
@@ -470,30 +472,30 @@ import Testing
     @Test func aGrantsFileThatDoesNotReadIsSaid() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "<script>window.done = true</script>"))
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
         defer { window.close() }
         window.load()
-        #expect(window.granted.rights == ["store"])
+        #expect(window.granted.rights == ["state", "store"])
         try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
         let info = info(test, ask, space, view: window)
         #expect(info.problem?.hasPrefix("The grants in") == true && info.rights.isEmpty)
         window.regrant()
-        #expect(window.granted.rights == ["store"], "the rights in force stay")
+        #expect(window.granted.rights == ["state", "store"], "the rights in force stay")
         #expect(ask.told.count == 1)
     }
 
     @Test func aSwitchAppliesOnlyTheDeclarationThePersonWasAsked() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"], "agents": {"folders": []}}"#,
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send"], "agents": {"folders": []}}"#,
                                                  "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
         defer { window.close() }
         window.load()
         // The file widens its scope; the reload that would ask has not run yet.
-        try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"], "agents": {"see": "all"}}"#, ""))
-        info(test, ask, space, view: window).set("store", allowed: false)
+        try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send"], "agents": {"see": "all"}}"#, ""))
+        info(test, ask, space, view: window).set("send", allowed: false)
         #expect(window.granted.rights == ["state"] && window.granted.agents == .folders([]))
     }
 

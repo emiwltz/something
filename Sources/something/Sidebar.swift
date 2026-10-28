@@ -248,7 +248,14 @@ struct SidebarView: View {
             }
             .disabled(Keys.command("palette")?.action == nil)
             HStack {
-                Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5).accessibilityAddTraits(.isHeader)
+                // The word, said once where every space is listed.
+                HStack(spacing: 6) {
+                    Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5)
+                    Text("pages of your own").font(Look.font(.ui, size: 11).ui).opacity(0.8).lineLimit(1)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Spaces, pages of your own")
+                .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Button { library.addGroup() } label: {
                     Image(systemName: "folder.badge.plus").font(.system(size: 12)).frame(width: 24, height: 22).contentShape(Rectangle())

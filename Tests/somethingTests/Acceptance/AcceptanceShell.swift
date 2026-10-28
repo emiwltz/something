@@ -1,5 +1,5 @@
 // Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, Info, full screen, the rail and the
-// rows' eyes (b1, b3–b8; b2, La page, waits for Emi). It also draws the frame of b1 alone, with and without a toast,
+// rows' eyes (b1, b3–b8; b2, La page, waits for Emi), and the word "space" explained (x1-2). It also draws the frame of b1 alone, with and without a toast,
 // and a long title in a narrow window.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
@@ -82,7 +82,8 @@ struct AcceptanceShell {
         #expect(labels == ["Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready", "Logbook, Asleep", "Oracle, Ready",
                            "Pebble, Done", "Stack, Asleep"], "\(labels)")
         let drawn = try stage.drawn(shell)
-        for line in ["Agents", "Notes", "Breaks", "Daily brief", "Pebble", "Stack", "Templates"] {
+        // Vision may read the f of "brief" as a t beside "pages of your own": the title's start is enough.
+        for line in ["Agents", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         try await stage.appearances { suffix in
@@ -141,7 +142,7 @@ struct AcceptanceShell {
         }
         // Vision may read a row's symbol as a letter before its title ("• Oracle"): a line contains the title.
         let drawn = try stage.drawn(shell)
-        for line in ["Agents", "Notes", "Breaks", "Daily brief", "Project watch", "Oracle"] {
+        for line in ["Agents", "Notes", "Breaks", "Daily bri", "Project watch", "Oracle"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
@@ -480,5 +481,26 @@ struct AcceptanceShell {
             try await Picture.panel(panel, over: shell, library: library, web: logbook.web, "b8" + suffix, root: stage.home.root)
         }
         panel.orderOut(nil)
+    }
+
+    /// X1.2, the words: "Space" stays, explained once where every space is listed, "pages of your own" beside SPACES;
+    /// New Space says where a space is built, and its level row starts at None, pre-set from the words.
+    @Test("x1-2: a space, a page of your own") func x1_2() async throws {
+        let stage = try Stage("shell-x1-2")
+        defer { stage.remove() }
+        let (shell, library, host) = try await AcceptanceBuild.newSpace(stage, builder: true)
+        let model = shell.assistant
+        #expect(String(BlankView.where(model.folder).characters) == "Describe it in your words. Your assistant builds it in \u{2009}~/something/spaces\u{2009}.")
+        #expect(model.level == .none && model.chosenLevel == nil)
+        let drawn = try stage.drawn(shell)
+        #expect(drawn.contains { $0.contains("pages of your own") }, "the drawn sidebar explains the word: \(drawn)")
+        let side = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+        let said = await AcceptanceBuild.read(side.view) { $0.contains("Spaces, pages of your own") }
+        #expect(said.contains("Spaces, pages of your own"), "\(said)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "x1-2" + suffix, root: stage.home.root)
+            let words = await AcceptanceBuild.read(host) { $0 == AcceptanceBuild.newSpaceWords() }
+            #expect(words == AcceptanceBuild.newSpaceWords(), "\(words)")
+        }
     }
 }

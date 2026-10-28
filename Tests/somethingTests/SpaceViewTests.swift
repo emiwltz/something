@@ -215,7 +215,7 @@ import WebKit
         let claude = bin.appendingPathComponent("claude")
         try "#!/bin/sh\nwhile IFS= read -r line; do :; done\n".write(to: claude, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
-        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: shop.path, remap: [:]) }
+        ask.answer = { RightsAnswer(level: $0.level, folder: shop.path) }
         let engine = home.engine()
         let declared = #"{"contract": 1, "title": "Board", "rights": ["launch:claude"], "folder": "~/code/shop"}"#
         let board = try home.space("board", page(declared, "")), other = try home.space("other", page(nil, ""))
@@ -427,7 +427,7 @@ import WebKit
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
         let ask = FakeAsk()
         ask.lowers = true
-        ask.answer = { RightsAnswer(allowed: $0, refused: [], folder: shop.path, remap: [:]) }
+        ask.answer = { RightsAnswer(level: $0.level, folder: shop.path) }
         let declared = #"{"contract": 1, "title": "Launcher", "rights": ["launch:opencode"], "folder": "~/code/shop"}"#
         let window = try await home.window(try home.space("launcher", page(declared, "<script>window.done = true</script>")), ask)
         defer { window.close() }
@@ -438,9 +438,10 @@ import WebKit
         #expect(ask.modes.isEmpty)
     }
 
-    /// The rights sheet says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
-    @Test func theRightsSheetSaysThatPiNeverAsks() {
-        #expect(Ask.title(for: "launch:pi") == "Start pi in a folder you choose" && Info.words(for: "launch:pi").detail.hasSuffix("pi runs commands and edits files without asking you first."))
+    /// Info and Run say that pi never asks before it acts, for launch:pi and for launch, which covers pi.
+    @Test func runSaysThatPiNeverAsks() {
+        #expect(Info.words(for: "launch:pi").detail.hasSuffix("pi runs commands and edits files without asking you first."))
+        #expect(Levels.runWarning == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp.")
         #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
         #expect(Ask.warning(for: "launch:claude") == nil && !Info.words(for: "launch:claude").detail.contains("without asking"))
     }
@@ -457,74 +458,51 @@ import WebKit
         }
     }
 
-    /// The rights sheet: one switch per right, all off; Allow greyed until one is on; the switches answer which are
-    /// allowed and which refused; Return and Escape press Don't Allow, which grants nothing (NativeAsk returns nil).
-    @Test func theRightsSheetStartsOffAndAllowsOnlyWhatIsOn() throws {
-        let question = RightsQuestion(space: "Review", description: nil, rights: ["state", "send:codex", "store"], scope: nil,
-                                      missing: [], folder: nil, page: "/Users/example/something/spaces/review.html")
+    /// The level sheet: pre-set to what the page needs, Allow ready; Return and Escape press Don't Allow, which holds the
+    /// focus and grants nothing (NativeAsk returns nil).
+    @Test func theLevelSheetIsPreSetAndDontAllowHoldsTheFocus() throws {
+        let question = RightsQuestion(space: "Review", description: nil, level: .talk, folder: nil, page: "/Users/example/something/spaces/review.html")
         let (sheet, answer) = Ask.rights(question, home: "/Users/example")
-        let switches = Self.switches(sheet.contentView)
-        #expect(switches.map(\.state) == [.off, .off, .off] && switches.map { $0.accessibilityLabel() } == ["See your agents", "Write to your Codex agents", "Remember things"])
+        #expect(PanelsTests.texts(sheet.contentView) == ["Review would like to work with your agents", "~/something/spaces/review.html", Levels.sheetFine])
         #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.role) == [.cancel, .primary])
-        #expect(!sheet.buttons[1].isEnabled, "Allow waits for a switch")
-        #expect(answer() == RightsAnswer(allowed: [], refused: ["state", "send:codex", "store"], folder: nil, remap: [:]))
-        switches[0].performClick(nil)
-        switches[2].performClick(nil)
-        #expect(sheet.buttons[1].isEnabled)
-        #expect(answer() == RightsAnswer(allowed: ["state", "store"], refused: ["send:codex"], folder: nil, remap: [:]))
-        switches[0].performClick(nil)
-        switches[2].performClick(nil)
-        #expect(!sheet.buttons[1].isEnabled, "all off again")
-        sheet.buttons[1].performClick(nil)
-        #expect(sheet.chosen == nil, "a greyed Allow cannot be pressed")
-        // Escape presses Don't Allow, so nothing is granted, even with a switch on; Return too, as it holds the focus.
-        switches[1].performClick(nil)
+        #expect(sheet.buttons[1].isEnabled && answer() == RightsAnswer(level: .talk, folder: nil))
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                                    characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
         #expect(sheet.performKeyEquivalent(with: escape) && sheet.chosen == .cancel)
         let other = Ask.rights(question).sheet
         #expect(other.firstResponder === other.buttons[0])
-        Self.switches(other.contentView)[0].performClick(nil)
         other.keyDown(with: try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                                           characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36)))
         #expect(other.chosen == .cancel)
-        // The fine print says what the space does not ask for, among all it declares.
-        #expect(Ask.fine(question) == "It does not ask to start agents. Each right starts off; change it later in its Info.")
-        var all = question
-        all.declared = ["state", "send", "launch:pi", "store"]
-        #expect(Ask.fine(all) == "Each right starts off; change it later in its Info.")
+        // Run without a folder: Allow waits for one.
+        let run = Ask.rights(RightsQuestion(space: "Review", description: nil, level: .run, folder: nil)).sheet
+        #expect(!run.buttons[1].isEnabled)
+        run.buttons[1].performClick(nil)
+        #expect(run.chosen == nil, "a greyed Allow cannot be pressed")
     }
 
-    static func switches(_ view: NSView?) -> [SheetSwitch] {
-        (view?.subviews ?? []).flatMap { ($0 as? SheetSwitch).map { [$0] } ?? switches($0) }
-    }
-
-    @Test func rightsAreAskedOnceAndRemembered() async throws {
+    @Test func aLevelIsAskedOnceAndIsTheAnswer() async throws {
         let home = Home(prefix: "something-window-")
         defer { home.remove() }
         let shop = home.root.appendingPathComponent("code/shop")
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
         let declared = #"{"contract": 1, "title": "Review", "rights": ["state", "store", "launch:codex"], "agents": {"folders": ["~/code/shop", "~/code/blog"]}, "folder": "~/code/shop"}"#
         let ask = FakeAsk()
-        ask.answer = { _ in RightsAnswer(allowed: ["state", "launch:codex"], refused: ["store"], folder: shop.path,
-                                         remap: ["~/code/blog": "/Users/example/blog"]) }
         let space = try home.space("review", page(declared, "<script>window.done = true</script>"))
         let first = try await home.window(space, ask)
         defer { first.close() }
         first.open()
         try await ready(first)
         first.close()
-        #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, rights: ["state", "store", "launch:codex"],
-                                                 scope: .folders(["~/code/shop", "~/code/blog"]), missing: ["~/code/blog"],
-                                                 folder: FolderQuestion(declared: "~/code/shop", found: shop.path),
-                                                 page: space.location.path, declared: ["state", "store", "launch:codex"])])
-        #expect(first.granted.rights == ["state", "launch:codex"] && first.granted.refused == ["store"])
+        #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, level: .run, folder: shop.path, folders: [], page: space.location.path)],
+                "pre-set to Run, its folder the declared one, found on this Mac")
+        #expect(first.granted.rights == ["state", "store", "launch:codex"] && first.granted.refused.isEmpty)
         #expect(first.granted.folder == shop.path)
-        #expect(first.granted.agents == .folders([shop.path, "/Users/example/blog"]))
+        #expect(first.granted.agents == .folders([shop.path, home.places.home.appendingPathComponent("code/blog").path]))
         let grant = try #require(try AppFile.read(home.places.grants).spaces["review"])
-        #expect(grant.granted == ["state", "launch:codex"] && grant.remap == ["~/code/blog": "/Users/example/blog"])
+        #expect(grant.level == .run && grant.granted == ["state", "send", "launch"] && grant.folder == shop.path)
 
-        // Opened again: nothing new to ask. A right added to the declaration is the only thing asked next.
+        // Opened again: nothing to ask. A right within its level, declared later, is not asked either.
         let second = try await home.window(space, ask)
         defer { second.close() }
         second.open()
@@ -535,24 +513,28 @@ import WebKit
         let third = try await home.window(space, ask)
         defer { third.close() }
         third.open()
-        #expect(ask.questions.last?.rights == ["send:codex"])
-        #expect(ask.questions.last?.folder == nil && ask.questions.last?.scope == nil)
+        #expect(ask.questions.count == 1 && third.granted.rights == ["state", "store", "send:codex", "launch:codex"])
     }
 
-    /// The scope is shown whenever `state` is asked, even when it was answered earlier with another right.
-    @Test func stateAddedLaterShowsItsScope() async throws {
+    /// Memory alone is never asked; a right above the level chosen stays refused, silently.
+    @Test func aRightAboveTheLevelIsRefusedSilently() async throws {
         let home = Home(prefix: "something-window-"), ask = FakeAsk()
         defer { home.remove() }
         let space = try home.space("later", page(#"{"contract": 1, "rights": ["store"], "agents": {"see": "all"}}"#, ""))
         let first = try await home.window(space, ask)
         first.open()
         first.close()
-        #expect(ask.questions.last?.scope == nil, "without state, the scope shows nothing")
+        #expect(ask.questions.isEmpty && first.granted.rights == ["store"], "its memory needs no permission")
         try page(#"{"contract": 1, "rights": ["store", "state"], "agents": {"see": "all"}}"#, "").write(to: space.location, atomically: true, encoding: .utf8)
         let second = try await home.window(space, ask)
-        defer { second.close() }
         second.open()
-        #expect(ask.questions.last?.rights == ["state"] && ask.questions.last?.scope == .all)
+        second.close()
+        #expect(ask.questions.map(\.level) == [.watch])
+        try page(#"{"contract": 1, "rights": ["store", "state", "send"], "agents": {"see": "all"}}"#, "").write(to: space.location, atomically: true, encoding: .utf8)
+        let third = try await home.window(space, ask)
+        defer { third.close() }
+        third.open()
+        #expect(ask.questions.count == 1 && third.granted.rights == ["store", "state"] && third.granted.refused == ["send"])
     }
 
     /// The stamp that reloads a space follows each visible file of a folder, an image as much as the page, and stops

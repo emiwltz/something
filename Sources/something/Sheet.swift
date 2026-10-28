@@ -78,6 +78,15 @@ final class Sheet: NSPanel {
 
     override var canBecomeKey: Bool { true }
 
+    /// Takes the height its content now needs, its top where it was: a sheet hangs from its top edge.
+    func refit() {
+        guard let content = contentView else { return }
+        content.layoutSubtreeIfNeeded()
+        var frame = self.frame
+        (frame.origin.y, frame.size.height) = (frame.maxY - content.fittingSize.height, content.fittingSize.height)
+        setFrame(frame, display: true)
+    }
+
     /// Hangs the sheet from `window`; once an action was pressed it is taken away, and `then` gets that action's role,
     /// or nil when the sheet was ended otherwise (Quit ends an open question as its Cancel would).
     func hang(on window: NSWindow, then: @escaping (Role?) -> Void) {
@@ -265,46 +274,3 @@ final class SheetButton: PanelButton {
     }
 }
 
-/// A switch as the mockup draws it, 30 by 18: filled in ink when on, in mist when off, its knob sliding between the
-/// two in the calm motion. `changed` hears each change the person makes. It reads as a checkbox to VoiceOver, which
-/// says on or off.
-final class SheetSwitch: NSButton {
-    static let size = NSSize(width: 30, height: 18)
-    var changed: () -> Void = {}
-    /// Where the knob stands, 0 (off) to 1 (on); animated between the two.
-    @objc dynamic var knob: CGFloat = 0 { didSet { needsDisplay = true } }
-
-    init(_ label: String) {
-        super.init(frame: NSRect(origin: .zero, size: Self.size))
-        setButtonType(.switch)
-        (title, isBordered, state, focusRingType) = ("", false, .off, .exterior)
-        (target, action) = (self, #selector(flip))
-        setAccessibilityLabel(label)
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    override var intrinsicContentSize: NSSize { Self.size }
-    override var acceptsFirstResponder: Bool { true }
-    override var canBecomeKeyView: Bool { true }
-    override var focusRingMaskBounds: NSRect { bounds }
-    override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 9, yRadius: 9).fill() }
-
-    override static func defaultAnimation(forKey key: NSAnimatablePropertyKey) -> Any? {
-        key == "knob" ? CABasicAnimation() : super.defaultAnimation(forKey: key)
-    }
-
-    @objc private func flip() {
-        let on = state == .on
-        Look.animate(Look.duration(0.2, Look.motion(Look.chosen)), Look.out) { [weak self] in self?.moving.knob = on ? 1 : 0 }
-        changed()
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let track = NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2)
-        (state == .on ? Look.Token.ink : .mist).color.setFill()
-        track.fill()
-        Look.Token.bg2.color.setFill()
-        NSBezierPath(ovalIn: NSRect(x: 2 + 12 * knob, y: 2, width: 14, height: 14)).fill()
-    }
-}

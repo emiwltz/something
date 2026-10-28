@@ -2,7 +2,8 @@
 // slice that builds it. Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")`
 // until that slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from
 // that file, so this catalog is only edited to bring back La page (b2 and the _p variants) or to mark an id shot. With SOMETHING_ACCEPT_STRICT=1
-// the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots.
+// the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots. Round 2's frozen steps
+// (mockup v6.2) join it with their slice, each in the area file of its screen, and retire the old ids they replace.
 import Foundation
 import Testing
 
@@ -21,7 +22,7 @@ enum Catalog {
         ("b1", "W3"), ("b2", "W7"), ("b3", "W2"), ("b4", "W4"), ("b5", "W5"), ("b6", "W2"), ("b7", "W6"), ("b8", "W3"),
         ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c5", "AB11"), ("c6", "AB09b"), ("c7", "AB05"),
         ("c8", "AB08"), ("c9", "AB06"), ("c10", "AB07"),
-        ("d1", "AB12"), ("d2", "AB14"), ("d3", "AB15"), ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
+        ("d2", "AB14"), ("d3", "AB15"), ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
         ("e1", "T2"), ("e2", "T3"), ("e3", "T2"), ("e4", "T5"), ("e5", "T6"), ("e6", "T4"), ("e7", "T7"), ("e8", "T8"),
         ("e9", "T9"), ("e10", "T10"), ("e11", "T10"), ("e12", "T11"), ("e13", "T2"), ("e14", "AB17w"), ("e15", "T9"),
         ("f1", "T14"), ("f2", "T15"), ("f3", "T16"), ("f4", "T17"), ("f5", "T13"), ("f6", "T19"), ("f7", "T20"), ("f8", "T21"),
@@ -29,7 +30,14 @@ enum Catalog {
         ("g1", "G2"), ("g2", "G3"), ("g3", "G4"), ("g4", "G5"), ("g5", "G5"), ("g6", "G4"), ("g7", "G4"), ("g8", "G6"),
         ("g9", "F5"), ("g10", "G1"), ("g11", "G5"),
         ("b1_p", "W7"), ("c2_p", "W7"), ("d1_p", "W7"), ("e1_p", "W7"), ("f6_p", "W7"), ("g4_p", "W7"),
+    ] + frozen
+    /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
+    /// x3_1), and the slice that builds each.
+    static let frozen: [(id: String, slice: String)] = [
+        ("x1-2", "S2"), ("x3-1", "S2"),
     ]
+    /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1).
+    static let retired: Set<String> = ["d1"]
     /// La page, pending Emi's decision: no scenario is written for these, and the gate does not count them.
     static let excluded: Set<String> = ["b2", "b1_p", "c2_p", "d1_p", "e1_p", "f6_p", "g4_p"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
@@ -42,6 +50,7 @@ enum Catalog {
     /// The area file of a screen id.
     static func area(_ id: String) -> Area {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
+        if id.contains("-") { return [1: .shell, 3: .build][number] ?? .command }
         switch id.first {
         case "a", "d": return .build
         case "b": return .shell
@@ -75,7 +84,10 @@ enum Catalog {
         func part(_ match: NSTextCheckingResult, _ group: Int) -> String? { Range(match.range(at: group), in: text).map { String(text[$0]) } }
         let matches = test.matches(in: text, range: NSRange(text.startIndex..., in: text))
         return matches.enumerated().compactMap { index, match in
-            guard let id = part(match, 2), id.range(of: #"^[a-g][0-9]+(_p)?$"#, options: .regularExpression) != nil else { return nil }
+            guard let name = part(match, 2) else { return nil }
+            // A frozen step's function, x3_1, is the screen id x3-1.
+            let id = name.range(of: #"^[xj][0-9]+_[0-9]+$"#, options: .regularExpression) != nil ? name.replacingOccurrences(of: "_", with: "-") : name
+            guard id.contains("-") || id.range(of: #"^[a-g][0-9]+(_p)?$"#, options: .regularExpression) != nil else { return nil }
             let traits = part(match, 1) ?? ""
             let slice = unbuilt.firstMatch(in: traits, range: NSRange(traits.startIndex..., in: traits)).flatMap { Range($0.range(at: 1), in: traits) }
             // The body runs from the function's name to the next test, or to the end of the file.
@@ -102,7 +114,8 @@ enum Catalog {
             (1...count).map { "\(letter)\($0)" }
         }
         #expect(expected.count == 71)
-        #expect(Set(ids.filter { !$0.hasSuffix("_p") }) == Set(expected))
+        #expect(Set(ids.filter { !$0.hasSuffix("_p") && !$0.contains("-") }) == Set(expected).subtracting(Catalog.retired))
+        #expect(Catalog.frozen.allSatisfy { $0.id.range(of: #"^[xj][0-9]+-[0-9]+$"#, options: .regularExpression) != nil })
         #expect(Set(ids.filter { $0.hasSuffix("_p") }) == Catalog.excluded.subtracting(["b2"]))
         #expect(Catalog.excluded.isSubset(of: Set(ids)) && Catalog.pendingShots.isSubset(of: Set(ids)))
         #expect(owners.allSatisfy { !$0.slice.isEmpty })
@@ -114,7 +127,9 @@ enum Catalog {
         for area in Catalog.Area.allCases {
             let scenarios = try Catalog.scenarios(area)
             let mine = owners.map(\.id).filter { Catalog.area($0) == area && Catalog.status($0) != .excluded }
-            #expect(scenarios.map(\.id) == mine, "\(area.rawValue) registers \(scenarios.map(\.id)), its ids are \(mine)")
+            // The old ids in the catalog's order; a frozen step stands where its screen did.
+            #expect(scenarios.map(\.id).filter { !$0.contains("-") } == mine.filter { !$0.contains("-") } && Set(scenarios.map(\.id)) == Set(mine),
+                    "\(area.rawValue) registers \(scenarios.map(\.id)), its ids are \(mine)")
             for scenario in scenarios {
                 if let slice = scenario.unbuilt { #expect(slice == Catalog.slice(scenario.id), "\(scenario.id) waits for \(slice)") }
                 #expect(scenario.unbuilt != nil || scenario.asserts, "\(scenario.id) is enabled but asserts nothing")

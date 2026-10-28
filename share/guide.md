@@ -14,11 +14,12 @@ contract, version 1. The look and the content are yours and theirs; the contract
 2. **Start from the closest template**, or from the empty one: `something new <name> --from <template>` copies a
    template to `~/something/spaces/<name>.html`; `something new <name>` writes the empty template there (`--folder`
    makes `<name>/index.html`, for a space of several files). Read the templates for what is possible.
-3. **Declare only the rights the page uses** (see "Rights"). The person is asked for each one.
+3. **Declare only the rights the page uses** (see "Rights"). The person answers them with one level.
 4. **Run `something check <name>` until it reports no error and no warning**, then once more with
    `--refuse <right>` for each right you declared: the page must hide what was refused, not throw.
 5. **Tell the person how to open it:** a click on it in something's sidebar, or `something open <name>`. The first
-   opening asks them for the rights. Saving the file again reloads the open space. A page that stops (its process
+   opening asks them for its level, unless they chose it on New Space before you built it. Saving the file again
+   reloads the open space. A page that stops (its process
    ends, as `PAGE_CRASHED` in the check) is said stopped in the window; after two stops something no longer reloads
    it on a save until the person clicks Reload or asks its assistant to fix it.
 
@@ -125,11 +126,11 @@ A folder space may instead put the same object in `something.json`. If both exis
 | Key | What it says | When absent |
 |---|---|---|
 | `contract` | The contract you wrote for: `1`. | Read as `1`, warning `CONTRACT_MISSING` |
-| `title` | Shown in the sidebar, the window title and the rights sheet. | The file or folder name |
-| `description` | One sentence, shown in the rights sheet and in Info. | Nothing shown |
+| `title` | Shown in the sidebar, the window title and the level sheet. | The file or folder name |
+| `description` | One sentence, shown in the level sheet and in Info. | Nothing shown |
 | `agents` | `{"see":"all"}`, or `{"folders":["~/code/shop"]}`: agents working in those folders or inside them. | Only the agents this space launched |
 | `rights` | What the space asks for (see "Rights"). | No right |
-| `folder` | Where the agents this space launches work. | The person picks one when a `launch` right is asked |
+| `folder` | Where the agents this space launches work. | The person picks one when they choose Run |
 
 Only JSON that does not parse (`DECLARATION_UNREADABLE`) or a `contract` higher than something knows
 (`CONTRACT_TOO_NEW`) stops the space from opening. Anything else is a warning and the space opens. The smallest
@@ -153,12 +154,23 @@ the person. A right asked twice counts once. An unknown word is ignored (warning
 but cannot honour (for a kind it only sees: `antigravity` and `cursor` in this version) goes to `granted.unavailable` (warning
 `RIGHT_UNAVAILABLE`).
 
-At the first opening, a window of the Mac lists what you declared, in plain words; the person allows or refuses each
-line. Refusals are remembered, and rights can be revoked at any time. **So never assume a right: read
-`something.granted`**, and listen to `"granted"` for changes.
+The person answers with one **level** for the whole space, never right by right:
 
-Ask for the least: a page that only shows agents needs `state` alone; a chat with agents it starts itself needs
-`launch` and `send`, and no `state` (it always sees what it launched); a game needs `store`.
+| Level | Grants |
+|---|---|
+| None | No right. |
+| Watch | `state` |
+| Talk | `state`, `send` |
+| Run | `state`, `send`, `launch`, in the folder the person picks (`granted.folder`, whatever `folder` declares) |
+
+`store` needs no permission: declared, it is always granted. A space made on something's New Space opens with the
+level the person chose there, before it was built; any other space (a template, an import, a page an agent wrote
+outside something) asks for its level in a window of the Mac at its first opening, pre-set to the highest level its
+rights use. A right above the level is refused without asking again, until the person changes it in Info. **So never
+assume a right: read `something.granted`**, and listen to `"granted"` for changes.
+
+Ask for the least: a page that only shows agents needs `state` alone (Watch); a chat with agents it starts itself needs
+`launch` and `send` (Run); a game needs `store` alone, which asks nothing.
 
 ## The bridge: `something.js`
 
@@ -430,7 +442,7 @@ await something.store.set("seen", [...seen, "a1"]);
   contract refuses to import it. It never carries the rights they gave, the journal, or anything read from an agent,
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
-  exported and imported whole. On another Mac, the space asks for its rights again and fills with that Mac's agents.
+  exported and imported whole. On another Mac, the space asks for its level again and fills with that Mac's agents.
 - **The assistant.** Your space's own assistant rests over it as a 44-point sticker, 16 points from its bottom right
   corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
   left or right edge. Keep what matters out of the 76 points along those two edges, or let it scroll. The first error

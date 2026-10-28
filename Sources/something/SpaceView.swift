@@ -341,8 +341,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         push()
     }
 
-    /// The grant in force after this opening: the person is asked only what changed since they last answered. The
-    /// answers are kept in the grants file, by the space's name. nil when nothing was ever answered or the file cannot
+    /// The grant in force after this opening: a space with no level yet (made elsewhere), or whose page declares what
+    /// its last answer did not cover, shows the level sheet. The answer is kept in the grants file, by the space's name. nil when nothing was ever answered or the file cannot
     /// be read.
     func answer(_ declaration: Declaration) -> Grant? {
         let grants = Grants(places.grants)
@@ -356,14 +356,10 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
         // not this space's.
         if grant == nil { launched = [] }
-        let toAsk = Rights.toAsk(declaration, since: grant)
-        guard !toAsk.isEmpty, let answer = ask.rights(question(declaration, toAsk, grant)) else { return grant }
+        guard !Rights.toAsk(declaration, since: grant).isEmpty, let answer = ask.rights(question(declaration, grant)) else { return grant }
         // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.
         func answered(_ before: Grant?) -> Grant {
-            var next = Rights.answered(declaration, allowed: answer.allowed, refused: answer.refused, folder: answer.folder,
-                                       at: iso8601.string(from: Date()), after: before)
-            next.remap.merge(answer.remap) { $1 }
-            return next
+            Rights.leveled(answer.level, folder: answer.folder, declaration: declaration, at: iso8601.string(from: Date()), after: before)
         }
         do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {
             ask.tell(error.sentence)
@@ -371,21 +367,16 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         }
     }
 
-    /// What the rights sheet shows: the rights never answered, the scope when it is new or wider, the scope folders
-    /// that are not on this Mac, and the launch folder when one must be chosen or confirmed.
-    func question(_ declaration: Declaration, _ toAsk: ToAsk, _ grant: Grant?) -> RightsQuestion {
-        func here(_ path: String) -> String? {
-            var folder: ObjCBool = false
-            guard let path = Declaration.expand(path, home: places.home),
-                  FileManager.default.fileExists(atPath: path, isDirectory: &folder), folder.boolValue else { return nil }
-            return path
-        }
-        var missing: [String] = []
-        if case .folders(let folders) = declaration.agents { missing = folders.filter { here($0) == nil && grant?.remap[$0] == nil } }
-        return RightsQuestion(space: declaration.title, description: declaration.description, rights: toAsk.rights,
-                              scope: toAsk.scope ? declaration.agents : nil, missing: missing,
-                              folder: toAsk.folder ? FolderQuestion(declared: declaration.folder, found: declaration.folder.flatMap(here)) : nil,
-                              made: made, page: space.location.path, declared: declaration.rights)
+    /// What the level sheet shows: the level in force, else the one the page needs; Run's folder in force, else the
+    /// declared one when it is on this Mac; and the folders the Mac's agents work in.
+    func question(_ declaration: Declaration, _ grant: Grant?) -> RightsQuestion {
+        var found: String?
+        var folder: ObjCBool = false
+        if let path = declaration.folder.flatMap({ Declaration.expand($0, home: places.home) }),
+           FileManager.default.fileExists(atPath: path, isDirectory: &folder), folder.boolValue { found = path }
+        return RightsQuestion(space: declaration.title, description: declaration.description,
+                              level: grant?.level ?? Grant.Level.needed(by: declaration.rights), folder: grant?.folder ?? found,
+                              folders: Levels.folders(engine.state), made: made, page: space.location.path)
     }
 
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice

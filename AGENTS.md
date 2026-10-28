@@ -78,7 +78,7 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
 6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by
    `BudgetTests`, every line counted: the core 1,850 lines in all; the host 2,750 in all and 450 per file; in each
-   `Agent*` target, 650 per driver and 450 per other file; the app 18,938 in all, a soft budget Emi raises per block on
+   `Agent*` target, 650 per driver and 450 per other file; the app 18,952 in all, a soft budget Emi raises per block on
    measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 700 lines.
 7. **Agents are extensions.** `SomethingCore` knows no agent. No line of the host's code names one. A family imports
    the host and never another family; what the host shares with them is `package`, public only where the app needs
@@ -164,7 +164,7 @@ header of each `*Trial.swift` says what it proves.
   and VoiceOver labels at every run. `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
   screen, day and night (`<id>.png`, `<id>-dark.png`), to set beside the mockup's; `SOMETHING_ACCEPT_STRICT=1` fails
   while a screen that counts is still unbuilt or waits for its shots. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what
-  the mockup has no screen for (alerts, the rights sheets' variants, the assistant's rarer states, the templates).
+  the mockup has no screen for (alerts, the level sheet's variants, the assistant's rarer states, the templates).
   After changing a template, run `tools/previews.sh` and commit its pictures.
 
 **Tests leave nothing behind.**

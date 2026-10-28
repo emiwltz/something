@@ -187,12 +187,11 @@ import Testing
         return window.performKeyEquivalent(with: event)
     }
 
-    /// A suggestion sends its whole sentence, from the blank page, with the conversation open, and leaves the draft as
-    /// it was; once the turn ended, the space the agent made opens by itself and its rights sheet says the agent made
-    /// it. A turn that made no space ends the build too. One made while the person is on another space is said ready,
-    /// and has its dot until it is opened.
-    @Test func theSuggestionsSendTheirSentences() async throws {
-        #expect(BlankView.chips.map(\.0) == ["Who is waiting for me", "A morning brief of my agents", "A small game for my breaks"])
+    /// A sentence sent from the blank page builds, with the conversation open, and leaves the draft as it was; once
+    /// the turn ended, the space the agent made opens by itself, its level the one New Space pre-set, and its level
+    /// sheet, shown elsewhere, says the agent made it. A turn that made no space ends the build too. One made while the
+    /// person is on another space is said ready, and has its dot until it is opened.
+    @Test func aBuildFromTheBlankPageOpensWhatItMade() async throws {
         let (home, model) = try assistants.assistant(prefix: "something-tour-")
         defer { home.remove() }
         model.engine.lookAgain()
@@ -208,7 +207,6 @@ import Testing
             opened.append(model.appeared(library.entries, open: open))
         }
         let sentence = BlankView.chips[0].1
-        #expect(sentence == "Make me a space that shows which of my agents are waiting for me, and lets me answer the ones I can.")
         making = ("waiting", "Who waits")
         model.draft = "Half written"
         model.send(sentence)
@@ -216,6 +214,7 @@ import Testing
         #expect(await wait(until: { model.rows.contains(.mine(caption: "on the blank page", text: sentence)) }))
         #expect(await wait(until: { !model.building }))
         #expect(opened == ["waiting"] && model.made == ["waiting"] && model.ready == nil)
+        #expect(try AppFile.read(home.places.grants).spaces["waiting"]?.level == .watch, "the level its words pre-set is its consent")
 
         // A question makes no space: the build ends with its answer all the same.
         making = nil
@@ -233,9 +232,9 @@ import Testing
         #expect(model.notice?.title == "“Second” is ready." && model.notice?.actions.map(\.title) == ["Open"])
         await assistants.finish(home, model)
 
-        let question = RightsQuestion(space: "Second", description: "Invented.", rights: ["store"], scope: nil, missing: [], folder: nil, made: true)
+        let question = RightsQuestion(space: "Second", description: "Invented.", level: .watch, folder: nil, made: true)
         let said = PanelsTests.texts(Ask.rights(question).sheet.contentView)
-        #expect(Array(said.prefix(3)) == ["Second would like to", "Your agent made this space.", "Invented."])
+        #expect(Array(said.prefix(3)) == ["Second would like to work with your agents", "Your agent made this space.", "Invented."])
     }
 
     /// Under a Homebrew prefix, the tour offers the launcher once and makes it in the home's Applications: a bundle of

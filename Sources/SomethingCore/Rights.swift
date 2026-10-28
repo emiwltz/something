@@ -1,5 +1,6 @@
-// What a space may do: the rights' words, the scope matched on whole path components, the `granted` a
-// space receives, the grants file the engine keeps outside the spaces folder, and what to ask again at an opening.
+// What a space may do: the rights' words, the one level a person chooses for them, the scope matched on whole path
+// components, the `granted` a space receives, the grants file the engine keeps outside the spaces folder, and what to
+// ask again at an opening.
 // A space never inherits rights by name: grants are keyed by name, so whoever imports, renames or deletes a space removes its entry.
 import Foundation
 
@@ -14,7 +15,29 @@ public struct Grant: Codable, Equatable, Sendable {
     /// For a scope folder, as declared, that is not on this Mac: the absolute folder the person chose in its place.
     public var remap: [String: String] = [:]
     public var at: String
+    /// The level the person chose for the whole space; nil for answers given right by right, before levels (optional,
+    /// so that a grants file written before them still reads).
+    public var level: Level?
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
+}
+
+extension Grant {
+    /// How far a space may work with the person's agents, one choice for all its rights: none, see them (`state`), see
+    /// and write to them (`send`), or also start them in a folder the person picks (`launch`). Its memory (`store`)
+    /// needs no level: it never leaves the space. A level is how the person answers; the rights stay the contract's words.
+    public enum Level: String, Codable, CaseIterable, Comparable, Sendable {
+        case none, watch, talk, run
+
+        /// The words this level allows, each covering the same word narrowed to a kind ("send" covers "send:claude").
+        public var words: [String] { Array(["state", "send", "launch"].prefix(Level.allCases.firstIndex(of: self) ?? 0)) }
+
+        /// The highest level `rights` use: what a page that declares them needs to do all it says.
+        public static func needed(by rights: [String]) -> Level {
+            allCases.last { level in level != .none && rights.contains { Rights.covers([level.words.last ?? ""], $0) } } ?? .none
+        }
+
+        public static func < (a: Level, b: Level) -> Bool { (allCases.firstIndex(of: a) ?? 0) < (allCases.firstIndex(of: b) ?? 0) }
+    }
 }
 
 /// The part of a declaration the person answers.
@@ -88,6 +111,36 @@ public struct ToAsk: Equatable, Sendable {
 }
 
 public enum Rights {
+    /// The words a level grants or refuses; `store` is never asked.
+    static let leveled = Grant.Level.run.words
+
+    /// The level a grant is at: the one chosen, or for a grant answered right by right, the highest level whose
+    /// declared rights were all allowed (a word the page did not declare neither raises nor stops it), never above what
+    /// the page declared. Reading an older grant this way widens nothing.
+    public static func level(of grant: Grant) -> Grant.Level {
+        if let level = grant.level { return level }
+        var reached = Grant.Level.none
+        for level in Grant.Level.allCases.dropFirst() {
+            guard let word = level.words.last else { continue }
+            let declared = grant.declared.rights.filter { covers([word], $0) }
+            if declared.isEmpty { continue }
+            guard declared.allSatisfy({ covers(grant.granted, $0) }) else { break }
+            reached = level
+        }
+        return reached
+    }
+
+    /// The grant once the person chose `level` for the space declaring `declaration`: the level's words allowed, the
+    /// others refused, `folder` in force for Run (kept from before when nil). A later declaration asks nothing more: a
+    /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares.
+    public static func leveled(_ level: Grant.Level, folder: String?, declaration: Declaration, at: String, after grant: Grant?) -> Grant {
+        var next = grant ?? Grant(declared: Asked(declaration), at: at)
+        (next.declared, next.at, next.level) = (Asked(declaration), at, level)
+        (next.granted, next.refused) = (level.words, leveled.filter { !level.words.contains($0) })
+        next.folder = level == .run ? folder ?? next.folder : nil
+        return next
+    }
+
     /// Whether one of `words` covers `right`: the same word, or a word without a kind for a right with one
     /// ("send" covers "send:claude", never the reverse).
     public static func covers(_ words: [String], _ right: String) -> Bool { words.contains { $0 == right || (!$0.contains(":") && right.hasPrefix($0 + ":")) } }
@@ -121,7 +174,8 @@ public enum Rights {
         var granted = Granted()
         (granted.unavailable, granted.limits, granted.folder) = (reading.unavailable, limits, grant?.folder)
         guard let declaration = reading.declaration else { return granted }
-        let allowed = grant?.granted ?? [], refused = grant?.refused ?? []
+        // A space's memory needs no permission: it never leaves the space.
+        let allowed = (grant?.granted ?? []) + ["store"], refused = grant?.refused ?? []
         for right in declaration.rights {
             if covers(allowed, right) { granted.rights.append(right) }
             // A wider right declared after a narrower one was allowed keeps what was allowed, until the person answers.
@@ -137,7 +191,11 @@ public enum Rights {
     /// than the one answered, or a declared folder that changed. Refusals are remembered and not asked again. The scope
     /// says which agents `state` shows, so it is asked with `state` and only while `state` is declared and not refused.
     public static func toAsk(_ declaration: Declaration, since grant: Grant?) -> ToAsk {
-        let answered = (grant?.granted ?? []) + (grant?.refused ?? [])
+        // A level answers every right; only Run without a folder chosen yet asks again.
+        if let grant, let level = grant.level {
+            return ToAsk(rights: [], scope: false, folder: level == .run && grant.folder == nil && declaration.rights.contains { $0.hasPrefix("launch") })
+        }
+        let answered = (grant?.granted ?? []) + (grant?.refused ?? []) + ["store"]
         let rights = declaration.rights.filter { !covers(answered, $0) }
         let launches = declaration.rights.contains { $0.hasPrefix("launch") && !covers(grant?.refused ?? [], $0) }
         let sees = declaration.rights.contains("state") && !covers(grant?.refused ?? [], "state")
@@ -148,13 +206,14 @@ public enum Rights {
     }
 
     /// The grant after the person answered: their allowed and refused rights replace earlier answers for the same
-    /// words, the declaration becomes the one answered, and `folder`, when given, becomes the folder in force.
+    /// words, the declaration becomes the one answered, and `folder`, when given, becomes the folder in force. Answers
+    /// given right by right replace a level.
     public static func answered(_ declaration: Declaration, allowed: [String], refused: [String], folder: String?,
                                 at: String, after grant: Grant?) -> Grant {
         var next = grant ?? Grant(declared: Asked(declaration), at: at)
         next.granted = next.granted.filter { !refused.contains($0) } + allowed.filter { !next.granted.contains($0) }
         next.refused = next.refused.filter { !allowed.contains($0) } + refused.filter { !next.refused.contains($0) }
-        (next.declared, next.at) = (Asked(declaration), at)
+        (next.declared, next.at, next.level) = (Asked(declaration), at, nil)
         if let folder { next.folder = folder }
         return next
     }

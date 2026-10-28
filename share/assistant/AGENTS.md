@@ -12,6 +12,10 @@ folder only.
   steps below name the commands; their tools take the same name, template (`from`) and rights to refuse.
 - Read the guide once (`something_guide`, or `something guide --print`). It is the contract of a space; follow it.
 - Each message starts with a line from something saying which space is open. "This space" means that one.
+- On a new space, a second line says what the person chose for it: `[something] With your agents: <level>.` Declare
+  exactly that level's rights, and do not ask: None, no agent right; Watch, `state`; Talk, `state` and `send`; Run,
+  `state`, `send` and `launch`, its folder the one the line names. `store` needs no permission: declare it when the
+  space remembers something.
 
 ## Make a space
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.

@@ -1,6 +1,6 @@
 # something
 
-something is a Mac app for **spaces**: pages you build with your own coding agent, such as a board of who is waiting
+something is a Mac app for **spaces**, pages of your own that you build with your own coding agent, such as a board of who is waiting
 for you, a morning paper of what your agents did, or a small game for your breaks. something shows them safely, and
 lets them see the coding agents on your Mac and talk to them.
 
@@ -24,8 +24,9 @@ agents builds your spaces with you (it starts none of them). It also offers, eac
 notification when a request waits and, when installed with Homebrew, a small launcher in `~/Applications` so that
 Spotlight finds something.
 
-The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space, or click a
-suggestion, and your agent builds it; it opens by itself when ready, and a sheet asks you what it may do. Each space's
+The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
+the field with an example), choose under it what it may do with your agents (None, Watch, Talk or Run, pre-set from
+your words), and Build: your agent builds it, and it opens by itself when ready, with nothing more to allow. Each space's
 assistant rests over it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is
 in the way. Click it (or ⌘K) to ask for a change: the space reloads as your agent saves it. ⌘J shows the conversation,
 ⌘\ makes it small again, ⌘. stops the assistant. Templates (⇧⌘T) are six finished spaces to start from, and need no
@@ -109,7 +110,7 @@ runs them in its shell instead. What "without asking" means for each:
 - **OpenCode** asks as your OpenCode settings say. **OMP** too, and its own default asks nothing.
 - **pi** and **Amp** never ask when something launches them, by design (a tool your Amp settings would ask for, Amp
   refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
-  space's right to start agents, in the sheet that asks for it and in Info.
+  space's Run, where you choose it and in Info.
 
 "Ask Before Every Change", in the assistant card's menu or Settings › Permissions, turns the exception off from the next
 conversation. No space can see what you say to your assistant, or write to it. something writes `AGENTS.md` and
@@ -120,9 +121,13 @@ yours and left alone.
 
 Every decision is yours, in a window of the Mac that a space cannot draw, imitate or answer:
 
-- **Rights.** At the first opening of a space, a sheet lists what it declares (see your agents, write to them, start
-  them, remember things), each to allow or not. Info (⌘I), a panel beside the space, shows its assistant, each right
-  with a switch to revoke it, its versions, and what the space did.
+- **Rights.** A space works with your agents at one level: **None**; **Watch**, it sees them (their state, folder and
+  last messages); **Talk**, it also writes to them (a message, stop one, change its model); **Run**, it also starts one
+  in a folder you pick. On New Space you choose it before Build, pre-set from your words: that choice is your consent,
+  and the space opens without asking. A space made elsewhere (a template, an import, an agent outside something) asks
+  for its level in a sheet at its first opening, pre-set to what it declares. What a space declares above its level
+  stays refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel
+  beside the space, shows its assistant, each right with a switch to revoke it, its versions, and what the space did.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
@@ -168,7 +173,7 @@ Quit something first (⌘Q): quitting stops the agents it launched.
 brew uninstall something
 brew untap emiwltz/tap                               # if you installed nothing else from it
 rm -rf ~/Applications/something.app                  # the launcher, if the welcome added it
-rm -rf ~/Library/Application\ Support/something      # your settings, answers to the rights sheets, journals, versions and assistants' conversations
+rm -rf ~/Library/Application\ Support/something      # your settings, your spaces' levels, journals, versions and assistants' conversations
 rm -rf ~/something                                   # your spaces and their memory: keep them if you may come back
 rm -rf "$TMPDIR/something-check"                     # the snapshots something check took of pages elsewhere
 ```

@@ -79,7 +79,7 @@ import SwiftUI
         guard let space else { return }
         let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds)
         about = reading.declaration?.description
-        asksNothing = reading.declaration?.rights.isEmpty ?? true
+        asksNothing = reading.declaration?.rights.allSatisfy { $0 == "store" } ?? true
         do {
             let grant = try Grants(places.grants).read().spaces[space.name]
             if let grant { rights = Info.standings(reading, grant, home: places.home) }
@@ -114,15 +114,16 @@ import SwiftUI
     /// Where each declared right stands, by what the space receives: the same reading as its `granted`.
     static func standings(_ reading: DeclarationReading, _ grant: Grant, home: URL) -> [(right: String, standing: Standing)] {
         let force = Rights.granted(reading, grant, limits: [:], home: home)
-        return (reading.declaration?.rights ?? []).map { right in
+        // Its memory needs no permission: nothing to switch.
+        return (reading.declaration?.rights ?? []).filter { $0 != "store" }.map { right in
             if force.rights.contains(right) { return (right, .allowed) }
             if force.refused.contains(right) { return (right, .refused) }
             return (right, .notAnswered(inForce: force.rights.filter { $0 != right && Rights.covers([right], $0) }))
         }
     }
 
-    /// A right as the panel names it, as the rights sheet does, and what it lets the space do in the mockup's short
-    /// words, with the warning the rights sheet gives when it has one.
+    /// A right as the panel names it, and what it lets the space do in the mockup's short words, with the warning a
+    /// person must read before allowing it when it has one.
     static func words(for right: String) -> (name: String, detail: String) {
         let detail = ["state": "Their state, folder and last messages.", "send": "Send them a message you typed here.",
                       "launch": "Launch one in a folder you choose.", "store": "A small memory, kept in its own folder."][Ask.parts(of: right).word]
@@ -162,7 +163,7 @@ import SwiftUI
     }
 
     /// Allows or refuses one declared right, as the person's answer, and tells the open space. A space never
-    /// answered has no switch: its first answers are given in its rights sheet, with its scope and folder.
+    /// answered has no switch: its first answer is its level, on New Space or in its level sheet.
     func set(_ right: String, allowed: Bool) {
         let declared = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.rights } ?? []
         change { grant in
@@ -181,17 +182,21 @@ import SwiftUI
             next.granted += keptAllowed.filter { !next.granted.contains($0) }
             next.refused += keptRefused.filter { !next.refused.contains($0) }
             if allowed { next.granted.append(right) } else { next.refused.append(right) }
-            next.at = iso8601.string(from: clock())
+            // Answered right by right, the space no longer has one level.
+            (next.at, next.level) = (iso8601.string(from: clock()), nil)
             grant = next
         }
         open()?.regrant()
     }
 
-    /// Clears the space's refusals: what it was allowed, its folder and its remap stay. The refused rights are asked
-    /// again now if it is open, otherwise at its next opening.
+    /// Clears the space's refusals and its level: what it was allowed, its folder and its remap stay. The refused
+    /// rights are asked again now if it is open, otherwise at its next opening.
     func askAgain() {
-        change { $0?.refused = [] }
-        // Just after the button's action: the rights sheet waits for the person, and the view must not wait inside it.
+        change {
+            $0?.refused = []
+            $0?.level = nil
+        }
+        // Just after the button's action: the level sheet waits for the person, and the view must not wait inside it.
         DispatchQueue.main.async { [weak self] in
             guard let self, let open = open() else { return }
             open.load()

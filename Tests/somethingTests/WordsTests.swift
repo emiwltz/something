@@ -1,6 +1,6 @@
 // What the person reads, word for word: a path with ~ and cut between two names, a journal line in local time with
-// the agent's name and the result only when it is not ok, and the rights window's defaults (every right ticked,
-// "Allow" first). No window is shown.
+// the agent's name and the result only when it is not ok, the level sheet's answers and New Space's level words. No
+// window is shown.
 import AppKit
 import SomethingCore
 import Testing
@@ -61,32 +61,31 @@ import Testing
                 == "09:02\tinterrupted pi “shop” — failed (A_LATER_CODE)", "a code this version does not know")
     }
 
-    @Test func theRightsSheetShowsTheLaunchFolder() throws {
-        let question = RightsQuestion(space: "Morning review", description: nil, rights: ["state", "store"], scope: nil, missing: [],
-                                      folder: FolderQuestion(declared: "~/code/shop", found: "/Users/example/code/shop"))
-        let window = Ask.rights(question, home: home)
-        #expect(window.answer() == RightsAnswer(allowed: [], refused: ["state", "store"], folder: "/Users/example/code/shop", remap: [:]))
-        let paths = labels(in: try #require(window.sheet.contentView)).filter { $0.toolTip != nil }
-        #expect(paths.map(\.stringValue) == ["~/code/shop"] && paths.map(\.toolTip) == ["/Users/example/code/shop"])
+    /// The level sheet answers the level shown and Run's folder; Allow waits for that folder; a folder is kept only
+    /// for Run.
+    @Test func theLevelSheetHoldsTheLevelAndRunsFolder() {
+        let run = Ask.rights(RightsQuestion(space: "Morning review", description: nil, level: .run, folder: "/Users/example/code/shop"), home: home)
+        #expect(run.answer() == RightsAnswer(level: .run, folder: "/Users/example/code/shop") && run.sheet.buttons[1].isEnabled)
+        #expect(!Ask.rights(RightsQuestion(space: "Board", description: nil, level: .run, folder: nil), home: home).sheet.buttons[1].isEnabled,
+                "Run waits for its folder")
+        let watch = Ask.rights(RightsQuestion(space: "Board", description: nil, level: .watch, folder: "/Users/example/code/shop"), home: home)
+        #expect(watch.answer() == RightsAnswer(level: .watch, folder: nil) && watch.sheet.buttons[1].isEnabled)
     }
 
-    /// A chosen folder keeps the sentence that says which declared folder it replaces.
-    @Test func aChosenFolderSaysWhatItReplaces() {
-        let lines = NSStackView()
-        var kept: String?
-        let chooser = Chooser(lines, "This folder is not on this Mac:", folder: "~/code/shop", then: "In place of ~/code/shop:",
-                              button: "Choose a folder in its place…", home: home) { kept = $0 }
-        chooser.picked("/Users/example/code/shop-copy")
-        #expect(labels(in: lines).map(\.stringValue) == ["In place of ~/code/shop:", "~/code/shop-copy"])
-        #expect(kept == "/Users/example/code/shop-copy")
-    }
-
-    /// Past six folders, the scope says how many more, all of them in a tooltip: a sheet does not scroll.
-    @Test func aLongScopeKeepsTheWindowOnTheScreen() throws {
-        let folders = (1...8).map { "/Users/example/code/project-\($0)" }
-        let question = RightsQuestion(space: "Board", description: nil, rights: ["state"], scope: .folders(folders), missing: [], folder: nil)
-        let shown = labels(in: try #require(Ask.rights(question, home: home).sheet.contentView)).map(\.stringValue)
-        #expect(shown.filter { $0.hasPrefix("~/code/project-") }.count == 6 && shown.contains("and 2 more"))
+    /// New Space's words pre-set the level, starting before writing before seeing; the agent hears it on a line of its own.
+    @Test func aDescriptionPresetsALevel() {
+        #expect(Grant.Level.guess("A countdown to Saturday, with what my agents still have to finish before the weekend.") == .watch)
+        #expect(Grant.Level.guess("A page that starts a reviewer agent in my shop every morning") == .run)
+        #expect(Grant.Level.guess("Let me nudge my agents or send them a note") == .talk)
+        #expect(Grant.Level.guess("My reading list") == .none && Grant.Level.guess("Restart my runner, agentless") == .none, "whole words only")
+        #expect(Grant.Level.allCases.map(\.title) == ["None", "Watch", "Talk", "Run"])
+        #expect(Grant.Level.allCases.map(\.sentence) == ["It shows no agent.", "It sees your agents: their state, folder and last messages.",
+                                                          "It sees them and writes to them: send a message, stop one, change its model.",
+                                                          "It sees them, writes to them, and starts one in a folder you pick."])
+        #expect(Grant.Level.run.line(folder: "/Users/example/code/shop", home: home) == "[something] With your agents: Run, in ~/code/shop.")
+        #expect(Grant.Level.watch.line(folder: "/Users/example/code/shop", home: home) == "[something] With your agents: Watch.")
+        #expect(AssistantModel.shown("[something] No space is open: the person is on the blank page.\n[something] With your agents: Watch.\nA countdown.")
+                == ("on the blank page", "A countdown."), "the conversation shows the person's words only")
     }
 
     /// A request in words: its effect by the tool's kind and the space, in the mockup's words, how long ago it was
