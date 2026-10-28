@@ -31,7 +31,7 @@ function play(something, method, p) {
   const pick = (keys) => Object.fromEntries(keys.filter((k) => k in p).map((k) => [k, p[k]]));
   switch (method) {
     case "state": return something.state();
-    case "send": return something.send(p.agent, p.text, "when" in p ? { when: p.when } : undefined);
+    case "send": return something.send(p.agent, p.text, "when" in p || "command" in p ? pick(["when", "command"]) : undefined);
     case "interrupt": return something.interrupt(p.agent);
     case "set": return something.set(p.agent, pick(["model", "mode", "effort"]));
     case "launch": return something.launch(p.kind, pick(["folder", "model", "mode", "effort"]));

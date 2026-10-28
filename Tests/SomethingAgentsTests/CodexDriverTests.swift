@@ -407,6 +407,19 @@ import SomethingCore
         #expect((replay.lines().last?["params"] as? [String: Any])?["effort"] as? String == "high")
     }
 
+    /// A collaboration call is its sub-agents' work; spawnAgent starts one, listed with its prompt until it ends.
+    @Test func aSpawnedAgentIsASubagent() throws {
+        let replay = Self.opened()
+        _ = try replay.agent.send("Please split it.", when: "next")
+        Self.started(replay, call: 4)
+        let call: [String: Any] = ["type": "collabAgentToolCall", "id": "call_9", "tool": "spawnAgent", "prompt": "Invented: write the tests", "status": "inProgress"]
+        replay.feed(["method": "item/started", "params": ["threadId": Self.thread, "item": call]])
+        #expect(replay.items.last?.kind == "subagent" && replay.fold.agent.subagents == [Tool(name: "Invented: write the tests", status: "running")])
+        replay.feed(["method": "item/completed", "params": ["threadId": Self.thread, "turnId": Self.turn, "item": call.merging(["status": "completed"]) { $1 }]])
+        replay.feed(["method": "item/started", "params": ["threadId": Self.thread, "item": ["type": "collabAgentToolCall", "id": "call_10", "tool": "wait", "status": "inProgress"]]])
+        #expect(replay.fold.agent.subagents == [Tool(name: "Invented: write the tests", status: "done")])
+    }
+
     @Test func aFileChangeShowsItsPaths() throws {
         let replay = Self.opened()
         _ = try replay.agent.send("Please patch it.", when: "next")

@@ -477,6 +477,82 @@ struct AcceptanceShell {
         #expect(SidebarOver.close(in: shell.layer))
     }
 
+    /// Talking to an agent in full from a page (S8, J4.2): My agents, its Claude Code in pacman launched by the space,
+    /// listing its own commands and three sub-agents. "/" in its reply box opens its commands as it lists them, ↓
+    /// chooses, ↩ puts "/plan " in the box; the helpers line says which sub-agents work; the picture shows "/goal" and
+    /// its argument typed, as the mockup does. The page draws all this from
+    /// the contract's `commands` and `subagents`; something only passes "/plan …" on as the agent's own command.
+    @Test("j4-2: talk to an agent, in full") func j4_2() async throws {
+        let stage = try Stage("shell-j4-2")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        Stage.work(library)
+        try Self.eyes(shell, Stage.moment)
+        let board = try await stage.open("agents", in: shell, library)
+        defer { board.close() }
+        #expect(board.granted.rights.contains("send"), "\(board.granted.rights)")
+        board.engine.update(outside: Self.inFull)
+        board.push()   // the app's timer pushes four times a second; no timer runs here
+        let tile = #"[...document.querySelectorAll(".tile")].find((t) => t.querySelector(".name").textContent === "pacman")"#
+        func run(_ script: String) async throws -> [String: Any] {
+            try #require(try await board.web.callAsyncJavaScript("const tile = \(tile), box = tile && tile.querySelector('textarea'); \(script)",
+                                                                  in: try #require(board.frame), contentWorld: .defaultClient) as? [String: Any])
+        }
+        var ready = false
+        for _ in 0..<100 where !ready {
+            ready = (try? await run("return { ok: !!tile && !tile.querySelector('form').hidden };"))?["ok"] as? Bool == true
+            if !ready { _ = await wait(0.05) }
+        }
+        #expect(ready, "pacman's reply box shows once the space may write to it")
+        let read = """
+            const menu = tile.querySelector(".cmds");
+            return { hidden: menu.hidden, label: menu.getAttribute("aria-label"), role: menu.getAttribute("role"), box: box.value,
+                     names: [...menu.querySelectorAll("li b")].map((b) => b.textContent), roles: [...menu.children].map((li) => li.getAttribute("role")),
+                     chosen: [...menu.children].findIndex((li) => li.getAttribute("aria-selected") === "true"), place: box.placeholder,
+                     helpers: tile.querySelector(".helpers").textContent };
+            """
+        func key(_ name: String) -> String { #"box.dispatchEvent(new KeyboardEvent("keydown", { key: "\#(name)", bubbles: true, cancelable: true }));"# }
+        let type = #"box.focus(); box.value = "/"; box.dispatchEvent(new Event("input"));"#
+        var seen = try await run(type + read)
+        #expect(seen["hidden"] as? Bool == false && seen["label"] as? String == "Claude Code's commands" && seen["role"] as? String == "listbox", "\(seen)")
+        #expect(seen["names"] as? [String] == ["/goal", "/plan", "/review", "/agents", "/compact"] && seen["chosen"] as? Int == 0, "\(seen)")
+        #expect((seen["roles"] as? [String])?.allSatisfy { $0 == "option" } == true)
+        #expect(seen["place"] as? String == "A word to Claude Code… · / for its commands")
+        #expect(seen["helpers"] as? String == "2 at work: Writer: chase for Blinky · Writer: chase for Pinky", "\(seen)")
+        seen = try await run(#"box.value = "/re"; box.dispatchEvent(new Event("input"));"# + read)
+        #expect(seen["names"] as? [String] == ["/review"])
+        seen = try await run(type + key("ArrowDown") + read)
+        #expect(seen["chosen"] as? Int == 1)
+        seen = try await run(key("Enter") + read)
+        #expect(seen["box"] as? String == "/plan " && seen["hidden"] as? Bool == true, "\(seen)")
+        // Esc closes the menu, and a text that is no command's name shows none.
+        seen = try await run(type + key("Escape") + read)
+        #expect(seen["hidden"] as? Bool == true)
+        seen = try await run(#"box.value = "/deploy"; box.dispatchEvent(new Event("input"));"# + read)
+        #expect(seen["hidden"] as? Bool == true)
+        // As the mockup draws it: a command chosen, its argument typed, the helpers at work in view.
+        seen = try await run(#"box.value = "/goal Each ghost chases its own way, and the tests pass"; box.dispatchEvent(new Event("input"));"# + read)
+        #expect(seen["hidden"] as? Bool == true)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: board.web, "j4-2" + suffix, root: stage.home.root)
+        }
+    }
+
+    /// The mockup's agents, Claude Code in pacman launched by My agents, with its own commands and its sub-agents.
+    static var inFull: (agents: [Agent], threads: [AgentThread]) {
+        var world = Stage.world
+        guard let index = world.agents.firstIndex(where: { $0.id == "claude-pacman" }) else { return world }
+        world.agents[index].origin = "launched"
+        (world.agents[index].can.send, world.agents[index].can.steer, world.agents[index].can.queue, world.agents[index].can.interrupt) = (true, true, true, true)
+        world.agents[index].because = [:]
+        world.agents[index].commands = [("goal", "A goal it keeps working toward, checking as it goes"), ("plan", "It proposes before it touches a file"),
+                                        ("review", "Reads the recent changes and comments on them"), ("agents", "See its helpers, or ask it to start one"),
+                                        ("compact", "Shortens the conversation, keeps the gist")].map { Option(value: $0, label: $1) }
+        world.agents[index].subagents = [Tool(name: "Explore: read the ghost files", status: "done"), Tool(name: "Writer: chase for Blinky", status: "running"),
+                                         Tool(name: "Writer: chase for Pinky", status: "running")]
+        return world
+    }
+
     /// X1.2, the words: "Space" stays, explained once where every space is listed, "pages of your own" beside SPACES;
     /// New Space says where a space is built, and its level row starts at None, pre-set from the words.
     @Test("x1-2: a space, a page of your own") func x1_2() async throws {

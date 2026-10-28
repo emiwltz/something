@@ -25,7 +25,7 @@ public enum Codes {
         "AGENT_NOT_FOUND": Code("bridge", .error, "No such agent in this space's scope.", "Use an id from the latest state; agents come and go."),
         "READ_ONLY_AGENT": Code("bridge", .error, "A write to an agent started elsewhere.", "Check can before writing; offer resume to continue this conversation here."),
         "NOT_SUPPORTED": Code("bridge", .error, "This agent cannot do it (its can says false).", "Check can and because before the call, and hide what this agent cannot do."),
-        "VALUE_NOT_OFFERED": Code("bridge", .error, "set with a value not in options, or the agent replied with a different value.", "Pick a value from the agent's options."),
+        "VALUE_NOT_OFFERED": Code("bridge", .error, "set with a value not in options, send with a command not in commands, or the agent replied with a different value.", "Pick a value from the agent's options or commands."),
         "AGENT_STOPPED": Code("bridge", .error, "The agent has ended.", "Launch or resume an agent to go on."),
         "FOLDER_NOT_GRANTED": Code("bridge", .error, "launch with a folder outside the granted one.", "Launch in something.granted.folder or a folder inside it."),
         "NOT_INSTALLED": Code("bridge", .error, "The agent's program was not found on this Mac.", "Tell the person to install this agent; kinds says which ones are installed."),

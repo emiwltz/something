@@ -106,6 +106,20 @@ struct BridgeTests {
         #expect(code("send", hello, try FakeHost(granted: refused)) == "RIGHT_NOT_GRANTED")
     }
 
+    /// send with one of the agent's own commands: "/name" and the text as its argument go to the agent, as the journal
+    /// says; a command it does not list, or an agent that listed none, is refused before anything is sent.
+    @Test func sendRunsOneOfTheAgentsCommands() throws {
+        let host = try FakeHost(["state", "send"])
+        #expect(code("send", ["agent": "a1", "command": "review", "text": "the footer"], host) == "ok")
+        #expect(code("send", ["agent": "a1", "command": "compact"], host) == "ok")
+        #expect(host.lines.map(\.text) == ["/review the footer", "/compact"] && host.calls == ["deliver a1 next", "deliver a1 next"])
+        #expect(code("send", ["agent": "a1", "command": "deploy"], host) == "VALUE_NOT_OFFERED")
+        #expect(code("send", ["agent": "a1", "command": 3], host) == "BAD_PARAMS")
+        host.state.agents[0].commands = nil
+        #expect(code("send", ["agent": "a1", "command": "review"], host) == "VALUE_NOT_OFFERED")
+        #expect(host.calls.count == 2)
+    }
+
     /// The person's assistant (a1 here): a space with every right, seeing every agent, even one that launched it,
     /// finds it listed as it is, but can neither write to it nor read its conversation, held messages, requests, or
     /// the words of its error.
@@ -117,7 +131,7 @@ struct BridgeTests {
         let state = Bridge.visible(host)
         let assistant = try #require(state.agents.first { $0.id == "a1" })
         #expect((assistant.origin, assistant.state, assistant.waiting) == ("launched", "waiting", "permission"), "listed honestly")
-        #expect(assistant.can == Can() && assistant.thread == nil && assistant.queue.isEmpty && assistant.detail.isEmpty)
+        #expect(assistant.can == Can() && assistant.thread == nil && assistant.queue.isEmpty && assistant.detail.isEmpty && assistant.subagents == nil)
         #expect(assistant.error == AgentError(code: "TURN_FAILED", message: "The person's assistant met an error."))
         for key in ["send", "interrupt", "model", "mode", "effort"] {
             #expect(assistant.because[key] == "This is the person's assistant: spaces cannot write to it.")
@@ -126,7 +140,7 @@ struct BridgeTests {
         let page = try JSONSerialization.data(withJSONObject: try #require(Bridge.answer(["method": "state"], host: host)["result"]))
         let text = String(decoding: page, as: UTF8.self)
         #expect(!text.contains("c0ffee00-0000-4000-8000-000000000001") && !text.contains("Then run the tests.") && !text.contains(#""r1""#))
-        #expect(!text.contains("Invented secret words") && !text.contains("Invented detail"))
+        #expect(!text.contains("Invented secret words") && !text.contains("Invented detail") && !text.contains("Find where the footer"))
         let writes: [(String, [String: Any])] = [("send", ["agent": "a1", "text": "Invented."]), ("send", ["agent": "a1", "text": "Invented.", "when": "now"]),
                                                  ("interrupt", ["agent": "a1"]), ("set", ["agent": "a1", "mode": "plan"]),
                                                  ("set", ["agent": "a1", "model": "sonnet"]), ("set", ["agent": "a1", "effort": "low"])]

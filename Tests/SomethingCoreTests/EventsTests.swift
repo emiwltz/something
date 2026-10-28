@@ -125,6 +125,24 @@ struct EventsTests {
         #expect(fold.turns.last?.items.count == Limits.items && fold.turns.last?.items.first?.id == "i11")
     }
 
+    /// Its commands are null until it lists them, and a new list replaces the old; its sub-agents are null until one
+    /// starts, each kept by its starting item, updated in place when it ends, the last 50 kept.
+    @Test func commandsAndSubagentsAreTheAgentsOwn() {
+        var fold = launched()
+        #expect(fold.agent.commands == nil && fold.agent.subagents == nil)
+        fold.apply(.commands([Option(value: "review", label: "Reviews the changes")]), at: "2026-10-17T09:00:00Z")
+        fold.apply(.commands([]), at: "2026-10-17T09:00:00Z")
+        #expect(fold.agent.commands == [])
+        fold.apply(.subagent(id: "t1", name: "Find the footer", status: "running"), at: "2026-10-17T09:00:01Z")
+        fold.apply(.subagent(id: "t2", name: "Write the tests", status: "running"), at: "2026-10-17T09:00:01Z")
+        fold.apply(.subagent(id: "t1", name: "Find the footer", status: "done"), at: "2026-10-17T09:00:02Z")
+        #expect(fold.agent.subagents == [Tool(name: "Find the footer", status: "done"), Tool(name: "Write the tests", status: "running")])
+        for n in 1...60 { fold.apply(.subagent(id: "s\(n)", name: "Invented \(n)", status: "done"), at: "2026-10-17T09:00:03Z") }
+        #expect(fold.agent.subagents?.count == Limits.items && fold.agent.subagents?.first?.name == "Invented 11")
+        fold.apply(.subagent(id: "s60", name: "Invented 60", status: "failed"), at: "2026-10-17T09:00:04Z")
+        #expect(fold.agent.subagents?.last == Tool(name: "Invented 60", status: "failed"))
+    }
+
     @Test func anItemBeforeAnyTurnGoesInATurnNobodySawStart() {
         var fold = launched()
         fold.apply(.started(pid: nil, thread: "th1"), at: "2026-10-17T09:00:00Z")

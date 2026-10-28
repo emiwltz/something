@@ -8,7 +8,7 @@
   "warnings": 1,
   "declaration": { "contract": 1, "title": "Morning review", "description": null, "agents": { "see": "all" }, "rights": ["state", "send:claude"], "folder": null },
   "rights": { "granted": ["state", "send:claude"], "refused": [], "unavailable": [], "unknown": ["sendd"] },
-  "received": { "source": "invented", "agents": 3, "states": { "waiting": 1, "done": 1, "unknown": 1 }, "requests": 1, "nullKeys": ["effort", "error", "mode", "model", "pid", "thread", "updated", "waiting"] },
+  "received": { "source": "invented", "agents": 3, "states": { "waiting": 1, "done": 1, "unknown": 1 }, "requests": 1, "nullKeys": ["commands", "effort", "error", "mode", "model", "pid", "subagents", "thread", "updated", "waiting"] },
   "problems": [
     { "code": "SCRIPT_ERROR", "level": "error", "message": "ReferenceError: Can't find variable: agnets", "fix": "Fix the code at this line; the page stops running at this error.", "where": { "file": "morning-review.html", "line": 12, "column": 5 } },
     { "code": "UNKNOWN_RIGHT", "level": "warning", "message": "\"sendd\" is not a right of contract 1.", "fix": "Use one of: state, send, launch, store, optionally with :kind.", "where": null }

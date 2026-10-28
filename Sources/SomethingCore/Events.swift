@@ -14,6 +14,9 @@ public enum AgentEvent: Equatable, Sendable {
     /// All three values at once, from a harness's complete list of them: nil means the agent has none now.
     case settings(model: String?, mode: String?, effort: String?)
     case options(Options)
+    case commands([Option])
+    /// A sub-agent started ("running") or ended; `id` is the item that started it, `name` what it was asked to do.
+    case subagent(id: String, name: String, status: String?)
     /// A turn began; `id` is the harness's own when it has one.
     case turnStarted(id: String?)
     case turnEnded(Outcome)
@@ -38,7 +41,7 @@ public struct Fold: Sendable {
     /// false once older turns were left out.
     public private(set) var complete = true
     public private(set) var requests: [Request] = []
-    private var facts = StateMap.Facts(alive: nil), count = 0
+    private var facts = StateMap.Facts(alive: nil), count = 0, subagents: [String] = []
 
     /// Starts from what the engine knows before the first event: id, kind, origin, folder, `can` and `because`.
     public init(_ agent: Agent) { self.agent = agent }
@@ -64,6 +67,11 @@ public struct Fold: Sendable {
             (agent.model, agent.mode, agent.effort) = (model ?? agent.model, mode ?? agent.mode, effort ?? agent.effort)
         case .settings(let model, let mode, let effort): (agent.model, agent.mode, agent.effort) = (model, mode, effort)
         case .options(let options): agent.options = options
+        case .commands(let commands): agent.commands = commands
+        case .subagent(let id, let name, let status):
+            if !subagents.contains(id) { subagents.append(id); agent.subagents = (agent.subagents ?? []) + [Tool(name: name, status: status)] }
+            if subagents.count > Limits.items { subagents.removeFirst(); agent.subagents?.removeFirst() }
+            if let index = subagents.firstIndex(of: id) { agent.subagents?[index] = Tool(name: name, status: status) }
         case .turnStarted(let id):
             count += 1
             add(Turn(id: id ?? "\(agent.thread ?? agent.id)#\(count)", state: "working", started: at, ended: nil, items: []))

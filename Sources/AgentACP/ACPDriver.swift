@@ -25,6 +25,8 @@ final class ACPDriver: Driver {
     private var setting = false
     /// Messages handed over before the session and its settings were ready; at most one in practice.
     private var early: [String] = []
+    /// The commands listed before the session was named (OpenCode lists them first), applied once it is.
+    private var listed: [String: Any]?
     /// Whether something sent session/cancel for the running prompt: its "cancelled" is then an interrupt.
     private var cancelAsked = false
     /// Open requests by the id something shows.
@@ -95,6 +97,7 @@ final class ACPDriver: Driver {
         switch (message["method"] as? String, message["id"]) {
         case (let method?, let id?): request(method, id, params)
         case ("session/update"?, nil) where params["sessionId"] as? String == session: update(params["update"] as? [String: Any] ?? [:])
+        case ("session/update"?, nil) where session == nil && (params["update"] as? [String: Any])?["sessionUpdate"] as? String == "available_commands_update": listed = params
         case (nil, let id as Int): response(id, message)
         default: return false   // a newer agent's lines must not break an older something
         }
@@ -235,6 +238,7 @@ final class ACPDriver: Driver {
             session = launch.resume ? launch.thread : result["sessionId"] as? String
             emit(.started(pid: nil, thread: session))
             read(result["configOptions"])
+            if let listed, listed["sessionId"] as? String == session { update(listed["update"] as? [String: Any] ?? [:]) }
             // Before the effort, which depends on the model; a resumed conversation keeps its own model.
             if !modelAsked, !launch.resume, let recent, recent != model, models.contains(recent) {
                 settings.insert(("model", recent), at: settings.firstIndex { $0.key == "effort" } ?? settings.endIndex)
@@ -344,7 +348,12 @@ final class ACPDriver: Driver {
                 emit(.error(AgentError(code: "AGENT_ERROR", message: profile.questionDismissed)))
             }
         case "config_option_update": read(update["configOptions"])   // sent from 2.0.25 on
-        default: break   // commands, usage, retries: nothing the state shows
+        // The agent's own commands, each run by sending "/name" and its text; a list replaces the one before.
+        case "available_commands_update":
+            emit(.commands((update["availableCommands"] as? [Any] ?? []).compactMap { $0 as? [String: Any] }.compactMap { entry in
+                (entry["name"] as? String).map { Option(value: $0, label: entry["description"] as? String ?? ((entry["input"] as? [String: Any])?["hint"] as? String) ?? $0) }
+            }))
+        default: break   // usage, retries: nothing the state shows
         }
     }
 

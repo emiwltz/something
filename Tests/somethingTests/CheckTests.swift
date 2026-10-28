@@ -137,7 +137,7 @@ extension Home {
         let calls = checked.json["calls"] as? [[String: Any]] ?? []
         #expect(calls.contains { $0["method"] as? String == "state" && ($0["answer"] as? [String: Any])?["agents"] as? [String] == ["a1", "e1", "p1"] })
         #expect(checked.json["received"] as? NSDictionary == ["source": "invented", "agents": 3, "states": ["waiting": 1, "done": 1, "unknown": 1],
-                                                               "requests": 1, "nullKeys": ["effort", "error", "mode", "model", "pid", "thread", "updated", "waiting"]])
+                                                               "requests": 1, "nullKeys": ["commands", "effort", "error", "mode", "model", "pid", "subagents", "thread", "updated", "waiting"]])
         let human = try await Checked(["board"], home)
         #expect(human.status == 0 && human.out.hasPrefix("something check board\n  space     "), "\(human.out)")
         #expect(human.out.contains("\n  received  3 agents (1 waiting, 1 done, 1 unknown), 1 request · invented state\n"))

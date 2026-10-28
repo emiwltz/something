@@ -65,8 +65,11 @@
         if (at >= 0) listeners[event].splice(at, 1);
       };
     },
-    // Without `when` the engine holds the message for the next turn ("next", the default).
-    send: function (agent, text, options) { return call("send", given({ agent: agent, text: text }, options, ["when"])); },
+    // Without `when` the engine holds the message for the next turn ("next", the default). With `command`, one of the
+    // agent's `commands`, the text is that command's argument and may be left out: "/command text" goes to the agent.
+    send: function (agent, text, options) {
+      return call("send", given(given({ agent: agent }, { text: text }, ["text"]), options, ["when", "command"]));
+    },
     interrupt: function (agent) { return call("interrupt", { agent: agent }); },
     set: function (agent, values) { return call("set", given({ agent: agent }, values, ["model", "mode", "effort"])); },
     launch: function (kind, options) { return call("launch", given({ kind: kind }, options, ["folder", "model", "mode", "effort"])); },

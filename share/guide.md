@@ -187,7 +187,7 @@ returns a promise. A rejected promise carries an `Error` with `.code` (see "Ever
 | `something.granted` | Granted (below), a property set before your scripts run | none |
 | `something.state()` | The state | `state` (without it: only the agents this space launched) |
 | `something.on(event, fn)` | `"change"`: `fn(state)`; `"granted"`: `fn(granted)`. Returns a function that unsubscribes. | none |
-| `something.send(agent, text, {when})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` (below) | `send` |
+| `something.send(agent, text, {when, command})` | `{delivery}`: `started`, `steered`, `queued` or `unconfirmed` (below) | `send` |
 | `something.interrupt(agent)` | `{interrupted}`: true, or false if no turn was running. The agent's `queue` is emptied either way, and a steer the agent has not taken in yet is dropped. | `send` |
 | `something.set(agent, {model, mode, effort})` | `{applied}`: `now` or `next-turn`. At least one key, values from `options`. | `send` |
 | `something.launch(kind, {folder, model, mode, effort})` | The new agent's `id`. All optional; `folder` is the granted one or inside it. | `launch` |
@@ -210,6 +210,11 @@ Call `something.open` for a link your code opens, not from the click handler of 
 - On a waiting agent (a `permission` or a `question` in `requests`), a turn is still running: `"next"` is held in
   `queue` and handed over when that turn ends, after the person has answered in something's window; `"now"` steers.
   Neither answers the request. So a reply box on a waiting agent can stay, if it says the message comes after the answer.
+
+**`command` in `send`:** the `value` of one of the agent's `commands`, without its "/". The text is that command's
+argument and may be empty; something sends "/command text" to the agent as it is, held or steered as `when` says, and
+the agent runs it as its own. A command the agent does not list (or an agent whose `commands` is `null`) gives
+`VALUE_NOT_OFFERED`. Text that starts with "/" without `command` goes as plain text, which most agents also run.
 
 What each `delivery` means today:
 
@@ -343,7 +348,9 @@ sentence for the person when something is off (for a kind something does not lau
 | `thread` | The id of its conversation in `threads`, what `resume` takes; or `null`. |
 | `model`, `mode`, `effort` | What the agent last reported, never what was asked; each may be `null`. |
 | `options` | `{model, mode, effort}`: each a list of `{value, label}` the agent offers, or `null`. |
+| `commands` | The agent's own commands, as it lists them: `[{value, label}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does. `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
 | `queue` | `[{id, text, at}]`: messages something holds for the agent's next turn. |
+| `subagents` | The sub-agents it started that its stream marks, oldest first, the last 50: `[{name, status}]`, `name` what it asked each to do, `status` `running`, `done`, `failed` or `null`. `null` until one shows. Their work is in the thread, as items of kind `subagent`. |
 | `can` | `send steer queue interrupt model mode effort resume`: what a call would do now. Always booleans. |
 | `because` | For a false entry of `can` worth explaining: one sentence. Show it next to the hidden button. |
 | `error` | `{code, message}` or `null`: the agent's last error, in its own words when they are clear. |
@@ -411,6 +418,11 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   something does not set: its `mode` says that agent mode (`medium`, for instance). When Amp asks the person to choose,
   the channel cannot carry the answer: the turn stays `working`, the agent's `error` says so, and stopping it is the way. Its threads live on Amp's servers:
   an Amp started elsewhere is seen by its process only, like an `other` agent.
+- **Their own commands and sub-agents**: Claude Code lists its `commands` as it starts, OpenCode as it opens its
+  conversation (and any agent over ACP that sends them); Codex, pi and Amp give something no list, so theirs stay
+  `null`, and so do an agent's started elsewhere. `subagents` lists Claude Code's Agent calls and Codex's spawned
+  agents; OpenCode's and Amp's sub-agents show only as items of kind `subagent`. something only shows them and passes
+  the commands a page sends: it never starts, stops or chains a sub-agent.
 - **An agent started elsewhere is read-only**: something has no channel into a terminal it did not open. Only a
   `claude` or `codex` conversation can be resumed ("continue here"), once no other process holds it: its `can.resume`
   is true, and `because.send` ends with "Continue it here to write to it." The new agent is a launch of this space,
@@ -418,7 +430,7 @@ Read `can` rather than this table: it is what holds now. Why the gaps:
   says why. A permission or a question of an agent started elsewhere is answered where it runs: it is no `request`.
 - **The person's assistants are read-only too**: each space has its own assistant, so `agents` may list several agents
   something's own window talks to, each as launched, but with its `can` all false and `because.send` saying why; a
-  write to one answers `READ_ONLY_AGENT`. Their conversations, their held messages and their requests are the
+  write to one answers `READ_ONLY_AGENT`. Their conversations, their held messages, their sub-agents and their requests are the
   person's: they are never in a space's state. Each one's `error` keeps its `code` but not its words, and no
   conversation in or below the spaces folder is ever listed as seen elsewhere. A Quick Change (the person points at a
   part and asks for a change) is a short-lived assistant of the same kind: a space may see it briefly in
@@ -529,7 +541,7 @@ The same list as data: `share/contract/codes.json`.
 | `AGENT_NOT_FOUND` | No such agent in this space's scope. | Use an id from the latest state; agents come and go. |
 | `READ_ONLY_AGENT` | A write to an agent started elsewhere. | Check can before writing; offer resume to continue this conversation here. |
 | `NOT_SUPPORTED` | This agent cannot do it: its `can` says false. | Check can and because before the call, and hide what this agent cannot do. |
-| `VALUE_NOT_OFFERED` | `set` with a value not in `options`, a mode never offered, or the agent replied with a different value. | Pick a value from the agent's options. |
+| `VALUE_NOT_OFFERED` | `set` with a value not in `options`, `send` with a command not in `commands`, a mode never offered, or the agent replied with a different value. | Pick a value from the agent's options or commands. |
 | `AGENT_STOPPED` | The agent has ended. | Launch or resume an agent to go on. |
 | `FOLDER_NOT_GRANTED` | `launch` with a folder outside the granted one. | Launch in something.granted.folder or a folder inside it. |
 | `NOT_INSTALLED` | The agent's program was not found on this Mac. | Tell the person to install this agent; kinds says which ones are installed. |

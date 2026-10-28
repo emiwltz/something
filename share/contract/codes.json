@@ -16,7 +16,7 @@
     "AGENT_NOT_FOUND": { "from": "bridge", "level": "error", "when": "No such agent in this space's scope.", "fix": "Use an id from the latest state; agents come and go." },
     "READ_ONLY_AGENT": { "from": "bridge", "level": "error", "when": "A write to an agent started elsewhere.", "fix": "Check can before writing; offer resume to continue this conversation here." },
     "NOT_SUPPORTED": { "from": "bridge", "level": "error", "when": "This agent cannot do it (its can says false).", "fix": "Check can and because before the call, and hide what this agent cannot do." },
-    "VALUE_NOT_OFFERED": { "from": "bridge", "level": "error", "when": "set with a value not in options, or the agent replied with a different value.", "fix": "Pick a value from the agent's options." },
+    "VALUE_NOT_OFFERED": { "from": "bridge", "level": "error", "when": "set with a value not in options, send with a command not in commands, or the agent replied with a different value.", "fix": "Pick a value from the agent's options or commands." },
     "AGENT_STOPPED": { "from": "bridge", "level": "error", "when": "The agent has ended.", "fix": "Launch or resume an agent to go on." },
     "FOLDER_NOT_GRANTED": { "from": "bridge", "level": "error", "when": "launch with a folder outside the granted one.", "fix": "Launch in something.granted.folder or a folder inside it." },
     "NOT_INSTALLED": { "from": "bridge", "level": "error", "when": "The agent's program was not found on this Mac.", "fix": "Tell the person to install this agent; kinds says which ones are installed." },

@@ -56,7 +56,9 @@
       "mode": ["string", "null"],
       "effort": ["string", "null"],
       "options": ["Options"],
+      "commands": ["[Option]", "null"],
       "queue": ["[Queued]"],
+      "subagents": ["[Tool]", "null"],
       "can": ["Can"],
       "because": ["{string}"],
       "error": ["AgentError", "null"],
@@ -164,7 +166,8 @@
       "folder": ["string", "null"]
     },
     "SendOptions": {
-      "?when": ["=next", "=now"]
+      "?when": ["=next", "=now"],
+      "?command": ["string"]
     },
     "Delivery": {
       "delivery": ["=started", "=steered", "=queued", "=unconfirmed"]

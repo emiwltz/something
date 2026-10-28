@@ -325,10 +325,13 @@ final class ClaudeDriver: Driver {
             case "tool_use":
                 let name = block["name"] as? String ?? "a tool", toolID = block["id"] as? String ?? "\(frameID)/\(index)"
                 let lent = launch.lent == nil ? nil : Lent.called(name, block["input"])
-                let item = Item(id: toolID, kind: sub ? "subagent" : "tool", author: "agent", text: lent.map { $0.command ?? "\($0.name) (wrong arguments)" } ?? ClaudeDriver.summary(block["input"]),
+                // An Agent (Task before 2.1) call starts a sub-agent: shown as one, and listed in the agent's `subagents`.
+                let starts = !sub && ClaudeDriver.starters.contains(name)
+                let item = Item(id: toolID, kind: sub || starts ? "subagent" : "tool", author: "agent", text: lent.map { $0.command ?? "\($0.name) (wrong arguments)" } ?? ClaudeDriver.summary(block["input"]),
                                 at: at, tool: Tool(name: lent?.name ?? name, status: "running"), decision: decisions[toolID])
                 tools[toolID] = item
                 emit(.itemAppended(item))
+                if starts { emit(.subagent(id: toolID, name: item.text, status: "running")) }
             default: break
             }
         }
@@ -341,6 +344,7 @@ final class ClaudeDriver: Driver {
             item.tool?.status = block["is_error"] as? Bool == true ? "failed" : "done"
             item.decision = decisions.removeValue(forKey: toolID) ?? ClaudeDriver.decision(frame, toolID) ?? item.decision
             emit(.itemUpdated(item))
+            if ClaudeDriver.starters.contains(item.tool?.name ?? ""), frame["parent_tool_use_id"] as? String == nil { emit(.subagent(id: toolID, name: item.text, status: item.tool?.status)) }
         }
     }
 
@@ -417,6 +421,7 @@ final class ClaudeDriver: Driver {
         case "initialize":
             models = payload["models"] as? [[String: Any]]
             emit(.options(options()))
+            if let commands = payload["commands"] as? [Any] { emit(.commands(ClaudeDriver.commands(commands))) }
             if let mode = payload["current_permission_mode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
         // set_model's success says nothing of the model in use: the next `init` or reply names it, so nothing is
         // reported here (an alias such as "opus" is not a model). The efforts offered become the new model's.
@@ -520,6 +525,16 @@ final class ClaudeDriver: Driver {
 
     /// The efforts are those of the model in use, as `initialize` listed them; nil until it did and the model is
     /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
+    /// The tools that start a sub-agent.
+    static let starters: Set = ["Agent", "Task"]
+
+    /// The commands initialize lists, by name, with what each does (else its argument's hint, else its name).
+    static func commands(_ list: [Any]) -> [Option] {
+        list.compactMap { $0 as? [String: Any] }.compactMap { entry in
+            (entry["name"] as? String).map { Option(value: $0, label: [entry["description"], entry["argumentHint"]].compactMap { $0 as? String }.first { !$0.isEmpty } ?? $0) }
+        }
+    }
+
     private func options() -> Options {
         var options = Options()
         options.mode = Driving.claude.modes

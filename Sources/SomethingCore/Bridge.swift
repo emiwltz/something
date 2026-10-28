@@ -70,11 +70,14 @@ public enum Bridge {
         case "state":
             return try JSONSerialization.jsonObject(with: visible(host).json())
         case "send":
-            let id = try p.string("agent"), text = try p.string("text"), when = try p.optional("when") ?? "next"
+            // With `command`, one of the agent's own, `text` is its argument and may be left out: "/command text" is sent.
+            let id = try p.string("agent"), command = try p.optional("command"), when = try p.optional("when") ?? "next"
+            let words = command == nil ? try p.string("text") : try p.optional("text") ?? "", text = command.map { "/\($0)\(words.isEmpty ? "" : " " + words)" } ?? words
             (line.when, line.text) = (when, text)
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw CodedError("BAD_PARAMS", "send needs a text that is not empty.") }
             guard when == "next" || when == "now" else { throw CodedError("BAD_PARAMS", "when is \"next\" or \"now\", not \"\(when)\".") }
             let agent = try writable(id, host, &line)
+            if let command, agent.commands?.contains(where: { $0.value == command }) != true { throw CodedError("VALUE_NOT_OFFERED", "\(command) is not one of this agent's commands; pick one from its commands in the state.") }
             // An idle agent starts a turn with either `when`; steer and queue only matter during a turn.
             try able(agent, "send"); if ["working", "waiting"].contains(agent.state) { try able(agent, when == "now" ? "steer" : "queue") }
             return ["delivery": try host.deliver(text, to: agent, when: when)]
@@ -147,12 +150,12 @@ public enum Bridge {
 
     /// The state as this space sees it. The person's assistant is listed, honestly, as an agent no space can write
     /// to, without its conversation, its held messages, its requests or the words of its error (which may quote the
-    /// person or the model): those are the person's, not a space's.
+    /// person or the model), or what it asked its sub-agents: those are the person's, not a space's.
     public static func visible(_ host: BridgeHost) -> State {
         var state = Rights.visible(host.state, host.granted, launched: host.launched)
         let mine = host.assistants
         for index in state.agents.indices where mine.contains(state.agents[index].id) {
-            (state.agents[index].can, state.agents[index].thread, state.agents[index].queue, state.agents[index].detail) = (Can(), nil, [], [:])
+            (state.agents[index].can, state.agents[index].thread, state.agents[index].queue, state.agents[index].detail, state.agents[index].subagents) = (Can(), nil, [], [:], nil)
             state.agents[index].error = state.agents[index].error.map { AgentError(code: $0.code, message: "The person's assistant met an error.") }
             for key in ["send", "interrupt", "model", "mode", "effort"] { state.agents[index].because[key] = "This is the person's assistant: spaces cannot write to it." }
         }

@@ -246,6 +246,19 @@ import SomethingCore
         #expect(replay.items.map(\.text) == ["Hello.", "Main reply.", "Child.", "Invented thought."])
     }
 
+    /// The agent's own commands come in available_commands_update, each by name with what it does (else its input's
+    /// hint); a newer list replaces the older, an entry without a name is left out. The recordings list OpenCode's.
+    @Test func itsCommandsAreTheOnesItLists() throws {
+        let replay = Self.opened()
+        #expect(replay.fold.agent.commands == nil)
+        replay.feed(Self.update(["sessionUpdate": "available_commands_update", "availableCommands": [
+            ["name": "review", "description": "Invented: review changes"], ["name": "goal", "input": ["hint": "Invented: the goal"]], ["description": "no name"], 7]]))
+        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: review changes"), Option(value: "goal", label: "Invented: the goal")])
+        replay.feed(Self.update(["sessionUpdate": "available_commands_update", "availableCommands": "garbage"]))
+        #expect(replay.fold.agent.commands == [])
+        #expect(try Replay.play("turn", kind: "opencode").fold.agent.commands?.map(\.value) == ["init", "review"])
+    }
+
     /// From 2.0.25 OpenCode says when its options change by themselves.
     @Test func aConfigUpdateIsRead() {
         let replay = Self.opened()

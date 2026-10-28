@@ -84,7 +84,11 @@ public struct Agent: Codable, Equatable, Sendable, EveryKey {
     public var mode: String?
     public var effort: String?
     public var options = Options()
+    /// Its own commands as it lists them, `value` the name without "/" and `label` what it does; nil until it lists them.
+    public var commands: [Option]?
     public var queue: [Queued] = []
+    /// The sub-agents it started that its stream marks, oldest first, `name` what each was asked; nil until one shows.
+    public var subagents: [Tool]?
     public var can = Can()
     /// One sentence for a false entry of `can` worth explaining.
     public var because: [String: String] = [:]

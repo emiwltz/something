@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- Template "My agents", for something (contract 1). A control room: every coding agent on this Mac, who waits for
      the person first, who works, and a word to each one this space may write to. Rights: "state" over every agent,
-     "send". It keeps no memory: what it shows is rebuilt from the state each time it opens. -->
+     "send". "/" in a reply box opens that agent's own commands, as it lists them. It keeps no memory: what it shows
+     is rebuilt from the state each time it opens. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -118,6 +119,16 @@
   button:hover { border-color: var(--work); color: var(--work); }
   button.stop:hover { border-color: var(--fail); color: var(--fail); }
   .said { color: var(--work); font-size: 11.5px; min-height: 1em; }
+  /* The agent's own commands, over its reply box while the text starts with "/"; its helpers under its last line. */
+  .reply { position: relative; }
+  .cmds { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 2; list-style: none; margin: 0; padding: 4px;
+          background: var(--panel); border: 1px solid var(--work); border-radius: 4px; max-height: 220px; overflow: auto; }
+  .cmds li { display: flex; gap: 10px; padding: 4px 6px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+  .cmds li b { color: var(--work); font-weight: 500; flex: none; }
+  .cmds li span { color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmds li[aria-selected=true] { background: color-mix(in srgb, var(--work) 14%, transparent); }
+  .helpers { color: var(--soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .helpers::before { content: "HELPERS · "; color: var(--faint); letter-spacing: .12em; font-size: 10.5px; }
 
   .empty { border: 1px dashed var(--edge); border-radius: 6px; padding: 28px; text-align: center; color: var(--soft); }
   #problem { border: 1px solid var(--fail); color: var(--fail); border-radius: 6px; padding: 8px 12px; margin: 0; }
@@ -213,22 +224,26 @@
   function tile(agent) {
     const node = make("article", "tile");
     node.innerHTML = `<div class="top label"><span class="status"></span><span class="kind"></span></div>
-      <div class="body"><div class="name"></div><div class="folder"></div><div class="last"></div>
+      <div class="body"><div class="name"></div><div class="folder"></div><div class="last"></div><div class="helpers" hidden></div>
       <div class="ask" hidden></div><div class="fault" hidden></div><div class="held" hidden></div>
-      <form class="reply" hidden><textarea rows="1" aria-label="Message"></textarea>
+      <form class="reply" hidden><ul class="cmds" role="listbox" hidden></ul><textarea rows="1" aria-label="Message"></textarea>
         <div class="buttons"><button type="button" class="stop">Interrupt</button>
         <button type="submit" value="now">Steer now</button><button type="submit" value="next">Send</button></div>
         <div class="said" aria-live="polite"></div></form>
       <div class="why" hidden></div></div>`;
-    const form = node.querySelector("form");
+    const form = node.querySelector("form"), box = form.querySelector("textarea");
+    commandMenu(node, box);
     form.onsubmit = (event) => {
       event.preventDefault();
-      const text = form.querySelector("textarea").value.trim();
+      const text = box.value.trim();
       if (!text) return;
       // "next" waits for the running turn to end (on a waiting agent: until the person answered in something's
       // window); "now" steers into the running turn. The button pressed says which.
       const when = event.submitter && event.submitter.value === "now" ? "now" : "next";
-      something.send(agent.id, text, { when }).then(({ delivery }) => {
+      // "/name words", name one of the agent's own commands: sent as that command, the words its argument.
+      const [, name, words] = text.match(/^\/(\S+)\s*([\s\S]*)$/) || [];
+      const listed = name && (node.agent.commands || []).some((c) => c.value === name);
+      something.send(agent.id, listed ? words : text, listed ? { when, command: name } : { when }).then(({ delivery }) => {
         form.querySelector("textarea").value = "";
         form.querySelector(".said").textContent = DELIVERY[delivery] || `Message ${delivery}.`;
         problem(null);
@@ -239,12 +254,47 @@
     }).catch(problem);
     return node;
   }
+  // The "/" menu: the commands the agent lists whose name starts with what follows "/", until a space; ↑↓ choose, ↩ or
+  // a click puts "/name " in the box, Esc closes. Drawn from node.agent, the latest state's.
+  function commandMenu(node, box) {
+    const menu = node.querySelector(".cmds");
+    let shown = [], at = 0;
+    const draw = () => {
+      const typed = box.value.match(/^\/(\S*)$/);
+      shown = typed ? (node.agent.commands || []).filter((c) => c.value.startsWith(typed[1])) : [];
+      at = Math.min(at, Math.max(0, shown.length - 1));
+      menu.hidden = !shown.length;
+      menu.setAttribute("aria-label", `${label(node.agent.kind)}'s commands`);
+      menu.replaceChildren(...shown.map((c, i) => {
+        const row = make("li", "");
+        row.setAttribute("role", "option");
+        row.setAttribute("aria-selected", String(i === at));
+        row.append(make("b", "", "/" + c.value), make("span", "", c.label));
+        row.onmousedown = (event) => { event.preventDefault(); at = i; pick(); };
+        return row;
+      }));
+    };
+    const pick = () => { box.value = "/" + shown[at].value + " "; menu.hidden = true; shown = []; };
+    box.addEventListener("input", () => { at = 0; draw(); });
+    box.addEventListener("blur", () => { menu.hidden = true; });
+    box.addEventListener("keydown", (event) => {
+      if (menu.hidden || !shown.length) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") at = (at + (event.key === "ArrowDown" ? 1 : shown.length - 1)) % shown.length;
+      else if (event.key === "Enter" || event.key === "Tab") pick();
+      else if (event.key === "Escape") menu.hidden = true;
+      else return;
+      event.preventDefault();
+      if (!menu.hidden) draw();
+    });
+  }
+
   const DELIVERY = {
     started: "Sent. It opens a new turn.", steered: "Sent into the running turn.",
     queued: "Held. It goes in when this turn ends.", unconfirmed: "Sent into the running turn.",
   };
 
   function update(node, agent, state) {
+    node.agent = agent;
     const status = word(agent.state);
     node.className = "tile " + status + (node.dataset.fresh ? " fresh" : "");
     const q = (selector) => node.querySelector(selector);
@@ -268,13 +318,18 @@
       ? `Asks to run ${request.tool ?? "a tool"}${request.about ? ": " + request.about : ""}. Answer in something's window.`
       : `Asks you a question${request.about ? ": " + request.about : ""}. Answer in something's window.`)
       : status === "waiting" ? "Waits for you. Answer where it runs." : "");
+    // Its own sub-agents, as its stream marks them: how many work now, and what each was asked.
+    const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running");
+    show(".helpers", helpers.length ? (busy.length ? `${busy.length} at work: ${busy.map((h) => h.name).join(" · ")}`
+      : `${helpers.length} done, the last: ${helpers[helpers.length - 1].name}`) : "");
     show(".fault", agent.error ? agent.error.message : "");
     show(".held", agent.queue.length ? `${agent.queue.length} held for after this turn: “${agent.queue[0].text}”` : "");
     // `can` says what a call would do now and `because` why not; the person's grant says whether this space may.
     const may = has("send", agent.kind);
     const form = q("form");
     form.hidden = !(agent.can.send && may);
-    q("textarea").placeholder = status === "waiting" ? "Message for after the answer…" : `A word to ${label(agent.kind)}…`;
+    q("textarea").placeholder = (status === "waiting" ? "Message for after the answer…" : `A word to ${label(agent.kind)}…`)
+      + (agent.commands && agent.commands.length ? " · / for its commands" : "");
     q("button[value=now]").hidden = !agent.can.steer || status === "idle";
     q(".stop").hidden = !agent.can.interrupt || !["working", "waiting"].includes(status);
     show(".why", !agent.can.send ? (agent.because.send || "This agent cannot take a message now.")

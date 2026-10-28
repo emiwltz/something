@@ -409,6 +409,37 @@ import SomethingCore
         #expect(other.fold.agent.state == "done")
     }
 
+    /// The commands `initialize` lists are the agent's own, by name, with what each does; an entry without a name is
+    /// left out, and a response without commands leaves them unknown. The recorded build lists Claude's.
+    @Test func itsCommandsAreThoseInitializeLists() throws {
+        let replay = Replay()
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": [
+            "commands": [["name": "review", "description": "Invented: reviews the changes", "argumentHint": ""], ["name": "goal", "description": "", "argumentHint": "Describe the goal"],
+                         ["name": "plain"], ["description": "Invented: no name"], "garbage"]]]] as [String: Any])
+        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: reviews the changes"), Option(value: "goal", label: "Describe the goal"),
+                                               Option(value: "plain", label: "plain")])
+        let other = Replay()
+        other.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["commands": "garbage"]]] as [String: Any])
+        #expect(other.fold.agent.commands == nil)
+        #expect((try Replay.play("assistant-build").fold.agent.commands?.count ?? 0) > 0)
+    }
+
+    /// An Agent call starts a sub-agent: its item is one, and the agent lists it running, then done with its result.
+    /// What the sub-agent itself calls is its work, not another sub-agent.
+    @Test func anAgentCallStartsASubagent() throws {
+        let replay = Replay()
+        _ = try replay.agent.send("Hello.", when: "next")
+        replay.feed(["type": "assistant", "uuid": "u1", "parent_tool_use_id": NSNull(), "message": ["model": "claude-example", "content": [
+            ["type": "tool_use", "id": "toolu_a", "name": "Agent", "input": ["description": "Invented: find the footer", "prompt": "Invented."]]]]])
+        #expect(replay.fold.agent.subagents == [Tool(name: "Invented: find the footer", status: "running")])
+        replay.feed(["type": "assistant", "uuid": "u2", "parent_tool_use_id": "toolu_a", "message": ["model": "claude-other", "content": [
+            ["type": "tool_use", "id": "toolu_b", "name": "Read", "input": ["file_path": "/Users/example/shop/footer.html"]]]]])
+        replay.feed(["type": "user", "parent_tool_use_id": "toolu_a", "message": ["content": [["type": "tool_result", "tool_use_id": "toolu_b", "content": "Invented"]]]])
+        replay.feed(["type": "user", "parent_tool_use_id": NSNull(), "message": ["content": [["type": "tool_result", "tool_use_id": "toolu_a", "content": "Invented"]]]])
+        #expect(replay.items.filter { $0.kind == "subagent" }.map(\.id) == ["toolu_a", "toolu_b"])
+        #expect(replay.fold.agent.subagents == [Tool(name: "Invented: find the footer", status: "done")])
+    }
+
     @Test func aSubagentsModelIsNotTheAgents() throws {
         let replay = Replay()
         _ = try replay.agent.send("Hello.", when: "next")

@@ -39,6 +39,7 @@ enum Catalog {
         ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
         ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
+        ("j4-2", "S8"),
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3).

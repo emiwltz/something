@@ -417,9 +417,11 @@ final class CodexDriver: Driver {
                 (name, text) = (lent.name, lent.command ?? "\(lent.name) (wrong arguments)")
             }
             let status = ["inProgress": "running", "completed": "done", "failed": "failed", "declined": "failed"][item["status"] as? String ?? ""]
-            let shown = Item(id: id, kind: "tool", author: "agent", text: text, at: tools[id]?.at ?? now(),
+            // A collaboration call is its sub-agents' work; spawnAgent starts one (a shape no trial has recorded yet).
+            let shown = Item(id: id, kind: type == "collabAgentToolCall" ? "subagent" : "tool", author: "agent", text: text, at: tools[id]?.at ?? now(),
                              tool: Tool(name: name, status: done ? status ?? "done" : status), decision: decisions[id])
             emit(tools[id] == nil ? .itemAppended(shown) : .itemUpdated(shown))
+            if name == "spawnAgent", type == "collabAgentToolCall" { emit(.subagent(id: id, name: text, status: shown.tool?.status)) }
             tools[id] = done ? nil : shown
             if done { decisions[id] = nil }
         }
