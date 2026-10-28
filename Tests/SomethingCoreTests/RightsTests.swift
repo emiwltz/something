@@ -162,6 +162,30 @@ struct RightsTests {
         #expect(!String(decoding: try JSONEncoder().encode(file), as: UTF8.self).contains("level"))
     }
 
+    /// A lasting rule keeps one plain command, exactly, for one kind in one folder; a chain, a pipe, a redirection, a
+    /// substitution, a variable or a second line is never kept, and an older grants file reads without rules.
+    @Test func aLastingRuleCoversOneExactCommand() throws {
+        for plain in ["npm test", "git log --oneline -20", "swift test --filter Rights"] { #expect(Rights.single(plain), "\(plain)") }
+        for chained in ["", "  ", "npm test && rm -rf .", "ls | wc -l", "a; b", "echo x > f", "cat < f", "echo $(id)", "echo `id`",
+                        "echo $HOME", "npm test\nrm -rf .", "npm test &", "a \\\n b"] {
+            #expect(!Rights.single(chained), "\(chained)")
+        }
+        var grant = Grant(declared: Asked(declaration(["launch"])), at: "2026-10-21T09:00:00Z")
+        let kept = Rule(kind: "claude", command: "git log --oneline -20", folder: "/Users/example/code/atelier", at: "2026-10-21T09:00:00Z")
+        #expect(Rights.rule(in: grant, kind: "claude", command: kept.command, folder: kept.folder) == nil, "no rule yet")
+        grant.rules = [kept]
+        #expect(Rights.rule(in: grant, kind: "claude", command: kept.command, folder: kept.folder) == kept)
+        for (kind, command, folder) in [("codex", kept.command, kept.folder), ("claude", "git log --oneline -21", kept.folder),
+                                        ("claude", kept.command + " ", kept.folder), ("claude", kept.command, "/Users/example/code"),
+                                        ("claude", kept.command, nil as String?)] {
+            #expect(Rights.rule(in: grant, kind: kind, command: command, folder: folder) == nil, "\(kind) \(command) \(folder ?? "nil")")
+        }
+        let leveled = Rights.leveled(.talk, folder: nil, declaration: declaration(["send"]), at: "2026-10-22T09:00:00Z", after: grant)
+        #expect(leveled.rules == [kept], "a new level keeps the rules")
+        let old = #"{"declared": {"rights": ["launch"], "agents": {"see": "all"}}, "granted": [], "refused": [], "remap": {}, "at": "2026-10-17T09:00:00Z"}"#
+        #expect(try JSONDecoder().decode(Grant.self, from: Data(old.utf8)).rules == nil)
+    }
+
     @Test func theGrantsFileRoundTripsAndAnUnreadableOneIsNotErased() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("grants-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }

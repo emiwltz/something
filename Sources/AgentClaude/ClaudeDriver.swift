@@ -186,7 +186,7 @@ final class ClaudeDriver: Driver {
         }
         var allowed: [String: Any]?   // nil: a deny, or an answer that does not fit the request
         switch (answer, question) {
-        case (.once, false): allowed = input
+        case (.once, false), (.rule, false): allowed = input
         case (.choice(let chosen), true):
             // Several labels of one question are joined as Claude's own panel joins them.
             let texts = ask.prompt.questions.map(\.text)
@@ -213,7 +213,7 @@ final class ClaudeDriver: Driver {
             try send(["type": "control_response", "response": ["subtype": "success", "request_id": ask.claudeID, "response": reply]])
             asks[request] = nil
         }
-        if let tool = ask.request["tool_use_id"] as? String ?? hookTool(ask.request) { decide(tool, Decision(by: "person", outcome: allow ? "allowed" : "denied")) }
+        if let tool = ask.request["tool_use_id"] as? String ?? hookTool(ask.request) { decide(tool, Decision(by: answer.by, outcome: allow ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
         return true
     }

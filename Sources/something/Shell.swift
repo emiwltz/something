@@ -2,7 +2,8 @@
 // over all three, and a calm toolbar: the sidebar toggle at the sidebar's edge, the space's name alone (a click on it
 // opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
 // its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
-// while it shows) and Page Full Screen (PageFull.swift). Off the spaces only the name shows. Reload is in the View
+// while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on, its orange mark, which
+// turns it off (Rules.swift). Off the spaces only the name shows. Reload is in the View
 // menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its
 // backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
 // holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
@@ -48,6 +49,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// The space's name, which opens Info.
     let titleLine = TitleLine()
+    /// Full Access's mark, hidden while it is off.
+    let fullMark = FullMark(target: nil, action: #selector(App.turnOffFullAccess(_:)))
     /// Called when the person closes the window: the app closes the open space, whose page stops.
     var closed: () -> Void = {}
     /// Called with false when nobody can see the window (closed, minimized, hidden, covered), with true when it shows.
@@ -377,10 +380,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let tools = [item(Shell.point, "Point", "scope", Keys.tooltip("pointpart", "Point"), Keys.command("pointpart")?.action, words: "Point"),
                          item(Shell.info, "Info", "info.circle", Keys.tooltip("insp", "Info"), #selector(App.toggleInfo(_:))),
                          item(Shell.full, "Page Full Screen", "viewfinder", Keys.tooltip("pagefull", "Page Full Screen"), Keys.command("pagefull")?.action)]
-            let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: buttons)
+            let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: [fullMark] + buttons)
             tools.forEach { $0.view = nil }
             self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
             row.spacing = 4
+            row.setCustomSpacing(10, after: fullMark)
+            fullMark.isHidden = !library.preferences.fullAccess
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
             row.edgeInsets.right = 2
             titleLine.reserve = row.fittingSize.width + 24

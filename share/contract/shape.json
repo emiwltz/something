@@ -180,7 +180,7 @@
     },
     "JournalLine": {
       "at": ["string"],
-      "action": ["=send", "=interrupt", "=set", "=launch", "=resume", "=open"],
+      "action": ["=send", "=interrupt", "=set", "=launch", "=resume", "=open", "=allow"],
       "?agent": ["string"],
       "?kind": ["string"],
       "?when": ["=next", "=now"],

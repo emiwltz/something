@@ -132,7 +132,7 @@ final class NativeAsk: Asking {
 
 /// The README's promise, word for word (AGENTS.md rule 2): under Settings › Advanced's permissions, and in the README.
 enum Promise {
-    static let sentence = "something never answers for you. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
+    static let sentence = "something answers for you only where you said so: one exact command you allowed Always for a space, and every permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
 }
 
 enum Ask {

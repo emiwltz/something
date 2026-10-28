@@ -167,20 +167,41 @@ struct AcceptanceCommand {
         }
     }
 
-    /// X7.4, Advanced: whether your assistant asks before every change (off) and the agents a space starts (their own
-    /// settings), the assistants' rest and resume, and the shortcuts.
+    /// X7.4, Advanced: Full Access (off; turning it on asks once), whether your assistant asks before every change (off)
+    /// and the agents a space starts (their own settings); the lasting rules, each with Revoke (Project watch's, the
+    /// mockup's); the assistants' rest and resume, and the shortcuts.
     @Test("x7-4: Settings, Advanced") func x7_4() async throws {
-        let shows = ["Permissions", "Your assistant asks before every change", "Agents a space starts", "Their Own Settings",
-                     "something never answers for you", "Assistants",
-                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes", "Keep at most", "assistants awake",
-                     "Keyboard", "Keyboard shortcuts", "Show Shortcuts"]
-        try await settings(.advanced, "x7-4", shows: shows, hears: ["Your assistant asks before every change", "Put idle assistants to sleep after: 10 minutes", "Show Shortcuts"]) { settings, _ in
-            let sections = settings.model.sections(.advanced)
-            #expect(sections.map(\.title) == ["Permissions", "Assistants", "Keyboard"] && sections[0].lead == Promise.sentence)
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Your assistant asks before every change", "Agents a space starts",
+        let shows = ["Permissions", "Full Access", "Nobody asks: your assistant gets every permission", "Your assistant asks before every change",
+                     "Agents a space starts", "Their Own Settings", "something answers for you only where you said so", "Lasting rules",
+                     "git log --oneline -20", "code/atelier", "for Project watch", "Revoke", "Assistants",
+                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes"]
+        try await settings(.advanced, "x7-4", shows: shows, hears: ["Full Access", "Your assistant asks before every change", "Revoke",
+                                                                   "Put idle assistants to sleep after: 10 minutes", "Show Shortcuts"]) { settings, _ in
+            let model = settings.model, sections = model.sections(.advanced)
+            #expect(sections.map(\.title) == ["Permissions", "Lasting rules", "Assistants", "Keyboard"] && sections[0].lead == Promise.sentence)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Full Access", "Your assistant asks before every change", "Agents a space starts",
                                                               "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most",
                                                               "Keyboard shortcuts"])
-            #expect(sections[1].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
+            let kept = try #require(sections[1].more.first)
+            #expect(sections[1].more.count == 1 && kept.title == "git log --oneline -20" && kept.code && kept.mark == "Claude Code")
+            #expect(kept.note == "Claude Code · in ~/code/atelier · for Project watch · since yesterday")
+            #expect(sections[2].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
+            // Full Access goes through the app, which asks once; Revoke too.
+            var turned: [Bool] = [], revoked: [LastingRule] = []
+            (model.fullAccess, model.revoke) = ({ turned.append($0) }, { revoked.append($0) })
+            if case .toggle(let get, let set) = sections[0].rows[0].control {
+                #expect(!get())
+                set(true)
+            }
+            if case .button(let title, _, let run) = kept.control {
+                #expect(title == "Revoke")
+                run()
+            }
+            #expect(turned == [true] && revoked.map(\.rule.command) == ["git log --oneline -20"])
+            let confirm = Rules.confirmation()
+            #expect(confirm.title == "Turn On Full Access?" && confirm.isAlert)
+            #expect(confirm.buttons.map(\.title) == ["Turn On Full Access", "Cancel"] && (confirm.initialFirstResponder as? SheetButton)?.title == "Cancel")
+            #expect(PanelsTests.texts(confirm.contentView).contains("The agents your spaces start still ask, as their own settings say."))
         }
     }
 
@@ -219,6 +240,10 @@ struct AcceptanceCommand {
                      "antigravity": ("/Applications/Antigravity.app", "1.2")]
         model.locate = { kind in found[kind].map { .success($0.0) } ?? .failure(CodedError("NOT_INSTALLED", "\(kind) was not found on this Mac.")) }
         model.versions = { found.mapValues(\.1) }
+        // The mockup's one lasting rule: Project watch's, for Claude Code in ~/code/atelier.
+        let atelier = stage.home.places.home.appendingPathComponent("code/atelier").path
+        model.rules = { [LastingRule(space: "project", title: "Project watch",
+                                     rule: Rule(kind: "claude", command: "git log --oneline -20", folder: atelier, at: "2026-10-21T09:00:00Z"))] }
         // The look ended 18 minutes before the picture.
         model.clock = { Stage.local.addingTimeInterval(-18 * 60) }
         var listed = Options()

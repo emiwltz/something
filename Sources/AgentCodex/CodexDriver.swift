@@ -148,13 +148,13 @@ final class CodexDriver: Driver {
         case ("item/tool/requestUserInput", _):
             reply = ["answers": [String: Any]()]
             allowed = false
-        case ("item/permissions/requestApproval", .once):
+        case ("item/permissions/requestApproval", .once), ("item/permissions/requestApproval", .rule):
             reply = ["permissions": ask.params["permissions"] ?? [:], "scope": "turn"]
             allowed = true
         case ("item/permissions/requestApproval", _):
             reply = ["permissions": [String: Any]()]
             allowed = false
-        case (_, .once):
+        case (_, .once), (_, .rule):
             reply = ["decision": "accept"]
             allowed = true
         default:
@@ -163,7 +163,7 @@ final class CodexDriver: Driver {
         }
         try send(["id": ask.codexID, "result": reply])
         asks[request] = nil
-        if let item = ask.params["itemId"] as? String { decide(item, Decision(by: "person", outcome: allowed ? "allowed" : "denied")) }
+        if let item = ask.params["itemId"] as? String { decide(item, Decision(by: answer.by, outcome: allowed ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
         return true
     }

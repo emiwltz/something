@@ -2,7 +2,8 @@
 // it. One panel holds Info or History (History.swift), swapped by `content` without a relayout; it opens and closes at
 // once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
 // parts that follow what a space is (X5.1): Space (its file, its size and last change, Export in one click, History),
-// Your agents (its level, one control, Run's folder, and the agents its page shows now) and Assistant (its eyes, the
+// Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now)
+// and Assistant (its eyes, the
 // agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits quietly at the foot. A level
 // chosen here is the person's answer: kept in the grants file, it reaches the open space at once as a `granted`
 // event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window would take it from
@@ -41,6 +42,8 @@ import SwiftUI
     private(set) var level: Grant.Level?
     /// Where the agents it starts work, for Run.
     private(set) var folder: String?
+    /// Its lasting rules, oldest first (Rules.swift).
+    private(set) var rules: [Rule] = []
     /// Why the level cannot be shown: the grants file does not read.
     private(set) var problem: String?
     /// Its last change (the newest of a folder's files) and its weight; nil when unread.
@@ -65,7 +68,7 @@ import SwiftUI
     func show(_ space: Space?) {
         self.space = space
         history.show(space)
-        (about, level, folder, problem, changed, size) = (nil, nil, nil, nil, nil, nil)
+        (about, level, folder, problem, changed, size, rules) = (nil, nil, nil, nil, nil, nil, [])
         defer { refresh() }
         guard let space else { return }
         let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration
@@ -73,7 +76,7 @@ import SwiftUI
         if declaration != nil {
             do {
                 let grant = try Grants(places.grants).read().spaces[space.name]
-                (level, folder) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder)
+                (level, folder, rules) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder, grant?.rules ?? [])
             } catch {
                 problem = error.sentence
             }
@@ -114,6 +117,13 @@ import SwiftUI
         }
         if let open = open(), open.space.name == space.name { open.regrant() }
         show(self.space)
+    }
+
+    /// Revoke: `rule` goes from the open space's grant; the next request for its command asks again. Says a failure.
+    func revoke(_ rule: Rule) {
+        guard let space else { return }
+        do { try Rules.revoke(rule, in: space.name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
+        show(space)
     }
 
     /// "Today", "Yesterday", "9 Oct", or "9 Oct 2025" in another year; with `time`, "Today, 18:12".
@@ -357,11 +367,40 @@ struct InspectorView: View {
                 }
                 Levels.runNote
             }
+            if level == .run || !info.rules.isEmpty { always }
             if level != .none, !info.shown.isEmpty { now }
             Levels.note("Whatever an agent asks still waits for you: Allow Once or Deny.")
         } else {
             Text("It can't be shown now, so it shows no agent.").foot()
         }
+    }
+
+    /// Always for this space: each lasting rule, its agent, its command and its folder, with Revoke; or how one is made.
+    private var always: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Always for this space").font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink3.ui)
+                .accessibilityAddTraits(.isHeader)
+            if info.rules.isEmpty {
+                Text("None yet. Tick “Always for this space” when an agent asks.").foot()
+            }
+            ForEach(info.rules, id: \.self) { rule in
+                let name = Registry.app.name(of: rule.kind), folder = Words.path(rule.folder, home: info.places.home.path)
+                HStack(spacing: 8) {
+                    Monogram(name: name)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(rule.command).font(Look.font(.code, size: 11.5).ui).foregroundStyle(Look.Token.ink.ui).lineLimit(2)
+                        Text("in " + folder).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.head)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("\(name): \(rule.command), in \(folder)")
+                    Button("Revoke") { info.revoke(rule) }.buttonStyle(Secondary(height: 26, leading: 9, trailing: 9))
+                        .font(Look.font(.ui, size: 12, weight: .medium).ui).accessibilityLabel("Revoke \(rule.command)")
+                }
+                .padding(.horizontal, 8).padding(.vertical, 7)
+                .boxed(RoundedRectangle(cornerRadius: 9), Look.Token.sunk.ui, ring: Look.Token.line.ui)
+            }
+        }
+        .padding(.top, 2)
     }
 
     /// The agents the page shows now: who, what it does, where.

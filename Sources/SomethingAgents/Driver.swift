@@ -64,11 +64,19 @@ public struct Question: Equatable, Sendable {
     }
 }
 
-/// The person's answer to a request. Permissions are allowed once or denied, never always.
+/// The answer to a request. Permissions are allowed once or denied, never always in the agent: a lasting rule stays
+/// something's own, which answers `rule` each time it applies.
 public enum Answer: Equatable, Sendable {
     case once, deny
+    /// Allowed once by something itself, as the person's lasting rule or Full Access for their assistant said.
+    case rule
     /// For a question: the chosen labels (or the typed text) for each question, in its order.
     case choice([[String]])
+
+    /// Whether it allows a permission.
+    package var allows: Bool { self == .once || self == .rule }
+    /// Who decided, as an item's `decision.by` says it.
+    package var by: String { self == .rule ? "rule" : "person" }
 }
 
 /// The program's arguments for a launch, and what the launch changes in the person's environment.

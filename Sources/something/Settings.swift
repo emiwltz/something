@@ -1,8 +1,8 @@
 // Settings (⌘,): a window of its own whose toolbar holds four tabs, as the Mac's own settings do, sized to each tab:
 // General (the start, the theme, the interface size, the sidebar), Spaces (where they live, export, versions and
 // storage, Storage.swift), Agents (your assistant, what a new space may do, each space's level, and the agents on this
-// Mac, found by a look at files that never runs one) and Advanced (how your assistant and the agents a space starts
-// ask, the assistants' rest and resume, the shortcuts). Each tab is a list of rows given as data (a title, a note, a
+// Mac, found by a look at files that never runs one) and Advanced (Full Access, how your assistant and the agents a
+// space starts ask, the lasting rules with Revoke, the assistants' rest and resume, the shortcuts). Each tab is a list of rows given as data (a title, a note, a
 // control), so that a test can work every control and see which key it wrote. The theme applies at once, everywhere.
 import AppKit
 import SomethingAgents
@@ -53,6 +53,8 @@ struct SettingsRow: Identifiable {
     var keys: [(key: String, words: String)] = []
     /// What tells two rows of one title apart (two spaces of one name).
     var tag: String?
+    /// The title in code (a command), after the monogram of the agent named `mark`.
+    var code = false, mark: String?
     var id: String { tag ?? title }
 }
 
@@ -88,6 +90,11 @@ struct SettingsSection: Identifiable {
     /// Each space's level, and the person's choice of one (Info.choose, which asks for Run's folder).
     @ObservationIgnored var levels: () -> [SpaceLevel] = { [] }
     @ObservationIgnored var setLevel: (String, Grant.Level) -> Void = { _, _ in }
+    /// Every lasting rule, and Revoke (Rules.swift).
+    @ObservationIgnored var rules: () -> [LastingRule] = { [] }
+    @ObservationIgnored var revoke: (LastingRule) -> Void = { _ in }
+    /// Full Access turned on (after its confirmation) or off: the app's.
+    @ObservationIgnored var fullAccess: (Bool) -> Void = { _ in }
     /// The builders the assistant offers now (AssistantModel); every builder until the window says otherwise.
     @ObservationIgnored var offered: () -> [String] = { Registry.app.builders.map(\.kind) }
     /// The default agent just chosen, for the assistant to take (Build With's own path, AssistantModel.buildNew).
@@ -109,6 +116,7 @@ struct SettingsSection: Identifiable {
     private(set) var looked: Date?
     private(set) var floats = false
     private(set) var spaceLevels: [SpaceLevel] = []
+    private(set) var lasting: [LastingRule] = []
     /// How tall each tab's rows are, as last drawn: its page is as tall, up to SettingsPage.most.
     var heights: [SettingsTab: CGFloat] = [:]
     /// What the store weighs (Storage.swift); nil until it was first measured.
@@ -125,7 +133,7 @@ struct SettingsSection: Identifiable {
 
     /// Reads again what lives elsewhere than in the preferences: the window's sidebar, the levels, the versions seen.
     func look() {
-        (floats, spaceLevels, seen) = (floating(), levels(), versions())
+        (floats, spaceLevels, seen, lasting) = (floating(), levels(), versions(), rules())
     }
 
     /// Look Again: the engine looks for the programs again, and so does this window, which says it is looking meanwhile.
@@ -262,7 +270,7 @@ struct SettingsSection: Identifiable {
         }))
     }
 
-    /// Advanced: who asks, the assistants' rest and resume, and the shortcuts.
+    /// Advanced: who asks, the lasting rules, the assistants' rest and resume, and the shortcuts.
     private func advancedSections() -> [SettingsSection] {
         let preferences = preferences, builders = Registry.app.builders
         let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
@@ -270,6 +278,9 @@ struct SettingsSection: Identifiable {
         let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
         return [
             SettingsSection(title: "Permissions", rows: [
+                SettingsRow(title: "Full Access", note: "Nobody asks: your assistant gets every permission. The agents your spaces start keep their own settings. "
+                                + "An orange mark stays in the toolbar while it is on.",
+                            control: .toggle(get: { preferences.fullAccess }, set: { [weak self] in self?.fullAccess($0) })),
                 SettingsRow(title: "Your assistant asks before every change", note: "Off: it changes your spaces freely and asks for anything else.",
                             control: .toggle(get: { preferences.askEverything }, set: { [weak self] value in
                                 preferences.askEverything = value
@@ -277,6 +288,14 @@ struct SettingsSection: Identifiable {
                             })),
                 SettingsRow(title: "Agents a space starts", note: "Each agent asks you as it usually does.", control: .said("Their Own Settings")),
             ], lead: Promise.sentence),
+            SettingsSection(title: "Lasting rules", rows: [], lead: "Made with “Always for this space” in the request panel, and shown in each space’s Info."
+                                + (lasting.isEmpty ? " None yet." : ""), more: lasting.map { kept in
+                SettingsRow(title: kept.rule.command, note: Rules.line(kept.rule, space: kept.title, home: places.home.path, now: clock()),
+                            control: .button("Revoke") { [weak self] in
+                                self?.revoke(kept)
+                                self?.look()
+                            }, tag: kept.id, code: true, mark: Registry.app.name(of: kept.rule.kind))
+            }),
             SettingsSection(title: "Assistants", rows: [
                 SettingsRow(title: "Resume each space’s conversation",
                             note: "\(Words.list(resuming, "and")) can. \(Words.list(fresh, "and")) start fresh, and say so.", control: toggle(\.resume)),
@@ -384,6 +403,10 @@ extension App {
             model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
             model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
             model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
+            let grants = Grants(places.grants)
+            model.rules = { [weak self] in Rules.all(grants, spaces: self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? []) }
+            model.revoke = { [weak self] kept in self?.revoke(kept.rule, in: kept.space) }
+            model.fullAccess = { [weak self] in self?.fullAccess($0, over: Settings.shown?.window) }
             model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
             model.look()
             model.find()
@@ -565,7 +588,7 @@ private struct RowView: View {
                 // The control inside the sentence, as the mockup's .sf-inl.
                 HStack(spacing: 7) { Text(row.title); RowControl(row: row); Text(trail) }.font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
             } else {
-                Text(row.title).font(Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
+                Text(row.title).font(row.code ? Look.font(.code, size: 12.5).ui : Look.body.font.ui).foregroundStyle(Look.Token.ink.ui)
             }
             if !row.note.isEmpty {
                 Text(LocalizedStringKey(row.note)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
@@ -585,6 +608,7 @@ private struct RowView: View {
                 VStack(alignment: .leading, spacing: 8) { words; RowControl(row: row) }.frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(spacing: 16) {
+                    if let mark = row.mark { Monogram(name: mark, side: 22).padding(.trailing, -6) }
                     words.frame(maxWidth: .infinity, alignment: .leading)
                     if row.trail == nil { RowControl(row: row) }
                 }

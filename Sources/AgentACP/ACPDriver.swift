@@ -149,17 +149,17 @@ final class ACPDriver: Driver {
     /// decision shown is the one sent: an allow that could not be sent is a refusal, and the agent's error says why.
     func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
-        let kind = answer == .once ? "allow_once" : "reject_once"
+        let kind = answer.allows ? "allow_once" : "reject_once"
         let option = ask.options.first { $0["kind"] as? String == kind }?["optionId"] as? String
         try send(["id": ask.rpcID, "result": ["outcome": option.map { ["outcome": "selected", "optionId": $0] } ?? ["outcome": "cancelled"]]])
         asks[request] = nil
-        let allowed = answer == .once && option != nil
-        if answer == .once, !allowed { emit(.error(AgentError(code: "AGENT_ERROR", message: profile.noAllowOnce))) }
+        let allowed = answer.allows && option != nil
+        if answer.allows, !allowed { emit(.error(AgentError(code: "AGENT_ERROR", message: profile.noAllowOnce))) }
         if !allowed {
             let about = (ask.prompt.request.about ?? ask.prompt.request.tool).map { "its request “\(Launched.short($0))”" } ?? "one of its requests"
             halted = "\(profile.name) stopped its turn because \(about) was refused. Tell it what to do instead in a new message."
         }
-        if let tool = ask.tool { decide(tool, Decision(by: "person", outcome: allowed ? "allowed" : "denied")) }
+        if let tool = ask.tool { decide(tool, Decision(by: answer.by, outcome: allowed ? "allowed" : "denied")) }
         emit(.requestClosed(id: request))
         return true
     }

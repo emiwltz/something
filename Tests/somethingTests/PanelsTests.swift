@@ -421,7 +421,7 @@ final class FakeNotifier: Notifier {
         EOF
         """
 
-    func commandPanel(_ input: String = long, who: Asker = Asker(program: "Codex", space: "My agents", assistant: true, preAllowed: true))
+    func commandPanel(_ input: String = long, who: Asker = Asker(program: "Codex", space: "My agents", assistant: true))
         throws -> (RequestPanel, CommandBox) {
         let panel = RequestPanel { _ in }
         panel.show(Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: nil, at: "2026-10-23T18:00:00Z"),
@@ -448,42 +448,76 @@ final class FakeNotifier: Notifier {
             }
         }
         let (short, box) = try commandPanel("npm test")
-        #expect(Self.texts(short.contentView).contains("The exact command") && box.shown == CommandBox.line + 2 * CommandBox.inset)
+        #expect(Self.texts(short.contentView).contains("The exact command · 1 line") && box.shown == CommandBox.line + 2 * CommandBox.inset)
     }
 
-    /// Copy Command writes the exact text, newlines and all; Why am I asked? opens and closes its sentence.
-    @Test func copyAndWhy() throws {
+    /// Copying the selected command gives the agent's words: the zero-width spaces that let a line break stay out. A
+    /// trailing newline ends the one line; it does not make two.
+    @Test func copyingTheCommand() throws {
         let (panel, _) = try commandPanel()
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("something-test-\(UUID().uuidString)"))
         defer { pasteboard.releaseGlobally() }
-        panel.pasteboard = pasteboard
-        func links(_ view: NSView) -> [NSButton] { ((view as? NSButton).map { [$0] } ?? []) + view.subviews.flatMap(links) }
-        let buttons = links(try #require(panel.contentView)).filter { ["Copy Command", "Why am I asked?"].contains($0.title) }
-        #expect(buttons.count == 2)
-        buttons[0].performClick(nil)
-        #expect(pasteboard.string(forType: .string) == Self.long && buttons[0].title == "Copied")
-        // Copying the selected text gives the same words: the zero-width spaces that let a line break stay out.
         let text = try #require(panel.code?.text)
         text.selectAll(nil)
         #expect(text.string.contains(CommandText.joint) && text.writeSelection(to: pasteboard, types: [.string]))
         #expect(pasteboard.string(forType: .string) == Self.long)
-        let height = panel.frame.height
-        buttons[1].performClick(nil)
-        #expect(Self.texts(panel.contentView).last?.hasPrefix("Codex is this space's assistant: it may change your spaces and run something's own commands without asking; everything else it does asks you") == true)
-        #expect(panel.frame.height > height && buttons[1].isAccessibilityExpanded())
-        buttons[1].performClick(nil)
-        #expect(panel.frame.height == height && !buttons[1].isAccessibilityExpanded())
-        // Without the exception (a builder not pre-allowed, or Ask Before Every Change), and for any other agent.
-        let others = [(Asker(program: "OpenCode", space: "My agents", assistant: true), "OpenCode asks you when its own settings decide; its request waits here"),
-                      (Asker(program: "Claude Code", space: "Project watch"), "Claude Code asks you when its own settings decide; its request waits here")]
-        for (who, words) in others {
-            let (other, _) = try commandPanel(who: who)
-            links(try #require(other.contentView)).first { $0.title == "Why am I asked?" }?.performClick(nil)
-            #expect(Self.texts(other.contentView).last?.hasPrefix(words) == true, "\(who.program)")
-        }
-        // A trailing newline ends the one line; it does not make two.
         let one = CommandBox("ls\n", target: panel, action: #selector(RequestPanel.expand))
-        #expect(Self.texts(one).contains("The exact command") && one.text.string == "ls\n")
+        #expect(Self.texts(one).contains("The exact command · 1 line") && one.text.string == "ls\n")
+    }
+
+    /// "Always for this space": offered, unticked, when the app has a rule to keep; ticked, Allow Once keeps it, and
+    /// never Deny. A request something answers by itself (a rule, Full Access) never reaches the panel: it is answered
+    /// `rule` and said; one whose answer did not go through waits for the person.
+    @Test func alwaysForThisSpace() throws {
+        let source = FakePrompts()
+        source.prompts = [source.permission("r1", about: "npm test")]
+        let panels = Panels(source: source, shows: false)
+        var clock: TimeInterval = 0, kept: [Rule] = [], alone: Set<String> = [], allowed: [String] = []
+        let rule = Rule(kind: "claude", command: "npm test", folder: "/Users/example/code/shop", at: "2026-10-22T18:20:00Z")
+        panels.clock = { clock }
+        panels.who = { _ in Asker(program: "Claude Code", space: "My agents", name: "shop", folder: "~/code/shop") }
+        panels.offer = { _, prompt in prompt.input == "npm test" ? rule : nil }
+        panels.keep = { rule, request in
+            #expect(request.id == "r1")
+            kept.append(rule)
+        }
+        panels.alone = { request, _ in alone.contains(request.id) }
+        panels.allowed = { request, _ in allowed.append(request.id) }
+        panels.refresh()
+        let panel = try #require(panels.panel), box = try #require(panel.always)
+        #expect(box.state == .off && !panel.keeps && box.accessibilityLabel() == "Always for this space")
+        let texts = Self.texts(panel.contentView)
+        for words in ["Runs in", "~/code/shop", "The exact command · 1 line", "Keeps exactly this command, for Claude Code, in ~/code/shop. You can revoke it in the space’s Info.",
+                      "No space can see or click this window."] {
+            #expect(texts.contains(words), "\(words): \(texts)")
+        }
+        #expect(!texts.contains("Space") && !texts.contains("Copy Command") && !texts.contains("Why am I asked?"))
+        box.performClick(nil)
+        clock += 1
+        panel.tick()
+        panel.allow()
+        #expect(kept == [rule] && source.answers.map(\.1) == [.once])
+        // The same command again: something answers it, and it never shows.
+        source.prompts = [source.permission("r2", about: "npm test")]
+        alone = ["r2"]
+        panels.refresh()
+        #expect(source.answers.last.map { $0.0 == "r2" && $0.1 == .rule } == true && allowed == ["r2"] && panels.panel == nil && panels.queue.waiting.isEmpty)
+        // An answer that did not go through: the person sees the request.
+        source.prompts = [source.permission("r3", about: "npm test")]
+        (alone, source.lost) = (["r3"], CodedError("AGENT_STOPPED", "The agent stopped."))
+        panels.refresh()
+        #expect(panels.queue.waiting.map(\.id) == ["r3"] && allowed == ["r2"])
+        // Ticked then denied: nothing is kept. Not offered: no checkbox.
+        source.lost = nil
+        source.prompts = [source.permission("r4", about: "npm test")]
+        alone = []
+        panels.refresh()
+        panels.panel?.always?.performClick(nil)
+        panels.panel?.deny()
+        #expect(kept == [rule])
+        source.prompts = [source.permission("r5", about: "npm test && rm -rf build")]
+        panels.refresh()
+        #expect(panels.panel?.request?.id == "r5" && panels.panel?.always == nil)
     }
 
     /// ↕ makes the panel 560 wide and shows the whole command, within the screen, its footer in sight; again, it folds
@@ -553,12 +587,6 @@ final class FakeNotifier: Notifier {
         agent.folder = "/Users/example/something/spaces"
         let assistant = App.who(agent, space: "Daily brief", home: "/Users/example", assistant: true)
         #expect(assistant == Asker(program: "Claude Code", space: "Daily brief", assistant: true, folder: "~/something/spaces"))
-        // Pre-allowed only while launched without Ask Before Every Change, and only for a pre-allowed builder.
-        #expect(App.who(agent, space: nil, home: "/Users/example", assistant: true, building: true).preAllowed)
-        #expect(!App.who(agent, space: nil, home: "/Users/example", assistant: false, building: true).preAllowed)
-        agent.kind = "opencode"
-        #expect(!App.who(agent, space: nil, home: "/Users/example", assistant: true, building: true).preAllowed)
-        agent.kind = "claude"
         let panel = RequestPanel { _ in }
         panel.show(FakePrompts().permission("r1", about: "npm test"), who: assistant, age: "asked 3 min ago")
         #expect(panel.title == "Claude Code wants to run a command")
@@ -566,7 +594,8 @@ final class FakeNotifier: Notifier {
         #expect(panel.contentView.flatMap(sign)?.accessibilityLabel()?.hasPrefix("Claude Code is waiting, ") == true)
         #expect(Self.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
                                                   "Daily brief · its assistant · asked 3 min ago", "It will run one command in the Daily brief space.",
-                                                  "Space", "Daily brief", "Folder", "~/something/spaces", "The exact command", "npm test"])
+                                                  "Runs in", "~/something/spaces", "The exact command · 1 line", "npm test",
+                                                  "No space can see or click this window."])
     }
 
     func request(_ id: String, agent: String = "a1", at: String = "2026-10-23T18:00:00Z") -> Request {

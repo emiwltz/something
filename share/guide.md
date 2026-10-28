@@ -386,10 +386,13 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   `tool` is `{name, status}` (`running`, `done`, `failed` or `null`) for a tool item, else `null`. `decision` is
   `{by, outcome}` when the agent's own stream says who decided a permission (`by`: `person`, `hook`, `rule`, `mode`;
   `outcome`: `allowed`, `denied`), else `null`. An agent something launched says `person` when the person answered
-  something's window; only Claude Code also says when a hook, a rule or its mode decided.
+  something's window, or `rule` when something allowed it by itself: a lasting rule the person kept ("Always for this
+  space": one exact command, one kind of agent, one folder) or Full Access for their assistant. Only Claude Code also
+  says when a hook, its own rule or its mode decided.
 - **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
   the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and
-  say "answer in something's window".
+  say "answer in something's window". A request a lasting rule of your space covers is answered by something at once,
+  so it may leave `requests` before your page draws it.
 
 What is outside the scope is absent: agents, and their threads and requests. Without the `state` right, `state()`
 still answers, with only the agents this space launched. Agents seen elsewhere stay listed while alive, and for 24
@@ -453,7 +456,8 @@ await something.store.set("seen", [...seen, "a1"]);
 ## What the person sees of your space
 
 - **The journal.** Every write of your space (`send`, `interrupt`, `set`, `launch`, `resume`, `open`), successful or
-  not, adds a line to its journal, which `something check --journal` prints. It never leaves the Mac.
+  not, adds a line to its journal, which `something check --journal` prints, and so does each request something
+  allowed by a lasting rule of your space (`allow`, its command in `text`). It never leaves the Mac.
 - **Export.** The person can export your space in one click as one `.something` file in their Downloads (JSON: its
   files in base64, and its memory only if they choose so). The export carries the contract your space declares; a
   something that does not know that contract refuses to import it. It never carries the rights they gave, the journal, or anything read from an agent,

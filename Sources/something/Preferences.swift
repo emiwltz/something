@@ -29,6 +29,8 @@ import SomethingCore
         /// The commands each kind's agent last listed, by kind: "/" in the card offers them before it runs.
         var commands: [String: [Option]] = [:]
         var askEverything = false, resume = true, toured = false
+        /// Full Access: something allows every permission the person's assistant asks, by itself (Settings › Advanced).
+        var fullAccess = false
         /// The hints already shown (Hint.swift), each once.
         var hinted: [String] = []
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
@@ -50,7 +52,7 @@ import SomethingCore
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, listed, commands, askEverything, resume, toured, hinted, groups, folded, names,
+            case lastOpen, assistant, model, effort, listed, commands, askEverything, fullAccess, resume, toured, hinted, groups, folded, names,
                  recents, openAtStart, appearance, motion, size, notify, level, exportMemory, sticker, sleepAfter, awakeAtMost,
                  versionsKept, storageLimit
         }

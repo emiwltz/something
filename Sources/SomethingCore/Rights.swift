@@ -1,6 +1,6 @@
-// What a space may do: the rights' words, the one level a person chooses for them, the scope matched on whole path
-// components, the `granted` a space receives, the grants file the engine keeps outside the spaces folder, and what to
-// ask again at an opening.
+// What a space may do: the rights' words, the one level a person chooses for them, the lasting rules they keep, the
+// scope matched on whole path components, the `granted` a space receives, the grants file the engine keeps outside the
+// spaces folder, and what to ask again at an opening.
 // A space never inherits rights by name: grants are keyed by name, so whoever imports, renames or deletes a space removes its entry.
 import Foundation
 
@@ -18,7 +18,16 @@ public struct Grant: Codable, Equatable, Sendable {
     /// The level the person chose for the whole space; nil for answers given right by right, before levels (optional,
     /// so that a grants file written before them still reads).
     public var level: Level?
+    /// The commands the person allowed "Always for this space" (optional, so that an older grants file still reads).
+    public var rules: [Rule]?
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
+}
+
+/// A lasting rule: one exact command an agent of `kind` working in `folder` (absolute) may run for the space without
+/// asking again, kept `at` (ISO 8601). It covers that command only, never another, a longer one or another folder.
+public struct Rule: Codable, Hashable, Sendable {
+    public var kind: String, command: String, folder: String, at: String
+    public init(kind: String, command: String, folder: String, at: String) { (self.kind, self.command, self.folder, self.at) = (kind, command, folder, at) }
 }
 
 extension Grant {
@@ -139,6 +148,18 @@ public enum Rights {
         (next.granted, next.refused) = (level.words, leveled.filter { !level.words.contains($0) })
         next.folder = level == .run ? folder ?? next.folder : nil
         return next
+    }
+
+    /// Whether `command` is one plain command a rule may keep: no chain, pipe, redirection, substitution, variable or
+    /// second line, so that a rule never allows more than the person read.
+    public static func single(_ command: String) -> Bool {
+        !command.trimmingCharacters(in: .whitespaces).isEmpty && command.rangeOfCharacter(from: CharacterSet(charactersIn: ";&|<>`$\\\n\r")) == nil
+    }
+
+    /// The rule of `grant` that allows exactly `command` for an agent of `kind` working in `folder`; nil when none does.
+    public static func rule(in grant: Grant?, kind: String, command: String, folder: String?) -> Rule? {
+        guard single(command), let folder else { return nil }
+        return grant?.rules?.first { $0.kind == kind && $0.command == command && $0.folder == folder }
     }
 
     /// Whether one of `words` covers `right`: the same word, or a word without a kind for a right with one

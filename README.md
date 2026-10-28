@@ -112,8 +112,9 @@ mode, Amp cannot be interrupted) is in [the guide](share/guide.md#what-each-kind
 
 ## The promise
 
-something never answers for you. Your assistant may change your spaces and run something's own commands without
-asking; everything else it does asks you, as your agent's own settings decide.
+something answers for you only where you said so: one exact command you allowed Always for a space, and every
+permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something's own
+commands without asking; everything else it does asks you, as your agent's own settings decide.
 
 Your assistant is the agent you chose, working in `~/something/spaces`. Each space has its own: its own conversation
 with that agent, started at its first message and shown when the space is open. New Space has one too, and the space it
@@ -149,13 +150,23 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   size, Export, History), your agents (its level, one control that changes it at once, Run's folder, and the agents it
   shows now) and its assistant (its agent and model, its last reply, Open Conversation). Settings › Agents lists every
   space with its level, and changes one the same way.
-- **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
-  no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
+- **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
+  sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
   the panel's); its permissions still open the panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
   the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Agents), and
   never the command.
+- **Always for this space.** When an agent a space started asks to run one plain command (no `&&`, `|`, `;`,
+  redirection, `$` or second line), the panel offers a checkbox beside Allow Once: "Always for this space". Ticked, Allow
+  Once also keeps a lasting rule: exactly that command, for that kind of agent, in that folder, for that space. The next
+  time the same request comes, something answers it by itself, says "Allowed by your rule" in a quiet note, and writes
+  it in the space's journal; any other command, folder, agent or space still asks. The rules are listed in the space's
+  Info and in Settings › Advanced, each with Revoke, and go with the space when it is renamed, imported or deleted.
+  Nothing is written into the agent's own settings. Your assistant's requests are never kept this way.
+- **Full Access.** Settings › Advanced › Full Access, after one confirmation, lets something allow every permission your
+  assistant asks, by itself; an orange mark stays in the toolbar while it is on, and a click on it turns it off. The
+  agents your spaces start keep their own settings and still ask, and a question still waits for you.
 - **Modes.** A mode that makes an agent ask less always asks you again. A mode that never asks (Claude Code's
   `bypassPermissions`) is refused.
 - **Links.** Each link a space opens asks you first.

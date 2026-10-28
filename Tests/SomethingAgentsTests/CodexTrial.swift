@@ -113,7 +113,7 @@ import SomethingCore
 
     func answer(_ answer: Answer) throws -> Bool {
         let id = try #require(request).id
-        let with: Any = switch answer { case .once: "once"; case .deny: "deny"; case .choice(let chosen): chosen }
+        let with: Any = switch answer { case .once: "once"; case .rule: "rule"; case .deny: "deny"; case .choice(let chosen): chosen }
         exchange.rows.append(["answer": id, "with": with])
         return try agent.answer(id, answer)
     }

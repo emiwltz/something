@@ -94,7 +94,7 @@ public struct Memory: Sendable {
 /// an `open` has no agent.
 public struct JournalLine: Codable, Equatable, Sendable {
     public var at: String
-    /// "send", "interrupt", "set", "launch", "resume" or "open".
+    /// "send", "interrupt", "set", "launch", "resume", "open", or "allow" for a request a lasting rule answered.
     public var action: String
     public var agent: String?, kind: String?, when: String?, text: String?
     /// "ok" or a bridge code.

@@ -33,6 +33,9 @@ import SomethingCore
         keep(waiting.compactMap { now[$0.id] } + new)
     }
 
+    /// Whether `id` waits here or was answered.
+    func knows(_ id: String) -> Bool { answered.contains(id) || waiting.contains { $0.id == id } }
+
     /// Takes `id` out once the person answered it, for good.
     func answer(_ id: String) { drop(id) }
 

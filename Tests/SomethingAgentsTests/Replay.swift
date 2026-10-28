@@ -116,8 +116,9 @@ final class Replay {
     /// "resume" makes a launch that continues that thread, "model" a launch with that model, "effort" one with that
     /// thinking level, and "assistant" the person's assistant, given something's MCP server with the environment its
     /// "server" names (else `server`). `database` is the OpenCode database the driver reads at the end, as the engine
-    /// sets it; `driving` plays an OpenCode exchange with another agent over ACP.
-    static func play(_ name: String, kind: String = "claude", database: String? = nil, driving: Driving? = nil) throws -> Replay {
+    /// sets it; `driving` plays an OpenCode exchange with another agent over ACP; `once` answers each "once" of the
+    /// exchange in its place (`.rule`: something allows by itself what the wire carries as the person's Allow Once).
+    static func play(_ name: String, kind: String = "claude", database: String? = nil, driving: Driving? = nil, once: Answer = .once) throws -> Replay {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Exchanges/\(kind)/\(name).jsonl")
         let rows = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map { text in
@@ -145,7 +146,7 @@ final class Replay {
             }
             if let interrupted = row["interrupted"] as? Bool { #expect(try replay.agent.interrupt() == interrupted, "\(at)") }
             if let request = row["answer"] as? String {
-                let with: Answer = row["with"] as? String == "once" ? .once : row["with"] as? String == "deny" ? .deny
+                let with: Answer = row["with"] as? String == "once" ? once : row["with"] as? String == "deny" ? .deny
                     : .choice(row["with"] as? [[String]] ?? [])
                 #expect(try replay.agent.answer(request, with), "\(at): the request was not open")
             }

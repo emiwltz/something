@@ -100,6 +100,9 @@ enum Words {
         }
     }
 
+    /// Whether `tool` runs a command, as its agent's descriptor says: what a lasting rule may keep.
+    static func isCommand(_ tool: String?) -> Bool { tool.flatMap { kinds[$0] } == .command }
+
     /// What each tool does, by its name, as the first agent that names it says.
     private static let kinds = Dictionary(Registry.app.agents.flatMap(\.tools).map { ($0.key, $0.value) }) { first, _ in first }
 

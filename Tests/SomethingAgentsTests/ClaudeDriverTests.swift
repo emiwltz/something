@@ -18,6 +18,12 @@ import SomethingCore
         #expect(replay.fold.turns.map(\.state) == ["done"])
     }
 
+    /// A request something allows by itself (a lasting rule, Full Access) goes out as Allow Once, and says `rule`.
+    @Test func permissionByRule() throws {
+        let replay = try Replay.play("permission-once", once: .rule)
+        #expect(try #require(replay.items.first { $0.kind == "tool" }).decision == Decision(by: "rule", outcome: "allowed"))
+    }
+
     @Test func deny() throws {
         let replay = try Replay.play("deny")
         let tool = try #require(replay.items.first { $0.kind == "tool" })

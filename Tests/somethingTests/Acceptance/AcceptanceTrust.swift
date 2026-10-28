@@ -1,5 +1,6 @@
 // Acceptance scenarios of what asks the person: the request panel and its queue, the Dock, the sheets and the quit alerts
-// (e1–e9, e13–e15). Key-window and focus claims are not asserted offscreen: each slice lists them for the hand trial.
+// (e1–e9, e13–e15), and round 2's lasting rules: Info with none (x4-1), the panel's "Always for this space" (x4-2) and
+// Info with one, and Revoke (x4-3). Key-window and focus claims are not asserted offscreen: each slice lists them for the hand trial.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -62,7 +63,7 @@ struct AcceptanceTrust {
             let (kind, space, folder, assistant) = agents[(Int(request.agent.dropFirst()) ?? 1) - 1]
             var agent = Agent(id: request.agent, kind: kind, origin: "launched")
             (agent.name, agent.folder) = (assistant ? nil : "watcher", folder)
-            return App.who(agent, space: space, home: "/Users/example", assistant: assistant, building: assistant)
+            return App.who(agent, space: space, home: "/Users/example", assistant: assistant)
         }
         return panels
     }
@@ -110,7 +111,8 @@ struct AcceptanceTrust {
                 "what waits is in Needs You, never in the toolbar")
         #expect(PanelsTests.texts(panel.contentView).starts(with: ["something", "·  Permission", "", "Codex wants to run a command",
                                                                    "My agents · its assistant · just now", "It will run one command in the My agents space.",
-                                                                   "Space", "My agents", "Folder", "~/something/spaces", "The exact command"]))
+                                                                   "Runs in", "~/something/spaces", "The exact command · 1 line"]))
+        #expect(panel.always == nil, "Always is never offered to an assistant")
         // Across the window's top-right corner, half outside it, below the toolbar.
         let window = shell.window.frame, toolbar = window.height - shell.window.contentLayoutRect.maxY
         #expect(panel.frame.width == RequestPanel.width && panel.frame.minX < window.maxX && panel.frame.maxX > window.maxX)
@@ -143,6 +145,116 @@ struct AcceptanceTrust {
         panel.allow()
         #expect(source.answers.map(\.1) == [.once] && panels.panel == nil && library.sidebar.needs.isEmpty && shell.glass.mine == 0, "answered: Needs You empties")
     }
+    /// `name` open at Run in `folder` under the Stage's home, keeping `rules`, Info shown: X4's window.
+    static func info(_ stage: Stage, _ name: String, folder: String, rules: [Rule]) async throws -> (Shell, Library, Info, SpaceView) {
+        let (shell, library, info) = stage.window()
+        Stage.work(library)
+        let space = try #require(library.entry(name)?.space), path = stage.home.places.home.appendingPathComponent(folder).path
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        let declaration = try #require(Declaration.read(space, home: stage.home.places.home, kinds: Registry.app.kinds).declaration)
+        var grant = Rights.leveled(.run, folder: path, declaration: declaration, at: "2026-10-19T09:00:00Z", after: nil)
+        grant.rules = rules.isEmpty ? nil : rules
+        try Grants(stage.home.places.grants).update { $0.spaces[name] = grant }
+        let view = try await stage.open(name, in: shell, library)
+        (info.current, info.clock) = ({ view }, { Stage.local })
+        info.show(view.space)
+        shell.showInfo(true)
+        shell.window.layoutIfNeeded()
+        return (shell, library, info, view)
+    }
+
+    /// X4.1: My agents at Run in ~/code/shop, no lasting rule yet: Info says how one is made, under the folder.
+    @Test("x4-1: Info, no lasting rule") func x4_1() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, info, view) = try await Self.info(stage, "agents", folder: "code/shop", rules: [])
+        defer { view.close() }
+        #expect(info.level == .run && info.rules.isEmpty && info.folder?.hasSuffix("/code/shop") == true)
+        let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
+        #expect(read.contains("Always for this space") && read.contains("With your agents: Run"), "\(read)")
+        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        for words in ["Starts them in", "~/code/shop", "Always for this space", "None yet. Tick", "when an agent asks"] {
+            #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
+        }
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "x4-1" + suffix, root: stage.home.root)
+        }
+    }
+
+    /// X4.2: Claude Code, started by My agents in ~/code/shop, asks to run `npm test`: the panel says where it runs, the
+    /// exact command, "Always for this space" and what it keeps, then Deny and Allow Once. Ticked, Allow Once keeps the
+    /// rule in My agents' grant.
+    @Test("x4-2: Always for this space") func x4_2() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(Self.large)
+        let agents = try await stage.open("agents", in: shell, library)
+        defer { agents.close() }
+        let declaration = try #require(Declaration.read(agents.space, home: stage.home.places.home, kinds: Registry.app.kinds).declaration)
+        let grants = Grants(stage.home.places.grants), shop = "/Users/example/code/shop"
+        try grants.update { $0.spaces["agents"] = Rights.leveled(.run, folder: shop, declaration: declaration, at: "2026-10-22T18:00:00Z", after: nil) }
+        let source = FakePrompts()
+        source.prompts = [Prompt(request: Request(id: "r1", agent: "a2", kind: "permission", tool: "Bash", about: nil, at: iso8601.string(from: Stage.now)),
+                                 input: "npm test")]
+        var agent = Agent(id: "a2", kind: "claude", origin: "launched")
+        (agent.name, agent.folder) = ("shop", shop)
+        var time: TimeInterval = 100
+        let panels = Panels(source: source, shows: false)
+        (panels.now, panels.clock) = ({ Stage.now }, { time })
+        panels.who = { _ in App.who(agent, space: "My agents", home: "/Users/example") }
+        panels.offer = { request, prompt in
+            Rules.offer(request, input: prompt.input, agent: agent, assistant: false, grant: try? grants.read().spaces["agents"], at: "2026-10-22T18:20:00Z")
+        }
+        panels.keep = { rule, _ in try? Rules.keep(rule, in: "agents", grants) }
+        panels.refresh()
+        let panel = try #require(panels.panel), box = try #require(panel.always)
+        panel.place(beside: shell.window, screen: Self.desk)
+        #expect(panel.title == "Claude Code wants to run a command" && box.accessibilityLabel() == "Always for this space" && box.state == .off)
+        #expect(PanelsTests.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
+                                                         "My agents · “shop” · just now", "It will run one command in the My agents space.",
+                                                         "Runs in", "~/code/shop", "The exact command · 1 line", "npm test",
+                                                         "Keeps exactly this command, for Claude Code, in ~/code/shop. You can revoke it in the space’s Info.",
+                                                         "No space can see or click this window."])
+        #expect(panel.allowButton.title == "Allow Once" && panel.denyButton.title == "Deny")
+        box.performClick(nil)
+        time += 1
+        panel.tick()
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: agents.web, "x4-2" + suffix, root: stage.home.root)
+        }
+        panel.allow()
+        #expect(source.answers.map(\.1) == [.once])
+        let kept = try grants.read().spaces["agents"]?.rules
+        #expect(kept == [Rule(kind: "claude", command: "npm test", folder: shop, at: "2026-10-22T18:20:00Z")])
+    }
+
+    /// X4.3: Project watch at Run in ~/code/atelier keeps one rule, `git log --oneline -20` for Claude Code: Info lists
+    /// it under "Always for this space", with Revoke, which takes it out of the grant at once.
+    @Test("x4-3: a lasting rule in Info") func x4_3() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let atelier = stage.home.places.home.appendingPathComponent("code/atelier").path
+        let rule = Rule(kind: "claude", command: "git log --oneline -20", folder: atelier, at: "2026-10-21T09:00:00Z")
+        let (shell, library, info, view) = try await Self.info(stage, "project", folder: "code/atelier", rules: [rule])
+        defer { view.close() }
+        #expect(info.level == .run && info.rules == [rule])
+        let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
+        for words in ["Always for this space", "Claude Code: git log --oneline -20, in ~/code/atelier", "Revoke git log --oneline -20"] {
+            #expect(read.contains(words), "VoiceOver hears \(words): \(read)")
+        }
+        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        for words in ["Always for this space", "git log --oneline -20", "in ~/code/atelier", "Revoke"] {
+            #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
+        }
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "x4-3" + suffix, root: stage.home.root)
+        }
+        info.revoke(rule)
+        let left = try Grants(stage.home.places.grants).read().spaces["project"]?.rules
+        #expect(info.rules.isEmpty && left == nil)
+    }
+
     /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
     /// corner below the toolbar, its footer in sight.
     @Test("e2: the command box") func e2() async throws {

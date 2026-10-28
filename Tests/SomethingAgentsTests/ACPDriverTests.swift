@@ -33,6 +33,12 @@ import SomethingCore
         #expect(reply["outcome"] as? [String: String] == ["outcome": "selected", "optionId": "once"], "never \"always\"")
     }
 
+    /// A request something allows by itself (a lasting rule) goes out as Allow Once, and says `rule`.
+    @Test func permissionByRule() throws {
+        let replay = try Replay.play("permission-once", kind: "opencode", once: .rule)
+        #expect(try #require(replay.items.first { $0.kind == "tool" }).decision == Decision(by: "rule", outcome: "allowed"))
+    }
+
     /// OpenCode ends the turn "cancelled" by itself after a refusal: something did not cancel, and the turn did not
     /// end as a normal one, so it fails with what happened.
     @Test func deny() throws {

@@ -64,12 +64,18 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
 1. **Nothing in the agents.** something writes no hook, no MCP server, no skill and no setting into an agent's
    configuration. What a launch needs is passed on the command line or the agent's channel, for that launch only.
 2. **Every permission is shown.** A request from an agent something launched waits for "Allow Once" or "Deny" in a
-   window of the Mac, which a space cannot draw or answer. One exception, the assistant's own building work, with the
-   same words in the README and the app: "something never answers for you. Your assistant may change your spaces and
+   window of the Mac, which a space cannot draw or answer. The exceptions are the person's own, with the same words in
+   the README and the app: "something answers for you only where you said so: one exact command you allowed Always for
+   a space, and every permission your assistant asks while Full Access is on. Your assistant may change your spaces and
    run something's own commands without asking; everything else it does asks you, as your agent's own settings
-   decide." For Claude Code that is exactly edits and writes in `~/something/spaces` and the lent tools; its rules fail
-   toward asking, never a broader path, a `Bash(...)` rule or a whole MCP server. "Ask Before Every Change" turns it
-   off.
+   decide." A lasting rule ("Always for this space", a checkbox beside Allow Once) is offered only for one plain command
+   of an agent a space started; it keeps that exact command, kind and folder in the space's grant, and something then
+   answers it alone (`decision.by` `rule`, a journal line), until Revoke in Info or Settings › Advanced. Full Access
+   (Settings › Advanced, one confirmation, an orange mark while on) covers the assistant's permissions only: agents a
+   space starts keep their own settings, and questions always wait. The assistant's building work: for Claude Code that
+   is exactly edits and writes in `~/something/spaces` and the lent tools; its rules fail toward asking, never a broader
+   path, a `Bash(...)` rule or a whole MCP server. "Ask Before Every Change" turns it off. Nothing of either is written
+   into an agent.
 3. **The unknown is said.** What is not known is `null`; a state no source gives is `"unknown"`, never `"idle"`, never
    a guess.
 4. **No orchestration.** something launches, shows and passes the messages it is asked to pass. It never chains agents,
@@ -77,8 +83,8 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
    read its conversation.
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
 6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by
-   `BudgetTests`, every line counted: the core 1,850 lines in all; the host 2,750 in all and 450 per file; in each
-   `Agent*` target, 650 per driver and 450 per other file; the app 19,521 in all, a soft budget Emi raises per block on
+   `BudgetTests`, every line counted: the core 1,855 lines in all; the host 2,750 in all and 450 per file; in each
+   `Agent*` target, 650 per driver and 450 per other file; the app 19,580 in all, a soft budget Emi raises per block on
    measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 700 lines.
 7. **Agents are extensions.** `SomethingCore` knows no agent. No line of the host's code names one. A family imports
    the host and never another family; what the host shares with them is `package`, public only where the app needs

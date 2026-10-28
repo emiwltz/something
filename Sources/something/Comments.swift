@@ -230,7 +230,7 @@ final class Comments: NSView, NSTextFieldDelegate {
 final class CommentTray: NSView {
     weak var owner: Comments?
     private(set) var fields: [NSTextField] = [], removes: [RowRemove] = []
-    private(set) lazy var clear = LinkButton("Clear", nil, size: 12, target: self, action: #selector(clearAll))
+    private(set) lazy var clear = LinkButton("Clear", size: 12, target: self, action: #selector(clearAll))
     let sendButton = PanelButton("Send to Assistant", primary: true, hint: "⌘↵", symbol: "arrow.up")
     private var list: [Comments.Comment] = [], phase = Comments.Phase.writing, pointing = false
     private var hovered: Int? { didSet { light() } }

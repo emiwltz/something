@@ -89,6 +89,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         })
         panels.attention?.notify = { [weak self] in self?.library.preferences.notify == true }
         panels.queue.space = { [weak self] request in self?.space(ofAgent: request.agent) }
+        followRules()
         engine.changed = { [weak self] in self?.schedulePush() }
         // This program's main routes `something hook permission`, inside the .app and under `swift run` alike.
         engine.hookCommand = Engine.ownHookCommand
@@ -272,17 +273,16 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     func who(_ request: Request) -> Asker {
         let space = panels.queue.space(request).map { library.entry($0)?.title ?? $0 }
         var who = App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
-                          assistant: engine.assistants.contains(request.agent), building: assistant.session(of: request.agent).map { !$0.asking } ?? false)
+                          assistant: engine.assistants.contains(request.agent))
         who.quick = assistant.quick(request.agent)
         return who
     }
 
-    /// `agent` in the panel's words, "An agent" when the state no longer holds it: pre-allowed only as an assistant launched
-    /// without Ask Before Every Change (`building`) whose builder is; named unless the assistant; its folder with ~.
-    static func who(_ agent: Agent?, space: String?, home: String, assistant: Bool = false, building: Bool = false) -> Asker {
+    /// `agent` in the panel's words, "An agent" when the state no longer holds it: named unless the assistant; its folder
+    /// with ~.
+    static func who(_ agent: Agent?, space: String?, home: String, assistant: Bool = false) -> Asker {
         guard let agent else { return Asker(program: "An agent", space: space) }
         return Asker(program: Registry.app.name(of: agent.kind), space: space, assistant: assistant,
-                     preAllowed: assistant && building && Registry.app.agent(agent.kind)?.builder?.preAllowed == true,
                      name: assistant ? nil : agent.name, folder: agent.folder.map { Words.path($0, home: home) })
     }
 
@@ -425,7 +425,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
 
     /// The space `agent` works for, as the request queue says it, or nil.
-    private func space(ofAgent agent: String) -> String? {
+    func space(ofAgent agent: String) -> String? {
         RequestQueue.space(of: agent, assistant: engine.assistants.contains(agent), working: assistant.space(of: agent), launches: launches.ids)
     }
 

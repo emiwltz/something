@@ -30,6 +30,8 @@ import Testing
         model.setLevel = { effects.levels.append(($0, $1)) }
         model.chose = { effects.chosen.append($0) }
         model.asking = { effects.asking.append($0) }
+        // As the app does once its confirmation is answered (App.fullAccess).
+        model.fullAccess = { [unowned model] in model.preferences.fullAccess = $0 }
         model.lookAgain = { effects.looks += 1 }
         model.reveal = { effects.revealed.append($0) }
         // Invented places; no program is looked for, let alone run.
@@ -71,7 +73,7 @@ import Testing
                                            "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil,
                                            "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
                                            "Keep": "versionsKept", "Storage limit": "storageLimit",
-                                           "Your assistant asks before every change": "askEverything", "Agents a space starts": nil,
+                                           "Full Access": "fullAccess", "Your assistant asks before every change": "askEverything", "Agents a space starts": nil,
                                            "Resume each space’s conversation": "resume", "Put idle assistants to sleep after": "sleepAfter",
                                            "Keep at most": "awakeAtMost", "Keyboard shortcuts": nil]
         var seen: Set<String> = []
@@ -126,7 +128,7 @@ import Testing
                           "Agent": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
                           "Notify me when an agent asks": "off", "Daily brief": "Watch", "Project watch": "Run", "Unread": "Not known",
                           "Where they live": "Show in Finder", "Include a space’s memory when you export it": "off", "Keep": "50",
-                          "Storage limit": "500 MB", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
+                          "Storage limit": "500 MB", "Full Access": "off", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
                           "Resume each space’s conversation": "on", "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3",
                           "Keyboard shortcuts": "Show Shortcuts"])
         #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])

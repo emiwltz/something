@@ -1,6 +1,7 @@
 // The request panel: a window of the Mac of its own, beside the main window, that no space can draw, imitate or answer.
 // It shows the queue's request on screen (Requests.swift), with "‹ 1 of 3 ›" while more wait: who asks, the effect in
-// words first, where it acts, the exact text, then Deny and Allow Once. It never takes the keys when it arrives: a key
+// words first, where it runs, the exact text, for a plain command of an agent a space started the checkbox "Always for
+// this space" (kept as a lasting rule once Allow Once answers: Rules.swift), then Deny and Allow Once. It never takes the keys when it arrives: a key
 // typed in a page must never answer it. Allow Once arms 0.5 s after a request appears, and then answers a click, or
 // VoiceOver's press once the person made the panel key themselves (a click on it, or Show Request); no key, Return and
 // Space included, ever presses it. Show Request (⌥⌘P) gives it the keys, ringed, with one pulse; when it goes away
@@ -13,11 +14,10 @@ import AppKit
 import SomethingAgents
 import SomethingCore
 
-/// Who asks, in the panel's words: the program, its space, whether it is that space's assistant and its building is
-/// pre-allowed now (rule 2's exception), the agent's own name, its folder with ~, and whether it is a Quick Change's
-/// temporary session. What is not known is left out.
+/// Who asks, in the panel's words: the program, its space, whether it is that space's assistant, the agent's own name,
+/// its folder with ~, and whether it is a Quick Change's temporary session. What is not known is left out.
 struct Asker: Equatable {
-    var program: String, space: String? = nil, assistant = false, preAllowed = false, name: String? = nil, folder: String? = nil
+    var program: String, space: String? = nil, assistant = false, name: String? = nil, folder: String? = nil
     var quick = false
 }
 
@@ -28,8 +28,6 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     var step: (Int) -> Void = { _ in }
     /// The clock Allow Once's arming reads, in seconds: a test's seam.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
-    /// Where Copy Command writes: a test's seam.
-    var pasteboard = NSPasteboard.general
     private(set) var request: Request?, who: Asker?
     /// The exact command's box, when the request has one.
     private(set) var code: CommandBox?
@@ -51,9 +49,8 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     private var widthRule = NSLayoutConstraint()
     /// The window and screen it was last placed beside, to place it again once it changed size.
     private weak var beside: NSWindow?
-    /// The open "Why am I asked?" sentence, and Copy Command's presses: only the last one's reset puts its title back.
-    private weak var whyBox: Box?
-    private var copies = 0
+    /// "Always for this space", when the request offers it.
+    private(set) var always: NSButton?
     private var desk: NSRect?
     /// While more requests wait, the edges of the next ones under the panel's bottom, 6 and 11 points, as a small
     /// stack: windows of their own, since a window draws nothing outside its frame. The nearer one is first.
@@ -158,9 +155,10 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         }
     }
 
-    /// Shows `prompt`, asked by `who` `age` ago, in place of what the panel showed, and arms Allow Once again.
-    func show(_ prompt: Prompt, who: Asker, age: String?) {
-        (request, self.who, code) = (prompt.request, who, nil)
+    /// Shows `prompt`, asked by `who` `age` ago, in place of what the panel showed, with "Always for this space" when
+    /// `always`, unticked, and arms Allow Once again.
+    func show(_ prompt: Prompt, who: Asker, age: String?, always: Bool = false) {
+        (request, self.who, code, self.always) = (prompt.request, who, nil, nil)
         // Its labels are made for the first width; size(width:) widens them to the kept one.
         let kept = widthRule.constant
         widthRule.constant = Self.width
@@ -170,17 +168,18 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         (boxes, typed) = ([], [])
         var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age, quick: who.quick), who.program)]
         if question {
-            denyButton = LinkButton("Don't Answer", nil, size: 12, weight: .semibold, target: self, action: #selector(deny))
+            denyButton = LinkButton("Don't Answer", size: 12, weight: .semibold, target: self, action: #selector(deny))
             views += ask(prompt.questions)
         } else {
             views.append(Self.text(Words.effect(prompt.request.tool, space: who.space), Look.body))
-            let rows = [("Space", who.space), ("Folder", who.folder)].compactMap { key, value in value.map { (key, $0) } }
-            if !rows.isEmpty { views.append(Self.table(rows)) }
+            if let folder = who.folder { views.append(Self.runsIn(folder)) }
             if let exact = prompt.input ?? prompt.request.about {
                 let code = CommandBox(exact, target: self, action: #selector(expand))
-                views += [code, links()]
+                views.append(code)
                 self.code = code
             }
+            if always, let folder = who.folder { views.append(keeper(who.program, folder)) }
+            views.append(Self.lock("No space can see or click this window."))
             denyButton = PanelButton("Deny", hint: "esc")
             foot.setViews([denyButton, allowButton], in: .trailing)
         }
@@ -244,38 +243,6 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     func resize(to size: NSSize) {
         sized = true
         self.size(width: size.width, height: max(300, size.height))
-    }
-
-    /// Copy Command: the exact text the agent sent, as it sent it.
-    @objc func copyCommand(_ sender: NSButton) {
-        guard let code else { return }
-        pasteboard.clearContents()
-        pasteboard.setString(code.exact, forType: .string)
-        sender.title = "Copied"
-        copies += 1
-        let press = copies
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in if self?.copies == press { sender.title = "Copy Command" } }
-    }
-
-    /// Why am I asked?: says, under the links, why this request waits here; a second press takes it away.
-    @objc func why(_ sender: NSButton) {
-        if let shown = whyBox {
-            shown.removeFromSuperview()
-            whyBox = nil
-        } else if let who {
-            let words = who.preAllowed ? "\(who.program) is this space's assistant: it may change your spaces and run something's own "
-                + "commands without asking; everything else it does asks you, as its own settings decide, and"
-                : "\(who.program) asks you when its own settings decide; its request"
-            let field = Self.text(words + " waits here, in a window of the Mac that no page can draw or click. Allow Once covers this one "
-                                  + "request, this one time.", Look.small, .ink2)
-            field.preferredMaxLayoutWidth = widthRule.constant - 52
-            let box = Box(field, fill: .hover, radius: 8, insets: NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10))
-            body.addArrangedSubview(box)
-            stretch([box])
-            whyBox = box
-        }
-        sender.setAccessibilityExpanded(whyBox != nil)
-        size(width: widthRule.constant, height: sized ? frame.height : nil)
     }
 
     /// The boxes among `views` take the body's width, less its insets.
@@ -425,21 +392,39 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         return row
     }
 
-    /// Space, Folder: a key in ink3, its value in ink, in a ringed box.
-    private static func table(_ rows: [(String, String)]) -> NSView {
-        let grid = NSGridView(views: rows.map { key, value in
-            [text(key, Look.Style(face: .ui, size: 12, weight: .regular, leading: 1.45), .ink3),
-             text(value, Look.Style(face: .ui, size: 12, weight: .medium, leading: 1.45))]
-        })
-        (grid.columnSpacing, grid.rowSpacing) = (14, 4)
-        return Box(grid, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11), loose: true)
+    /// Where it runs: a folder, "Runs in" in ink3, the folder in code, in a ringed box.
+    private static func runsIn(_ folder: String) -> NSView {
+        let row = NSStackView(views: [NSImageView.symbol("folder", 10, .regular, tint: .ink3),
+                                      text("Runs in", Look.Style(face: .ui, size: 12, weight: .regular, leading: 1.45), .ink3),
+                                      text(folder, Look.Style(face: .code, size: 11.5, weight: .regular, leading: 1.45))])
+        (row.spacing, row.alignment) = (8, .firstBaseline)
+        row.setCustomSpacing(12, after: row.views[1])
+        return Box(row, ring: .line, radius: 9, insets: NSEdgeInsets(top: 8, left: 11, bottom: 8, right: 11), loose: true)
     }
 
-    /// Copy Command and Why am I asked?, quiet links under the command.
-    private func links() -> NSView {
-        let row = NSStackView(views: [LinkButton("Copy Command", "square.on.square", target: self, action: #selector(copyCommand)),
-                                      LinkButton("Why am I asked?", "questionmark.circle", target: self, action: #selector(why))])
-        row.spacing = 14
+    /// "Always for this space", unticked, and what it keeps: exactly this command, for `program`, in `folder`.
+    private func keeper(_ program: String, _ folder: String) -> NSView {
+        let box = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+        box.attributedTitle = NSAttributedString(string: "Always for this space", attributes: [.font: Look.font(.ui, size: 12.5, weight: .semibold),
+                                                                                             .foregroundColor: Look.Token.ink.color])
+        box.setAccessibilityLabel("Always for this space")
+        let what = Self.text("Keeps exactly this command, for \(program), in \(folder). You can revoke it in the space’s Info.", Look.small, .ink3)
+        // Under the box's title, as the mockup sets it: the panel's insets, the box's, and the checkbox's width.
+        what.preferredMaxLayoutWidth = widthRule.constant - 32 - 22 - 20
+        let column = NSStackView(views: [box, Box(what, insets: NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 0))])
+        (column.orientation, column.alignment, column.spacing) = (.vertical, .leading, 2)
+        always = box
+        return Box(column, fill: .sunk, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 10, right: 11))
+    }
+
+    /// Whether "Always for this space" is ticked.
+    var keeps: Bool { always?.state == .on }
+
+    /// A lock, then `words` in ink3: what no page can do to this window.
+    private static func lock(_ words: String) -> NSView {
+        let row = NSStackView(views: [NSImageView.symbol("lock", 9, .medium, tint: .ink3),
+                                      text(words, Look.Style(face: .ui, size: 11, weight: .regular, leading: 1.3), .ink3)])
+        row.spacing = 5
         return row
     }
 
@@ -471,10 +456,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
                       Self.text(question.text, Look.Style(face: .voice, size: 15, weight: .regular, leading: 1.42)),
                       options.isEmpty ? nil : Box(list), Box(own)].compactMap { $0 }
         }
-        let hint = NSStackView(views: [NSImageView.symbol("lock", 9, .medium, tint: .ink3),
-                                       Self.text("The space can't see this window.", Look.Style(face: .ui, size: 11, weight: .regular, leading: 1.3), .ink3)])
-        hint.spacing = 5
-        let last = NSStackView(views: [denyButton, hint])
+        let last = NSStackView(views: [denyButton, Self.lock("The space can't see this window.")])
         last.distribution = .equalSpacing
         // The mockup's spacing around the row, measured on its picture.
         return views + [Box(last, insets: NSEdgeInsets(top: 13, left: 0, bottom: 16, right: 0))]
@@ -640,14 +622,13 @@ class PanelButton: KeyableButton {
     private var lead: CGFloat { symbol.map { $0.size.width + 7 } ?? 0 }
 }
 
-/// A quiet link of the panel: a symbol, 5 points, then its words in ink2, drawn here because NSButton measures itself
-/// by the system's font and clips Onest.
+/// A quiet link of the panel: its words in ink2, drawn here because NSButton measures itself by the system's font and
+/// clips Onest.
 final class LinkButton: KeyableButton {
-    private let symbol: NSImage?, face: NSFont, lead: CGFloat
+    private let face: NSFont
 
-    init(_ title: String, _ symbol: String?, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
-        self.symbol = symbol.map { NSImage.symbol($0, 10, .medium) }
-        (face, lead) = (Look.font(.ui, size: size, weight: weight), symbol == nil ? 0 : 17)
+    init(_ title: String, size: CGFloat = 11.5, weight: NSFont.Weight = .medium, target: AnyObject, action: Selector) {
+        face = Look.font(.ui, size: size, weight: weight)
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
     }
@@ -660,14 +641,9 @@ final class LinkButton: KeyableButton {
         NSAttributedString(string: title, attributes: [.font: face, .foregroundColor: Look.Token.ink2.color])
     }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: (lead + words.size().width).rounded(.up), height: 18) }
+    override var intrinsicContentSize: NSSize { NSSize(width: words.size().width.rounded(.up), height: 18) }
 
-    override func draw(_ dirtyRect: NSRect) {
-        if let symbol {
-            symbol.tinted(Look.Token.ink2.color).draw(in: NSRect(x: 0, y: ((bounds.height - symbol.size.height) / 2).rounded(), width: symbol.size.width, height: symbol.size.height))
-        }
-        words.draw(at: NSPoint(x: lead, y: ((bounds.height - words.size().height) / 2).rounded()))
-    }
+    override func draw(_ dirtyRect: NSRect) { words.draw(at: NSPoint(x: 0, y: ((bounds.height - words.size().height) / 2).rounded())) }
 }
 
 /// One option of a question: its number in a small tile, its label, in a ringed row. `toggles` nil, a click answers;
@@ -832,7 +808,7 @@ final class CommandBox: Box, NSLayoutManagerDelegate {
         self.exact = exact
         // A trailing newline ends the last line; it does not start another.
         let lines = exact.split(separator: "\n", omittingEmptySubsequences: false).reversed().drop(while: \.isEmpty).count
-        let caption = RequestPanel.text("The exact command" + (lines > 1 ? " · \(lines) lines" : ""),
+        let caption = RequestPanel.text("The exact command · \(lines) line\(lines == 1 ? "" : "s")",
                                         Look.Style(face: .ui, size: 10.5, weight: .medium, leading: 1), .ink3)
         expand = NSButton(image: NSImage(systemSymbolName: "arrow.up.and.down", accessibilityDescription: "Expand the command") ?? NSImage(),
                           target: target, action: action)
