@@ -9,6 +9,7 @@ import SwiftUI
 @testable import SomethingAgents
 import SomethingCore
 import Testing
+import CoreML
 import Vision
 import WebKit
 @testable import something
@@ -213,13 +214,19 @@ final class Stage {
     /// its own appearance. Anything that sets NSApp.appearance in a test goes through here, or a night picture drawn at
     /// the same time by another suite would reach a day one (or the reverse). So does a walk that turns on VoiceOver's
     /// mode (also the whole process's), and a timing that either would slow; so does any test that sets the interface
-    /// size (Look.scale, the whole process's too) or reads an absolute size, which it gives back at Default.
+    /// size (Look.scale, the whole process's too) or reads an absolute size, which it gives back at Default. Inside a
+    /// turn already held (a read of VoiceOver's labels while a picture is drawn, a moment of set length that takes the
+    /// turn before it starts), `body` runs at once, in that turn, and gives back nothing.
     static func alone<T>(_ body: () async throws -> T) async rethrows -> T {
+        if holding { return try await body() }
         _ = await wait(600, until: { !drawing })
         drawing = true
         defer { (drawing, NSApplication.shared.appearance, Look.scale.size) = (false, nil, .standard) }
-        return try await body()
+        return try await $holding.withValue(true) { try await body() }
     }
+
+    /// Whether the running task holds the drawing turn.
+    @TaskLocal private static var holding = false
 }
 
 /// How a picture is drawn: the window's frame by cacheDisplay, the page by WebKit's snapshot (it draws in another
@@ -418,13 +425,24 @@ enum Picture {
         zip(layers, before).forEach { $0.backgroundColor = $1 }
     }
 
-    /// The lines of text `rep` shows, read by Vision.
+    /// The lines of text `rep` shows, read by Vision. On a loaded Mac the neural engine may refuse to make the reading's
+    /// compute operation (an e5rtError, while other processes use it): the same reading then runs on the processor,
+    /// which always can, only slower.
     static func text(_ rep: NSBitmapImageRep) throws -> [String] {
-        let read = VNRecognizeTextRequest()
-        read.recognitionLevel = .accurate
-        read.usesLanguageCorrection = false
-        try VNImageRequestHandler(cgImage: try #require(rep.cgImage)).perform([read])
-        return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        let image = try #require(rep.cgImage)
+        func read(processor: Bool) throws -> [String] {
+            let read = VNRecognizeTextRequest()
+            read.recognitionLevel = .accurate
+            read.usesLanguageCorrection = false
+            if processor {
+                for (stage, devices) in try read.supportedComputeStageDevices {
+                    read.setComputeDevice(devices.first { if case .cpu = $0 { true } else { false } }, for: stage)
+                }
+            }
+            try VNImageRequestHandler(cgImage: image).perform([read])
+            return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        }
+        do { return try read(processor: false) } catch { return try read(processor: true) }
     }
 
     static func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {

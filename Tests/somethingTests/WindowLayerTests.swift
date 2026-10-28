@@ -8,8 +8,13 @@ import Testing
 @testable import something
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-frame-")) struct WindowLayerTests {
-    /// A window of an empty home, never shown, nothing open; `body` gets its shell.
-    func window(_ body: (Shell) throws -> Void) throws {
+    /// A window of an empty home, never shown, nothing open; `body` gets its shell. In Stage's drawing turn: the sizes
+    /// read here are Default's, and a size test of another suite holds the whole app at Large or Larger a while.
+    func window(_ body: (Shell) throws -> Void) async throws {
+        try await Stage.alone { try made(body) }
+    }
+
+    private func made(_ body: (Shell) throws -> Void) throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let home = Home(prefix: "something-frame-")
         defer { home.remove() }
@@ -19,8 +24,8 @@ import Testing
         try body(shell)
     }
 
-    @Test func theFrameHasTheMockupsSizesAndToolbar() throws {
-        try window { shell in
+    @Test func theFrameHasTheMockupsSizesAndToolbar() async throws {
+        try await window { shell in
             #expect(shell.window.contentView?.frame.size == NSSize(width: 1200, height: 760))
             #expect(shell.window.contentMinSize == NSSize(width: 640, height: 480))
             #expect(shell.inspector.minimumThickness == 320 && shell.inspector.maximumThickness == 320 && shell.inspector.isCollapsed)
@@ -52,8 +57,8 @@ import Testing
     }
 
     /// Full Access's orange mark sits before Point only while it is on; a click on it turns it off.
-    @Test func theFullAccessMarkFollowsThePreference() throws {
-        try window { shell in
+    @Test func theFullAccessMarkFollowsThePreference() async throws {
+        try await window { shell in
             #expect(shell.fullMark.isHidden && shell.fullMark.superview != nil && shell.fullMark.action == #selector(App.turnOffFullAccess(_:)))
             shell.fullAccess(true)
             #expect(!shell.fullMark.isHidden && shell.library.preferences.fullAccess)
@@ -62,8 +67,8 @@ import Testing
         }
     }
 
-    @Test func theLayerTakesOnlyWhatItHolds() throws {
-        try window { shell in
+    @Test func theLayerTakesOnlyWhatItHolds() async throws {
+        try await window { shell in
             let layer = shell.layer, root = try #require(shell.window.contentView?.superview)
             #expect(layer.isHidden && layer.frame.size == NSSize(width: 1200, height: 760))
             let held = NSView(frame: NSRect(x: 500, y: 300, width: 200, height: 100))
@@ -78,8 +83,8 @@ import Testing
         }
     }
 
-    @Test func oneToastAtATimeItsActionOnceAndNeverTheFocus() throws {
-        try window { shell in
+    @Test func oneToastAtATimeItsActionOnceAndNeverTheFocus() async throws {
+        try await window { shell in
             var said: [String] = [], undone = 0
             shell.layer.announce = { said.append($0) }
             let focus = shell.window.firstResponder
@@ -99,8 +104,8 @@ import Testing
 
     /// The mockup's right-hand cluster (X9.1): Point, Info and Page Full Screen, 28-point buttons 4 points apart, Page
     /// Full Screen 10 points from the window's edge (the mockup's centres: 1176, 1143).
-    @Test func theToolsSitAsTheMockupsDo() throws {
-        try window { shell in
+    @Test func theToolsSitAsTheMockupsDo() async throws {
+        try await window { shell in
             shell.heading("Daily brief", "", space: true)
             shell.window.contentView?.superview?.layoutSubtreeIfNeeded()
             @MainActor func frame(_ id: NSToolbarItem.Identifier) throws -> NSRect {
@@ -116,8 +121,8 @@ import Testing
 
     /// A long title at the narrowest window gives way: the window keeps its 640 points, the tools stay in the toolbar,
     /// none in its overflow menu, 10 points from the edge. Widened, the title gets its whole line back.
-    @Test func aLongTitleNeverPushesTheToolsOut() throws {
-        try window { shell in
+    @Test func aLongTitleNeverPushesTheToolsOut() async throws {
+        try await window { shell in
             shell.window.setContentSize(shell.window.contentMinSize)
             shell.heading("A morning brief with every feed, newsletter and calendar I read before work starts", "", space: true)
             let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent + TitleLine.trail
@@ -144,8 +149,8 @@ import Testing
         }
     }
 
-    @Test func underReducedMotionTheToastIsInPlaceAtOnce() throws {
-        try window { shell in
+    @Test func underReducedMotionTheToastIsInPlaceAtOnce() async throws {
+        try await window { shell in
             shell.library.preferences.motion = .reduced
             shell.layer.announce = { _ in }
             #expect(shell.toast("Pebble is back").bottom?.constant == -22)

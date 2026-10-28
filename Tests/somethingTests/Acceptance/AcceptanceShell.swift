@@ -744,9 +744,13 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
         defer { view.close() }
-        let center = shell.center.frame.width + 320, docked = shell.inspector.viewController.view.frame
         #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
-        #expect(docked.width == 320 && view.web.frame.width == center - 320)
+        // Info's 320 points are Default's: read in the drawing turn, which no other suite holds at Large meanwhile.
+        await Stage.alone {
+            let docked = { shell.inspector.viewController.view.frame.width }
+            #expect(await wait(10) { shell.window.layoutIfNeeded(); return docked() == 320 && view.web.frame.width == shell.center.frame.width },
+                    "\(docked()) \(view.web.frame.width) \(shell.center.frame.width)")
+        }
         #expect(info.level == .watch && info.folder == nil && info.about == "A countdown to Saturday, your plans, and what your agents still have to finish.")
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
         // The agents its page sees: X5's, all of them, as its page receives them, each with what it did last.
@@ -758,10 +762,12 @@ struct AcceptanceShell {
         #expect(Info.doing(unknown) == "state unknown", "the unknown is said")
         // As VoiceOver reads the panel: every button named, the three parts, the level as one choice of four.
         let panel = shell.inspector.viewController.view
-        let tree = await AccessibilityTests.walk(panel), read = tree.words
+        let heard = ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents: Watch",
+                     "The agents it shows now", "Assistant", "Its assistant: Asleep", "Open Conversation", "Move to Trash…"]
+        // SwiftUI makes the panel's elements part by part, as late as a loaded Mac lets it: read until all are there.
+        let tree = await AccessibilityTests.walk(panel) { words in heard.allSatisfy(words.contains) }, read = tree.words
         #expect(tree.unnamed.isEmpty, "\(tree.unnamed)")
-        for words in ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents: Watch",
-                      "The agents it shows now", "Assistant", "Its assistant: Asleep", "Open Conversation", "Move to Trash…"] {
+        for words in heard {
             #expect(read.contains(words), "the panel reads \(words): \(read)")
         }
         #expect(read.filter { ["Space", "Your agents", "Assistant"].contains($0) }.count == 3, "three parts: \(read)")
@@ -783,7 +789,7 @@ struct AcceptanceShell {
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
         shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
         shell.window.layoutIfNeeded()
-        #expect(!shell.infoShown && view.web.frame.width == center && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        #expect(!shell.infoShown && view.web.frame.width == shell.center.frame.width && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
         let command = try #require(Keys.command("insp"))
         #expect(command.action == #selector(App.toggleInfo(_:)) && command.key == "i")
         shell.toggleInfo(spaceOpen: false)
@@ -1131,5 +1137,133 @@ struct AcceptanceShell {
         #expect(shell.escape(try Self.escape(shell)) && !model.cardShown && shell.pageFull, "Esc folds the card first")
         #expect(await wait { shell.glass.grown == false && !shell.glass.morphing && shell.glass.stickerShown })
         #expect(shell.escape(try Self.escape(shell)) && !shell.pageFull, "then leaves")
+    }
+
+    // MARK: The words and the window's finish (X1.1, X1.3, 2.9, 2.10)
+
+    /// The window and its menus in the words Emi kept (X1.1, axis 1 B): "Space" stays, said at once as "pages of your
+    /// own" beside the sidebar's SPACES; the groups are Work, Notes and Breaks ("agents" means one thing only); the
+    /// menu bar says File, Edit, View, Go, Space, Assistant, Window, Help, and the Assistant menu names the open space's
+    /// assistant first. The open menu cannot be drawn offscreen: its lines are written beside the picture as
+    /// x1-1-assistant.txt.
+    @Test("x1-1: the window and its menus") func x1_1() async throws {
+        let stage = try Stage("shell-x1-1")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.calm(stage)
+        defer { brief.close() }
+        let host = shell.split.splitViewItems[0].viewController.view
+        let said = await AcceptanceBuild.read(host) { $0.contains("Spaces, pages of your own") && $0.contains("Stack, Asleep") }
+        #expect(said.contains("Spaces, pages of your own") && said.contains("New Space") && said.contains("Templates"), "\(said)")
+        #expect(library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
+        #expect(!said.contains { $0.hasPrefix("Agents,") }, "no group is called Agents: \(said)")
+        let drawn = try stage.drawn(shell)
+        #expect(drawn.contains { $0.contains("pages of your own") }, "the drawn sidebar explains the word: \(drawn)")
+        let bar = MenuBar(builders: nil)
+        bar.open = { ("brief", "Daily brief") }
+        bar.refresh()
+        #expect(bar.menu.items.dropFirst().map(\.title) == ["File", "Edit", "View", "Go", "Space", "Assistant", "Window", "Help"])
+        let assistant = try #require(bar.submenu("Assistant")), lines = Mockup.lines(assistant)
+        #expect(lines.first == "# Daily brief’s assistant", "\(lines)")
+        for line in ["Ask…  ⌘K", "Show Conversation  ⌘J", "Stop  ⌘.", "Point at a Part  ⌥⌘S", "Put Idle Assistants to Sleep"] {
+            #expect(lines.contains(line), "the Assistant menu holds \(line): \(lines)")
+        }
+        #expect(Mockup.lines(try #require(bar.submenu("Space"))).first == "# Daily brief")
+        if let gallery {
+            try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
+            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("x1-1-assistant.txt"), atomically: true, encoding: .utf8)
+        }
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "x1-1" + suffix, root: stage.home.root)
+        }
+    }
+
+    /// Talking to the one who builds (X1.3, axis 1 B): Logbook open, ⌘K opens its card, named for the role and the
+    /// space, whatever agent is behind it: the sticker and the menu say "assistant", the chip says the agent. Asleep,
+    /// it wakes on the next message.
+    @Test("x1-3: talk to the one who builds") func x1_3() async throws {
+        let stage = try Stage("shell-x1-3")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        Stage.work(library)
+        try Self.eyes(shell, Stage.moment)
+        shell.waiting(["agents"], mine: 0)
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let logbook = try await stage.open("logbook", in: shell, library)
+        defer { logbook.close() }
+        #expect(Keys.command("ask")?.key == "k" && Keys.command("ask")?.title == "Ask…")
+        model.focus()
+        #expect(model.cardShown && model.title == "Logbook" && model.place.space == "logbook")
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
+        #expect(model.name == "Claude Code" && AgentModelChip.label(model).hasPrefix("Claude Code, "), "\(AgentModelChip.label(model))")
+        #expect(model.presence.header == "Asleep · wakes on your next message" && model.placeholder == "Ask for a change · it wakes up", "\(model.presence.header) \(model.placeholder)")
+        let bar = MenuBar(builders: nil)
+        bar.open = { ("logbook", "Logbook") }
+        bar.refresh()
+        #expect(Mockup.lines(try #require(bar.submenu("Assistant"))).first == "# Logbook’s assistant")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: logbook.web, "x1-3" + suffix, root: stage.home.root)
+        }
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
+
+    /// The sidebar's finish (2.9, in v6.2's window): bottom left the word "something" alone and a real gear for
+    /// Settings; a list longer than the column fades out above Templates instead of cutting a row in half. Six more
+    /// spaces in Notes, in a window 1000 by 660.
+    @Test("2-9: something, and a real gear") func v2_9() async throws {
+        let stage = try Stage("shell-2-9")
+        defer { stage.remove() }
+        let more = [("garden", "Garden notes"), ("review", "Morning review"), ("reading", "Reading list"), ("recipes", "Recipes"),
+                    ("wins", "Tiny wins"), ("trips", "Trips")]
+        for (name, title) in more {
+            try stage.home.space(name, page(#"{"contract": 1, "title": "\#(title)"}"#, "<p>Invented.</p>"))
+        }
+        let (shell, library, _) = stage.window(NSSize(width: 1000, height: 660))
+        library.preferences.groups = Stage.work.map { Preferences.Group(name: $0.0, spaces: $0.0 == "Notes" ? $0.1 + more.map(\.0) : $0.1) }
+        library.relist()
+        try Self.eyes(shell, Stage.moment)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        #expect(library.sections().map(\.entries.count) == [3, 8, 2])
+        let host = shell.split.splitViewItems[0].viewController.view
+        let said = await AcceptanceBuild.read(host) { $0.contains("Settings") && $0.contains("Templates") }
+        #expect(said.contains("Settings") && said.contains("Templates"), "\(said)")
+        #expect(Keys.tooltip("settings", "Settings") == "Settings (⌘,)")
+        // The word alone, no sign: the sign with eyes is the assistant's.
+        let drawn = try stage.drawn(shell)
+        #expect(drawn.last == "something", "the foot says something alone: \(drawn)")
+        #expect(drawn.contains("Templates") && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
+        }
+    }
+
+    /// A calm toolbar where no space is open (2.10): on New Space and Templates, Point, Info and Page Full Screen are
+    /// gone rather than greyed, and the name opens nothing; they come back with a space. Drawn on Templates.
+    @Test("2-10: a calm toolbar without a space") func v2_10() async throws {
+        let stage = try Stage("shell-2-10")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        Stage.work(library)
+        try Self.eyes(shell, Stage.moment)
+        let tools = [Shell.point, Shell.info, Shell.full]
+        @MainActor func shown() -> [Bool] { tools.map { shell.controls[$0]?.isHidden == false } }
+        #expect(library.selection == .newSpace && shown() == [false, false, false] && shell.window.title == "New Space")
+        #expect(shell.titleLine.accessibilityRole() == .staticText && shell.titleLine.toolTip == nil)
+        library.select(.templates)
+        shell.show(nil, templates: true)
+        #expect(shell.window.title == "Templates" && shown() == [false, false, false] && shell.titleLine.accessibilityRole() == .staticText)
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "2-10" + suffix, root: stage.home.root)
+        }
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        #expect(shown() == [true, true, true] && shell.titleLine.accessibilityRole() == .button)
     }
 }

@@ -55,7 +55,7 @@ import Testing
         #expect(Info.doing(agent) == "ended")
     }
 
-    @Test func thePanelOpensAtOnce() throws {
+    @Test func thePanelOpensAtOnce() async throws {
         let test = Home(prefix: "something-info-")
         defer { test.remove() }
         try test.space("board", page(#"{"contract": 1, "title": "Board"}"#, ""))
@@ -67,10 +67,13 @@ import Testing
         info.content = .history
         shell.showInfo(true)
         #expect(shell.infoShown && info.content == .info, "⌘I opens Info, whatever the panel held")
-        shell.window.layoutIfNeeded()
-        #expect(shell.inspector.viewController.view.frame.width == 320 && shell.center.frame.width == 1200 - 236 - 320)
-        info.close()
-        shell.window.layoutIfNeeded()
-        #expect(!shell.infoShown && shell.center.frame.width == 1200 - 236)
+        // Default's sizes: read in Stage's drawing turn, which no size test of another suite holds at Large meanwhile.
+        await Stage.alone {
+            shell.window.layoutIfNeeded()
+            #expect(shell.inspector.viewController.view.frame.width == 320 && shell.center.frame.width == 1200 - 236 - 320)
+            info.close()
+            shell.window.layoutIfNeeded()
+            #expect(!shell.infoShown && shell.center.frame.width == 1200 - 236)
+        }
     }
 }

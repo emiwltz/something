@@ -629,20 +629,24 @@ struct AcceptanceBuild {
     /// agree, for a view with no live clock), or after a minute. A SwiftUI view offscreen gives only the description of
     /// its outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here.
     static func read(_ view: NSView, until says: (([String]) -> Bool)? = nil) async -> [String] {
-        let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
-        // As an assistive app asks: SwiftUI makes its elements only then.
-        NSApp.accessibilitySetValue(true, forAttribute: enhanced)
-        defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
-        // The first question makes them, and SwiftUI updates them, on the run loop, as late as a busy runner lets it:
-        // read again until they hold still and say what is awaited. The minute only stops a hang.
-        _ = view.accessibilityChildren()
-        let end = Date() + 60
-        var last: [String]?
-        while true {
-            await wait(0.1)
-            let words = labels(view)
-            if says.map({ $0(words) }) ?? (words == last && !words.isEmpty) || Date() > end { return words }
-            last = words
+        // The mode is the whole process's, and slows every SwiftUI view made meanwhile: the read takes Stage's turn,
+        // as what is timed does.
+        await Stage.alone {
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            // As an assistive app asks: SwiftUI makes its elements only then.
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            // The first question makes them, and SwiftUI updates them, on the run loop, as late as a busy runner lets
+            // it: read again until they hold still and say what is awaited. The minute only stops a hang.
+            _ = view.accessibilityChildren()
+            let end = Date() + 60
+            var last: [String]?
+            while true {
+                await wait(0.1)
+                let words = labels(view)
+                if says.map({ $0(words) }) ?? (words == last && !words.isEmpty) || Date() > end { return words }
+                last = words
+            }
         }
     }
 

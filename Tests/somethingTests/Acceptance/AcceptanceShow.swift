@@ -126,8 +126,8 @@ struct AcceptanceShow {
         shell.waiting(["agents"], mine: 0)
         shell.layer.announce = { _ in }
         model.choose(model: "opus")
-        // Long enough to draw Done and the end in both appearances.
-        model.lingers = (12, 60)
+        // Long enough to draw Done and the end in both appearances, on a loaded Mac too.
+        model.lingers = (20, 60)
         // A never-shown window's animations run only while this Mac's display is awake: under reduced motion the toast
         // is drawn where it lands, whatever the display does during the run.
         library.preferences.motion = .reduced
@@ -164,28 +164,32 @@ struct AcceptanceShow {
             try await Picture.window(shell, library: library, web: brief.web, "f3-working" + suffix, root: stage.home.root)
         }
 
-        // The quick session changes the page and ends its turn: Done, the change kept with its named undo.
-        let loads = brief.loads
-        try was.replacingCharacters(in: style, with: "  .dateline b { font-size: 80%; }\n</style>").write(to: page, atomically: true, encoding: .utf8)
-        try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
-        #expect(await wait(until: { quick.phase == .done }), "\(quick.phase)")
-        #expect(drawn.badge == "Done" && drawn.chip == "Quick session · Claude Code · Opus 5.5")
-        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
-        #expect(toast.words == "Changed Daily brief" && toast.bottom?.constant == -22)
-        #expect(changes.versions.list("brief").first?.kind == .quick && shell.undo.undoMenuItemTitle == "Undo “Make the weather corner smaller”")
-        #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
-        await Picture.settle(brief)
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "f3-done" + suffix, root: stage.home.root)
-        }
+        // The quick session changes the page and ends its turn: Done, the change kept with its named undo. Done
+        // lasts its set time, then the chip says the session ended: the drawing turn is taken first, since waiting
+        // for it while another suite draws could outlast both moments.
+        try await Stage.alone {
+            let loads = brief.loads
+            try was.replacingCharacters(in: style, with: "  .dateline b { font-size: 80%; }\n</style>").write(to: page, atomically: true, encoding: .utf8)
+            try Data().write(to: stage.home.root.appendingPathComponent("out/finish"))
+            #expect(await wait(until: { quick.phase == .done }), "\(quick.phase)")
+            #expect(drawn.badge == "Done" && drawn.chip == "Quick session · Claude Code · Opus 5.5")
+            let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
+            #expect(toast.words == "Changed Daily brief" && toast.bottom?.constant == -22)
+            #expect(changes.versions.list("brief").first?.kind == .quick && shell.undo.undoMenuItemTitle == "Undo “Make the weather corner smaller”")
+            #expect(await wait(until: { brief.loads > loads && !brief.web.isLoading && brief.frame != nil }), "the page did not reload")
+            await Picture.settle(brief)
+            try await stage.appearances { suffix in
+                try await Picture.window(shell, library: library, web: brief.web, "f3-done" + suffix, root: stage.home.root)
+            }
 
-        // Then only the chip, which says the session ended.
-        #expect(await wait(15) { quick.phase == .ended })
-        #expect(drawn.badge == nil && drawn.chip == "Quick session ended" && drawn.superview != nil)
-        // The mockup's f9 (Quick Change) is this same moment, its shot the same: drawn here, its keys proven in f9.
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "f3" + suffix, root: stage.home.root)
-            try await Picture.window(shell, library: library, web: brief.web, "f9" + suffix, root: stage.home.root)
+            // Then only the chip, which says the session ended.
+            #expect(await wait(30) { quick.phase == .ended })
+            #expect(drawn.badge == nil && drawn.chip == "Quick session ended" && drawn.superview != nil)
+            // The mockup's f9 (Quick Change) is this same moment, its shot the same: drawn here, its keys proven in f9.
+            try await stage.appearances { suffix in
+                try await Picture.window(shell, library: library, web: brief.web, "f3" + suffix, root: stage.home.root)
+                try await Picture.window(shell, library: library, web: brief.web, "f9" + suffix, root: stage.home.root)
+            }
         }
         shell.layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         var stopped = false
@@ -419,18 +423,21 @@ struct AcceptanceShow {
         let all = try await Self.keepVersions(of: brief, info)
 
         // Info: its Space part, History beside Export.
-        let center = shell.center.frame.width
         shell.showInfo(true)
         shell.window.layoutIfNeeded()
         let panel = shell.inspector.viewController.view
         let infoRead = await AcceptanceBuild.read(panel)
         #expect(infoRead.contains("Space") && infoRead.contains("History") && infoRead.contains("Export"), "\(infoRead)")
         #expect(info.history.bytes == store.weight("brief") && History.when(all[0].when, now: info.clock()) == "Today 18:12")
-        // History: in Info's place, at its width; Info's button no longer pressed.
+        // History: in Info's place, at its width; Info's button no longer pressed. The 320 points are Default's: read
+        // in the drawing turn, which no other suite holds at Large meanwhile.
         info.showHistory()
-        shell.window.layoutIfNeeded()
         #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
-        #expect(shell.inspector.viewController.view.frame.width == 320 && brief.web.frame.width == center - 320, "\(shell.inspector.viewController.view.frame.width) \(brief.web.frame.width)")
+        await Stage.alone {
+            let width = { shell.inspector.viewController.view.frame.width }
+            #expect(await wait(10) { shell.window.layoutIfNeeded(); return width() == 320 && brief.web.frame.width == shell.center.frame.width },
+                    "\(width()) \(brief.web.frame.width) \(shell.center.frame.width)")
+        }
         let history = info.history
         #expect(history.chosen == all[1].id && history.restorable && history.rows.count == 6)
         #expect(history.older == "6 older versions, back to 12 October")
@@ -476,7 +483,7 @@ struct AcceptanceShow {
         // Esc with the focus in it closes it; the page takes its width back.
         shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
         shell.window.layoutIfNeeded()
-        #expect(!shell.infoShown && brief.web.frame.width == center)
+        #expect(!shell.infoShown && brief.web.frame.width == shell.center.frame.width)
         // Opened again after the restore: on the version before the newest, not on Now. Restoring the version the
         // space already is says so.
         shell.showHistory()

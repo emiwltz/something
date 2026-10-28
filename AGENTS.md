@@ -148,6 +148,8 @@ lines, one per test bundle: a run can exit 0 after stopping midway.
   ```
 
 - **Fakes shaped exactly like real data.** Fake agents that speak each channel, fake session files with invented text.
+- **One process, suites side by side.** A test that sets the whole app's appearance or interface size, turns on
+  VoiceOver's mode, times something or reads an absolute size does it inside `Stage.alone`.
 - **Other machines.** GitHub runs the suite on macOS 15 and its latest macOS at each push (`.github/workflows/tests.yml`).
   A red run is fixed before anything else.
 - **Green tests do not replace a trial with real agents.** Readers are also checked, read-only, against real session
@@ -167,7 +169,8 @@ header of each `*Trial.swift` says what it proves.
   own sessions, read-only, and print counts only. `SOMETHING_TRIAL_REST=1` measures the app's timers at rest.
 - **The screens are the approved mockup's.** `Tests/somethingTests/Acceptance/` holds one scenario per screen id
   (its catalog in `AcceptanceTests.swift`, the invented home in `Stage.swift`): each asserts structure, words, counts
-  and VoiceOver labels at every run. `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
+  and VoiceOver labels at every run. Every step of the frozen mockup (v6.2) has its scenario, or is retired with its
+  reason in the catalog (`retiredSteps`). `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
   screen, day and night (`<id>.png`, `<id>-dark.png`), to set beside the mockup's; `SOMETHING_ACCEPT_STRICT=1` fails
   while a screen that counts is still unbuilt or waits for its shots. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what
   the mockup has no screen for (alerts, the level sheet's variants, the assistant's rarer states, the templates).

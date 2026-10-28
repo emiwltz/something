@@ -132,6 +132,13 @@ final class MarginNote: NSView {
         Task { @MainActor in
             repeat {
                 askAgain = false
+                // The page reflows in its own process, a moment after the web view's frame changed (longer on a busy
+                // Mac): asked before, it says where the part was. A second at most, then it is asked all the same.
+                for _ in 0..<50 {
+                    let inner = try? await space.web.callAsyncJavaScript("return innerWidth", in: frame, contentWorld: Lockdown.world) as? Double
+                    if inner.map({ abs($0 * space.web.pageZoom - space.web.frame.width) < 2 }) ?? true { break }
+                    try? await Task.sleep(nanoseconds: 20_000_000)
+                }
                 let found = await Pointing.rects([part.path], in: space.web, frame: frame)
                 if superview != nil, let rect = found.first ?? nil, rect != part.rect {
                     part.rect = rect

@@ -2,7 +2,7 @@
 // slice that builds it; round 2's frozen v6.2 steps join it as their slices land, their ids the step in lower case
 // with a dash ("x9-1" for X9.1, its function x9_1; "2-6" for the numbered step 2.6, its function v2_6, after the
 // mockup's chapter "v2"), each in the area file of its screen, and retire the old ids they
-// replace. Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")` until that
+// replace; a frozen step no scenario draws is retired with its reason (`retiredSteps`). Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")` until that
 // slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from that file, so
 // this catalog is only edited to bring back La page (b2 and the _p variants) or to mark an id shot. With
 // SOMETHING_ACCEPT_STRICT=1 the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots.
@@ -41,6 +41,21 @@ enum Catalog {
         ("x2-1", "S12"), ("x2-2", "S12"), ("x2-3", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
         ("6-1", "S7"), ("6-3", "S7"), ("x7-1", "S10"), ("x7-2", "S10"), ("x7-3", "S10"), ("x7-4", "S10"),
         ("x4-1", "S11"), ("x4-2", "S11"), ("x4-3", "S11"),
+        ("x1-1", "S14b"), ("x1-3", "S14b"), ("2-9", "S14b"), ("2-10", "S14b"),
+    ]
+    /// Every step of the frozen mockup v6.2 that has a reference picture (round 2's frozen shots), by its id: each is
+    /// a scenario of `frozen` or retired in `retiredSteps`, never both.
+    static let steps: Set<String> = [
+        "2-1", "2-2", "2-4", "2-6", "2-8", "2-9", "2-10", "6-1", "6-3", "j3-4", "j4-1", "j4-2", "j4-4", "x0-1",
+        "x1-1", "x1-2", "x1-3", "x2-1", "x2-2", "x2-3", "x2-4", "x3-1", "x3-2", "x3-3", "x4-1", "x4-2", "x4-3",
+        "x5-1", "x5-2", "x5-3", "x6-1", "x6-2", "x6-3", "x7-1", "x7-2", "x7-3", "x7-4", "x8-1", "x8-2", "x9-1", "x9-2", "xe-1",
+    ]
+    /// The frozen steps no scenario draws, each with why: what they showed was replaced by a later step Emi chose, or
+    /// is no screen of its own.
+    static let retiredSteps: [String: String] = [
+        "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
+        "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",
+        "xe-1": "the whole mockup to try, every axis at Emi's letter: no screen of its own, each part asserted by its step",
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3); a1, the film, and
@@ -132,6 +147,11 @@ enum Catalog {
         #expect(expected.count == 71)
         #expect(Set(ids.filter { !$0.hasSuffix("_p") && !$0.contains("-") }) == Set(expected).subtracting(Catalog.retired))
         #expect(Catalog.frozen.allSatisfy { $0.id.range(of: #"^[xj]?[0-9]+-[0-9]+$"#, options: .regularExpression) != nil })
+        // Every frozen step is asserted by a scenario or retired with its reason, not both.
+        let drawn = Set(Catalog.frozen.map(\.id)), retired = Set(Catalog.retiredSteps.keys)
+        #expect(drawn.isDisjoint(with: retired) && drawn.union(retired) == Catalog.steps,
+                "missing \(Catalog.steps.subtracting(drawn.union(retired)).sorted()), unknown \(drawn.union(retired).subtracting(Catalog.steps).sorted())")
+        #expect(Catalog.retiredSteps.values.allSatisfy { !$0.isEmpty })
         #expect(Catalog.retired.isDisjoint(with: Set(ids)))
         #expect(Set(ids.filter { $0.hasSuffix("_p") }) == Catalog.excluded.subtracting(["b2"]))
         #expect(Catalog.excluded.isSubset(of: Set(ids)) && Catalog.pendingShots.isSubset(of: Set(ids)))
