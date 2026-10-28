@@ -52,6 +52,42 @@ struct RulesTests {
         #expect(!Rules.alone(request("question"), input: nil, agent: agent, assistant: true, fullAccess: true, grant: nil))
     }
 
+    /// A command the agent says runs in another folder (Codex's cwd) is neither kept nor answered by a rule of its own
+    /// folder: the rule keeps the folder the command runs in.
+    @Test func aRuleKeepsTheFolderTheCommandRunsIn() {
+        var kept = grant
+        kept.rules = [Rule(kind: "claude", command: "npm test", folder: "/Users/example/code/shop", at: "2026-10-21T09:00:00Z")]
+        #expect(Rules.alone(request(), input: "npm test", runs: "/Users/example/code/shop", agent: agent, assistant: false, fullAccess: false, grant: kept))
+        #expect(!Rules.alone(request(), input: "npm test", runs: "/Users/example/code/other", agent: agent, assistant: false, fullAccess: false, grant: kept))
+        #expect(Rules.offer(request(), input: "npm test", runs: "/Users/example/code/other", agent: agent, assistant: false, grant: grant, at: "") == nil)
+        #expect(Rules.offer(request(), input: "npm test", runs: "/Users/example/code/shop", agent: agent, assistant: false, grant: grant, at: "")?.folder
+                == "/Users/example/code/shop")
+    }
+
+    /// An answer by a rule is written in the space's journal, action "allow", and said in a quiet note; Full Access's
+    /// only in the note, the assistant having no space journal.
+    @Test func whatAnAnswerBySomethingLeaves() throws {
+        let home = Home(prefix: "something-rules-")
+        defer { home.remove() }
+        let journal = Journal(folder: home.places.journals)
+        #expect(Rules.trace(request(), input: "npm test", kind: "claude", assistant: false, space: "agents", journal: journal, at: "2026-10-22T18:20:00Z")
+                == "Allowed by your rule · npm test")
+        #expect(try journal.last(5, space: "agents")
+                == [JournalLine(at: "2026-10-22T18:20:00Z", action: "allow", agent: "a1", kind: "claude", text: "npm test", result: "ok")])
+        #expect(Rules.trace(request(), input: "rm -rf build", kind: "claude", assistant: true, space: nil, journal: journal, at: "")
+                == "Allowed by Full Access · rm -rf build")
+        #expect(Rules.trace(request(), input: nil, kind: "claude", assistant: false, space: "agents", journal: journal, at: "") == nil)
+        #expect(try journal.last(5, space: "agents").count == 1, "only the rule's answer is journaled")
+    }
+
+    /// Full Access's one confirmation: its words, Turn On then Cancel, and Cancel, the safe action, first in focus.
+    @MainActor @Test(.enabled(if: windowServer, windowServerMissing)) func fullAccessAsksOnce() throws {
+        let sheet = Rules.confirmation()
+        #expect(sheet.title == "Turn On Full Access?" && sheet.isAlert)
+        #expect(sheet.buttons.map(\.title) == ["Turn On Full Access", "Cancel"] && sheet.buttons.map(\.role) == [.destructive, .primary])
+        #expect((sheet.initialFirstResponder as? SheetButton)?.title == "Cancel")
+    }
+
     /// Kept once in the space's grant, listed with its space, said in Settings' words, revoked to nothing.
     @Test func keepListAndRevoke() throws {
         let home = Home(prefix: "something-rules-")

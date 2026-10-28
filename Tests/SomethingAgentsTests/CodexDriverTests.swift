@@ -230,7 +230,7 @@ import SomethingCore
         // the shell is the model's choice, and asks as any command.
         func check(_ replay: Replay, _ id: Int) {
             replay.feed(["id": id, "method": "item/commandExecution/requestApproval", "params": ["threadId": Self.thread, "turnId": Self.turn,
-                "itemId": "call_\(id)", "command": "/bin/zsh -lc 'something check board'"]])
+                "itemId": "call_\(id)", "command": "/bin/zsh -lc 'something check board'", "cwd": "/Users/example/something/spaces/board"]])
         }
         let unready = Replay.codex(assistant: true)
         unready.feed(["id": 1, "result": ["userAgent": "something/0.163.0"]])
@@ -245,6 +245,8 @@ import SomethingCore
         status(started, "something", "ready")
         check(started, 0)
         #expect(!started.quit && started.refusals.isEmpty && started.fold.requests.count == 1)
+        let asked = try #require(started.fold.requests.first)
+        #expect(started.agent.prompt(asked.id)?.folder == "/Users/example/something/spaces/board", "the folder Codex says the command runs in")
 
         let ready = Self.opened()
         status(ready, "something", "failed", error: "Invented: not lent")

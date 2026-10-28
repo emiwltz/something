@@ -49,11 +49,13 @@ public struct Prompt: Equatable, Sendable {
     public var request: Request
     /// For a permission: what the agent wants to run or change, as it sent it (a command, a path, a diff).
     public var input: String?
+    /// For a permission: the folder it acts in, when the agent says it; it may differ from the agent's own folder.
+    public var folder: String?
     /// For a question: what the agent asks, in its order.
     public var questions: [Question]
 
-    public init(request: Request, input: String? = nil, questions: [Question] = []) {
-        (self.request, self.input, self.questions) = (request, input, questions)
+    public init(request: Request, input: String? = nil, folder: String? = nil, questions: [Question] = []) {
+        (self.request, self.input, self.folder, self.questions) = (request, input, folder, questions)
     }
 }
 

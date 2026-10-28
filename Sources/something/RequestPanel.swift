@@ -13,6 +13,7 @@
 import AppKit
 import SomethingAgents
 import SomethingCore
+import SwiftUI
 
 /// Who asks, in the panel's words: the program, its space, whether it is that space's assistant, the agent's own name,
 /// its folder with ~, and whether it is a Quick Change's temporary session. What is not known is left out.
@@ -166,7 +167,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         title = question ? "\(who.program) asks you a question" : "\(who.program) wants to \(Words.wants(prompt.request.tool))"
         header.kind = question ? "Question" : "Permission"
         (boxes, typed) = ([], [])
-        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age, quick: who.quick), who.program)]
+        var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age, quick: who.quick), who.program, assistant: who.assistant)]
         if question {
             denyButton = LinkButton("Don't Answer", size: 12, weight: .semibold, target: self, action: #selector(deny))
             views += ask(prompt.questions)
@@ -373,10 +374,20 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
 
     // MARK: The parts
 
-    /// The sign, the title in Fraunces, and under it the waiting eyes with the space, who asks and when.
-    private func whoRow(_ headline: String, _ line: String, _ program: String) -> NSView {
-        let sign = SignView(.listen, side: 36)
-        sign.name = "\(program) is waiting"
+    /// The asker's tile (the sign for the assistant, else the agent's monogram), the title in Fraunces, and under it
+    /// the waiting eyes with the space, who asks and when.
+    private func whoRow(_ headline: String, _ line: String, _ program: String, assistant: Bool) -> NSView {
+        let sign: NSView
+        if assistant {
+            let mark = SignView(.listen, side: 36)
+            mark.name = "\(program) is waiting"
+            sign = mark
+        } else {
+            sign = NSHostingView(rootView: Monogram(name: program, side: 36))
+            sign.setAccessibilityElement(true)
+            sign.setAccessibilityRole(.image)
+            sign.setAccessibilityLabel("\(program) is waiting")
+        }
         let eyes = NSImageView(image: Sign.miniEyes(.wait, template: false))
         let sub = NSStackView(views: [eyes, Self.text(line, Look.small, .ink3)])
         sub.spacing = 6

@@ -19,20 +19,22 @@ enum Rules {
     static let orange = Look.srgb(0xD9822B, 1)
 
     /// The rule a permission could keep: a plain command, `input`, of an agent a space started (never an assistant),
-    /// whose folder is known, for a space that has a grant. nil when "Always for this space" is not offered.
-    static func offer(_ request: Request, input: String?, agent: Agent?, assistant: Bool, grant: Grant?, at: String) -> Rule? {
+    /// whose folder is known and is the one the command runs in (`runs`, when the agent says it), for a space that has
+    /// a grant. nil when "Always for this space" is not offered.
+    static func offer(_ request: Request, input: String?, runs: String? = nil, agent: Agent?, assistant: Bool, grant: Grant?, at: String) -> Rule? {
         guard request.kind == "permission", !assistant, grant != nil, Words.isCommand(request.tool), let agent, let folder = agent.folder,
-              let input, Rights.single(input) else { return nil }
+              runs == nil || runs == folder, let input, Rights.single(input) else { return nil }
         return Rule(kind: agent.kind, command: input, folder: folder, at: at)
     }
 
     /// Whether something answers a request by itself: a permission of the person's assistant while Full Access is on,
-    /// or a command, `input`, of a command tool, that a lasting rule of `grant` keeps exactly for `agent`. Never a
-    /// question, and never another tool whose input reads the same.
-    static func alone(_ request: Request, input: String?, agent: Agent?, assistant: Bool, fullAccess: Bool, grant: Grant?) -> Bool {
+    /// or a command, `input`, of a command tool, that a lasting rule of `grant` keeps exactly for `agent`, in its
+    /// folder. Never a question, never another tool whose input reads the same, never a command the agent says runs
+    /// in another folder (`runs`).
+    static func alone(_ request: Request, input: String?, runs: String? = nil, agent: Agent?, assistant: Bool, fullAccess: Bool, grant: Grant?) -> Bool {
         guard request.kind == "permission" else { return false }
         if assistant { return fullAccess }
-        guard Words.isCommand(request.tool), let agent, let input else { return false }
+        guard Words.isCommand(request.tool), let agent, let input, runs == nil || runs == agent.folder else { return false }
         return Rights.rule(in: grant, kind: agent.kind, command: input, folder: agent.folder) != nil
     }
 
@@ -70,6 +72,17 @@ enum Rules {
         let since = day.map { " · since " + (["Today", "Yesterday"].contains($0) ? $0.lowercased() : $0) } ?? ""
         return [Registry.app.name(of: rule.kind), "in " + Words.path(rule.folder, home: home), space.map { "for " + $0 }].compactMap { $0 }
             .joined(separator: " · ") + since
+    }
+
+    /// What follows a request something answered by itself, `input` for the command: for the assistant (Full Access),
+    /// only the quiet note returned; for a rule, a journal line in `space`'s journal, action "allow", and the note. nil
+    /// when a rule's request has no space or no command to say.
+    static func trace(_ request: Request, input: String?, kind: String?, assistant: Bool, space: String?, journal: Journal, at: String) -> String? {
+        // The assistant has no space journal: Full Access leaves only this quiet trace on screen.
+        if assistant { return "Allowed by Full Access · \(input ?? request.tool ?? "a permission")" }
+        guard let space, let input else { return nil }
+        try? journal.append(JournalLine(at: at, action: "allow", agent: request.agent, kind: kind, text: input, result: "ok"), space: space)
+        return "Allowed by your rule · \(input)"
     }
 
     /// The one confirmation before Full Access: who gets what, what stays true; Cancel, the safe action, first in focus.
@@ -116,7 +129,7 @@ extension App {
     func followRules() {
         panels.offer = { [weak self] request, prompt in
             guard let self, let name = space(ofAgent: request.agent) else { return nil }
-            return Rules.offer(request, input: prompt.input, agent: engine.state.agents.first { $0.id == request.agent },
+            return Rules.offer(request, input: prompt.input, runs: prompt.folder, agent: engine.state.agents.first { $0.id == request.agent },
                                assistant: engine.assistants.contains(request.agent),
                                grant: try? Grants(places.grants).read().spaces[name], at: iso8601.string(from: Date()))
         }
@@ -127,19 +140,16 @@ extension App {
         }
         panels.alone = { [weak self] request, prompt in
             guard let self else { return false }
-            return Rules.alone(request, input: prompt.input, agent: engine.state.agents.first { $0.id == request.agent },
+            return Rules.alone(request, input: prompt.input, runs: prompt.folder, agent: engine.state.agents.first { $0.id == request.agent },
                                assistant: engine.assistants.contains(request.agent), fullAccess: library.preferences.fullAccess,
                                grant: space(ofAgent: request.agent).flatMap { try? Grants(self.places.grants).read().spaces[$0] })
         }
         panels.allowed = { [weak self] request, prompt in
             guard let self else { return }
-            // The assistant has no space journal: Full Access leaves only this quiet trace on screen.
-            if engine.assistants.contains(request.agent) { return _ = shell.toast("Allowed by Full Access · \(prompt.input ?? request.tool ?? "a permission")", quiet: true) }
-            guard let name = space(ofAgent: request.agent), let command = prompt.input else { return }
-            let kind = engine.state.agents.first { $0.id == request.agent }?.kind
-            try? Journal(folder: places.journals).append(JournalLine(at: iso8601.string(from: Date()), action: "allow", agent: request.agent, kind: kind,
-                                                                     text: command, result: "ok"), space: name)
-            _ = shell.toast("Allowed by your rule · \(command)", quiet: true)
+            let said = Rules.trace(request, input: prompt.input, kind: engine.state.agents.first { $0.id == request.agent }?.kind,
+                                   assistant: engine.assistants.contains(request.agent), space: space(ofAgent: request.agent),
+                                   journal: Journal(folder: places.journals), at: iso8601.string(from: Date()))
+            if let said { _ = shell.toast(said, quiet: true) }
         }
     }
 
@@ -152,11 +162,18 @@ extension App {
     }
 
     func setFullAccess(_ on: Bool) {
-        library.preferences.fullAccess = on
-        shell.fullMark.isHidden = !on
+        shell.fullAccess(on)
         if !on { _ = shell.toast("Full Access is off · your assistant asks you again", quiet: true) }
     }
 
     /// The toolbar's mark: Full Access off.
     @objc func turnOffFullAccess(_ sender: Any?) { setFullAccess(false) }
+}
+
+extension Shell {
+    /// Full Access on or off: the preference, and the toolbar's mark, shown while it is on.
+    func fullAccess(_ on: Bool) {
+        library.preferences.fullAccess = on
+        fullMark.isHidden = !on
+    }
 }

@@ -51,6 +51,17 @@ import Testing
         }
     }
 
+    /// Full Access's orange mark sits before Point only while it is on; a click on it turns it off.
+    @Test func theFullAccessMarkFollowsThePreference() throws {
+        try window { shell in
+            #expect(shell.fullMark.isHidden && shell.fullMark.superview != nil && shell.fullMark.action == #selector(App.turnOffFullAccess(_:)))
+            shell.fullAccess(true)
+            #expect(!shell.fullMark.isHidden && shell.library.preferences.fullAccess)
+            shell.fullAccess(false)
+            #expect(shell.fullMark.isHidden && !shell.library.preferences.fullAccess)
+        }
+    }
+
     @Test func theLayerTakesOnlyWhatItHolds() throws {
         try window { shell in
             let layer = shell.layer, root = try #require(shell.window.contentView?.superview)

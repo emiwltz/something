@@ -364,7 +364,7 @@ final class CodexDriver: Driver {
             return
         }
         let shown = Request(id: shownID, agent: launch.agent, kind: questions.isEmpty ? "permission" : "question", tool: kind, about: about, at: now())
-        asks[shownID] = Ask(codexID: codexID, method: method, params: params, prompt: Prompt(request: shown, input: input, questions: questions),
+        asks[shownID] = Ask(codexID: codexID, method: method, params: params, prompt: Prompt(request: shown, input: input, folder: params["cwd"] as? String, questions: questions),
                             questionIDs: questionIDs)
         emit(.requestOpened(shown))
     }

@@ -275,6 +275,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         var who = App.who(engine.state.agents.first { $0.id == request.agent }, space: space, home: places.home.path,
                           assistant: engine.assistants.contains(request.agent))
         who.quick = assistant.quick(request.agent)
+        // "Runs in" says where this command runs, when the agent says it: it may not be the agent's own folder.
+        if let folder = engine.prompt(request.id)?.folder { who.folder = Words.path(folder, home: places.home.path) }
         return who
     }
 

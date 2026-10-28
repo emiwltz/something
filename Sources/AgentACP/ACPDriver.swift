@@ -300,7 +300,7 @@ final class ACPDriver: Driver {
                             tool: lent?.name ?? tool.flatMap { names[$0] } ?? call["kind"] as? String, about: call["title"] as? String, at: now())
         let words = lent.map { $0.command ?? "\($0.name) (wrong arguments)" } ?? input?["command"] as? String ?? ACPDriver.json(input)
         asks[shown.id] = Ask(rpcID: rpcID, options: params["options"] as? [[String: Any]] ?? [], tool: tool,
-                             prompt: Prompt(request: shown, input: words))
+                             prompt: Prompt(request: shown, input: words, folder: input?["cwd"] as? String))
         emit(.requestOpened(shown))
     }
 
