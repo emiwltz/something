@@ -147,13 +147,21 @@ final class Stage {
     /// The lines of text the drawn sidebar shows, read off its picture by Vision: what the screen shows, not what the
     /// model computes. SwiftUI builds no accessibility tree while no assistive app asks, so the picture is read.
     func drawn(_ shell: Shell) throws -> [String] {
+        try Picture.text(sidebar(shell))
+    }
+
+    /// The sidebar of `shell` drawn offscreen at its size, as `drawn` reads it; `shown`, at the size of its part below
+    /// the title bar, as the window's picture draws it, where a long list meets its fade.
+    func sidebar(_ shell: Shell, shown: Bool = false) throws -> NSBitmapImageRep {
         let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
         let offscreen = Offscreen(NSHostingView(rootView: host.rootView))
-        offscreen.window.setContentSize(host.view.bounds.size)
+        var size = host.view.bounds.size
+        if shown { size.height = min(host.view.convert(host.view.bounds, to: nil).maxY, shell.window.contentLayoutRect.maxY) }
+        offscreen.window.setContentSize(size)
         offscreen.view.layoutSubtreeIfNeeded()
         let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
         offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
-        return try Picture.text(rep)
+        return rep
     }
 
     /// The main window of the home, never shown, at `size`, its spaces listed.
@@ -216,7 +224,8 @@ final class Stage {
     /// mode (also the whole process's), and a timing that either would slow; so does any test that sets the interface
     /// size (Look.scale, the whole process's too) or reads an absolute size, which it gives back at Default. Inside a
     /// turn already held (a read of VoiceOver's labels while a picture is drawn, a moment of set length that takes the
-    /// turn before it starts), `body` runs at once, in that turn, and gives back nothing.
+    /// turn before it starts), `body` runs at once, in that turn, and leaves the appearance and the interface size to the
+    /// outer turn to restore.
     static func alone<T>(_ body: () async throws -> T) async rethrows -> T {
         if holding { return try await body() }
         _ = await wait(600, until: { !drawing })
@@ -429,8 +438,14 @@ enum Picture {
     /// compute operation (an e5rtError, while other processes use it): the same reading then runs on the processor,
     /// which always can, only slower.
     static func text(_ rep: NSBitmapImageRep) throws -> [String] {
+        try lines(rep).map(\.words)
+    }
+
+    /// As `text`, each line with where it is drawn, in the picture's pixels, measured from its top left.
+    static func lines(_ rep: NSBitmapImageRep) throws -> [(words: String, box: CGRect)] {
         let image = try #require(rep.cgImage)
-        func read(processor: Bool) throws -> [String] {
+        let (wide, high) = (CGFloat(image.width), CGFloat(image.height))
+        func read(processor: Bool) throws -> [(words: String, box: CGRect)] {
             let read = VNRecognizeTextRequest()
             read.recognitionLevel = .accurate
             read.usesLanguageCorrection = false
@@ -440,7 +455,12 @@ enum Picture {
                 }
             }
             try VNImageRequestHandler(cgImage: image).perform([read])
-            return (read.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+            return (read.results ?? []).compactMap { line in
+                line.topCandidates(1).first.map { word in
+                    let box = line.boundingBox
+                    return (word.string, CGRect(x: box.minX * wide, y: (1 - box.maxY) * high, width: box.width * wide, height: box.height * high))
+                }
+            }
         }
         do { return try read(processor: false) } catch { return try read(processor: true) }
     }

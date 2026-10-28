@@ -422,7 +422,8 @@ struct AcceptanceShow {
         let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
         let all = try await Self.keepVersions(of: brief, info)
 
-        // Info: its Space part, History beside Export.
+        // Info: its Space part, History beside Export. The page's width before Info opens, at Default's size.
+        let wide = await Stage.alone { shell.window.layoutIfNeeded(); return brief.web.frame.width }
         shell.showInfo(true)
         shell.window.layoutIfNeeded()
         let panel = shell.inspector.viewController.view
@@ -435,8 +436,8 @@ struct AcceptanceShow {
         #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
         await Stage.alone {
             let width = { shell.inspector.viewController.view.frame.width }
-            #expect(await wait(10) { shell.window.layoutIfNeeded(); return width() == 320 && brief.web.frame.width == shell.center.frame.width },
-                    "\(width()) \(brief.web.frame.width) \(shell.center.frame.width)")
+            #expect(await wait(10) { shell.window.layoutIfNeeded(); return width() == 320 && brief.web.frame.width == wide - 320 },
+                    "\(width()) \(brief.web.frame.width) \(wide)")
         }
         let history = info.history
         #expect(history.chosen == all[1].id && history.restorable && history.rows.count == 6)
@@ -482,8 +483,11 @@ struct AcceptanceShow {
 
         // Esc with the focus in it closes it; the page takes its width back.
         shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
-        shell.window.layoutIfNeeded()
-        #expect(!shell.infoShown && brief.web.frame.width == shell.center.frame.width)
+        #expect(!shell.infoShown)
+        await Stage.alone {
+            #expect(await wait(10) { shell.window.layoutIfNeeded(); return shell.inspector.isCollapsed && brief.web.frame.width == wide },
+                    "\(wide) \(brief.web.frame.width)")
+        }
         // Opened again after the restore: on the version before the newest, not on Now. Restoring the version the
         // space already is says so.
         shell.showHistory()

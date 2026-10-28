@@ -746,10 +746,11 @@ struct AcceptanceShell {
         defer { view.close() }
         #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         // Info's 320 points are Default's: read in the drawing turn, which no other suite holds at Large meanwhile.
-        await Stage.alone {
+        let open = await Stage.alone {
             let docked = { shell.inspector.viewController.view.frame.width }
             #expect(await wait(10) { shell.window.layoutIfNeeded(); return docked() == 320 && view.web.frame.width == shell.center.frame.width },
                     "\(docked()) \(view.web.frame.width) \(shell.center.frame.width)")
+            return view.web.frame.width
         }
         #expect(info.level == .watch && info.folder == nil && info.about == "A countdown to Saturday, your plans, and what your agents still have to finish.")
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
@@ -788,8 +789,12 @@ struct AcceptanceShell {
         // Esc with the focus in the panel closes it; ⌘I opens it again and closes it; ✕ too.
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
         shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
-        shell.window.layoutIfNeeded()
-        #expect(!shell.infoShown && view.web.frame.width == shell.center.frame.width && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        #expect(!shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        // The page takes back the 320 points Info held, at Default's size like the width read open.
+        await Stage.alone {
+            #expect(await wait(10) { shell.window.layoutIfNeeded(); return shell.inspector.isCollapsed && view.web.frame.width == open + 320 },
+                    "\(open) \(view.web.frame.width)")
+        }
         let command = try #require(Keys.command("insp"))
         #expect(command.action == #selector(App.toggleInfo(_:)) && command.key == "i")
         shell.toggleInfo(spaceOpen: false)
@@ -897,6 +902,19 @@ struct AcceptanceShell {
         #expect(shell.infoShown && info.content == .history)
     }
     // MARK: Round 2, S6: Page Full Screen and the floating sidebar
+
+    /// How far apart the lightest and the darkest pixel of `box` in `picture` are, in brightness from 0 to 1: how
+    /// strongly the text there stands out from its background.
+    static func spread(_ picture: NSBitmapImageRep, _ box: CGRect) -> CGFloat {
+        var (low, high) = (CGFloat(1), CGFloat(0))
+        for x in Int(box.minX)..<min(Int(box.maxX), picture.pixelsWide) {
+            for y in Int(box.minY)..<min(Int(box.maxY), picture.pixelsHigh) {
+                let bright = picture.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)?.brightnessComponent ?? 0
+                (low, high) = (min(low, bright), max(high, bright))
+            }
+        }
+        return max(0, high - low)
+    }
 
     /// The pointer's way in or out of `view`, as its tracking area would send it.
     static func pointer(_ entered: Bool, _ view: NSView) throws -> NSEvent {
@@ -1145,7 +1163,8 @@ struct AcceptanceShell {
     /// own" beside the sidebar's SPACES; the groups are Work, Notes and Breaks ("agents" means one thing only); the
     /// menu bar says File, Edit, View, Go, Space, Assistant, Window, Help, and the Assistant menu names the open space's
     /// assistant first. The open menu cannot be drawn offscreen: its lines are written beside the picture as
-    /// x1-1-assistant.txt.
+    /// x1-1-assistant.txt. Build With ▸ is filled by the app when it opens, which this menu bar has no part of: the
+    /// builder it checks is AssistantTests.buildWithChoosesNewSpacesBuilder's.
     @Test("x1-1: the window and its menus") func x1_1() async throws {
         let stage = try Stage("shell-x1-1")
         defer { stage.remove() }
@@ -1235,9 +1254,19 @@ struct AcceptanceShell {
         #expect(said.contains("Settings") && said.contains("Templates"), "\(said)")
         #expect(Keys.tooltip("settings", "Settings") == "Settings (⌘,)")
         // The word alone, no sign: the sign with eyes is the assistant's.
-        let drawn = try stage.drawn(shell)
+        let whole = try stage.sidebar(shell), lines = try Picture.lines(whole), drawn = lines.map(\.words)
         #expect(drawn.last == "something", "the foot says something alone: \(drawn)")
         #expect(drawn.contains("Templates") && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
+        // The list is longer than its column, and its last row fades out above Templates: drawn as the window shows the
+        // column, below the title bar, Stack, under the fade's 16 points, stands out far less than Pebble, a row above
+        // it; drawn at the sidebar's full height, Stack clear of the fade, both stand out alike.
+        func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
+        let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
+        #expect((list.documentView?.frame.height ?? 0) > list.contentView.bounds.height, "the list overflows its column")
+        let pebble = try #require(lines.first { $0.words == "Pebble" }?.box), stack = try #require(lines.first { $0.words == "Stack" }?.box)
+        let shown = try stage.sidebar(shell, shown: true)
+        let (above, under) = (Self.spread(shown, pebble), Self.spread(shown, stack))
+        #expect(abs(Self.spread(whole, stack) - Self.spread(whole, pebble)) < 0.1 && above > 0.4 && under < above / 2, "\(above) \(under)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }

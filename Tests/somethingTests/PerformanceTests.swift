@@ -61,11 +61,12 @@ struct PerformanceTests {
     /// ⌘P with fifty spaces: from the key to the card laid out and drawn, its rows built from the fifty spaces' names
     /// and eyes. The first opening of the run fills SwiftUI's and the fonts' caches, as the app's first does once; each
     /// of the next three is timed (three more, up to ten times, while none is in bound), and the quickest is under
-    /// 100 ms on a Mac. What is timed is the main thread's own
-    /// processor time, where all of that work runs: a loaded Mac (the suite's other processes, another build) lends
-    /// the thread less of the processor and stretches the clock, not the work. On CI's virtual Macs, with no graphics
-    /// card and a shared processor, the bound is 500 ms: still a gross regression, rows built per spaces squared for
-    /// one, but no false red.
+    /// 100 ms on a Mac. What is timed is the main thread's own processor time, where all of that work runs: a loaded
+    /// Mac (the suite's other processes, another build) lends the thread less of the processor and stretches the clock,
+    /// not the work. Time the thread spends blocked (on the window server, a font read from disk) is not counted: the
+    /// clock's time is printed beside it, so a regression there still shows in the log. On CI's virtual Macs, with no
+    /// graphics card and a shared processor, the bound is 500 ms: still a gross regression, rows built per spaces
+    /// squared for one, but no false red.
     @Test func thePaletteOpensUnderATenthOfASecondWithFiftySpaces() async throws {
         let stage = try Stage("perf")
         defer { stage.remove() }
@@ -77,14 +78,16 @@ struct PerformanceTests {
         library.select(.space("brief"))
         // This thread's processor time, in seconds.
         func busy() -> TimeInterval { TimeInterval(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1e9 }
+        var clock: [TimeInterval] = []
         func open() throws -> TimeInterval {
-            let began = busy()
+            let (began, started) = (busy(), Date())
             let model = PaletteModel(library: library, eyes: { shell.assistant.eyes(of: $0) }, enabled: { Keys.enabled($0, Keys.Situation(space: true)) })
             let palette = try #require(Palette.toggle(in: shell.layer, model: model, motion: .reduced))
             palette.layoutSubtreeIfNeeded()
             let rep = try #require(palette.bitmapImageRepForCachingDisplay(in: palette.card.frame))
             palette.cacheDisplay(in: palette.card.frame, to: rep)
             let took = busy() - began
+            clock.append(Date().timeIntervalSince(started))
             #expect(model.rows.filter { $0.section == .spaces || $0.section == .recent }.count == 50)
             #expect(Palette.toggle(in: shell.layer, model: model) == nil, "⌘P again closes it")
             return took
@@ -102,7 +105,8 @@ struct PerformanceTests {
             }
             return times
         }
-        print("⌘P with 50 spaces opened in " + times.map { String(format: "%.1f ms", $0 * 1000) }.joined(separator: ", "))
+        let said = zip(times, clock.dropFirst()).map { String(format: "%.1f ms (%.1f ms by the clock)", $0 * 1000, $1 * 1000) }
+        print("⌘P with 50 spaces opened in " + said.joined(separator: ", "))
         #expect(try #require(times.min()) < bound, "\(times)")
     }
 
