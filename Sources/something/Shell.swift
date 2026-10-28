@@ -2,14 +2,15 @@
 // over all three, and a calm toolbar: the sidebar toggle at the sidebar's edge, the space's name alone (a click on it
 // opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
 // its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
-// while it shows) and Page Full Screen. Off the spaces only the name and Page Full Screen show. Reload is in the View
+// while it shows) and Page Full Screen (PageFull.swift). Off the spaces only the name and Page Full Screen, greyed, show. Reload is in the View
 // menu; what waits for the person is said by the panel, the sidebar's Needs You and the Dock, never here. Its backgrounds are the identity's, opaque: no vibrancy lets the desktop through. The center
 // holds the open space's web view edge to edge under the toolbar, what keeps a space from being shown, New Space or
 // the templates; over a space, the glass, which holds the assistant (Glass.swift). Off the spaces the assistant is
 // away: New Space has its own field. While the welcome is open over it, the window steps back under a veil that takes
 // every click.
 // In full screen the space is alone: the system hides the toolbar and the menu bar until the pointer reaches the top,
-// the sidebar steps aside and the space starts at the screen's top; ⌃⌘S lays the sidebar over it (SidebarOver).
+// the sidebar steps aside and the space starts at the screen's top; ⌃⌘S lays the sidebar over it (SidebarOver). Page
+// Full Screen does the same inside the window, and a hidden sidebar floats (PageFull.swift).
 // A window narrower than 860 points has the rail in place of its sidebar (Rail.swift), until it is 880 wide again, so
 // that a window resized about the line does not flicker between the two: ⌃⌘S lays the whole sidebar over the space
 // there too, and the toolbar's own toggle goes (the rail has one).
@@ -41,7 +42,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
                tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
                info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
-    /// The items that act on the open space, hidden while none is open.
+    /// The items that act on the open space, hidden while none is open; Page Full Screen stays, greyed.
     static let onSpace = [point, info]
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
@@ -58,13 +59,24 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var film: Film?
     /// The window's undo manager: typing, and the changes of the spaces (Changes.swift).
     let undo = WindowUndo()
-    /// Whether the window is in full screen, or entering it; the sidebar's own state before, given back after.
+    /// Whether the window is in full screen, or entering it; the sidebar's own state before, given back after (also
+    /// by Page Full Screen).
     private(set) var full = false
-    private var sideHidden = false
+    var sideHidden = false
+    /// Whether the page fills the window (Page Full Screen), and whether it will once the Mac's full screen is left.
+    var pageFull = false, pageAfterFull = false
+    /// The strips at the center's top and left edges that bring back the toolbar in Page Full Screen and the floating
+    /// sidebar (PageFull.swift); the toolbar's height, measured while it shows.
+    let topEdge = Reveal(delay: 0, leave: 0.6), leftEdge = Reveal(delay: 0.2)
+    var bar: CGFloat = 52
+    /// The watch on the sidebar column's collapse, which makes it float or not.
+    var collapse: NSKeyValueObservation?
+    /// The left edge's top: under the toolbar, or the window's top in Page Full Screen.
+    var leftTop: (under: NSLayoutConstraint, top: NSLayoutConstraint)?
     /// What holds the top of what the center shows: the toolbar's lower edge, or in full screen the window's top.
-    private var top: NSLayoutConstraint?
+    var top: NSLayoutConstraint?
     /// The toolbar's lower edge, over the center only.
-    private let edge = NSBox()
+    let edge = NSBox()
     /// Whether the sidebar column is the rail; the column's own state before, given back after.
     private(set) var rail = false
     private var sideBefore: (hidden: Bool, width: CGFloat) = (false, 236)
@@ -94,7 +106,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         glass = Glass(over: center, model: assistant)
         super.init()
         split.over = { [unowned self] in sidebarOver() }
-        split.laid = { [unowned self] in full || rail ? SidebarOver.shown(in: layer) != nil : nil }
+        split.laid = { [unowned self] in full || rail || pageFull ? SidebarOver.shown(in: layer) != nil : nil }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
@@ -146,6 +158,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         NSLayoutConstraint.activate([edge.heightAnchor.constraint(equalToConstant: 1), edge.leadingAnchor.constraint(equalTo: center.leadingAnchor),
                                      edge.trailingAnchor.constraint(equalTo: center.trailingAnchor),
                                      edge.bottomAnchor.constraint(equalTo: center.safeAreaLayoutGuide.topAnchor)])
+        edges()
         show(nil)
     }
 
@@ -166,6 +179,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The columns moved: the title measures the room it has again; Info shown, a note leaves the right edge to it.
     @objc private func columnsMoved() {
         titleLine.invalidateIntrinsicContentSize()
+        reveals()
         if !inspector.isCollapsed { space?.note?.dismiss() }
     }
 
@@ -195,13 +209,21 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     // A transition that fails leaves the window as it was: its layout goes back too.
     func windowDidFailToEnterFullScreen(_ window: NSWindow) { fullScreen(false) }
     func windowDidFailToExitFullScreen(_ window: NSWindow) { fullScreen(true) }
+    /// Page Full Screen asked for in the Mac's full screen comes once the window is back.
+    func windowDidExitFullScreen(_ notification: Notification) {
+        if pageAfterFull { pageFullScreen(true) }
+    }
 
     /// Lays the window out for full screen (`on`) or back: the sidebar steps aside and comes back as it was, the space
     /// starts at the window's top, which the hidden toolbar no longer holds, and the Full Screen button turns to leave
     /// it. Pinned to the top rather than to the safe area, the page does not move when the toolbar comes down over it.
+    /// The sticker is discreet there.
     func fullScreen(_ on: Bool) {
         guard on != full else { return }
-        if on { railed(false) }
+        if on {
+            pageFullScreen(false)
+            railed(false)
+        }
         full = on
         _ = SidebarOver.close(in: layer)
         let side = split.splitViewItems[0]
@@ -211,24 +233,24 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         top = shown.map(pin)
         top?.isActive = true
         edge.isHidden = on
-        controls[Shell.full]?.image = NSImage(systemSymbolName: on ? "arrow.down.right.and.arrow.up.left" : "viewfinder",
-                                              accessibilityDescription: on ? "Exit Full Screen" : "Full Screen")
+        glass.discreet = on
         if !on { fit() }
+        reveals()
     }
 
     /// Whether a window `width` points wide has the rail, `now` being whether it has it: below 860 it takes it, and
     /// keeps it until 880.
     static func rail(_ width: CGFloat, now: Bool) -> Bool { width < narrow + (now ? hysteresis : 0) }
 
-    /// Takes the rail or gives it up for the window's width; never in full screen, where the sidebar steps aside.
+    /// Takes the rail or gives it up for the window's width; never in either full screen, where the sidebar steps aside.
     func fit() {
-        railed(!full && Shell.rail(window.frame.width, now: rail))
+        railed(!full && !pageFull && Shell.rail(window.frame.width, now: rail))
     }
 
     /// Turns the sidebar column into the rail (`on`), shown whatever the column was, or back into the sidebar as it
     /// was before; the toolbar follows. The split view stops keeping its widths meanwhile: the rail's 64 points must
     /// never become the person's saved width, nor its shown column a sidebar they had hidden.
-    private func railed(_ on: Bool) {
+    func railed(_ on: Bool) {
         guard on != rail else { return }
         rail = on
         _ = SidebarOver.close(in: layer)
@@ -256,13 +278,21 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                 for id in Shell.head { if let at = toolbar.items.firstIndex(where: { $0.itemIdentifier == id }) { toolbar.removeItem(at: at) } }
             } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
         }
+        reveals()
     }
 
     /// ⌃⌘S in full screen or beside the rail: lays the sidebar over the space, or takes it away; beside the rail, under
-    /// the toolbar, which would draw the title over it. Returns false elsewhere, where the sidebar column shows or
-    /// hides as usual.
+    /// the toolbar, which would draw the title over it. In Page Full Screen the floating sidebar comes or goes. Returns
+    /// false elsewhere, where the sidebar column shows or hides as usual: a floating sidebar laid over is kept.
     private func sidebarOver() -> Bool {
-        guard full || rail else { return false }
+        if pageFull {
+            if !SidebarOver.close(in: layer) { float() }
+            return true
+        }
+        guard full || rail else {
+            _ = SidebarOver.close(in: layer)
+            return false
+        }
         let under = full ? 0 : window.frame.height - window.contentLayoutRect.maxY
         // The column's own eyes, so that both lists always say the same.
         guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return true }
@@ -320,11 +350,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             sidebar.target = split
             return sidebar
         case Shell.tools:
-            // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart. Page
-            // Full Screen enters the Mac's full screen until the page's own mode is built (S6).
+            // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart.
             let tools = [item(Shell.point, "Point", "scope", Keys.tooltip("pointpart", "Point"), Keys.command("pointpart")?.action, words: "Point"),
                          item(Shell.info, "Info", "info.circle", Keys.tooltip("insp", "Info"), #selector(App.toggleInfo(_:))),
-                         item(Shell.full, "Page Full Screen", "viewfinder", Keys.tooltip("full", "Page Full Screen"), #selector(NSWindow.toggleFullScreen(_:)))]
+                         item(Shell.full, "Page Full Screen", "viewfinder", Keys.tooltip("pagefull", "Page Full Screen"), Keys.command("pagefull")?.action)]
             let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: buttons)
             tools.forEach { $0.view = nil }
             // The mockup draws Full Screen's corners heavier than the other icons.
@@ -346,7 +375,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// Writes the name in the toolbar, alone, for the window menu and VoiceOver too (`subtitle` only for the window's
     /// own, which nothing draws), and shows what acts on a space only while one is open: off the spaces, the toolbar
-    /// holds the name and Page Full Screen. Point is greyed when `point` is false: the page stopped.
+    /// holds the name and Page Full Screen, greyed. Point is greyed when `point` is false: the page stopped.
     func heading(_ title: String, _ subtitle: String, space: Bool, point: Bool = true) {
         (window.title, window.subtitle) = (title, subtitle)
         titleLine.line = NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 13.5, weight: .semibold),
@@ -362,14 +391,18 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             // A borderless button with a tint draws the same enabled or not; the mockup's disabled .ib is at .32.
             control?.alphaValue = $0.isEnabled ? 1 : 0.32
         }
+        toolbarItems.first { $0.itemIdentifier == Shell.full }?.isEnabled = space
+        if let full = controls[Shell.full] { (full.isEnabled, full.alphaValue) = (space, space ? 1 : 0.32) }
     }
 
     /// What View's and Space's Info items say: what they will do.
     var infoWords: String { infoShown && info.content == .info ? "Hide Info" : "Show Info" }
 
-    /// Names a menu item as it reads now: the Info items, in View and Space, say Hide Info while Info shows.
+    /// Names a menu item as it reads now: the Info items, in View and Space, say Hide Info while Info shows; Page Full
+    /// Screen's says Exit while it is on.
     func retitle(_ item: NSMenuItem) {
         if item.identifier?.rawValue == "insp" { item.title = infoWords }
+        if item.identifier?.rawValue == "pagefull" { item.title = pageFull ? "Exit Page Full Screen" : "Enter Page Full Screen" }
     }
 
     /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You; `mine`,
@@ -392,8 +425,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func show(_ space: SpaceView?, templates: Bool = false) {
         library.previewing = false
         self.space = space
-        // A space picked in the sidebar laid over the page takes its place.
+        // A space picked in the sidebar laid over the page takes its place; off the spaces, the page's full screen ends.
         _ = SidebarOver.close(in: layer)
+        if space == nil { pageFullScreen(false) }
         // A reload keeps point mode and its picks (the overlay asks again once the page loaded); only a page that
         // cannot be shown or stopped ends it.
         if let space, !space.pointable { space.point(nil) }
@@ -533,8 +567,14 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         // The open card is the last layer: Esc folds it into the sticker wherever the focus is. Inside the card, the
         // card's own Esc does it, after its field had the key (an input method's Esc).
         let inCard = (window.firstResponder as? NSView)?.isDescendant(of: glass.card) == true
-        guard assistant.open, assistant.place.space != nil, !inCard else { return false }
-        assistant.escape()
+        guard !inCard else { return false }
+        if assistant.open, assistant.place.space != nil {
+            assistant.escape()
+            return true
+        }
+        // Page Full Screen is under everything else.
+        guard pageFull else { return false }
+        pageFullScreen(false)
         return true
     }
 
@@ -656,9 +696,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                                      shown.trailingAnchor.constraint(equalTo: center.trailingAnchor)])
     }
 
-    /// The top of `shown`: under the toolbar, never behind it; in full screen, the window's top.
-    private func pin(_ shown: NSView) -> NSLayoutConstraint {
-        shown.topAnchor.constraint(equalTo: full ? center.topAnchor : center.safeAreaLayoutGuide.topAnchor)
+    /// The top of `shown`: under the toolbar, never behind it; in either full screen, the window's top.
+    func pin(_ shown: NSView) -> NSLayoutConstraint {
+        shown.topAnchor.constraint(equalTo: full || pageFull ? center.topAnchor : center.safeAreaLayoutGuide.topAnchor)
     }
 
     /// `view` in the center: it takes the window's size, and never asks the window for its own.

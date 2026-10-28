@@ -311,6 +311,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     @objc func showInFinder(_ sender: Any?) { current.map { library.showInFinder($0.space.name) } }
     @objc func reloadSpace(_ sender: Any?) { current?.load() }
     @objc func toggleInfo(_ sender: Any?) { shell.toggleInfo(spaceOpen: current != nil) }
+    @objc func pageFullScreen(_ sender: Any?) { shell.pageFullScreen(!shell.pageFull) }
     @objc func showHistory(_ sender: Any?) { shell.showHistory() }
     @objc func pointAtPart(_ sender: Any?) { shell.point() }
     @objc func showConversation(_ sender: Any?) { shell.toggleConversation(sender) }

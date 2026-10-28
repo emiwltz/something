@@ -170,7 +170,7 @@ struct AcceptanceCommand {
         try await settings(.shortcuts, "g7", shows: shows) { settings, _ in
             #expect(ShortcutColumns.lines(.spaces).map(\.line) == ["Go to a space, or ask", "New Space", "Templates", "Go to space 1 to 9", "Reload space",
                                                                     "Space info", "Close Info or History"])
-            #expect(ShortcutColumns.lines(.window).map(\.shown) == ["⌃⌘F", "⌃⌘S", "⌘,", "⌘/", "⌘W"])
+            #expect(ShortcutColumns.lines(.window).map(\.shown) == ["⇧⌘F", "⌃⌘F", "⌃⌘S", "⌘,", "⌘/", "⌘W"])
             #expect(settings.model.sections(.shortcuts).isEmpty)
         }
     }

@@ -92,7 +92,7 @@ enum Mockup {
         #expect(Keys.Command.Area.allCases.map(\.rawValue) == Array(NSOrderedSet(array: shortcuts.map(\.area))) as? [String])
         // The plan's keys, said the Mac's way.
         let keys = ["⌘N", "⇧⌘T", "⌘P", "⌘I", "⌘K", "⌘J", "⌘R", "⌘1 … ⌘9", "⌘/", "⌘\\", "⌥⌘S", "⌥⌘P", "⇧⌘K", "⌘.", "⇧⌘E", "⌥⌘R",
-                    "⌃⌘F", "⌃⌘S", "⇧⌘Z", "⌘W", "⌘⌫", "⌘↵", "hold ⌥", "esc"]
+                    "⇧⌘F", "⌃⌘F", "⌃⌘S", "⇧⌘Z", "⌘W", "⌘⌫", "⌘↵", "hold ⌥", "esc"]
         #expect(Set(keys).isSubset(of: Set(Keys.commands.map(\.shown))), "\(Set(keys).subtracting(Keys.commands.map(\.shown)))")
     }
 
@@ -214,7 +214,8 @@ enum Mockup {
         #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
         // The two keys the window takes from a focused page only for a while (Shell.sendComments, Shell.escape).
         let flatGuide = guide.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        #expect(flatGuide.contains("While comments wait over your space, ⌘↵ sends them; while one of something's notes shows over it, Escape closes it."))
+        #expect(flatGuide.contains("While comments wait over your space, ⌘↵ sends them; while one of something's notes shows over it, Escape closes it; "
+                                   + "in Page Full Screen (⇧⌘F), where your space fills the window, Escape ends it."))
         // The README names a few of them as examples: each must be one something keeps.
         let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)
         let flatReadme = readme.split(whereSeparator: \.isWhitespace).joined(separator: " ")
@@ -283,7 +284,7 @@ enum Mockup {
         #expect(window.makeFirstResponder(page) && KeysSheet.shown(in: layer) == nil && !KeysSheet.close(in: layer))
         let listed = ShortcutColumns.columns.flatMap { $0.flatMap(ShortcutColumns.lines) }.map(\.id)
         #expect(Set(listed) == Set(Keys.commands.filter { $0.area != nil }.map(\.id)) && Set(listed).count == listed.count, "every command once")
-        #expect(listed.count == 21 && ShortcutColumns.caps(Keys.shown("tpls")) == [.key("⇧"), .key("⌘"), .key("T")])
+        #expect(listed.count == 22 && ShortcutColumns.caps(Keys.shown("tpls")) == [.key("⇧"), .key("⌘"), .key("T")])
 
         func show() throws -> KeysSheet {
             let sheet = try #require(KeysSheet.toggle(in: layer, motion: .reduced))

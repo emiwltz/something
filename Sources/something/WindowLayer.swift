@@ -1,6 +1,6 @@
 // The layer above the whole window's split view, for what covers the window rather than one column: the toast, and
 // the cards on a scrim, the shortcut sheet (KeysSheet.swift) and the palette (Palette.swift); and the sidebar laid
-// over the space in full screen (SidebarOver). It takes the mouse only on what it holds, so the columns, their dividers and the toolbar's separators
+// over the space in full screen, beside the rail, or floating (SidebarOver). It takes the mouse only on what it holds, so the columns, their dividers and the toolbar's separators
 // under it behave as if it were not there, and it is hidden while it holds nothing. The glass over the center, which
 // holds the assistant, is one too (Glass.swift).
 import AppKit
@@ -174,23 +174,50 @@ class ScrimCard: NSView {
 
 /// The sidebar laid over the space at the window's left edge, full height, where full screen leaves no column for it:
 /// the mockup's .wn-sideov, its float shadow and ring, no scrim. It arrives from the edge, takes the focus for ↑ and ↓,
-/// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it.
+/// and goes with Esc, ⌃⌘S again, a click outside it, or the space picked in it. Floating (PageFull.swift), it stands
+/// `inset` points inside the window's edges with rounded corners and a pin at its top, and leaves soon after the
+/// pointer does, unless a field in it is being edited.
 final class SidebarOver: ScrimCard {
     static let width: CGFloat = 236
     private let host: NSView
+    /// Whether it leaves with the pointer: the floating sidebar's.
+    let floats: Bool
+    private var leaving: Timer?
 
     /// Lays out `list`, the window's own sidebar list: its first row 49 points down, under the 50-point band of the
     /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar beside
-    /// the rail), its first row just under them.
-    init(_ list: SidebarView, under: CGFloat = 0) {
-        let host = NSHostingView(rootView: list.padding(.top, max(52 - under, 8)).background(Look.Token.side.ui))
+    /// the rail), its first row just under them. `pin`, when given, makes it the floating sidebar, its head 40 points
+    /// high holding the pin.
+    init(_ list: SidebarView, under: CGFloat = 0, inset: CGFloat = 0, pin: (() -> Void)? = nil) {
+        let host = NSHostingView(rootView: list.padding(.top, pin == nil ? max(52 - under, 8) : 40).background(Look.Token.side.ui))
         (host.safeAreaRegions, host.sizingOptions) = ([], [])
-        self.host = host
-        super.init(card: host, radius: 0, label: "Sidebar")
-        let place = host.leadingAnchor.constraint(equalTo: leadingAnchor)
-        NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor, constant: under), host.bottomAnchor.constraint(equalTo: bottomAnchor),
-                                     host.widthAnchor.constraint(equalToConstant: SidebarOver.width)])
-        arrival = (place, -SidebarOver.width, 0.5)
+        (self.host, floats) = (host, pin != nil)
+        // The mockup's floating panel: 14-point corners.
+        super.init(card: host, radius: pin == nil ? 0 : Look.card + 4, label: "Sidebar")
+        let place = host.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset)
+        NSLayoutConstraint.activate([place, host.topAnchor.constraint(equalTo: topAnchor, constant: under + inset),
+                                     host.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
+                                     host.widthAnchor.constraint(equalToConstant: SidebarOver.width + (pin == nil ? 0 : 8))])
+        arrival = (place, -SidebarOver.width - 2 * inset, 0.5)
+        if pin != nil {
+            host.wantsLayer = true
+            host.layer?.cornerRadius = Look.card + 4
+            host.layer?.masksToBounds = true
+        }
+        guard let pin else { return }
+        let image = NSImage(systemSymbolName: "pin", accessibilityDescription: "Keep Sidebar") ?? NSImage()
+        let button = Pin(image: image, target: nil, action: nil)
+        (button.isBordered, button.contentTintColor, button.toolTip) = (false, Look.Token.ink2.color, Keys.tooltip("sidebar", "Keep Sidebar"))
+        button.symbolConfiguration = .init(pointSize: 12, weight: .regular)
+        button.setAccessibilityLabel("Keep Sidebar")
+        button.kept = pin
+        (button.target, button.action) = (button, #selector(Pin.keep))
+        button.translatesAutoresizingMaskIntoConstraints = false
+        // Beside the card rather than in it: the hosting view lays out its own subviews.
+        addSubview(button)
+        NSLayoutConstraint.activate([button.widthAnchor.constraint(equalToConstant: 26), button.heightAnchor.constraint(equalToConstant: 26),
+                                     button.topAnchor.constraint(equalTo: host.topAnchor, constant: 7),
+                                     button.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -10)])
     }
 
     required init?(coder: NSCoder) { nil }
@@ -198,8 +225,43 @@ final class SidebarOver: ScrimCard {
     override var focus: NSView? { host }
     override var dims: Bool { false }
 
+    /// The pin, with what it does.
+    final class Pin: NSButton {
+        var kept: () -> Void = {}
+        @objc func keep() { kept() }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        // From the window's edge, where the pointer brought it, to its right side: it leaves once the pointer leaves that.
+        let room = NSRect(x: 0, y: card.frame.minY, width: card.frame.maxX, height: card.frame.height)
+        if floats { addTrackingArea(NSTrackingArea(rect: room, options: [.mouseEnteredAndExited, .activeInKeyWindow, .assumeInside], owner: self)) }
+    }
+
+    override func layout() {
+        super.layout()
+        updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) { leaving?.invalidate() }
+    /// The floating sidebar leaves a third of a second after the pointer, unless a name in it is being edited.
+    override func mouseExited(with event: NSEvent) {
+        leaving?.invalidate()
+        leaving = Timer.scheduledTimer(withTimeInterval: 0.32, repeats: false) { [weak self] _ in
+            guard let self, superview != nil else { return }
+            if let editing = window?.firstResponder as? NSView, editing is NSText, editing.isDescendant(of: self) { return }
+            close()
+        }
+    }
+
+    override func removeFromSuperview() {
+        leaving?.invalidate()
+        super.removeFromSuperview()
+    }
+
     /// No scrim: the space stays as it is beside the sidebar, which casts the float shadow.
     override func draw(_ dirtyRect: NSRect) {
-        Look.drawFloat(card.frame, radius: 0, fill: .side, ring: true, appearance: effectiveAppearance)
+        Look.drawFloat(card.frame, radius: floats ? Look.card + 4 : 0, fill: .side, ring: true, appearance: effectiveAppearance)
     }
 }

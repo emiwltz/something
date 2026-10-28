@@ -296,7 +296,9 @@ enum Picture {
                 held.append((image, view.convert(view.bounds, to: frame), cover.alphaValue))
             }
         }
-        let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.layer].filter { !$0.isHidden }
+        // In Page Full Screen the toolbar brought back lies over the page, on its band.
+        let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.topEdge].filter(\.filled)
+            + [shell.layer].filter { !$0.isHidden }
         // The first-launch film plays in its own window over the whole of this one, toolbar included.
         let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) } + (shell.film.map { [($0 as NSView, frame.bounds)] } ?? [])
         let over = try placed.map { view, place in
@@ -308,7 +310,9 @@ enum Picture {
         // band, not its controls, which are drawn again over it, as faded as a scrim card leaves them.
         let band = shell.window.contentLayoutRect.maxY
         let reaches = shell.layer.subviews.contains { !shell.layer.isHidden && $0.convert($0.bounds, to: frame).maxY > band }
-        let bar = try (reaches ? shell.toolbarItems.compactMap(\.view) : []).filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
+        // The toolbar back over the page in Page Full Screen: its items whole, the group of tools in one row.
+        let items = shell.topEdge.filled ? (shell.window.toolbar?.items ?? []).compactMap(\.view) : reaches ? shell.toolbarItems.compactMap(\.view) : []
+        let bar = try items.filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)
             return (drawn, view.convert(view.bounds, to: frame), view.alphaValue)

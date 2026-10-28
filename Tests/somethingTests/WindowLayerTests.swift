@@ -30,18 +30,19 @@ import Testing
             let items = shell.toolbarItems
             #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full], "no Reload, no waiting chip")
             @MainActor func item(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? { items.first { $0.itemIdentifier == id } }
-            // Without a space, the calm toolbar: what acts on one is hidden; the name and Page Full Screen stay.
+            // Without a space, the calm toolbar: what acts on one is hidden; the name and Page Full Screen stay, greyed.
             for id in Shell.onSpace {
                 let control = shell.controls[id]
                 #expect(item(id)?.isEnabled == false && control?.isHidden == true, "\(id)")
             }
-            #expect(item(Shell.full)?.isEnabled == true && shell.controls[Shell.full]?.isHidden == false)
-            #expect(shell.controls[Shell.info]?.toolTip == "Info (⌘I)" && shell.controls[Shell.full]?.toolTip == "Page Full Screen (⌃⌘F)")
+            #expect(item(Shell.full)?.isEnabled == false && shell.controls[Shell.full]?.isHidden == false && shell.controls[Shell.full]?.alphaValue == 0.32)
+            #expect(shell.controls[Shell.info]?.toolTip == "Info (⌘I)" && shell.controls[Shell.full]?.toolTip == "Page Full Screen (⇧⌘F)")
             #expect(shell.window.title == "New Space" && shell.window.titleVisibility == .hidden)
             #expect(shell.titleLine.accessibilityRole() == .staticText && shell.titleLine.toolTip == nil, "New Space's name opens nothing")
             // Over a space they show, and the name is a button that opens Info.
             shell.heading("Daily brief", "", space: true)
             #expect(Shell.onSpace.allSatisfy { shell.controls[$0]?.isHidden == false && item($0)?.isEnabled == true })
+            #expect(item(Shell.full)?.isEnabled == true && shell.controls[Shell.full]?.alphaValue == 1)
             #expect(shell.titleLine.accessibilityRole() == .button && shell.titleLine.accessibilityLabel() == "Daily brief")
             #expect(shell.titleLine.toolTip == "Show Info (⌘I)" && shell.titleLine.line.string == "Daily brief")
             // Window › Zoom acts on this window.

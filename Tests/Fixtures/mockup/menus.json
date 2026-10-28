@@ -1,5 +1,5 @@
 {
-  "source": "The exploration mockup's menu bar (command/command.js: Desk.appMenu and Desk.menus) with no space open, as round 2's frozen v6.2 left it: one name per command, in every menu (v6g 7.2), Reload in View only, History once. \"separator\" is a line, \"header\" a section header, \"spaces\" the spaces something lists, \"system\" an item macOS adds by itself, \"needsSpace\" an item greyed while no space is open. Titles are the first state of a title that changes (Undo, Show Sidebar, Enter Full Screen).",
+  "source": "The exploration mockup's menu bar (command/command.js: Desk.appMenu and Desk.menus) with no space open, as round 2's frozen v6.2 left it: one name per command, in every menu (v6g 7.2), Reload in View only, History once. \"separator\" is a line, \"header\" a section header, \"spaces\" the spaces something lists, \"system\" an item macOS adds by itself, \"needsSpace\" an item greyed while no space is open. Titles are the first state of a title that changes (Undo, Show Sidebar, Enter Page Full Screen, Enter Full Screen). Page Full Screen is v6b's (B3), kept by v6.1 and v6.2.",
   "menus": [
     {"title": "something", "items": [
       {"title": "About something"}, {"separator": true},
@@ -23,6 +23,7 @@
       {"title": "Show Sidebar", "key": "⌃⌘S"}, {"title": "Show Info", "key": "⌘I", "needsSpace": true}, {"separator": true},
       {"title": "Show History…", "needsSpace": true}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"separator": true},
       {"title": "Reload Space", "key": "⌘R", "needsSpace": true}, {"separator": true},
+      {"title": "Enter Page Full Screen", "key": "⇧⌘F", "needsSpace": true},
       {"title": "Enter Full Screen", "key": "⌃⌘F"}
     ]},
     {"title": "Go", "items": [

@@ -6,7 +6,8 @@
 // every space, kept in Preferences. A press that moves less than 4 points, Return or ⌘K grows the card from the
 // sticker's corner; ⌘\, Esc or Reduce shrinks it back, and the focus returns to the page. From one space to another the
 // card stays open and fades to that space's own conversation. The glass is only over a space: off the spaces (New
-// Space, the templates, the tour) it is hidden, and New Space is its own composer.
+// Space, the templates, the tour) it is hidden, and New Space is its own composer. In either full screen the sticker is
+// discreet: smaller, from its corner toward the window's, and faded until the pointer or the focus comes; ⌘K is the same.
 import AppKit
 import Observation
 
@@ -37,6 +38,16 @@ final class Glass: WindowLayer {
     private(set) var morphing = false
     /// The count of moves begun: a move cut short by the next one ends, and only the last one's end counts.
     private var moves = 0
+    /// Whether the sticker is discreet, as in both full screens.
+    var discreet = false {
+        didSet {
+            guard discreet != oldValue else { return }
+            sticker.discreet = discreet
+            place()
+        }
+    }
+    /// How much smaller the discreet sticker is.
+    static let quiet: CGFloat = 0.72
     /// Where the sticker rests over every space; nil at its first place. Its edges hold it when the center resizes.
     var spot: Preferences.StickerPlace? { didSet { if spot != oldValue { place() } } }
     /// Called with the sticker's new place when a drag lets it go: the shell keeps it in Preferences.
@@ -68,10 +79,14 @@ final class Glass: WindowLayer {
 
     required init?(coder: NSCoder) { nil }
 
-    /// The sticker's surface: `side` square, where a drag holds it, else at its place (over a space) or its first.
+    /// The sticker's surface: `side` square, where a drag holds it, else at its place (over a space) or its first;
+    /// discreet and at rest, smaller, its corner nearest the window's edges where it was.
     var corner: NSRect {
-        let origin = held ?? Glass.origin(of: onSpace ? spot ?? Glass.first : Glass.first, in: room)
-        return NSRect(origin: origin, size: NSSize(width: Glass.side, height: Glass.side))
+        let place = onSpace ? spot ?? Glass.first : Glass.first
+        let whole = NSRect(origin: held ?? Glass.origin(of: place, in: room), size: NSSize(width: Glass.side, height: Glass.side))
+        guard discreet, held == nil else { return whole }
+        let side = (Glass.side * Glass.quiet).rounded()
+        return NSRect(x: place.trailing ? whole.maxX - side : whole.minX, y: place.bottom ? whole.minY : whole.maxY - side, width: side, height: side)
     }
 
     /// Where the sticker moves: the center under the toolbar.
@@ -300,6 +315,10 @@ final class Sticker: NSView {
     private var label = ""
     /// Whether its label is shown: the pointer is over it, or it has the focus.
     var hovering: Bool { pointed || focused }
+    /// Whether it is discreet: faded until the pointer or the focus comes.
+    var discreet = false {
+        didSet { faded() }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -332,11 +351,25 @@ final class Sticker: NSView {
         place()
     }
 
-    /// The sign 7 points inside the surface.
-    private func place() { sign.frame = surface.insetBy(dx: 7, dy: 7) }
+    /// The sign 7 points inside the surface, as much less as the surface is smaller.
+    private func place() {
+        let inset = 7 * surface.width / Glass.side
+        sign.frame = surface.insetBy(dx: inset, dy: inset)
+    }
+
+    /// Discreet and neither pointed at nor focused, the sticker is at 40%.
+    private func faded() {
+        sign.alphaValue = discreet && !hovering ? 0.4 : 1
+        needsDisplay = true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
-        Sign.grab(surface, radius: Sticker.radius, lift: pointed || dragging ? .held : .rest)
+        // Faded as one shape: the surface drawn over its shadow would otherwise let the shadow through.
+        let context = NSGraphicsContext.current?.cgContext
+        context?.setAlpha(discreet && !hovering ? 0.4 : 1)
+        context?.beginTransparencyLayer(auxiliaryInfo: nil)
+        Sign.grab(surface, radius: Sticker.radius * surface.width / Glass.side, lift: pointed || dragging ? .held : .rest)
+        context?.endTransparencyLayer()
     }
 
     /// The surface answers for the sticker; the shadow and the room around let the page have it.
@@ -355,7 +388,7 @@ final class Sticker: NSView {
     private func point(_ on: Bool) {
         pointed = on
         place()
-        needsDisplay = true
+        faded()
         hovered()
     }
 
@@ -390,11 +423,13 @@ final class Sticker: NSView {
     override var acceptsFirstResponder: Bool { !isHidden && alphaValue > 0 }
     override func becomeFirstResponder() -> Bool {
         focused = true
+        faded()
         hovered()
         return true
     }
     override func resignFirstResponder() -> Bool {
         focused = false
+        faded()
         hovered()
         return true
     }

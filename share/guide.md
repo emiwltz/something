@@ -466,9 +466,10 @@ await something.store.set("seen", [...seen, "a1"]);
   version of the space, shown to compare: it cannot act.") before it reaches your journal. Do not count on how many
   times your page loads. A Quick Change's answer may open a 284-point margin at the right edge the same way.
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
-  ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them, and
-  `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
-  something's notes shows over it, Escape closes it. Every other key is your page's.
+  ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⇧⌘F, ⌃⌘F, ⌃⌘S, ⌘, and ⌘/. They go to something's menus before your page sees them,
+  and `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
+  something's notes shows over it, Escape closes it; in Page Full Screen (⇧⌘F), where your space fills the window,
+  Escape ends it. Every other key is your page's.
 
 ## Checking your space
 

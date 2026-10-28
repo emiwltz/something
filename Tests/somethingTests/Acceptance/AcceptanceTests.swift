@@ -1,6 +1,7 @@
 // The acceptance catalog, the interface's stop criterion: every screen id of the mockup Emi approved, with the one
 // slice that builds it; round 2's frozen v6.2 steps join it as their slices land, their ids the step in lower case
-// with a dash ("x9-1" for X9.1, its function x9_1), each in the area file of its screen, and retire the old ids they
+// with a dash ("x9-1" for X9.1, its function x9_1; "2-6" for the numbered step 2.6, its function v2_6, after the
+// mockup's chapter "v2"), each in the area file of its screen, and retire the old ids they
 // replace. Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")` until that
 // slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from that file, so
 // this catalog is only edited to bring back La page (b2 and the _p variants) or to mark an id shot. With
@@ -33,10 +34,11 @@ enum Catalog {
         ("b1_p", "W7"), ("c2_p", "W7"), ("d1_p", "W7"), ("e1_p", "W7"), ("f6_p", "W7"), ("g4_p", "W7"),
     ] + frozen
     /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
-    /// x3_1), and the slice that builds each.
+    /// x3_1; "2-6" for 2.6, v2_6), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
         ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
         ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
+        ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3).
@@ -54,7 +56,7 @@ enum Catalog {
     static func area(_ id: String) -> Area {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
         if id.contains("-") {
-            return ["x1": .shell, "x3": .build, "x5": .shell, "x9": .shell, "j3": .build, "j4": .shell][String(id.prefix { $0 != "-" })] ?? .command
+            return ["x1": .shell, "x3": .build, "x5": .shell, "x9": .shell, "j3": .build, "j4": .shell, "2": .shell][String(id.prefix { $0 != "-" })] ?? .command
         }
         switch id.first {
         case "a", "d": return .build
@@ -90,8 +92,9 @@ enum Catalog {
         let matches = test.matches(in: text, range: NSRange(text.startIndex..., in: text))
         return matches.enumerated().compactMap { index, match in
             guard let name = part(match, 2) else { return nil }
-            // A frozen step's function, x3_1, is the screen id x3-1.
-            let id = name.range(of: #"^[xj][0-9]+_[0-9]+$"#, options: .regularExpression) != nil ? name.replacingOccurrences(of: "_", with: "-") : name
+            // A frozen step's function, x3_1, is the screen id x3-1; a numbered step's, v2_6, is 2-6.
+            let step = name.range(of: #"^([xj]|v(?=[0-9]))[0-9]+_[0-9]+$"#, options: .regularExpression) != nil
+            let id = step ? String(name.drop { $0 == "v" }).replacingOccurrences(of: "_", with: "-") : name
             guard id.contains("-") || id.range(of: #"^[a-g][0-9]+(_p)?$"#, options: .regularExpression) != nil else { return nil }
             let traits = part(match, 1) ?? ""
             let slice = unbuilt.firstMatch(in: traits, range: NSRange(traits.startIndex..., in: traits)).flatMap { Range($0.range(at: 1), in: traits) }
@@ -120,7 +123,7 @@ enum Catalog {
         }
         #expect(expected.count == 71)
         #expect(Set(ids.filter { !$0.hasSuffix("_p") && !$0.contains("-") }) == Set(expected).subtracting(Catalog.retired))
-        #expect(Catalog.frozen.allSatisfy { $0.id.range(of: #"^[xj][0-9]+-[0-9]+$"#, options: .regularExpression) != nil })
+        #expect(Catalog.frozen.allSatisfy { $0.id.range(of: #"^[xj]?[0-9]+-[0-9]+$"#, options: .regularExpression) != nil })
         #expect(Catalog.retired.isDisjoint(with: Set(ids)))
         #expect(Set(ids.filter { $0.hasSuffix("_p") }) == Catalog.excluded.subtracting(["b2"]))
         #expect(Catalog.excluded.isSubset(of: Set(ids)) && Catalog.pendingShots.isSubset(of: Set(ids)))
@@ -164,6 +167,8 @@ enum Catalog {
             """
         #expect(try Catalog.scenarios(in: "@Test(\"x9-1: the toolbar\") func x9_1() async throws {\n#expect(true)\n}")
                 == [Catalog.Scenario(id: "x9-1", unbuilt: nil, asserts: true)])
+        #expect(try Catalog.scenarios(in: "@Test(\"2-6: Page Full Screen\") func v2_6() async throws {\n#expect(true)\n}")
+                == [Catalog.Scenario(id: "2-6", unbuilt: nil, asserts: true)])
         let scenarios = try Catalog.scenarios(in: text)
         #expect(scenarios == [Catalog.Scenario(id: "b1", unbuilt: nil, asserts: false), Catalog.Scenario(id: "b3", unbuilt: nil, asserts: true),
                               Catalog.Scenario(id: "b4", unbuilt: "W4", asserts: false)])

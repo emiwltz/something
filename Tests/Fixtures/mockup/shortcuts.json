@@ -24,6 +24,7 @@
       ["undo", "Undo the last change", "⌘Z"]
     ]},
     {"area": "Window", "items": [
+      ["pagefull", "Page full screen", "⇧⌘F"],
       ["full", "Full screen", "⌃⌘F"],
       ["sidebar", "Show or hide the sidebar", "⌃⌘S"],
       ["settings", "Settings", "⌘,"],
