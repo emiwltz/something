@@ -12,8 +12,9 @@ import AppKit
 import Observation
 
 final class Glass: WindowLayer {
-    /// The sticker's side and its distance from the center's edges.
-    static let side: CGFloat = 44, margin: CGFloat = 16
+    /// The sticker's side, which grows with the interface size, and its distance from the center's edges.
+    static var side: CGFloat { 44 * Look.scale.size.factor }
+    static let margin: CGFloat = 16
     /// How near the top or the bottom a sticker let go clings there; how far its eyes lean while it moves.
     static let magnet: CGFloat = 44, lean: CGFloat = 3
     /// The sticker's first place, and its place when none is remembered or no space is open: the bottom trailing corner.

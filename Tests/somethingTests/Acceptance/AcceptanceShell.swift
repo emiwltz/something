@@ -540,6 +540,13 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: board.web, "j4-2" + suffix, root: stage.home.root)
         }
+        // And "/" alone, its commands open as the agent lists them: the step's point. The page's own look (the mockup's
+        // dark board, the card's model menu, Send Now and After This Turn) is the template's, redrawn in S14a.
+        seen = try await run(type + read)
+        #expect(seen["hidden"] as? Bool == false)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: board.web, "j4-2-list" + suffix, root: stage.home.root)
+        }
     }
 
     /// The mockup's agents, Claude Code in pacman launched by My agents, with its own commands and its sub-agents.

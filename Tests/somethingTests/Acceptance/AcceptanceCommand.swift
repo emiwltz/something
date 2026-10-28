@@ -431,7 +431,7 @@ struct AcceptanceCommand {
         try await settings(.general, "6-1", shows: shows, size: .large) { settings, _ in
             let look = try #require(settings.model.sections(.general).last)
             #expect(look.title == "Look" && look.rows.map(\.title) == ["Interface size"])
-            #expect(look.rows[0].note.contains("⌘+ bigger · ⌘− smaller · ⌘0 default"))
+            #expect(look.rows[0].tiles && look.rows[0].keys.map(\.key) == ["⌘+", "⌘−", "⌘0"])
             guard case .choice(let options, let get, _) = look.rows[0].control else { Issue.record("not a choice"); return }
             #expect(options.map(\.label) == ["Default", "Large", "Larger"] && get() == "default")
             #expect(Look.Size.allCases.map(\.factor) == [1, 1.12, 1.24])

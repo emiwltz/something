@@ -137,8 +137,11 @@ struct WelcomeView: View {
                 AgentModelChip(model: assistant).boxed(RoundedRectangle(cornerRadius: Look.control + 1), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
             }
             .padding(.top, 30)
-            Text(found > 1 ? "Found on this Mac. \(found - 1) more to choose from." : "Found on this Mac.")
-                .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9)
+            // Said of the builder found and chosen for the person; once they pick another, it is their choice.
+            if assistant.kind == assistant.entries.first(where: \.enabled)?.id {
+                Text(found > 1 ? "Found on this Mac. \(found - 1) more to choose from." : "Found on this Mac.")
+                    .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9)
+            }
         }
     }
 

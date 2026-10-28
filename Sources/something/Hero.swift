@@ -78,7 +78,7 @@ struct Hero: View {
     private func shown(_ piece: Piece) -> Double {
         switch (light.lit, piece) {
         case (nil, _), (.page, .page), (.agents, .agents), (.agents, .panel), (.assistant, .assistant), (.assistant, .panel): 1
-        case (_, .page): 0.5
+        case (_, .page): 0.8
         default: 0.14
         }
     }
@@ -120,9 +120,13 @@ struct Hero: View {
         .boxed(RoundedRectangle(cornerRadius: 6), Look.Token.bg.ui, ring: Look.Token.line2.ui)
     }
 
-    /// The page, in its own colours (a page's, not the app's), the same by day and by night.
+    /// The page, in its own colours (a page's, not the app's), the same by day and by night; in neutral greys while
+    /// another part is lit, drawn so rather than desaturated, which an offscreen drawing would not keep.
     private var page: some View {
-        let brown = Color(red: 0x3A / 255, green: 0x24 / 255, blue: 0x18 / 255), note = Color.white.opacity(0.62)
+        let grey = light.lit != nil && light.lit != .page
+        let brown = grey ? Color(white: 0.45) : Color(red: 0x3A / 255, green: 0x24 / 255, blue: 0x18 / 255), note = Color.white.opacity(0.62)
+        let fill: [Color] = grey ? [Color(white: 0.94), Color(white: 0.91), Color(white: 0.88)]
+            : [Color(red: 0.984, green: 0.902, blue: 0.8), Color(red: 0.973, green: 0.812, blue: 0.682), Color(red: 0.949, green: 0.718, blue: 0.612)]
         func lines(_ widths: [CGFloat]) -> some View {
             VStack(alignment: .leading, spacing: 6) { ForEach(widths, id: \.self) { Capsule().fill(brown.opacity(0.22)).frame(width: 160 * $0, height: 4) } }
         }
@@ -153,7 +157,7 @@ struct Hero: View {
                                 .background(brown.opacity(0.1), in: RoundedRectangle(cornerRadius: 3))
                             Capsule().fill(brown.opacity(0.22)).frame(width: index == 1 ? 70 : 100, height: 4)
                             Spacer(minLength: 0)
-                            Circle().fill([Look.Token.ok.ui, brown.opacity(0.25), brown][index]).frame(width: 7, height: 7)
+                            Circle().fill([grey ? brown : Look.Token.ok.ui, brown.opacity(0.25), brown][index]).frame(width: 7, height: 7)
                         }
                     }
                 }
@@ -163,13 +167,11 @@ struct Hero: View {
             .padding(EdgeInsets(top: 14, leading: 14, bottom: 12, trailing: 14))
             .foregroundStyle(brown)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(LinearGradient(stops: [.init(color: Color(red: 0.984, green: 0.902, blue: 0.8), location: 0),
-                                               .init(color: Color(red: 0.973, green: 0.812, blue: 0.682), location: 0.55),
-                                               .init(color: Color(red: 0.949, green: 0.718, blue: 0.612), location: 1)], startPoint: .top, endPoint: .bottom))
+            .background(LinearGradient(stops: zip(fill, [0, 0.55, 1]).map { .init(color: $0, location: $1) }, startPoint: .top, endPoint: .bottom))
         }
         .frame(width: 212, height: 272)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder((grey ? Look.Token.ink3 : .ink).ui, lineWidth: 1.5))
     }
 
     private var assistant: some View {
@@ -327,12 +329,19 @@ enum HowItWorks {
 
     /// The window, made once and kept, not shown yet, `lit` lit.
     static func made(builder: String, motion: Look.Motion, lit: Hero.Part? = nil) -> NSWindow {
-        let made = window ?? NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        let made = window ?? NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                                      backing: .buffered, defer: false)
         if window == nil {
-            (made.isReleasedWhenClosed, made.title) = (false, "How something Works")
+            // Its title bar is drawn by the view, centred on side as the mockup's; the window keeps the title for the
+            // Window menu and VoiceOver.
+            (made.isReleasedWhenClosed, made.title, made.titlebarAppearsTransparent, made.titleVisibility) = (false, "How something Works", true, .hidden)
             made.center()
         }
-        made.contentView = NSHostingView(rootView: HowItWorksView(light: light, builder: builder, motion: motion))
+        // The view under the title bar too: the whole frame is its size, which the view does not change.
+        let host = NSHostingView(rootView: HowItWorksView(light: light, builder: builder, motion: motion))
+        host.sizingOptions = []
+        made.contentView = host
+        made.setFrame(NSRect(origin: made.frame.origin, size: size), display: false)
         window = made
         light.light(lit)
         return made
@@ -342,25 +351,29 @@ enum HowItWorks {
 struct HowItWorksView: View {
     let light: HeroLight, builder: String, motion: Look.Motion
     static let parts: [(Hero.Part, String, String)] = [
-        (.page, "A page", "One HTML file in ~/something/spaces. Yours, exported in one click."),
+        // Word joiners keep the path on one line.
+        (.page, "A page", "One HTML file in ~/\u{2060}something/\u{2060}spaces. Yours, exported in one click."),
         (.agents, "Your agents", "The coding agents on your Mac. A page may Watch them, Talk to them, or Run one in a folder you pick."),
         (.assistant, "Your assistant", "One of your agents, at work on the page, only in the pages folder. Anything else, it asks you."),
     ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("something in one picture").font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui)
-            Text("A page, your agents, your assistant").font(Look.font(.title, size: 24, weight: .semibold).ui).padding(.top, 6)
+            Text("How something Works").font(Look.font(.ui, size: 13, weight: .medium).ui).frame(maxWidth: .infinity).frame(height: 37)
+                .background(Look.Token.side.ui).overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+                .padding(.horizontal, -40).accessibilityHidden(true)
+            Text("something in one picture").font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 22)
+            Text("A page, your agents, your assistant").font(Look.font(.title, size: 22, weight: .semibold).ui).padding(.top, 4)
                 .accessibilityAddTraits(.isHeader)
             Text("Three things, and how they meet. Everything stays on this Mac.").foregroundStyle(Look.Token.ink2.ui).padding(.top, 2)
-            Hero(light: light, builder: builder, motion: motion).frame(maxWidth: .infinity).padding(.top, 22)
+            Hero(light: light, builder: builder, motion: motion).frame(maxWidth: .infinity).padding(.top, 18)
             HStack(alignment: .top, spacing: 10) {
                 ForEach(Array(Self.parts.enumerated()), id: \.offset) { index, part in
                     let on = light.lit == part.0
                     Button { light.light(on ? nil : part.0) } label: {
                         HStack(alignment: .top, spacing: 9) {
                             Text("\(index + 1)").font(Look.font(.ui, size: 11, weight: .semibold).ui).foregroundStyle((on ? Look.Token.actfg : .ink2).ui)
-                                .frame(width: 20, height: 20).boxed(RoundedRectangle(cornerRadius: 6), (on ? Look.Token.act : .bg2).ui, ring: Look.Token.line.ui)
+                                .frame(width: 20, height: 20).boxed(RoundedRectangle(cornerRadius: 6), (on ? Look.Token.act : .bg2).ui, ring: Look.Token.line2.ui)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(part.1).font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
                                 Text(part.2).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
@@ -368,7 +381,7 @@ struct HowItWorksView: View {
                             Spacer(minLength: 0)
                         }
                         .padding(EdgeInsets(top: 9, leading: 10, bottom: 10, trailing: 10)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .boxed(RoundedRectangle(cornerRadius: 8), (on ? Look.Token.sel : .bg2).ui, ring: (on ? Look.Token.ink2 : .line).ui, width: on ? 1.5 : 1)
+                        .boxed(RoundedRectangle(cornerRadius: 8), on ? Look.Token.sel.ui : .clear, ring: (on ? Look.Token.ink2 : .line2).ui, width: on ? 1.5 : 1)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -376,7 +389,7 @@ struct HowItWorksView: View {
                 }
             }
             .fixedSize(horizontal: false, vertical: true).padding(.top, 16)
-            Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.top, 16)
+            Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.top, 12)
             HStack(spacing: 7) {
                 Image(systemName: "lock").font(.system(size: 10.5)).accessibilityHidden(true)
                 Text("Only you answer, in a window of your Mac. A page can’t see or answer it.")
@@ -387,11 +400,12 @@ struct HowItWorksView: View {
                 .buttonStyle(Secondary()).padding(.leading, 12)
                 Spacer()
             }
-            .font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink2.ui).padding(.top, 14)
+            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(.top, 12)
         }
-        .font(Look.font(.ui, size: 13.5).ui).foregroundStyle(Look.Token.ink.ui)
-        .padding(EdgeInsets(top: 26, leading: 40, bottom: 18, trailing: 40))
+        .font(Look.font(.ui, size: 13).ui).foregroundStyle(Look.Token.ink.ui)
+        .padding(EdgeInsets(top: 0, leading: 40, bottom: 18, trailing: 40))
         .frame(width: HowItWorks.size.width, height: HowItWorks.size.height, alignment: .topLeading)
         .background(Look.Token.bg.ui)
+        .ignoresSafeArea()
     }
 }

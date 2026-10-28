@@ -559,10 +559,15 @@ struct AgentModelChip: View {
         } label: {
             HStack(spacing: 6) {
                 Monogram(name: model.name, side: 16)
-                Text("\(model.name) · \(words.model)").lineLimit(1)
+                // The agent in semibold ink, its model after it in regular ink2, as the mockup's chip.
+                HStack(spacing: 0) {
+                    Text(model.name).fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui)
+                    Text(" · \(words.model)")
+                }
+                .lineLimit(1)
                 Chevron()
             }
-            .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
+            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
             .padding(.leading, 4).padding(.trailing, 8).frame(height: 26).contentShape(Rectangle())
         }
         .plainMenu()

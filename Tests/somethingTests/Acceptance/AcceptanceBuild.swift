@@ -43,6 +43,15 @@ struct AcceptanceBuild {
         try await scene.draw("x2-2") { words in
             #expect(words == Self.welcomeWords("Codex"), "\(words)")
         }
+        // The chip's menu is a system menu, drawn by the window server where no picture here reaches (cannot_native):
+        // its agents and model are written beside the picture as x2-2-menu.txt.
+        if let gallery {
+            let agents = model.entries.map { "  \($0.title)\($0.checked ? "  ✓" : "")" }
+            let models = model.modelMenu.flatMap { part in [part.header.uppercased()] + part.choices.map { "  \($0.title)\($0.checked ? "  ✓" : "")" }
+                + (part.note.map { ["  \($0)"] } ?? []) }
+            try (["BUILDS THIS SPACE"] + agents + models).joined(separator: "\n").appending("\n")
+                .write(to: gallery.appendingPathComponent("x2-2-menu.txt"), atomically: true, encoding: .utf8)
+        }
     }
 
     /// X2.3, the first space for real: Make My First Space (Return) ends the welcome, kept as seen; the window arrives

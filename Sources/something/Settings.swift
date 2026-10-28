@@ -48,6 +48,8 @@ struct SettingsRow: Identifiable {
     var trail: String?
     /// The note is a path, in code.
     var code = false
+    /// A choice drawn as "Aa" tiles that grow with each option (Interface size), and keys said under the note.
+    var tiles = false, keys: [(key: String, words: String)] = []
     var id: String { title }
 }
 
@@ -179,8 +181,9 @@ struct SettingsSection: Identifiable {
                             control: .button("Show Again") { [weak self] in self?.tour() }),
             ]), SettingsSection(title: "Look", rows: [
                 SettingsRow(title: "Interface size",
-                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages. ⌘+ bigger · ⌘− smaller · ⌘0 default, from anywhere.",
-                            control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }, then: { [weak self] in self?.resize(preferences.size) })),
+                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages.",
+                            control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }, then: { [weak self] in self?.resize(preferences.size) }),
+                            tiles: true, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
             ])]
         case .assistant:
             return assistantSections()
@@ -576,6 +579,15 @@ private struct RowView: View {
                 } else if !row.note.isEmpty {
                     Text(row.note).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)
                 }
+                if !row.keys.isEmpty {
+                    HStack(spacing: 5) {
+                        ForEach(Array(row.keys.enumerated()), id: \.offset) { index, pair in
+                            Keycap(words: pair.key, boxed: true)
+                            Text(pair.words + (index < row.keys.count - 1 ? " ·" : ""))
+                        }
+                    }
+                    .font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 5)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if row.trail == nil { RowControl(row: row) }
@@ -591,6 +603,8 @@ struct RowControl: View {
 
     var body: some View {
         switch row.control {
+        case .choice(let options, let get, let set) where row.tiles:
+            Tiles(title: row.title, options: options, get: get, set: set)
         case .choice(let options, let get, let set):
             // The menu itself is the system's, a heading as a section.
             let shown = options.first { !$0.heading && $0.value == get() }?.label ?? ""
@@ -613,6 +627,33 @@ struct RowControl: View {
             .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui).disabled(!enabled).opacity(enabled ? 1 : 0.45)
         case .locked(let word):
             Label(word, systemImage: "lock").labelStyle(Locked()).accessibilityLabel("\(row.title): \(word), cannot be changed")
+        }
+    }
+}
+
+/// A choice in tiles, each "Aa" a size larger than the one before over two lines of text; the chosen one ringed in
+/// ink, its label in semibold.
+private struct Tiles: View {
+    let title: String, options: [SettingsRow.Option], get: () -> String, set: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                let on = get() == option.value
+                Button { set(option.value) } label: {
+                    VStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Aa").font(Look.font(.ui, size: 14 + 3 * CGFloat(index), weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                            ForEach([0.5, 0.35], id: \.self) { Capsule().fill(Look.Token.line2.ui).frame(width: 64 * $0, height: 2.5) }
+                        }
+                        .padding(.horizontal, 10).frame(width: 84, height: 54, alignment: .leading)
+                        .boxed(RoundedRectangle(cornerRadius: Look.control, style: .continuous), Look.Token.bg2.ui, ring: (on ? Look.Token.ink : .line2).ui, width: on ? 2 : 1)
+                        Text(option.label).font(Look.font(.ui, size: 11.5, weight: on ? .semibold : .regular).ui).foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(title): \(option.label)").accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+            }
         }
     }
 }

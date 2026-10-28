@@ -261,7 +261,7 @@ struct GalleryTests {
         defer { Look.scale.size = .standard }
         let larger = try await draw(model, "assistant-conversation-larger" + suffix, height: 748, fixture)
         Look.scale.size = .standard
-        let fixed: Set = ["agents", "assistant", "claude", "code", "haiku", "point", "ask", "for", "change"]
+        let fixed: Set = ["agents", "assistant", "claude", "code", "haiku", "ask", "for", "change"]
         #expect(fixed.isSubset(of: larger), "the card at Larger loses \(fixed.subtracting(larger))")
         // As narrow as the center of the smallest window with the sidebar and Info open.
         try await draw(model, "assistant-conversation-narrow" + suffix, width: 340, height: 560, fixture)

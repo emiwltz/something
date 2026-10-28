@@ -591,6 +591,10 @@ struct AcceptanceAssistant {
         let (shell, library, brief) = try await AcceptanceAssistant.x6(stage)
         defer { brief.close() }
         let model = shell.assistant
+        // The card's clock held as the turn ends: "Just now" lasts a few seconds, less than the pictures take.
+        let held = Date()
+        model.clock = { held }
+        model.tick()
         shell.toggleConversation(nil)
         #expect(model.cardShown && model.threadShown && model.title == "Daily brief" && model.notice == nil)
         #expect(model.presence.now == .changed("brief.html"), "said: \(String(describing: model.presence.now))")

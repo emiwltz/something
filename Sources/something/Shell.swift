@@ -310,6 +310,16 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             DispatchQueue.main.async { self?.followSize(now) }
         }
         guard now != size else { return }
+        // The toolbar's buttons grow in place, kept (they hold Point's pressed state), as item(_:) would make them now;
+        // the sticker too.
+        for item in toolbarItems {
+            guard let button = controls[item.itemIdentifier] ?? item.view as? NSButton else { continue }
+            button.constraints.filter { [.width, .height].contains($0.firstAttribute) }.forEach { $0.constant *= now.factor / size.factor }
+            button.symbolConfiguration = .init(pointSize: (item.itemIdentifier == Shell.point ? 12 : 13) * now.factor,
+                                               weight: item.itemIdentifier == Shell.full ? .bold : .regular)
+            if item.itemIdentifier == Shell.point { button.font = Look.font(.ui, size: 12, weight: .medium) }
+        }
+        glass.place()
         heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
         space?.web.pageZoom = now.factor
         let side = split.splitViewItems[0], width = side.viewController.view.frame.width
@@ -336,17 +346,18 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
             let button = ToolButton(image: image, target: nil, action: action)
             (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, Look.Token.ink2.color, tip)
-            // The mockup's icons are thin strokes, Point's target a size below the others'.
-            button.symbolConfiguration = .init(pointSize: id == Shell.point ? 12 : 13, weight: .regular)
+            // The mockup's icons are thin strokes, Point's target a size below the others'; all at the interface size.
+            let k = Look.scale.size.factor
+            button.symbolConfiguration = .init(pointSize: (id == Shell.point ? 12 : 13) * k, weight: .regular)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
-            var width: CGFloat = 28
+            var width = 28 * k
             if let words {
                 let font = Look.font(.ui, size: 12, weight: .medium)
                 // The space before the words makes the mockup's 6 points with the button's own gap after the icon.
                 (button.title, button.imagePosition, button.imageHugsTitle, button.font) = (" " + words, .imageLeading, true, font)
-                width = 9 + 13 + 6 + ceil(words.size(withAttributes: [.font: font]).width) + 9
+                width = (9 + 13 + 6 + 9) * k + ceil(words.size(withAttributes: [.font: font]).width)
             }
-            NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28), button.widthAnchor.constraint(equalToConstant: width)])
+            NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28 * k), button.widthAnchor.constraint(equalToConstant: width)])
             // The image and action serve the overflow menu, where the toolbar puts an item without its view.
             (item.view, item.label, item.isBordered, item.autovalidates, item.image, item.action) = (button, label, false, false, button.image, action)
             return item
@@ -370,7 +381,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let buttons = tools.compactMap { $0.view as? NSButton }, row = NSStackView(views: buttons)
             tools.forEach { $0.view = nil }
             // The mockup draws Full Screen's corners heavier than the other icons.
-            buttons[2].symbolConfiguration = .init(pointSize: 13, weight: .bold)
+            buttons[2].symbolConfiguration = .init(pointSize: 13 * Look.scale.size.factor, weight: .bold)
             self.controls = Dictionary(uniqueKeysWithValues: zip(tools.map(\.itemIdentifier), buttons))
             row.spacing = 4
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
