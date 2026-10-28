@@ -211,11 +211,12 @@ final class Stage {
     /// Runs `body`, which sets NSApp's appearance, while no other scenario or the gallery does, then gives the app back
     /// its own appearance. Anything that sets NSApp.appearance in a test goes through here, or a night picture drawn at
     /// the same time by another suite would reach a day one (or the reverse). So does a walk that turns on VoiceOver's
-    /// mode (also the whole process's), and a timing that either would slow.
+    /// mode (also the whole process's), and a timing that either would slow; so does any test that sets the interface
+    /// size (Look.scale, the whole process's too) or reads an absolute size, which it gives back at Default.
     static func alone<T>(_ body: () async throws -> T) async rethrows -> T {
         _ = await wait(600, until: { !drawing })
         drawing = true
-        defer { (drawing, NSApp.appearance) = (false, nil) }
+        defer { (drawing, NSApplication.shared.appearance, Look.scale.size) = (false, nil, .standard) }
         return try await body()
     }
 }

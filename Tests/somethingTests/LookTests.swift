@@ -81,28 +81,34 @@ import Testing
         for tone in Look.tiles { #expect(contrast(0xFFFFFF, tone) >= 3, "\(String(tone, radix: 16))") }
     }
 
-    @Test func theSizesAndTheScaleAreTheMockups() {
-        #expect((Look.card, Look.control, Look.window) == (10, 7, 12))
-        #expect((Look.row, Look.density) == (25, 0.75))
-        let scale = [Look.xs, Look.small, Look.medium, Look.body, Look.large].map(\.size)
-        #expect(scale == [10.5, 11.5, 12.5, 13, 15])
-        let titles = [Look.titleS, Look.titleM, Look.titleL, Look.titleXL]
-        #expect(titles.map(\.size) == [17, 22, 34, 44] && titles.map(\.leading) == [1.2, 1.15, 1.06, 1.04])
-        #expect(titles.allSatisfy { $0.face == .title && $0.weight == .semibold })
+    @Test func theSizesAndTheScaleAreTheMockups() async {
+        // Under the lock the size tests hold: Look.scale is the whole process's, and they set it to Larger a while.
+        await Stage.alone {
+            #expect((Look.card, Look.control, Look.window) == (10, 7, 12))
+            #expect((Look.row, Look.density) == (25, 0.75))
+            let scale = [Look.xs, Look.small, Look.medium, Look.body, Look.large].map(\.size)
+            #expect(scale == [10.5, 11.5, 12.5, 13, 15])
+            let titles = [Look.titleS, Look.titleM, Look.titleL, Look.titleXL]
+            #expect(titles.map(\.size) == [17, 22, 34, 44] && titles.map(\.leading) == [1.2, 1.15, 1.06, 1.04])
+            #expect(titles.allSatisfy { $0.face == .title && $0.weight == .semibold })
+        }
     }
 
-    @Test func aFontFallsBackToTheSystemsClosest() {
-        #expect(Look.Face.title.family == "Fraunces" && Look.Face.ui.family == "Onest" && Look.Face.voice.family == "Young Serif")
-        for face in [Look.Face.title, .ui, .voice, .code] {
-            let font = Look.font(face, size: 13)
-            #expect(font.pointSize == 13)
-            // Bundled or not, a title is never the interface's sans serif, and code is always monospaced.
-            if face == .code { #expect(font.isFixedPitch) }
-            if face == .title || face == .voice {
-                #expect(font.familyName != NSFont.systemFont(ofSize: 13).familyName, "\(face): \(font.familyName ?? "")")
+    @Test func aFontFallsBackToTheSystemsClosest() async {
+        // Under the lock the size tests hold: Look.scale is the whole process's, and they set it to Larger a while.
+        await Stage.alone {
+            #expect(Look.Face.title.family == "Fraunces" && Look.Face.ui.family == "Onest" && Look.Face.voice.family == "Young Serif")
+            for face in [Look.Face.title, .ui, .voice, .code] {
+                let font = Look.font(face, size: 13)
+                #expect(font.pointSize == 13)
+                // Bundled or not, a title is never the interface's sans serif, and code is always monospaced.
+                if face == .code { #expect(font.isFixedPitch) }
+                if face == .title || face == .voice {
+                    #expect(font.familyName != NSFont.systemFont(ofSize: 13).familyName, "\(face): \(font.familyName ?? "")")
+                }
             }
+            #expect(Look.titleXL.font.pointSize == 44)
         }
-        #expect(Look.titleXL.font.pointSize == 44)
     }
 
     /// The value of each axis of `font`, by its four-letter tag; an axis at its default is left out by CoreText.

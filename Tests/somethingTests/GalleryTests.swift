@@ -258,6 +258,7 @@ struct GalleryTests {
         // At Larger, the card's fixed frames (its head, chips and composer) hold type 24 % larger, uncut; the thread
         // scrolls, so its first lines may be out of sight.
         Look.scale.size = .larger
+        defer { Look.scale.size = .standard }
         let larger = try await draw(model, "assistant-conversation-larger" + suffix, height: 748, fixture)
         Look.scale.size = .standard
         let fixed: Set = ["agents", "assistant", "claude", "code", "haiku", "point", "ask", "for", "change"]
