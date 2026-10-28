@@ -14,7 +14,7 @@ struct BlankView: View {
     static let chips = [
         ("A countdown to Saturday", "A countdown to Saturday, with what my agents still have to finish before the weekend.", "sun.max"),
         ("A small game for my breaks", "A small game I can play in a minute between two tasks, with my best score kept.", "play"),
-        ("My reading list", "My reading list: what I want to read, a line on each, the ones I finished folded away.", "note.text"),
+        ("My reading list", "My reading list: what I want to read, a line on each, the ones I finished folded away.", "bookmark"),
     ]
     static let placeholder = "A page that shows who is waiting for me, oldest first…"
     /// The field's width, as the mockup's.
@@ -60,7 +60,7 @@ struct BlankView: View {
                     }
                     if !model.building, !model.noAgent { suggestions.padding(.top, 20) }
                 }
-                .padding(EdgeInsets(top: ladder != nil ? 40 : 64, leading: 40, bottom: 64, trailing: 40))
+                .padding(EdgeInsets(top: ladder != nil ? 40 : 58, leading: 40, bottom: 64, trailing: 40))
                 .frame(maxWidth: .infinity)
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -72,7 +72,7 @@ struct BlankView: View {
     private func hero(_ ladder: Ladder?) -> some View {
         VStack(spacing: 10) {
             PageSign(state: model.building ? ladder?.eyes == .wait ? .listen : ladder?.eyes ?? .think : .listen, joy: ladder?.done == true,
-                     side: 76, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
+                     side: 52, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
             Text("What do you want to make?").font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
                 .multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
                 // The mockup's line is 1.04 of the size; Fraunces's own leading is taller.
@@ -163,7 +163,7 @@ struct Key: View {
     }
 }
 
-/// New Space's field: flat, bg2 in a line2 ring that turns ink2 with the focus, no shadow; Onest 16, two lines high;
+/// New Space's field: flat, bg2 in a line2 ring that turns ink with the focus, no shadow; Onest 16, two lines high;
 /// its bar under the words: who builds it and with which model in one chip, what ⇧Return does, and Build, greyed while
 /// nothing is written. Return builds, ⇧Return adds a line, and Return that confirms what an input method composes
 /// builds nothing. While it builds it holds `sent`, read only, and its bar steps aside.
@@ -192,7 +192,7 @@ struct BuildField: View {
             .padding(EdgeInsets(top: 12, leading: 16, bottom: busy ? 12 : 0, trailing: 16))
             if !busy { bar }
         }
-        .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink2.ui : Look.Token.line2.ui)
+        .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink.ui : Look.Token.line2.ui)
     }
 
     /// The agent and its model in one chip, ⇧↵ new line, and Build.
@@ -200,7 +200,7 @@ struct BuildField: View {
         HStack(spacing: 8) {
             let words = model.modelWords
             MenuChip(label: "Agent and model: \(model.name), \(words.model)") {
-                Image(nsImage: Sign.miniEyes(.listen)).renderingMode(.template).frame(width: 16, height: 10)
+                Monogram(name: model.name)
                 Text(model.name)
                 Text("·").foregroundStyle(Look.Token.ink3.ui)
                 Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)

@@ -41,9 +41,13 @@ enum Levels {
     static var runWarning: String? { Ask.warning(for: "launch").map { $0 + "." } }
     static let sheetFine = "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."
 
-    /// `text` as a warning under the choice.
+    /// `text` as a warning under the choice: a quiet line with its mark, read before choosing, never an alarm.
     static func warning(_ text: String) -> some View {
-        Text(text).font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.bad.ui).fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 9.5)).foregroundStyle(Look.Token.ink2.ui).accessibilityHidden(true)
+            Text(text)
+        }
+        .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
     }
 
     /// The folders the Mac's agents work in, as `state` knows them, each once, in order: Run's choices.
@@ -70,18 +74,45 @@ enum Levels {
     }
 }
 
-/// The four levels side by side: the Mac's segmented control, read by VoiceOver as one choice among four; as wide as
-/// its words.
+/// The four levels side by side, as the mockup's .xc-seg: a sunk track, the chosen level a raised pill of the page's
+/// colour, no dividers; read by VoiceOver as one adjustable control that says the level. As wide as its words, or as its column
+/// (`wide`, Info's).
 struct LevelPicker: View {
     let level: Binding<Grant.Level>
+    var wide = false
 
     var body: some View {
-        Picker("With your agents", selection: level) {
-            ForEach(Grant.Level.allCases, id: \.self) { Text($0.title).tag($0) }
+        HStack(spacing: 2) {
+            ForEach(Grant.Level.allCases, id: \.self) { choice in
+                let on = choice == level.wrappedValue
+                Button { level.wrappedValue = choice } label: {
+                    Text(choice.title).font(Look.font(.ui, size: 12, weight: on ? .semibold : .medium).ui)
+                        .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                        .padding(.horizontal, wide ? 4 : 10).frame(minWidth: wide ? 0 : 58, maxWidth: wide ? .infinity : nil).frame(height: 24)
+                        .background {
+                            if on {
+                                RoundedRectangle(cornerRadius: 6).fill(Look.Token.bg.ui).shadow(color: .black.opacity(0.08), radius: 1, y: 1)
+                                    .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(Look.Token.line2.ui) }
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .fixedSize()
+        .padding(2)
+        .boxed(RoundedRectangle(cornerRadius: 8), Look.Token.sunk.ui, ring: Look.Token.line.ui)
+        .fixedSize(horizontal: !wide, vertical: true)
+        // One control to VoiceOver: its level said as its value, changed by the adjust gesture, as a slider is.
+        .accessibilityElement(children: .ignore)
+        // The level in the label itself: offscreen and on, the words read are the same.
+        .accessibilityLabel("With your agents: \(level.wrappedValue.title)")
+        .accessibilityHint("None, Watch, Talk or Run")
+        .accessibilityAdjustableAction { direction in
+            let all = Grant.Level.allCases, at = all.firstIndex(of: level.wrappedValue) ?? 0
+            let next = direction == .increment ? min(at + 1, all.count - 1) : direction == .decrement ? max(at - 1, 0) : at
+            level.wrappedValue = all[next]
+        }
     }
 }
 

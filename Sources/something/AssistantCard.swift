@@ -441,6 +441,27 @@ struct MenuChip<Shown: View, Items: View>: View {
     }
 }
 
+/// An agent's monogram, as the mockup's .cc-mono: its initials on a sunk tile ("CC" for two words, the capitals of one
+/// word written in two, "OC", else its first letter). Drawn from its name alone, so that no line here names an agent.
+struct Monogram: View {
+    let name: String
+
+    static func letters(_ name: String) -> String {
+        let words = name.split(separator: " ").filter { !$0.isEmpty }
+        if words.count > 1 { return words.prefix(2).compactMap { $0.first.map { String($0).uppercased() } }.joined() }
+        let capitals = name.filter(\.isUppercase)
+        if capitals.count == 2, name.contains(where: \.isLowercase) { return capitals }
+        return name.first.map { String($0).uppercased() } ?? "?"
+    }
+
+    var body: some View {
+        Text(Monogram.letters(name)).font(Look.font(.ui, size: 9.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
+            .frame(width: 18, height: 18)
+            .boxed(RoundedRectangle(cornerRadius: 5), Look.Token.sunk.ui, ring: Look.Token.line.ui)
+            .accessibilityHidden(true)
+    }
+}
+
 /// The agent chip: a dot of its state's colour and the builder's name, opening the agent menu. New Space shows it too.
 struct AgentChip: View {
     let model: AssistantModel
@@ -676,7 +697,9 @@ extension AssistantModel {
     var modelWords: (model: String, effort: String?) {
         let offered = offered
         if ownModel { return ("Its own model", nil) }
-        let model = (session.model ?? agent?.model).map { m in offered.model?.first { $0.value == m }?.label ?? m } ?? "Default model"
+        // A model the agent names by a bare word ("sonnet") is said as a name, never as an id.
+        let model = (session.model ?? agent?.model).map { m in offered.model?.first { $0.value == m }?.label ?? (m.allSatisfy(\.isLowercase) ? m.capitalized : m) }
+            ?? "Default model"
         let effort = (session.effort ?? agent?.effort).map { e in offered.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
         return (model, effort)
     }

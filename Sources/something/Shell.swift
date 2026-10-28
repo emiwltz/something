@@ -122,6 +122,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         // A frame kept narrow from the last time starts with the rail.
         fit()
+        watchRailTip()
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
         titleLine.opened = { [weak self] in self.map { $0.toggleInfo(spaceOpen: $0.space != nil) } }
@@ -130,7 +131,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         library.exported = { [weak self, weak library] url in
-            _ = self?.toast("\(url.lastPathComponent) is in Downloads", action: Toast.Action(label: "Show") { library?.reveal(url) })
+            // What the file holds too: its memory is never in it (Library.export).
+            _ = self?.toast("\(url.lastPathComponent) is in Downloads · its memory stays on this Mac", action: Toast.Action(label: "Show") { library?.reveal(url) })
         }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
@@ -743,10 +745,14 @@ final class Veil: NSView {
 
 /// The toolbar's name: drawn here, since a text field in a toolbar is greyed while its window is not the key one. It
 /// gives way first when the window narrows, cut with an ellipsis, so that the tools never leave the toolbar. Over a
-/// space it is a button: a click, or VoiceOver's press, opens Info or closes it, as ⌘I does.
+/// space it is a button, drawn as the mockup's chip (a light fill, darker under the pointer, and a chevron): a click,
+/// or VoiceOver's press, opens Info or closes it, as ⌘I does.
 final class TitleLine: NSView {
-    /// 18 points from the sidebar's edge, as the mockup's toolbar starts; the toolbar gives the other 8.
+    /// 18 points from the sidebar's edge, as the mockup's toolbar starts; the toolbar gives the other 8. The chip starts
+    /// 8 points before the words.
     static let indent: CGFloat = 10
+    /// The chip's height, and what its chevron takes after the words.
+    static let chip: CGFloat = 26, chevron: CGFloat = 20
     var line = NSAttributedString() {
         didSet {
             setAccessibilityLabel(line.string)
@@ -761,7 +767,13 @@ final class TitleLine: NSView {
             setAccessibilityHelp(space ? Keys.tooltip("insp") : nil)
             toolTip = space ? Keys.tooltip("insp") : nil
             window?.invalidateCursorRects(for: self)
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
         }
+    }
+    /// Whether the pointer is over the chip.
+    private var lit = false {
+        didSet { needsDisplay = true }
     }
 
     /// What the tools need on its right, with the gap before them: the toolbar would rather move them to its overflow
@@ -771,16 +783,33 @@ final class TitleLine: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        let whole = ceil(line.size().width) + TitleLine.indent
+        let whole = ceil(line.size().width) + TitleLine.indent + (space ? TitleLine.chevron : 0)
         let room = window.map { $0.frame.width - convert(NSPoint.zero, to: nil).x - reserve } ?? whole
-        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: ceil(line.size().height))
+        return NSSize(width: max(TitleLine.indent, min(whole, room)), height: max(ceil(line.size().height), space ? TitleLine.chip : 0))
     }
     override func draw(_ dirtyRect: NSRect) {
         let cut = NSMutableAttributedString(attributedString: line), style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         cut.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: cut.length))
-        cut.draw(in: NSRect(x: TitleLine.indent, y: 0, width: bounds.width - TitleLine.indent, height: bounds.height))
+        let height = ceil(line.size().height), words = bounds.width - TitleLine.indent - (space ? TitleLine.chevron : 0)
+        if space {
+            (lit ? Look.Token.sel : .hover).color.setFill()
+            let chip = NSRect(x: TitleLine.indent - 8, y: (bounds.height - TitleLine.chip) / 2, width: bounds.width - TitleLine.indent + 8, height: TitleLine.chip)
+            NSBezierPath(roundedRect: chip, xRadius: Look.control, yRadius: Look.control).fill()
+            if let mark = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: 8, weight: .semibold).applying(.init(paletteColors: [Look.Token.ink3.color]))) {
+                mark.draw(in: NSRect(x: TitleLine.indent + words + 5, y: (bounds.height - mark.size.height) / 2, width: mark.size.width, height: mark.size.height))
+            }
+        }
+        cut.draw(in: NSRect(x: TitleLine.indent, y: (bounds.height - height) / 2, width: words, height: height))
     }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { lit = space }
+    override func mouseExited(with event: NSEvent) { lit = false }
     override func resetCursorRects() {
         if space { addCursorRect(bounds, cursor: .pointingHand) }
     }

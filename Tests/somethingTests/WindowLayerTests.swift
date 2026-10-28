@@ -108,7 +108,7 @@ import Testing
         try window { shell in
             shell.window.setContentSize(shell.window.contentMinSize)
             shell.heading("A morning brief with every feed, newsletter and calendar I read before work starts", "", space: true)
-            let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent
+            let whole = ceil(shell.titleLine.line.size().width) + TitleLine.indent + TitleLine.chevron
             // The toolbar lays its items out again on a later turn of the run loop, later under load: turned until
             // `done`, at least 0.2 s; the minute only stops a hang.
             func settle(until done: () -> Bool) {

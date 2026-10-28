@@ -1,8 +1,9 @@
 // The narrow window's sidebar, a rail of icons (the mockup's .wn-rail): the toggle that lays the whole sidebar over the
 // space (⌃⌘S), New Space, Go to…, a line, New Group, then each space as a letter on its colour (the only place a space
 // has one: the sidebar is a list of names), every group's rows shown even folded since no header is, a line between
-// groups; Templates and Settings at the foot. No words fit: each button says what it is under the pointer, a space "name
-// · state", and to VoiceOver, a space "Title, state" as in the sidebar. ↑ and ↓ move through New Space and the spaces.
+// groups; Templates and Settings at the foot. No words fit: each button says what it is under the pointer, a space in a
+// bubble beside its tile (RailTip: its name and its assistant's state, drawn at once, which a system tooltip is not), and
+// to VoiceOver, a space "Title, state" as in the sidebar. ↑ and ↓ move through New Space and the spaces.
 import AppKit
 import SwiftUI
 
@@ -16,7 +17,8 @@ struct Rail: View {
     private var library: Library { side.library }
     private var state: SidebarState { side.state }
 
-    /// What a space's tile says under the pointer: its name, and its assistant's state, the rail's only word for it.
+    /// What a space's tile says under the pointer, on one line: its name, and its assistant's state, the rail's only word
+    /// for it (RailTip draws the same two).
     static func tip(_ entry: Library.Entry, _ state: Sign.State) -> String {
         "\(entry.title) · \(entry.isSpace ? state.word : "not a space yet")"
     }
@@ -29,19 +31,19 @@ struct Rail: View {
     var body: some View {
         VStack(spacing: 0) {
             nav("Show Sidebar", tip: Keys.tooltip("sidebar", "Show Sidebar"), on: false, open: { Keys.send("sidebar") }) {
-                Image(systemName: "sidebar.left").font(.system(size: 13, weight: .medium)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "sidebar.left").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui)
             }
             nav("New Space", tip: tip("new", "New Space"), on: library.selection == .newSpace, open: side.newSpace) {
                 Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
                     .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
             }
             nav("Go to…", tip: tip("palette", "Go to…"), on: false, open: { Keys.send("palette") }) {
-                Image(systemName: "magnifyingglass").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "magnifyingglass").font(.system(size: 11.5)).foregroundStyle(Look.Token.ink2.ui)
             }
             .disabled(Keys.command("palette")?.action == nil)
             Self.line.padding(.top, 6)
             Button { library.addGroup() } label: {
-                Image(systemName: "folder.badge.plus").font(.system(size: 12)).foregroundStyle(Look.Token.ink3.ui)
+                Image(systemName: "folder.badge.plus").font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui)
                     .frame(width: 40, height: 26).contentShape(Rectangle())
             }
             .buttonStyle(.plain).help("New Group").accessibilityLabel("New Group")
@@ -58,11 +60,11 @@ struct Rail: View {
             Spacer(minLength: 0)
             nav("Templates", tip: tip("tpls", "Templates"), on: library.selection == .templates && !library.previewing,
                 open: { library.select(.templates) }) {
-                Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "square.grid.2x2").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui)
             }
             Self.line.padding(.top, 8)
             Button { Keys.send("settings") } label: {
-                Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
+                Image(systemName: "gearshape").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
@@ -124,6 +126,7 @@ struct Rail: View {
                 if side.assistant.ready?.id == entry.id { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).offset(x: 4, y: -4) }
             }
             .frame(width: 44, height: 38)
+            .background(TileAnchor(id: entry.id, state: state))
         .background(on ? Look.Token.sel.ui : state.hovered == key ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .contentShape(Rectangle())
         .onTapGesture {
@@ -131,11 +134,74 @@ struct Rail: View {
             library.select(.space(entry.id))
         }
         .onHover { side.hover(key, $0) }
-        .help(Self.tip(entry, now))
         .contextMenu { SidebarView.items(library.menu(for: entry)) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Library.label(entry, now))
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction { library.select(.space(entry.id)) }
+    }
+}
+
+/// Where a space's tile is, for the Shell to lay its bubble beside it: a view of its own, which AppKit can place.
+private struct TileAnchor: NSViewRepresentable {
+    let id: String, state: SidebarState
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        state.tiles[id] = SidebarState.Weak(view: view)
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) { state.tiles[id] = SidebarState.Weak(view: view) }
+}
+
+/// The name of the rail's tile under the pointer, in a bubble beside it (the mockup's .wn-rail tooltip): an arrow
+/// towards the tile, the name in semibold, its assistant's eyes and state. It lies in the window layer, over the space,
+/// which the rail's own column could not draw over; it takes no click.
+final class RailTip: NSHostingView<RailTip.Bubble> {
+    struct Bubble: View {
+        /// The tile's name, and its assistant's state; nil for a page that is not a space yet.
+        let name: String, state: Sign.State?
+
+        var body: some View {
+            HStack(spacing: 0) {
+                Rectangle().fill(Look.Token.act.ui).frame(width: 7, height: 7).rotationEffect(.degrees(45)).offset(x: 4)
+                HStack(spacing: 7) {
+                    Text(name).font(Look.font(.ui, size: 12, weight: .semibold).ui)
+                    if let state { Image(nsImage: Sign.miniEyes(state)).renderingMode(.template).resizable().frame(width: 12, height: 7.5).opacity(0.75) }
+                    Text(state?.word ?? "not a space yet").font(Look.font(.ui, size: 11.5).ui).opacity(0.75)
+                }
+                .foregroundStyle(Look.Token.actfg.ui).lineLimit(1)
+                .padding(.horizontal, 9).frame(height: 26)
+                .background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
+            }
+            .fixedSize()
+            .accessibilityHidden(true)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// Shows the bubble of `entry` beside `tile` in `layer`, in place of any other; none for nil.
+    static func show(_ entry: Library.Entry?, _ state: Sign.State, beside tile: NSView?, in layer: WindowLayer) {
+        layer.subviews.filter { $0 is RailTip }.forEach { $0.removeFromSuperview() }
+        guard let entry, let tile, tile.window === layer.window else { return }
+        let tip = RailTip(rootView: Bubble(name: entry.title, state: entry.isSpace ? state : nil))
+        let size = tip.fittingSize, at = layer.convert(tile.bounds, from: tile)
+        tip.frame = NSRect(x: at.maxX - 2, y: at.midY - size.height / 2, width: size.width, height: size.height)
+        layer.hold(tip)
+    }
+}
+
+extension Shell {
+    /// Keeps the rail's bubble on the tile under the pointer, while the column is the rail.
+    func watchRailTip() {
+        let side = library.sidebar
+        let hovered = withObservationTracking { side.rail ? side.hovered : nil } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.watchRailTip() }
+        }
+        guard case .space(let id)? = hovered, let entry = library.entry(id) else { return RailTip.show(nil, .sleep, beside: nil, in: layer) }
+        let eyes = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView.eyes
+        RailTip.show(entry, eyes?(id) ?? .sleep, beside: side.tiles[id]?.view, in: layer)
     }
 }

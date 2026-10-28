@@ -49,6 +49,8 @@ import SwiftUI
     /// The agents its page sees now, as it receives them; and the folders the Mac's agents work in, Run's choices.
     private(set) var shown: [Agent] = []
     private(set) var folders: [String] = []
+    /// What each agent shown did last, by its id, as its page sees it: the last step or message of its conversation.
+    private(set) var lasts: [String: String] = [:]
 
     init(places: Places, ask: Asking) {
         self.places = places
@@ -87,9 +89,11 @@ import SwiftUI
     /// state, while the panel shows. Only a change is set, so the panel is drawn again only then.
     func refresh() {
         let view = open()
-        let agents = view.map { Bridge.visible($0).agents } ?? []
+        let visible = view.map { Bridge.visible($0) }, agents = visible?.agents ?? []
         let known = view.map { Levels.folders($0.engine.state) } ?? []
+        let said = visible.map(Info.lasts) ?? [:]
         if agents != shown { shown = agents }
+        if said != lasts { lasts = said }
         if known != folders { folders = known }
     }
 
@@ -143,6 +147,26 @@ import SwiftUI
         case "error": "stopped on an error"
         default: "state unknown"
         }
+    }
+
+    /// The last step or message of each agent's conversation in `state`, by agent, on one line: the last words a page
+    /// that sees it has of what it does.
+    static func lasts(_ state: SomethingCore.State) -> [String: String] {
+        state.threads.reduce(into: [:]) { lasts, thread in
+            guard let item = thread.turns.last?.items.last else { return }
+            let line = item.text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+            if !line.isEmpty { lasts[thread.agent] = line.count > 60 ? String(line.prefix(58)) + "…" : line }
+        }
+    }
+
+    /// What an agent shown is doing, with what it did last when its page has it; idle, since when.
+    func doing(_ agent: Agent) -> String {
+        let doing = Info.doing(agent)
+        if agent.alive != false, agent.state == "idle", let updated = agent.updated.flatMap(iso8601.date) {
+            return doing + " since " + Info.day(updated, now: clock(), time: true).inSentence.replacingOccurrences(of: "today, ", with: "")
+        }
+        guard ["working", "waiting"].contains(agent.state), agent.alive != false, let last = lasts[agent.id] else { return doing }
+        return doing + ": " + last
     }
 
     /// The open space's view, when it is the one shown here.
@@ -300,7 +324,7 @@ struct InspectorView: View {
                     .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 7)).help(space.location.path)
                     .accessibilityLabel("Its file: \(path)")
                 Button { library.showInFinder(space.name) } label: {
-                    Image(systemName: "macwindow").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24).contentShape(Rectangle())
+                    Image(systemName: "arrow.up.forward.app").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("finder", "Show in Finder")).accessibilityLabel("Show in Finder")
             }
@@ -319,7 +343,7 @@ struct InspectorView: View {
         if let problem = info.problem {
             Text(problem).foot()
         } else if let level = info.level {
-            LevelPicker(level: Binding(get: { level }, set: { info.choose($0) }))
+            LevelPicker(level: Binding(get: { level }, set: { info.choose($0) }), wide: true)
             Text(level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
             if level == .run {
                 HStack(spacing: 8) {
@@ -345,12 +369,15 @@ struct InspectorView: View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(info.shown, id: \.id) { agent in
                 // A program something only sees by its process goes by that process's name.
-                let name = Registry.app.agent(agent.kind)?.name ?? agent.name ?? agent.kind, doing = Info.doing(agent)
+                let name = Registry.app.agent(agent.kind)?.name ?? agent.name ?? agent.kind, doing = info.doing(agent)
                 let folder = agent.folder.map { Words.path($0, home: info.places.home.path) }
-                VStack(alignment: .leading, spacing: 1) {
-                    (Text(name).fontWeight(.semibold).foregroundColor(Look.Token.ink.ui) + Text(" " + doing))
-                        .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-                    if let folder { Text(folder).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.head) }
+                HStack(alignment: .center, spacing: 8) {
+                    Monogram(name: name)
+                    VStack(alignment: .leading, spacing: 1) {
+                        (Text(name).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui) + Text(" " + doing))
+                            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                        if let folder { Text(folder).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.head) }
+                    }
                 }
                 .padding(.horizontal, 6).padding(.vertical, 5).frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .ignore).accessibilityLabel([name, doing, folder].compactMap { $0 }.joined(separator: ", "))
@@ -367,9 +394,10 @@ struct InspectorView: View {
         let last = assistant.rows.last { $0.reply != nil }?.reply.map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
         return VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 8) {
-                Image(nsImage: Sign.miniEyes(state, template: false)).resizable().interpolation(.high).frame(width: 22, height: 14.7)
-                    .accessibilityLabel("Its assistant: \(state.word)")
+                PageSign(state: state, side: 22, lands: false, motion: library.preferences.motion)
+                    .accessibilityElement().accessibilityLabel("Its assistant: \(state.word)")
                 MenuChip(label: "Agent and model: \(name), \(words.model)") {
+                    Monogram(name: name)
                     Text(name)
                     Text("·").foregroundStyle(Look.Token.ink3.ui)
                     Text(words.model) + Text(words.effort.map { " " + $0 } ?? "").fontWeight(.regular).foregroundColor(Look.Token.ink3.ui)
@@ -381,7 +409,7 @@ struct InspectorView: View {
                 .disabled(assistant.blocked)
             }
             if let last {
-                Text("“\(last.count > 110 ? String(last.prefix(108)) + "…" : last)”").font(Look.font(.voice, size: 13).ui).lineSpacing(3)
+                Text("“\(last.count > 110 ? String(last.prefix(108)) + "…" : last)”").font(Look.font(.voice, size: 12).ui).lineSpacing(3)
                     .foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                     .accessibilityLabel("Its last reply: \(last)")
             }

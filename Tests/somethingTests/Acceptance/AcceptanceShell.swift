@@ -7,6 +7,7 @@
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
+@testable import SomethingAgents
 import SomethingCore
 import SwiftUI
 import Testing
@@ -347,9 +348,7 @@ struct AcceptanceShell {
     /// agents waiting for the answer to its request, the rows' states at the mockup's moment.
     static func calm(_ stage: Stage, _ size: NSSize = Stage.Size.main) async throws -> (Shell, Library, SpaceView) {
         let (shell, library, _) = stage.window(size)
-        let groups = [("Work", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
-        library.preferences.groups = groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
-        library.relist()
+        Stage.work(library)
         try Self.eyes(shell, Stage.moment)
         shell.waiting(["agents"], mine: 0)
         let brief = try await stage.open("brief", in: shell, library)
@@ -484,6 +483,7 @@ struct AcceptanceShell {
         let stage = try Stage("shell-x1-2")
         defer { stage.remove() }
         let (shell, library, host) = try await AcceptanceBuild.newSpace(stage, builder: true)
+        Stage.work(library)
         let model = shell.assistant
         #expect(String(BlankView.where(model.folder).characters) == "Describe it in your words. Your assistant builds it in \u{2009}~/something/spaces\u{2009}.")
         #expect(model.level == .none && model.chosenLevel == nil)
@@ -529,6 +529,28 @@ struct AcceptanceShell {
         </script></body></html>
         """
 
+    /// X5's agents (the mockup's XC_NOW), their words invented, in folders of the stage's home so that Info says them
+    /// from ~: Claude Code at work and Amp waiting in shop, Codex idle in atelier since 16:10.
+    static func weekendWorld(_ home: URL) -> (agents: [Agent], threads: [AgentThread]) {
+        let at = { (minutes: Double) in iso8601.string(from: Stage.local.addingTimeInterval(-60 * minutes)) }
+        let rows = [("cc", "claude", "shop", "working", 3.0, "Write the login form"), ("amp", "amp", "shop", "waiting", 6, "Run the tests?"),
+                    ("cx", "codex", "atelier", "idle", 130, "The page builds again.")]
+        var agents: [Agent] = [], threads: [AgentThread] = []
+        for (key, kind, folder, state, minutes, words) in rows {
+            var agent = Agent(id: "\(kind)-\(key)", kind: kind, origin: "elsewhere")
+            (agent.folder, agent.state, agent.alive, agent.evidence, agent.thread) = (home.appendingPathComponent("code/\(folder)").path, state, true, "log", key)
+            agent.name = folder
+            (agent.started, agent.updated, agent.waiting) = (at(minutes + 20), at(minutes), state == "waiting" ? "permission" : "none")
+            agents.append(agent)
+            threads.append(AgentThread(id: key, agent: agent.id, title: nil, started: at(minutes + 20), turns: [
+                Turn(id: "\(key)-0", state: state == "idle" ? "done" : "working", started: at(minutes + 20), ended: nil, items: [
+                    Item(id: "\(key)-0-0", kind: "message", author: "agent", text: words, at: at(minutes)),
+                ]),
+            ]))
+        }
+        return (agents, threads)
+    }
+
     /// The X5 window: Week-end open, watching your agents (the level its page needs, answered at its opening), its
     /// assistant asleep on the reply that built it, Info shown. The sidebar as the mockup groups it.
     static func weekend(_ stage: Stage) async throws -> (shell: Shell, library: Library, info: Info, view: SpaceView) {
@@ -556,6 +578,12 @@ struct AcceptanceShell {
         engine.lookAgain()
         #expect(await wait(until: { model.kind == "claude" }))
         let view = try await stage.open("week-end", in: shell, library)
+        view.engine.update(outside: weekendWorld(stage.home.places.home))
+        // Its page's own card hears them before any picture is drawn.
+        for _ in 0..<100 {
+            if (try? await run(view, "return document.getElementById('list').textContent") as? String)?.contains("atelier") == true { break }
+            await wait(0.05)
+        }
         shell.layer.announce = { _ in }
         (info.current, info.clock) = ({ view }, { Stage.local })
         info.show(view.space)
@@ -589,14 +617,18 @@ struct AcceptanceShell {
         #expect(docked.width == 320 && view.web.frame.width == center - 320)
         #expect(info.level == .watch && info.folder == nil && info.about == "A countdown to Saturday, your plans, and what your agents still have to finish.")
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
-        // The agents its page sees: the mockup's world, all of them, as its page receives them.
-        #expect(info.shown.map(\.id) == Stage.world.agents.map(\.id), "\(info.shown.map(\.id))")
-        #expect(info.shown.map(Info.doing) == ["waits for you", "working", "working", "idle", "state unknown"], "the unknown is said")
+        // The agents its page sees: X5's, all of them, as its page receives them, each with what it did last.
+        #expect(Set(info.shown.map(\.id)) == Set(Self.weekendWorld(stage.home.places.home).agents.map(\.id)), "\(info.shown.map(\.id))")
+        #expect(Set(info.shown.map(info.doing)) == ["working: Write the login form", "waits for you: Run the tests?", "idle since 16:10"],
+                "\(info.shown.map(info.doing))")
+        var unknown = Agent(id: "other-1", kind: "other", origin: "elsewhere")
+        unknown.state = "unknown"
+        #expect(Info.doing(unknown) == "state unknown", "the unknown is said")
         // As VoiceOver reads the panel: every button named, the three parts, the level as one choice of four.
         let panel = shell.inspector.viewController.view
         let tree = await AccessibilityTests.walk(panel), read = tree.words
         #expect(tree.unnamed.isEmpty, "\(tree.unnamed)")
-        for words in ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents", "Watch",
+        for words in ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents: Watch",
                       "The agents it shows now", "Assistant", "Its assistant: Asleep", "Open Conversation", "Move to Trash…"] {
             #expect(read.contains(words), "the panel reads \(words): \(read)")
         }
@@ -608,7 +640,7 @@ struct AcceptanceShell {
         let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         // Vision reads a middle dot as a bullet: the words around it are enough.
         for words in ["A countdown to Saturday", "~/something/spaces/week-end.html", "one file", "changed today, 18:04", "It sees your agents",
-                      "Amp waits for you", "Claude Code working", "node state unknown", "Whatever an agent asks still waits for you", "Claude Code",
+                      "Amp waits for you", "Claude Code working", "Codex idle since 16:10", "~/code/shop", "Whatever an agent asks still waits for you", "Claude Code",
                       "Week-end is ready. It counts down to"] {
             #expect(drawn.contains(words), "the panel shows \(words): \(drawn)")
         }
@@ -710,7 +742,7 @@ struct AcceptanceShell {
         let ask = try #require(view.ask as? FakeAsk)
         #expect(ask.told.isEmpty && ask.folderMessages.isEmpty, "no sheet, no panel: \(ask.told)")
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
-        #expect(toast.words == "week-end.something is in Downloads")
+        #expect(toast.words == "week-end.something is in Downloads · its memory stays on this Mac")
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         let show = try #require(buttons(toast).first { $0.title == "Show" })
         show.performClick(nil)

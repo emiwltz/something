@@ -37,6 +37,10 @@ import SwiftUI
     var draft = ""
     /// Whether the window is narrow enough that its sidebar column is the rail (Rail.swift); the Shell decides.
     var rail = false
+    /// The rail's tiles, by space, where the Shell lays the name of the one under the pointer (RailTip).
+    @ObservationIgnored var tiles: [String: Weak] = [:]
+    /// A view held without keeping it.
+    struct Weak { weak var view: NSView? }
 
     /// A menu began: the row or header under the pointer is the one it was opened on (the menu bar's are over none).
     func menuOpened() {
@@ -243,7 +247,8 @@ struct SidebarView: View {
 
     private var whole: some View {
         VStack(alignment: .leading, spacing: 0) {
-            nav("new", label: "New Space", on: library.selection == .newSpace, open: newSpace) {
+            // New Space is a way in, never a place the list holds: it is not drawn chosen while its page shows.
+            nav("new", label: "New Space", on: false, open: newSpace) {
                 // The identity's ink, never the system's accent: a rounded square of ink with its plus.
                 Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
                     .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
@@ -325,8 +330,8 @@ struct SidebarView: View {
         }
     }
 
-    /// Needs You, over the groups while a request waits: a mark and the words in the colour of what waits (the count
-    /// only for VoiceOver, as X9.1 draws no number), then a row per space, a bar of that colour at its edge. A click opens the space, or, open already, shows its
+    /// Needs You, over the groups while a request waits: a mark, the words and the count in the colour of what waits,
+    /// then a row per space, a bar of that colour at its edge. A click opens the space, or, open already, shows its
     /// request in the panel, the only place that answers (rule 2).
     @ViewBuilder private var needs: some View {
         let spaces = library.needing()
@@ -337,6 +342,8 @@ struct SidebarView: View {
                         .background(Circle().fill(Look.Token.needSoft.ui).frame(width: 13, height: 13))
                     Text("Needs You")
                     Spacer(minLength: 0)
+                    // In the groups' column, as their counts.
+                    Text("\(spaces.count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit().padding(.trailing, 18)
                 }
                 .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
                 .foregroundStyle(Look.Token.needInk.ui)

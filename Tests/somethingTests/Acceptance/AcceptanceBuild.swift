@@ -240,6 +240,9 @@ struct AcceptanceBuild {
         let stage = try Stage("build")
         defer { stage.remove() }
         let (shell, library, host) = try await Self.newSpace(stage, builder: true)
+        // As the mockup's step: round 2's groups, nothing waiting.
+        Stage.work(library)
+        shell.waiting([], mine: 0)
         let model = shell.assistant
         #expect(shell.window.title == "New Space" && shell.window.subtitle == "" && shell.glass.isHidden && !model.cardShown)
         #expect(model.kind == "claude" && model.draft.isEmpty && !model.canSend && model.level == .none && model.chosenLevel == nil)
@@ -267,8 +270,8 @@ struct AcceptanceBuild {
         #expect(model.level == .run)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "x3-1" + suffix, root: stage.home.root)
-            let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1) }
-            #expect(words == Self.newSpaceWords(BlankView.chips[0].1), "\(words)")
+            let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1, level: .run) }
+            #expect(words == Self.newSpaceWords(BlankView.chips[0].1, level: .run), "\(words)")
         }
         (model.chosenLevel, model.draft) = (nil, "")
 
@@ -338,7 +341,7 @@ struct AcceptanceBuild {
             try await Picture.window(shell, library: library, web: nil, "x3-1-building" + suffix, root: stage.home.root)
             let building = await Self.read(fresh)
             #expect(shell.glass.isHidden && !building.contains("Build") && !building.contains(BlankView.chips[0].0) && building.contains("Stop")
-                    && !building.contains("With your agents"), "\(building)")
+                    && !building.contains { $0.hasPrefix("With your agents") }, "\(building)")
         }
         var stopped = false
         model.engine.stopAll(within: 6) { stopped = true }
@@ -357,8 +360,8 @@ struct AcceptanceBuild {
 
     /// What VoiceOver reads of New Space with `draft` in its field, as far as an offscreen SwiftUI view gives it (its
     /// menus, plain texts and the sign are out of reach here; the level, its sentence and Run's folder are the model's).
-    static func newSpaceWords(_ draft: String = "") -> [String] {
-        ["What do you want to make?"] + (draft.isEmpty ? [] : [draft]) + ["Build"] + Grant.Level.allCases.map(\.title) + BlankView.chips.map(\.0)
+    static func newSpaceWords(_ draft: String = "", level: Grant.Level = .none) -> [String] {
+        ["What do you want to make?"] + (draft.isEmpty ? [] : [draft]) + ["Build", "With your agents: \(level.title)"] + BlankView.chips.map(\.0)
     }
 
     /// New Space in a window of `stage`, the toolbar's chip at the mockup's one request; with `builder`, AssistantTests'
@@ -474,9 +477,9 @@ struct AcceptanceBuild {
         #expect(shell.window.title == "Waiting room")
         // What App.open does around it: the conversation follows the space shown.
         model.place = AssistantModel.place(room)
-        // It starts on the sign of 76 points, its arm and stroke the sign's, its eyes on.
-        #expect(arrival.start.face && abs(arrival.start.arm - 76 * 0.31) < 0.01 && arrival.start.stroke == 35)
-        #expect(abs(arrival.start.rect.width - 76 * 0.88) < 0.5 && abs(arrival.start.rect.midX - arrival.room.midX) < 1, "\(arrival.start.rect)")
+        // It starts on the sign of 52 points, its arm and stroke the sign's, its eyes on.
+        #expect(arrival.start.face && abs(arrival.start.arm - 52 * 0.31) < 0.01 && arrival.start.stroke == 35)
+        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && abs(arrival.start.rect.midX - arrival.room.midX) < 1, "\(arrival.start.rect)")
         arrival.progress = 0.6
         let shape = arrival.shape
         #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)
@@ -554,7 +557,7 @@ struct AcceptanceBuild {
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].isEnabled)
         #expect(sheet.accessibilitySubrole() == .dialog && answer() == RightsAnswer(level: .watch, folder: nil))
         // What VoiceOver reads (the level's sentence, a plain text of SwiftUI, is out of reach offscreen).
-        let said = ["Two people", "Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html"] + Grant.Level.allCases.map(\.title)
+        let said = ["Two people", "Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html", "With your agents: Watch"]
             + [Levels.sheetFine, "Don't Allow", "Allow"]
         let words = await Self.read(try #require(sheet.contentView)) { $0 == said }
         #expect(words == said, "\(words)")

@@ -71,7 +71,7 @@ struct AccessibilityTests {
         let (shell, _, _) = try await AcceptanceBuild.newSpace(stage, builder: true)
         let model = shell.assistant
         let empty = await Self.walk(shell.window)
-        #expect(empty.count > 20 && empty.words.contains(BlankView.chips[0].0) && empty.words.contains("With your agents") && empty.unnamed.isEmpty, "\(empty)")
+        #expect(empty.count > 20 && empty.words.contains(BlankView.chips[0].0) && empty.words.contains("With your agents: None") && empty.unnamed.isEmpty, "\(empty)")
         model.send(BlankView.chips[0].1)
         #expect(model.building)
         let building = await Self.walk(shell.window)
