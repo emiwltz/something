@@ -106,7 +106,7 @@ struct WelcomeView: View {
 
     private func title(_ words: String) -> some View {
         Text(words).font(Look.font(.title, size: 30, weight: .semibold).ui).kerning(-0.6).lineSpacing(-2)
-            .fixedSize(horizontal: false, vertical: true).padding(.top, 18).accessibilityAddTraits(.isHeader)
+            .fixedSize(horizontal: false, vertical: true).padding(.top, 12).accessibilityAddTraits(.isHeader)
     }
 
     /// The three rows, then who builds.
@@ -114,7 +114,7 @@ struct WelcomeView: View {
         let found = assistant.entries.filter(\.enabled).count
         return VStack(alignment: .leading, spacing: 0) {
             title("Pages of your own, that work with your agents.")
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 24) {
                 ForEach(Array(Self.rows.enumerated()), id: \.offset) { index, row in
                     let text = row.0 == .assistant ? "One of your agents, \(assistant.name), builds the space and changes it when you ask." : row.2
                     HStack(alignment: .top, spacing: 14) {
@@ -123,7 +123,7 @@ struct WelcomeView: View {
                             .background(Circle().fill((model.light.lit == row.0 ? Look.Token.act : .bg).ui)).overlay(Circle().strokeBorder(Look.Token.line2.ui))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(row.1).font(Look.font(.ui, size: 14, weight: .semibold).ui)
-                            Text(text).font(Look.font(.ui, size: 13).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                            Text(text).font(Look.font(.ui, size: 12.5).ui).lineSpacing(2.5).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .contentShape(Rectangle())

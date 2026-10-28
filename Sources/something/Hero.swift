@@ -358,16 +358,16 @@ struct HowItWorksView: View {
                 ForEach(Array(Self.parts.enumerated()), id: \.offset) { index, part in
                     let on = light.lit == part.0
                     Button { light.light(on ? nil : part.0) } label: {
-                        HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 9) {
                             Text("\(index + 1)").font(Look.font(.ui, size: 11, weight: .semibold).ui).foregroundStyle((on ? Look.Token.actfg : .ink2).ui)
                                 .frame(width: 20, height: 20).boxed(RoundedRectangle(cornerRadius: 6), (on ? Look.Token.act : .bg2).ui, ring: Look.Token.line.ui)
-                            VStack(alignment: .leading, spacing: 3) {
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(part.1).font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
                                 Text(part.2).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 0)
                         }
-                        .padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(EdgeInsets(top: 9, leading: 10, bottom: 10, trailing: 10)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .boxed(RoundedRectangle(cornerRadius: 8), (on ? Look.Token.sel : .bg2).ui, ring: (on ? Look.Token.ink2 : .line).ui, width: on ? 1.5 : 1)
                         .contentShape(Rectangle())
                     }

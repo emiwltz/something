@@ -22,9 +22,9 @@ something
 `something` opens with one welcome screen, alone on your desktop: a space (a page of your own), your agents, and your
 assistant, beside one picture of how they meet. The coding agent found on your Mac is already chosen to build your
 spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
-the window. Notifications and, when installed with Homebrew, a small launcher in `~/Applications` so that Spotlight
-finds something stay off until you turn them on in Settings › General. Help › Welcome shows the welcome again, and
-Help › How something Works the picture, one part at a time if you like.
+the window. Notifications (Settings › Permissions) and, when installed with Homebrew, a small launcher in
+`~/Applications` so that Spotlight finds something (Settings › General) stay off until you turn them on. Help › Welcome
+shows the welcome again, and Help › How something Works the picture, one part at a time if you like.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example), choose under it what it may do with your agents (None, Watch, Talk or Run, pre-set from
