@@ -109,11 +109,12 @@ final class Stage {
             thread("shop", "amp", [("done", 52, 40, [("person", "Fix the total on the cart page", nil, 52), ("agent", "Read cart.js", "Read", 50),
                                                        ("agent", "The total adds the delivery twice.", nil, 41)]),
                                     ("working", 39, nil, [("person", "Go on, but run the tests first", nil, 39), ("agent", "npm test", "Bash", 38)])]),
-            thread("pacman", "claude", [("working", 12, nil, [("person", "Bring the chase mode back", nil, 12), ("agent", "Edit ghosts.js", "Edit", 20),
-                                                               ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 17),
-                                                               ("agent", "Edit ghosts.js", "Edit", 1)])]),
+            thread("pacman", "claude", [("working", 12, nil, [("person", "Bring the chase mode back, and keep the ghosts out of the walls.", nil, 12),
+                                                               ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 6),
+                                                               ("person", "Now give each ghost its own way of chasing.", nil, 4),
+                                                               ("agent", "Started the workflow “Chase mode” · step 2 of 4", "Workflow", 1)])]),
             thread("portfolio", "claude", [("working", 25, nil, [("person", "Resize the images for the projects page", nil, 25),
-                                                                  ("agent", "Resizing images, 14 of 28", "Bash", 2)])]),
+                                                                  ("agent", "Resizing images for the projects page, 14 of 28", "Bash", 2)])]),
             thread("notes", "pi", [("done", 200, 190, [("person", "Summarise the reading list", nil, 200), ("agent", "Done: six books, two articles.", nil, 190)])]),
         ]
         return (agents, threads)

@@ -93,7 +93,8 @@ import Testing
 
         #expect(Words.who(space: "My agents", assistant: true, name: nil, age: "asked 3 min ago") == "My agents · its assistant · asked 3 min ago")
         #expect(Words.who(space: nil, assistant: true, name: nil, age: "just now") == "your assistant · just now")
-        #expect(Words.who(space: "Project watch", assistant: false, name: "watcher", age: nil) == "Project watch · “watcher”")
+        #expect(Words.who(space: "Project watch", assistant: false, name: "watcher", age: nil) == "Started by Project watch")
+        #expect(Words.who(space: nil, assistant: false, name: "watcher", age: "just now") == "“watcher” · just now")
         #expect(Words.who(space: nil, assistant: false, name: nil, age: nil) == "")
     }
 

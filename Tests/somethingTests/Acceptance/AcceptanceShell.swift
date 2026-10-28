@@ -522,14 +522,14 @@ struct AcceptanceShell {
         #expect(counted["first"] as? String == "claude-pacman" && counted["open"] as? Bool == true, "\(counted)")
         #expect(counted["chips"] as? [String] == ["Sonnet 5.5", "Medium", "Ask"] && counted["labels"] as? [String] == ["Model", "Effort", "Mode"], "\(counted)")
         #expect((counted["amp"] as? String)?.hasPrefix("waits ") == true && counted["ampWrite"] as? Bool == true, "\(counted)")
-        #expect(counted["thread"] as? [String] == ["you", "step", "it", "step"], "\(counted)")
+        #expect(counted["thread"] as? [String] == ["you", "it", "you", "step"], "\(counted)")
         #expect(counted["buttons"] as? [String] == ["Its commands", "Send Now", "After This Turn"], "\(counted)")
         let read = """
             const menu = card.querySelector(".cmds"), hint = card.querySelector(".hint");
             return { hidden: menu.hidden, label: menu.getAttribute("aria-label"), role: menu.getAttribute("role"), box: box.value,
                      names: [...menu.querySelectorAll("li b")].map((b) => b.textContent), roles: [...menu.children].map((li) => li.getAttribute("role")),
                      chosen: [...menu.children].findIndex((li) => li.getAttribute("aria-selected") === "true"), place: box.placeholder,
-                     helpers: card.querySelector(".helpers").textContent, expanded: box.getAttribute("aria-expanded"),
+                     helpers: card.querySelector(".helpers summary").textContent, expanded: box.getAttribute("aria-expanded"),
                      active: box.getAttribute("aria-activedescendant"), chosenID: menu.querySelector("[aria-selected=true]")?.id ?? null,
                      controls: box.getAttribute("aria-controls") === menu.id, hint: hint.hidden ? null : hint.textContent };
             """
@@ -540,7 +540,7 @@ struct AcceptanceShell {
         #expect(seen["names"] as? [String] == ["/goal", "/plan", "/review", "/agents", "/compact"] && seen["chosen"] as? Int == 0, "\(seen)")
         #expect((seen["roles"] as? [String])?.allSatisfy { $0 == "option" } == true)
         #expect(seen["place"] as? String == "Write to Claude Code…")
-        #expect(seen["helpers"] as? String == "Its helpersWriter: chase for Blinky · Writer: chase for Pinky · 2 sub-agents at work", "\(seen)")
+        #expect(seen["helpers"] as? String == "Its helpers2 sub-agents at work · 1 finished", "\(seen)")
         seen = try await run(#"box.value = "/re"; box.dispatchEvent(new Event("input"));"# + read)
         #expect(seen["names"] as? [String] == ["/review"])
         seen = try await run(type + key("ArrowDown") + read)
@@ -587,6 +587,10 @@ struct AcceptanceShell {
                                         ("compact", "Shortens the conversation, keeps the gist")].map { Option(value: $0, label: $1) }
         world.agents[index].subagents = [Tool(name: "Explore: read the ghost files", status: "done"), Tool(name: "Writer: chase for Blinky", status: "running"),
                                          Tool(name: "Writer: chase for Pinky", status: "running")]
+        // Claude Code in portfolio, launched by the space too: Write to It, as the mockup draws it at Run.
+        if let other = world.agents.firstIndex(where: { $0.id == "claude-portfolio" }) {
+            (world.agents[other].origin, world.agents[other].can.send, world.agents[other].because) = ("launched", true, [:])
+        }
         return world
     }
 

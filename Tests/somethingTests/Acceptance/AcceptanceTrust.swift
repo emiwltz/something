@@ -5,7 +5,7 @@
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
 import AppKit
-import SomethingAgents
+@testable import SomethingAgents
 import SomethingCore
 import Testing
 import WebKit
@@ -212,7 +212,7 @@ struct AcceptanceTrust {
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Claude Code wants to run a command" && box.accessibilityLabel() == "Always for this space" && box.state == .off)
         #expect(PanelsTests.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
-                                                         "My agents · “shop” · just now", "It will run one command in the My agents space.",
+                                                         "Started by My agents · just now", "It will run one command in the My agents space.",
                                                          "Runs in", "~/code/shop", "The exact command · 1 line", "npm test",
                                                          "Keeps exactly this command, for Claude Code, in ~/code/shop. You can revoke it in the space’s Info.",
                                                          "No space can see or click this window."])
@@ -236,8 +236,15 @@ struct AcceptanceTrust {
         defer { stage.remove() }
         let atelier = stage.home.places.home.appendingPathComponent("code/atelier").path
         let rule = Rule(kind: "claude", command: "git log --oneline -20", folder: atelier, at: "2026-10-21T09:00:00Z")
+        try Self.atelier(stage)
         let (shell, library, info, view) = try await Self.info(stage, "project", folder: "code/atelier", rules: [rule])
         defer { view.close() }
+        var world = Stage.world
+        world.agents.append(Self.slides.agent)
+        world.threads.append(Self.slides.thread)
+        view.engine.update(outside: world)
+        view.push()
+        await Picture.settle(view)
         #expect(info.level == .run && info.rules == [rule])
         let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
         for words in ["Always for this space", "Claude Code: git log --oneline -20, in ~/code/atelier", "Revoke git log --oneline -20"] {
@@ -253,6 +260,37 @@ struct AcceptanceTrust {
         info.revoke(rule)
         let left = try Grants(stage.home.places.grants).read().spaces["project"]?.rules
         #expect(info.rules.isEmpty && left == nil)
+    }
+
+    /// Project watch as Use Template leaves it for ~/code/atelier (the mockup's agents live under /Users/example, so
+    /// it follows that folder), with the mockup's milestones: three done on 15, 18 and 21 October, two open.
+    static func atelier(_ stage: Stage) throws {
+        let file = stage.home.places.spaces.appendingPathComponent("project.html")
+        let page = try String(contentsOf: file, encoding: .utf8)
+            .replacingOccurrences(of: #""folders": ["~/code/your-project"]"#, with: #""folders": ["/Users/example/code/atelier"]"#)
+            .replacingOccurrences(of: #""folder": "~/code/your-project""#, with: #""folder": "~/code/atelier""#)
+        try page.write(to: file, atomically: true, encoding: .utf8)
+        let done = [("Outline the talk", "2026-10-15"), ("Pick the colour model", "2026-10-18"), ("Draft the introduction page", "2026-10-21")]
+        let open = ["Rehearse with the slides", "Send the final"]
+        let milestones: [[String: Any]] = done.enumerated().map { ["id": "m\($0)", "text": $1.0, "done": true, "at": $1.1 + "T10:00:00Z"] }
+            + open.enumerated().map { ["id": "o\($0)", "text": $1, "done": false] }
+        try Memory(folder: stage.home.places.data, space: "project").set("milestones", milestones)
+    }
+
+    /// Claude Code at work in the atelier, writing the slides (invented), for Project watch to follow.
+    static var slides: (agent: Agent, thread: AgentThread) {
+        let at = { (minutes: Double) in iso8601.string(from: Stage.local.addingTimeInterval(-60 * minutes)) }
+        var agent = Agent(id: "claude-atelier", kind: "claude", origin: "elsewhere")
+        (agent.folder, agent.state, agent.alive, agent.evidence, agent.name) = ("/Users/example/code/atelier", "working", true, "log", "atelier")
+        (agent.thread, agent.started, agent.updated, agent.waiting) = ("atelier", at(30), at(1), "none")
+        agent.because = ["send": "This agent was started outside something; something only reads it."]
+        let thread = AgentThread(id: "atelier", agent: agent.id, title: nil, started: at(30), turns: [
+            Turn(id: "atelier-0", state: "working", started: at(30), ended: nil, items: [
+                Item(id: "atelier-0-0", kind: "message", author: "person", text: "Write the slides for Friday's talk", at: at(30), tool: nil),
+                Item(id: "atelier-0-1", kind: "tool", author: "agent", text: "Writing the slides", at: at(1), tool: Tool(name: "Write", status: "running")),
+            ]),
+        ])
+        return (agent, thread)
     }
 
     /// A command of fourteen lines, expanded by ↕: the panel 560 wide shows all of it, still across the window's
@@ -320,7 +358,7 @@ struct AcceptanceTrust {
         arrows[1].performClick(nil)
         #expect(panel.request?.id == "r2" && panel.position == "2 of 3" && !panel.armed)
         #expect(panel.title == "Claude Code wants to run a command")
-        #expect(PanelsTests.texts(panel.contentView).contains("Project watch · “watcher” · asked 12 min ago"))
+        #expect(PanelsTests.texts(panel.contentView).contains("Started by Project watch · asked 12 min ago"))
         arrows[0].performClick(nil)
         #expect(panel.request?.id == "r1" && panel.position == "1 of 3")
         time += 1

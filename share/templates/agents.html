@@ -20,20 +20,14 @@
 </script>
 <style>
   [hidden] { display: none !important; }
-  /* A calm control room: deep green-black by night, pale sage by day; amber for what waits, green for what works.
-     --soft stays readable (4.5:1) on the cards; --edge only draws lines. */
+  /* A calm control room, deep green-black by day and by night alike, as a control room stays lit the same: amber for
+     what waits, green for what works. --soft stays readable (4.5:1) on the cards; --edge only draws lines. */
   :root {
-    color-scheme: light dark;
-    --room: #eef2ef; --card: #fafcfa; --sunk: #e6ece8; --edge: #d3ddd6; --ink: #142019; --soft: #56645b; --faint: #6b786f;
-    --work: #1f7a43; --work-bg: #dcefe2; --wait: #9a5b00; --wait-bg: #fbecc9; --amber: #f2c14e; --amber-ink: #241a00;
-    --fail: #b3261e; --you: #e1e9e4;
+    color-scheme: dark;
+    --room: #0e1411; --card: #141b17; --sunk: #19221d; --edge: #26312b; --ink: #e8efe9; --soft: #a3b0a7; --faint: #8b988f;
+    --work: #7bd88f; --work-bg: #1d3a26; --wait: #f2c14e; --wait-bg: #3a2e12; --amber: #f2c14e; --amber-ink: #241a00;
+    --fail: #ff7b72; --you: #1f2b25; --deep: #213a2b;
     font: 14px/1.45 -apple-system, system-ui, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --room: #0e1411; --card: #141b17; --sunk: #19221d; --edge: #26312b; --ink: #e8efe9; --soft: #a3b0a7; --faint: #8b988f;
-      --work: #7bd88f; --work-bg: #1d3a26; --wait: #f2c14e; --wait-bg: #3a2e12; --fail: #ff7b72; --you: #1f2b25;
-    }
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--room); color: var(--ink); }
@@ -83,12 +77,13 @@
   .btn { border: 1px solid var(--edge); background: var(--sunk); border-radius: 7px; padding: 5px 11px; cursor: pointer; font-size: 13px; }
   .btn:hover { border-color: var(--faint); }
   .btn.go { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); font-weight: 600; }
+  .btn.next { background: var(--deep); border-color: var(--deep); font-weight: 600; }
 
   /* The open card's chips: its model and effort, its mode, each as the agent reported it, for its next turn. */
   .chips { margin-left: auto; display: flex; gap: 6px; align-items: center; }
   .chip { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--edge); border-radius: 7px; background: var(--sunk);
           font-size: 12.5px; padding: 0 4px; height: 26px; }
-  .chip select { appearance: none; border: 0; background: none; padding: 0 3px; cursor: pointer; font-size: 12.5px; }
+  .chip select { appearance: none; border: 0; background: none; padding: 0 3px; cursor: pointer; font-size: 12.5px; field-sizing: content; }
   .chip select + select { color: var(--soft); }
   .chip::after { content: "⌄"; color: var(--faint); padding: 0 3px 4px 0; }
   .chip.fixed::after { content: none; }
@@ -102,10 +97,15 @@
   .thread .it .tile { height: 18px; min-width: 18px; font-size: 9px; }
   .thread .step { color: var(--faint); font-size: 12.5px; padding-left: 8px; }
   .thread .step::before { content: "○"; margin-right: 8px; }
-  .helpers { display: flex; gap: 8px; align-items: center; border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px;
-             font-size: 12.5px; color: var(--soft); }
+  /* Its helpers: one line, a › to unfold each sub-agent and where it stands. */
+  .helpers { border: 1px solid var(--edge); border-radius: 8px; font-size: 12.5px; color: var(--soft); }
+  .helpers summary { display: flex; gap: 8px; align-items: center; padding: 8px 12px; cursor: pointer; list-style: none; }
+  .helpers summary::-webkit-details-marker { display: none; }
+  .helpers summary::before { content: "⌥"; color: var(--work); }
+  .helpers summary::after { content: "›"; margin-left: auto; color: var(--faint); font-size: 15px; transition: transform 140ms ease-out; }
+  .helpers[open] summary::after { transform: rotate(90deg); }
   .helpers b { color: var(--ink); font-weight: 600; }
-  .helpers::before { content: "⌥"; color: var(--work); }
+  .helpers ul { list-style: none; margin: 0; padding: 0 12px 8px 30px; display: flex; flex-direction: column; gap: 3px; }
   .held { margin: 0; color: var(--soft); font-size: 12.5px; }
 
   /* The reply: "/" opens its commands, the field, then Send Now and After This Turn. */
@@ -132,7 +132,7 @@
 
   .empty { grid-column: 1 / -1; border: 1px dashed var(--edge); border-radius: 12px; padding: 28px; text-align: center; color: var(--soft); }
   #problem { border: 1px solid var(--fail); color: var(--fail); border-radius: 8px; padding: 8px 12px; margin: 0; }
-  #notes { color: var(--wait); font-size: 12.5px; margin: 0; }
+  #notes { color: var(--faint); font-size: 12px; margin: 0; }
   @media (max-width: 700px) { main { padding: 18px; } .thread .you { max-width: 90%; } .keys .from { margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .agent.fresh { animation: none; } }
 </style>
@@ -205,13 +205,13 @@
     node.innerHTML = `<div class="head"><span class="tile"></span><span class="name"></span><span class="folder mono"></span>
         <span class="pill"></span><span class="chips" hidden></span></div>
       <p class="line"></p><p class="fault" hidden></p>
-      <ol class="thread" hidden></ol><div class="helpers" hidden></div><p class="held" hidden></p>
+      <ol class="thread" hidden></ol><details class="helpers" hidden><summary></summary><ul></ul></details><p class="held" hidden></p>
       <div class="acts"><button type="button" class="btn write">Write to It</button></div>
       <div class="talk" hidden><p class="hint" hidden></p>
         <form class="reply"><ul class="cmds" role="listbox" hidden></ul>
           <button type="button" class="slash" aria-label="Its commands">/</button>
           <textarea rows="1" aria-label="Message" role="combobox" aria-autocomplete="list" aria-expanded="false"></textarea>
-          <button type="submit" class="btn go" value="now">Send Now</button><button type="submit" class="btn" value="next">After This Turn</button>
+          <button type="submit" class="btn go" value="now">Send Now</button><button type="submit" class="btn next" value="next">After This Turn</button>
         </form>
         <div class="keys"><span class="now"><kbd>↩</kbd>now, it reads it at its next step</span><span class="after"><kbd>⌥↩</kbd>after this turn</span>
           <span class="own"></span><span class="from">through something · this page may write to your agents</span></div>
@@ -340,22 +340,25 @@
     // Opened: its latest lines, its helpers as its stream marks them, and what waits for after this turn.
     q(".thread").hidden = !opened;
     if (opened) q(".thread").replaceChildren(...lines(state, agent, 6).map((i) => {
-      if (i.kind === "tool") return make("li", "step", (i.tool && !i.text.startsWith(i.tool.name) ? i.tool.name + " " : "") + i.text.split("\n")[0]);
+      const named = i.tool && i.text.toLowerCase().includes(i.tool.name.toLowerCase());   // "Started the workflow…" names its tool
+      if (i.kind === "tool") return make("li", "step", (i.tool && !named ? i.tool.name + " " : "") + i.text.split("\n")[0]);
       if (i.author === "person") return make("li", "you", i.text);
       const said = make("li", "it");
       said.append(make("span", "tile", TILES[agent.kind] || "?"), make("span", "", i.text));
       return said;
     }));
-    const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running");
+    const helpers = agent.subagents || [], busy = helpers.filter((h) => h.status === "running"), ended = helpers.length - busy.length;
     q(".helpers").hidden = !opened || !helpers.length;
-    if (opened && helpers.length) q(".helpers").replaceChildren(make("b", "", "Its helpers"), busy.length
-      ? `${busy.map((h) => h.name).join(" · ")} · ${busy.length} sub-agent${busy.length === 1 ? "" : "s"} at work`
-      : `${helpers.length} finished, the last: ${helpers[helpers.length - 1].name}`);
+    if (opened && helpers.length) {
+      q(".helpers summary").replaceChildren(make("b", "", "Its helpers"), [busy.length && `${busy.length} sub-agent${busy.length === 1 ? "" : "s"} at work`,
+        ended && `${ended} finished`].filter(Boolean).join(" · "));
+      q(".helpers ul").replaceChildren(...helpers.map((h) => make("li", "", `${h.name} · ${h.status === "running" ? "at work" : h.status}`)));
+    }
     shown(".held", opened && agent.queue.length ? `${agent.queue.length} held for after this turn: “${agent.queue[0].text}”` : "");
     q(".acts").hidden = opened || !may;
     q(".talk").hidden = !opened;
     q(".slash").hidden = !(agent.commands && agent.commands.length);
-    q(".own").textContent = agent.commands && agent.commands.length ? `/ ${label(agent.kind)}'s own commands` : "";
+    q(".own").replaceChildren(...(agent.commands && agent.commands.length ? [make("kbd", "", "/"), `${label(agent.kind)}'s own commands`] : []));
     // Send Now steers into a running turn; to an agent not at work there is one send, for its next turn.
     const steer = agent.can.steer && status === "working";
     q("[value=now]").hidden = !steer;
@@ -403,8 +406,8 @@
         ? "No agent on this Mac right now. Start one in a terminal, and it appears here."
         : "This space may not see your agents. Allow “See your agents” in the space's Info."));
     }
-    // A program whose files changed shape says so once, under the cards.
-    const notes = Object.values(state.kinds).map((k) => k.note).filter(Boolean);
+    // A program whose files changed shape says so once, quietly under the cards, while one of its agents is here.
+    const notes = Object.entries(state.kinds).filter(([kind, k]) => k.note && state.agents.some((a) => a.kind === kind)).map(([, k]) => k.note);
     $("notes").hidden = !notes.length;
     $("notes").textContent = notes.map((n) => "⚠ " + n).join("  ");
     painted = true;

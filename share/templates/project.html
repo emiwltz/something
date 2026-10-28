@@ -21,20 +21,14 @@
 </script>
 <style>
   [hidden] { display: none !important; }
-  /* Dark: a blueprint, white lines on Prussian blue. Light: a whiteprint, blue lines on pale paper. */
+  /* A blueprint, white lines on Prussian blue, by day and by night: a drawing keeps its paper. */
   :root {
-    color-scheme: light dark;
-    --paper: #eef3f7; --line: #0e2a47; --soft: rgba(14, 42, 71, .62); --faint: rgba(14, 42, 71, .3);
-    --grid: rgba(0, 119, 182, .10); --grid-major: rgba(0, 119, 182, .16); --accent: #0077b6; --wait: #a86f00; --fail: #c0392b;
+    color-scheme: dark;
+    --paper: #0e2a47; --line: #e7f3ff; --soft: rgba(231, 243, 255, .7); --faint: rgba(231, 243, 255, .3);
+    --grid: rgba(95, 211, 255, .12); --grid-major: rgba(95, 211, 255, .2); --accent: #5fd3ff; --wait: #ffd166; --fail: #ff7a6b;
     --head: "Avenir Next Condensed", "Avenir Next", "Helvetica Neue", sans-serif;
     --mono: Menlo, ui-monospace, monospace;
     font: 13px/1.45 "Avenir Next", "Helvetica Neue", sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --paper: #0e2a47; --line: #e7f3ff; --soft: rgba(231, 243, 255, .7); --faint: rgba(231, 243, 255, .3);
-      --grid: rgba(95, 211, 255, .12); --grid-major: rgba(95, 211, 255, .2); --accent: #5fd3ff; --wait: #ffd166; --fail: #ff7a6b;
-    }
   }
   * { box-sizing: border-box; }
   body {
@@ -75,7 +69,8 @@
   .milestones li { display: flex; align-items: center; gap: 8px; }
   .milestones label { flex: 1; display: flex; gap: 8px; cursor: pointer; }
   .milestones input { accent-color: var(--accent); }
-  .milestones .done span { color: var(--soft); text-decoration: line-through; text-decoration-color: var(--accent); }
+  .milestones .done label span { color: var(--soft); text-decoration: line-through; text-decoration-color: var(--accent); }
+  .milestones .when { font: 11px var(--mono); color: var(--soft); white-space: nowrap; }
   .milestones .x { background: none; border: 0; color: var(--soft); padding: 0 4px; font-size: 14px; }
   .milestones .x:hover { color: var(--fail); background: none; }
   form.add { display: flex; gap: 6px; }
@@ -248,12 +243,15 @@
     $("milestones").replaceChildren(...list.map((m) => {
       const item = make("li", m.done ? "done" : "");
       const box = Object.assign(make("input"), { type: "checkbox", checked: m.done });
-      box.onchange = () => keep(list.map((x) => x.id === m.id ? { ...x, done: box.checked } : x));
+      // Ticked, a milestone keeps the day it was done; an older one without it says only "done".
+      box.onchange = () => keep(list.map((x) => x.id === m.id ? { ...x, done: box.checked, at: box.checked ? new Date(now()).toISOString() : null } : x));
       const line = make("label");
       line.append(box, make("span", "", m.text));
+      const day = m.done && m.at ? new Date(m.at) : null;
+      const when = make("span", "when", !m.done ? "open" : day ? `done ${day.getDate()} ${day.toLocaleString("en", { month: "short" })}` : "done");
       const remove = Object.assign(make("button", "x", "×"), { title: "Remove" });
       remove.onclick = () => keep(list.filter((x) => x.id !== m.id));
-      item.append(line, remove);
+      item.append(line, when, remove);
       return item;
     }));
     if (!list.length) $("milestones").append(make("li", "why", "Name the next step of this project."));

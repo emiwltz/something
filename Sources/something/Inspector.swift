@@ -370,7 +370,7 @@ struct InspectorView: View {
             }
             if level == .run || !info.rules.isEmpty { always }
             if level != .none, !info.shown.isEmpty { now }
-            Levels.note("Whatever an agent asks still waits for you: Allow Once or Deny.")
+            Levels.note("Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission: it stays with the space.")
         } else {
             Text("It can't be shown now, so it shows no agent.").foot()
         }
