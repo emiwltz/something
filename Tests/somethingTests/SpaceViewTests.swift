@@ -438,12 +438,12 @@ import WebKit
         #expect(ask.modes.isEmpty)
     }
 
-    /// Info and Run say that pi never asks before it acts, for launch:pi and for launch, which covers pi.
+    /// Run says that pi never asks before it acts, for launch:pi and for launch, which covers pi.
     @Test func runSaysThatPiNeverAsks() {
-        #expect(Info.words(for: "launch:pi").detail.hasSuffix("pi runs commands and edits files without asking you first."))
+        #expect(Ask.warning(for: "launch:pi")?.hasSuffix("pi runs commands and edits files without asking you first") == true)
         #expect(Levels.runWarning == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp.")
         #expect(Ask.warning(for: "launch") == "Some of them run commands and edit files without asking you first: pi, OMP by default, and Amp")
-        #expect(Ask.warning(for: "launch:claude") == nil && !Info.words(for: "launch:claude").detail.contains("without asking"))
+        #expect(Ask.warning(for: "launch:claude") == nil)
     }
 
     /// granted.limits is the guide's table "What each kind can do", as the contract's own fixtures give it.

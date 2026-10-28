@@ -39,11 +39,6 @@ protocol Asking: AnyObject {
     /// true when the person chose to open `url`, which is then already open in their browser or mail app; false when
     /// they pressed Cancel; nil when the sheet could not be shown (no window, or another sheet up), which is no Cancel.
     func link(_ url: URL, space: String) -> Bool?
-    /// Whether the export of `space` carries its memory, shown with its keys and its size: false ("Without Data", the
-    /// default) or true; nil when the person cancels.
-    func withData(_ space: String, keys: [String], bytes: Int) -> Bool?
-    /// Where to save `name` (a .something file); nil when the person cancels.
-    func saveAs(_ name: String) -> URL?
     /// The .something file to import; nil when the person cancels.
     func importFile() -> URL?
     /// A folder the person chooses, `message` saying what for; nil when they cancel.
@@ -100,32 +95,13 @@ final class NativeAsk: Asking {
         return true
     }
 
-    func withData(_ space: String, keys: [String], bytes: Int) -> Bool? {
-        NativeAsk.withDataChoice(wait(Ask.withData(space, keys: keys, bytes: bytes)))
-    }
-
     // The buttons' meanings, apart from the modal loop so that a test can hold them.
 
     /// true when the sheet ended with its first button (Allow); false for any other, or none.
     static func agreed(_ response: NSApplication.ModalResponse?) -> Bool { response == .alertFirstButtonReturn }
 
-    /// false for "Without Data" (the first button), true for "With Its Data" (the second), nil for Cancel or none.
-    static func withDataChoice(_ response: NSApplication.ModalResponse?) -> Bool? {
-        switch response {
-        case .alertFirstButtonReturn: return false
-        case .alertSecondButtonReturn: return true
-        default: return nil
-        }
-    }
-
     private func chosen(_ panel: NSSavePanel) -> URL? {
         wait(panel) { panel.beginSheetModal(for: $0, completionHandler: $1) } == .OK ? panel.url : nil
-    }
-
-    func saveAs(_ name: String) -> URL? {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = name
-        return chosen(panel)
     }
 
     func importFile() -> URL? {
@@ -228,17 +204,6 @@ enum Ask {
                      block: Box(address, fill: .sunk, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11)),
                      fine: "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: mail ? "Open in Mail" : "Open in Browser", role: .primary)])
-    }
-
-    /// The export sheet: Without Data, With Its Data, or Cancel, in that order.
-    static func withData(_ space: String, keys: [String], bytes: Int) -> NSAlert {
-        // Ten keys at most: a memory of hundreds would make the sheet taller than the screen.
-        let shown = keys.prefix(10).joined(separator: ", ") + (keys.count > 10 ? " and \(keys.count - 10) more" : "")
-        let alert = alert("Export “\(space)” with its data?", "Its memory holds \(shown) (\(Size.words(bytes))). "
-                          + "Whoever receives the file can read all of it. Without data, the space starts empty on the other Mac.",
-                          buttons: ["Without Data", "With Its Data", "Cancel"], escape: 2)
-        alert.buttons[1].keyEquivalent = ""
-        return alert
     }
 
     /// The sheet before Move to Trash: what goes with the space, its page, how many entries its memory holds (nil

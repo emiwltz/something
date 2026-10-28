@@ -49,7 +49,6 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
     var memory: Memory? { Memory(folder: places.data, space: space.name) }
 
     func journal(_ line: JournalLine) {
-        defer { journaled() }
         do { try Journal(folder: places.journals).append(line, space: space.name) } catch {
             FileHandle.standardError.write(Data("\(error.sentence)\n".utf8))
             unkept()

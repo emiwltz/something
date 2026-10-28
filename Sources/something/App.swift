@@ -69,11 +69,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         library.trashing = { [weak self] entry in self?.confirmTrash(entry) }
         library.used = { [weak self] name in self?.assistant.fromTemplate = name }
         info.current = { [weak self] in self?.current }
-        info.agents = { [weak self] in self?.engine.state.agents ?? [] }
-        info.asks = { [weak self] in
-            guard let self, let name = current?.space.name else { return nil }
-            return panels.queue.waiting.first { self.panels.queue.space($0) == name }?.tool
-        }
         // The space stays selected, so that it opens again with the window.
         shell.closed = { [weak self] in self?.open(nil) }
         shell.visible = { [weak self] visible in
@@ -248,7 +243,6 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 Task { @MainActor [weak self] in await self?.info.history.picture(of: view) }
             }
             view.made = assistant.made.contains(name)
-            view.journaled = { [weak self] in self?.info.journaled() }
             view.unkept = { [weak self] in self?.assistant.unkept = true }
             view.changed = { [weak self] in self?.changes.seen(name) }
             current = view
@@ -295,6 +289,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             self?.pushing = false
             self?.current?.push()
+            if self?.shell.infoShown == true { self?.info.refresh() }
             self?.panels.refresh()
             self?.assistant.refresh()
         }

@@ -56,6 +56,8 @@ import SomethingCore
     @ObservationIgnored var renamed: (String) -> Void = { _ in }
     /// Says a sentence for a moment: the window's toast, quiet.
     @ObservationIgnored var told: (String) -> Void = { _ in }
+    /// Told where an export was written: the window's toast, with Show.
+    @ObservationIgnored var exported: (URL) -> Void = { _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
     /// Moves a file to the Trash; a test moves it into its own home, so that nothing reaches the person's Trash.
@@ -254,22 +256,23 @@ import SomethingCore
         relist()
     }
 
-    /// Saves the space `name` as a .something file. Its memory goes with it only when the person says so, after
-    /// seeing its keys and size; grants and journal never do.
+    /// Saves the space `name` as one .something file in Downloads, its memory inside, in one click (X5.3): under its
+    /// name, or "name 2" and on when that is taken, never over a file. Grants and journal never go. The window says
+    /// where it is (`exported`), or what failed.
     func export(_ name: String) {
         guard let space = entry(name)?.space else { return }
         do {
-            var data: [String: Any]?
-            if let memory = try Export.memory(space.name, in: places.data) {
-                let bytes = try JSONSerialization.data(withJSONObject: memory, options: .sortedKeys).count
-                guard let with = ask.withData(space.name, keys: memory.keys.sorted(), bytes: bytes) else { return }
-                data = with ? memory : nil
+            let document = try Export.document(space, data: try Export.memory(space.name, in: places.data), app: Resources.version)
+            let folder = places.downloads
+            let url = ([""] + (2...999).map { " \($0)" }).lazy.map { folder.appendingPathComponent("\(space.name)\($0).something") }
+                .first { !FileManager.default.fileExists(atPath: $0.path) } ?? folder.appendingPathComponent("\(space.name) \(UUID().uuidString).something")
+            do {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                try document.write(to: url, options: .withoutOverwriting)
+            } catch {
+                throw SpaceError("The export could not be written to \(Words.path(url.path, home: places.home.path)): \(error.localizedDescription)")
             }
-            let document = try Export.document(space, data: data, app: Resources.version)
-            guard let url = ask.saveAs("\(space.name).something") else { return }
-            do { try document.write(to: url, options: .atomic) } catch {
-                throw SpaceError("The export could not be written to \(url.path): \(error.localizedDescription)")
-            }
+            exported(url)
             let links = Export.links(space)
             if !links.isEmpty {
                 ask.tell("\(space.name) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")

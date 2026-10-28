@@ -126,8 +126,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
         info.showHistory = { [weak self] in self?.showHistory() }
+        info.converse = { [weak self] in self?.converse() }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
+        library.exported = { [weak self, weak library] url in
+            _ = self?.toast("\(url.lastPathComponent) is in Downloads", action: Toast.Action(label: "Show") { library?.reveal(url) })
+        }
         glass.motion = { [weak library] in library?.preferences.motion ?? .calm }
         glass.page = { [weak self] in self?.page }
         // One place for the sticker over every space, kept for the next start unless the person asked otherwise.
@@ -376,7 +380,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Says in the toolbar's chip that `count` requests wait, every space's (the chip goes away at 0), and on the
     /// sticker's badge that `mine` are the open space's.
     func waiting(_ count: Int, mine: Int) {
-        (glass.mine, info.waiting) = (mine, mine)
+        glass.mine = mine
         guard chip.count != count else { return }
         chip.count = count
         window.toolbar?.items.first { $0.itemIdentifier == Shell.chip }?.isHidden = count == 0

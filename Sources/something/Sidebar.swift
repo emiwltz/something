@@ -178,7 +178,7 @@ extension Library {
             ]),
             .separator,
             .item("Show in Finder", symbol: "macwindow") { [weak self] in self?.showInFinder(id) },
-            .item("Export…", symbol: "square.and.arrow.up") { [weak self] in self?.export(id) },
+            .item("Export", symbol: "square.and.arrow.up") { [weak self] in self?.export(id) },
             .separator,
             .item("Move to Trash…", symbol: "trash", destructive: true) { [weak self] in
                 if let entry = self?.entry(id) { self?.trashing(entry) }

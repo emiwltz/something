@@ -19,7 +19,7 @@ enum Catalog {
     /// Every screen id and the slice that removes its `.disabled` trait (the plan's screen map, one owner each).
     static let owners: [(id: String, slice: String)] = [
         ("a1", "AB18"), ("a2", "AB17"), ("a3", "AB17"), ("a4", "AB17"), ("a5", "AB17"), ("a6", "AB17"), ("a7", "AB17"), ("a8", "AB17"),
-        ("b1", "W3"), ("b2", "W7"), ("b3", "W2"), ("b4", "W4"), ("b5", "W5"), ("b6", "W2"), ("b7", "W6"), ("b8", "W3"),
+        ("b1", "W3"), ("b2", "W7"), ("b3", "W2"), ("b5", "W5"), ("b6", "W2"), ("b7", "W6"), ("b8", "W3"),
         ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c5", "AB11"), ("c6", "AB09b"), ("c7", "AB05"),
         ("c8", "AB08"), ("c9", "AB06"), ("c10", "AB07"),
         ("d2", "AB14"), ("d3", "AB15"), ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
@@ -34,10 +34,10 @@ enum Catalog {
     /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
     /// x3_1), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
-        ("x1-2", "S2"), ("x3-1", "S2"),
+        ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
     ]
-    /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1).
-    static let retired: Set<String> = ["d1"]
+    /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1).
+    static let retired: Set<String> = ["d1", "b4"]
     /// La page, pending Emi's decision: no scenario is written for these, and the gate does not count them.
     static let excluded: Set<String> = ["b2", "b1_p", "c2_p", "d1_p", "e1_p", "f6_p", "g4_p"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
@@ -50,7 +50,7 @@ enum Catalog {
     /// The area file of a screen id.
     static func area(_ id: String) -> Area {
         let number = Int(id.dropFirst().prefix { $0.isNumber }) ?? 0
-        if id.contains("-") { return [1: .shell, 3: .build][number] ?? .command }
+        if id.contains("-") { return [1: .shell, 3: .build, 5: .shell][number] ?? .command }
         switch id.first {
         case "a", "d": return .build
         case "b": return .shell

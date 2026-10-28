@@ -227,7 +227,7 @@ struct AssistantTrial {
             #expect(ask.questions.count == 1, "the edit asks nothing again")
             let info = Info(places: places, ask: ask)
             info.show(space)
-            #expect(info.rights.map(\.right) == template.rights.filter { $0 != "store" } && info.rights.allSatisfy { $0.standing == .allowed })
+            #expect(info.level == Grant.Level.needed(by: template.rights), "the level its page needs, allowed")
             #expect(info.problem == nil)
 
             let assistant = try #require(model.id)

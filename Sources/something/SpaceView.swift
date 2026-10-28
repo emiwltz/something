@@ -55,8 +55,6 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     var pointable: Bool { blocked.isEmpty && !stopped }
     /// Called when the watch saw a file of the space change, before the reload: Changes keeps what no turn made.
     var changed: () -> Void = {}
-    /// Called after each line the space adds to its journal: Info shows it.
-    var journaled: () -> Void = {}
     /// Called when a line could not be added to the journal: the window says so.
     var unkept: () -> Void = {}
     /// The codes of the errors the page did not catch since it loaded (SCRIPT_ERROR, PROMISE_REJECTED): only these go
@@ -371,11 +369,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// declared one when it is on this Mac; and the folders the Mac's agents work in.
     func question(_ declaration: Declaration, _ grant: Grant?) -> RightsQuestion {
         // An older grant, answered right by right, starts from the level it reached, never below what the page needs.
-        let needed = Grant.Level.needed(by: declaration.rights)
-        var found: String?
-        var folder: ObjCBool = false
-        if let path = declaration.folder.flatMap({ Declaration.expand($0, home: places.home) }),
-           FileManager.default.fileExists(atPath: path, isDirectory: &folder), folder.boolValue { found = path }
+        let needed = Grant.Level.needed(by: declaration.rights), found = Levels.onThisMac(declaration.folder, home: places.home)
         return RightsQuestion(space: declaration.title, description: declaration.description,
                               level: grant.map { max(Rights.level(of: $0), needed) } ?? needed, folder: grant?.folder ?? found,
                               folders: Levels.folders(engine.state), made: made, page: space.location.path)

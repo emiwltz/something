@@ -396,8 +396,7 @@ struct AcceptanceShow {
         ("Add a weather corner, top right", 22, 18, 12),
     ]
 
-    /// Daily brief open, its twelve versions kept: Info's Versions part says how many, what they weigh and the latest,
-    /// and Show History… puts History in Info's place, 320 points, the page narrowed beside it. History opens on the
+    /// Daily brief open, its twelve versions kept: Info's History, beside Export, puts History in Info's place, 320 points, the page narrowed beside it. History opens on the
     /// version before the newest, the edit outside something with its pencil, six rows, then the fold to the six
     /// older back to 12 October; Hold Space to compare beside Restore This Version. The newest's picture is taken once
     /// its page settled. ↓ moves the choice; a restore waits while the assistant works, then is a version; Esc closes.
@@ -419,15 +418,15 @@ struct AcceptanceShow {
         let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
         let all = try await Self.keepVersions(of: brief, info)
 
-        // Info: its Versions part.
+        // Info: its Space part, History beside Export.
         let center = shell.center.frame.width
         shell.showInfo(true)
         shell.window.layoutIfNeeded()
         let panel = shell.inspector.viewController.view
         let infoRead = await AcceptanceBuild.read(panel)
-        #expect(infoRead.contains("VERSIONS") && infoRead.contains("Show History…"), "\(infoRead)")
+        #expect(infoRead.contains("Space") && infoRead.contains("History") && infoRead.contains("Export"), "\(infoRead)")
         #expect(info.history.bytes == store.weight("brief") && History.when(all[0].when, now: info.clock()) == "Today 18:12")
-        // Show History…: in Info's place, at its width; Info's button no longer pressed.
+        // History: in Info's place, at its width; Info's button no longer pressed.
         info.showHistory()
         shell.window.layoutIfNeeded()
         #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
@@ -448,7 +447,7 @@ struct AcceptanceShow {
             try await Picture.window(shell, library: library, web: brief.web, "f6" + suffix, root: stage.home.root)
         }
 
-        // ↓ and ↑ as keys with the focus in the panel; ⌘I goes back to Info, Show History… again opens on the
+        // ↓ and ↑ as keys with the focus in the panel; ⌘I goes back to Info, History again opens on the
         // version before the newest.
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
         let arrow = { (code: UInt16) in

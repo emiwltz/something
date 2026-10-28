@@ -51,6 +51,14 @@ enum Levels {
         Array(Set(state.agents.compactMap(\.folder))).sorted().prefix(8).map { $0 }
     }
 
+    /// `folder`, as a page declares it ("~/code/shop"), made absolute when it is a folder on this Mac; else nil.
+    static func onThisMac(_ folder: String?, home: URL) -> String? {
+        var directory: ObjCBool = false
+        guard let path = folder.flatMap({ Declaration.expand($0, home: home) }), FileManager.default.fileExists(atPath: path, isDirectory: &directory),
+              directory.boolValue else { return nil }
+        return path
+    }
+
     /// Asks for a folder in the Mac's open panel, as a sheet on the key window (or alone without one), and gives it
     /// to `chosen`; nothing when the person cancels.
     static func chooseFolder(_ chosen: @escaping (String) -> Void) {
@@ -62,9 +70,11 @@ enum Levels {
     }
 }
 
-/// The four levels side by side: the Mac's segmented control, read by VoiceOver as one choice among four.
+/// The four levels side by side: the Mac's segmented control, read by VoiceOver as one choice among four; as wide as
+/// its words; in Info (`fills`) it starts its row, which it leaves to nothing else.
 struct LevelPicker: View {
     let level: Binding<Grant.Level>
+    var fills = false
 
     var body: some View {
         Picker("With your agents", selection: level) {
@@ -72,7 +82,8 @@ struct LevelPicker: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .fixedSize()
+        .fixedSize(horizontal: !fills, vertical: true)
+        .frame(maxWidth: fills ? .infinity : nil, alignment: .leading)
     }
 }
 

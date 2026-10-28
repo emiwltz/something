@@ -241,28 +241,28 @@ import Testing
         #expect(versions.list("today").isEmpty && ask.told.isEmpty)
     }
 
-    @Test func exportAsksForTheDataAndImportStartsWithoutGrants() async throws {
+    @Test func exportGoesToDownloadsInOneClickAndImportStartsWithoutGrants() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try page(#"{"contract": 1, "rights": ["store"]}"#, "<p>An invented board.</p>").write(to: folder.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
         try Memory(folder: test.places.data, space: "board").set("seen", ["a1"])
-        let saved = test.root.appendingPathComponent("board.something")
+        let saved = test.places.downloads.appendingPathComponent("board.something")
         let library = library(test, ask)
+        var exported: [URL] = []
+        library.exported = { exported.append($0) }
 
-        ask.withData = nil
-        ask.saveTo = saved
+        // One click: no question, no panel; its memory inside; a Downloads folder made when there is none.
+        #expect(!FileManager.default.fileExists(atPath: test.places.downloads.path))
         library.export("board")
-        #expect(ask.shown == [["seen"]] && !FileManager.default.fileExists(atPath: saved.path), "cancelled: nothing saved")
-        ask.withData = false
-        library.export("board")
-        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
-        #expect(without["data"] is NSNull && without["name"] as? String == "board", "Without Data is the default answer")
-        ask.withData = true
-        library.export("board")
+        #expect(exported == [saved] && ask.told.isEmpty && ask.folderMessages.isEmpty, "\(ask.told)")
         let with = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
-        #expect(with["data"] as? NSDictionary == ["seen": ["a1"]])
+        #expect(with["data"] as? NSDictionary == ["seen": ["a1"]] && with["name"] as? String == "board")
+        // Never over a file: the next one takes the next free name, as Finder's copies do.
+        library.export("board")
+        #expect(exported.last?.lastPathComponent == "board 2.something" && FileManager.default.fileExists(atPath: saved.path))
+        try FileManager.default.removeItem(at: exported[1])
 
         // Answers kept under the name the import will give: the received space must not inherit them.
         var file = try AppFile.read(test.places.grants)
@@ -296,8 +296,7 @@ import Testing
         let outside = test.root.appendingPathComponent(".claude.json")
         try #"{"note": "invented"}"#.write(to: outside, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("notes.json"), withDestinationURL: outside)
-        let saved = test.root.appendingPathComponent("board.something")
-        ask.saveTo = saved
+        let saved = test.places.downloads.appendingPathComponent("board.something")
         let library = library(test, ask)
         library.export("board")
         #expect(FileManager.default.fileExists(atPath: saved.path))
@@ -307,7 +306,7 @@ import Testing
         try FileManager.default.createDirectory(at: test.places.data, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: Memory(folder: test.places.data, space: "board").file, withDestinationURL: outside)
         library.export("board")
-        #expect(ask.shown.isEmpty && !FileManager.default.fileExists(atPath: saved.path), "a linked memory is never read")
+        #expect(!FileManager.default.fileExists(atPath: saved.path), "a linked memory is never read")
         #expect(ask.told.count == 2 && ask.told[1].hasPrefix("board was not exported.") && ask.told[1].contains("is a link"), "\(ask.told)")
     }
 
@@ -357,7 +356,9 @@ import Testing
 
     // MARK: Info
 
-    @Test func aRevokedRightReachesTheOpenSpace() async throws {
+    /// A level chosen in Info is the person's answer: kept as the space's grant and heard at once by the open space,
+    /// with nothing asked; its memory never stops answering.
+    @Test func aLevelChosenInInfoReachesTheOpenSpace() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send", "store"]}"#, """
@@ -370,81 +371,72 @@ import Testing
         #expect(try await run(window, "await something.store.set('word', 'invented'); return await something.store.get('word')") as? String == "invented")
 
         let info = info(test, ask, space, view: window)
-        #expect(info.rights.map(\.right) == ["state", "send"] && info.rights.allSatisfy { $0.standing == .allowed }, "its memory has no switch")
-
-        info.set("send", allowed: false)
+        #expect(info.level == .talk && info.folder == nil && info.problem == nil, "the level its sheet answered")
+        info.choose(.none)
         for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 1 { await wait(0.05) }
-        #expect(try await run(window, "return heard") as? [String] == ["state,store"])
-        #expect(try await run(window, "return something.granted.refused") as? [String] == ["send"])
+        #expect(try await run(window, "return heard") as? [String] == ["store"])
         let grant = try #require(try AppFile.read(test.places.grants).spaces["notes"])
-        #expect(grant.granted == ["state"] && grant.refused == ["launch", "send"] && grant.level == nil, "answered right by right: no level now")
-        #expect(info.rights.map(\.standing) == [.allowed, .refused])
+        #expect(grant.level == Grant.Level.none && grant.granted.isEmpty && grant.refused == ["state", "send", "launch"])
+        #expect(info.level == Grant.Level.none)
 
-        // Switched on again: it writes again; its memory never stopped answering.
-        info.set("send", allowed: true)
+        info.choose(.watch)
         for _ in 0..<600 where try await run(window, "return heard.length") as? Int != 2 { await wait(0.05) }
-        #expect(try await run(window, "return heard") as? [String] == ["state,store", "state,send,store"])
+        #expect(try await run(window, "return heard") as? [String] == ["store", "state,store"])
         #expect(try await run(window, "return await something.store.get('word')") as? String == "invented")
-        #expect(ask.questions.count == 1, "a switch is the person's answer: nothing more is asked")
+        #expect(ask.questions.count == 1 && info.level == .watch, "a level chosen here is the answer: nothing more is asked")
     }
 
-    @Test func askAgainClearsTheRefusalsOnlyAndAsksThemNow() async throws {
+    /// Run needs its folder: the one in force, else the one its page declares when it is on this Mac, else the person
+    /// picks one; a folder not picked changes nothing. Leaving Run lets the folder go.
+    @Test func runTakesItsFolder() throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
-        let space = try test.space("board", page(#"{"contract": 1, "rights": ["state", "send"]}"#, "<script>window.done = true</script>"))
+        let shop = test.root.appendingPathComponent("code/shop")
+        let space = try test.space("shop", page(#"{"contract": 1, "rights": ["state", "send", "launch"], "folder": "/nowhere/invented"}"#, ""))
+        let info = info(test, ask, space)
+        var picked: String?, asked = 0
+        info.pick = { answer in
+            asked += 1
+            if let picked { answer(picked) }
+        }
+        #expect(info.level == Grant.Level.none, "never answered")
+        info.choose(.run)
+        #expect(asked == 1 && info.level == Grant.Level.none, "not picked: nothing changes")
+        #expect(try AppFile.read(test.places.grants).spaces["shop"] == nil)
+        picked = shop.path
+        info.choose(.run)
+        #expect(asked == 2 && info.level == .run && info.folder == shop.path)
+        #expect(try AppFile.read(test.places.grants).spaces["shop"]?.granted == ["state", "send", "launch"])
+        info.choose(.watch)
+        #expect(info.level == .watch && info.folder == nil)
+
+        // Declared and on this Mac: taken without asking.
+        try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
+        let declared = try test.space("shop", page(#"{"contract": 1, "rights": ["launch"], "folder": "\#(shop.path)"}"#, ""))
+        info.show(declared)
+        info.choose(.run)
+        #expect(asked == 2 && info.level == .run && info.folder == shop.path)
+    }
+
+    /// A page that declares nothing is at None; a grants file that does not read is said, and the rights in force stay.
+    @Test func whatInfoSaysWithoutALevel() async throws {
+        let test = Home(prefix: "something-library-"), ask = FakeAsk()
+        defer { test.remove() }
+        let plain = try test.space("plain", page(nil, ""))
+        let info = info(test, ask, plain)
+        #expect(info.level == Grant.Level.none && info.problem == nil, "a page that declares nothing still has its level")
+
+        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
         let window = try await test.window(space, ask)
         defer { window.close() }
-        ask.answer = { _ in RightsAnswer(level: .watch, folder: nil) }
         window.load()
-        let info = info(test, ask, space, view: window)
-        #expect(info.rights.map(\.standing) == [.allowed, .refused])
-
-        // "Don't Allow": what was allowed stays, in the file and in the open space; the refusal is no longer remembered.
-        ask.answer = nil
-        info.askAgain()
-        #expect(await wait(30, until: { ask.questions.count == 2 }), "asked after the click")
-        #expect(ask.questions.map(\.level) == [.talk, .talk], "pre-set to what the page needs")
-        let grant = try #require(try AppFile.read(test.places.grants).spaces["board"])
-        #expect(grant.granted == ["state"] && grant.refused.isEmpty && grant.level == nil)
-        #expect(window.granted.rights == ["state"])
-        #expect(info.rights.map(\.standing) == [.allowed, .notAnswered(inForce: [])])
-
-        // Answered: Info shows the new answer at once.
-        ask.answer = { RightsAnswer(level: $0.level, folder: nil) }
-        info.askAgain()
-        #expect(await wait(30, until: { ask.questions.count == 3 }))
-        #expect(info.rights.map(\.standing) == [.allowed, .allowed])
-        #expect(window.granted.rights == ["state", "send"])
-    }
-
-    @Test func aSwitchChangesOnlyItsOwnRight() throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        // "send" was allowed; the space now declares one right per kind, and a launch it was never asked about.
-        let space = try test.space("shop", page(#"{"contract": 1, "rights": ["send:claude", "send:codex", "launch:claude"]}"#, ""))
-        var file = AppFile()
-        file.spaces["shop"] = answered(declared: ["send"], granted: ["send"])
-        try file.write(test.places.grants)
-        let info = info(test, ask, space)
-        #expect(info.rights.map(\.standing) == [.allowed, .allowed, .notAnswered(inForce: [])])
-
-        info.set("send:claude", allowed: false)
-        let after = try #require(try AppFile.read(test.places.grants).spaces["shop"])
-        #expect(after.granted == ["send:codex"] && after.refused == ["send:claude"])
-        #expect(info.rights.map(\.standing) == [.refused, .allowed, .notAnswered(inForce: [])])
-    }
-
-    /// A space that declares no right is never asked about: Info does not say it will be.
-    @Test func aSpaceWithoutRightsAsksForNothing() throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        let plain = try test.space("clock", page(#"{"contract": 1}"#, ""))
-        let info = info(test, ask, plain)
-        #expect(info.asksNothing && info.rights.isEmpty && info.problem == nil)
-        info.show(try test.space("notes", page(#"{"contract": 1, "rights": ["store"]}"#, "")))
-        #expect(info.asksNothing && info.rights.isEmpty, "its memory needs no permission")
-        info.show(try test.space("board", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "")))
-        #expect(!info.asksNothing && info.rights.isEmpty, "declared, never answered: it asks when it opens")
+        #expect(window.granted.rights == ["state", "store"])
+        try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
+        let broken = self.info(test, ask, space, view: window)
+        #expect(broken.problem?.hasPrefix("The grants in") == true && broken.level == nil)
+        broken.choose(.none)
+        #expect(window.granted.rights == ["state", "store"], "the rights in force stay")
+        #expect(ask.told.count == 2, "\(ask.told)")
     }
 
     /// Closing the window closes the open space: its page stops, and nothing asks from a window nobody sees.
@@ -457,64 +449,5 @@ import Testing
         shell.closed = { closed += 1 }
         shell.window.close()
         #expect(closed == 1)
-    }
-
-    @Test func aWiderRightDeclaredLaterShowsWhatIsInForce() throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        let space = try test.space("shop", page(#"{"contract": 1, "rights": ["send"]}"#, ""))
-        var file = AppFile()
-        file.spaces["shop"] = answered(declared: ["send:claude"], granted: ["send:claude"])
-        try file.write(test.places.grants)
-        #expect(info(test, ask, space).rights.map(\.standing) == [.notAnswered(inForce: ["send:claude"])], "neither on nor off: not asked yet")
-    }
-
-    @Test func aGrantsFileThatDoesNotReadIsSaid() async throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "store"]}"#, "<script>window.done = true</script>"))
-        let window = try await test.window(space, ask)
-        defer { window.close() }
-        window.load()
-        #expect(window.granted.rights == ["state", "store"])
-        try "not json".write(to: test.places.grants, atomically: true, encoding: .utf8)
-        let info = info(test, ask, space, view: window)
-        #expect(info.problem?.hasPrefix("The grants in") == true && info.rights.isEmpty)
-        window.regrant()
-        #expect(window.granted.rights == ["state", "store"], "the rights in force stay")
-        #expect(ask.told.count == 1)
-    }
-
-    @Test func aSwitchAppliesOnlyTheDeclarationThePersonWasAsked() async throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        let space = try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send"], "agents": {"folders": []}}"#,
-                                                 "<script>window.done = true</script>"))
-        let window = try await test.window(space, ask)
-        defer { window.close() }
-        window.load()
-        // The file widens its scope; the reload that would ask has not run yet.
-        try test.space("notes", page(#"{"contract": 1, "rights": ["state", "send"], "agents": {"see": "all"}}"#, ""))
-        info(test, ask, space, view: window).set("send", allowed: false)
-        #expect(window.granted.rights == ["state"] && window.granted.agents == .folders([]))
-    }
-
-    @Test func theActivityIsTheJournalNewestFirst() throws {
-        let test = Home(prefix: "something-library-"), ask = FakeAsk()
-        defer { test.remove() }
-        let space = try test.space("board", page(#"{"contract": 1, "title": "Board", "description": "An invented board."}"#, ""))
-        #expect(info(test, ask, space).activity.isEmpty)
-        let journal = Journal(folder: test.places.journals)
-        for index in 0..<120 {
-            try journal.append(JournalLine(at: "2026-10-17T09:00:00Z", action: "send", agent: "a1", kind: "claude", when: "next",
-                                           text: "Invented message \(index).", result: "ok"), space: "board")
-        }
-        let info = info(test, ask, space)
-        #expect(info.about == "An invented board.")
-        #expect(info.activity.count == 100)
-        // The state no longer has a1: the line names its kind alone (WordsTests check the words).
-        #expect(info.activity.first?.what == "wrote to Claude Code: “Invented message 119.”", "\(info.activity.first?.what ?? "")")
-        #expect(info.activity.last?.what == "wrote to Claude Code: “Invented message 20.”")
-        #expect(info.activity.allSatisfy { !$0.time.isEmpty })
     }
 }

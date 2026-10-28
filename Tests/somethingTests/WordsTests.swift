@@ -1,6 +1,5 @@
-// What the person reads, word for word: a path with ~ and cut between two names, a journal line in local time with
-// the agent's name and the result only when it is not ok, the level sheet's answers and New Space's level words. No
-// window is shown.
+// What the person reads, word for word: a path with ~ and cut between two names, a time in local time, the level
+// sheet's answers and New Space's level words. No window is shown.
 import AppKit
 import SomethingCore
 import Testing
@@ -32,33 +31,16 @@ import Testing
     }()
     let now = ISO8601DateFormatter().date(from: "2026-10-17T12:00:00Z")!
 
-    func words(_ line: JournalLine, _ names: [String: String] = ["a1": "shop"], clock: Locale = Locale(identifier: "en_GB")) -> String {
-        Words.journal(line, names: names, home: home, now: now, calendar: calendar, locale: Locale(identifier: "en_GB"), clock: clock)
+    func time(_ at: String, clock: Locale = Locale(identifier: "en_GB")) -> String {
+        Words.time(at, now: now, calendar: calendar, locale: Locale(identifier: "en_GB"), clock: clock).replacingOccurrences(of: "\u{202F}", with: " ")
     }
 
-    @Test func aJournalLineIsOneSentence() {
-        #expect(words(JournalLine(at: "2026-10-17T08:00:00Z", action: "send", agent: "a1", kind: "claude", when: "next",
-                                  text: "What changed in the cart overnight?\nList the files.", result: "ok"))
-                == "08:00\twrote to Claude Code “shop”: “What changed in the cart overnight? Lis…”")
-        #expect(words(JournalLine(at: "2026-10-17T08:00:00Z", action: "interrupt", agent: "a1", kind: "claude", result: "ok"),
-                      clock: Locale(identifier: "en_US")).replacingOccurrences(of: "\u{202F}", with: " ")
-                == "8:00 am\tinterrupted Claude Code “shop”", "a clock of 12 hours (some systems put a narrow space before am)")
-        #expect(words(JournalLine(at: "2026-10-17T08:07:00Z", action: "interrupt", agent: "a1", kind: "claude", result: "AGENT_STOPPED"))
-                == "08:07\tinterrupted Claude Code “shop” — failed: the agent had ended")
-        #expect(words(JournalLine(at: "2026-10-16T08:07:00Z", action: "set", agent: "a2", kind: "codex", text: "model=gpt-invented mode=plan",
-                                  result: "VALUE_NOT_OFFERED"))
-                == "16 Oct 08:07\tchanged Codex: model gpt-invented, mode plan — refused: this agent does not offer that value", "an agent the state no longer has")
-        #expect(words(JournalLine(at: "2025-12-31T23:59:00Z", action: "launch", agent: "a1", kind: "opencode", text: "/Users/example/code/shop",
-                                  result: "ok"))
-                == "31 Dec 2025 23:59\tlaunched OpenCode “shop” in ~/code/shop")
-        #expect(words(JournalLine(at: "2026-10-17T09:00:00Z", action: "resume", kind: "pi", text: "thread-invented", result: "STILL_RUNNING"))
-                == "09:00\tcontinued a conversation of pi here — failed: the conversation is still open elsewhere")
-        #expect(words(JournalLine(at: "2026-10-17T09:01:00Z", action: "open", text: "https://example.com/notes", result: "REFUSED"))
-                == "09:01\topened a link: https://example.com/notes — you said no")
-        #expect(words(JournalLine(at: "not a date", action: "send", agent: "a3", text: "Hi", result: "AGENT_NOT_FOUND"))
-                == "not a date\twrote to an agent: “Hi” — refused: the space cannot see this agent")
-        #expect(words(JournalLine(at: "2026-10-17T09:02:00Z", action: "interrupt", agent: "a1", kind: "pi", result: "A_LATER_CODE"))
-                == "09:02\tinterrupted pi “shop” — failed (A_LATER_CODE)", "a code this version does not know")
+    @Test func aTimeIsSaidInLocalTime() {
+        #expect(time("2026-10-17T08:00:00Z") == "08:00")
+        #expect(time("2026-10-17T08:00:00Z", clock: Locale(identifier: "en_US")) == "8:00 am", "a clock of 12 hours (some systems put a narrow space before am)")
+        #expect(time("2026-10-16T08:07:00Z") == "16 Oct 08:07")
+        #expect(time("2025-12-31T23:59:00Z") == "31 Dec 2025 23:59")
+        #expect(time("not a date") == "not a date", "a date that does not read is shown as it is written")
     }
 
     /// The level sheet answers the level shown and Run's folder; Allow waits for that folder; a folder is kept only

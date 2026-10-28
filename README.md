@@ -127,7 +127,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   and the space opens without asking. A space made elsewhere (a template, an import, an agent outside something) asks
   for its level in a sheet at its first opening, pre-set to what it declares. What a space declares above its level
   stays refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel
-  beside the space, shows its assistant, each right with a switch to revoke it, its versions, and what the space did.
+  beside the space, says it all in three parts: the space (its file, its size, Export, History), your agents (its
+  level, one control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent
+  and model, its last reply, Open Conversation).
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". There is
   no "always". A space sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds on New Space, which that page shows with its choices; its permissions still open the
@@ -140,13 +142,16 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 - **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others
   [the guide](share/guide.md#what-the-person-sees-of-your-space) lists) reach its menus even while a space has the
   focus: a page cannot keep them, so it cannot stop you from stopping your assistant.
-- **Export.** An exported space carries its memory only if you choose so.
+- **Export.** Export, in Info or the Space menu, writes the space in one click as one `.something` file in your
+  Downloads folder, its memory inside (whoever receives the file can read it), never its level, its journal or what it
+  read from an agent.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
 or the agent's channel, for that launch only. It writes only in `~/something/` and
-`~/Library/Application Support/something/`, plus the launcher in `~/Applications` if you turn it on and the snapshots
-`something check` takes in `$TMPDIR/something-check`; what it removes goes to the Trash.
+`~/Library/Application Support/something/`, plus the exports you ask for in `~/Downloads`, the launcher in
+`~/Applications` if you turn it on and the snapshots `something check` takes in `$TMPDIR/something-check`; what it
+removes goes to the Trash.
 
 ## No network for spaces
 

@@ -166,7 +166,8 @@ The person answers with one **level** for the whole space, never right by right:
 `store` needs no permission: declared, it is always granted. A space made on something's New Space opens with the
 level the person chose there, before it was built; any other space (a template, an import, a page an agent wrote
 outside something) asks for its level in a window of the Mac at its first opening, pre-set to the highest level its
-rights use. A right above the level is refused without asking again, until the person changes it in Info. Which
+rights use. A right above the level is refused without asking again, until the person changes it in Info, where the
+level is one control that applies at once (your page hears `"granted"`). Which
 agents `state` shows is the scope you declare in `agents`, not asked: keep it to the folders the page is about. **So never
 assume a right: read `something.granted`**, and listen to `"granted"` for changes.
 
@@ -437,9 +438,9 @@ await something.store.set("seen", [...seen, "a1"]);
 ## What the person sees of your space
 
 - **The journal.** Every write of your space (`send`, `interrupt`, `set`, `launch`, `resume`, `open`), successful or
-  not, adds a line to its journal, shown in Info beside the space. It never leaves the Mac.
-- **Export.** The person can export your space as one `.something` file (JSON: its files in base64, and its memory
-  only if they choose so). The export carries the contract your space declares; a something that does not know that
+  not, adds a line to its journal, which `something check --journal` prints. It never leaves the Mac.
+- **Export.** The person can export your space in one click as one `.something` file in their Downloads (JSON: its
+  files in base64, and its memory). The export carries the contract your space declares; a something that does not know that
   contract refuses to import it. It never carries the rights they gave, the journal, or anything read from an agent,
   and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
   export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be

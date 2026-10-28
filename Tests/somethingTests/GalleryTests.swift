@@ -163,7 +163,6 @@ struct GalleryTests {
         try draw(Ask.lowers("acceptEdits", kind: "claude", folder: "/Users/example/code/shop", space: "Morning review", home: "/Users/example"), "lowering-mode" + suffix, fixture)
         let link = try #require(URL(string: "https://example.com/notes/overnight"))
         try Picture.view(try #require(Ask.link(link, space: "Morning review").contentView), "link" + suffix, root: fixture.root)
-        try draw(Ask.withData("morning-review", keys: ["drafts", "last-read", "summaries"], bytes: 18_400), "export" + suffix, fixture)
 
         let who = App.who(agents()[0], space: "Morning review", home: "/Users/example")
         let permission = Prompt(request: Request(id: "r1", agent: "a1", kind: "permission", tool: "Bash", about: "npm test",
@@ -209,11 +208,10 @@ struct GalleryTests {
         }
     }
 
-    /// The window of `fixture`'s home, never shown, with its spaces listed; the agents of `agents()` named in Info.
+    /// The window of `fixture`'s home, never shown, with its spaces listed.
     func window(_ fixture: Home) -> (shell: Shell, library: Library, info: Info) {
         let ask = FakeAsk()
         let library = Library(places: fixture.places, ask: ask, share: Home.share), info = Info(places: fixture.places, ask: ask)
-        info.agents = { self.agents() }
         library.relist()
         let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: fixture.engine(), places: fixture.places), autosave: false)
         return (shell, library, info)
