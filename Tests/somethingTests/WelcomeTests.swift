@@ -55,7 +55,7 @@ import Testing
         welcome.finished = { shell.welcomed() }
         let window = Self.shown(shell.welcome(welcome, onScreen: false))
         defer { window.orderOut(nil) }
-        #expect(shell.welcoming === window && library.selection == .newSpace && window.firstResponder is WelcomeKeys)
+        #expect(shell.welcoming === window && library.selection == .templates && window.firstResponder is WelcomeKeys, "what was shown stays until it ends")
         let screen = Welcome.place(on: NSScreen.main)
         #expect(screen.size == Welcome.size && Welcome.place(on: nil).origin == .zero)
         let welcoming = Keys.Situation(space: true, agent: true, welcoming: true, waiting: true)

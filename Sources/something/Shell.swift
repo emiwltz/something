@@ -597,7 +597,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         let welcome = Welcome.window(model, assistant: assistant, motion: library.preferences.motion)
         welcome.setFrame(Welcome.place(on: window.screen ?? NSScreen.main), display: false)
         welcoming = welcome
-        library.select(.newSpace)
         guard onScreen else { return welcome }
         window.orderOut(nil)
         welcome.makeKeyAndOrderFront(nil)

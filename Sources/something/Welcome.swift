@@ -138,7 +138,7 @@ struct WelcomeView: View {
             }
             .padding(.top, 30)
             Text(found > 1 ? "Found on this Mac. \(found - 1) more to choose from." : "Found on this Mac.")
-                .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9).padding(.leading, 56)
+                .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9)
         }
     }
 

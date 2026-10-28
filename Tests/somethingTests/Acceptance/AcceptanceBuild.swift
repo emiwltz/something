@@ -82,9 +82,17 @@ struct AcceptanceBuild {
         #expect(HintBubble.shown(in: shell.layer) == nil && shell.made == "elsewhere", "no hint for a space no build made")
         var said: [String] = []
         shell.layer.announce = { said.append($0) }
+        // As App's `ended` does after a build: the space it made opens, the card open on its conversation. The hint
+        // stays owed under the card, and comes once the card shrinks into the sticker.
         shell.made = "waiting-room"
+        model.place = AssistantModel.place(room)
+        model.open = true
         shell.show(room)
-        #expect(await wait(until: { HintBubble.shown(in: shell.layer)?.kind == .ask }), "1.3 s after the space it made opens")
+        #expect(model.cardShown)
+        await wait(1.8)
+        #expect(HintBubble.shown(in: shell.layer) == nil && shell.made == "waiting-room" && library.preferences.hinted.isEmpty)
+        model.open = false
+        #expect(await wait(until: { HintBubble.shown(in: shell.layer)?.kind == .ask }), "by the sticker once the card is reduced")
         #expect(shell.made == nil && library.preferences.hinted == ["ask"])
         #expect(said == ["Your assistant. It built this space, and changes it when you ask. Press ⌘K, or click it."])
         let bubble = try #require(HintBubble.shown(in: shell.layer)), sticker = shell.glass.sticker

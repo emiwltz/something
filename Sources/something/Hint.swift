@@ -31,13 +31,21 @@ extension Shell {
     /// After the space `name` showed: the next hint not seen yet, 1.3 s later if that space is still shown. Your
     /// assistant's comes first, and only on the opening of a space a build just made (`made`).
     func hintLater(_ name: String) {
-        let made = self.made == name, seen = library.preferences.hinted
-        if made { self.made = nil }
-        guard let next = Hint.allCases.first(where: { !seen.contains($0.rawValue) }), next != .ask || made else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in
-            guard let self, space?.space.name == name, window.isVisible else { return }
-            hint(next)
+        let seen = library.preferences.hinted
+        guard let next = Hint.allCases.first(where: { !seen.contains($0.rawValue) }), next != .ask || made == name else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) { [weak self] in self?.hintNow(next, on: name) }
+    }
+
+    /// Shows `next` while the space `name` is shown. Your assistant's stays owed (`made`) until it is shown: a build
+    /// leaves its card open on the conversation, so it waits for the card to shrink into the sticker, then comes by it.
+    private func hintNow(_ next: Hint, on name: String) {
+        guard space?.space.name == name, window.isVisible, next != .ask || made == name else { return }
+        if next == .ask && assistant.cardShown {
+            return withObservationTracking { _ = assistant.cardShown } onChange: { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self?.hintNow(next, on: name) }
+            }
         }
+        if hint(next) != nil, next == .ask { made = nil }
     }
 
     /// Shows `kind` now, and keeps it as seen; nil when what it points at is not there (the sticker under its card, the
@@ -117,15 +125,26 @@ final class HintBubble: NSView {
 struct HintView: View {
     enum Arrow { case leading, center, trailing }
     let kind: Hint, arrow: Arrow, gotIt: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.displayScale) private var scale
+
+    /// The key as a keycap in the sentence, ringed in line2: drawn as a picture, which a wrapping Text can hold.
+    private var cap: Text {
+        let shape = RoundedRectangle(cornerRadius: 4)
+        let renderer = ImageRenderer(content: Text(kind.words.key).font(Look.font(.ui, size: 10.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
+            .padding(.horizontal, 5).background(Look.Token.bg2.ui, in: shape).overlay(shape.strokeBorder(Look.Token.line2.ui))
+            .environment(\.colorScheme, scheme))
+        renderer.scale = scale
+        guard let image = renderer.nsImage else { return Text(kind.words.key) }
+        return Text(Image(nsImage: image)).baselineOffset(-1.5)
+    }
 
     var body: some View {
         let words = kind.words
-        var key = AttributedString(words.key)
-        (key.font, key.backgroundColor) = (Look.font(.ui, size: 11, weight: .semibold).ui, Look.Token.sunk.ui)
         let shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
         return VStack(alignment: .leading, spacing: 4) {
             Text(kind.title).font(Look.font(.title, size: 16, weight: .semibold).ui).accessibilityLabel(kind.title).accessibilityAddTraits(.isHeader)
-            Text(AttributedString(words.before) + key + AttributedString(words.after))
+            Text("\(Text(words.before))\(cap)\(Text(words.after))")
                 .font(Look.font(.ui, size: 12.5).ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(words.before + words.key + words.after)
             Button("Got It", action: gotIt).font(Look.font(.ui, size: 12, weight: .semibold).ui).buttonStyle(Primary(height: 26, padding: 10)).accessibilityLabel("Got It")
