@@ -26,9 +26,16 @@ struct AssistantCard: View {
         if model.cardShown || model.folding {
             VStack(spacing: 0) {
                 header
-                if model.threadShown { conversation }
-                if let notice = model.notice { NoticeView(notice: notice).padding(EdgeInsets(top: 2, leading: 10, bottom: 8, trailing: 10)) }
-                if let now = model.presence.now { nowLine(now) }
+                // The "/" list opens over what is above the field, as a menu: the card keeps its size unless that is
+                // shorter than the list.
+                ZStack(alignment: .bottom) {
+                    VStack(spacing: 0) {
+                        if model.threadShown { conversation }
+                        if let notice = model.notice { NoticeView(notice: notice).padding(EdgeInsets(top: 2, leading: 10, bottom: 8, trailing: 10)) }
+                        if let now = model.presence.now { nowLine(now) }
+                    }
+                    if model.place != .blank, let shown = model.slashed { CommandList(model: model, shown: shown).padding(EdgeInsets(top: 0, leading: 8, bottom: 4, trailing: 8)) }
+                }
                 if model.place != .blank { composer }
             }
             .frame(width: AssistantCard.width)
@@ -64,13 +71,16 @@ struct AssistantCard: View {
                 .accessibilityLabel("Conversation menu")
                 Text(model.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
             }
+            // The state line takes the room before the buttons rather than the heading's width.
+            .layoutPriority(1)
             Spacer(minLength: 0)
             // Fold: the conversation folds away, the card keeping its header and field (⌘J).
             Button { model.threadShown.toggle() } label: {
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 0 : 180))
                     .frame(width: 24, height: 24).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel(model.threadShown ? "Fold Conversation" : "Unfold Conversation")
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).help(Keys.tooltip("convo", "Fold Conversation"))
+            .accessibilityLabel(model.threadShown ? "Fold Conversation" : "Show Conversation")
             Button { model.open = false } label: {
                 Image(systemName: "minus").font(.system(size: 12, weight: .medium)).frame(width: 24, height: 24).contentShape(Rectangle())
             }
@@ -94,7 +104,7 @@ struct AssistantCard: View {
 
     /// "Week-end's assistant" in a space; where the person is elsewhere.
     private var heading: String {
-        if case .space = model.place { Words.possessive(model.title) + " assistant" } else { model.title }
+        model.inSpace ? Words.possessive(model.title) + " assistant" : model.title
     }
 
     // MARK: The conversation
@@ -142,8 +152,8 @@ struct AssistantCard: View {
         .defaultScrollAnchor(.bottom)
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: AssistantCard.thread)
-        // What scrolled up never shows under the header.
-        .clipped()
+        // What scrolled up fades out under the header, never cut there.
+        .mask(VStack(spacing: 0) { LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 12); Color.black })
     }
 
     @ViewBuilder private func line(_ row: AssistantModel.Row) -> some View {
@@ -308,7 +318,6 @@ struct AssistantCard: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let shown = model.slashed { CommandList(model: model, shown: shown).padding(.bottom, 6) }
             AgentModelChip(model: model).padding(.bottom, 4)
             if !model.threadShown, !model.held.isEmpty { heldStrip }
             Field(model: model)
@@ -337,7 +346,7 @@ struct Field: View {
                 .lineLimit(1...5)
                 .padding(.horizontal, 2).padding(.vertical, 5)
                 .frame(minHeight: 30)
-                .accessibilityLabel("Message")
+                .accessibilityLabel(model.messageLabel)
                 .composing(model, $typing)
                 // Outside composing's Return, which would send the "/" typed: the outer handler is asked first.
                 .onKeyPress(keys: [.upArrow, .downArrow, .return, .tab], phases: .down) { Field.slash($0.key, model) }
@@ -436,11 +445,11 @@ struct CommandList: View {
                     ForEach(Array(shown.enumerated()), id: \.offset) { index, command in
                         Button { model.use(command, send: true) } label: {
                             HStack(spacing: 8) {
-                                Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).frame(width: 96, alignment: .leading)
+                                Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).frame(width: 86, alignment: .leading)
                                 Text(command.label).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
                                 Spacer(minLength: 0)
                             }
-                            .padding(.horizontal, 8).frame(height: 30).contentShape(Rectangle())
+                            .padding(.horizontal, 8).frame(minHeight: 36).contentShape(Rectangle())
                             .background(index == at ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
                         }
                         .buttonStyle(.plain).id(index)
@@ -450,7 +459,7 @@ struct CommandList: View {
                 }
             }
             .onChange(of: at) { list.scrollTo(at) } }
-            .frame(height: CGFloat(min(max(shown.count, 1), 6)) * 31)
+            .frame(height: CGFloat(min(max(shown.count, 1), 6)) * 37)
             HStack(spacing: 12) {
                 Text("↑↓ choose"); Text("↩ send"); Text("⇥ add text"); Spacer(minLength: 4); Text("Passed to \(model.name) as is")
             }
@@ -644,7 +653,7 @@ struct AgentMenu: View {
     let model: AssistantModel
 
     var body: some View {
-        Section("Builds this space") {
+        Section(model.inSpace ? "Builds this space" : "Builds your spaces") {
             ForEach(model.entries) { entry in
                 Toggle(isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) })) {
                     Label { Text(entry.title) } icon: { Monogram.image(Registry.app.name(of: entry.id)).map { Image(nsImage: $0) } }
@@ -703,7 +712,7 @@ extension AssistantModel {
     /// listed; before any, a sentence. A builder that picks its own model says so, and offers none.
     var modelMenu: [ModelPart] {
         let offered = offered, chosen = (model: session.model ?? agent?.model, effort: session.effort ?? agent?.effort)
-        var model = ModelPart(header: "Model · this space")
+        var model = ModelPart(header: inSpace ? "Model · this space" : "Model")
         if ownModel {
             model.note = "\(name) chooses its own model. Change it in " + Words.possessive(name) + " settings."
         } else if let models = offered.model, !models.isEmpty {
@@ -770,6 +779,11 @@ extension AssistantModel {
         case .templates: "Templates"
         }
     }
+
+    /// Whether the person is in a space, where the chip's menus say "this space".
+    var inSpace: Bool { if case .space = place { true } else { false } }
+    /// The field's name for VoiceOver: whose assistant the message goes to, inside a space.
+    var messageLabel: String { inSpace ? "Message to " + Words.possessive(title) + " assistant" : "Message" }
 
     /// The caption of a message written here, which the conversation leaves out.
     var here: String? { AssistantModel.shown(AssistantModel.context(place, home: places.home.path) + "\n").caption }

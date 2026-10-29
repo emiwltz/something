@@ -94,7 +94,7 @@ struct AccessibilityTests {
         model.focus()
         model.threadShown = true
         let space = await Self.walk(shell.window)
-        #expect(space.words.contains("Message") && space.words.contains("Fold Conversation") && space.unnamed.isEmpty, "\(space)")
+        #expect(space.words.contains("Message to Daily brief’s assistant") && space.words.contains("Fold Conversation") && space.unnamed.isEmpty, "\(space)")
 
         let source = FakePrompts()
         AcceptanceTrust.request("r", [0], in: source)

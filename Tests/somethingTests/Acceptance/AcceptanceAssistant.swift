@@ -646,17 +646,26 @@ struct AcceptanceAssistant {
         let (shell, library, brief) = try await AcceptanceAssistant.x6(stage)
         defer { brief.close() }
         let model = shell.assistant, window = shell.window
+        // Another scenario's field can take the shared field editor while this one waits for a drawing turn: the keys
+        // go only once the card's own field has them.
+        func inCard() async -> Bool { await wait { (window.firstResponder as? NSView)?.isDescendant(of: shell.glass.card) == true && !model.wantsFocus } }
         shell.toggleConversation(nil)
-        #expect(await wait { window.firstResponder is NSTextView && !model.wantsFocus }, "the card's field has the keys")
+        #expect(await inCard(), "the card's field has the keys")
+        try await AcceptanceAssistant.fit(shell)
+        let height = shell.glass.card.frame.height
         model.draft = "/"
         #expect(model.slashed?.map(\.value) == ["compact", "explain", "init", "review", "tidy"] && model.commandPick == 0)
         #expect(model.slashed?.first?.label == "Summarize the conversation to make room")
         for _ in 0..<3 { window.sendEvent(try AcceptanceTrust.key("\u{F701}", 125)) }
         #expect(await wait { model.commandPick == 3 }, "↓ moves the choice: \(model.commandPick)")
         try await AcceptanceAssistant.fit(shell)
+        let card = shell.glass.card
+        #expect(await wait { shell.glass.place(); return card.frame.height == height }, "the list opens over the conversation: \(height) → \(card.frame.height)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "x6-3-list" + suffix, root: stage.home.root)
         }
+        model.focus()
+        #expect(await inCard(), "the card's field has the keys again after the pictures")
         // Typing filters; nothing matches, and the list says so.
         model.draft = "/zz"
         #expect(model.slashed == [] && model.noCommands == "No command of Claude Code starts with that.")
@@ -669,9 +678,10 @@ struct AcceptanceAssistant {
         model.draft = "/review now"
         #expect(model.slashed == nil && Field.slash(.return, model) == .ignored)
         model.draft = "/rev"
+        #expect(await inCard())
         window.sendEvent(try AcceptanceTrust.key("\t", 48))
         #expect(await wait { model.draft == "/review " }, "Tab leaves it for its text: \(model.draft)")
-        #expect(window.firstResponder is NSTextView, "Tab kept the field")
+        #expect((window.firstResponder as? NSView)?.isDescendant(of: shell.glass.card) == true, "Tab kept the field")
         model.draft = "/"
         for _ in 0..<3 { window.sendEvent(try AcceptanceTrust.key("\u{F701}", 125)) }
         #expect(await wait { model.commandPick == 3 })
@@ -720,7 +730,7 @@ struct AcceptanceAssistant {
                                                            context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)))
         }
         func opened() async -> Bool {
-            await wait { glass.grown == true && !glass.morphing && window.firstResponder is NSTextView && !model.wantsFocus }
+            await wait { glass.grown == true && !glass.morphing && (window.firstResponder as? NSView)?.isDescendant(of: glass.card) == true && !model.wantsFocus }
         }
         func reduced() async throws -> Bool {
             try key(53, "\u{1b}")
