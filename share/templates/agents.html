@@ -31,7 +31,8 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; background: var(--room); color: var(--ink); }
-  main { max-width: 1100px; margin: 0 auto; padding: 26px 30px 30px; display: flex; flex-direction: column; gap: 16px; }
+  /* The bottom keeps clear of something's assistant, which floats over the page's bottom-right corner. */
+  main { max-width: 1100px; margin: 0 auto; padding: 26px 30px 72px; display: flex; flex-direction: column; gap: 16px; }
   button, select, textarea { font: inherit; color: inherit; }
   .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 
@@ -125,7 +126,7 @@
   .cmds li b { color: var(--amber); font-weight: 600; flex: none; min-width: 90px; }
   .cmds li span { color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cmds li[aria-selected=true] { background: var(--sunk); }
-  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--faint); font-size: 11.5px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 8px; color: var(--faint); font-size: 11.5px; }
   .keys kbd { font: inherit; border: 1px solid var(--edge); border-radius: 4px; padding: 0 5px; margin-right: 5px; }
   .keys .from { margin-left: auto; }
   .said { margin: 0; color: var(--work); font-size: 12.5px; min-height: 1em; }
@@ -133,7 +134,7 @@
   .empty { grid-column: 1 / -1; border: 1px dashed var(--edge); border-radius: 12px; padding: 28px; text-align: center; color: var(--soft); }
   #problem { border: 1px solid var(--fail); color: var(--fail); border-radius: 8px; padding: 8px 12px; margin: 0; }
   #notes { color: var(--faint); font-size: 12px; margin: 0; }
-  @media (max-width: 700px) { main { padding: 18px; } .thread .you { max-width: 90%; } .keys .from { margin-left: 0; } }
+  @media (max-width: 700px) { main { padding: 18px 18px 72px; } .thread .you { max-width: 90%; } .keys .from { margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .agent.fresh { animation: none; } }
 </style>
 </head>
@@ -187,7 +188,7 @@
   function summary(state, agent) {
     const request = state.requests.find((r) => r.agent === agent.id);
     if (request) return (request.kind === "permission" ? `Asks to run ${request.tool ?? "a tool"}${request.about ? ": " + request.about : ""}.`
-      : `Asks you a question${request.about ? ": " + request.about : ""}.`) + " Answer in something's window.";
+      : `Asks you a question${request.about ? ": " + request.about : ""}.`) + " Answer in something’s window.";
     const last = lines(state, agent, 1)[0], text = last ? last.text.split("\n")[0] : "";
     // Waiting on a permission where it runs: the step it stopped at is what it asks to run.
     if (word(agent.state) === "waiting") return (last && last.kind === "tool" && agent.waiting === "permission"
@@ -358,7 +359,7 @@
     q(".acts").hidden = opened || !may;
     q(".talk").hidden = !opened;
     q(".slash").hidden = !(agent.commands && agent.commands.length);
-    q(".own").replaceChildren(...(agent.commands && agent.commands.length ? [make("kbd", "", "/"), `${label(agent.kind)}'s own commands`] : []));
+    q(".own").replaceChildren(...(agent.commands && agent.commands.length ? [make("kbd", "", "/"), `${label(agent.kind)}’s own commands`] : []));
     // Send Now steers into a running turn; to an agent not at work there is one send, for its next turn.
     const steer = agent.can.steer && status === "working";
     q("[value=now]").hidden = !steer;

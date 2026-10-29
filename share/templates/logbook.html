@@ -12,7 +12,7 @@
 {
   "contract": 1,
   "title": "Logbook",
-  "description": "Your notes and your agents' days, day by day.",
+  "description": "Your notes and your agents’ days, day by day.",
   "agents": { "see": "all" },
   "rights": ["state", "store"]
 }
@@ -165,10 +165,10 @@
       <span><i></i>Your notes</span>
       <span id="legend-agents"><i class="rust"></i>What your agents did</span>
     </div>
-    <p class="fine" id="coverage">Your agents' turns are copied in from what something still holds of their
+    <p class="fine" id="coverage">Your agents’ turns are copied in from what something still holds of their
       conversations (the last ten turns), each time this logbook is open. Open it now and then, and no day is lost.</p>
     <p class="fine because" id="no-state" hidden>This logbook may not see your agents, so only your notes are here.
-      Allow “See your agents” in the space's Info, and their days write themselves in.</p>
+      Allow “See your agents” in the space’s Info, and their days write themselves in.</p>
   </aside>
   <main class="page">
     <div class="frame">
@@ -294,8 +294,8 @@
     if (!lines.length) {
       $("entries").append(make("p", "empty", query ? `Nothing in the notebook matches “${$("search").value.trim()}”.`
         : has("store") ? "A new notebook. Write the first line above: a thought, a decision, what is next."
-          + (has("state") ? " Your agents' days write themselves in below." : "")
-        : has("state") ? "Nothing yet. Your agents' days write themselves in here." : "Nothing can be written here yet."));
+          + (has("state") ? " Your agents’ days write themselves in below." : "")
+        : has("state") ? "Nothing yet. Your agents’ days write themselves in here." : "Nothing can be written here yet."));
     }
 
     // The index: every day, with its count; a rust count when the day holds lines new since the last look.
@@ -401,7 +401,7 @@
     $("write").hidden = !has("store");
     $("no-store").hidden = has("store");
     $("no-store").textContent = "You did not allow this logbook to remember, so it cannot keep your notes, and only your "
-      + "agents' last ten turns are shown. Allow it in the space's Info.";
+      + "agents’ last ten turns are shown. Allow it in the space’s Info.";
   }
 
   async function load() {

@@ -47,7 +47,7 @@ also start from one in something's Templates (⇧⌘T, or File › Templates).
 | `agents` (My agents) | Who works, who waits for you, and a word to each. | `state` (all agents), `send` |
 | `project` (Project watch) | One folder's progress, and the agents working in it. | `state` (one folder), `send`, `launch`, `store` |
 | `brief` (Daily brief) | What your agents did, like a morning paper. | `state` (all agents), `store` |
-| `logbook` (Logbook) | Your notes and your agents' days, day by day. | `state` (all agents), `store` |
+| `logbook` (Logbook) | Your notes and your agents’ days, day by day. | `state` (all agents), `store` |
 | `stack` (Stack) | A one-key game for your breaks. | `store` |
 | `pet` (Pebble) | A little creature that lives to the rhythm of your agents. | `state` (all agents), `store` |
 
