@@ -101,6 +101,12 @@ import Testing
         #expect(!view.animating)
         window.contentView?.addSubview(view)
         #expect(view.animating)
+        // A resting breath asks few frames; a turn asks more.
+        #expect(view.rate == 12)
+        view.state = .think
+        #expect(view.rate == 30)
+        view.state = .sleep
+        #expect(view.rate == 12)
         view.state = .unknown
         #expect(!view.animating)
         view.state = .think

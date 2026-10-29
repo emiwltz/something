@@ -373,20 +373,37 @@ final class SignView: NSView {
         return name.map { $0.isEmpty ? word : "\($0), \(word)" } ?? word
     }
 
+    /// The frames a second it asks: a resting breath (listen, sleep), left alone for long, needs few; a turn, a smile
+    /// or a landing more.
+    var rate: Float {
+        [.listen, .sleep].contains(state) && !joy && arrival.map { clock() - $0 >= 1.05 } != false ? 12 : 30
+    }
+
     private func refresh() {
         needsDisplay = true
         if animating, link == nil {
             let link = displayLink(target: self, selector: #selector(tick))
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 30, preferred: 30)
             link.add(to: .main, forMode: .common)
             self.link = link
         } else if !animating {
             link?.invalidate()
             link = nil
         }
+        pace()
+    }
+
+    /// Keeps the link at `rate`, which a new state or an arrival's end changes.
+    private func pace() {
+        let rate = rate
+        if let link, link.preferredFrameRateRange.preferred != rate {
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: rate, preferred: rate)
+        }
     }
 
     @objc private func tick() {
-        if animating { needsDisplay = true } else { refresh() }
+        if animating {
+            needsDisplay = true
+            pace()
+        } else { refresh() }
     }
 }
