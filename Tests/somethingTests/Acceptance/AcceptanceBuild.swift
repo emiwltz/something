@@ -71,6 +71,8 @@ struct AcceptanceBuild {
         defer { room.close() }
         #expect(shell.window.title == "Waiting room" && room.web.url != nil && shell.window.attachedSheet == nil)
         #expect(library.order().map(\.title) == ["Waiting room"])
+        await Self.built(model)
+        model.open = false
         try await scene.stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: room.web, "x2-3" + suffix, root: scene.stage.home.root)
         }
@@ -89,6 +91,8 @@ struct AcceptanceBuild {
         let room = try await Self.first(scene)
         defer { room.close() }
         #expect(HintBubble.shown(in: shell.layer) == nil && shell.made == "elsewhere", "no hint for a space no build made")
+        await Self.built(model)
+        model.open = false
         var said: [String] = []
         shell.layer.announce = { said.append($0) }
         // As App's `ended` does after a build: the space it made opens, the card open on its conversation. The hint
@@ -187,6 +191,20 @@ struct AcceptanceBuild {
         let welcome = WelcomeModel(places: stage.home.places)
         let window = shell.welcome(welcome, onScreen: false)
         return WelcomeScene(stage: stage, shell: shell, library: library, model: welcome, window: window)
+    }
+
+    /// The state a build leaves the open space's assistant in: awake, listening, after a short conversation with the
+    /// fake Claude Code the welcome's bin holds.
+    static func built(_ model: AssistantModel) async {
+        if model.kind != "claude" { model.choose("claude") }
+        model.draft = "A waiting room for my agents."
+        model.send()
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 2 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        // A few seconds on, past the turn's brief "done": listening.
+        let later = Date() + 2 * Presence.changedFor
+        model.clock = { later }
+        model.refresh()
+        #expect(model.presence.state == .listen, "\(model.presence.state)")
     }
 
     /// The first space the build made, Waiting room, open alone in Work.
@@ -585,14 +603,14 @@ struct AcceptanceBuild {
         let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
         #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == shell.split.splitViewItems[0].viewController.view.frame.width)
         try await stage.appearances { suffix in
-            try await Picture.sheet(sheet, over: shell, library: library, web: room.web, "d4" + suffix, root: stage.home.root)
+            try await Picture.sheet(sheet, over: shell, library: library, web: nil, "d4" + suffix, root: stage.home.root)
         }
         var run = question
         run.level = .run
         let (runSheet, runAnswer) = Ask.rights(run, home: stage.home.root.path)
         #expect(!runSheet.buttons[1].isEnabled && runAnswer() == RightsAnswer(level: .run, folder: nil))
         try await stage.appearances { suffix in
-            try await Picture.sheet(runSheet, over: shell, library: library, web: room.web, "d4-run" + suffix, root: stage.home.root)
+            try await Picture.sheet(runSheet, over: shell, library: library, web: nil, "d4-run" + suffix, root: stage.home.root)
         }
     }
 
