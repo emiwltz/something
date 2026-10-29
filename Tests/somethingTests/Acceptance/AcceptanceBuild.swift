@@ -646,11 +646,16 @@ struct AcceptanceBuild {
         }
     }
 
+    /// What VoiceOver says of `element` alone, as SwiftUI gives it offscreen; empty when it says nothing.
+    static func said(_ element: Any) -> String {
+        ((element as AnyObject).accessibilityAttributeValue(NSAccessibility.Attribute(rawValue: "AXAttributedDescription")) as? NSAttributedString)?.string ?? ""
+    }
+
     private static func labels(_ element: Any) -> [String] {
         let object = element as AnyObject
-        let described = object.accessibilityAttributeValue(NSAccessibility.Attribute(rawValue: "AXAttributedDescription")) as? NSAttributedString
+        let described = Optional(said(element)).flatMap { $0.isEmpty ? nil : $0 }
         let words = [NSAccessibility.Attribute.description, .title, .value].compactMap { object.accessibilityAttributeValue($0) as? String }
-            + [described?.string].compactMap { $0 }
+            + [described].compactMap { $0 }
         let children = (object as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []
         return words.filter { !$0.isEmpty } + children.flatMap(labels)
     }

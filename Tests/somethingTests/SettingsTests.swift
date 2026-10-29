@@ -256,7 +256,7 @@ import Testing
         defer { settings.window.close() }
         #expect(settings.window.toolbar == nil, "a bar of its own, not the toolbar's boxed items")
         let content = try #require(settings.window.contentView)
-        var heights: [CGFloat] = []
+        var heights: [CGFloat] = [], top: CGFloat?
         for tab in SettingsTab.allCases {
             settings.select(tab)
             _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - content.fittingSize.height) <= 1
@@ -265,13 +265,21 @@ import Testing
             #expect(settings.tab == tab && settings.window.title == tab.label)
             #expect(abs(size.width - 720) < 1, "\(tab)")
             #expect(abs(size.height - content.fittingSize.height) <= 1, "\(tab) takes its page's height")
+            // The top edge holds, as the Mac's own settings: the bar stays under the pointer.
+            top = top ?? settings.window.frame.maxY
+            #expect(abs(settings.window.frame.maxY - (top ?? 0)) <= 1, "\(tab) keeps the window's top edge")
             heights.append(size.height)
         }
+        // VoiceOver hears the bar as the window's first four elements, one per tab, before the page's scroll area.
+        // Offscreen, SwiftUI's elements carry only their words (AXAttributedDescription): no role, no selected trait,
+        // and no press reaches them, so the choice is proved by calling the bar's `choose`.
         let labels = SettingsTab.allCases.map(\.label)
-        let tabs = await AcceptanceBuild.read(content) { words in labels.allSatisfy(words.contains) }
-        #expect(labels.allSatisfy(tabs.contains), "the bar's tabs, heard: \(tabs)")
-        // The bar's buttons call its `choose`, which shows the tab and titles the window. Offscreen, VoiceOver cannot
-        // reach inside the bar (AcceptanceBuild.read) to press one.
+        var bar: [String] = []
+        _ = await AcceptanceBuild.read(content) { _ in
+            bar = (content.accessibilityChildren() ?? []).prefix(4).map(AcceptanceBuild.said)
+            return bar == labels
+        }
+        #expect(bar == labels, "the bar's tabs, heard: \(bar)")
         settings.select(.general)
         let frame = try #require(content as? NSHostingView<SettingsFrame>).rootView
         frame.choose(.advanced)

@@ -830,9 +830,9 @@ final class TitleLine: NSView {
     }
 }
 
-/// The center when a space cannot be shown, in the card a stopped space shows (Stopped.box, its ring; its shadow is
-/// SwiftUI's): the sign, its title in Fraunces, what keeps it from being displayed in plain words, the assistant asked
-/// to fix it, and the codes in small mono at the foot; something's own words only.
+/// The center when a space cannot be shown, in the card a stopped space shows (Stopped.box, CardFace): the sign,
+/// its title in Fraunces, what keeps it from being displayed in plain words, the assistant asked to fix it, and the
+/// codes in small mono at the foot; something's own words only.
 struct Unshown: View {
     let problems: [String], fault: AssistantModel.Fault
     let assistant: AssistantModel
@@ -852,12 +852,27 @@ struct Unshown: View {
         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
         .padding(EdgeInsets(top: Stopped.box.insets.top, leading: Stopped.box.insets.left, bottom: Stopped.box.insets.bottom,
                             trailing: Stopped.box.insets.right)).frame(width: Stopped.box.width)
-        .background {
-            RoundedRectangle(cornerRadius: Look.card, style: .continuous).fill(Look.Token.bg2.ui)
-                .overlay { RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.floatRing.token.ui) }
-                .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
-        }
+        .background { CardFace() }
         .frame(maxWidth: .infinity, maxHeight: .infinity).background(Look.Token.bg.ui)
+    }
+}
+
+/// Unshown's card from Look.float's shades, as Stopped draws its own: each shade cast by the card inset by its
+/// spread, then the face and its ring outside it.
+private struct CardFace: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Look.card, style: .continuous)
+        let shades = Look.float(NSAppearance(named: scheme == .dark ? .darkAqua : .aqua) ?? NSApp.effectiveAppearance)
+        ZStack {
+            ForEach(shades.indices, id: \.self) { index in
+                shape.fill(Look.Token.bg2.ui).padding(-shades[index].spread)
+                    .shadow(color: Color(nsColor: shades[index].color), radius: shades[index].blur / 2, y: shades[index].y)
+            }
+            shape.fill(Look.Token.bg2.ui)
+            shape.inset(by: -0.5).stroke(Look.floatRing.token.ui, lineWidth: Look.floatRing.width)
+        }
     }
 }
 

@@ -487,6 +487,7 @@ enum Found {
         host.safeAreaRegions = []
         window.contentView = host
         select(model.tab)
+        fit()
         follow()
     }
 
@@ -495,11 +496,21 @@ enum Found {
     private func follow() {
         withObservationTracking { _ = (model.heights, model.tab, Look.scale.size) } onChange: { [weak self] in
             DispatchQueue.main.async { [weak self] in
-                guard let self, let host = window.contentView else { return }
-                window.setContentSize(host.fittingSize)
-                follow()
+                self?.fit()
+                self?.follow()
             }
         }
+    }
+
+    /// Sizes the window to its content, its top edge kept, as the Mac's own settings do: the bar stays under the
+    /// pointer from one tab to the next (setContentSize would keep the bottom edge and move the bar).
+    private func fit() {
+        guard let host = window.contentView else { return }
+        let target = window.frameRect(forContentRect: NSRect(origin: .zero, size: host.fittingSize))
+        var frame = window.frame
+        frame.origin.y += frame.height - target.height
+        frame.size = target.size
+        window.setFrame(frame, display: true)
     }
 
     var tab: SettingsTab { model.tab }

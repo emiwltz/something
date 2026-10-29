@@ -12,8 +12,8 @@ final class Stopped: NSView {
     let assistant: AssistantModel
     let reload: PanelButton, fix: PanelButton
     private let card = NSStackView()
-    /// The card's width and the room inside it, which Unshown (Shell.swift) shares: one look, built twice, because
-    /// this one draws itself for cacheDisplay and Unshown is hosted SwiftUI.
+    /// The card's width and the room inside it, which Unshown (Shell.swift) shares, its card drawn from the same
+    /// Look.float shades: one look, built twice, because this one draws itself for cacheDisplay and Unshown is SwiftUI.
     static let box = (width: CGFloat(420), insets: NSEdgeInsets(top: 28, left: 30, bottom: 22, right: 30))
 
     /// The cover of `space`, which stopped; its Fix button asks `assistant`, and it fades in under Calm `motion`.
