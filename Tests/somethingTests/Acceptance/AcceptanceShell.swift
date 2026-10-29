@@ -148,6 +148,9 @@ struct AcceptanceShell {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
+        let seen = try Picture.lines(try stage.sidebar(shell, shown: true))
+        let breaks = try #require(seen.first { $0.words == "Breaks" }?.box, "\(seen.map(\.words))")
+        #expect(seen.contains { $0.words == "2" && abs($0.box.midY - breaks.midY) < 4 }, "a folded group keeps its count at rest")
         library.sidebar.hovered = .space("project")
         library.sidebar.menuOpened()
         #expect(library.sidebar.menued == .space("project"), "the row its menu opened on stays lit and ringed")
@@ -1279,11 +1282,11 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }
-        // The chrome grows with the words at Larger (6.3): a nav row 30 × 1.24, the first group's header 25 × 1.24.
+        // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24. The nav rows
+        // grow by the same factor (SidebarView.nav); only the header's drawn height is measured here.
         #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
         try await Stage.alone {
             Look.scale.size = .larger
-            #expect(abs(SidebarView.nav - 30 * 1.24) < 0.01)
             #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
         }
     }

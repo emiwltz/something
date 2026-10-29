@@ -931,11 +931,12 @@ import WebKit
             #expect(model.kind == kind && model.command == kind)
             let fresh = kind == "claude" ? [] : ["\(Registry.app.name(of: kind)) cannot resume a conversation, so each one starts fresh."]
             #expect(model.firstLines == [line] + fresh, "\(kind)")
-            if kind == "claude" {
-                // Full Access on, something allows what Claude Code asks: the line says so rather than "asks you".
-                Preferences.at(model.places).fullAccess = true
-                #expect(model.firstLines.first?.hasSuffix("without asking. Full Access is on: something allows what it asks.") == true)
-                Preferences.at(model.places).fullAccess = false
+            if kind == "claude" || kind == "opencode" {
+                // Full Access on, something allows what the assistant asks: the line says so rather than "asks you".
+                model.fullAccess = true
+                let end = kind == "claude" ? "without asking." : "settings say."
+                #expect(model.firstLines.first?.hasSuffix("\(end) Full Access is on: something allows what it asks.") == true, "\(kind)")
+                model.fullAccess = false
             }
             #expect(model.canAskEverything == canAsk && (model.lent(for: kind)?.tools.map(\.name) ?? []) == lent, "\(kind)")
             // Served by this program, `something mcp`, which the agent starts with its own environment.

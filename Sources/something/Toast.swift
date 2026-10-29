@@ -23,10 +23,11 @@ final class Toast: NSView {
 
     /// Shows `words` in `layer`, centred at the bottom of `center`, in place of any toast there, and returns it. It
     /// always stands in that one place, as the mockup's does, over the open card if there is one: it leaves after
-    /// `seconds`, or when its action is clicked, which acts once; it slides only under Calm `motion`.
+    /// `seconds`, or when its action is clicked, which acts once; it slides only under Calm `motion`. While `sticker`
+    /// shows in its corner, it keeps clear of it.
     @discardableResult
     static func show(_ words: String, action: Action? = nil, quiet: Bool = false, seconds: TimeInterval = 3.2,
-                     motion: Look.Motion = .calm, in layer: WindowLayer, under center: NSView) -> Toast {
+                     motion: Look.Motion = .calm, in layer: WindowLayer, under center: NSView, clearOf sticker: Bool = false) -> Toast {
         layer.subviews.compactMap { $0 as? Toast }.forEach { $0.leave(now: true) }
         let toast = Toast(words, action: action, quiet: quiet)
         layer.hold(toast)
@@ -34,7 +35,6 @@ final class Toast: NSView {
         let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: rest + 68)
         // Centred, it keeps clear of the sticker in its corner by the sign's width and 12 points, so they never read
         // as one shape.
-        let sticker = center.subviews.contains { ($0 as? Glass)?.stickerShown == true }
         let clear = sticker ? 2 * (Glass.margin + Glass.side + 12) : 32
         NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor),
                                      toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -clear)])

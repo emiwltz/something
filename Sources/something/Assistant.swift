@@ -153,6 +153,8 @@ import SomethingCore
     var failure: String? { session.failure }
     var asleep: Bool { session.asleep }
     private(set) var askEverything: Bool
+    /// Settings › Advanced's Full Access, kept here so that the first lines follow it while they show.
+    var fullAccess: Bool
     /// What the state says of each builder: installed or not; absent while not known.
     private(set) var installed: [String: Bool] = [:]
     private(set) var notes: [String: String] = [:]
@@ -221,6 +223,7 @@ import SomethingCore
         let kept = Preferences.at(places)
         preferred = kept.assistant
         askEverything = kept.askEverything
+        fullAccess = kept.fullAccess
         sessions[.new] = session
         refresh()
     }
@@ -550,16 +553,18 @@ import SomethingCore
     /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     var firstLines: [String] {
         guard session.kept.isEmpty else { return [] }
-        let agent = kind.flatMap(Registry.app.agent)
+        let agent = kind.flatMap(Registry.app.agent), full = fullAccess ? "Full Access is on: something allows what it asks." : nil
         let how = if agent?.neverAsks == true { "\(name) works in \(folder). \(name) never asks: it can run any command on your Mac." }
             else if agent?.asksNothingByDefault == true {
                 "\(name) works in \(folder). By default \(name) asks nothing: it can run any command on your Mac, unless your own \(name) settings say otherwise."
             }
-            else if agent?.builder?.preAllowed == false { "\(name) works in \(folder). It asks as your own \(name) settings say." }
+            else if agent?.builder?.preAllowed == false {
+                "\(name) works in \(folder). It asks as your own \(name) settings say." + (full.map { " " + $0 } ?? "")
+            }
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
             else {
                 "\(name) works in \(folder). It may change your spaces and run something’s own commands there without asking. "
-                    + (Preferences.at(places).fullAccess ? "Full Access is on: something allows what it asks." : "Anything else asks you.")
+                    + (full ?? "Anything else asks you.")
             }
         return [how] + (resumable(kind ?? "") ? [] : ["\(name) cannot resume a conversation, so each one starts fresh."])
             + [session.renewed].compactMap { $0 }

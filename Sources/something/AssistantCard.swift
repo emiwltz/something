@@ -79,7 +79,7 @@ struct AssistantCard: View {
                 Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).rotationEffect(.degrees(model.threadShown ? 0 : 180))
                     .frame(width: 24, height: 24).contentShape(Rectangle())
             }
-            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).help(Keys.tooltip("convo", "Fold Conversation"))
+            .buttonStyle(.plain).foregroundStyle(Look.Token.ink2.ui).help(Keys.tooltip("convo", model.threadShown ? "Fold Conversation" : nil))
             .accessibilityLabel(model.threadShown ? "Fold Conversation" : "Show Conversation")
             Button { model.open = false } label: {
                 Image(systemName: "minus").font(.system(size: 12, weight: .medium)).frame(width: 24, height: 24).contentShape(Rectangle())

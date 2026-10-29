@@ -476,7 +476,7 @@ struct SidebarView: View {
     }
 
     /// A group's header, 25 points: its name, and its count on a 22-point column where the chevron takes its place
-    /// under the pointer and while folded.
+    /// under the pointer, turned a quarter while folded; at rest a folded group still says how many spaces it hides.
     /// A click folds it; a double click renames it in place.
     private func header(_ group: String, count: Int) -> some View {
         let folded = library.folded(group), key = SidebarState.Hover.group(group)
@@ -489,10 +489,10 @@ struct SidebarView: View {
             }
             Spacer(minLength: 0)
             Text("\(count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
-                .frame(width: 22).opacity(lit || folded ? 0 : 1)
+                .frame(width: 22).opacity(lit ? 0 : 1)
                 .overlay {
                     Image(systemName: "chevron.down").font(Look.icon(9, weight: .semibold))
-                        .rotationEffect(.degrees(folded ? -90 : 0)).opacity(lit || folded ? 1 : 0)
+                        .rotationEffect(.degrees(folded ? -90 : 0)).opacity(lit ? 1 : 0)
                 }
         }
         .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)

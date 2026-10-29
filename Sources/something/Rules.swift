@@ -171,9 +171,10 @@ extension App {
 }
 
 extension Shell {
-    /// Full Access on or off: the preference, and the toolbar's mark, shown while it is on.
+    /// Full Access on or off: the preference, the assistant's first lines, and the toolbar's mark, shown while it is on.
     func fullAccess(_ on: Bool) {
         library.preferences.fullAccess = on
+        assistant.fullAccess = on
         fullMark.isHidden = !on
     }
 }
