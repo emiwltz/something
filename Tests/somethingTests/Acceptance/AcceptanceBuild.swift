@@ -71,7 +71,7 @@ struct AcceptanceBuild {
         defer { room.close() }
         #expect(shell.window.title == "Waiting room" && room.web.url != nil && shell.window.attachedSheet == nil)
         #expect(library.order().map(\.title) == ["Waiting room"])
-        await Self.built(model)
+        await Self.built(model, sticker: shell.glass.sticker)
         model.open = false
         try await scene.stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: room.web, "x2-3" + suffix, root: scene.stage.home.root)
@@ -91,7 +91,7 @@ struct AcceptanceBuild {
         let room = try await Self.first(scene)
         defer { room.close() }
         #expect(HintBubble.shown(in: shell.layer) == nil && shell.made == "elsewhere", "no hint for a space no build made")
-        await Self.built(model)
+        await Self.built(model, sticker: shell.glass.sticker)
         model.open = false
         var said: [String] = []
         shell.layer.announce = { said.append($0) }
@@ -195,16 +195,13 @@ struct AcceptanceBuild {
 
     /// The state a build leaves the open space's assistant in: awake, listening, after a short conversation with the
     /// fake Claude Code the welcome's bin holds.
-    static func built(_ model: AssistantModel) async {
+    static func built(_ model: AssistantModel, sticker: Sticker) async {
         if model.kind != "claude" { model.choose("claude") }
         model.draft = "A waiting room for my agents."
         model.send()
         #expect(await wait(until: { AssistantModel.messages(model.rows) == 2 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
-        // A few seconds on, past the turn's brief "done": listening.
-        let later = Date() + 2 * Presence.changedFor
-        model.clock = { later }
-        model.refresh()
-        #expect(model.presence.state == .listen, "\(model.presence.state)")
+        // A few seconds on, past the turn's brief "done", the sticker listens.
+        #expect(await wait(until: { sticker.sign.state == .listen }), "\(model.presence.state)")
     }
 
     /// The first space the build made, Waiting room, open alone in Work.
