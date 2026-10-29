@@ -56,9 +56,11 @@ struct SettingsRow: Identifiable {
     var keys: [(key: String, words: String)] = []
     /// What tells two rows of one title apart (two spaces of one name).
     var tag: String?
-    /// The title in code (a command, a path), after the monogram of the agent named `mark` or the system `symbol`.
+    /// The title in code (a command, a path), after the monogram of the agent named `mark` or the system `symbol`;
+    /// a menu shows the monogram in its button instead, before the agent chosen.
     var code = false, mark: String?, symbol: String?
     var id: String { tag ?? title }
+    var menu: Bool { if case .choice = control { style == .menu } else { false } }
 }
 
 /// A titled group: its rows in a card, then a line, then more rows in a card of their own; Storage draws the store's
@@ -227,12 +229,12 @@ struct SettingsSection: Identifiable {
         let levels = Grant.Level.allCases.map { ($0, $0.title) }
         return [
             SettingsSection(title: "Your assistant", rows: [
-                SettingsRow(title: "Agent", note: "It builds and changes your spaces, only in `~/something/spaces`. Anything else, it asks you.",
+                SettingsRow(title: "Agent", note: agentNote(kind),
                             control: .choice(kinds.map { SettingsRow.Option(value: $0, label: registry.name(of: $0)) }, get: { [preferences.assistant ?? first] }, set: { [weak self] chosen in
                                 // Another agent's model and effort mean nothing to this one (AssistantModel.keepDefault).
                                 preferences.change { if $0.assistant != chosen { ($0.assistant, $0.model, $0.effort) = (chosen, nil, nil) } }
                                 self?.chose(chosen)
-                            })),
+                            }), mark: registry.name(of: kind)),
                 model(of: kind),
             ]),
             SettingsSection(title: "Spaces and your agents", rows: [
@@ -251,6 +253,15 @@ struct SettingsSection: Identifiable {
             }),
             SettingsSection(title: "On this Mac", rows: [], block: .found),
         ]
+    }
+
+    /// What the assistant `kind` asks, as the README says it; for an agent that acts without asking, the warning
+    /// Allow shows (Ask.warning).
+    private func agentNote(_ kind: String) -> String {
+        guard let agent = Registry.app.agent(kind), agent.neverAsks || agent.asksNothingByDefault, let warning = Ask.warning(for: "launch:" + kind) else {
+            return "It builds and changes your spaces in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
+        }
+        return warning + "."
     }
 
     /// The model, and the effort when the agent takes one, in one menu: the names the agent last listed for `kind`,
@@ -280,6 +291,8 @@ struct SettingsSection: Identifiable {
         let preferences = preferences, builders = Registry.app.builders
         let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let fresh = builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
+        let assistant = preferences.assistant ?? offered().first ?? builders.first?.kind ?? ""
+        let preAllowed = Registry.app.agent(assistant)?.builder?.preAllowed == true
         let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
         // The folders the spaces at Run start agents in, each with those spaces: what the levels already hold.
         let folders = spaceLevels.reduce(into: [(key: String, value: [String])]()) { all, space in
@@ -288,14 +301,17 @@ struct SettingsSection: Identifiable {
         }
         return [
             SettingsSection(title: "Permissions", rows: [
-                SettingsRow(title: "Full Access", note: "Nobody asks: your assistant gets every permission. The agents your spaces start keep their own settings. "
-                                + "An orange mark stays in the toolbar while it is on.",
+                SettingsRow(title: "Full Access", note: "something allows every permission your assistant asks; a question still waits for you. "
+                                + "The agents your spaces start keep their own settings. An orange mark stays in the toolbar while it is on.",
                             control: .toggle(get: { preferences.fullAccess }, set: { [weak self] in self?.fullAccess($0) })),
-                SettingsRow(title: "Your assistant asks before every change", note: "Off: it changes your spaces freely and asks for anything else.",
+            ] + (preAllowed ? [
+                // Only an assistant whose building work is allowed ahead can be made to ask before it (AssistantModel.canAskEverything).
+                SettingsRow(title: "Your assistant asks before every change", note: "Off: it changes your spaces freely; everything else asks as its own settings decide.",
                             control: .toggle(get: { preferences.askEverything }, set: { [weak self] value in
                                 preferences.askEverything = value
                                 self?.asking(value)
                             })),
+            ] : []) + [
                 SettingsRow(title: "Agents a space starts", note: "Each agent asks you as it usually does.", control: .said("Their Own Settings")),
             ], lead: Promise.sentence),
             SettingsSection(title: "Lasting rules", rows: [], lead: "Made with “Always for this space” in the request panel, and shown in each space’s Info."
@@ -595,7 +611,9 @@ struct SettingsPage: View {
                         Rows(rows: section.rows)
                     }
                     if let lead = section.lead {
-                        Text(lead).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 2).padding(.top, 4)
+                        // With no rows above it, it reads as the title's note: as close under it as a row's note.
+                        Text(lead).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 2)
+                            .padding(.top, section.rows.isEmpty && !section.title.isEmpty ? -6 : 4)
                     }
                     if !section.more.isEmpty { Rows(rows: section.more) }
                     if section.block == .found { AgentsFound(model: model) }
@@ -651,7 +669,7 @@ private struct RowView: View {
                 VStack(alignment: .leading, spacing: 8) { words; RowControl(row: row) }.frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 HStack(spacing: 16) {
-                    if let mark = row.mark { Monogram(name: mark, side: 22).padding(.trailing, -6) }
+                    if let mark = row.mark, !row.menu { Monogram(name: mark, side: 22).padding(.trailing, -6) }
                     if let symbol = row.symbol {
                         Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Look.Token.ink3.ui).frame(width: 22).padding(.trailing, -6)
                     }
@@ -678,7 +696,7 @@ struct RowControl: View {
             case .menu:
                 let chosen = get()
                 PopMenu(title: row.title, shown: options.filter { !$0.heading && chosen.contains($0.value) }.map(\.label).joined(separator: " · "),
-                        minWidth: row.trail == nil ? 96 : 0) {
+                        minWidth: row.trail == nil ? 96 : 0, mark: row.mark) {
                     // The menu itself is the system's, a heading as a section, each chosen item checked.
                     ForEach(Array(Self.sections(options).enumerated()), id: \.offset) { _, section in
                         Section(section.heading) {

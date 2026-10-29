@@ -385,6 +385,8 @@ struct Secondary: ButtonStyle {
 struct PopMenu<Choices: View>: View {
     let title: String, shown: String
     var minWidth: CGFloat = 0
+    /// The agent whose monogram goes before the words, when the choice is an agent.
+    var mark: String?
     @ViewBuilder let choices: Choices
 
     var body: some View {
@@ -392,6 +394,7 @@ struct PopMenu<Choices: View>: View {
             choices.pickerStyle(.inline).labelsHidden()
         } label: {
             HStack(spacing: 6) {
+                if let mark { Monogram(name: mark, side: 16) }
                 // The paddings, the gap and the chevron take 29 points of the width.
                 Text(shown).font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink.ui)
                     .frame(minWidth: max(0, minWidth - 29), alignment: .leading)

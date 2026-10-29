@@ -144,6 +144,15 @@ struct AcceptanceCommand {
             #expect(sections[1].more.map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
             #expect(sections[1].more.map(\.note) == ["", "", "in `~/code/atelier`", "", "", "", ""], "\(stage.home.places.home.path)")
             #expect(settings.model.agents.count == 8 && settings.model.agents.suffix(2).allSatisfy { $0.line == "Seen only" })
+            // The note says what the chosen agent asks: Claude Code as the README says it, pi as Allow warns of it; and
+            // Ask Before Every Change only for an assistant it can hold.
+            let agent = sections[0].rows[0], chosen = settings.model.preferences.assistant
+            #expect(agent.mark == "Claude Code" && agent.note == "It builds and changes your spaces in ~/something/spaces. "
+                        + "Everything else it does asks you, as your agent’s own settings decide.")
+            settings.model.preferences.change { $0.assistant = "pi" }
+            #expect(settings.model.sections(.agents)[0].rows[0].note == "pi runs commands and edits files without asking you first.")
+            #expect(!settings.model.sections(.advanced)[0].rows.map(\.title).contains("Your assistant asks before every change"))
+            settings.model.preferences.change { $0.assistant = chosen }
             guard case .choice(let options, let get, _) = sections[0].rows[1].control else { Issue.record("not a choice"); return }
             let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
             #expect(menu == ["# Model", "  Default model", "✓ Opus 5.5", "  Sonnet 5.5", "# Effort", "  Default effort", "  Medium", "✓ High"])
@@ -171,7 +180,7 @@ struct AcceptanceCommand {
     /// and the agents a space starts (their own settings); the lasting rules, each with Revoke (Project watch's, the
     /// mockup's); the assistants' rest and resume, and the shortcuts.
     @Test("x7-4: Settings, Advanced") func x7_4() async throws {
-        let shows = ["Permissions", "Full Access", "Nobody asks: your assistant gets every permission", "Your assistant asks before every change",
+        let shows = ["Permissions", "Full Access", "something allows every permission your assistant asks", "Your assistant asks before every change",
                      "Agents a space starts", "Their Own Settings", "something answers for you only where you said so", "Lasting rules",
                      "git log --oneline -20", "code/atelier", "for Project watch", "Revoke", "Folders", "Assistants",
                      "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes"]
@@ -272,6 +281,8 @@ struct AcceptanceCommand {
         for words in hears { #expect(heard.contains(words), "\(id) hears “\(words)”; heard: \(heard)") }
         try await stage.appearances { suffix in
             (Look.scale.size, library.preferences.size) = (size, size)
+            // Theme says what the window shows: Light by day, Dark by night.
+            library.preferences.change { $0.appearance = suffix.isEmpty ? .light : .dark }
             defer { (Look.scale.size, library.preferences.size) = (.standard, .standard) }
             settings.window.layoutIfNeeded()
             await wait(1.2)

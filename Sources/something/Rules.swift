@@ -101,7 +101,7 @@ final class FullMark: NSButton {
     init(target: AnyObject?, action: Selector?) {
         super.init(frame: .zero)
         (self.target, self.action, isBordered, title) = (target, action, false, "Full Access")
-        toolTip = "Full Access is on: your assistant asks you nothing. Click to turn it off."
+        toolTip = "Full Access is on: something allows every permission your assistant asks. Click to turn it off."
         setAccessibilityLabel("Full Access is on. Turn Off")
         setContentHuggingPriority(.required, for: .horizontal)
     }

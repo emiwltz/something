@@ -131,8 +131,8 @@ runs them in its shell instead. What "without asking" means for each:
   refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
   space's Run, where you choose it and in Info.
 
-"Ask Before Every Change", in the assistant card's menu or Settings › Advanced (Your assistant asks before every
-change), turns the exception off from the next conversation. No space can see what you say to your assistant, or write
+"Ask Before Every Change", for Claude Code and Codex, in the assistant card's menu or Settings › Advanced (Your
+assistant asks before every change), turns the exception off from the next conversation. No space can see what you say to your assistant, or write
 to it. something writes `AGENTS.md` and `CLAUDE.md` in `~/something/spaces` to tell your assistant what something is;
 a copy whose first line you removed is yours and left alone.
 
