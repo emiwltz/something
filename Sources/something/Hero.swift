@@ -12,8 +12,8 @@ import SwiftUI
 struct Hero: View {
     enum Part: CaseIterable { case page, agents, assistant }
     static let size = CGSize(width: 720, height: 420)
-    static let label = "something in one picture: a page in the middle; your agents around it, which the page may watch, talk to or run; "
-        + "your assistant building the page; and the panel where only you answer."
+    static let label = "something in one picture: a space, a page of your own, in the middle; your agents around it, which the space may "
+        + "watch, talk to or run; your assistant building the space; and the panel where only you answer."
 
     let light: HeroLight
     /// The assistant's line: its agent and model.
@@ -61,11 +61,12 @@ struct Hero: View {
             Group {
                 page.offset(x: 270, y: 48)
                 HStack(spacing: 5) {
-                    Text("A page").fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui)
-                    Text("· one file, yours")
+                    Text("A space").fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui)
+                    Text("· a page of your own")
                     tag("square.and.arrow.up", "Export")
                 }
-                .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(ink2).frame(width: 212).offset(x: 270, y: 332)
+                // On one line, centred under the page even where it is wider than the page.
+                .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(ink2).fixedSize().frame(width: 212).offset(x: 270, y: 332)
             }
             .opacity(shown(.page)).saturation(shown(.page) < 1 ? 0 : 1)
         }
@@ -337,9 +338,9 @@ struct HowItWorksView: View {
     let light: HeroLight, builder: String, motion: Look.Motion
     static let parts: [(Hero.Part, String, String)] = [
         // Word joiners keep the path on one line.
-        (.page, "A page", "One HTML file in ~/\u{2060}something/\u{2060}spaces. Yours, exported in one click."),
-        (.agents, "Your agents", "The coding agents on your Mac. A page may Watch them, Talk to them, or Run one in a folder you pick."),
-        (.assistant, "Your assistant", "One of your agents, at work on the page, only in the pages folder. Anything else, it asks you."),
+        (.page, "A space", "A page of your own: one HTML file in ~/\u{2060}something/\u{2060}spaces, exported in one click."),
+        (.agents, "Your agents", "The coding agents on your Mac. A space may Watch them, Talk to them, or Run one in a folder you pick."),
+        (.assistant, "Your assistant", "One of your agents, at work on the space, only in the spaces folder. Anything else, it asks you."),
     ]
 
     var body: some View {
@@ -348,7 +349,7 @@ struct HowItWorksView: View {
                 .background(Look.Token.side.ui).overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
                 .padding(.horizontal, -40).accessibilityHidden(true)
             Text("something in one picture").font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 22)
-            Text("A page, your agents, your assistant").font(Look.font(.title, size: 22, weight: .semibold).ui).padding(.top, 4)
+            Text("A space, your agents, your assistant").font(Look.font(.title, size: 22, weight: .semibold).ui).padding(.top, 4)
                 .accessibilityAddTraits(.isHeader)
             Text("Three things, and how they meet. Everything stays on this Mac.").foregroundStyle(Look.Token.ink2.ui).padding(.top, 2)
             Hero(light: light, builder: builder, motion: motion).frame(maxWidth: .infinity).padding(.top, 18)
@@ -377,7 +378,7 @@ struct HowItWorksView: View {
             Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.top, 12)
             HStack(spacing: 7) {
                 Image(systemName: "lock").font(.system(size: 10.5)).accessibilityHidden(true)
-                Text("Only you answer, in a window of your Mac. A page can’t see or answer it.")
+                Text("Only you answer, in a window of your Mac. A space can’t see or answer it.")
                 Button { light.cycle(motion) } label: {
                     HStack(spacing: 6) { Image(systemName: "arrow.clockwise").font(.system(size: 11)); Text("Replay") }
                         .font(Look.font(.ui, size: 12.5, weight: .semibold).ui)

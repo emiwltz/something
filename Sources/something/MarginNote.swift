@@ -66,7 +66,7 @@ final class MarginNote: NSView {
         card.dismiss.action = #selector(dismiss)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel("\(title)’s assistant, no change")
+        setAccessibilityLabel(Words.possessive(title) + " assistant, no change")
         setAccessibilityValue(words)
     }
     required init?(coder: NSCoder) { nil }
@@ -185,7 +185,7 @@ final class MarginNote: NSView {
             (leading.minimumLineHeight, leading.maximumLineHeight) = (13.5 * 1.5, 13.5 * 1.5)
             self.words = NSAttributedString(string: words, attributes: [.font: Look.font(.voice, size: 13.5), .foregroundColor: Look.Token.ink.color,
                                                                         .paragraphStyle: leading])
-            name = NSAttributedString(string: "\(title)’s assistant", attributes: [.font: Look.font(.ui, size: 13, weight: .semibold),
+            name = NSAttributedString(string: Words.possessive(title) + " assistant", attributes: [.font: Look.font(.ui, size: 13, weight: .semibold),
                                                                                     .foregroundColor: Look.Token.ink.color])
             said = NSAttributedString(string: "Answered · nothing changed", attributes: [.font: Look.font(.ui, size: 11), .foregroundColor: Look.Token.ink3.color])
             self.part = NSAttributedString(string: part, attributes: [.font: Look.font(.ui, size: 11), .foregroundColor: Look.Token.ink3.color])

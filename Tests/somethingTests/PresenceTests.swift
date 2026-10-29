@@ -131,7 +131,7 @@ import Testing
         #expect(failed.notice?.text == "Claude Code failed: the program stopped at once.")
 
         let retrying = of(agent("working", retry: true), turn())
-        #expect(retrying.word == "Stopped · can't reach its model")
+        #expect(retrying.word == "Retrying · can't reach its model" && retrying.notice?.title == retrying.word, "it says what the notice says")
         #expect(retrying.now == nil)
         #expect(retrying.notice?.text == "Opus 4.7 did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
         #expect(of(agent("error"), turn("error", [tool("Edit", "brief.html")])).notice?.text == "Opus 4.7 did not answer. Your last message is kept.",

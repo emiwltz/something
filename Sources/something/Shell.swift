@@ -485,7 +485,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             hintLater(space.space.name)
         } else {
             let fault = AssistantModel.Fault(title: space.title, name: space.space.name, codes: space.blocked.map(\.code))
-            put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix) (\($0.code))" }, fault: fault, assistant: assistant)))
+            put(Shell.hosted(Unshown(problems: space.blocked.map { "\($0.message) \($0.fix)" }, fault: fault, assistant: assistant)))
         }
         heading(space)
     }
@@ -830,25 +830,33 @@ final class TitleLine: NSView {
     }
 }
 
-/// The center when a space cannot be shown: what keeps it from being displayed, one problem per line with its code,
-/// and the assistant asked to fix it, with something's own words only.
+/// The center when a space cannot be shown, in the card a stopped space shows (Stopped.swift): the sign, its title in
+/// Fraunces, what keeps it from being displayed in plain words, the assistant asked to fix it, and the codes in small
+/// mono at the foot; something's own words only.
 struct Unshown: View {
     let problems: [String], fault: AssistantModel.Fault
     let assistant: AssistantModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("“\(fault.title)” can't be shown").font(.title2.weight(.semibold))
-            ForEach(problems, id: \.self) { Text($0).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
-            Text("It reloads by itself when its files change.").foregroundStyle(.secondary)
+        VStack(spacing: 10) {
+            Image(nsImage: Sign.image(.limit, side: 60)).padding(.bottom, 6).accessibilityHidden(true)
+            Text("“\(fault.title)” can’t be shown").font(Look.titleM.font.ui).kerning(-0.55).foregroundStyle(Look.Token.ink.ui)
+            ForEach(problems, id: \.self) { Text($0).font(Look.body.font.ui).lineSpacing(3).foregroundStyle(Look.Token.ink2.ui).textSelection(.enabled) }
+            Text("It reloads by itself when its files change.").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
             if assistant.kind != nil {
                 Button("Ask \(assistant.name) to Fix It") { assistant.fix(fault) }
+                    .buttonStyle(Primary()).font(Look.font(.ui, size: 12.5, weight: .semibold).ui).padding(.top, 6)
             }
+            Text(([fault.name] + fault.codes).joined(separator: " · ")).font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 4)
         }
-        .frame(maxWidth: 520, alignment: .leading)
-        .padding(28)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+        .padding(EdgeInsets(top: 28, leading: 30, bottom: 22, trailing: 30)).frame(width: 420)
+        .background {
+            RoundedRectangle(cornerRadius: Look.card, style: .continuous).fill(Look.Token.bg2.ui)
+                .overlay { RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line2.ui) }
+                .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity).background(Look.Token.bg.ui)
     }
 }
 

@@ -62,7 +62,7 @@ struct AssistantCard: View {
                 }
                 .plainMenu()
                 .accessibilityLabel("Conversation menu")
-                Text(presence.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
+                Text(model.header).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).padding(.leading, 6)
             }
             Spacer(minLength: 0)
             // Fold: the conversation folds away, the card keeping its header and field (⌘J).
@@ -94,7 +94,7 @@ struct AssistantCard: View {
 
     /// "Week-end's assistant" in a space; where the person is elsewhere.
     private var heading: String {
-        if case .space = model.place { "\(model.title)'s assistant" } else { model.title }
+        if case .space = model.place { Words.possessive(model.title) + " assistant" } else { model.title }
     }
 
     // MARK: The conversation
@@ -205,10 +205,15 @@ struct AssistantCard: View {
         }
     }
 
-    /// An agent's reply with its inline Markdown (bold, code, links), the line breaks kept; as written when it does not
-    /// parse.
+    /// An agent's reply with its inline Markdown (code, links, emphasis; bold set regular), the line breaks kept; as
+    /// written when it does not parse.
     static func markdown(_ text: String) -> AttributedString {
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        var parsed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        // Young Serif has one weight: bold words would be thickened by the system, a synthetic bold. They stay regular.
+        for range in parsed.runs.compactMap({ $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true ? $0.range : nil }) {
+            parsed[range].inlinePresentationIntent?.remove(.stronglyEmphasized)
+        }
+        return parsed
     }
 
     /// A button's title split before its shortcut (a last word holding ⌘), nil when it has none.
@@ -421,7 +426,7 @@ struct CommandList: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 7) {
                 Monogram(name: model.name)
-                Text("\(model.name)'s commands").font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                Text(Words.possessive(model.name) + " commands").font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
                 Spacer(minLength: 4)
                 Text("as \(model.name) lists them").font(Look.xs.font.ui)
             }
@@ -455,7 +460,7 @@ struct CommandList: View {
         .foregroundStyle(Look.Token.ink3.ui)
         .padding(6)
         .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg.ui, ring: Look.Token.line2.ui)
-        .accessibilityElement(children: .contain).accessibilityLabel("\(model.name)'s commands")
+        .accessibilityElement(children: .contain).accessibilityLabel(Words.possessive(model.name) + " commands")
     }
 }
 
@@ -700,7 +705,7 @@ extension AssistantModel {
         let offered = offered, chosen = (model: session.model ?? agent?.model, effort: session.effort ?? agent?.effort)
         var model = ModelPart(header: "Model · this space")
         if ownModel {
-            model.note = "\(name) chooses its own model. Change it in \(name)'s settings."
+            model.note = "\(name) chooses its own model. Change it in " + Words.possessive(name) + " settings."
         } else if let models = offered.model, !models.isEmpty {
             model.choices = models.map { .init(title: $0.label, value: $0.value, effort: false, checked: $0.value == chosen.model) }
         } else {

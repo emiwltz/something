@@ -137,9 +137,11 @@ enum Promise {
 
 enum Ask {
     /// An alert that says `message`, with `details` below it, `accessory` under them, and `buttons` (none: OK), the
-    /// first one the default. The button at `escape`, if any, is the one Escape presses.
+    /// first one the default. The button at `escape`, if any, is the one Escape presses. It shows something's sign,
+    /// not the icon the system finds for a program run outside its .app.
     static func alert(_ message: String, _ details: String = "", buttons: [String] = [], escape: Int? = nil, accessory: NSView? = nil) -> NSAlert {
         let alert = NSAlert()
+        alert.icon = Sign.image(.listen, side: 64)
         alert.messageText = message
         alert.informativeText = details
         buttons.forEach { alert.addButton(withTitle: $0) }
@@ -155,8 +157,9 @@ enum Ask {
     /// no Return: a page can raise this sheet while the person types in it, and a Return meant for the page must not
     /// lower the mode. The folder is shown from `home`.
     static func lowers(_ mode: String, kind: String, folder: String?, space: String, home: String = NSHomeDirectory()) -> NSAlert {
-        let sheet = alert("Let “\(space)” put \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode)) (\(mode))?",
-              "The agent works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"). In this mode it asks you less before it acts.",
+        let sheet = alert("Let “\(space)” start \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode))?",
+              "It works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"), for this launch only. "
+                + "In this mode (\(mode)) it asks you less before it acts.",
               buttons: ["Allow", "Don't Allow"], escape: 1)
         sheet.buttons[0].keyEquivalent = ""
         return sheet
@@ -226,7 +229,7 @@ enum Ask {
     /// How to Get One: each coding agent something builds with (none it refuses), its install command and a Copy button; Look Again,
     /// then Close. something downloads nothing itself.
     static func howToGetOne(copy: @escaping (String) -> Void) -> NSAlert {
-        alert("Get a coding agent", "Install one, sign it in once in Terminal, then click Look Again.", buttons: ["Look Again", "Close"],
+        alert("Get a coding agent", "Install one, sign in to it once in Terminal, then click Look Again.", buttons: ["Look Again", "Close"],
               escape: 1, accessory: NSHostingView(rootView: InstallList(rows: InstallList.builders, copy: copy)))
     }
 

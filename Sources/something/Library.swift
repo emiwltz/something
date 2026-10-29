@@ -263,7 +263,9 @@ import SomethingCore
     /// on when that is taken, never over a file. Its memory goes only when the person chose so (Settings › Spaces);
     /// grants and journal never go. The window says where it is (`exported`), or what failed.
     func export(_ name: String) {
-        guard let space = entry(name)?.space else { return }
+        guard let entry = entry(name) else { return }
+        // Said by the title the person sees everywhere, not the file's name.
+        let (space, title) = (entry.space, "“\(entry.title)”")
         do {
             let memory = preferences.exportMemory ? try Export.memory(space.name, in: places.data) : nil
             let document = try Export.document(space, data: memory, app: Resources.version)
@@ -279,10 +281,10 @@ import SomethingCore
             exported(url)
             let links = Export.links(space)
             if !links.isEmpty {
-                ask.tell("\(space.name) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
+                ask.tell("\(title) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
             }
         } catch {
-            ask.tell("\(space.name) was not exported. \(error.sentence)")
+            ask.tell("\(title) was not exported. \(error.sentence)")
         }
     }
 

@@ -1,16 +1,16 @@
-// Settings (⌘,): a window of its own whose toolbar holds four tabs, as the Mac's own settings do, sized to each tab:
+// Settings (⌘,): a window of its own whose bar holds four tabs, as the Mac's own settings do, sized to each tab:
 // General (the start, the theme, the interface size, the sidebar), Spaces (where they live, export, versions and
 // storage, Storage.swift), Agents (your assistant, what a new space may do, each space's level, and the agents on this
 // Mac, found by a look at files that never runs one) and Advanced (Full Access, how your assistant and the agents a
-// space starts ask, the lasting rules with Revoke, the assistants' rest and resume, the shortcuts). Each tab is a list
-// of rows given as data (a title, a note, a control), so that a test can work every control and see which key it wrote.
-// The theme applies at once, everywhere.
+// space starts ask, the lasting rules with Revoke, the folders agents run in, the assistants' rest and resume, the
+// shortcuts). Each tab is a list of rows given as data (a title, a note, a control), so that a test can work every
+// control and see which key it wrote. The theme applies at once, everywhere.
 import AppKit
 import SomethingAgents
 import SomethingCore
 import SwiftUI
 
-/// The tabs, in the toolbar's order.
+/// The tabs, in the bar's order.
 enum SettingsTab: String, CaseIterable {
     case general, spaces, agents, advanced
 
@@ -39,6 +39,8 @@ struct SettingsRow: Identifiable {
         case button(String, symbol: String? = nil, () -> Void)
         /// Words in place of a control: what is not chosen here.
         case said(String)
+        /// Nothing: the row only says.
+        case nothing
     }
 
     /// How a choice is drawn: a menu, "Aa" tiles, the theme's pictures, or segments side by side.
@@ -54,8 +56,8 @@ struct SettingsRow: Identifiable {
     var keys: [(key: String, words: String)] = []
     /// What tells two rows of one title apart (two spaces of one name).
     var tag: String?
-    /// The title in code (a command), after the monogram of the agent named `mark`.
-    var code = false, mark: String?
+    /// The title in code (a command, a path), after the monogram of the agent named `mark` or the system `symbol`.
+    var code = false, mark: String?, symbol: String?
     var id: String { tag ?? title }
 }
 
@@ -116,6 +118,8 @@ struct SettingsSection: Identifiable {
     /// When the last look ended, by `clock`; nil while none has.
     private(set) var looked: Date?
     private(set) var floats = false
+    /// The tab shown.
+    var tab = SettingsTab.general
     private(set) var spaceLevels: [SpaceLevel] = []
     private(set) var lasting: [LastingRule] = []
     /// How tall each tab's rows are, as last drawn: its page is as tall, up to SettingsPage.most.
@@ -271,12 +275,17 @@ struct SettingsSection: Identifiable {
         }))
     }
 
-    /// Advanced: who asks, the lasting rules, the assistants' rest and resume, and the shortcuts.
+    /// Advanced: who asks, the lasting rules, the folders agents run in, the assistants' rest and resume, the shortcuts.
     private func advancedSections() -> [SettingsSection] {
         let preferences = preferences, builders = Registry.app.builders
         let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let fresh = builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
+        // The folders the spaces at Run start agents in, each with those spaces: what the levels already hold.
+        let folders = spaceLevels.reduce(into: [(key: String, value: [String])]()) { all, space in
+            guard space.level == .run, let folder = space.folder else { return }
+            if let at = all.firstIndex(where: { $0.key == folder }) { all[at].value.append(space.title) } else { all.append((folder, [space.title])) }
+        }
         return [
             SettingsSection(title: "Permissions", rows: [
                 SettingsRow(title: "Full Access", note: "Nobody asks: your assistant gets every permission. The agents your spaces start keep their own settings. "
@@ -296,6 +305,10 @@ struct SettingsSection: Identifiable {
                                 self?.revoke(kept)
                                 self?.look()
                             }, tag: kept.id, code: true, mark: Registry.app.name(of: kept.rule.kind))
+            }),
+            SettingsSection(title: "Folders", rows: [], lead: folders.isEmpty ? "No space runs agents in a folder yet." : nil, more: folders.map { folder in
+                SettingsRow(title: Words.path(folder.key, home: places.home.path), note: Words.list(folder.value, "and"), control: .nothing,
+                            tag: "folder:" + folder.key, code: true, symbol: "folder")
             }),
             SettingsSection(title: "Assistants", rows: [
                 SettingsRow(title: "Resume each space’s conversation",
@@ -458,64 +471,70 @@ enum Found {
     }
 }
 
-/// The window: an NSTabViewController in toolbar style, in the preference toolbar, each tab a page 720 points wide whose
-/// height the window takes.
+/// The window: the four tabs in a bar of our own, the title in ink over them, then the tab's page, 720 points wide and
+/// as tall as the page. NSTabViewController's toolbar boxes each item on this SDK; the mockup's bar has borderless items
+/// and one soft pill behind the selected one.
 @MainActor final class SettingsWindow {
     let model: SettingsModel
-    let tabs = Tabs()
-    let window: NSWindow
-
-    /// The tab view controller whose toolbar items are plain, as the mockup draws them: a 14-point symbol and its label,
-    /// no box around each; the preference toolbar marks only the selected one.
-    final class Tabs: NSTabViewController {
-        override func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-                              willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-            let item = super.toolbar(toolbar, itemForItemIdentifier: itemIdentifier, willBeInsertedIntoToolbar: flag)
-            item?.isBordered = false
-            return item
-        }
-    }
+    let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: true)
 
     init(_ model: SettingsModel) {
         self.model = model
-        tabs.tabStyle = .toolbar
-        for tab in SettingsTab.allCases {
-            let page = NSHostingController(rootView: SettingsPage(model: model, tab: tab))
-            page.sizingOptions = [.preferredContentSize]
-            // The tab view controller titles the window with the selected page's title, however the tab was chosen.
-            page.title = tab.label
-            let item = NSTabViewItem(viewController: page)
-            (item.label, item.identifier) = (tab.label, tab.rawValue)
-            // powerplug.portrait is SF Symbols 6's: an older system shows the plug lying down.
-            item.image = (NSImage(systemSymbolName: tab.symbol, accessibilityDescription: tab.label) ?? NSImage(systemSymbolName: "powerplug", accessibilityDescription: tab.label))?
-                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .regular))
-            tabs.addTabViewItem(item)
-        }
-        window = NSWindow(contentViewController: tabs)
-        window.styleMask = [.titled, .closable, .miniaturizable]
-        window.toolbarStyle = .preference
-        window.isReleasedWhenClosed = false
-        window.title = SettingsTab.general.label
-        follow()
+        // The title is drawn with the tabs, in ink, under a transparent title bar that still moves the window.
+        (window.titlebarAppearsTransparent, window.titleVisibility, window.isReleasedWhenClosed) = (true, .hidden, false)
+        let host = NSHostingView(rootView: SettingsFrame(model: model) { [weak self] in self?.select($0) })
+        // The title shares the title bar's height with the lights: no safe area pushes it under them.
+        host.safeAreaRegions = []
+        window.contentView = host
+        select(model.tab)
     }
 
-    /// Takes the page's size at a new interface size: the tab view takes a page's size only as its tab is chosen, and
-    /// the page's own measure follows on SwiftUI's time, so a page made now measures it.
-    private func follow() {
-        withObservationTracking { _ = Look.scale.size } onChange: { [weak self] in
-            DispatchQueue.main.async { [weak self] in self?.refit() }
-        }
-    }
+    var tab: SettingsTab { model.tab }
 
-    private func refit() {
-        follow()
-        window.setContentSize(NSHostingView(rootView: SettingsPage(model: model, tab: tab)).fittingSize)
-    }
-
-    var tab: SettingsTab { SettingsTab.allCases[max(0, tabs.selectedTabViewItemIndex)] }
-
+    /// Shows `tab`'s page, and names the window after it (the Window menu, VoiceOver).
     func select(_ tab: SettingsTab) {
-        tabs.selectedTabViewItemIndex = SettingsTab.allCases.firstIndex(of: tab) ?? 0
+        model.tab = tab
+        window.title = tab.label
+    }
+}
+
+/// The bar, then the page: the window's whole content, which sizes the window.
+struct SettingsFrame: View {
+    let model: SettingsModel
+    let choose: (SettingsTab) -> Void
+
+    var body: some View {
+        let factor = Look.scale.size.factor
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                Text(model.tab.label).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                    .frame(height: 28 * factor).accessibilityHidden(true)
+                HStack(spacing: 2) {
+                    ForEach(SettingsTab.allCases, id: \.self) { tab in
+                        let on = tab == model.tab
+                        Button { choose(tab) } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: tab.symbol).font(.system(size: 14 * factor)).frame(height: 18 * factor)
+                                Text(tab.label).font(Look.font(.ui, size: 11, weight: on ? .semibold : .medium).ui)
+                            }
+                            .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                            .frame(width: 88 * factor, height: 48 * factor)
+                            .background { if on { RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Look.Token.sel.ui) } }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(tab.label)
+                        .accessibilityAddTraits(on ? [.isSelected] : [])
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+            .frame(maxWidth: .infinity)
+            .background(Look.Token.side.ui)
+            .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+            SettingsPage(model: model, tab: model.tab)
+        }
+        .fixedSize()
     }
 }
 
@@ -610,6 +629,9 @@ private struct RowView: View {
             } else {
                 HStack(spacing: 16) {
                     if let mark = row.mark { Monogram(name: mark, side: 22).padding(.trailing, -6) }
+                    if let symbol = row.symbol {
+                        Image(systemName: symbol).font(.system(size: 12)).foregroundStyle(Look.Token.ink3.ui).frame(width: 22).padding(.trailing, -6)
+                    }
                     words.frame(maxWidth: .infinity, alignment: .leading)
                     if row.trail == nil { RowControl(row: row) }
                 }
@@ -653,6 +675,8 @@ struct RowControl: View {
             .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui)
         case .said(let words):
             Text(words).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel("\(row.title): \(words)")
+        case .nothing:
+            EmptyView()
         }
     }
 
@@ -843,13 +867,16 @@ private extension View {
     }
 }
 
-/// The mockup's switch: 30 by 18, ink when on, mist when off, its knob bg2.
+/// The mockup's switch: 30 by 18, ink when on, mist when off, its knob bg2. Off, the track and the knob are ringed in
+/// line2: at night mist and bg2 are both near the card's colour, and the switch would vanish.
 struct SwitchTrack: View {
     let on: Bool
 
     var body: some View {
-        Capsule().fill((on ? Look.Token.ink : .mist).ui).frame(width: 30, height: 18)
-            .overlay(alignment: on ? .trailing : .leading) { Circle().fill(Look.Token.bg2.ui).frame(width: 14, height: 14).padding(2) }
+        Capsule().fill((on ? Look.Token.ink : .mist).ui).overlay { if !on { Capsule().strokeBorder(Look.Token.line2.ui) } }.frame(width: 30, height: 18)
+            .overlay(alignment: on ? .trailing : .leading) {
+                Circle().fill(Look.Token.bg2.ui).overlay { if !on { Circle().strokeBorder(Look.Token.line2.ui) } }.frame(width: 14, height: 14).padding(2)
+            }
     }
 }
 

@@ -168,7 +168,7 @@ final class RailTip: NSHostingView<RailTip.Bubble> {
                 Rectangle().fill(Look.Token.act.ui).frame(width: 7, height: 7).rotationEffect(.degrees(45)).offset(x: 4)
                 HStack(spacing: 7) {
                     Text(name).font(Look.font(.ui, size: 12, weight: .semibold).ui)
-                    if let state { Image(nsImage: Sign.miniEyes(state)).renderingMode(.template).resizable().frame(width: 12, height: 7.5).opacity(0.75) }
+                    if let state { Image(nsImage: Sign.miniEyes(state)).renderingMode(.template).resizable().frame(width: 12, height: 7.5) }
                     Text(state?.word ?? "not a space yet").font(Look.font(.ui, size: 11.5).ui).opacity(0.75)
                 }
                 .foregroundStyle(Look.Token.actfg.ui).lineLimit(1)

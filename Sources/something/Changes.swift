@@ -193,7 +193,7 @@ final class Changes {
     /// toast says to wait.
     private func allows(_ name: String, _ doing: String = "undo") -> Bool {
         guard working(name) else { return true }
-        toast("\(title(name))’s assistant is working · \(doing) once it’s done", nil, true, 4)
+        toast(Words.possessive(title(name)) + " assistant is working · \(doing) once it’s done", nil, true, 4)
         return false
     }
 

@@ -71,7 +71,7 @@ struct WelcomeView: View {
     let model: WelcomeModel, assistant: AssistantModel, motion: Look.Motion
     static let rows: [(Hero.Part, String, String)] = [
         (.page, "A space, a page of your own", "One HTML file on your Mac, blank at first. Export it in one click."),
-        (.agents, "Your agents", "The coding agents on this Mac. A page can watch them, talk to them or run them, if you say so."),
+        (.agents, "Your agents", "The coding agents on this Mac. A space can watch them, talk to them or run them, if you say so."),
         (.assistant, "Your assistant", ""),
     ]
 

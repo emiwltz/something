@@ -149,7 +149,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   it stays with the space. Info (⌘I), a panel beside the space, says it all in three parts: the space (its file, its
   size, Export, History), your agents (its level, one control that changes it at once, Run's folder, and the agents it
   shows now) and its assistant (its agent and model, its last reply, Open Conversation). Settings › Agents lists every
-  space with its level, and changes one the same way.
+  space with its level, and changes one the same way; Settings › Advanced › Folders lists each folder your spaces run
+  agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is

@@ -570,8 +570,9 @@ class PanelButton: KeyableButton {
     var height: CGFloat = 30
     /// Its title's size, its key hint's, and the room each side of its words: the point composer's are 12, 11 and 10.
     var size: CGFloat = 12.5, hintSize: CGFloat = 10, pad: CGFloat = 13
-    /// Its narrowest width, and the colour a primary one is filled with.
-    lazy var least: CGFloat = primary ? 112 : 96
+    /// Its narrowest width, one for both kinds so that Deny and Allow Once side by side are as wide; and the colour a
+    /// primary one is filled with.
+    var least: CGFloat = 112
     var fill = Look.Token.act
     /// How much of the fill has swept across, 0 to 1.
     var progress: CGFloat = 1 { didSet { needsDisplay = true } }

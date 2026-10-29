@@ -311,7 +311,7 @@ import Testing
         let library = library(test, ask)
         library.export("board")
         #expect(FileManager.default.fileExists(atPath: saved.path))
-        #expect(ask.told == ["board was exported without notes.json: a link to somewhere else is never exported. Replace a link with the file itself to export it."])
+        #expect(ask.told == ["“board” was exported without notes.json: a link to somewhere else is never exported. Replace a link with the file itself to export it."])
 
         // A memory that is a link is never read: the export leaves the memory out.
         try FileManager.default.removeItem(at: saved)
@@ -323,7 +323,7 @@ import Testing
         // Asked to carry it, the export stops and says why rather than follow the link.
         library.preferences.exportMemory = true
         library.export("board")
-        #expect(ask.told.count == 3 && ask.told.last?.hasPrefix("board was not exported.") == true && ask.told.last?.contains("is a link") == true, "\(ask.told)")
+        #expect(ask.told.count == 3 && ask.told.last?.hasPrefix("“board” was not exported.") == true && ask.told.last?.contains("is a link") == true, "\(ask.told)")
     }
 
     @Test func aRefusedImportSaysWhyAndAGoneSpaceLosesItsGrants() throws {

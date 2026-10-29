@@ -50,7 +50,7 @@ struct AcceptanceAssistant {
         #expect(model.cardShown && !model.threadShown && model.title == "Daily brief" && model.presence.header == "Working")
         #expect(model.presence.state == .think && model.notice == nil)
         #expect(model.name == "Claude Code" && model.modelWords.model == "Opus 5.5" && model.modelWords.effort == "High")
-        #expect(AssistantModel.messages(model.rows) == 3 && model.placeholder == "Write your next request · it waits for this one")
+        #expect(AssistantModel.messages(model.rows) == 3 && model.placeholder == "Write the next one · sent when this one ends")
         #expect(model.stops && !model.canSend, "Send is Stop while it works and nothing is written")
         let host = shell.glass.card
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
@@ -181,7 +181,7 @@ struct AcceptanceAssistant {
         model.clock = { later }
         model.tick()
         #expect(model.presence.now == .working("Checking the page…", late: true) && model.presence.header == "Working")
-        #expect(AssistantModel.messages(model.rows) == 4 && model.placeholder == "Write your next request · it waits for this one")
+        #expect(AssistantModel.messages(model.rows) == 4 && model.placeholder == "Write the next one · sent when this one ends")
         #expect(model.stops && !model.canSend && model.presence.stopHelp == Keys.tooltip("stop"))
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
@@ -233,7 +233,7 @@ struct AcceptanceAssistant {
         ])
         #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code")
         #expect(model.title == "Project watch" && model.presence.header == "Listening" && !model.threadShown)
-        #expect(model.placeholder == "Ask for a change · / for Claude Code's commands")
+        #expect(model.placeholder == "Ask for a change · / for Claude Code’s commands")
         // This space's alone: the defaults for new spaces are unchanged.
         #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
         shell.waiting(["agents"], mine: 0)
@@ -415,7 +415,7 @@ struct AcceptanceAssistant {
         #expect(model.presence.state == .unknown && model.presence.header == "State unknown · something cannot read it")
         #expect(unknown.title == "State unknown · something cannot read it" && !unknown.bad && unknown.actions.isEmpty)
         #expect(unknown.text == "Claude Code gave no sign for 4 minutes. It may still be working; something will not guess.")
-        #expect(!model.blocked && model.placeholder == "Ask for a change · / for Claude Code's commands")
+        #expect(!model.blocked && model.placeholder == "Ask for a change · / for Claude Code’s commands")
         try await draw(logbook, ["c8-unknown"])
         (engine.changed, model.clock) = ({ model.refresh() }, Date.init)
         model.refresh()
@@ -429,10 +429,10 @@ struct AcceptanceAssistant {
         model.send()
         #expect(await wait(until: { model.presence.stuck == .cannotReachModel }), "said: \(model.presence.word)")
         let limit = try #require(model.notice)
-        #expect(limit.title == "Stopped · can't reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
+        #expect(limit.title == "Retrying · can't reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
         #expect(limit.text == "Its model did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
-        #expect(!model.blocked && model.presence.header == "Stopped · can't reach its model")
-        #expect(!model.stops && model.placeholder == "Write your next request · it waits until the model answers", "the send arrow, not Stop")
+        #expect(!model.blocked && model.presence.header == "Retrying · can't reach its model")
+        #expect(!model.stops && model.placeholder == "Write now · sent when the model answers", "the send arrow, not Stop")
         shell.toggleConversation(nil)
         try await draw(project, ["c8-model"])
         shell.toggleConversation(nil)
@@ -553,7 +553,7 @@ struct AcceptanceAssistant {
         #expect(!input.contains("Also make the date bigger."))
         model.takeBack()
         #expect(model.held.isEmpty && model.draft == "Also make the date bigger.")
-        #expect(model.placeholder == "Write your next request · it waits for this one")
+        #expect(model.placeholder == "Write the next one · sent when this one ends")
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })
@@ -601,7 +601,7 @@ struct AcceptanceAssistant {
         #expect(model.name == "Claude Code" && model.modelWords == ("Sonnet 5.5", "Medium"))
         #expect(AgentModelChip.label(model) == "Claude Code, Sonnet 5.5, effort Medium. Change agent, model or effort")
         #expect(Monogram.letters(model.name) == "CC" && model.commands.map(\.value) == ["compact", "explain", "init", "review", "tidy"])
-        #expect(model.placeholder == "Ask for a change · / for Claude Code's commands" && model.slashed == nil)
+        #expect(model.placeholder == "Ask for a change · / for Claude Code’s commands" && model.slashed == nil)
         let field = try #require(AcceptanceTrust.fields(shell.glass.card).first)
         #expect(field.placeholderString == model.placeholder || field.placeholderAttributedString?.string == model.placeholder)
         #expect(AcceptanceTrust.fields(shell.glass.card).count == 1, "one field, and no other control drawn as one")

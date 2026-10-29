@@ -55,6 +55,9 @@ final class Sheet: NSPanel {
         let head = NSStackView(views: [tiled, column].compactMap { $0 })
         (head.orientation, head.alignment, head.spacing) = alert ? (.vertical, .centerX, 14) : (.horizontal, .top, 14)
         buttons = actions.map { SheetButton($0, target: self, action: #selector(press(_:))) }
+        // Side by side, the actions are as wide as the widest.
+        let widest = buttons.map(\.intrinsicContentSize.width).max() ?? 0
+        buttons.forEach { $0.least = widest }
         let row = NSStackView(views: buttons)
         row.spacing = 8
         if alert {
@@ -237,7 +240,7 @@ final class SheetBack: Box {
 }
 
 /// An action of a sheet, drawn by its role: Cancel and secondary ringed, primary filled in act, destructive in bad.
-/// While it holds the focus it is ringed in ink 2 points outside its edge, as the mockup marks the safe action. It
+/// While it holds the focus a light ring, ink3 and thinner than the primary's weight, sits 2 points outside it. It
 /// takes the focus with or without the system's full keyboard access: a sheet is answered from the keyboard too.
 final class SheetButton: PanelButton {
     let role: Sheet.Role
@@ -267,9 +270,9 @@ final class SheetButton: PanelButton {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard window?.firstResponder === self else { return }
-        let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: -3, dy: -3), xRadius: Look.control + 3, yRadius: Look.control + 3)
-        ring.lineWidth = 2
-        Look.Token.ink.color.setStroke()
+        let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: -2.5, dy: -2.5), xRadius: Look.control + 2.5, yRadius: Look.control + 2.5)
+        ring.lineWidth = 1.5
+        Look.Token.ink3.color.setStroke()
         ring.stroke()
     }
 }

@@ -508,6 +508,9 @@ import SomethingCore
         return agent.flatMap { Registry.app.agent($0.kind) }?.refusesSignIn(status: status, error: error) ?? false
     }
 
+    /// The card's status line: the presence's, or, signed out, the notice's cause rather than the model it could not reach.
+    var header: String { signedOut ? "Not signed in to its model" : presence.header }
+
     /// What went wrong with the last message, in the agent's or the engine's words; nil when nothing did.
     var problem: String? {
         if let failure { return failure }
@@ -521,10 +524,10 @@ import SomethingCore
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _):
             if !held.isEmpty { return "Write another request…" }
-            if presence.stuck == .cannotReachModel { return "Write your next request · it waits until the model answers" }
+            if presence.stuck == .cannotReachModel { return "Write now · sent when the model answers" }
             // Waiting for an answer, the way on is the request's own window, not this field: it reads as usual.
-            if light == .working { return "Write your next request · it waits for this one" }
-            return presence.state == .sleep ? "Ask for a change · it wakes up" : commands.isEmpty ? "Ask for a change…" : "Ask for a change · / for \(name)'s commands"
+            if light == .working { return "Write the next one · sent when this one ends" }
+            return presence.state == .sleep ? "Ask for a change · it wakes up" : commands.isEmpty ? "Ask for a change…" : "Ask for a change · / for " + Words.possessive(name) + " commands"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
         }
@@ -1199,9 +1202,9 @@ import SomethingCore
         guard case .space(let title, let name, _) = place, !text.isEmpty, !parts.isEmpty else { return "Point at a part and say what should change." }
         let main = session(for: place)
         guard let kind = main.kind, installed[kind] != false, ![.missing, .crashed].contains(presence(of: main).stuck) else {
-            return "\(AssistantModel.clean(title))’s assistant can’t start · open its card to see why"
+            return Words.possessive(AssistantModel.clean(title)) + " assistant can’t start · open its card to see why"
         }
-        if works(on: name) { return "\(AssistantModel.clean(title))’s assistant is working · try once it’s done" }
+        if works(on: name) { return Words.possessive(AssistantModel.clean(title)) + " assistant is working · try once it’s done" }
         let own = Registry.app.limits[kind]?.contains("model") == true
         let options = main.agent?.alive != false ? main.agent?.options : nil
         let model = own ? nil : main.model ?? main.agent?.model
@@ -1274,7 +1277,7 @@ import SomethingCore
         guard case .space(let title, let name, _) = place, !list.isEmpty else { return "Point at a part and add a comment first." }
         let main = session(for: place)
         guard let kind = main.kind, installed[kind] != false, ![.missing, .crashed].contains(presence(of: main).stuck) else {
-            return "\(AssistantModel.clean(title))’s assistant can’t start · open its card to see why"
+            return Words.possessive(AssistantModel.clean(title)) + " assistant can’t start · open its card to see why"
         }
         let lines = AssistantModel.comments(list), message = ([AssistantModel.context(place, home: places.home.path)] + lines).joined(separator: "\n")
         commenting[name] = Commenting(message: message, sentence: "\(list.count) comment\(list.count == 1 ? "" : "s")", after: nil)

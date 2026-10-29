@@ -85,6 +85,8 @@ struct Presence: Equatable {
         case (.missing?, _): "\(name) isn't on this Mac"
         case (.crashed?, _): "Stopped unexpectedly"
         case (.undelivered?, _): "Couldn't reach \(name)"
+        // The agent tries again by itself: "Stopped" would contradict the notice.
+        case (.cannotReachModel?, _) where agent?.state == "working": "Retrying · can't reach its model"
         case (nil, .sleep) where facts.waking: "Waking up…"
         case (nil, .think): step
         case (nil, .done) where !edited.isEmpty: "Just finished · changed \(edited[edited.count - 1])"
@@ -100,7 +102,7 @@ struct Presence: Equatable {
                 ?? "\(name) quit unexpectedly\(seen.map { " at " + Presence.clock.string(from: $0) } ?? ""). "
                 + (facts.resumes ? "Your conversation is kept; starting again picks it up." : "Starting again begins a new conversation."))
         case .cannotReachModel?:
-            Notice(title: "Stopped · can't reach its model",
+            Notice(title: word,
                    text: "\(agent?.model ?? "Its model") did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
                        + (untouched ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
         case .undelivered?:

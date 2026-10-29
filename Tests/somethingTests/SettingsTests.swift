@@ -70,7 +70,7 @@ import Testing
         // The sidebar, a space's level, the words and the buttons write no key: the window, the grants or nothing.
         let expected: [String: String?] = ["When something opens": "openAtStart", "Theme": "appearance", "Interface size": "size", "Sidebar": nil,
                                            "Agent": "assistant", "Model and effort": "model", "A new space may": "level",
-                                           "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil,
+                                           "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil, "/Users/example/code/atelier": nil,
                                            "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
                                            "Keep": "versionsKept", "Storage limit": "storageLimit",
                                            "Full Access": "fullAccess", "Your assistant asks before every change": "askEverything", "Agents a space starts": nil,
@@ -94,6 +94,8 @@ import Testing
                 run()
             case .said(let words):
                 #expect(["Their Own Settings", "Not known"].contains(words), "\(row.title)")
+            case .nothing:
+                #expect(row.symbol == "folder" && row.note == "Project watch", "\(row.title): only Advanced › Folders says without a control")
             }
             let after = try Self.keys(model.preferences.values)
             let changed = Set(after.keys).union(before.keys).filter { before[$0] != after[$0] }
@@ -121,6 +123,7 @@ import Testing
             case .choice(let options, let get, _): shown[row.title] = options.filter { !$0.heading && get().contains($0.value) }.map(\.label).joined(separator: " · ")
             case .toggle(let get, _): shown[row.title] = get() ? "on" : "off"
             case .button(let title, _, _), .said(let title): shown[row.title] = title
+            case .nothing: shown[row.title] = row.note
             }
         }
         #expect(shown == ["When something opens": "The last space you had open", "Theme": "Auto", "Interface size": "Default", "Sidebar": "Pinned",
@@ -130,7 +133,7 @@ import Testing
                           "Where they live": "Show in Finder", "Include a space’s memory when you export it": "off", "Keep": "50",
                           "Storage limit": "500 MB", "Full Access": "off", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
                           "Resume each space’s conversation": "on", "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3",
-                          "Keyboard shortcuts": "Show Shortcuts"])
+                          "/Users/example/code/atelier": "Project watch", "Keyboard shortcuts": "Show Shortcuts"])
         #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])
         let run = try #require(model.sections(.agents)[1].more.first { $0.title == "Project watch" })
         #expect(run.note == "in `/Users/example/code/atelier`" || run.note == "in `~/code/atelier`", "\(run.note)")
@@ -242,7 +245,8 @@ import Testing
         #expect(Settings.shown?.tab == .agents, "where it was left")
     }
 
-    /// The window: the preference toolbar with the four tabs, 720 points wide, as high as each tab, titled by it.
+    /// The window: the bar with the four tabs, the selected one alone pressed, 720 points wide, as high as each tab,
+    /// titled by it.
     @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowTakesEachTabsHeight() async throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
@@ -250,24 +254,23 @@ import Testing
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
         settings.window.alphaValue = 0
         defer { settings.window.close() }
-        #expect(settings.window.toolbarStyle == .preference)
-        #expect(settings.window.toolbar?.items.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])
+        #expect(settings.window.toolbar == nil, "a bar of its own, not the toolbar's boxed items")
+        let content = try #require(settings.window.contentView)
         var heights: [CGFloat] = []
         for tab in SettingsTab.allCases {
             settings.select(tab)
-            settings.window.layoutIfNeeded()
-            let page = { settings.tabs.tabViewItems[settings.tabs.selectedTabViewItemIndex].viewController?.preferredContentSize.height ?? 0 }
-            _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - page()) <= 1 })
-            let content = settings.window.contentRect(forFrameRect: settings.window.frame).size
+            _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - content.fittingSize.height) <= 1
+                && (settings.model.heights[tab] ?? 0) > 0 })
+            let size = settings.window.contentRect(forFrameRect: settings.window.frame).size
             #expect(settings.tab == tab && settings.window.title == tab.label)
-            #expect(abs(content.width - 720) < 1, "\(tab)")
-            #expect(abs(content.height - page()) <= 1 && page() > 0, "\(tab) takes its page's height")
-            heights.append(content.height)
+            #expect(abs(size.width - 720) < 1, "\(tab)")
+            #expect(abs(size.height - content.fittingSize.height) <= 1, "\(tab) takes its page's height")
+            heights.append(size.height)
         }
+        let labels = SettingsTab.allCases.map(\.label)
+        let tabs = await AcceptanceBuild.read(content) { words in labels.allSatisfy(words.contains) }
+        #expect(labels.allSatisfy(tabs.contains), "the bar's tabs, heard: \(tabs)")
         #expect(Set(heights.map { Int($0) }).count > 1, "the tabs are not one height: \(heights)")
-        // A click on a toolbar tab goes through the tab view, not the index: the title follows it too.
-        settings.tabs.tabView.selectTabViewItem(at: 3)
-        #expect(settings.tab == .advanced && settings.window.title == "Advanced")
         #expect(settings.window.styleMask.contains(.miniaturizable), "three lights, as the Mac's own settings")
     }
 

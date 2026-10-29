@@ -373,9 +373,9 @@ enum Picture {
         }
     }
 
-    /// Draws an alert's window as it would be shown, with the app's icon.
+    /// Draws an alert's window as it would be shown, with its own icon.
     static func alert(_ alert: NSAlert, _ name: String, root: URL) throws {
-        alert.icon = NSApp.applicationIconImage
+        // The alert's own icon: something's sign (Ask.alert), not the program's.
         alert.layout()
         try view(try #require(alert.window.contentView), name, root: root)
     }

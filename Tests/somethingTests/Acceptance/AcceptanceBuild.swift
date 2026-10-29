@@ -141,7 +141,7 @@ struct AcceptanceBuild {
     static func welcomeWords(_ builder: String) -> [String] {
         ["Welcome to something", "Pages of your own, that work with your agents.",
          "1. A space, a page of your own. One HTML file on your Mac, blank at first. Export it in one click.",
-         "2. Your agents. The coding agents on this Mac. A page can watch them, talk to them or run them, if you say so.",
+         "2. Your agents. The coding agents on this Mac. A space can watch them, talk to them or run them, if you say so.",
          "3. Your assistant. One of your agents, \(builder), builds the space and changes it when you ask.", Hero.label, "Make My First Space"]
     }
 
