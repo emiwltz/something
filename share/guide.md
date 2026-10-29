@@ -69,7 +69,7 @@ page, as a space to build: something opens it by itself once your turn ends, whe
 something writes there, says how to work in it: read it after this guide. something may lend you `something new`,
 `check` and `guide` as tools (`something_new`, `something_check`, `something_guide`): use them when you have them. As
 Claude Code, changing the files of that folder and those tools do not ask the person, unless they chose Ask Before
-Every Change; anything else asks them. As Codex, your sandbox lets you write in that folder, and those tools are
+Every Change; anything else asks them, unless they turned on Full Access. As Codex, your sandbox lets you write in that folder, and those tools are
 allowed. OpenCode and OMP ask as the person's own settings say (OMP's default asks nothing). pi and Amp never ask: say
 so before you run anything outside this folder. A space you make while the person is on the blank page opens by
 itself; otherwise something shows it as ready in the sidebar. Never run `something open` after `something new`. No
@@ -387,7 +387,7 @@ lives (`alive: null`), an agent shows `unknown`, or `working` when an open turn 
   `{by, outcome}` when the agent's own stream says who decided a permission (`by`: `person`, `hook`, `rule`, `mode`;
   `outcome`: `allowed`, `denied`), else `null`. An agent something launched says `person` when the person answered
   something's window, or `rule` when something allowed it by itself: a lasting rule the person kept ("Always for this
-  space": one exact command, one kind of agent, one folder) or Full Access for their assistant. Only Claude Code also
+  space": one exact command, one kind of agent, one folder). Only Claude Code also
   says when a hook, its own rule or its mode decided.
 - **Request** `{id, agent, kind, tool, about, at}`: a `permission` or a `question` from a launched agent, waiting for
   the person in a window of the Mac. **Your space sees it and can never answer it.** Show that the agent waits, and

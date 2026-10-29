@@ -49,11 +49,11 @@ Return. ⌘/ lists the shortcuts.
 
 **One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
 its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
-whose agents wait for your answer (each stays in its group too). The toolbar holds only the space's name (click it for
-Info), Point, Info and Page Full Screen (⇧⌘F: the page fills the window, the toolbar comes back at its top edge, Esc
-leaves); Reload is in the View menu (⌘R), and so is the interface size: ⌘+ and ⌘− grow or shrink the whole app,
-pages included, to Large or Larger, ⌘0 brings it back (also in Settings › General). Hide the sidebar (⌃⌘S) and it
-floats: rest the pointer on the window's left edge and it comes over the page, its pin keeps it. **something stops
+whose agents wait for your answer (each stays in its group too). The toolbar holds only the sidebar button, the space's
+name (click it for Info), Point, Info and Page Full Screen (⇧⌘F: the page fills the window, the toolbar comes back at
+its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload is in the View menu (⌘R), and so is
+the interface size: ⌘+ and ⌘− grow or shrink the whole app, pages included, to Large or Larger, ⌘0 brings it back
+(also in Settings › General). Hide the sidebar (⌃⌘S) and it floats: rest the pointer on the window's left edge and it comes over the page, its pin keeps it. **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
 space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Advanced changes both: Put
 idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
