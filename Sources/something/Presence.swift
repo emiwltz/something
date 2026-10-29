@@ -82,11 +82,11 @@ struct Presence: Equatable {
         default: nil
         }
         word = switch (stuck, state) {
-        case (.missing?, _): "\(name) isn't on this Mac"
+        case (.missing?, _): "\(name) isn’t on this Mac"
         case (.crashed?, _): "Stopped unexpectedly"
-        case (.undelivered?, _): "Couldn't reach \(name)"
+        case (.undelivered?, _): "Couldn’t reach \(name)"
         // The agent tries again by itself: "Stopped" would contradict the notice.
-        case (.cannotReachModel?, _) where agent?.state == "working": "Retrying · can't reach its model"
+        case (.cannotReachModel?, _) where agent?.state == "working": "Retrying · can’t reach its model"
         case (nil, .sleep) where facts.waking: "Waking up…"
         case (nil, .think): step
         case (nil, .done) where !edited.isEmpty: "Just finished · changed \(edited[edited.count - 1])"
@@ -95,7 +95,7 @@ struct Presence: Equatable {
         let seen = agent?.updated.flatMap(iso8601.date)
         notice = switch stuck {
         case .missing?:
-            Notice(title: "\(name) isn't on this Mac",
+            Notice(title: "\(name) isn’t on this Mac",
                    text: "something launches the agent you already use. Install \(name), or choose another one for this space.")
         case .crashed?:
             Notice(title: "The assistant stopped", text: facts.failure
@@ -106,14 +106,14 @@ struct Presence: Equatable {
                    text: "\(agent?.model ?? "Its model") did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
                        + (untouched ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
         case .undelivered?:
-            Notice(title: "Your message didn't reach \(name)", text: facts.failure ?? "")
+            Notice(title: "Your message didn’t reach \(name)", text: facts.failure ?? "")
         case .unknown?:
             Notice(title: "State unknown · something cannot read it",
                    text: "\(name) gave no sign\(seen.map { Presence.minutes(date.timeIntervalSince($0)) } ?? ""). It may still be working; something will not guess.")
         case nil: nil
         }
         stopHelp = agent?.can.interrupt == false && !facts.waking
-            ? "Stop ends \(name), which can't pause mid-task; your next message starts it again." : Keys.tooltip("stop")
+            ? "Stop ends \(name), which can’t pause mid-task; your next message starts it again." : Keys.tooltip("stop")
     }
 
     /// The card's header: the short state word while the line below already says what it does, else `word`.
@@ -170,7 +170,7 @@ struct Presence: Equatable {
         case .wait: "Waiting for you"
         case .done: "Just finished"
         case .sleep: "Asleep · wakes on your next message"
-        case .limit: "Stopped · can't reach its model"
+        case .limit: "Stopped · can’t reach its model"
         case .unknown: "State unknown · something cannot read it"
         }
     }

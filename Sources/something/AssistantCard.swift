@@ -654,7 +654,7 @@ struct AgentMenu: View {
         }
         Section("Seen only") {
             ForEach(AssistantModel.seenOnly, id: \.name) { seen in
-                Button("\(seen.name) · Can't build yet") {}.disabled(true).help(seen.why)
+                Button("\(seen.name) · Can’t build yet") {}.disabled(true).help(seen.why)
             }
         }
     }
@@ -808,7 +808,7 @@ extension AssistantModel {
         // What went wrong in the agent's or the engine's own words, which the notice says when its sentence does not.
         let said = failure ?? problem.map { "\(name) said: “\($0)”" }
         if signedOut {
-            return Notice(symbol: "exclamationmark.triangle", title: "\(name) isn't signed in to its model.",
+            return Notice(symbol: "exclamationmark.triangle", title: "\(name) isn’t signed in to its model.",
                           text: [said, "Open Terminal, type \(command) and sign in, then click Try Again."].compactMap { $0 }.joined(separator: " "), bad: true,
                           actions: [.init(title: "Copy Command", run: copyCommand), .init(title: "Try Again", run: tryAgain)])
         }
@@ -822,7 +822,8 @@ extension AssistantModel {
             case .unknown: []
             }
             let symbol = stuck == .unknown ? "questionmark" : stuck == .missing ? "powerplug" : "exclamationmark.triangle"
-            var text = notice.text
+            // With no other agent to choose, the notice names only the way that is left.
+            var text = stuck == .missing && others.isEmpty ? "something launches the agent you already use. Install \(name)." : notice.text
             // A crash is said as quitting; what the agent wrote as it went is no sentence for the person.
             if stuck != .crashed, let problem, let said, !text.contains(problem) { text += (text.isEmpty ? "" : " ") + said }
             return Notice(symbol: symbol, title: notice.title, text: text, bad: stuck != .unknown, actions: actions)
@@ -833,7 +834,7 @@ extension AssistantModel {
                           actions: [.init(title: "Show Request \(Keys.shown("showreq"))", run: showRequest)])
         }
         if unkept {
-            return Notice(symbol: "exclamationmark.triangle", title: "Couldn't keep this space's journal",
+            return Notice(symbol: "exclamationmark.triangle", title: "Couldn’t keep this space’s journal",
                           text: "Its activity is not saved.", bad: true, actions: [])
         }
         return nil

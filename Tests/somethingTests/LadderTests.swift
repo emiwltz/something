@@ -164,7 +164,7 @@ import Testing
         model.send("sign-in-please, a page of my plans")
         model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
         #expect(await wait(until: { model.builds.isEmpty }))
-        #expect(told == ["Your new space didn't build · your words are back"])
+        #expect(told == ["Your new space didn’t build · your words are back"])
         model.place = .blank
         #expect(model.draft == "sign-in-please, a page of my plans" && !model.building && model.notice != nil)
         await AssistantTests().finish(home, model)

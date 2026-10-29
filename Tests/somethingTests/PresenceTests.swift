@@ -95,7 +95,7 @@ import Testing
         #expect(of(agent("working")).stopHelp == Keys.tooltip("stop"))
         var stubborn = agent("working")
         stubborn.can.interrupt = false
-        #expect(of(stubborn).stopHelp == "Stop ends Claude Code, which can't pause mid-task; your next message starts it again.")
+        #expect(of(stubborn).stopHelp == "Stop ends Claude Code, which can’t pause mid-task; your next message starts it again.")
     }
 
     @Test func aFinishedTurnSaysWhatItChangedForThreeSecondsAndAHalf() {
@@ -116,7 +116,7 @@ import Testing
 
     @Test func eachStuckKindSaysWhatIsBrokenAndNothingMore() {
         let missing = of(Presence.Facts(name: "Codex", installed: false), nil)
-        #expect(missing.word == "Codex isn't on this Mac")
+        #expect(missing.word == "Codex isn’t on this Mac")
         #expect(missing.notice?.text == "something launches the agent you already use. Install Codex, or choose another one for this space.")
 
         let crashed = agent("error", alive: false, error: true)
@@ -131,7 +131,7 @@ import Testing
         #expect(failed.notice?.text == "Claude Code failed: the program stopped at once.")
 
         let retrying = of(agent("working", retry: true), turn())
-        #expect(retrying.word == "Retrying · can't reach its model" && retrying.notice?.title == retrying.word, "it says what the notice says")
+        #expect(retrying.word == "Retrying · can’t reach its model" && retrying.notice?.title == retrying.word, "it says what the notice says")
         #expect(retrying.now == nil)
         #expect(retrying.notice?.text == "Opus 4.7 did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
         #expect(of(agent("error"), turn("error", [tool("Edit", "brief.html")])).notice?.text == "Opus 4.7 did not answer. Your last message is kept.",
@@ -148,9 +148,9 @@ import Testing
                     == "Opus 4.7 did not answer. Your last message is kept and nothing in the space changed.", "a failed edit and a check change nothing")
 
         let refused = of(Presence.Facts(name: "Claude Code", installed: true, failure: "The message could not be delivered."), agent("idle"))
-        #expect((refused.state, refused.stuck, refused.word) == (.listen, .undelivered, "Couldn't reach Claude Code"),
+        #expect((refused.state, refused.stuck, refused.word) == (.listen, .undelivered, "Couldn’t reach Claude Code"),
                 "a live agent that missed a message did not stop")
-        #expect(refused.notice == .init(title: "Your message didn't reach Claude Code", text: "The message could not be delivered."))
+        #expect(refused.notice == .init(title: "Your message didn’t reach Claude Code", text: "The message could not be delivered."))
 
         let unknown = of(agent("unknown"))
         #expect(unknown.word == "State unknown · something cannot read it")

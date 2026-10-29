@@ -144,7 +144,7 @@ struct AssistantTrial {
             model.draft = "Make the counters bigger."
             model.send()
             #expect(await wait(60) { model.problem != nil }, "rows: \(model.rows)")
-            #expect(model.light == .error && model.notice?.title == "Claude Code isn't signed in to its model." && model.signedOut, "the same sign-in row as a refused key")
+            #expect(model.light == .error && model.notice?.title == "Claude Code isn’t signed in to its model." && model.signedOut, "the same sign-in row as a refused key")
             #expect(model.notice?.text.contains("/login") == true, "the card says what Claude Code said: \(model.notice?.text ?? "nothing")")
 
             try trial.signIn()

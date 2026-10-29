@@ -346,7 +346,7 @@ struct AcceptanceAssistant {
             (.done, Presence(facts, agent: agent("idle"), turn: Turn(id: "t1", state: "done", started: at(9), ended: at(1), items: [done]), now: now),
              "Just finished · changed project.html"),
             (.sleep, Presence(facts, agent: nil, turn: nil, now: now), "Asleep · wakes on your next message"),
-            (.limit, Presence(facts, agent: agent("error"), turn: nil, now: now), "Stopped · can't reach its model"),
+            (.limit, Presence(facts, agent: agent("error"), turn: nil, now: now), "Stopped · can’t reach its model"),
             (.unknown, Presence(facts, agent: agent("unknown"), turn: nil, now: now), "State unknown · something cannot read it"),
         ]
         for (state, presence, words) in states {
@@ -429,9 +429,9 @@ struct AcceptanceAssistant {
         model.send()
         #expect(await wait(until: { model.presence.stuck == .cannotReachModel }), "said: \(model.presence.word)")
         let limit = try #require(model.notice)
-        #expect(limit.title == "Retrying · can't reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
+        #expect(limit.title == "Retrying · can’t reach its model" && limit.bad && limit.actions.map(\.title) == ["Try Again"])
         #expect(limit.text == "Its model did not answer; Claude Code keeps trying. Your last message is kept and nothing in the space changed.")
-        #expect(!model.blocked && model.presence.header == "Retrying · can't reach its model")
+        #expect(!model.blocked && model.presence.header == "Retrying · can’t reach its model")
         #expect(!model.stops && model.placeholder == "Write now · sent when the model answers", "the send arrow, not Stop")
         shell.toggleConversation(nil)
         try await draw(project, ["c8-model"])
@@ -461,9 +461,9 @@ struct AcceptanceAssistant {
         engine.lookAgain()
         #expect(await wait(until: { model.presence.stuck == .missing }))
         let missing = try #require(model.notice)
-        #expect(missing.title == "Claude Code isn't on this Mac" && missing.bad && missing.actions.map(\.title) == ["How to Get One"])
-        #expect(missing.text == "something launches the agent you already use. Install Claude Code, or choose another one for this space.")
-        #expect(model.blocked && model.placeholder == "Choose an agent to continue" && model.presence.header == "Claude Code isn't on this Mac")
+        #expect(missing.title == "Claude Code isn’t on this Mac" && missing.bad && missing.actions.map(\.title) == ["How to Get One"])
+        #expect(missing.text == "something launches the agent you already use. Install Claude Code.")
+        #expect(model.blocked && model.placeholder == "Install Claude Code to continue" && model.presence.header == "Claude Code isn’t on this Mac")
         try await draw(brief, ["c8-missing"])
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }

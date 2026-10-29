@@ -449,7 +449,7 @@ import SomethingCore
     var noBuilder: String {
         let found = builders.filter { installed[$0] == true }
         if found.count == 1, let because = refused[found[0]] { return because }
-        return found.isEmpty ? "No coding agent found." : "\(found.map(Registry.app.name).joined(separator: ", ")) can't build spaces."
+        return found.isEmpty ? "No coding agent found." : "\(found.map(Registry.app.name).joined(separator: ", ")) can’t build spaces."
     }
 
     /// Whether New Space shows a build as it goes.
@@ -519,7 +519,7 @@ import SomethingCore
     }
 
     var placeholder: String {
-        if blocked { return presence.stuck == .missing ? "Choose an agent to continue" : "Start Again to send a message" }
+        if blocked { return presence.stuck != .missing ? "Start Again to send a message" : others.isEmpty ? "Install \(name) to continue" : "Choose an agent to continue" }
         switch place {
         case .space(_, let space, _) where space == fromTemplate: return "Ask \(name) to make it yours: colors, sections, anything."
         case .space(let title, _, _):
@@ -557,7 +557,10 @@ import SomethingCore
             }
             else if agent?.builder?.preAllowed == false { "\(name) works in \(folder). It asks as your own \(name) settings say." }
             else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
-            else { "\(name) works in \(folder). It may change your spaces and run something's own commands there without asking. Anything else asks you." }
+            else {
+                "\(name) works in \(folder). It may change your spaces and run something’s own commands there without asking. "
+                    + (Preferences.at(places).fullAccess ? "Full Access is on: something allows what it asks." : "Anything else asks you.")
+            }
         return [how] + (resumable(kind ?? "") ? [] : ["\(name) cannot resume a conversation, so each one starts fresh."])
             + [session.renewed].compactMap { $0 }
     }
@@ -566,7 +569,7 @@ import SomethingCore
     var entries: [Entry] {
         builders.filter { installed[$0] == true }.map { kind in
             let agent = Registry.app.agent(kind)
-            let because = refused[kind] != nil ? "can't build spaces" : agent?.neverAsks == true ? "never asks before acting"
+            let because = refused[kind] != nil ? "can’t build spaces" : agent?.neverAsks == true ? "never asks before acting"
                 : agent?.asksNothingByDefault == true ? "asks nothing by default" : nil
             let title = [Registry.app.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
             return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind])
@@ -968,7 +971,7 @@ import SomethingCore
             ending = nil
             back(build)
             if !shown && !(place == .blank && watched == nil) {
-                told(trouble(build.session) ? "Your new space didn't build · your words are back" : "Your assistant answered on New Space")
+                told(trouble(build.session) ? "Your new space didn’t build · your words are back" : "Your assistant answered on New Space")
             }
         }
         resolve()

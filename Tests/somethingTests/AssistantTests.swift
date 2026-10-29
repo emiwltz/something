@@ -545,7 +545,7 @@ import WebKit
         #expect(model.draft == "Make an invented board.")
         #expect(model.kind == nil && model.noAgent)
         #expect(model.noBuilder == old && model.notice?.title == old)
-        #expect(model.entries.map(\.title) == ["Codex · can't build spaces"] && model.entries.map(\.note) == [old])
+        #expect(model.entries.map(\.title) == ["Codex · can’t build spaces"] && model.entries.map(\.note) == [old])
         #expect(model.entries.allSatisfy { !$0.enabled })
         model.choose("codex")
         #expect(model.kind == nil)
@@ -743,7 +743,7 @@ import WebKit
         #expect(model.notice?.text == "Claude Code said: “Invalid API key · Please run /login” Open Terminal, type claude and sign in, then click Try Again.",
                 "the card says what Claude Code said")
         #expect(model.light == .error && model.signedOut, "a Claude Code never signed in gets the sign-in notice")
-        #expect(model.notice?.title == "Claude Code isn't signed in to its model." && model.notice?.actions.map(\.title) == ["Copy Command", "Try Again"])
+        #expect(model.notice?.title == "Claude Code isn’t signed in to its model." && model.notice?.actions.map(\.title) == ["Copy Command", "Try Again"])
         model.copyCommand()
         #expect(copied == ["claude"])
         let first = model.id
@@ -763,12 +763,12 @@ import WebKit
         model.send()
         #expect(await wait(until: { model.presence.stuck == .cannotReachModel }))
         #expect(model.light == .working && !model.signedOut)
-        #expect(model.presence.stuck == .cannotReachModel && model.notice?.title == "Retrying · can't reach its model")
+        #expect(model.presence.stuck == .cannotReachModel && model.notice?.title == "Retrying · can’t reach its model")
         model.newConversation()
         model.draft = "Give it a darker header."
         model.send()
         #expect(await wait(until: { model.light == .error }))
-        #expect(model.signedOut && model.notice?.title == "Claude Code isn't signed in to its model.")
+        #expect(model.signedOut && model.notice?.title == "Claude Code isn’t signed in to its model.")
         #expect(model.header == "Not signed in to its model", "the header says the notice's cause, not the model")
         #expect(model.notice?.text.contains("Claude Code said: “The model's server refused Claude Code's sign-in (error 401).”") == true)
         model.tryAgain()
@@ -854,7 +854,7 @@ import WebKit
         try FileManager.default.removeItem(at: home.root.appendingPathComponent("bin/claude"))
         await look(model)
         #expect(model.kind == "claude" && model.presence.stuck == .missing && model.blocked)
-        #expect(model.notice?.title == "Claude Code isn't on this Mac" && model.notice?.actions.map(\.title) == ["How to Get One", "Use Another Agent"])
+        #expect(model.notice?.title == "Claude Code isn’t on this Mac" && model.notice?.actions.map(\.title) == ["How to Get One", "Use Another Agent"])
         #expect(model.others.map(\.id) == ["codex"] && model.placeholder == "Choose an agent to continue" && !model.canSend)
         model.notice?.actions.first?.run()
         #expect(shown == 1)
@@ -919,8 +919,8 @@ import WebKit
                                                  "Amp · never asks before acting"])
         let folder = "works in ~/something/spaces.", all = ["something_guide", "something_new", "something_check"]
         let said: [(String, String, Bool, [String])] = [
-            ("claude", "Claude Code \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
-            ("codex", "Codex \(folder) It may change your spaces and run something's own commands there without asking. Anything else asks you.", true, all),
+            ("claude", "Claude Code \(folder) It may change your spaces and run something’s own commands there without asking. Anything else asks you.", true, all),
+            ("codex", "Codex \(folder) It may change your spaces and run something’s own commands there without asking. Anything else asks you.", true, all),
             ("opencode", "OpenCode \(folder) It asks as your own OpenCode settings say.", false, all),
             ("pi", "pi \(folder) pi never asks: it can run any command on your Mac.", false, []),
             ("omp", "OMP \(folder) By default OMP asks nothing: it can run any command on your Mac, unless your own OMP settings say otherwise.", false, all),
@@ -931,6 +931,12 @@ import WebKit
             #expect(model.kind == kind && model.command == kind)
             let fresh = kind == "claude" ? [] : ["\(Registry.app.name(of: kind)) cannot resume a conversation, so each one starts fresh."]
             #expect(model.firstLines == [line] + fresh, "\(kind)")
+            if kind == "claude" {
+                // Full Access on, something allows what Claude Code asks: the line says so rather than "asks you".
+                Preferences.at(model.places).fullAccess = true
+                #expect(model.firstLines.first?.hasSuffix("without asking. Full Access is on: something allows what it asks.") == true)
+                Preferences.at(model.places).fullAccess = false
+            }
             #expect(model.canAskEverything == canAsk && (model.lent(for: kind)?.tools.map(\.name) ?? []) == lent, "\(kind)")
             // Served by this program, `something mcp`, which the agent starts with its own environment.
             #expect(model.lent(for: kind).map { $0.server?.words.last == "mcp" && $0.server?.words.count == 2 } ?? true, "\(kind)")
@@ -960,7 +966,7 @@ import WebKit
         model.draft = "Make an invented board."
         model.send()
         #expect(await wait(until: { model.agent?.state == "working" }))
-        #expect(model.presence.stopHelp == "Stop ends Amp, which can't pause mid-task; your next message starts it again.")
+        #expect(model.presence.stopHelp == "Stop ends Amp, which can’t pause mid-task; your next message starts it again.")
         let first = model.id
         model.stop()
         #expect(await wait(until: { model.agent?.alive == false }), "Stop ends the fake Amp")
