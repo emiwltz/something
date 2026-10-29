@@ -141,7 +141,10 @@ struct LevelRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
                 Spacer(minLength: 8)
-                Text(model.chosenLevel == nil ? "Pre-set from your words" : "Your choice").font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
+                // Before any words, nothing was pre-set from them.
+                if model.chosenLevel != nil || !model.draft.isEmpty {
+                    Text(model.chosenLevel != nil ? "Your choice" : "Pre-set from your words").font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
+                }
             }
             .accessibilityElement(children: .combine)
             if level == .run { Levels.runNote }
