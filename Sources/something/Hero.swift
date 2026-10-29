@@ -1,7 +1,7 @@
 // something in one picture, drawn here rather than shipped as an image: a page in the middle, three of your agents on
 // its left joined to it by the three kinds of line a level allows (Watch dotted, Talk dashed, Run plain with an arrow),
-// your assistant on its right building it, and under it the small panel where whatever an agent asks waits and only
-// you answer. One part may be lit, the others faded: the page, your agents (with the panel their requests reach), or
+// your assistant on its right building it, and under it the small panel where whatever an agent asks waits for you
+// to answer. One part may be lit, the others faded: the page, your agents (with the panel their requests reach), or
 // your assistant (with the panel too); the page stays half lit, since everything is about it. The welcome shows it
 // beside its three rows, and Help › How something Works in a window of its own, with a button per part and Replay.
 // The agents shown are the first three the app knows, the folders and the request invented, so no line names an agent.
@@ -13,7 +13,7 @@ struct Hero: View {
     enum Part: CaseIterable { case page, agents, assistant }
     static let size = CGSize(width: 720, height: 420)
     static let label = "something in one picture: a space, a page of your own, in the middle; your agents around it, which the space may "
-        + "watch, talk to or run; your assistant building the space; and the panel where only you answer."
+        + "watch, talk to or run; your assistant building the space; and the panel where you answer."
 
     let light: HeroLight
     /// The assistant's line: its agent and model.
@@ -121,12 +121,14 @@ struct Hero: View {
         .boxed(RoundedRectangle(cornerRadius: 6), Look.Token.bg.ui, ring: Look.Token.line2.ui)
     }
 
-    /// The page, in its own colours (a page's, not the app's), the same by day and by night; in neutral greys while
-    /// another part is lit, drawn so rather than desaturated, which an offscreen drawing would not keep.
+    /// The page, in its own colours (a page's, not the app's), the same by day and by night; in the app's quiet tokens
+    /// while another part is lit, drawn so rather than desaturated, which an offscreen drawing would not keep, and so
+    /// that a faded page stays under the lit parts by night too.
     private var page: some View {
         let grey = light.lit != nil && light.lit != .page
-        let brown = grey ? Color(white: 0.45) : Color(red: 0x3A / 255, green: 0x24 / 255, blue: 0x18 / 255), note = Color.white.opacity(0.62)
-        let fill: [Color] = grey ? [Color(white: 0.94), Color(white: 0.91), Color(white: 0.88)]
+        let brown = grey ? Look.Token.ink3.ui : Color(red: 0x3A / 255, green: 0x24 / 255, blue: 0x18 / 255)
+        let note = grey ? Look.Token.bg.ui.opacity(0.62) : Color.white.opacity(0.62)
+        let fill: [Color] = grey ? [Look.Token.bg2.ui, Look.Token.sunk.ui, Look.Token.line2.ui]
             : [Color(red: 0.984, green: 0.902, blue: 0.8), Color(red: 0.973, green: 0.812, blue: 0.682), Color(red: 0.949, green: 0.718, blue: 0.612)]
         func lines(_ widths: [CGFloat]) -> some View {
             VStack(alignment: .leading, spacing: 6) { ForEach(widths, id: \.self) { Capsule().fill(brown.opacity(0.22)).frame(width: 160 * $0, height: 4) } }
@@ -180,7 +182,11 @@ struct Hero: View {
             VStack(spacing: 6) {
                 PageSign(state: .listen, side: 48, lands: false, motion: .reduced).frame(width: 48, height: 48)
                 Text("Your assistant").font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                Text(builder).font(Look.font(.ui, size: 10.5).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).minimumScaleFactor(0.8)
+                HStack(spacing: 5) {
+                    // The agent's monogram, when the line names one the app knows.
+                    if let name = builder.components(separatedBy: " · ").first, Registry.app.agents.contains(where: { $0.name == name }) { Monogram(name: name, side: 15) }
+                    Text(builder).font(Look.font(.ui, size: 10.5).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).minimumScaleFactor(0.8)
+                }
                 code("~/something/spaces")
             }
             .padding(.horizontal, 8)
@@ -213,7 +219,7 @@ struct Hero: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "person.fill").font(.system(size: 9)).foregroundStyle(Look.Token.actfg.ui).frame(width: 20, height: 20)
                 .background(Look.Token.act.ui, in: Circle())
-            Text("Only you answer, in a window of your Mac.").font(Look.font(.ui, size: 10.5).ui).foregroundStyle(Look.Token.ink2.ui)
+            Text("You answer, in a window of your Mac.").font(Look.font(.ui, size: 10.5).ui).foregroundStyle(Look.Token.ink2.ui)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(width: 184, alignment: .leading)
@@ -309,7 +315,7 @@ private struct Dots: Shape {
 /// all of it), and Replay, which lights each part in turn again.
 @MainActor
 enum HowItWorks {
-    static let size = NSSize(width: 860, height: 730)
+    static let size = NSSize(width: 860, height: 752)
     private static var window: NSWindow?
     static let light = HeroLight()
 
@@ -340,7 +346,7 @@ struct HowItWorksView: View {
         // Word joiners keep the path on one line.
         (.page, "A space", "A page of your own: one HTML file in ~/\u{2060}something/\u{2060}spaces, exported in one click."),
         (.agents, "Your agents", "The coding agents on your Mac. A space may Watch them, Talk to them, or Run one in a folder you pick."),
-        (.assistant, "Your assistant", "One of your agents, at work on the space, only in the spaces folder. Anything else, it asks you."),
+        (.assistant, "Your assistant", "One of your agents, at work on the space, in the spaces folder. Everything else asks you, as your agent’s settings decide."),
     ]
 
     var body: some View {
@@ -378,7 +384,7 @@ struct HowItWorksView: View {
             Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.top, 12)
             HStack(spacing: 7) {
                 Image(systemName: "lock").font(.system(size: 10.5)).accessibilityHidden(true)
-                Text("Only you answer, in a window of your Mac. A space can’t see or answer it.")
+                Text("You answer, in a window of your Mac, unless you said so. A space can’t see or answer it.")
                 Button { light.cycle(motion) } label: {
                     HStack(spacing: 6) { Image(systemName: "arrow.clockwise").font(.system(size: 11)); Text("Replay") }
                         .font(Look.font(.ui, size: 12.5, weight: .semibold).ui)

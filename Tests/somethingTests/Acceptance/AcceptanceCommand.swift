@@ -430,6 +430,34 @@ struct AcceptanceCommand {
             let words = await AcceptanceBuild.read(try #require(window.contentView))
             #expect(words == Self.howWords, "\(words)")
         }
+        // Replay stands whole in the window, its margin under it.
+        let content = try #require(window.contentView), replay = try #require(await Self.frame(of: "Replay", in: content))
+        #expect(replay.minY - window.frame.minY >= 16, "Replay at \(replay) in \(window.frame)")
+    }
+
+    /// Where the element VoiceOver calls `label` stands on the screen (the window's coordinates of the screen), as
+    /// SwiftUI makes it for an assistive app; nil when none says it.
+    static func frame(of label: String, in view: NSView) async -> NSRect? {
+        await Stage.alone {
+            let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+            NSApp.accessibilitySetValue(true, forAttribute: enhanced)
+            defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
+            @MainActor func find(_ element: Any) -> NSRect? {
+                let object = element as AnyObject
+                let words = [NSAccessibility.Attribute.description, .title, .value].compactMap { object.accessibilityAttributeValue($0) as? String }
+                // SwiftUI's nodes answer the getter, not the protocol's cast.
+                if (words + [AcceptanceBuild.said(element)]).contains(label), let frame = (object as? NSObject)?.value(forKey: "accessibilityFrame") as? NSValue {
+                    return frame.rectValue
+                }
+                return ((object as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []).lazy.compactMap(find).first
+            }
+            _ = view.accessibilityChildren()
+            for _ in 0..<100 {
+                await wait(0.1)
+                if let found = find(view) { return found }
+            }
+            return nil
+        }
     }
 
     /// X8.2, one part lit: Your assistant's button pressed (its number dark), the picture faded but for the assistant
@@ -460,6 +488,8 @@ struct AcceptanceCommand {
         let view = NSHostingView(rootView: hero)
         view.frame.size = Hero.size
         try await stage.appearances { suffix in
+            // Outside a window, the view follows no app appearance: give it the pass's own.
+            view.appearance = NSAppearance(named: suffix.isEmpty ? .aqua : .darkAqua)
             try Picture.view(view, "x0-1" + suffix, root: stage.home.root)
             #expect(await AcceptanceBuild.read(view) == [Hero.label])
         }
