@@ -506,11 +506,8 @@ enum Found {
     /// pointer from one tab to the next (setContentSize would keep the bottom edge and move the bar).
     private func fit() {
         guard let host = window.contentView else { return }
-        let target = window.frameRect(forContentRect: NSRect(origin: .zero, size: host.fittingSize))
-        var frame = window.frame
-        frame.origin.y += frame.height - target.height
-        frame.size = target.size
-        window.setFrame(frame, display: true)
+        let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: host.fittingSize)).size
+        window.setFrame(NSRect(origin: NSPoint(x: window.frame.minX, y: window.frame.maxY - size.height), size: size), display: true)
     }
 
     var tab: SettingsTab { model.tab }

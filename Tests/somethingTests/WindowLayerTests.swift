@@ -11,17 +11,15 @@ import Testing
     /// A window of an empty home, never shown, nothing open; `body` gets its shell. In Stage's drawing turn: the sizes
     /// read here are Default's, and a size test of another suite holds the whole app at Large or Larger a while.
     func window(_ body: (Shell) throws -> Void) async throws {
-        try await Stage.alone { try made(body) }
-    }
-
-    private func made(_ body: (Shell) throws -> Void) throws {
-        NSApplication.shared.setActivationPolicy(.prohibited)
-        let home = Home(prefix: "something-frame-")
-        defer { home.remove() }
-        let library = Library(places: home.places, ask: FakeAsk(), share: Home.share), info = Info(places: home.places, ask: FakeAsk())
-        let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
-        defer { shell.window.close() }
-        try body(shell)
+        try await Stage.alone {
+            NSApplication.shared.setActivationPolicy(.prohibited)
+            let home = Home(prefix: "something-frame-")
+            defer { home.remove() }
+            let library = Library(places: home.places, ask: FakeAsk(), share: Home.share), info = Info(places: home.places, ask: FakeAsk())
+            let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
+            defer { shell.window.close() }
+            try body(shell)
+        }
     }
 
     @Test func theFrameHasTheMockupsSizesAndToolbar() async throws {

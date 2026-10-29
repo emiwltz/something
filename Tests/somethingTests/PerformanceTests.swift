@@ -1,7 +1,8 @@
 // What the app costs, measured with fake agents only, in windows never shown: opening Info lays the page out once; ⌘P
-// opens in under 100 ms of the main thread's time with fifty spaces; a version held in History, History closed and a template's Preview leave no web
-// content process behind; assistants asleep are no process at all and leave no timer waiting; the sticker's sign ticks
-// only with its window's display link, so no frame off screen. What the timers cost at rest, in CPU and wakeups, is RestTrial's to measure.
+// opens in under 100 ms of the main thread's time with fifty spaces; a version held in History, History closed and a
+// template's Preview leave no web content process behind; assistants asleep are no process at all and leave no timer
+// waiting; the sticker's sign ticks only with its window's display link, so no frame off screen. What the timers cost
+// at rest, in CPU and wakeups, is RestTrial's to measure.
 import AppKit
 import Darwin
 import SomethingCore

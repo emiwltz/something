@@ -210,8 +210,8 @@ struct AssistantCard: View {
     static func markdown(_ text: String) -> AttributedString {
         var parsed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
         // Young Serif has one weight: bold words would be thickened by the system, a synthetic bold. They stay regular.
-        for range in parsed.runs.compactMap({ $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true ? $0.range : nil }) {
-            parsed[range].inlinePresentationIntent?.remove(.stronglyEmphasized)
+        for run in parsed.runs where run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+            parsed[run.range].inlinePresentationIntent?.remove(.stronglyEmphasized)
         }
         return parsed
     }

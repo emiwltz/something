@@ -1,11 +1,12 @@
 // The acceptance catalog, the interface's stop criterion: every screen id of the mockup Emi approved, with the one
-// slice that builds it; round 2's frozen v6.2 steps join it as their slices land, their ids the step in lower case
-// with a dash ("x9-1" for X9.1, its function x9_1; "2-6" for the numbered step 2.6, its function v2_6, after the
-// mockup's chapter "v2"), each in the area file of its screen, and retire the old ids they
-// replace; a frozen step no scenario draws is retired with its reason (`retiredSteps`). Each id's scenario lives in its area's file and carries `.disabled("not built yet: <slice>")` until that
-// slice lands, removes the trait and gives it a body that asserts; whether an id is built is read from that file, so
-// this catalog is only edited to bring back La page (b2 and the _p variants) or to mark an id shot. With
-// SOMETHING_ACCEPT_STRICT=1 the end gate runs: it fails while any id that counts is still unbuilt or waits for its shots.
+// slice that builds it; round 2's frozen v6.2 steps join it as their slices land, their ids the step in lower case with
+// a dash ("x9-1" for X9.1, its function x9_1; "2-6" for the numbered step 2.6, its function v2_6, after the mockup's
+// chapter "v2"), each in the area file of its screen, and retire the old ids they replace; a frozen step no scenario
+// draws is retired with its reason (`retiredSteps`). Each id's scenario lives in its area's file and carries
+// `.disabled("not built yet: <slice>")` until that slice lands, removes the trait and gives it a body that asserts;
+// whether an id is built is read from that file, so this catalog is only edited to bring back La page (b2 and the _p
+// variants) or to mark an id shot. With SOMETHING_ACCEPT_STRICT=1 the end gate runs: it fails while any id that counts
+// is still unbuilt or waits for its shots.
 import Foundation
 import Testing
 

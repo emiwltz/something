@@ -657,9 +657,8 @@ struct AcceptanceBuild {
 
     private static func labels(_ element: Any) -> [String] {
         let object = element as AnyObject
-        let described = Optional(said(element)).flatMap { $0.isEmpty ? nil : $0 }
         let words = [NSAccessibility.Attribute.description, .title, .value].compactMap { object.accessibilityAttributeValue($0) as? String }
-            + [described].compactMap { $0 }
+            + [said(element)]
         let children = (object as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []
         return words.filter { !$0.isEmpty } + children.flatMap(labels)
     }
