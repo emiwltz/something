@@ -199,6 +199,13 @@ enum Mockup {
         bar.open = { ("s1", "Daily brief") }
         bar.refresh()
         #expect(bar.submenu("Assistant")?.items.first?.title == "Daily brief’s assistant")
+        // Build With names the builder after it, dimmed, once however often the menu opens.
+        bar.builder = { "Codex" }
+        bar.refresh()
+        bar.refresh()
+        let build = try #require(bar.submenu("Assistant")?.items.first { $0.identifier?.rawValue == "buildWith" })
+        let dim = build.attributedTitle?.attribute(.foregroundColor, at: build.title.count - 1, effectiveRange: nil) as? NSColor
+        #expect(build.title == "Build With  Codex" && dim == .secondaryLabelColor)
     }
 
     static func event(_ key: String, _ modifiers: NSEvent.ModifierFlags, keyCode: UInt16 = 0, window: Int = 0) throws -> NSEvent {

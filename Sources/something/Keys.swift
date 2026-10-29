@@ -297,6 +297,8 @@ final class MenuBar: NSObject, NSMenuDelegate {
     var open: () -> (id: String, title: String)? = { nil }
     /// The state of a space's assistant, as its row's eyes say it.
     var eyes: (String) -> Sign.State = { _ in .unknown }
+    /// The agent that builds now, nil when none was found.
+    var builder: () -> String? = { nil }
     /// Whether text is being edited in a native field, where ⌘⌫ deletes.
     var editingText: () -> Bool = { false }
 
@@ -357,6 +359,14 @@ final class MenuBar: NSObject, NSMenuDelegate {
             submenu(menu)?.items.first { $0.identifier?.rawValue == "header.\(menu.lowercased())" }?.title = title ?? "No space open"
         }
         submenu("View")?.items.first { $0.identifier?.rawValue == "header.size" }?.title = MenuBar.size
+        // Build With says who builds now, dimmed after it as the mockup's menu (the item's title then holds both).
+        if let item = submenu("Assistant")?.items.first(where: { $0.identifier?.rawValue == "buildWith" }), let title = Keys.command("buildWith")?.title {
+            let shown = NSMutableAttributedString(string: title, attributes: [.font: NSFont.menuFont(ofSize: 0)])
+            if let builder = builder() {
+                shown.append(NSAttributedString(string: "  " + builder, attributes: [.font: NSFont.menuFont(ofSize: 0), .foregroundColor: NSColor.secondaryLabelColor]))
+            }
+            item.attributedTitle = shown
+        }
         let trash = Keys.command("trash")?.key ?? ""
         for item in ["File", "Space"].compactMap({ submenu($0) }).flatMap(\.items) where item.identifier?.rawValue == "trash" {
             item.keyEquivalent = editingText() ? "" : trash

@@ -46,6 +46,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         menuBar.open = { [weak self] in self?.current.map { ($0.space.name, $0.title) } }
         menuBar.editingText = { [weak self] in self?.shell.window.firstResponder is NSText }
         menuBar.eyes = { [weak self] in self?.assistant.eyes(of: $0) ?? .unknown }
+        menuBar.builder = { [weak self] in self?.assistant.kind == nil ? nil : self?.assistant.name }
         // WebKit hands a page the keys it has the focus for, ⌘P and ⌘1 included: something's own go to the menu first.
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
