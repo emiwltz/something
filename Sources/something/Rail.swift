@@ -31,28 +31,29 @@ struct Rail: View {
     var body: some View {
         VStack(spacing: 0) {
             nav("Show Sidebar", tip: Keys.tooltip("sidebar", "Show Sidebar"), on: false, open: { Keys.send("sidebar") }) {
-                Image(systemName: "sidebar.left").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "sidebar.left").font(Look.icon(12)).foregroundStyle(Look.Token.ink2.ui)
             }
             nav("New Space", tip: tip("new", "New Space"), on: library.selection == .newSpace, open: side.newSpace) {
-                Image(systemName: "plus").font(.system(size: 10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
-                    .frame(width: 20, height: 20).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
+                Image(systemName: "plus").font(Look.icon(10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
+                    .frame(width: 20 * Look.scale.size.factor, height: 20 * Look.scale.size.factor).background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
             }
             nav("Go to…", tip: tip("palette", "Go to…"), on: false, open: { Keys.send("palette") }) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11.5)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "magnifyingglass").font(Look.icon(11.5)).foregroundStyle(Look.Token.ink2.ui)
             }
             .disabled(Keys.command("palette")?.action == nil)
             Self.line.padding(.top, 6)
             Button { library.addGroup() } label: {
-                Image(systemName: "folder.badge.plus").font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui)
-                    .frame(width: 40, height: 26).contentShape(Rectangle())
+                Image(systemName: "folder.badge.plus").font(Look.icon(11)).foregroundStyle(Look.Token.ink3.ui)
+                    .frame(width: 40, height: 26 * Look.scale.size.factor).contentShape(Rectangle())
             }
             .buttonStyle(.plain).help("New Group").accessibilityLabel("New Group")
             .padding(EdgeInsets(top: 8, leading: 0, bottom: 4, trailing: 0))
             ScrollView {
                 VStack(spacing: 4) {
+                    let tones = Look.tiles(library.order().filter(\.isSpace).map(\.id))
                     ForEach(Array(library.sections().filter { !$0.entries.isEmpty }.enumerated()), id: \.offset) { index, section in
                         if index > 0 { Self.line.frame(width: 44) }
-                        VStack(spacing: 2) { ForEach(section.entries) { space($0) } }
+                        VStack(spacing: 2) { ForEach(section.entries) { space($0, tone: tones[$0.id]) } }
                     }
                 }
             }
@@ -60,11 +61,11 @@ struct Rail: View {
             Spacer(minLength: 0)
             nav("Templates", tip: tip("tpls", "Templates"), on: library.selection == .templates && !library.previewing,
                 open: { library.select(.templates) }) {
-                Image(systemName: "square.grid.2x2").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui)
+                Image(systemName: "square.grid.2x2").font(Look.icon(12)).foregroundStyle(Look.Token.ink2.ui)
             }
             Self.line.padding(.top, 8)
             Button { Keys.send("settings") } label: {
-                Image(systemName: "gearshape").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26)
+                Image(systemName: "gearshape").font(Look.icon(12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 26, height: 26 * Look.scale.size.factor)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
@@ -105,11 +106,11 @@ struct Rail: View {
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
-    /// A space's button, 44 by 38: its letter tile, 22 points, white on the colour of its name (a page that is not a
-    /// space yet, grey), ringed in that colour when it is open, on the selection's fill.
-    private func space(_ entry: Library.Entry) -> some View {
+    /// A space's button, 44 by 38: its letter tile, 22 points, white on `tone`, its name's unless an earlier tile has
+    /// it (a page that is not a space yet, grey), ringed in that colour when it is open, on the selection's fill.
+    private func space(_ entry: Library.Entry, tone: NSColor?) -> some View {
         let on = library.selection == .space(entry.id), now = side.eyes(entry.id), key = SidebarState.Hover.space(entry.id)
-        let tone = entry.isSpace ? Color(nsColor: Look.tile(entry.id)) : Look.Token.mist.ui
+        let tone = entry.isSpace ? Color(nsColor: tone ?? Look.tile(entry.id)) : Look.Token.mist.ui
         return Text(Self.letter(entry.title)).font(Look.font(.ui, size: 11, weight: .semibold).ui)
             .foregroundStyle(entry.isSpace ? Color.white : Look.Token.ink2.ui)
             .frame(width: 22, height: 22)
@@ -172,7 +173,7 @@ final class RailTip: NSHostingView<RailTip.Bubble> {
                     Text(state?.word ?? "not a space yet").font(Look.font(.ui, size: 11.5).ui).opacity(0.75)
                 }
                 .foregroundStyle(Look.Token.actfg.ui).lineLimit(1)
-                .padding(.horizontal, 9).frame(height: 26)
+                .padding(.horizontal, 9).frame(height: 26 * Look.scale.size.factor)
                 .background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6))
             }
             .fixedSize()

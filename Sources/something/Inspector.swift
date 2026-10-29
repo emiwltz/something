@@ -6,7 +6,7 @@
 // and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
 // quietly at the foot. A level chosen here is the person's answer: kept in the grants file, it reaches the open space
 // at once as a `granted` event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
-// would take it from every page and field. port AppKit
+// would take it from every page and field.
 import Observation
 import SomethingAgents
 import SomethingCore
@@ -176,7 +176,8 @@ import SwiftUI
             return doing + " since " + Info.day(updated, now: clock(), time: true).inSentence.replacingOccurrences(of: "today, ", with: "")
         }
         guard ["working", "waiting"].contains(agent.state), agent.alive != false, let last = lasts[agent.id] else { return doing }
-        return doing + ": " + last
+        // Joined after a colon, the agent's words begin lower-case, as the page beside it says them.
+        return doing + ": " + last.prefix(1).lowercased() + last.dropFirst()
     }
 
     /// The open space's view, when it is the one shown here.
@@ -337,7 +338,7 @@ struct InspectorView: View {
                     .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 7)).help(space.location.path)
                     .accessibilityLabel("Its file: \(path)")
                 Button { library.showInFinder(space.name) } label: {
-                    Image(systemName: "arrow.up.forward.app").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24).contentShape(Rectangle())
+                    Image(systemName: "finder").font(.system(size: 12)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("finder", "Show in Finder")).accessibilityLabel("Show in Finder")
             }
@@ -368,7 +369,7 @@ struct InspectorView: View {
             }
             if level == .run || !info.rules.isEmpty { always }
             if level != .none, !info.shown.isEmpty { now }
-            Levels.note("Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission: it stays with the space.")
+            Levels.note(Levels.sheetFine)
         } else {
             Text("It can’t be shown now, so it shows no agent.").foot()
         }

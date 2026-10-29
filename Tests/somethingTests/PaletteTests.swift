@@ -36,11 +36,11 @@ import Testing
         #expect(titles(.templates) == library.templates.map(\.title) && titles(.templates).count == 6)
         #expect(rows.map(\.section) == rows.map(\.section).sorted { order($0) < order($1) }, "the sections in their order")
         let brief = try #require(rows.first { $0.id == "space:brief" }), agents = try #require(rows.first)
-        #expect(brief.kind == .space(.think, open: true) && brief.sub == "Agents")
-        #expect(agents.kind == .space(.wait, open: false) && agents.sub == "Agents" && agents.target == "agents")
+        #expect(brief.kind == .space(.think, open: true) && brief.sub == "Work")
+        #expect(agents.kind == .space(.wait, open: false) && agents.sub == "Work" && agents.target == "agents")
         #expect(rows.filter { if case .space(_, true) = $0.kind { true } else { false } }.count == 1, "only the open space is marked")
         #expect(rows.first { $0.id == "action:new" }?.kind == .action(key: "⌘N") && rows.first { $0.id == "action:sleep" }?.kind == .action(key: ""))
-        #expect(PaletteCard.label(agents) == "My agents, Agents, Waiting for you" && PaletteCard.label(brief) == "Daily brief, Agents, open, Working")
+        #expect(PaletteCard.label(agents) == "My agents, Work, Waiting for you" && PaletteCard.label(brief) == "Daily brief, Work, open, Working")
     }
 
     func order(_ section: PaletteModel.Row.Section) -> Int { [.recent, .spaces, .actions, .templates].firstIndex(of: section) ?? 0 }

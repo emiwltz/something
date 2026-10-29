@@ -32,8 +32,12 @@ final class Toast: NSView {
         layer.hold(toast)
         // It starts below its place (170% of its height, as the mockup's) and rises to it.
         let bottom = toast.bottomAnchor.constraint(equalTo: center.bottomAnchor, constant: rest + 68)
+        // Centred, it keeps clear of the sticker in its corner by the sign's width and 12 points, so they never read
+        // as one shape.
+        let sticker = center.subviews.contains { ($0 as? Glass)?.stickerShown == true }
+        let clear = sticker ? 2 * (Glass.margin + Glass.side + 12) : 32
         NSLayoutConstraint.activate([bottom, toast.centerXAnchor.constraint(equalTo: center.centerXAnchor),
-                                     toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -32)])
+                                     toast.widthAnchor.constraint(lessThanOrEqualTo: center.widthAnchor, constant: -clear)])
         (toast.bottom, toast.motion) = (bottom, motion)
         layer.layoutSubtreeIfNeeded()
         toast.move(to: rest)

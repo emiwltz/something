@@ -87,7 +87,7 @@ struct AcceptanceShell {
                            "Pebble, Done", "Stack, Asleep"], "\(labels)")
         let drawn = try stage.drawn(shell)
         // Vision may read the f of "brief" as a t beside "pages of your own": the title's start is enough.
-        for line in ["Needs You", "Agents", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
+        for line in ["Needs You", "Work", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         try await stage.appearances { suffix in
@@ -106,14 +106,14 @@ struct AcceptanceShell {
             let lines = go.map { "\($0.state == .on ? "✓ " : "")[eyes] \($0.attributedTitle?.string.replacingOccurrences(of: "\t", with: "  ") ?? "")  ⌘\($0.keyEquivalent)" }
             try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("g9-go.txt"), atomically: true, encoding: .utf8)
         }
-        // Folded, Agents hides its rows, My agents too, which Needs You still lists.
-        library.preferences.fold("Agents", true)
-        #expect(library.label(group: "Agents", count: 3) == "Agents, 3 spaces, folded")
+        // Folded, Work hides its rows, My agents too, which Needs You still lists.
+        library.preferences.fold("Work", true)
+        #expect(library.label(group: "Work", count: 3) == "Work, 3 spaces, folded")
         let folded = try stage.drawn(shell)
         #expect(folded.filter { $0.contains("My agents") }.count == 1 && !folded.contains { $0.contains("Project watch") }, "\(folded)")
-        library.preferences.fold("Agents", false)
+        library.preferences.fold("Work", false)
     }
-    /// The sidebar and its groups (W2): Agents, Notes and Breaks, Breaks folded with its count, Daily brief open, the
+    /// The sidebar and its groups (W2): Work, Notes and Breaks, Breaks folded with its count, Daily brief open, the
     /// pointer over Project watch, whose "…" shows. An open menu cannot be drawn offscreen: its structure is checked by
     /// value and written beside the picture as b3-menu.txt.
     @Test("b3: sidebar groups") func b3() async throws {
@@ -128,15 +128,15 @@ struct AcceptanceShell {
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
         let sections = library.sections()
-        #expect(sections.map(\.group) == ["Agents", "Notes", "Breaks"])
+        #expect(sections.map(\.group) == ["Work", "Notes", "Breaks"])
         #expect(sections.map { $0.entries.map(\.title) } == [["Daily brief", "My agents", "Project watch"], ["Logbook", "Oracle"], ["Pebble", "Stack"]])
         #expect(library.folded("Breaks") && library.label(group: "Breaks", count: 2) == "Breaks, 2 spaces, folded")
-        #expect(library.label(group: "Agents", count: 3) == "Agents, 3 spaces, open")
+        #expect(library.label(group: "Work", count: 3) == "Work, 3 spaces, open")
         #expect(library.stops().contains(.space("pet")) == false, "a folded group's rows are not stops")
         let row = try #require(library.entry("project"))
         #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
         let menu = SidebarMenu.text(library.menu(for: row))
-        #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
+        #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Work  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
                          "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export", "—",
                          "Move to Trash…  (red)"])
         if let gallery {
@@ -144,7 +144,7 @@ struct AcceptanceShell {
             try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b3-menu.txt"), atomically: true, encoding: .utf8)
         }
         let drawn = try stage.drawn(shell)
-        for line in ["Agents", "Notes", "Breaks", "Daily bri", "Project watch", "Oracle"] {
+        for line in ["Work", "Notes", "Breaks", "Daily bri", "Project watch", "Oracle"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
@@ -256,7 +256,7 @@ struct AcceptanceShell {
         #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
         let drawn = try stage.drawn(shell)
         #expect(drawn.contains { $0.contains("Your spaces appear here") }, "the drawn sidebar says where the spaces will be: \(drawn)")
-        #expect(!drawn.contains { ["Agents", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
+        #expect(!drawn.contains { ["Work", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "b6" + suffix, root: stage.home.root)
         }
@@ -441,11 +441,9 @@ struct AcceptanceShell {
         let order = library.order()
         #expect(order.map { Rail.letter($0.title) } == ["D", "M", "P", "L", "O", "P", "S"])
         #expect(order.map { Rail.tip($0, Stage.moment[$0.id] ?? .sleep) }.first == "Daily brief · Working")
-        // Neighbours of a group never share a colour here.
-        for section in library.sections() {
-            let tones = section.entries.map { Look.tile($0.id) }
-            #expect(zip(tones, tones.dropFirst()).allSatisfy { $0 != $1 }, "\(section.group ?? "")")
-        }
+        // Eight spaces or fewer never share a colour in the rail.
+        let tones = Look.tiles(order.filter(\.isSpace).map(\.id))
+        #expect(order.count <= 8 && Set(tones.values.map(\.description)).count == tones.count, "\(tones)")
         let spaces = order.map { Library.label($0, Stage.moment[$0.id] ?? .sleep) }
         let said = await AcceptanceBuild.read(host) { words in spaces.allSatisfy(words.contains) }
         #expect(said.filter(spaces.contains) == spaces && !said.contains("Needs You"), "\(said)")
@@ -711,11 +709,14 @@ struct AcceptanceShell {
         #expect(await wait(until: { model.kind == "claude" }))
         let view = try await stage.open("week-end", in: shell, library)
         view.engine.update(outside: weekendWorld(stage.home.places.home))
+        view.push()   // the app's timer pushes four times a second; no timer runs here
         // Its page's own card hears them before any picture is drawn.
-        for _ in 0..<100 {
-            if (try? await run(view, "return document.getElementById('list').textContent") as? String)?.contains("atelier") == true { break }
+        var list = ""
+        for _ in 0..<200 where !list.contains("run the tests?") {
+            list = (try? await run(view, "return document.getElementById('list').textContent") as? String) ?? ""
             await wait(0.05)
         }
+        #expect(list.contains("run the tests?"), "the page lists what Info lists: \(list)")
         shell.layer.announce = { _ in }
         (info.current, info.clock) = ({ view }, { Stage.local })
         info.show(view.space)
@@ -756,7 +757,7 @@ struct AcceptanceShell {
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
         // The agents its page sees: X5's, all of them, as its page receives them, each with what it did last.
         #expect(Set(info.shown.map(\.id)) == Set(Self.weekendWorld(stage.home.places.home).agents.map(\.id)), "\(info.shown.map(\.id))")
-        #expect(Set(info.shown.map(info.doing)) == ["working: Write the login form", "waits for you: Run the tests?", "idle since 16:10"],
+        #expect(Set(info.shown.map(info.doing)) == ["working: write the login form", "waits for you: run the tests?", "idle since 16:10"],
                 "\(info.shown.map(info.doing))")
         var unknown = Agent(id: "other-1", kind: "other", origin: "elsewhere")
         unknown.state = "unknown"
@@ -1148,6 +1149,8 @@ struct AcceptanceShell {
         let card = Self.inWindow(shell.glass, shell.glass.card.frame)
         #expect(card.maxY <= shell.window.frame.height && card.maxX <= shell.window.frame.width, "\(card)")
         #expect(shell.glass.sticker.isHidden && shell.window.toolbar?.isVisible == false)
+        // The hint of the first moments goes after 2.6 s: both pictures are drawn without it (2-6-alone has it).
+        #expect(await wait { !shell.layer.subviews.contains { $0 is NSHostingView<PageFullHint> } }, "the hint is gone")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "2-8" + suffix, root: stage.home.root, keyed: false)
         }
@@ -1243,7 +1246,7 @@ struct AcceptanceShell {
             try stage.home.space(name, page(#"{"contract": 1, "title": "\#(title)"}"#, "<p>Invented.</p>"))
         }
         let (shell, library, _) = stage.window(NSSize(width: 1000, height: 660))
-        library.preferences.groups = Stage.work.map { Preferences.Group(name: $0.0, spaces: $0.0 == "Notes" ? $0.1 + more.map(\.0) : $0.1) }
+        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.0 == "Notes" ? $0.1 + more.map(\.0) : $0.1) }
         library.relist()
         try Self.eyes(shell, Stage.moment)
         let brief = try await stage.open("brief", in: shell, library)
@@ -1276,6 +1279,59 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }
+        // The chrome grows with the words at Larger (6.3): a nav row 30 × 1.24, the first group's header 25 × 1.24.
+        #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
+        try await Stage.alone {
+            Look.scale.size = .larger
+            #expect(abs(SidebarView.nav - 30 * 1.24) < 0.01)
+            #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
+        }
+    }
+
+    /// Forty spaces in three groups, which no frozen step shows: the sidebar at the main size and the rail in the
+    /// smallest window each scroll to the last space, and Go to… finds it. Drawn as forty-sidebar and forty-rail.
+    @Test("Forty spaces") func fortySpaces() async throws {
+        let stage = try Stage("shell-forty")
+        defer { stage.remove() }
+        let names = (1...40).map { String(format: "s%02d", $0) }
+        for (index, name) in names.enumerated() {
+            try stage.home.space(name, page(#"{"contract": 1, "title": "Invented \#(index + 1)"}"#, "<p>Invented.</p>"))
+        }
+        let (shell, library, _) = stage.window()
+        library.preferences.groups = [("Home", 0..<14), ("Studio", 14..<27), ("Later", 27..<40)].map { Preferences.Group(name: $0.0, spaces: Array(names[$0.1])) }
+        library.relist()
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let last = try #require(library.order().last { names.contains($0.id) })
+        #expect(library.order().filter { names.contains($0.id) }.count == 40)
+        // The last space can be scrolled into view: the column's list reaches past it.
+        func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
+        func scrolls(_ host: NSView) throws -> Bool {
+            let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
+            guard let document = list.documentView, document.frame.height > list.contentView.bounds.height else { return false }
+            list.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - list.contentView.bounds.height : 0))
+            list.reflectScrolledClipView(list.contentView)
+            return list.contentView.documentVisibleRect.maxY >= document.frame.height - 1
+                || (!document.isFlipped && list.contentView.documentVisibleRect.minY <= 1)
+        }
+        let host = shell.split.splitViewItems[0].viewController.view
+        shell.window.layoutIfNeeded()
+        #expect(!shell.rail && (library.sidebar.ends.max() ?? 0) > host.frame.height, "the list is longer than the column")
+        #expect(try scrolls(host), "the sidebar scrolls to \(last.title)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "forty-sidebar" + suffix, root: stage.home.root)
+        }
+        shell.window.setContentSize(NSSize(width: 640, height: 480))
+        shell.window.layoutIfNeeded()
+        #expect(await wait { shell.rail }, "the smallest window has the rail")
+        #expect(try scrolls(shell.split.splitViewItems[0].viewController.view), "the rail scrolls to \(last.title)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "forty-rail" + suffix, root: stage.home.root)
+        }
+        // Go to… finds it by its title.
+        let palette = PaletteModel(library: library, eyes: { _ in .sleep }, enabled: { _ in true })
+        palette.query = last.title
+        #expect(palette.rows.first { $0.section == .spaces }?.id == "space:" + last.id, "\(palette.rows.map(\.id))")
     }
 
     /// A calm toolbar where no space is open (2.10): on New Space and Templates, Point, Info and Page Full Screen are

@@ -21,16 +21,13 @@ final class Stage {
     /// The spaces made from share/templates: file name and title as the mockup shows them.
     static let templates = [("brief", "Daily brief"), ("agents", "My agents"), ("project", "Project watch"),
                             ("logbook", "Logbook"), ("pet", "Pebble"), ("stack", "Stack")]
-    /// The sidebar's groups in the mockup, by space name (groups are a view: the spaces stay flat on disk). W2, which
-    /// builds the groups, is the first to read them.
-    static let groups = [("Agents", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
-    /// Round 2's names for them, as its frozen steps show them: Work, Notes, Breaks. A scenario of round 2 lists its
-    /// window's spaces in them (`work`).
-    static let work = [("Work", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
+    /// The sidebar's groups in the mockup, by space name (groups are a view: the spaces stay flat on disk), in round
+    /// 2's names, as every frozen step shows them: Work, Notes, Breaks.
+    static let groups = [("Work", ["brief", "agents", "project"]), ("Notes", ["logbook", "oracle"]), ("Breaks", ["pet", "stack"])]
 
     /// Lists `library`'s spaces in round 2's groups.
     static func work(_ library: Library) {
-        library.preferences.groups = work.map { Preferences.Group(name: $0.0, spaces: $0.1) }
+        library.preferences.groups = groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
         library.relist()
     }
     /// The mockup's moment: Thursday 22 October 2026, 18:20, in UTC (`zone`), fixed so it cannot fall back to the real

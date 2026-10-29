@@ -321,6 +321,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             button.constraints.filter { [.width, .height].contains($0.firstAttribute) }.forEach { $0.constant *= now.factor / size.factor }
             button.symbolConfiguration = Shell.symbol(item.itemIdentifier)
             if item.itemIdentifier == Shell.point { button.font = Look.font(.ui, size: 12, weight: .medium) }
+            // Its words are an attributed title, written with the font of the moment: written again in the new one.
+            if let tool = button as? ToolButton { let on = tool.pressed; tool.pressed = on }
         }
         glass.place()
         heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
