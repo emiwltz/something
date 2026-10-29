@@ -214,7 +214,7 @@ struct AcceptanceTrust {
         panel.place(beside: shell.window, screen: Self.desk)
         #expect(panel.title == "Claude Code wants to run a command" && box.accessibilityLabel() == "Always for this space" && box.state == .off)
         #expect(PanelsTests.texts(panel.contentView) == ["something", "·  Permission", "", "Claude Code wants to run a command",
-                                                         "Started by My agents · just now", "It will run one command in the My agents space.",
+                                                         "Started by My agents · just now", "It will run one command.",
                                                          "Runs in", "~/code/shop", "The exact command · 1 line", "npm test",
                                                          "Keeps exactly this command, for Claude Code, in ~/code/shop. You can revoke it in the space’s Info.",
                                                          "No space can see or click this window."])

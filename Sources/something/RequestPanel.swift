@@ -172,7 +172,8 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
             denyButton = LinkButton("Don't Answer", size: 12, weight: .semibold, target: self, action: #selector(deny))
             views += ask(prompt.questions)
         } else {
-            views.append(Self.text(Words.effect(prompt.request.tool, space: who.space), Look.body))
+            // An agent a space started works in its own folder, which Runs in says: the space is no place for it.
+            views.append(Self.text(Words.effect(prompt.request.tool, space: who.assistant ? who.space : nil), Look.body))
             if let folder = who.folder { views.append(Self.runsIn(folder)) }
             if let exact = prompt.input ?? prompt.request.about {
                 let code = CommandBox(exact, target: self, action: #selector(expand))
