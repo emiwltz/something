@@ -145,7 +145,7 @@ enum Frozen {
     @Test func theAssistantsPromiseIsTheSameWordsEverywhere() throws {
         let promise = "something answers for you only where you said so: one exact command you allowed Always for a space, and "
             + "every permission your assistant asks while Full Access is on. Your assistant may change your spaces and run "
-            + "something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
+            + "something’s own commands without asking; everything else it does asks you, as your agent’s own settings decide."
         for file in ["README.md", "AGENTS.md", "Sources/something/Ask.swift"] {
             let text = try String(contentsOf: ContractFiles.root.appendingPathComponent(file), encoding: .utf8)
             // The documents wrap their lines: compare with every run of white space as one space.

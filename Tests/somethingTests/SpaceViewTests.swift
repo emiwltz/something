@@ -464,7 +464,7 @@ import WebKit
         let question = RightsQuestion(space: "Review", description: nil, level: .talk, folder: nil, page: "/Users/example/something/spaces/review.html")
         let (sheet, answer) = Ask.rights(question, home: "/Users/example")
         #expect(PanelsTests.texts(sheet.contentView) == ["Review would like to work with your agents", "~/something/spaces/review.html", Levels.sheetFine])
-        #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.role) == [.cancel, .primary])
+        #expect(sheet.buttons.map(\.title) == ["Don’t Allow", "Allow"] && sheet.buttons.map(\.role) == [.cancel, .primary])
         #expect(sheet.buttons[1].isEnabled && answer() == RightsAnswer(level: .talk, folder: nil))
         let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
                                                    characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))

@@ -67,7 +67,7 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
    window of the Mac, which a space cannot draw or answer. The exceptions are the person's own, with the same words in
    the README and the app: "something answers for you only where you said so: one exact command you allowed Always for
    a space, and every permission your assistant asks while Full Access is on. Your assistant may change your spaces and
-   run something's own commands without asking; everything else it does asks you, as your agent's own settings
+   run something’s own commands without asking; everything else it does asks you, as your agent’s own settings
    decide." A lasting rule ("Always for this space", a checkbox beside Allow Once) is offered only for one plain command
    of an agent a space started; it keeps that exact command, kind and folder in the space's grant, and something then
    answers it alone (`decision.by` `rule`, a journal line), until Revoke in Info or Settings › Advanced. Full Access

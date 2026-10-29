@@ -523,7 +523,7 @@ struct AcceptanceTrust {
         #expect(sheet.title == "Open this link?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
         #expect(sheet.accessibilitySubrole() == .dialog)
         #expect(PanelsTests.texts(sheet.contentView) == ["Open this link?", "Daily brief wants to open news.example.com in your browser.",
-                                                         url.absoluteString, "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something."])
+                                                         url.absoluteString, "Spaces can’t reach the Internet. A link opens only when you say so, in your own browser, outside something."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Open in Browser"] && sheet.buttons.map(\.role) == [.cancel, .primary])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
         // The server is bold in the sentence and in the link, the rest plain; the scheme is quieter than the path.
@@ -612,12 +612,12 @@ struct AcceptanceTrust {
         #expect(sheet.title == "Move Daily brief and its memory to the Trash?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
         #expect(PanelsTests.texts(sheet.contentView) == ["Move Daily brief and its memory to the Trash?", "These go with it:",
                                                          "Its page", "brief.html", "What it remembers", "12 entries",
-                                                         "Its assistant's conversation", "3 messages",
+                                                         "Its assistant’s conversation", "3 messages",
                                                          "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Move to Trash"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
         let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"), messages: shell.assistant.messages(of: "pet"))
-        #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant's conversation", "empty"])
+        #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant’s conversation", "empty"])
         // The balanced title keeps the two lines it has at the full column, as the field itself draws them.
         let title = try #require(Self.fields(sheet.contentView).first { $0.stringValue == sheet.title })
         let full = try #require(title.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: Sheet.column(), height: 10_000)).height)

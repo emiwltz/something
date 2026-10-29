@@ -571,12 +571,12 @@ struct AcceptanceBuild {
         #expect(sheet.title == "Waiting room would like to work with your agents" && sheet.frame.width == 440 && !sheet.isAlert)
         #expect(PanelsTests.texts(sheet.contentView) == ["Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html",
                                                          "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."])
-        #expect(sheet.buttons.map(\.title) == ["Don't Allow", "Allow"] && sheet.buttons.map(\.hint) == ["esc", nil])
+        #expect(sheet.buttons.map(\.title) == ["Don’t Allow", "Allow"] && sheet.buttons.map(\.hint) == ["esc", nil])
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].isEnabled)
         #expect(sheet.accessibilitySubrole() == .dialog && answer() == RightsAnswer(level: .watch, folder: nil))
         // What VoiceOver reads (the level's sentence, a plain text of SwiftUI, is out of reach offscreen).
         let said = ["Two people", "Waiting room would like to work with your agents", "~/something/spaces/waiting-room.html", "With your agents: Watch"]
-            + [Levels.sheetFine, "Don't Allow", "Allow"]
+            + [Levels.sheetFine, "Don’t Allow", "Allow"]
         let words = await Self.read(try #require(sheet.contentView)) { $0 == said }
         #expect(words == said, "\(words)")
         // Under the toolbar, centred over the space beside the sidebar.

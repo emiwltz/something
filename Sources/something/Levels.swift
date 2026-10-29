@@ -220,7 +220,7 @@ extension Ask {
         lines.addArrangedSubview(choice)
         choice.widthAnchor.constraint(equalToConstant: text).isActive = true
         let sheet = Sheet(icon: .symbol("person.2"), title: "\(question.space) would like to work with your agents", block: lines, fine: Levels.sheetFine,
-                          actions: [.init(title: "Don't Allow", role: .cancel, hint: "esc"), .init(title: "Allow", role: .primary)], width: rightsWidth)
+                          actions: [.init(title: "Don’t Allow", role: .cancel, hint: "esc"), .init(title: "Allow", role: .primary)], width: rightsWidth)
         let allow = sheet.buttons[1]
         allow.enable(answer.ready)
         refit = { [weak sheet] in

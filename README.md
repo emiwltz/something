@@ -113,8 +113,8 @@ mode, Amp cannot be interrupted) is in [the guide](share/guide.md#what-each-kind
 ## The promise
 
 something answers for you only where you said so: one exact command you allowed Always for a space, and every
-permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something's own
-commands without asking; everything else it does asks you, as your agent's own settings decide.
+permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something’s own
+commands without asking; everything else it does asks you, as your agent’s own settings decide.
 
 Your assistant is the agent you chose, working in `~/something/spaces`. Each space has its own: its own conversation
 with that agent, started at its first message and shown when the space is open. New Space has one too, and the space it

@@ -32,7 +32,7 @@ struct RightsAnswer: Equatable {
 }
 
 protocol Asking: AnyObject {
-    /// The person's answer, or nil when they chose "Don't Allow": nothing is remembered and the space gets nothing new.
+    /// The person's answer, or nil when they chose "Don’t Allow": nothing is remembered and the space gets nothing new.
     func rights(_ question: RightsQuestion) -> RightsAnswer?
     /// true when the person lets the space put an agent of `kind`, working in `folder`, in `mode`, which makes it ask less.
     func lowers(_ mode: String, kind: String, folder: String?, space: String) -> Bool
@@ -132,7 +132,7 @@ final class NativeAsk: Asking {
 
 /// The README's promise, word for word (AGENTS.md rule 2): under Settings › Advanced's permissions, and in the README.
 enum Promise {
-    static let sentence = "something answers for you only where you said so: one exact command you allowed Always for a space, and every permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something's own commands without asking; everything else it does asks you, as your agent's own settings decide."
+    static let sentence = "something answers for you only where you said so: one exact command you allowed Always for a space, and every permission your assistant asks while Full Access is on. Your assistant may change your spaces and run something’s own commands without asking; everything else it does asks you, as your agent’s own settings decide."
 }
 
 enum Ask {
@@ -160,7 +160,7 @@ enum Ask {
         let sheet = alert("Let “\(space)” start \(Registry.app.name(of: kind)) in a mode where it \(words(forMode: mode))?",
               "It works in \(folder.map { Words.path($0, home: home) } ?? "a folder something does not know"), for this launch only. "
                 + "In this mode (\(mode)) it asks you less before it acts.",
-              buttons: ["Allow", "Don't Allow"], escape: 1)
+              buttons: ["Allow", "Don’t Allow"], escape: 1)
         sheet.buttons[0].keyEquivalent = ""
         return sheet
     }
@@ -189,7 +189,7 @@ enum Ask {
         return Sheet(icon: .symbol("globe"), title: "Open this link?",
                      body: [(space + " wants to open ", false), (name, true), (mail ? " in your mail app." : " in your browser.", false)],
                      block: Box(address, fill: .sunk, ring: .line, radius: 9, insets: NSEdgeInsets(top: 9, left: 11, bottom: 9, right: 11)),
-                     fine: "Spaces can't reach the Internet. A link opens only when you say so, in your own browser, outside something.",
+                     fine: "Spaces can’t reach the Internet. A link opens only when you say so, in your own browser, outside something.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: mail ? "Open in Mail" : "Open in Browser", role: .primary)])
     }
 
@@ -201,7 +201,7 @@ enum Ask {
         return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
                      rows: [.init(mark: .symbol("doc"), label: [("Its page", false)], meta: page),
                             .init(mark: .symbol("square.3.layers.3d"), label: [("What it remembers", false)], meta: memory),
-                            .init(mark: .symbol("bubble.left"), label: [("Its assistant's conversation", false)],
+                            .init(mark: .symbol("bubble.left"), label: [("Its assistant’s conversation", false)],
                                   meta: messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")],
                      fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
