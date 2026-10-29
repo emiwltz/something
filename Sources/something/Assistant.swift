@@ -561,7 +561,9 @@ import SomethingCore
             else if agent?.builder?.preAllowed == false {
                 "\(name) works in \(folder). It asks as your own \(name) settings say." + (full.map { " " + $0 } ?? "")
             }
-            else if id == nil ? askEverything : asking { "\(name) works in \(folder). It asks you before every change." }
+            else if id == nil ? askEverything : asking {
+                "\(name) works in \(folder). It asks you before every change." + (full.map { " " + $0 } ?? "")
+            }
             else {
                 "\(name) works in \(folder). It may change your spaces and run something’s own commands there without asking. "
                     + (full ?? "Anything else asks you.")

@@ -945,6 +945,10 @@ import WebKit
         model.choose("claude")
         model.toggleAsking()
         #expect(model.firstLines[0] == "Claude Code \(folder) It asks you before every change.")
+        // Both switches on: something answers every permission, and the line says so after "asks you".
+        model.fullAccess = true
+        #expect(model.firstLines[0] == "Claude Code \(folder) It asks you before every change. Full Access is on: something allows what it asks.")
+        model.fullAccess = false
         await finish(home, model)
     }
 

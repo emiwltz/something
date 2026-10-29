@@ -762,6 +762,9 @@ struct AcceptanceShell {
         #expect(Set(info.shown.map(\.id)) == Set(Self.weekendWorld(stage.home.places.home).agents.map(\.id)), "\(info.shown.map(\.id))")
         #expect(Set(info.shown.map(info.doing)) == ["working: write the login form", "waits for you: run the tests?", "idle since 16:10"],
                 "\(info.shown.map(info.doing))")
+        // Lower-cased after the colon, but for an acronym's capitals and "I".
+        #expect(["Write the form", "API key added", "README updated", "I wrote it", "A file"].map(Info.afterColon)
+                == ["write the form", "API key added", "README updated", "I wrote it", "a file"])
         var unknown = Agent(id: "other-1", kind: "other", origin: "elsewhere")
         unknown.state = "unknown"
         #expect(Info.doing(unknown) == "state unknown", "the unknown is said")
@@ -1282,12 +1285,22 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }
-        // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24. The nav rows
-        // grow by the same factor (SidebarView.nav); only the header's drawn height is measured here.
+        // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24, and the nav
+        // rows, 30 × 1.24: New Space's and Go to…'s tops, as drawn, one row apart (the same letters' caps, so the same
+        // height above each row's middle).
+        func row() throws -> CGFloat {
+            let rep = try stage.sidebar(shell), lines = try Picture.lines(rep), scale = CGFloat(rep.pixelsHigh) / rep.size.height
+            let new = try #require(lines.first { $0.words.contains("New Space") }), go = try #require(lines.first { $0.words.contains("Go to") })
+            return (go.box.minY - new.box.minY) / scale
+        }
         #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
+        let normal = try row()
+        #expect(abs(normal - 30) < 1, "\(normal)")
         try await Stage.alone {
             Look.scale.size = .larger
             #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
+            let larger = try row()
+            #expect(abs(larger - 30 * 1.24) < 1, "\(larger)")
         }
     }
 
@@ -1307,15 +1320,25 @@ struct AcceptanceShell {
         defer { brief.close() }
         let last = try #require(library.order().last { names.contains($0.id) })
         #expect(library.order().filter { names.contains($0.id) }.count == 40)
-        // The last space can be scrolled into view: the column's list reaches past it.
+        // The last row can be scrolled into view: scrolled to its end, the column shows its last row whole, the
+        // sidebar's above its fade (its bottom in the list, `ends`), the rail's lowest tile inside what the clip shows.
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
         func scrolls(_ host: NSView) throws -> Bool {
-            let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
-            guard let document = list.documentView, document.frame.height > list.contentView.bounds.height else { return false }
-            list.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - list.contentView.bounds.height : 0))
-            list.reflectScrolledClipView(list.contentView)
-            return list.contentView.documentVisibleRect.maxY >= document.frame.height - 1
-                || (!document.isFlipped && list.contentView.documentVisibleRect.minY <= 1)
+            let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first), clip = list.contentView
+            guard let document = list.documentView, document.frame.height > clip.bounds.height else { return false }
+            clip.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - clip.bounds.height : 0))
+            list.reflectScrolledClipView(clip)
+            host.layoutSubtreeIfNeeded()
+            if shell.rail {
+                // The rail's last tile, the lowest in its list, whichever space it is.
+                let tiles = library.sidebar.tiles.values.compactMap(\.view).map { $0.convert($0.bounds, to: clip) }
+                let lowest = try #require(tiles.max { document.isFlipped ? $0.maxY < $1.maxY : $0.minY > $1.minY })
+                return tiles.count >= 40 && clip.bounds.insetBy(dx: -1, dy: -1).contains(lowest)
+            }
+            // The visible part, measured from the list's top as `ends` are.
+            let visible = clip.documentVisibleRect, top = document.isFlipped ? visible.minY : document.frame.height - visible.maxY
+            let bottom = try #require(library.sidebar.ends.max())
+            return top <= bottom - 30 && top + visible.height - SidebarView.fade >= bottom - 1
         }
         let host = shell.split.splitViewItems[0].viewController.view
         shell.window.layoutIfNeeded()

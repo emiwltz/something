@@ -176,8 +176,15 @@ import SwiftUI
             return doing + " since " + Info.day(updated, now: clock(), time: true).inSentence.replacingOccurrences(of: "today, ", with: "")
         }
         guard ["working", "waiting"].contains(agent.state), agent.alive != false, let last = lasts[agent.id] else { return doing }
-        // Joined after a colon, the agent's words begin lower-case, as the page beside it says them.
-        return doing + ": " + last.prefix(1).lowercased() + last.dropFirst()
+        return doing + ": " + Self.afterColon(last)
+    }
+
+    /// `words` joined after a colon: lower-case first, as the page beside it says them, unless they begin with "I" or
+    /// an acronym ("API key"), whose capitals are the word's own.
+    static func afterColon(_ words: String) -> String {
+        let first = words.prefix { $0.isLetter }
+        let own = first == "I" || (first.count > 1 && first.allSatisfy(\.isUppercase))
+        return own ? words : words.prefix(1).lowercased() + words.dropFirst()
     }
 
     /// The open space's view, when it is the one shown here.
