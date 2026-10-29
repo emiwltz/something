@@ -1218,7 +1218,7 @@ struct AcceptanceShell {
         #expect(model.cardShown && model.title == "Logbook" && model.place.space == "logbook")
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
         #expect(model.name == "Claude Code" && AgentModelChip.label(model).hasPrefix("Claude Code, "), "\(AgentModelChip.label(model))")
-        #expect(model.presence.header == "Asleep · wakes on your next message" && model.placeholder == "Ask for a change · it wakes up", "\(model.presence.header) \(model.placeholder)")
+        #expect(model.presence.header == "Asleep · wakes on your next message" && model.placeholder == "Ask for a change · / for Claude Code’s commands", "\(model.presence.header) \(model.placeholder)")
         let bar = MenuBar(builders: nil)
         bar.open = { ("logbook", "Logbook") }
         bar.refresh()
@@ -1257,23 +1257,31 @@ struct AcceptanceShell {
         let whole = try stage.sidebar(shell), lines = try Picture.lines(whole), drawn = lines.map(\.words)
         #expect(drawn.last == "something", "the foot says something alone: \(drawn)")
         #expect(drawn.contains("Templates") && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
-        // The list is longer than its column, and its last row fades out above Templates: drawn as the window shows the
-        // column, below the title bar, Stack, under the fade's 16 points, stands out far less than Pebble, a row above
-        // it; drawn at the sidebar's full height, Stack clear of the fade, both stand out alike.
+        // The list is longer than its column, and it ends on a whole row that fades out above Templates. Drawn as the
+        // window shows the column, below the title bar: the last row read above Templates spans what it spans at the
+        // sidebar's full height (not cut through), stands out less than there (faded), and nothing of a next row is
+        // drawn between it and Templates.
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
         let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
         #expect((list.documentView?.frame.height ?? 0) > list.contentView.bounds.height, "the list overflows its column")
-        let pebble = try #require(lines.first { $0.words == "Pebble" }?.box), stack = try #require(lines.first { $0.words == "Stack" }?.box)
-        let shown = try stage.sidebar(shell, shown: true)
-        let (above, under) = (Self.spread(shown, pebble), Self.spread(shown, stack))
-        #expect(abs(Self.spread(whole, stack) - Self.spread(whole, pebble)) < 0.1 && above > 0.4 && under < above / 2, "\(above) \(under)")
+        let shown = try stage.sidebar(shell, shown: true), seen = try Picture.lines(shown)
+        let templates = try #require(seen.first { $0.words.hasSuffix("Templates") }?.box, "\(seen.map(\.words))")
+        let last = try #require(seen.filter { $0.box.maxY < templates.minY }.max { $0.box.minY < $1.box.minY })
+        let full = try #require(lines.first { $0.words == last.words }?.box, "\(last.words) is a row of the whole list")
+        #expect(last.box.minY < full.minY + 4 && last.box.maxY > full.maxY - 4, "\(last.words) is drawn whole: \(last.box) \(full)")
+        let (faded, clear) = (Self.spread(shown, last.box), Self.spread(whole, full))
+        #expect(clear > 0.4 && faded < clear * 0.85, "\(last.words) fades: \(faded) \(clear)")
+        let gap = CGRect(x: full.minX, y: last.box.maxY + 4, width: full.width, height: max(1, templates.minY - last.box.maxY - 8))
+        #expect(Self.spread(shown, gap) < 0.05, "no row is cut through between \(last.words) and Templates")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }
     }
 
     /// A calm toolbar where no space is open (2.10): on New Space and Templates, Point, Info and Page Full Screen are
-    /// gone rather than greyed, and the name opens nothing; they come back with a space. Drawn on Templates.
+    /// gone rather than greyed, and the name opens nothing; they come back with a space. Drawn on Templates. Page Full
+    /// Screen goes too, though 2.10's note keeps it there: X9.1 A and slice S5 ("nothing space-only") came after, and a
+    /// page's full screen has no page to show.
     @Test("2-10: a calm toolbar without a space") func v2_10() async throws {
         let stage = try Stage("shell-2-10")
         defer { stage.remove() }

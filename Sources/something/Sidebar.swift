@@ -40,6 +40,8 @@ import SwiftUI
     var rail = false
     /// The rail's tiles, by space, where the Shell lays the name of the one under the pointer (RailTip).
     @ObservationIgnored var tiles: [String: Weak] = [:]
+    /// The bottoms of the list's rows, in the list's own space: where its shown part may end (SidebarView.shown).
+    var ends: [CGFloat] = []
     /// A view held without keeping it.
     struct Weak { weak var view: NSView? }
 
@@ -239,6 +241,15 @@ struct SidebarView: View {
     var state: SidebarState { library.sidebar }
     /// What the list says while there is no space, and no group header shows: the center invites to make one.
     static let empty = "Your spaces appear here"
+    /// The height of the list's fade, the mockup's 22 points: most of the last row shown.
+    static let fade: CGFloat = 22
+
+    /// How tall the list is drawn in `room`: all of it when it fits; else down to the end of the last row that fits
+    /// whole (`ends`, the rows' bottoms in the list), so that no row is cut through and the last one is the faded one.
+    static func shown(_ room: CGFloat, ends: [CGFloat]) -> CGFloat {
+        guard let last = ends.max(), last + fade > room else { return room }
+        return ends.filter { $0 <= room }.max() ?? room
+    }
 
     var body: some View {
         if column && state.rail {
@@ -278,18 +289,21 @@ struct SidebarView: View {
             }
             .foregroundStyle(Look.Token.ink3.ui)
             .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2))
-            // A list longer than the sidebar fades out above Templates rather than being cut through a row; scrolled to
-            // its end, the last row clears the fade.
-            ScrollView {
-                list.padding(.bottom, 16)
+            // A list longer than the sidebar ends on a whole row, which fades out above Templates, rather than being
+            // cut through a row; scrolled to its end, the last row clears the fade.
+            GeometryReader { box in
+                ScrollView {
+                    list.padding(.bottom, Self.fade).coordinateSpace(.named(RowEnds.space))
+                        .onPreferenceChange(RowEnds.self) { ends in MainActor.assumeIsolated { if state.ends != ends { state.ends = ends } } }
+                }
+                .scrollIndicators(.never)
+                .mask(VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .black.opacity(0.15)], startPoint: .top, endPoint: .bottom).frame(height: Self.fade)
+                })
+                .frame(height: Self.shown(box.size.height, ends: state.ends))
             }
-            .scrollIndicators(.never)
-            .mask(VStack(spacing: 0) {
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 16)
-            })
             .padding(.bottom, 6)
-            Spacer(minLength: 0)
             nav("tpls", label: "Templates", on: library.selection == .templates && !library.previewing, open: { library.select(.templates) }) {
                 Image(systemName: "square.grid.2x2").font(.system(size: 13)).foregroundStyle(Look.Token.ink2.ui)
             }
@@ -315,11 +329,11 @@ struct SidebarView: View {
     @ViewBuilder private var list: some View {
         // The builds whose space has no file yet: first among the spaces, under Needs You.
         let pending = assistant.builds.filter { build in assistant.space(of: build).map { library.entry($0) == nil } ?? true }
-        let builds = VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0) } }
+        let builds = VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0).rowEnd() } }
         if library.entries.isEmpty {
             if pending.isEmpty {
                 Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-                    .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).rowEnd()
             } else { builds }
         } else {
             let sections = library.sections()
@@ -329,13 +343,13 @@ struct SidebarView: View {
                 ForEach(sections, id: \.group) { section in
                     VStack(alignment: .leading, spacing: 1) {
                         if let group = section.group {
-                            header(group, count: section.entries.count)
+                            header(group, count: section.entries.count).rowEnd()
                         }
                         if section.group.map(library.folded) != true {
-                            ForEach(section.entries) { space($0) }
+                            ForEach(section.entries) { space($0).rowEnd() }
                             if section.entries.isEmpty {
                                 Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
-                                    .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8))
+                                    .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8)).rowEnd()
                             }
                         }
                     }
@@ -356,8 +370,8 @@ struct SidebarView: View {
                         .background(Circle().fill(Look.Token.needSoft.ui).frame(width: 13, height: 13))
                     Text("Needs You")
                     Spacer(minLength: 0)
-                    // In the groups' column, as their counts.
-                    Text("\(spaces.count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit().padding(.trailing, 18)
+                    // At the row's edge, as the mockup's: no chevron follows it, unlike a group's count.
+                    Text("\(spaces.count)").font(Look.font(.ui, size: 11, weight: .medium).ui).monospacedDigit()
                 }
                 .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
                 .foregroundStyle(Look.Token.needInk.ui)
@@ -365,7 +379,8 @@ struct SidebarView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Needs You, \(spaces.count) \(spaces.count == 1 ? "space" : "spaces")")
                 .accessibilityAddTraits(.isHeader)
-                ForEach(spaces) { space($0, needs: true) }
+                .rowEnd()
+                ForEach(spaces) { space($0, needs: true).rowEnd() }
             }
             .padding(EdgeInsets(top: 2, leading: 0, bottom: 6, trailing: 0))
             .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
@@ -609,5 +624,19 @@ private extension EventModifiers {
         if flags.contains(.shift) { insert(.shift) }
         if flags.contains(.option) { insert(.option) }
         if flags.contains(.control) { insert(.control) }
+    }
+}
+
+/// The bottoms of the sidebar list's rows, gathered in the list's own space.
+struct RowEnds: PreferenceKey {
+    static let space = "sidebar.list"
+    static let defaultValue: [CGFloat] = []
+    static func reduce(value: inout [CGFloat], nextValue: () -> [CGFloat]) { value += nextValue() }
+}
+
+extension View {
+    /// Tells the list where this row ends.
+    func rowEnd() -> some View {
+        background(GeometryReader { Color.clear.preference(key: RowEnds.self, value: [$0.frame(in: .named(RowEnds.space)).maxY]) })
     }
 }

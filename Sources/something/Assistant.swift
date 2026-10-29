@@ -527,7 +527,8 @@ import SomethingCore
             if presence.stuck == .cannotReachModel { return "Write now · sent when the model answers" }
             // Waiting for an answer, the way on is the request's own window, not this field: it reads as usual.
             if light == .working { return "Write the next one · sent when this one ends" }
-            return presence.state == .sleep ? "Ask for a change · it wakes up" : commands.isEmpty ? "Ask for a change…" : "Ask for a change · / for " + Words.possessive(name) + " commands"
+            // Asleep, its commands are not listed yet, but "/" says so, and the header says it wakes (X1.3).
+            return commands.isEmpty && presence.state != .sleep ? "Ask for a change…" : "Ask for a change · / for " + Words.possessive(name) + " commands"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
         }

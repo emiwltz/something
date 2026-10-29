@@ -150,7 +150,7 @@ struct AcceptanceAssistant {
                                .tool(failed: false, words: "Edited logbook.html", command: nil),
                                .reply("Grouped. Each day now starts with a small heading, newest first.")])
         #expect(AssistantCard.day(Date(timeIntervalSince1970: 1_792_404_000), now: Stage.now) == "Monday")
-        #expect(model.firstLines.isEmpty && AssistantModel.messages(model.rows) == 2 && model.placeholder == "Ask for a change · it wakes up")
+        #expect(model.firstLines.isEmpty && AssistantModel.messages(model.rows) == 2 && model.placeholder == "Ask for a change · / for Claude Code’s commands")
         #expect(model.name == "Claude Code" && model.modelWords.effort == "Low" && model.resumes)
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
         try await stage.appearances { suffix in
@@ -280,7 +280,7 @@ struct AcceptanceAssistant {
         defer { logbook.close() }
         #expect(await wait { glass.fades == fades + 1 })
         #expect(model.cardShown && glass.grown == true && model.session !== briefs && model.rows.isEmpty && model.title == "Logbook")
-        #expect(model.presence.state == .sleep && model.placeholder == "Ask for a change · it wakes up")
+        #expect(model.presence.state == .sleep && model.placeholder == "Ask for a change · / for Claude Code’s commands")
         // My agents: written to, it answers, then asks; the card leads to the request, never shows Allow.
         let agents = try await stage.open("agents", in: shell, library)
         defer { agents.close() }
@@ -571,7 +571,7 @@ struct AcceptanceAssistant {
         model.engine.lookAgain()
         #expect(await wait(until: { model.kind == "claude" }))
         let brief = try await stage.open("brief", in: shell, library)
-        #expect(model.commands.isEmpty && model.placeholder == "Ask for a change · it wakes up", "no command is known before Claude Code first runs")
+        #expect(model.commands.isEmpty && model.placeholder == "Ask for a change · / for Claude Code’s commands", "no command is known before Claude Code first runs, and \"/\" says so")
         for (sent, count) in [("Put the agents that wait for me first.", 2), ("Show the time in the weather corner, 24-hour like the masthead.", 4)] {
             model.draft = sent
             model.send()
