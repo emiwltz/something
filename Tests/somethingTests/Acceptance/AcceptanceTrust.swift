@@ -120,6 +120,8 @@ struct AcceptanceTrust {
         #expect(panel.styleMask.contains(.nonactivatingPanel) && panel.level == .floating && panel.worksWhenModal && !panel.isKeyWindow)
         #expect(panel.allowButton.title == "Allow Once" && panel.denyButton.title == "Deny" && panel.denyButton.keyEquivalent == "\u{1b}")
         #expect(panel.standardWindowButton(.closeButton)?.accessibilityLabel() == "Close: deny")
+        panel.contentView?.layoutSubtreeIfNeeded()
+        #expect(panel.denyButton.frame.width == panel.allowButton.frame.width && panel.denyButton.frame.width > 0, "Deny and Allow Once, one width")
         // Each line as full as it can be, as the mockup breaks it; folded to four, from the first, the fourth fading.
         let code = try #require(panel.code), manager = try #require(code.text.layoutManager), string = code.text.string as NSString
         var lines: [String] = []
@@ -564,6 +566,8 @@ struct AcceptanceTrust {
         #expect(PanelsTests.texts(mail.contentView)[1] == "Daily brief wants to open desk@example.com in your mail app." && mail.buttons[1].title == "Open in Mail")
         // A destructive action holding the focus never takes Return.
         let trash = Sheet(icon: .symbol("trash"), title: "Move it?", actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
+        trash.contentView?.layoutSubtreeIfNeeded()
+        #expect(trash.buttons[0].frame.width == trash.buttons[1].frame.width && trash.buttons[0].frame.width > 0, "side by side, as wide as the widest")
         #expect(trash.makeFirstResponder(trash.buttons[1]))
         trash.keyDown(with: try Self.key("\r", 36))
         #expect(trash.chosen == nil)

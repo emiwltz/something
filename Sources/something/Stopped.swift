@@ -12,6 +12,9 @@ final class Stopped: NSView {
     let assistant: AssistantModel
     let reload: PanelButton, fix: PanelButton
     private let card = NSStackView()
+    /// The card's width and the room inside it, which Unshown (Shell.swift) shares: one look, built twice, because
+    /// this one draws itself for cacheDisplay and Unshown is hosted SwiftUI.
+    static let box = (width: CGFloat(420), insets: NSEdgeInsets(top: 28, left: 30, bottom: 22, right: 30))
 
     /// The cover of `space`, which stopped; its Fix button asks `assistant`, and it fades in under Calm `motion`.
     init(_ space: SpaceView, assistant: AssistantModel, motion: Look.Motion = .calm) {
@@ -36,13 +39,13 @@ final class Stopped: NSView {
         card.setCustomSpacing(16, after: sign)
         card.setCustomSpacing(16, after: body)
         card.setCustomSpacing(14, after: buttons)
-        card.edgeInsets = NSEdgeInsets(top: 28, left: 30, bottom: 22, right: 30)
+        card.edgeInsets = Stopped.box.insets
         card.translatesAutoresizingMaskIntoConstraints = false
         card.setAccessibilityElement(true)
         card.setAccessibilityRole(.group)
         card.setAccessibilityLabel("This space stopped")
         addSubview(card)
-        NSLayoutConstraint.activate([card.widthAnchor.constraint(equalToConstant: 420), card.centerXAnchor.constraint(equalTo: centerXAnchor),
+        NSLayoutConstraint.activate([card.widthAnchor.constraint(equalToConstant: Stopped.box.width), card.centerXAnchor.constraint(equalTo: centerXAnchor),
                                      card.centerYAnchor.constraint(equalTo: centerYAnchor)])
         // The page under it, as the mockup dims it: grey, a little blurred (on the screen only), behind the veil.
         wantsLayer = true

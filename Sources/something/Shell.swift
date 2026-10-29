@@ -830,9 +830,9 @@ final class TitleLine: NSView {
     }
 }
 
-/// The center when a space cannot be shown, in the card a stopped space shows (Stopped.swift): the sign, its title in
-/// Fraunces, what keeps it from being displayed in plain words, the assistant asked to fix it, and the codes in small
-/// mono at the foot; something's own words only.
+/// The center when a space cannot be shown, in the card a stopped space shows (Stopped.box, its ring; its shadow is
+/// SwiftUI's): the sign, its title in Fraunces, what keeps it from being displayed in plain words, the assistant asked
+/// to fix it, and the codes in small mono at the foot; something's own words only.
 struct Unshown: View {
     let problems: [String], fault: AssistantModel.Fault
     let assistant: AssistantModel
@@ -850,10 +850,11 @@ struct Unshown: View {
             Text(([fault.name] + fault.codes).joined(separator: " · ")).font(Look.font(.code, size: 11).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 4)
         }
         .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-        .padding(EdgeInsets(top: 28, leading: 30, bottom: 22, trailing: 30)).frame(width: 420)
+        .padding(EdgeInsets(top: Stopped.box.insets.top, leading: Stopped.box.insets.left, bottom: Stopped.box.insets.bottom,
+                            trailing: Stopped.box.insets.right)).frame(width: Stopped.box.width)
         .background {
             RoundedRectangle(cornerRadius: Look.card, style: .continuous).fill(Look.Token.bg2.ui)
-                .overlay { RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.Token.line2.ui) }
+                .overlay { RoundedRectangle(cornerRadius: Look.card, style: .continuous).strokeBorder(Look.floatRing.token.ui) }
                 .shadow(color: .black.opacity(0.12), radius: 18, y: 10)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity).background(Look.Token.bg.ui)

@@ -241,6 +241,14 @@ import WebKit
         home.remove()
     }
 
+    /// A reply's bold stays regular (Young Serif has one weight, the system would thicken it); its code stays code.
+    @Test func aReplysBoldStaysRegular() {
+        let reply = AssistantCard.markdown("a **b** `c`")
+        #expect(String(reply.characters) == "a b c")
+        #expect(!reply.runs.contains { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true })
+        #expect(reply.runs.contains { String(reply[$0.range].characters) == "c" && $0.inlinePresentationIntent?.contains(.code) == true })
+    }
+
     @Test func theContextLineSaysWhereThePersonIs() {
         let place = AssistantModel.Place.space(title: "My [agents]\nboard", name: "agents", page: "/Users/example/something/spaces/agents.html")
         #expect(AssistantModel.context(place, home: "/Users/example")

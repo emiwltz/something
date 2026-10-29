@@ -125,6 +125,13 @@ final class FakeNotifier: Notifier {
         #expect(sheet.buttons[0].keyEquivalent.isEmpty && sheet.buttons[1].keyEquivalent == "\u{1b}")
     }
 
+    /// An alert shows something's sign, not the icon the system finds for a program run outside its .app.
+    @Test func anAlertShowsTheSign() throws {
+        let icon = try #require(Ask.alert("x").icon)
+        #expect(icon !== NSApp.applicationIconImage && icon.size == NSSize(width: 64, height: 64))
+        #expect(icon.accessibilityDescription == Sign.State.listen.word)
+    }
+
     /// The panel as VoiceOver finds it: key or not as a test says.
     final class KeyPanel: RequestPanel {
         var key = false

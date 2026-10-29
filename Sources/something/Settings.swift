@@ -487,6 +487,19 @@ enum Found {
         host.safeAreaRegions = []
         window.contentView = host
         select(model.tab)
+        follow()
+    }
+
+    /// Takes the page's size as SwiftUI measures it, at each tab and interface size: the hosting view resizes its
+    /// window only on a display cycle, which a busy Mac or a window off the screen may not give.
+    private func follow() {
+        withObservationTracking { _ = (model.heights, model.tab, Look.scale.size) } onChange: { [weak self] in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let host = window.contentView else { return }
+                window.setContentSize(host.fittingSize)
+                follow()
+            }
+        }
     }
 
     var tab: SettingsTab { model.tab }
@@ -502,6 +515,8 @@ enum Found {
 struct SettingsFrame: View {
     let model: SettingsModel
     let choose: (SettingsTab) -> Void
+    /// A tab's size and its pill's rounding, the mockup's .sf-tab (X7.1): 88 wide, rounded 8, a step above Look.control.
+    static let tab = (width: 88.0, height: 48.0, radius: 8.0)
 
     var body: some View {
         let factor = Look.scale.size.factor
@@ -518,8 +533,8 @@ struct SettingsFrame: View {
                                 Text(tab.label).font(Look.font(.ui, size: 11, weight: on ? .semibold : .medium).ui)
                             }
                             .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
-                            .frame(width: 88 * factor, height: 48 * factor)
-                            .background { if on { RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Look.Token.sel.ui) } }
+                            .frame(width: Self.tab.width * factor, height: Self.tab.height * factor)
+                            .background { if on { RoundedRectangle(cornerRadius: Self.tab.radius, style: .continuous).fill(Look.Token.sel.ui) } }
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)

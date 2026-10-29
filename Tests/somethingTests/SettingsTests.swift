@@ -245,7 +245,7 @@ import Testing
         #expect(Settings.shown?.tab == .agents, "where it was left")
     }
 
-    /// The window: the bar with the four tabs, the selected one alone pressed, 720 points wide, as high as each tab,
+    /// The window: the bar with the four tabs, which its own buttons choose, 720 points wide, as high as each tab,
     /// titled by it.
     @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowTakesEachTabsHeight() async throws {
         let home = Home(prefix: "something-settings-")
@@ -270,6 +270,12 @@ import Testing
         let labels = SettingsTab.allCases.map(\.label)
         let tabs = await AcceptanceBuild.read(content) { words in labels.allSatisfy(words.contains) }
         #expect(labels.allSatisfy(tabs.contains), "the bar's tabs, heard: \(tabs)")
+        // The bar's buttons call its `choose`, which shows the tab and titles the window. Offscreen, VoiceOver cannot
+        // reach inside the bar (AcceptanceBuild.read) to press one.
+        settings.select(.general)
+        let frame = try #require(content as? NSHostingView<SettingsFrame>).rootView
+        frame.choose(.advanced)
+        #expect(settings.tab == .advanced && settings.window.title == "Advanced")
         #expect(Set(heights.map { Int($0) }).count > 1, "the tabs are not one height: \(heights)")
         #expect(settings.window.styleMask.contains(.miniaturizable), "three lights, as the Mac's own settings")
     }
