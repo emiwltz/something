@@ -80,6 +80,25 @@ import Testing
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty && model.id == nil)
     }
 
+    /// Tab leaves the welcome's keys for the next view of the window's key loop, and ⇧Tab for the one before. A field
+    /// stands in for that view here: SwiftUI's chip joins the loop only when Full Keyboard Access is on.
+    @Test func tabMovesTheFocus() async throws {
+        let (home, model) = try assistants.assistant(["claude", "codex"], prefix: "something-tour-")
+        defer { home.remove() }
+        let (shell, _, _) = window(home, model)
+        await assistants.look(model)
+        let window = Self.shown(shell.welcome(WelcomeModel(places: home.places), onScreen: false))
+        defer { window.orderOut(nil) }
+        let keys = try #require(window.firstResponder as? WelcomeKeys), field = NSTextField(frame: NSRect(x: 0, y: 0, width: 80, height: 22))
+        keys.addSubview(field)
+        (keys.nextKeyView, field.nextKeyView) = (field, keys)
+        Self.press(window, .tab)
+        #expect(!(window.firstResponder is WelcomeKeys), "Tab moved on: \(String(describing: window.firstResponder))")
+        #expect(window.makeFirstResponder(keys))
+        keys.doCommand(by: #selector(NSResponder.insertBacktab(_:)))
+        #expect(!(window.firstResponder is WelcomeKeys), "⇧Tab moved back")
+    }
+
     /// A request while the welcome is open: its panel floats over the welcome, and Escape at the panel denies the
     /// request and leaves the welcome open.
     @Test func aRequestFloatsOverTheWelcome() async throws {
@@ -125,11 +144,11 @@ import Testing
         window.sendEvent(event)
     }
 
-    enum Key: UInt16 { case `return` = 36, escape = 53, space = 49, left = 123, right = 124, down = 125, up = 126 }
+    enum Key: UInt16 { case `return` = 36, escape = 53, space = 49, tab = 48, left = 123, right = 124, down = 125, up = 126 }
 
     /// Sends `key` to `window`, as the window server would, to its first responder.
     static func press(_ window: NSWindow, _ key: Key) {
-        let characters: [Key: String] = [.return: "\r", .escape: "\u{1b}", .space: " ", .left: "\u{F702}", .right: "\u{F703}", .down: "\u{F701}", .up: "\u{F700}"]
+        let characters: [Key: String] = [.return: "\r", .escape: "\u{1b}", .space: " ", .tab: "\t", .left: "\u{F702}", .right: "\u{F703}", .down: "\u{F701}", .up: "\u{F700}"]
         let flags: NSEvent.ModifierFlags = [.left, .right, .down, .up].contains(key) ? [.numericPad, .function] : []
         guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
                                            context: nil, characters: characters[key] ?? "", charactersIgnoringModifiers: characters[key] ?? "",

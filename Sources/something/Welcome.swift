@@ -57,6 +57,9 @@ final class WelcomeKeys: NSView, NSWindowDelegate {
     override func keyDown(with event: NSEvent) { interpretKeyEvents([event]) }
     override func insertNewline(_ sender: Any?) { model.next(assistant) }
     override func cancelOperation(_ sender: Any?) { model.end() }
+    /// Tab and ⇧Tab still move the focus, to the Built by chip and back.
+    override func insertTab(_ sender: Any?) { window?.selectNextKeyView(sender) }
+    override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(sender) }
     /// Any other command of the text system does nothing, without the beep.
     override func doCommand(by selector: Selector) { if responds(to: selector) { super.doCommand(by: selector) } }
 
@@ -105,7 +108,8 @@ struct WelcomeView: View {
         .onAppear { model.light.cycle(motion) }
     }
 
-    private var builder: String { "\(assistant.name) · \(assistant.modelWords.model)" }
+    /// The picture's builder: none named before one is found.
+    private var builder: String { assistant.kind == nil ? "A coding agent you install" : "\(assistant.name) · \(assistant.modelWords.model)" }
 
     private func title(_ words: String) -> some View {
         Text(words).font(Look.font(.title, size: 30, weight: .semibold).ui).kerning(-0.6).lineSpacing(-2)
@@ -140,11 +144,11 @@ struct WelcomeView: View {
                 AgentModelChip(model: assistant).boxed(RoundedRectangle(cornerRadius: Look.control + 1), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
             }
             .padding(.top, 30)
-            // Said of the builder found and chosen for the person; once they pick another, it is their choice.
-            if assistant.kind == assistant.entries.first(where: \.enabled)?.id {
-                Text(found > 1 ? "Found on this Mac. \(found - 1) more to choose from." : "Found on this Mac.")
-                    .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9)
-            }
+            // Said of the builder found and chosen for the person; once they pick another, it is their choice. Its line
+            // stays laid out, so the footer does not move.
+            let chosen = assistant.kind == assistant.entries.first(where: \.enabled)?.id
+            Text(found > 1 ? "Found on this Mac. \(found - 1) more to choose from." : "Found on this Mac.").font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 9)
+                .opacity(chosen ? 1 : 0).accessibilityHidden(!chosen)
         }
     }
 

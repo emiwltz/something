@@ -25,7 +25,7 @@ struct AcceptanceBuild {
         // Shot with the whole picture lit, as the cycle ends.
         scene.model.light.light(nil)
         try await scene.draw("x2-1") { words in
-            #expect(words == Self.welcomeWords("Claude Code"), "\(words)")
+            #expect(words == Self.welcomeWords(scene.assistant, found: "Found on this Mac. 5 more to choose from."), "\(words)")
         }
     }
 
@@ -41,7 +41,7 @@ struct AcceptanceBuild {
         #expect(model.kind == "codex" && model.newKind == "codex")
         scene.model.light.light(.agents)
         try await scene.draw("x2-2") { words in
-            #expect(words == Self.welcomeWords("Codex"), "\(words)")
+            #expect(words == Self.welcomeWords(model, found: nil), "\(words)")
         }
         // The chip's menu is a system menu, drawn by the window server where no picture here reaches (cannot_native):
         // its agents and model are written beside the picture as x2-2-menu.txt.
@@ -137,12 +137,14 @@ struct AcceptanceBuild {
         #expect(HintBubble.shown(in: shell.layer) == nil)
     }
 
-    /// What VoiceOver reads of the welcome, `builder` building.
-    static func welcomeWords(_ builder: String) -> [String] {
+    /// What VoiceOver reads of the welcome, the builder of `model` building; with `found`, the line that says it was
+    /// chosen for the person.
+    static func welcomeWords(_ model: AssistantModel, found: String?) -> [String] {
         ["Welcome to something", "Pages of your own, that work with your agents.",
          "1. A space, a page of your own. One HTML file on your Mac, blank at first. Export it in one click.",
          "2. Your agents. The coding agents on this Mac. A space can watch them, talk to them or run them, if you say so.",
-         "3. Your assistant. One of your agents, \(builder), builds the space and changes it when you ask.", Hero.label, "Make My First Space"]
+         "3. Your assistant. One of your agents, \(model.name), builds the space and changes it when you ask.", Hero.label, "Built by",
+         AgentModelChip.label(model)] + (found.map { [$0] } ?? []) + ["Nothing leaves your Mac.", "Make My First Space"]
     }
 
     @MainActor struct WelcomeScene {
@@ -158,7 +160,7 @@ struct AcceptanceBuild {
         func draw(_ name: String, _ words: ([String]) -> Void) async throws {
             try await stage.appearances { suffix in
                 try await Picture.alone(window, name + suffix, root: stage.home.root)
-                words(await AcceptanceBuild.read(try #require(window.contentView?.subviews.first)))
+                words(await AcceptanceBuild.read(try #require(window.contentView?.subviews.first), whole: true))
             }
         }
     }
@@ -627,8 +629,9 @@ struct AcceptanceBuild {
 
     /// The labels VoiceOver reads in `view`, depth first, once `says` holds of them (else once two reads 0.1 s apart
     /// agree, for a view with no live clock), or after a minute. A SwiftUI view offscreen gives only the description of
-    /// its outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here.
-    static func read(_ view: NSView, until says: (([String]) -> Bool)? = nil) async -> [String] {
+    /// its outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here. With `whole`,
+    /// also what its static texts and menu buttons say (their value and title), as VoiceOver reads them.
+    static func read(_ view: NSView, whole: Bool = false, until says: (([String]) -> Bool)? = nil) async -> [String] {
         // The mode is the whole process's, and slows every SwiftUI view made meanwhile: the read takes Stage's turn,
         // as what is timed does.
         await Stage.alone {
@@ -643,7 +646,7 @@ struct AcceptanceBuild {
             var last: [String]?
             while true {
                 await wait(0.1)
-                let words = labels(view)
+                let words = labels(view, whole: whole)
                 if says.map({ $0(words) }) ?? (words == last && !words.isEmpty) || Date() > end { return words }
                 last = words
             }
@@ -655,12 +658,21 @@ struct AcceptanceBuild {
         ((element as AnyObject).accessibilityAttributeValue(NSAccessibility.Attribute(rawValue: "AXAttributedDescription")) as? NSAttributedString)?.string ?? ""
     }
 
-    private static func labels(_ element: Any) -> [String] {
+    private static func labels(_ element: Any, whole: Bool = false) -> [String] {
         let object = element as AnyObject
-        let words = [NSAccessibility.Attribute.description, .title, .value].compactMap { object.accessibilityAttributeValue($0) as? String }
+        var words = [NSAccessibility.Attribute.description, .title, .value].compactMap { object.accessibilityAttributeValue($0) as? String }
             + [said(element)]
+        // SwiftUI's nodes answer these getters only, a title sometimes as attributed text.
+        if whole, let node = object as? NSObject {
+            words += ["accessibilityTitle", "accessibilityValue"].filter { node.responds(to: Selector($0)) }.compactMap {
+                let value = node.value(forKey: $0)
+                return value as? String ?? (value as? NSAttributedString)?.string
+            }
+        }
         let children = (object as? NSAccessibilityProtocol)?.accessibilityChildren() ?? []
-        return words.filter { !$0.isEmpty } + children.flatMap(labels)
+        let all = words.filter { !$0.isEmpty } + children.flatMap { labels($0, whole: whole) }
+        // A menu's button comes as several nodes of one title: VoiceOver says it once.
+        return whole ? all.enumerated().filter { $0.offset == 0 || all[$0.offset - 1] != $0.element }.map(\.element) : all
     }
 
     /// Six cards in three columns, the first under the pointer with Preview, Show in Finder and Use; Agents keeps two.
