@@ -40,6 +40,8 @@ public final class Engine {
     private(set) var often = false
     /// The agents something launched, in launch order, with their program.
     private var launched: [(agent: Launched, spawn: Spawn)] = []
+    /// The programs started only to read what they offer (`peek`): no state, no space and no watch ever sees them.
+    private var peeking: [Spawn] = []
     /// The agents whose stop something asked for: their end is no failure.
     private var stopping: Set<String> = []
     private var count = 0
@@ -113,7 +115,7 @@ public final class Engine {
     /// `assistantFolder` or below it is left out too, whoever started it and when: it holds the person's words to their
     /// assistant, whether a space's own, woken again, or a Quick Change's, once the state forgot the launch.
     private var elsewhere: (agents: [Agent], threads: [AgentThread]) {
-        let groups = Set(launched.filter(\.spawn.running).map(\.spawn.pid).filter { $0 > 0 })
+        let groups = Set((launched.map(\.spawn) + peeking).filter(\.running).map(\.pid).filter { $0 > 0 })
         // A refused resume lists no thread (Launched.refused): its conversation is still the one seen elsewhere.
         let keys = launched.compactMap(\.agent.agent.thread)
         let real = HeldFiles.remembered(), mine = assistantFolder.map(real)
@@ -201,6 +203,36 @@ public final class Engine {
     public func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
         try registry.checkLaunch(kind, model: model, mode: mode, effort: effort)
         return try launch(kind, folder: folder, model: model, mode: mode, effort: effort, planB: false)
+    }
+
+    /// Starts an agent of `kind` in `folder` only to read what it offers, and calls `then` on the main queue with that,
+    /// or nil when it could not start or listed nothing within `seconds`. It gets no message, so it asks its model
+    /// nothing; it is stopped as soon as its list settled, and never joins the state.
+    public func peek(_ kind: String, folder: String, within seconds: TimeInterval = 10, then: @escaping (Options?) -> Void) {
+        lookFor(kind) { [self] in
+            let launch = Launch(agent: "\(kind)-peek", folder: HeldFiles.real(folder))
+            guard let driving = try? registry.driving(kind), let program = try? found[kind]?.get(),
+                  let started = try? start(driving, launch, program, record: nil) else { return then(nil) }
+            peeking.append(started.spawn)
+            var open = true, settling = false
+            let finish = { [self] in
+                guard open else { return }
+                open = false
+                started.agent.changed = {}
+                peeking.removeAll { $0 === started.spawn }
+                started.spawn.stop()
+                let options = started.agent.agent.options
+                then(options.model?.isEmpty == false ? options : nil)
+            }
+            // The efforts may follow the models: they get a moment.
+            started.agent.changed = {
+                if started.agent.agent.alive == false { finish() } else if !settling, started.agent.agent.options.model?.isEmpty == false {
+                    settling = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: finish)
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: finish)
+        }
     }
 
     /// The words a plan-B permission hook runs, before `--spool <dir>`: a program, by its absolute path, whose
@@ -319,7 +351,7 @@ public final class Engine {
     public func stopAll(within seconds: TimeInterval, only: String? = nil, done: @escaping () -> Void) {
         let chosen = launched.filter { only == nil || $0.agent.agent.id == only }
         stopping.formUnion(chosen.map(\.agent.agent.id))
-        Spawn.stopAll(chosen.map(\.spawn), cap: seconds) { DispatchQueue.main.async(execute: done) }
+        Spawn.stopAll(chosen.map(\.spawn) + (only == nil ? peeking : []), cap: seconds) { DispatchQueue.main.async(execute: done) }
     }
 
     /// The launched agent `id`, while its program runs.

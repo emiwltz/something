@@ -272,9 +272,7 @@ import SomethingCore
             }
             if each.read(state) { save(each) }
             // What its agent lists is what the chip offers for its kind, the next time too.
-            if let kind = each.kind, let options = each.agent?.options, options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options {
-                Preferences.at(places).listed[kind] = options
-            }
+            if let kind = each.kind, let options = each.agent?.options, options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options { Preferences.at(places).listed[kind] = options }
             if let kind = each.kind, let commands = each.agent?.commands, Preferences.at(places).commands[kind] != commands { Preferences.at(places).commands[kind] = commands }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
@@ -825,10 +823,12 @@ import SomethingCore
         return (kept.model, kept.effort)
     }
 
-    /// `kind` becomes the default builder; the default model and effort, another builder's, are its own again.
+    /// `kind` becomes the default builder; the default model and effort, another builder's, are its own again; what it offers is read once, for its menu before its first run.
     private func keepDefault(_ kind: String) {
         preferred = kind
         Preferences.at(places).change { if $0.assistant != kind { ($0.assistant, $0.model, $0.effort) = (kind, nil, nil) } }
+        guard Preferences.at(places).listed[kind] == nil, Registry.app.limits[kind]?.contains("model") != true else { return }
+        engine.peek(kind, folder: places.spaces.path) { [self] in if let options = $0 { Preferences.at(places).listed[kind] = options } }
     }
 
     /// Build With ▸: the builder of new spaces from now on, kept as the default. New Space's conversation takes it

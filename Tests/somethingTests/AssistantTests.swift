@@ -1051,6 +1051,21 @@ import WebKit
         await finish(home, model)
     }
 
+    /// Choosing a builder reads what it offers, before any conversation: its program gets `initialize` and no message,
+    /// and is gone once its list is kept. The state never shows it.
+    @Test func choosingABuilderReadsWhatItOffers() async throws {
+        let (home, model) = try assistant()
+        defer { home.remove() }
+        await look(model)
+        var shown = false
+        model.engine.changed = { [weak model] in if model?.engine.state.agents.isEmpty == false { shown = true } }
+        model.buildNew(with: "claude").map { _ in }
+        #expect(await wait(until: { Preferences(home.places).listed["claude"]?.model?.isEmpty == false }))
+        #expect(model.id == nil && !shown)
+        #expect(input(home).first?.contains("initialize") == true && !input(home).contains { $0.contains(#"\"type\":\"user\""#) }, "no message: \(input(home))")
+        await finish(home, model)
+    }
+
     /// The model chip: "Default model" before Claude Code ever ran; then the models its `initialize` listed, kept for
     /// its kind, so a space never launched offers them too. Awake, a model and an effort go to the agent (set_model,
     /// apply_flag_settings) and stay this space's alone; asleep, they are kept and the wake launches with them.
