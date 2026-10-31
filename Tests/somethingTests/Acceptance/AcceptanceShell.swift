@@ -819,6 +819,42 @@ struct AcceptanceShell {
         #expect(!shell.infoShown && shell.assistant.open && shell.assistant.threadShown)
     }
 
+    /// Info also holds what an agent a space started offers: its model, effort, mode and commands, from what it lists;
+    /// and once it has a conversation, Continue in Terminal, which stops it and hands Terminal a command file.
+    @Test("Info: an agent's settings and Continue in Terminal") func agentSettings() async throws {
+        let stage = try Stage("shell-settings")
+        defer { stage.remove() }
+        let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
+        defer { view.close() }
+        let home = stage.home.root, id = try view.launch("claude", folder: stage.home.places.spaces.path, model: nil, mode: nil, effort: nil)
+        let agent: () -> Agent? = { info.refresh(); return info.shown.first { $0.id == id } }
+        #expect(await wait(until: { agent()?.options.model?.isEmpty == false && agent()?.commands?.isEmpty == false }))
+        #expect(try #require(agent()).can.model && info.terminalWords(try #require(agent())) == nil, "no conversation yet")
+        _ = try view.deliver("Make the tiles wider.", to: try #require(agent()), when: "next")
+        #expect(await wait(until: { info.terminalWords(agent()!) != nil && agent()?.state == "idle" }))
+        let lines = { (try? String(contentsOf: home.appendingPathComponent("out/input"), encoding: .utf8)) ?? "" }
+        info.set(try #require(agent()), model: "sonnet")
+        #expect(await wait(until: { lines().contains(#""set_model""#) }), "the model goes to the agent")
+        info.set(try #require(agent()), mode: "plan")
+        #expect(await wait(until: { lines().contains(#""set_permission_mode""#) }), "a mode that asks as much needs no click")
+        info.command(try #require(agent()?.commands?.first?.value), to: try #require(agent()))
+        #expect(await wait(until: { lines().contains(#""/"#) }), "its own command, as it lists it")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "info-settings" + suffix, root: stage.home.root)
+        }
+        var opened: URL?
+        info.terminal = { opened = $0 }
+        info.continueInTerminal(try #require(agent()))
+        #expect(await wait(until: { opened != nil }), "Terminal gets its file once the agent stopped")
+        let file = try #require(opened)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let thread = try #require(agent()?.thread)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "#!/bin/sh\nrm -- \"$0\"\ncd '\(stage.home.places.spaces.path)' && exec 'claude' '--resume' '\(thread)'\n")
+        #expect(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int == 0o700)
+        #expect(Info.script(["x"], in: "/a'b") == "#!/bin/sh\nrm -- \"$0\"\ncd '/a'\\''b' && exec 'x'\n", "a quote stays in its word")
+        #expect(agent()?.alive == false && Registry.app.agent("pi")?.terminal == nil, "stopped; only proven ways")
+    }
+
     /// The level in one click (X5.2): None and the page shows no agent at once, nothing asked; Run takes a folder
     /// (asked when none is known) and says where it starts them.
     @Test("x5-2: the level in one click") func x5_2() async throws {

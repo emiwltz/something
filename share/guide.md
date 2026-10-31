@@ -479,6 +479,8 @@ await something.store.set("seen", [...seen, "a1"]);
   and a tray along the bottom of your space; neither is your page's, and both follow the part as it scrolls.
 - **Info and History.** Info (⌘I) and History open in one panel, 320 points wide, docked at the window's right edge:
   your space narrows beside it and gets a `resize`, nothing hides under it: lay your page out for narrow widths too.
+  Info also lets the person change the model, effort and mode of an agent your page shows, send it one of its commands,
+  and continue a `claude` or `codex` conversation in Terminal, which stops that agent: your page sees it in the state.
   While the person holds a version in History, that version of your files shows over your page in a second, read-only
   view: it reads today's state and memory, and every other call is refused with `NOT_SUPPORTED` ("This is an older
   version of the space, shown to compare: it cannot act.") before it reaches your journal. Do not count on how many

@@ -2,7 +2,8 @@
 // it. One panel holds Info or History (History.swift), swapped by `content` without a relayout; it opens and closes at
 // once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
 // parts that follow what a space is (X5.1): Space (its file, its size and last change, Export in one click, History),
-// Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now)
+// Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now,
+// each with what it offers: model, effort, mode, its commands, Continue in Terminal)
 // and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
 // quietly at the foot. A level chosen here is the person's answer: kept in the grants file, it reaches the open space
 // at once as a `granted` event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
@@ -30,6 +31,8 @@ import SwiftUI
     @ObservationIgnored var converse: () -> Void = {}
     /// Asks the person for Run's folder and gives it on; a test answers in its place.
     @ObservationIgnored var pick: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
+    /// Opens a command file in Terminal; a test sets it.
+    @ObservationIgnored var terminal: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The open space's versions, which History shows.
     let history: History
     var content = Content.info
@@ -123,6 +126,46 @@ import SwiftUI
         guard let name = name ?? space?.name else { return }
         do { try Rules.revoke(rule, in: name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
         show(space)
+    }
+
+    /// The person changed what `agent` runs with, in Info. A mode that makes it ask less waits for their click, as a
+    /// page's does; the rest reaches it at once or from its next turn. Says a failure.
+    func set(_ agent: Agent, model: String? = nil, mode: String? = nil, effort: String? = nil) {
+        guard let view = open() else { return }
+        do {
+            if let mode, try !view.confirms(mode: mode, kind: agent.kind, folder: agent.folder) { return }
+            _ = try view.set(agent, model: model, mode: mode, effort: effort)
+        } catch { ask.tell(error.sentence) }
+    }
+
+    /// Sends the agent's own command `name`, held until its turn ends. Says a failure.
+    func command(_ name: String, to agent: Agent) {
+        do { _ = try open()?.deliver("/" + name, to: agent, when: "next") } catch { ask.tell(error.sentence) }
+    }
+
+    /// The words that continue `agent`'s conversation in Terminal, when it has one and its kind has a proven way.
+    func terminalWords(_ agent: Agent) -> [String]? {
+        guard agent.origin == "launched", lasts[agent.id] != nil, let thread = agent.thread else { return nil }
+        return Registry.app.agent(agent.kind)?.terminal?(thread)
+    }
+
+    /// Continue in Terminal: something stops holding the conversation, then Terminal takes it, in the agent's folder.
+    func continueInTerminal(_ agent: Agent) {
+        guard let view = open(), let words = terminalWords(agent), let folder = agent.folder else { return }
+        view.engine.stopAll(within: 5, only: agent.id) { [self] in
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("something-\(UUID().uuidString).command")
+            do {
+                try Data(Info.script(words, in: folder).utf8).write(to: file)
+                try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
+                terminal(file)
+            } catch { ask.tell(error.sentence) }
+        }
+    }
+
+    /// A command file that removes itself, then continues in `folder`; each word quoted, so none is read by the shell.
+    static func script(_ words: [String], in folder: String) -> String {
+        let quoted = ([folder] + words).map { "'" + $0.replacingOccurrences(of: "'", with: #"'\''"#) + "'" }
+        return "#!/bin/sh\nrm -- \"$0\"\ncd \(quoted[0]) && exec \(quoted.dropFirst().joined(separator: " "))\n"
     }
 
     /// "Today", "Yesterday", "9 Oct", or "9 Oct 2025" in another year; with `time`, "Today, 18:12".
@@ -414,6 +457,20 @@ struct InspectorView: View {
     private var now: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(info.shown, id: \.id) { agent in
+                VStack(alignment: .leading, spacing: 5) {
+                    row(agent)
+                    controls(agent)
+                }
+            }
+        }
+        .padding(4)
+        .boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg2.ui, ring: Look.Token.line.ui)
+        .accessibilityElement(children: .contain).accessibilityLabel("The agents it shows now")
+    }
+
+    /// One agent: who, what it does, where.
+    private func row(_ agent: Agent) -> some View {
+        Group {
                 // A program something only sees by its process goes by that process's name.
                 let name = Registry.app.agent(agent.kind)?.name ?? agent.name ?? agent.kind, doing = info.doing(agent)
                 let folder = agent.folder.map { Words.path($0, home: info.places.home.path) }
@@ -427,11 +484,41 @@ struct InspectorView: View {
                 }
                 .padding(.horizontal, 6).padding(.vertical, 5).frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .ignore).accessibilityLabel([name, doing, folder].compactMap { $0 }.joined(separator: ", "))
-            }
         }
-        .padding(4)
-        .boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg2.ui, ring: Look.Token.line.ui)
-        .accessibilityElement(children: .contain).accessibilityLabel("The agents it shows now")
+    }
+
+    /// What the person can change of an agent, as it lists it; what it cannot do says why. Nothing for one only seen.
+    @ViewBuilder private func controls(_ agent: Agent) -> some View {
+        if agent.origin == "launched", agent.alive != false, agent.can.send {
+            setting("Model", agent.options.model, agent.model, agent.can.model, agent.because["model"]) { info.set(agent, model: $0) }
+            setting("Effort", agent.options.effort, agent.effort, agent.can.effort, agent.because["effort"]) { info.set(agent, effort: $0) }
+            setting("Mode", agent.options.mode, agent.mode, agent.can.mode, agent.because["mode"]) { info.set(agent, mode: $0) }
+            setting("Command", agent.commands, nil, true, nil) { info.command($0, to: agent) }
+        }
+        if info.terminalWords(agent) != nil {
+            let busy = agent.alive != false && ["working", "waiting"].contains(agent.state)
+            wide("Continue in Terminal", "terminal") { info.continueInTerminal(agent) }.disabled(busy)
+                .help(busy ? "It can continue in Terminal once this turn ends." : "something stops this agent, and Terminal continues its conversation.")
+                .padding(.horizontal, 6)
+        }
+    }
+
+    /// One line of an agent's settings: a menu of what it lists, else why not; nothing when neither is known.
+    @ViewBuilder private func setting(_ title: String, _ list: [Option]?, _ chosen: String?, _ can: Bool, _ why: String?,
+                                      _ run: @escaping (String) -> Void) -> some View {
+        if can, let list, !list.isEmpty {
+            HStack(spacing: 8) {
+                Text(title).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+                Spacer(minLength: 0)
+                Menu(list.first { $0.value == chosen }?.label ?? chosen ?? "Choose…") {
+                    ForEach(list, id: \.value) { option in Button(option.label) { run(option.value) } }
+                }
+                .menuStyle(.borderlessButton).fixedSize().font(Look.font(.ui, size: 12).ui).accessibilityLabel(title)
+            }
+            .padding(.horizontal, 6)
+        } else if let why {
+            Text("\(title): \(why)").foot().padding(.horizontal, 6)
+        }
     }
 
     /// Assistant: its eyes, the agent and model in one chip, its last reply, Open Conversation.

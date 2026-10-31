@@ -12,5 +12,6 @@ extension AgentDescriptor {
         kind: "codex", name: "Codex", install: "brew install --cask codex", asksAsMuch: ["on-request", "untrusted"],
         resume: .unlessKnownHeld, driving: .codex, reader: { CodexReader(environment: $0) }, builder: Builder(preAllowed: true, lent: LentTool.all),
         tools: ["commandExecution": .command, "fileChange": .file, "permissions": .permissions],
-        modeWords: ["never": "never asks you before it runs a command"], monogram: "Cx")
+        modeWords: ["never": "never asks you before it runs a command"], monogram: "Cx",
+        terminal: { ["codex", "resume", $0] })
 }
