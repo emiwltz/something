@@ -459,12 +459,16 @@ await something.store.set("seen", [...seen, "a1"]);
 - **The journal.** Every write of your space (`send`, `interrupt`, `set`, `launch`, `resume`, `open`), successful or
   not, adds a line to its journal, which `something check --journal` prints, and so does each request something
   allowed by a lasting rule of your space (`allow`, its command in `text`). It never leaves the Mac.
-- **Export.** The person can export your space in one click as one `.something` file in their Downloads (JSON: its
-  files in base64, and its memory only if they choose so). The export carries the contract your space declares; a
-  something that does not know that contract refuses to import it. It never carries the rights they gave, the journal, or anything read from an agent,
-  and a file of your space that is a link to somewhere else is left out. Keep a space under about 15 MB of files (the
-  export, in base64, must stay under 20 MB) and 500 files, and give no file a name starting with ".", or it cannot be
-  exported and imported whole. On another Mac, the space asks for its level again and fills with that Mac's agents.
+- **Export.** The person can export your space as one HTML file in their Downloads: your page, the other files of a
+  folder space inside it, `something.js`, and its memory only if they tick Include Its Memory. Opened in a browser it is
+  your page with no agents: each agent call fails with `NO_HOST`, and `store` works over the memory in the file when it
+  carries one, so hide what needs agents, as you do for a right refused. The file carries the contract your space
+  declares; a something that does not know that contract refuses to import it. It never carries the rights they gave,
+  the journal, or anything read from an agent, and a file of your space that is a link to somewhere else is left out.
+  Keep a space under about 15 MB of files (the export must stay under 20 MB) and 500 files, and give no file a name
+  starting with ".", or it cannot be exported and imported whole. Import takes that file back whole, or an older
+  `.something` file (JSON: its files in base64). On another Mac, the space asks for its level again and fills with that
+  Mac's agents.
 - **The assistant.** Your space's own assistant rests over it as a 44-point sticker, 16 points from its bottom right
   corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
   left or right edge. Keep what matters out of the 76 points along those two edges, or let it scroll. The first error

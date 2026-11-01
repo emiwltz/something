@@ -12,6 +12,8 @@ final class Toast: NSView {
     let words: String
     private static let pad: CGFloat = 9
     private var action: Action?
+    /// Told once when it goes without its action clicked: an Undo it offered is over.
+    var left: (() -> Void)?
     private var timer: Timer?
     /// Its distance from the center's bottom edge, `rest` once in place: 22 points above it.
     private(set) var bottom: NSLayoutConstraint?
@@ -93,7 +95,7 @@ final class Toast: NSView {
     /// Clicked: the action acts once, and the toast leaves.
     @objc func act() {
         let action = action
-        self.action = nil
+        (self.action, left) = (nil, nil)
         leave()
         action?.act()
     }
@@ -102,6 +104,9 @@ final class Toast: NSView {
     func leave(now: Bool = false) {
         timer?.invalidate()
         shown = false
+        let over = left
+        left = nil
+        over?()
         if now { return removeFromSuperview() }
         move(to: Toast.rest + 68) { [weak self] in self?.removeFromSuperview() }
     }

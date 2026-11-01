@@ -86,7 +86,7 @@ import Testing
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.size) = ("new", .dark, .reduced, .larger)
-        (values.notify, values.level, values.exportMemory) = (true, .run, true)
+        (values.notify, values.level, values.exportMemory, values.memoryExport) = (true, .run, true, ["garden": false])
         values.sticker = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
         (values.sleepAfter, values.awakeAtMost, values.versionsKept, values.storageLimit) = (0, 5, 0, 2000)
         // Each value differs from its default, so that a key not written would be seen.

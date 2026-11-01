@@ -1,7 +1,7 @@
 // Info, docked at the window's right edge at full height, 320 points: the space narrows beside it, nothing hides under
 // it. One panel holds Info or History (History.swift), swapped by `content` without a relayout; it opens and closes at
 // once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
-// parts that follow what a space is (X5.1): Space (its file, its size and last change, Export in one click, History),
+// parts that follow what a space is (X5.1): Space (its file, its size and last change, Export, History),
 // Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now,
 // each with its reading and what it offers: model, effort, mode, its commands, Continue in Terminal)
 // and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
@@ -370,7 +370,7 @@ struct InspectorView: View {
                 Text(Info.weight(size, form: space.form, changed: info.changed, now: info.clock())).foot()
             }
             HStack(spacing: 8) {
-                wide("Export", "square.and.arrow.up") { library.export(space.name) }.help(Keys.tooltip("export", "Export to Downloads"))
+                wide("Export…", "square.and.arrow.up") { library.export(space.name) }.help(Keys.tooltip("export", "Export to Downloads"))
                 wide("History", "clock") { info.showHistory() }
             }
         }

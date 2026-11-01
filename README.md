@@ -82,8 +82,8 @@ a picture of each; hold one (or press Space) to see it over the page, let go to 
 itself a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all
 are kept by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or
 500 files keeps no versions; restoring it sends the files it changes to the Trash. A space moved to the Trash takes its
-versions with it, and a space deleted or renamed in Finder sends the versions left under its old name there too, so a
-new space of that name starts without them.
+versions with it, the next space opens, and Undo in the toast brings it all back; a space deleted or renamed in Finder
+sends the versions left under its old name there too, so a new space of that name starts without them.
 
 Your agent must be installed and signed in as you use it in Terminal: something uses your own account and settings.
 
@@ -118,7 +118,8 @@ commands without asking; everything else it does asks you, as your agent’s own
 
 Your assistant is the agent you chose, working in `~/something/spaces`. Each space has its own: its own conversation
 with that agent, started at its first message and shown when the space is open. New Space has one too, and the space it
-makes keeps that conversation; a space moved to the Trash takes its conversation with it. something lends it three of
+makes keeps that conversation; a space moved to the Trash takes its conversation with it, once its Undo is gone.
+something lends it three of
 its own commands as tools (`something_guide`, `something_new`, `something_check`) through `something mcp`, an MCP server
 (Model Context Protocol, the standard way to give an agent tools) that the agent starts for that conversation only; pi
 runs them in its shell instead. What "without asking" means for each:
@@ -177,9 +178,11 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
 - **Keys.** something's own shortcuts (⌘P, ⌘K, ⌘I, ⌘. and the others
   [the guide](share/guide.md#what-the-person-sees-of-your-space) lists) reach its menus even while a space has the
   focus: a page cannot keep them, so it cannot stop you from stopping your assistant.
-- **Export.** An exported space carries its memory only if you choose so. Export, in Info or the Space menu, writes the
-  space in one click as one `.something` file in your Downloads folder, without its level or its journal, and without
-  its memory unless Settings › Spaces › Include a space's memory when you export it is on.
+- **Export.** An exported space carries its memory only if you choose so. Export Space… (⇧⌘E, in the File and Space
+  menus, on its row and in Info) writes the space as one HTML file in your Downloads folder, without its level or its
+  journal. A space with a memory first asks, Include Its Memory, unticked unless Settings › Spaces › Include a space's
+  memory when you export it is on, and keeps your choice for that space; a space without one exports in one click.
+  Opened in a browser, the file shows its page, and what needs something, such as your agents, says so.
 
 something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
 agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
@@ -191,7 +194,8 @@ or the agent's channel, for that launch only. It writes only in `~/something/` a
 
 A space loads only its own files, inline code, `data:` and `blob:`. Every other address is blocked four times: a
 sandboxed frame, a content security policy, a content rule list, and a navigation policy. The app opens no port,
-listens on nothing and sends no telemetry.
+listens on nothing and sends no telemetry. In a browser, an exported file keeps only one of these locks, a content
+security policy inside the file.
 
 One gap is known. When you click with the mouse on a link that opens a new window (`target="_blank"`) inside a closed
 shadow root written in HTML, WebKit may look up the link's server name and open one connection to it before it refuses

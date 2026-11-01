@@ -92,7 +92,7 @@ enum Keys {
         Command(id: "showAll", title: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), owner: "F5"),
         Command(id: "quit", title: "Quit something", key: "q", action: #selector(NSApplication.terminate(_:)), owner: "F5"),
         Command(id: "import", title: "Import Space…", action: #selector(App.importSpace(_:)), owner: "F5"),
-        Command(id: "export", title: "Export Space", key: "e", modifiers: [.command, .shift], action: #selector(App.exportSpace(_:)), owner: "F5",
+        Command(id: "export", title: "Export Space…", key: "e", modifiers: [.command, .shift], action: #selector(App.exportSpace(_:)), owner: "F5",
                 needsSpace: true),
         Command(id: "finder", title: "Show in Finder", key: "r", modifiers: [.command, .option], action: #selector(App.showInFinder(_:)), owner: "F5",
                 needsSpace: true),

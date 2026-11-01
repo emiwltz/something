@@ -17,6 +17,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     let engine = Engine(environment: ProcessInfo.processInfo.environment, registry: .app)
     let ask = NativeAsk()
     let launches = Launches()
+    lazy var trashUndo = TrashUndo(shell: shell)
     lazy var library = Library(places: places, ask: ask, share: Resources.share)
     lazy var info = Info(places: places, ask: ask)
     lazy var assistant = AssistantModel(engine: engine, places: places, launches: launches)
@@ -382,19 +383,13 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         alert.beginSheetModal(for: shell.window) { if $0 == .alertFirstButtonReturn { then() } }
     }
 
-    /// Asks in a sheet that says what goes with the space, then moves the space and its memory to the Trash.
+    /// Asks in a sheet that says what goes with the space, then moves the space and its memory to the Trash, with Undo.
     func confirmTrash(_ entry: Library.Entry) {
         shell.front()
         guard shell.window.attachedSheet == nil else { return }
-        Ask.trash(entry, remembers: library.remembers(entry.id), messages: assistant.messages(of: entry.id)).hang(on: shell.window) { [weak self] in
-            guard $0 == .destructive else { return }
-            self?.library.trash(entry.id)
-            // Its conversation goes only with the space: one that stayed, its move refused, keeps its assistant.
-            if self?.library.entry(entry.id) == nil {
-                self?.assistant.forget(entry.id)
-                self?.shell.forget(entry.id)
-                self?.launches.ids[entry.id] = nil
-            }
+        let sheet = Ask.trash(entry, remembers: library.remembers(entry.id), messages: assistant.messages(of: entry.id), keeps: trashUndo.running(entry.id).count)
+        sheet.hang(on: shell.window) { [weak self] in
+            if $0 == .destructive { self?.trashUndo.move(entry) }
         }
     }
 

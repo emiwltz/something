@@ -611,10 +611,13 @@ struct AcceptanceTrust {
         let sheet = Ask.trash(entry, remembers: library.remembers("brief"), messages: 3)
         #expect(sheet.title == "Move Daily brief and its memory to the Trash?" && sheet.frame.width == Sheet.width && !sheet.isAlert)
         #expect(PanelsTests.texts(sheet.contentView) == ["Move Daily brief and its memory to the Trash?", "These go with it:",
-                                                         "Its page", "brief.html", "What it remembers", "12 entries",
+                                                         "Its file", "brief.html", "What it remembers", "12 entries",
                                                          "Its assistant’s conversation", "3 messages",
                                                          "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder."])
         #expect(sheet.buttons.map(\.title) == ["Cancel", "Move to Trash"] && sheet.buttons.map(\.role) == [.cancel, .destructive])
+        // The agents it started are no part of what goes: the sheet says they stay.
+        #expect(PanelsTests.texts(Ask.trash(entry, remembers: 1, messages: 0, keeps: 1).contentView).contains("The agent it started keeps running"))
+        #expect(PanelsTests.texts(Ask.trash(entry, remembers: 1, messages: 0, keeps: 2).contentView).contains("The 2 agents it started keep running"))
         #expect(sheet.firstResponder === sheet.buttons[0] && sheet.buttons[0].keyEquivalent == "\u{1b}" && sheet.buttons[1].keyEquivalent.isEmpty)
         let empty = Ask.trash(try #require(library.entry("pet")), remembers: library.remembers("pet"), messages: shell.assistant.messages(of: "pet"))
         #expect(Array(PanelsTests.texts(empty.contentView)[3...7]) == ["pet.html", "What it remembers", "nothing yet", "Its assistant’s conversation", "empty"])
@@ -632,8 +635,9 @@ struct AcceptanceTrust {
         #expect(sheet.chosen == nil, "Return never moves a space to the Trash")
         // As the app does: the sheet hangs from the window, and its destructive action moves the space.
         let trash = stage.home.root.appendingPathComponent("Trash")
-        library.recycle = { try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
-            try FileManager.default.moveItem(at: $0, to: trash.appendingPathComponent($0.lastPathComponent)) }
+        library.discard = { try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: $0, to: trash.appendingPathComponent($0.lastPathComponent))
+            return trash.appendingPathComponent($0.lastPathComponent) }
         let kept = Ask.trash(entry, remembers: 12, messages: 3)
         kept.hang(on: shell.window) { if $0 == .destructive { library.trash("brief") } }
         kept.buttons[0].performClick(nil)

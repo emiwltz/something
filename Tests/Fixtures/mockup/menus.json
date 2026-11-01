@@ -10,7 +10,7 @@
     ]},
     {"title": "File", "items": [
       {"title": "New Space", "key": "⌘N"}, {"title": "Templates", "key": "⇧⌘T"}, {"separator": true},
-      {"title": "Import Space…"}, {"title": "Export Space", "key": "⇧⌘E"}, {"separator": true},
+      {"title": "Import Space…"}, {"title": "Export Space…", "key": "⇧⌘E"}, {"separator": true},
       {"title": "Show in Finder", "key": "⌥⌘R"}, {"title": "Move to Trash…", "key": "⌘⌫"}, {"separator": true},
       {"title": "Close Window", "key": "⌘W"}
     ]},
@@ -37,7 +37,7 @@
       {"header": "No space open"},
       {"title": "Show Info", "key": "⌘I", "needsSpace": true},
       {"title": "What It May Do…", "needsSpace": true}, {"title": "Show History…", "needsSpace": true}, {"separator": true},
-      {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export Space", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
+      {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export Space…", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
       {"title": "Move to Trash…", "key": "⌘⌫", "needsSpace": true}
     ]},
     {"title": "Assistant", "items": [

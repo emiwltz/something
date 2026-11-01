@@ -36,7 +36,7 @@ enum Catalog {
     /// Round 2's frozen steps, by the step in lower case with a dash ("x3-1" for X3.1; its scenario's function is
     /// x3_1; "2-6" for 2.6, v2_6), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
-        ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
+        ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"),
         ("x9-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
@@ -71,6 +71,7 @@ enum Catalog {
     static let retiredSteps: [String: String] = [
         "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
         "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",
+        "x5-3": "Export in one click: the final mockup's export is one HTML file, asserted by f6-1",
         "xe-1": "the whole mockup to try, every axis at Emi's letter: no screen of its own, each part asserted by its step",
         "x9-2": "the rail's tiles: subject 4 C removes the rail, r4-2 proves the list",
         "j4-1": "finding a space in the rail: subject 4 C removes it; r4-2 finds a space, f3-1 says what waits",

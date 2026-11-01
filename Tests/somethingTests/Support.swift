@@ -93,6 +93,12 @@ final class FakeAsk: Asking {
         during?(url)
         return link
     }
+    /// Include Its Memory's answer, given what was ticked; nil cancels. By default what was ticked, as Export does.
+    var exports: (Bool) -> Bool? = { $0 }, exportsAsked: [(space: String, entries: Int, included: Bool)] = []
+    func export(_ entry: Library.Entry, entries: Int, included: Bool) -> Bool? {
+        exportsAsked.append((entry.id, entries, included))
+        return exports(included)
+    }
     func importFile() -> URL? { chosen }
     func folder(_ message: String) -> URL? {
         folderMessages.append(message)

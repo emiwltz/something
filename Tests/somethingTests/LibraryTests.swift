@@ -18,9 +18,10 @@ import Testing
         let library = Library(places: test.places, ask: ask, share: Home.share)
         library.reveal = { _ in Issue.record("Show in Finder was not expected") }
         let trash = test.root.appendingPathComponent("Trash")
-        library.recycle = { url in
+        library.discard = { url in
             try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
             try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+            return trash.appendingPathComponent(url.lastPathComponent)
         }
         library.relist()
         return library
@@ -209,10 +210,16 @@ import Testing
         #expect(library.remembers("today") == 2 && library.remembers("elsewhere") == 0 && library.remembers("broken") == nil)
         try Versions(root: test.places.versions, keep: 50, limit: 0).capture(try #require(library.entry("today")).space, kind: .turn, sentence: "Make it")
         library.select(.space("today"))
-        library.trash("today")
+        var grants = try AppFile.read(test.places.grants)
+        grants.spaces["today"] = answered(declared: [], granted: [])
+        try grants.write(test.places.grants)
+        let trashed = try #require(library.trash("today"))
         let trash = test.root.appendingPathComponent("Trash")
-        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["today", "today.html", "today.json"], "its versions go too")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["today.html", "today.json"], "its versions wait for the Undo's end")
         #expect(library.entries.isEmpty && library.selection == .newSpace)
+        #expect(try AppFile.read(test.places.grants).spaces["today"] != nil, "Undo brings its answers back")
+        library.forget(trashed)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() == ["today", "today.html", "today.json"], "its versions go too")
         #expect(try AppFile.read(test.places.grants).spaces["today"] == nil, "a space made again under its name asks again")
         #expect(ask.told.isEmpty)
     }
@@ -241,39 +248,76 @@ import Testing
         #expect(versions.list("today").isEmpty && ask.told.isEmpty)
     }
 
-    @Test func exportGoesToDownloadsInOneClickAndImportStartsWithoutGrants() async throws {
+    @Test func exportWritesOneHTMLFileAndAsksOnlyWhenTheSpaceRemembersAndImportStartsWithoutGrants() async throws {
         let test = Home(prefix: "something-library-"), ask = FakeAsk()
         defer { test.remove() }
         let folder = test.places.spaces.appendingPathComponent("board")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try page(#"{"contract": 1, "rights": ["store"]}"#, "<p>An invented board.</p>").write(to: folder.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
-        try Memory(folder: test.places.data, space: "board").set("seen", ["a1"])
-        let saved = test.places.downloads.appendingPathComponent("board.something")
+        let index = page(#"{"contract": 1, "rights": ["store"]}"#, "<p>An invented board.</p>")
+        try index.write(to: folder.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        let saved = test.places.downloads.appendingPathComponent("board.html")
         let library = library(test, ask)
-        var exported: [URL] = []
-        library.exported = { exported.append($0) }
+        var exported: [(url: URL, memory: Bool)] = []
+        library.exported = { exported.append(($0, $1)) }
+        func held(_ url: URL) throws -> Received { try Export.read(try #require(Export.unwrap(try Data(contentsOf: url)))) }
 
-        // One click: no question, no panel; its memory stays on the Mac; a Downloads folder made when there is none.
+        // No memory: one click, no question; a Downloads folder made when there is none.
         #expect(!FileManager.default.fileExists(atPath: test.places.downloads.path))
         library.export("board")
-        #expect(exported == [saved] && ask.told.isEmpty && ask.folderMessages.isEmpty, "\(ask.told)")
-        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
-        #expect(without["data"] is NSNull && without["name"] as? String == "board")
+        #expect(exported.map(\.url) == [saved] && exported[0].memory == false && ask.exportsAsked.isEmpty && ask.told.isEmpty, "\(ask.told)")
+        #expect(try held(saved).files["index.html"] == Data(index.utf8) && held(saved).data == nil)
         // Never over a file: the next one takes the next free name, as Finder's copies do.
         library.export("board")
-        #expect(exported.last?.lastPathComponent == "board 2.something" && FileManager.default.fileExists(atPath: saved.path))
-        try FileManager.default.removeItem(at: exported[1])
-        // Settings › Spaces' Include a space's memory: the export carries it.
-        library.preferences.exportMemory = true
+        #expect(exported.last?.url.lastPathComponent == "board 2.html" && FileManager.default.fileExists(atPath: saved.path))
+        try FileManager.default.removeItem(at: exported[1].url)
+
+        // A memory: the sheet asks, unticked; Cancel writes nothing.
+        try Memory(folder: test.places.data, space: "board").set("seen", ["a1"])
+        ask.exports = { _ in nil }
         library.export("board")
-        let with = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: exported[2])) as? [String: Any])
-        #expect((with["data"] as? [String: Any])?["seen"] as? [String] == ["a1"] && ask.told.isEmpty)
-        try FileManager.default.removeItem(at: exported[2])
+        #expect(exported.count == 2 && ask.exportsAsked.count == 1 && ask.exportsAsked[0] == ("board", 1, false))
+        #expect(library.preferences.memoryExport["board"] == nil, "a Cancel answers nothing")
+        // Ticked: the memory goes, and the choice stays for this space, over the setting.
+        ask.exports = { _ in true }
+        library.export("board")
+        #expect(exported.last?.memory == true)
+        #expect(try held(try #require(exported.last).url).data?["seen"] as? [String] == ["a1"])
+        try FileManager.default.removeItem(at: try #require(exported.last).url)
+        ask.exports = { _ in false }
+        library.export("board")
+        #expect(ask.exportsAsked.last?.included == true && exported.last?.memory == false)
+        #expect(try held(try #require(exported.last).url).data == nil)
+        try FileManager.default.removeItem(at: try #require(exported.last).url)
+        library.preferences.exportMemory = true
+        ask.exports = { $0 }
+        library.export("board")
+        #expect(ask.exportsAsked.last?.included == false, "this space's own answer wins over the setting")
+        try FileManager.default.removeItem(at: try #require(exported.last).url)
+        // Settings › Spaces is the default of a space never answered for.
+        library.preferences.includeMemory(false, of: "other")
+        library.preferences.forget("board")
+        library.export("board")
+        #expect(ask.exportsAsked.last?.included == true)
+        try FileManager.default.removeItem(at: try #require(exported.last).url)
         library.preferences.exportMemory = false
 
-        // A file that carries a memory, as one made elsewhere may: the import keeps it.
-        let board = try #require(library.entry("board")?.space)
-        try Export.document(board, data: ["seen": ["a1"]], app: "test").write(to: saved)
+        // The file just written comes back whole, its memory too, into a free name: that is the round trip.
+        ask.exports = { _ in true }
+        library.export("board")
+        ask.chosen = try #require(exported.last).url
+        library.importChosen()
+        #expect(ask.told.isEmpty && library.entry("board-2")?.space.form == .folder, "\(ask.told)")
+        #expect(try Data(contentsOf: test.places.spaces.appendingPathComponent("board-2/index.html")) == Data(index.utf8))
+        #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
+        try FileManager.default.removeItem(at: test.places.spaces.appendingPathComponent("board-2"))
+        try FileManager.default.removeItem(at: Memory(folder: test.places.data, space: "board-2").file)
+        library.relist()
+        library.select(.space("board"))
+        try FileManager.default.removeItem(at: test.places.data.appendingPathComponent("board.json"))
+
+        // An older .something file, as one made elsewhere may be: the import keeps its memory.
+        let board = try #require(library.entry("board")?.space), older = test.places.downloads.appendingPathComponent("board.something")
+        try Export.document(board, data: ["seen": ["a1"]], app: "test").write(to: older)
 
         // Answers kept under the name the import will give: the received space must not inherit them.
         var file = try AppFile.read(test.places.grants)
@@ -281,11 +325,11 @@ import Testing
         try file.write(test.places.grants)
         var opened: [Library.Destination] = []
         library.opened = { opened.append($0) }
-        ask.chosen = saved
+        ask.chosen = older
         library.importChosen()
         #expect(ask.told.isEmpty, "\(ask.told)")
         #expect(library.selection == .space("board-2") && library.entry("board-2")?.space.form == .folder)
-        #expect(await wait(30, until: { opened == [.space("board-2")] }))
+        #expect(await wait(30, until: { opened.last == .space("board-2") }))
         #expect(try AppFile.read(test.places.grants).spaces["board-2"] == nil, "an imported space has no grant")
         #expect(try Memory(folder: test.places.data, space: "board-2").get("seen") as? [String] == ["a1"])
 
@@ -307,7 +351,7 @@ import Testing
         let outside = test.root.appendingPathComponent(".claude.json")
         try #"{"note": "invented"}"#.write(to: outside, atomically: true, encoding: .utf8)
         try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent("notes.json"), withDestinationURL: outside)
-        let saved = test.places.downloads.appendingPathComponent("board.something")
+        let saved = test.places.downloads.appendingPathComponent("board.html")
         let library = library(test, ask)
         library.export("board")
         #expect(FileManager.default.fileExists(atPath: saved.path))
@@ -318,10 +362,9 @@ import Testing
         try FileManager.default.createDirectory(at: test.places.data, withIntermediateDirectories: true)
         try FileManager.default.createSymbolicLink(at: Memory(folder: test.places.data, space: "board").file, withDestinationURL: outside)
         library.export("board")
-        let without = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: saved)) as? [String: Any])
-        #expect(without["data"] is NSNull && ask.told.count == 2, "\(ask.told)")
+        #expect(try Export.read(Export.unwrap(Data(contentsOf: saved)) ?? Data()).data == nil && ask.told.count == 2, "\(ask.told)")
         // Asked to carry it, the export stops and says why rather than follow the link.
-        library.preferences.exportMemory = true
+        ask.exports = { _ in true }
         library.export("board")
         #expect(ask.told.count == 3 && ask.told.last?.hasPrefix("“board” was not exported.") == true && ask.told.last?.contains("is a link") == true, "\(ask.told)")
     }

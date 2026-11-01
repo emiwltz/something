@@ -428,7 +428,7 @@ struct AcceptanceShow {
         shell.window.layoutIfNeeded()
         let panel = shell.inspector.viewController.view
         let infoRead = await AcceptanceBuild.read(panel)
-        #expect(infoRead.contains("Space") && infoRead.contains("History") && infoRead.contains("Export"), "\(infoRead)")
+        #expect(infoRead.contains("Space") && infoRead.contains("History") && infoRead.contains("Export…"), "\(infoRead)")
         #expect(info.history.bytes == store.weight("brief") && History.when(all[0].when, now: info.clock()) == "Today 18:12")
         // History: in Info's place, at its width; Info's button no longer pressed. The 320 points are Default's: read
         // in the drawing turn, which no other suite holds at Large meanwhile.

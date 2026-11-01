@@ -57,7 +57,7 @@ extension SettingsModel {
                 SettingsRow(title: "Where they live", note: "`~/\(Spaces.folders.spaces)` · one HTML file or folder each, yours.",
                             control: .button("Show in Finder", symbol: "finder") { [weak self] in self?.reveal(spaces) }),
                 SettingsRow(title: "Include a space’s memory when you export it",
-                            note: "Off: it exports as one .something file, without what it remembers. Space › Export Space (⇧⌘E).", control: toggle(\.exportMemory)),
+                            note: "Ticks Include Its Memory in File › Export Space… (⇧⌘E). Off: a file you hand to someone carries nothing it remembers.", control: toggle(\.exportMemory)),
                 SettingsRow(title: "Keep", note: "Each change is a version. ⌘Z goes back one; View › Show History… shows the others.",
                             control: number(\.versionsKept, [(20, "20"), (50, "50"), (100, "100"), (0, "All of them")]), trail: "versions of each space"),
             ]),

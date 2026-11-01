@@ -58,12 +58,19 @@ import SomethingCore
     @ObservationIgnored var told: (String) -> Void = { _ in }
     /// Whether a space is being built: it comes first in its group, drawn and walked by the keys alike.
     @ObservationIgnored var building: (String) -> Bool = { _ in false }
-    /// Told where an export was written: the window's toast, with Show.
-    @ObservationIgnored var exported: (URL) -> Void = { _ in }
+    /// Told where an export was written and whether it holds the memory: the window's toast, with Show.
+    @ObservationIgnored var exported: (URL, Bool) -> Void = { _, _ in }
     /// Show in Finder; a test puts its own, so that Finder never opens.
     @ObservationIgnored var reveal: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
-    /// Moves a file to the Trash; a test moves it into its own home, so that nothing reaches the person's Trash.
-    @ObservationIgnored var recycle: (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    /// Moves a file to the Trash and returns where it went; a test moves it into its own home, so that nothing reaches
+    /// the person's Trash.
+    @ObservationIgnored var discard: (URL) throws -> URL = { url in
+        var went: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &went)
+        return went as URL? ?? url
+    }
+    /// `discard`, for those who never bring a file back.
+    var recycle: (URL) throws -> Void { { [discard] in _ = try discard($0) } }
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var watched = false
     @ObservationIgnored private var looked: [String: Date] = [:]
@@ -243,42 +250,103 @@ import SomethingCore
         (try? Memory(folder: places.data, space: name).get("")).map { ($0 as? [String: Any])?.count ?? 0 }
     }
 
-    /// Moves the space, its memory and its versions to the Trash, where the person can put them back, and forgets its
-    /// answers. Says what failed.
-    func trash(_ name: String) {
-        guard let entry = entry(name) else { return }
-        let memory = Memory(folder: places.data, space: name).file
-        do {
-            try recycle(entry.space.location)
-            if FileManager.default.fileExists(atPath: memory.path) { try recycle(memory) }
-            preferences.forget(name)
-            try Library.forget(name, in: places, recycle: recycle)
-        } catch {
-            ask.tell("“\(entry.title)” was not moved to the Trash. \(error.sentence)")
-        }
-        relist()
+    /// A space in the Trash, while Undo can bring it back: where its file and its memory were, and went.
+    struct Trashed {
+        let name: String, title: String
+        let page: (home: URL, trash: URL), memory: (home: URL, trash: URL)?
     }
 
-    /// Saves the space `name` as one .something file in Downloads in one click (X5.3): under its name, or "name 2" and
-    /// on when that is taken, never over a file. Its memory goes only when the person chose so (Settings › Spaces);
-    /// grants and journal never go. The window says where it is (`exported`), or what failed.
+    /// Moves the space and its memory to the Trash and opens the next space in the sidebar's order, else the one
+    /// before, else New Space. All the rest it left stays until `forget`. Says what failed, and nil: both moved, or neither.
+    @discardableResult func trash(_ name: String) -> Trashed? {
+        guard let entry = entry(name) else { return nil }
+        let order = order().map(\.id), at = order.firstIndex(of: name)
+        let next = at.flatMap { order.indices.contains($0 + 1) ? order[$0 + 1] : order.indices.contains($0 - 1) ? order[$0 - 1] : nil }
+        let home = Memory(folder: places.data, space: name).file, location = entry.space.location
+        do {
+            let page = try discard(location)
+            var memory: (home: URL, trash: URL)?
+            do {
+                if FileManager.default.fileExists(atPath: home.path) { memory = (home, try discard(home)) }
+            } catch {
+                try? FileManager.default.moveItem(at: page, to: location)
+                throw error
+            }
+            if selection.space == name { select(next.map { .space($0) } ?? .newSpace) }
+            relist()
+            return Trashed(name: name, title: entry.title, page: (location, page), memory: memory)
+        } catch {
+            ask.tell("“\(entry.title)” was not moved to the Trash. \(error.sentence)")
+            relist()
+            return nil
+        }
+    }
+
+    /// Undo: puts `trashed` back where it was and opens it, its row ringed. Returns whether it came back, and the toast's
+    /// words, which say where it is when it did not.
+    func restore(_ trashed: Trashed) -> (back: Bool, words: String) {
+        let manager = FileManager.default, title = trashed.title
+        guard manager.fileExists(atPath: trashed.page.trash.path) else { return (false, "\(title) is no longer in the Trash") }
+        guard !manager.fileExists(atPath: trashed.page.home.path), Spaces(root: places.spaces).named(trashed.name) == nil else {
+            return (false, "\(title) stays in the Trash: a new space took its name")
+        }
+        do { try manager.moveItem(at: trashed.page.trash, to: trashed.page.home) } catch {
+            return (false, "\(title) stays in the Trash: \(error.localizedDescription)")
+        }
+        var words = "\(title) is back"
+        if let memory = trashed.memory, (try? manager.moveItem(at: memory.trash, to: memory.home)) == nil {
+            words += " · its memory stays in the Trash"
+        }
+        relist()
+        fresh = trashed.name
+        select(.space(trashed.name))
+        // The ring's own time, as an arrival lets it go.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { [weak self] in
+            if self?.fresh == trashed.name { self?.fresh = nil }
+        }
+        return (true, words)
+    }
+
+    /// The Undo of `trashed` is over: its answers, group and versions go, as its conversation does. Says what failed.
+    func forget(_ trashed: Trashed) {
+        preferences.forget(trashed.name)
+        do { try Library.forget(trashed.name, in: places, recycle: recycle) } catch {
+            ask.tell("What “\(trashed.title)” left was not cleared. \(error.sentence)")
+        }
+    }
+
+    /// Saves the space `name` as one HTML file in Downloads (F6.1): under its name, or "name 2" and on when that is
+    /// taken, never over a file. A space with a memory first asks whether it goes, ticked as this space's last answer
+    /// was, else as Settings › Spaces says; one without exports in one click. Grants and journal never go. The window
+    /// says where it is (`exported`), or what failed.
     func export(_ name: String) {
         guard let entry = entry(name) else { return }
         // Said by the title the person sees everywhere, not the file's name.
         let (space, title) = (entry.space, "“\(entry.title)”")
+        var carries = false
+        if let entries = remembers(name), entries > 0 {
+            guard let answer = ask.export(entry, entries: entries, included: preferences.includesMemory(name)) else { return }
+            preferences.includeMemory(answer, of: name)
+            carries = answer
+        }
         do {
-            let memory = preferences.exportMemory ? try Export.memory(space.name, in: places.data) : nil
-            let document = try Export.document(space, data: memory, app: Resources.version)
+            let memory = carries ? try Export.memory(space.name, in: places.data) : nil
+            let script = { (file: String) in
+                do { return try String(contentsOf: self.share.appendingPathComponent(file), encoding: .utf8) } catch {
+                    throw SpaceError("\(file) cannot be read in \(self.share.path): \(error.localizedDescription)")
+                }
+            }
+            let page = try Export.page(space, data: memory, app: Resources.version, bridge: script("something.js"), offline: script("offline.js"))
             let folder = places.downloads
-            let url = ([""] + (2...999).map { " \($0)" }).lazy.map { folder.appendingPathComponent("\(space.name)\($0).something") }
-                .first { !FileManager.default.fileExists(atPath: $0.path) } ?? folder.appendingPathComponent("\(space.name) \(UUID().uuidString).something")
+            let url = ([""] + (2...999).map { " \($0)" }).lazy.map { folder.appendingPathComponent("\(space.name)\($0).html") }
+                .first { !FileManager.default.fileExists(atPath: $0.path) } ?? folder.appendingPathComponent("\(space.name) \(UUID().uuidString).html")
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                try document.write(to: url, options: .withoutOverwriting)
+                try page.write(to: url, options: .withoutOverwriting)
             } catch {
                 throw SpaceError("The export could not be written to \(Words.path(url.path, home: places.home.path)): \(error.localizedDescription)")
             }
-            exported(url)
+            exported(url, carries)
             let links = Export.links(space)
             if !links.isEmpty {
                 ask.tell("\(title) was exported without \(links.joined(separator: ", ")): a link to somewhere else is never exported. Replace a link with the file itself to export it.")
@@ -319,18 +387,19 @@ import SomethingCore
         }
     }
 
-    /// Asks for a .something file and imports it.
+    /// Asks for an exported file and imports it.
     func importChosen() {
         if let url = ask.importFile() { importSpace(from: url) }
     }
 
-    /// Reads the .something file at `url` and makes it a new space, then opens it. It has no grant: what the grants
+    /// Reads the exported file at `url`, one HTML file or an older .something, and makes it a new space, then opens it. It has no grant: what the grants
     /// file kept for the name it gets is dropped before anything is written, so a grants file that cannot be changed
     /// leaves no space, and the space asks for its rights at its first opening.
     func importSpace(from url: URL) {
         do {
             // Mapped, not loaded: a huge file is refused by Export.read for its size without being read.
-            let received = try Export.read(try Data(contentsOf: url, options: .alwaysMapped))
+            let file = try Data(contentsOf: url, options: .alwaysMapped)
+            let received = try Export.read(Export.unwrap(file) ?? file)
             let folder = Spaces(root: places.spaces)
             let name = try Export.freeName(received, in: folder, memory: places.data)
             try Library.forget(name, in: places, recycle: recycle)

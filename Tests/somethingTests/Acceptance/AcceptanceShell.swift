@@ -1,5 +1,5 @@
 // Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen (b1, b3, b5,
-// b6; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2), Info in three parts (x5-1 to x5-3, which
+// b6; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2), Info in three parts (x5-1 and x5-2, which
 // retired b4), and round 2's calm window: the toolbar and Needs You (x9-1); the floating sidebar (2-1),
 // its pin and the View menu (2-2), Page Full Screen (2-6) and ⌘K in it (2-8). It also draws the frame of
 // b1 alone, with and without a toast, and a long name in a narrow window.
@@ -136,7 +136,7 @@ struct AcceptanceShell {
         #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
         let menu = SidebarMenu.text(library.menu(for: row))
         #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Work  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
-                         "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export", "—",
+                         "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export…", "—",
                          "Move to Trash…  (red)"])
         if let gallery {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
@@ -630,7 +630,7 @@ struct AcceptanceShell {
         #expect(Set(info.shown.map(\.word)) == ["Working", "Waiting for You", "Idle"], "\(info.shown.map(\.word))")
         // As VoiceOver reads the panel: every button named, the three parts, the level as one choice of four.
         let panel = shell.inspector.viewController.view
-        let heard = ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents: Watch",
+        let heard = ["Week-end", "Close Info", "Space", "Show in Finder", "Export…", "History", "Your agents", "With your agents: Watch",
                      "The agents it shows now", "Assistant", "Its assistant: Asleep", "Open Conversation", "Move to Trash…"]
         // SwiftUI makes the panel's elements part by part, as late as a loaded Mac lets it: read until all are there.
         let tree = await AccessibilityTests.walk(panel) { words in heard.allSatisfy(words.contains) }, read = tree.words
@@ -639,7 +639,7 @@ struct AcceptanceShell {
             #expect(read.contains(words), "the panel reads \(words): \(read)")
         }
         #expect(read.filter { ["Space", "Your agents", "Assistant"].contains($0) }.count == 3, "three parts: \(read)")
-        for gone in ["What it may do", "Versions", "About", "Activity", "Group", "Put to Sleep", "New Conversation", "Ask Again", "Export…", "Show Request"] {
+        for gone in ["What it may do", "Versions", "About", "Activity", "Group", "Put to Sleep", "New Conversation", "Ask Again", "Show Request"] {
             #expect(!read.contains { $0.hasPrefix(gone) }, "Info no longer holds \(gone)")
         }
         // Its sentences, as the panel draws them (offscreen, SwiftUI gives a text no element of its own).
@@ -781,10 +781,107 @@ struct AcceptanceShell {
         #expect(info.level == .watch && info.folder == nil && picks == 1)
     }
 
-    /// Export in one click (X5.3): one .something file in Downloads, without its memory until the person can choose to
-    /// include it, no sheet; the toast says where with Show. History beside it opens the versions in Info's place.
-    @Test("x5-3: Export in one click") func x5_3() async throws {
-        let stage = try Stage("shell-x5-3")
+    /// Move to Trash with Undo (F3.2): the next space opens, the toast offers Undo; Undo brings back the file, the memory,
+    /// the answers, the versions, the conversation and its place; the toast's end forgets them. An agent the space
+    /// started keeps running, and the toast says so.
+    @Test("f3-2: Trash with Undo, the next space opens") func f3_2() async throws {
+        let stage = try Stage("shell-f3-2")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant, engine = model.engine, places = stage.home.places
+        engine.changed = { model.refresh() }
+        engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let page = try await stage.open("logbook", in: shell, library)
+        defer { page.close() }
+        let trash = stage.home.root.appendingPathComponent("Trash")
+        library.discard = { url in
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: url, to: trash.appendingPathComponent(url.lastPathComponent))
+            return trash.appendingPathComponent(url.lastPathComponent)
+        }
+        library.preferences.motion = .reduced
+        func toast() -> Toast? { shell.layer.subviews.compactMap { $0 as? Toast }.last }
+        func undo() throws {
+            func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
+            try #require(toast().flatMap { buttons($0).first { $0.title == "Undo" } }).performClick(nil)
+        }
+        func trashed() throws -> [String] { try FileManager.default.contentsOfDirectory(atPath: trash.path).sorted() }
+        func grants() throws -> [String: Grant] { try AppFile.read(places.grants).spaces }
+        func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
+        func group(_ name: String) -> String? { library.sections().first { $0.entries.contains { $0.id == name } }?.group }
+        let conversation = Session.file("logbook", in: places.assistants), versions = Versions(root: places.versions, keep: 50, limit: 0)
+        let bin = TrashUndo(shell: shell), entry = try #require(library.entry("logbook"))
+        let order = library.order().map(\.id), next = order[try #require(order.firstIndex(of: "logbook")) + 1], home = group("logbook")
+        try versions.capture(entry.space, kind: .turn, sentence: "Make it")
+        Session(kind: "claude", space: "logbook").save(in: places.assistants)
+        library.preferences.includeMemory(true, of: "logbook")
+        let running = try engine.launch("claude", folder: stage.home.root.path, model: nil, mode: nil, effort: nil)
+        defer { engine.stopAll(within: 1, only: running) {} }
+        #expect(await wait(until: { engine.state.agents.contains { $0.id == running && $0.alive != false } }))
+        model.launches.ids["logbook"] = [running]
+        let word = try #require(bin.running("logbook").first)
+        #expect(try grants()["logbook"] != nil && exists(conversation))
+
+        // Gone at once, the next space open; all it left waits for the toast, and the agent it started keeps running.
+        bin.move(entry)
+        #expect(library.selection == .space(next) && library.entry("logbook") == nil, "the next space opens, not New Space")
+        #expect(toast()?.words == "Logbook is in the Trash · \(word) keeps running", "\(toast()?.words ?? "")")
+        #expect(try trashed() == ["logbook.html", "logbook.json"] && grants()["logbook"] != nil && versions.list("logbook").count == 1)
+        #expect(exists(conversation), "its conversation is kept")
+        #expect(engine.state.agents.contains { $0.id == running && $0.alive != false })
+
+        // Undo: everything back, in its place, the space open, its row ringed.
+        try undo()
+        #expect(toast()?.words == "Logbook is back")
+        #expect(library.selection == .space("logbook") && library.entry("logbook") != nil && library.fresh == "logbook" && group("logbook") == home)
+        #expect(try Memory(folder: places.data, space: "logbook").get("notes") != nil && grants()["logbook"] != nil && versions.list("logbook").count == 1)
+        #expect(exists(conversation) && library.preferences.memoryExport["logbook"] == true && model.launches.ids["logbook"] == [running])
+        try await stage.appearances { suffix in
+            let held = shell.toast("Logbook is back", seconds: 60)
+            try await Picture.window(shell, library: library, web: page.web, "f3-2" + suffix, root: stage.home.root)
+            held.leave(now: true)
+        }
+
+        // The toast's end: it goes for good. Its agent is no longer the space's, and goes on.
+        bin.move(entry)
+        #expect(library.selection == .space(next))
+        toast()?.leave(now: true)
+        #expect(try !exists(conversation) && grants()["logbook"] == nil && trashed().contains("logbook"), "its versions went to the Trash")
+        #expect(library.preferences.memoryExport["logbook"] == nil && model.launches.ids["logbook"] == nil && group("logbook") == nil)
+        #expect(engine.state.agents.contains { $0.id == running && $0.alive != false })
+
+        // Undo that can't: a new space took the name, and what the new one has stays.
+        let pet = try #require(library.entry("pet")), title = pet.title
+        var file = try AppFile.read(places.grants)
+        file.spaces["pet"] = Grant(declared: Asked(Declaration(name: "pet")), at: "2026-10-17T09:00:00Z")
+        try file.write(places.grants)
+        bin.move(pet)
+        _ = try stage.home.space("pet", "<!doctype html><p>A new one.</p>")
+        library.relist()
+        try undo()
+        #expect(toast()?.words == "\(title) stays in the Trash: a new space took its name")
+        #expect(try library.entry("pet") != nil && grants()["pet"] != nil)
+        // The Trash emptied meanwhile: said too.
+        let stack = try #require(library.entry("stack"))
+        bin.move(stack)
+        try FileManager.default.removeItem(at: trash.appendingPathComponent("stack.html"))
+        try undo()
+        #expect(toast()?.words == "\(stack.title) is no longer in the Trash")
+        // A second Trash ends the first's Undo at once.
+        let brief = try #require(library.entry("brief")), oracle = try #require(library.entry("oracle"))
+        Session(kind: "claude", space: "brief").save(in: places.assistants)
+        bin.move(brief)
+        bin.move(oracle)
+        #expect(!exists(Session.file("brief", in: places.assistants)))
+        bin.finish()
+    }
+
+    /// Export as one HTML file (F6.1): a space with a memory asks, Include Its Memory unticked; the file is in Downloads
+    /// without it, one space's answer kept; the toast says so with Show. History beside it opens the versions in Info's place.
+    @Test("f6-1: Export as one HTML file, then a browser") func f6_1() async throws {
+        let stage = try Stage("shell-f6-1")
         defer { stage.remove() }
         let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
         defer { view.close() }
@@ -792,25 +889,49 @@ struct AcceptanceShell {
         var revealed: [URL] = []
         library.reveal = { revealed.append($0) }
         let command = try #require(Keys.command("export"))
-        #expect(command.title == "Export Space" && command.key == "e" && command.action == #selector(App.exportSpace(_:)))
+        #expect(command.title == "Export Space…" && command.key == "e" && command.action == #selector(App.exportSpace(_:)))
+        // The sheet, as Export shows it: unticked; its words; Export is the way on, ↵ beside it.
+        let entries = try #require(library.remembers("week-end"))
+        let entry = try #require(library.entry("week-end"))
+        let asked = Ask.export(entry, entries: 12, included: false)
+        #expect(entries == 1 && asked.included() == false)
+        #expect(PanelsTests.texts(asked.sheet.contentView).contains("week-end.html · one HTML file, in Downloads"), "\(PanelsTests.texts(asked.sheet.contentView))")
+        #expect(PanelsTests.texts(asked.sheet.contentView).contains("12 entries. Anyone who gets the file can read them."))
+        #expect(asked.sheet.title == "Export \(entry.title)" && asked.sheet.buttons.map(\.title) == ["Cancel", "Export"] && asked.sheet.buttons.map(\.role) == [.cancel, .primary])
+        func ticks(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 }.filter { $0.title == "Include Its Memory" } + view.subviews.flatMap(ticks) }
+        let tick = try #require(asked.sheet.contentView.flatMap { ticks($0).first })
+        #expect(tick.state == .off, "unticked")
+        tick.performClick(nil)
+        #expect(asked.included() == true)
+        tick.performClick(nil)
+        #expect(Ask.export(entry, entries: 1, included: true).included() && PanelsTests.texts(Ask.export(entry, entries: 1, included: true).sheet.contentView).contains("1 entry. Anyone who gets the file can read them."))
+        try await stage.appearances { suffix in
+            try await Picture.sheet(asked.sheet, over: shell, library: library, web: view.web, "f6-1-sheet" + suffix, root: stage.home.root)
+        }
         // The toast in place at once, so that the pictures show it whole.
         library.preferences.motion = .reduced
         library.export("week-end")
-        let file = stage.home.places.downloads.appendingPathComponent("week-end.something")
-        let exported = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
-        #expect(exported["name"] as? String == "week-end" && exported["data"] is NSNull, "its memory stays on the Mac")
-        let ask = try #require(view.ask as? FakeAsk)
-        #expect(ask.told.isEmpty && ask.folderMessages.isEmpty, "no sheet, no panel: \(ask.told)")
+        let ask = try #require(library.ask as? FakeAsk)
+        #expect(ask.exportsAsked.count == 1 && ask.exportsAsked[0].included == false && ask.told.isEmpty, "\(ask.told)")
+        let file = stage.home.places.downloads.appendingPathComponent("week-end.html")
+        let exported = try Export.read(try #require(Export.unwrap(try Data(contentsOf: file))))
+        #expect(exported.name == "week-end" && exported.data == nil, "its memory stays on the Mac")
+        #expect(library.preferences.memoryExport["week-end"] == false, "kept for this space")
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
-        #expect(toast.words == "week-end.something is in Downloads · its memory stays on this Mac")
+        #expect(toast.words == "week-end.html is in Downloads · one HTML file")
         func buttons(_ view: NSView) -> [NSButton] { [view as? NSButton].compactMap { $0 } + view.subviews.flatMap(buttons) }
         let show = try #require(buttons(toast).first { $0.title == "Show" })
         show.performClick(nil)
         #expect(revealed == [file])
+        // The other word of the toast: with its memory.
+        ask.exports = { _ in true }
+        library.export("week-end")
+        let second = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
+        #expect(second.words == "week-end 2.html is in Downloads · one HTML file, its memory inside")
         // The pictures take longer than the toast stays: the same words held for them, as b1-frame-toast does.
         try await stage.appearances { suffix in
             let held = shell.toast(toast.words, action: Toast.Action(label: "Show") {}, seconds: 60)
-            try await Picture.window(shell, library: library, web: view.web, "x5-3" + suffix, root: stage.home.root)
+            try await Picture.window(shell, library: library, web: view.web, "f6-1" + suffix, root: stage.home.root)
             #expect(held.shown && held.superview != nil, "the toast is in the picture")
             held.leave(now: true)
         }
@@ -1322,9 +1443,7 @@ struct AcceptanceShell {
         #expect(await wait(until: { !model.building }))
         await AcceptanceBuild.finish(model)
     }
-    @Test("f3-2: Trash with Undo, the next space opens", .disabled("not built yet: C8")) func f3_2() async throws {}
     @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
-    @Test("f6-1: Export as one HTML file, then a browser", .disabled("not built yet: C8")) func f6_1() async throws {}
     @Test("f6-2: Import, checked first", .disabled("not built yet: C9")) func f6_2() async throws {}
     @Test("f6-2b: A file dropped on the window", .disabled("not built yet: C9")) func f6_2b() async throws {}
     @Test("f6-3: The white tile", .disabled("not built yet: S10")) func f6_3() async throws {}

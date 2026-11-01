@@ -41,8 +41,10 @@ import SomethingCore
         /// What a new space may do with the agents when its words name none (Grant.Level.guess): None, as before
         /// Settings had the row, so that a page sees no agent unless asked.
         var level = Grant.Level.none
-        /// Whether an export carries the space's memory.
+        /// Whether an export carries a space's memory, until the person answers for that space (`memoryExport`).
         var exportMemory = false
+        /// What the person last answered, by space, at Include Its Memory.
+        var memoryExport: [String: Bool] = [:]
         /// nil while it rests at its first place, the bottom trailing corner.
         var sticker: StickerPlace?
         /// Minutes; 0 for never.
@@ -53,7 +55,7 @@ import SomethingCore
 
         enum CodingKeys: String, CodingKey, CaseIterable {
             case lastOpen, assistant, model, effort, listed, commands, askEverything, fullAccess, resume, toured, hinted, groups, folded, names,
-                 recents, openAtStart, appearance, motion, size, notify, level, exportMemory, sticker, sleepAfter, awakeAtMost,
+                 recents, openAtStart, appearance, motion, size, notify, level, exportMemory, memoryExport, sticker, sleepAfter, awakeAtMost,
                  versionsKept, storageLimit
         }
 
@@ -178,12 +180,19 @@ import SomethingCore
             for index in values.groups.indices { values.groups[index].spaces.removeAll { !names.contains($0) } }
             values.recents.removeAll { !names.contains($0) }
             values.names = values.names.filter { names.contains($0.key) }
+            values.memoryExport = values.memoryExport.filter { names.contains($0.key) }
         }
     }
 
+    /// Whether Include Its Memory starts ticked for `name`.
+    func includesMemory(_ name: String) -> Bool { values.memoryExport[name] ?? values.exportMemory }
+
+    /// Keeps the person's answer at Include Its Memory, for `name` alone.
+    func includeMemory(_ included: Bool, of name: String) { change { $0.memoryExport[name] = included } }
+
     /// Forgets `name`, moved to the Trash: a new space of that name inherits neither its group nor its name.
     func forget(_ name: String) {
-        let all = Set(values.groups.flatMap(\.spaces) + values.recents + values.names.keys)
+        let all = Set(values.groups.flatMap(\.spaces) + values.recents + values.names.keys + values.memoryExport.keys)
         keep(only: all.subtracting([name]))
     }
 

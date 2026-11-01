@@ -34,7 +34,7 @@ Sources/Agent*/            one target per agent family: AgentClaude, AgentCodex,
                            Client Protocol, a profile per agent: OpenCode, OMP, Cursor; and Antigravity's descriptor),
                            AgentPi (pi, and OMP's reader), AgentAmp
 Sources/something/         the command and the Mac app; Extensions.swift is the only list of the agents
-share/                     what the app reads at run time: something.js, the templates, the guide, the skill, the
+share/                     what the app reads at run time: something.js, offline.js, the templates, the guide, the skill, the
                            assistant's AGENTS.md, the fonts (share/fonts/, with their licenses), the contract as data
                            (share/contract/)
 Tests/                     the Swift suites; Fixtures/ (invented agent homes the readers read, the mockup's menus and

@@ -1085,9 +1085,14 @@ import SomethingCore
         resolve()
     }
 
-    /// The space `name` went to the Trash: its conversation goes with it, its agent stopped, and a space of the same
-    /// name later begins a new one.
-    func forget(_ name: String) {
+    /// The space `name` went to the Trash, which Undo may still reverse: its agent stops, and its conversation stays in
+    /// its file, to come back asleep.
+    func leave(_ name: String) { end(name, forgetting: false) }
+
+    /// The space `name` is gone for good: its conversation goes with it, and a space of the same name later begins a new one.
+    func forget(_ name: String) { end(name, forgetting: true) }
+
+    private func end(_ name: String, forgetting: Bool) {
         // Halted first, as halting saves: the file goes after, before the open space's conversation is made again.
         let gone = sessions.removeValue(forKey: .space(name))
         gone.map(halt)
@@ -1095,7 +1100,7 @@ import SomethingCore
             halt(quick.session)
             quick.phase = .gone
         }
-        try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants))
+        if forgetting { try? FileManager.default.removeItem(at: Session.file(name, in: places.assistants)) }
         if let gone, gone === session { session = session(for: place) }
     }
 

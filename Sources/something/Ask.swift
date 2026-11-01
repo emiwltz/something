@@ -1,5 +1,5 @@
 // The sheets that ask the person, on the main window: a space's level with your agents (Levels.swift draws it), a mode that makes an agent ask less,
-// a link a space wants to open, whether an export carries the space's memory, where to save or find a .something file,
+// a link a space wants to open, whether an export carries the space's memory, where to find a file to import,
 // the folder a template follows, moving a space to the Trash, quitting while requests wait or agents work, switching
 // the assistant's builder, and how to get one. A space cannot draw them, so a space cannot answer them.
 // Each one names the space it is about. A space asks through `Asking`, so its tests answer without a window.
@@ -42,7 +42,10 @@ protocol Asking: AnyObject {
     /// true when the person chose to open `url`, which is then already open in their browser or mail app; false when
     /// they pressed Cancel; nil when the sheet could not be shown (no window, or another sheet up), which is no Cancel.
     func link(_ url: URL, space: String) -> Bool?
-    /// The .something file to import; nil when the person cancels.
+    /// Whether the export of `entry` carries its memory of `entries` entries, `included` ticked at first; nil when the
+    /// person cancels, or the sheet could not be shown.
+    func export(_ entry: Library.Entry, entries: Int, included: Bool) -> Bool?
+    /// The file to import; nil when the person cancels.
     func importFile() -> URL?
     /// A folder the person chooses, `message` saying what for; nil when they cancel.
     func folder(_ message: String) -> URL?
@@ -98,6 +101,11 @@ final class NativeAsk: Asking {
         return true
     }
 
+    func export(_ entry: Library.Entry, entries: Int, included: Bool) -> Bool? {
+        let sheet = Ask.export(entry, entries: entries, included: included)
+        return wait(sheet.sheet) == .primary ? sheet.included() : nil
+    }
+
     // The buttons' meanings, apart from the modal loop so that a test can hold them.
 
     /// true when the sheet ended with its first button (Allow); false for any other, or none.
@@ -109,7 +117,7 @@ final class NativeAsk: Asking {
 
     func importFile() -> URL? {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json]
+        panel.allowedContentTypes = [UTType(filenameExtension: "something") ?? .json, .json, .html]
         return chosen(panel)
     }
 
@@ -196,16 +204,45 @@ enum Ask {
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: mail ? "Open in Mail" : "Open in Browser", role: .primary)])
     }
 
+    /// The sheet before the export of a space that remembers something: Include Its Memory, ticked as `included` says,
+    /// then Cancel and Export. A file you hand to someone carries a memory only if you ask.
+    static func export(_ entry: Library.Entry, entries: Int, included: Bool) -> (sheet: Sheet, included: () -> Bool) {
+        let place = NSMutableAttributedString(string: "\(entry.space.name).html", attributes: [.font: Look.font(.code, size: 11.5), .foregroundColor: Look.Token.ink3.color])
+        place.append(NSAttributedString(string: " · one HTML file, in Downloads", attributes: [.font: Look.medium.font, .foregroundColor: Look.Token.ink3.color]))
+        let file = NSTextField(labelWithAttributedString: place)
+        let tick = NSButton(checkboxWithTitle: "Include Its Memory", target: nil, action: nil)
+        (tick.font, tick.state) = (Look.font(.ui, size: 13, weight: .medium), included ? .on : .off)
+        let note = Sheet.label([("\(entries) entr\(entries == 1 ? "y" : "ies"). Anyone who gets the file can read them.", false)], Look.small, color: .ink3,
+                               width: Sheet.column(width: 420) - 20)
+        let block = NSView()
+        for part in [file, tick, note] {
+            part.translatesAutoresizingMaskIntoConstraints = false
+            block.addSubview(part)
+        }
+        // The note lines up with the box's words, as the mockup sets it.
+        NSLayoutConstraint.activate([file.topAnchor.constraint(equalTo: block.topAnchor), file.leadingAnchor.constraint(equalTo: block.leadingAnchor),
+                                     tick.topAnchor.constraint(equalTo: file.bottomAnchor, constant: 18), tick.leadingAnchor.constraint(equalTo: block.leadingAnchor),
+                                     note.topAnchor.constraint(equalTo: tick.bottomAnchor, constant: 2), note.leadingAnchor.constraint(equalTo: block.leadingAnchor, constant: 20),
+                                     note.bottomAnchor.constraint(equalTo: block.bottomAnchor)])
+        let sheet = Sheet(icon: .symbol("square.and.arrow.up"), title: "Export \(entry.title)", block: block,
+                          actions: [.init(title: "Cancel", role: .cancel), .init(title: "Export", role: .primary, hint: "↵")], width: 420)
+        // Nothing here can be lost: Return exports, as the mockup's focus says.
+        sheet.makeFirstResponder(sheet.buttons[1])
+        return (sheet, { tick.state == .on })
+    }
+
     /// The sheet before Move to Trash: what goes with the space, its page, how many entries its memory holds (nil
-    /// when it does not read) and its assistant's conversation, of `messages` messages; then Cancel and Move to Trash.
-    static func trash(_ entry: Library.Entry, remembers: Int?, messages: Int) -> Sheet {
+    /// when it does not read), its assistant's conversation, of `messages` messages, and the `keeps` agents it started,
+    /// which keep running; then Cancel and Move to Trash.
+    static func trash(_ entry: Library.Entry, remembers: Int?, messages: Int, keeps: Int = 0) -> Sheet {
         let page = entry.space.location.lastPathComponent + (entry.space.form == .folder ? "/" : "")
         let memory = remembers.map { $0 == 0 ? "nothing yet" : "\($0) entr\($0 == 1 ? "y" : "ies")" } ?? "does not read"
         return Sheet(icon: .symbol("trash"), title: "Move \(entry.title) and its memory to the Trash?", body: [("These go with it:", false)],
-                     rows: [.init(mark: .symbol("doc"), label: [("Its page", false)], meta: page),
+                     rows: [.init(mark: .symbol("doc"), label: [("Its file", false)], meta: page),
                             .init(mark: .symbol("square.3.layers.3d"), label: [("What it remembers", false)], meta: memory),
                             .init(mark: .symbol("bubble.left"), label: [("Its assistant’s conversation", false)],
-                                  meta: messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")],
+                                  meta: messages == 0 ? "empty" : "\(messages) message\(messages == 1 ? "" : "s")")]
+                        + (keeps == 0 ? [] : [.init(mark: .symbol("eye"), label: [(keeps == 1 ? "The agent it started keeps running" : "The \(keeps) agents it started keep running", false)], meta: "")]),
                      fine: "Your agents and their own files stay where they are. You can put the space back from the Trash in Finder.",
                      actions: [.init(title: "Cancel", role: .cancel), .init(title: "Move to Trash", role: .destructive)])
     }
