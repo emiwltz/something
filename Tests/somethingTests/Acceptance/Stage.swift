@@ -126,7 +126,7 @@ final class Stage {
         (post.alive, post.can.resume) = (false, true)
         var old = agent("old", "omp", "Image sizes", "code/blog", "done", started: 4500, updated: 4400)
         old.alive = false
-        let agents = [agent("shop", "claude", "Fix the cart total", "code/shop", "waiting", started: 52, updated: 38), pacman,
+        let agents = [agent("shop", "claude", "Fix the cart total", "code/shop", "waiting", started: 52, updated: 34), pacman,
                       agent("portfolio", "claude", "Portfolio images", "code/portfolio", "working", started: 25, updated: 2),
                       agent("notes", "pi", "Reading list", "notes", "idle", started: 200, updated: 190), antigravity,
                       agent("login", "claude", "Login form", "code/shop", "working", started: 9, updated: 1), agent("tests", "amp", "Shop tests", "code/shop", "idle", started: 170, updated: 160),
@@ -134,7 +134,7 @@ final class Stage {
                       post, old]
         let threads = [
             thread("shop", "claude", "Fix the cart total", [("working", 52, nil, [("person", "The cart total is off by one cent on discounts.", nil, 52), ("agent", "Read cart.js and discounts.js", "Read", 50),
-                                                                                    ("agent", "Found it: the discount rounds twice.", nil, 41), ("agent", "npm test", "Bash", 38)])]),
+                                                                                    ("agent", "Found it: the discount rounds twice.", nil, 41), ("agent", "npm test", "Bash", 34)])]),
             thread("pacman", "claude", "Chase mode", [("working", 12, nil, [("person", "Bring the chase mode back, and keep the ghosts out of the walls.", nil, 12),
                                                                              ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 6),
                                                                              ("person", "Now give each ghost its own way of chasing.", nil, 4),
