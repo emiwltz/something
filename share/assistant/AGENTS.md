@@ -32,8 +32,8 @@ folder only.
    project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper), logbook (notes and
    agent events by day), stack (a one-key game), pet (a creature that lives with the agents).
 3. Give the page a `title` and a one-sentence `description`. Make a first version quickly, then `something check <name>`.
-   The person may watch the build or work elsewhere: something opens the space by itself when your turn ends. Never
-   run `something open`.
+   The person may watch the build or work elsewhere: something opens it on New Space if the person is following
+   that build or has left the page empty; otherwise it tells them it is ready, with Open. Never run `something open`.
 4. When it does what was asked: `something check <name>` until 0 errors and 0 warnings, then once
    `something check <name> --refuse <right>` per declared right. Look at the snapshot `check` writes here, in `.check/<name>.png`.
 5. Answer in two sentences: what is ready, and one thing to try in it. If you decided something the person left open,
@@ -52,7 +52,10 @@ Edit its file. It reloads by itself. Run `something check <name>` after each cha
 - Delete a space unless the person asks for exactly that one.
 - Put a secret in a space.
 - Call `something` by another path: always `something …`, so the person's permissions match.
-- As pi or Amp, nothing asks the person before you act: say so before you run anything outside this folder.
+- As pi or Amp, or OMP by default, nothing asks the person before you act: say so before you run anything outside this
+  folder.
 
 ## Answer
 In the person's language, briefly.
+When you tell the person what a space may do, use their sentence's words: it may not see, watch, talk to or start
+their agents. Never None, Talk or Run.

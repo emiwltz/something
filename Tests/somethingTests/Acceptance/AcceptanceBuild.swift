@@ -518,8 +518,8 @@ struct AcceptanceBuild {
     }
 
     /// A build that runs, in "Who is waiting for me" sent from New Space, the fake claude in `mode` (see AssistantTests).
-    static func building(_ mode: String) async throws -> (Stage, Shell, Library, NSView) {
-        let stage = try Stage("build")
+    static func building(_ mode: String, prefix: String? = nil) async throws -> (Stage, Shell, Library, NSView) {
+        let stage = try Stage("build", prefix: prefix)
         let out = stage.home.root.appendingPathComponent("out")
         try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
         try mode.write(to: out.appendingPathComponent("ladder"), atomically: true, encoding: .utf8)

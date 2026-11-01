@@ -59,11 +59,12 @@ final class Stage {
     /// Whether the pages see the mockup's agents (`world`).
     let seeded: Bool
 
-    /// A home named `something-accept-<area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
-    init(_ area: String) throws {
+    /// A home named `something-accept-<prefix or area>-…` in $TMPDIR, with every space written; `remove()` deletes it.
+    /// A scenario borrowing another area's world keeps its own suite's prefix for the cleanup check.
+    init(_ area: String, prefix: String? = nil) throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         Look.register(fonts: Home.share.appendingPathComponent("fonts"))   // as the app does at start
-        home = Home(prefix: "something-accept-\(area)-")
+        home = Home(prefix: "something-accept-\(prefix ?? area)-")
         grouped = ["show", "assistant", "build", "trust", "stopped"].contains(area)
         lively = area == "assistant"
         seeded = area != "show"

@@ -601,7 +601,7 @@ struct AcceptanceAgents {
     /// decide. The mockup's sketches beside the answers are for the reading of the person's words (C7): an agent's
     /// question brings none.
     @Test("f4-1: A build's question in full") func f4_1() async throws {
-        let (stage, shell, library, host) = try await AcceptanceBuild.building("ask")
+        let (stage, shell, library, host) = try await AcceptanceBuild.building("ask", prefix: "agents")
         defer { stage.remove() }
         let model = shell.assistant
         #expect(await wait(until: { model.asked != nil }))
@@ -627,7 +627,7 @@ struct AcceptanceAgents {
 
     /// F4.1b: the window's options each say what they mean, the field stays, Skip takes Don't Answer's place.
     @Test("f4-1b: The same, in the window") func f4_1b() async throws {
-        let stage = try Stage("trust")
+        let stage = try Stage("trust", prefix: "agents")
         defer { stage.remove() }
         let (shell, library, _) = stage.window()
         shell.window.setFrameOrigin(AcceptanceTrust.large)
@@ -663,7 +663,7 @@ struct AcceptanceAgents {
     /// that needs text says "…", stays in the field on Return, says what to write, and goes only with its text. A
     /// program that gives no list says so.
     @Test("f4-2: \"/\" from the first try") func f4_2() async throws {
-        let stage = try Stage("assistant")
+        let stage = try Stage("assistant", prefix: "agents")
         defer { stage.remove() }
         try AcceptanceAssistant.fake(in: stage)
         let (shell, library, _) = stage.window()

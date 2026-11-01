@@ -21,16 +21,18 @@ something
 
 `something` opens alone on your desktop, with five short steps, each one sentence and one drawing: pages of your own,
 what an agent is and where it lives, the one that builds and the ones you show, who answers, and your first space. Esc
-skips them. The coding agent found on your Mac is already chosen to build your
-spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
-the window. Notifications (Settings › Permissions) stay off until you turn them on. Help › Welcome shows the welcome
+skips them. The coding program found on your Mac is already chosen for your assistant; change it and its model on
+the third step. Make My First Space opens New Space, and Open an Example opens My agents. Choosing another program
+may start it, without a message, to read its models. Notifications (Settings › Permissions) stay off until you turn
+them on. Help › Welcome shows the welcome
 again, and Help › How something Works the picture, one part at a time if you like.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example). Under the field one sentence says what it may do with your agents, "This space may [watch]
 [all your agents].", pre-set from your words, else from Settings › Permissions, "not see" at first; each bracketed word opens
-a menu that explains its choices. Build, or ⌘↵ at any moment, starts it: your assistant builds it, decides what you left
-open and says so, and the space opens by itself when ready, with nothing more to allow. The space appears in the sidebar
+a menu that explains its choices. Build Now, Continue or ⌘↵ starts it: your assistant builds it, decides what you left
+open and says so, and the space opens by itself when ready if you are following that build, with nothing more to
+allow. The space appears in the sidebar
 at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time: nothing
 stops them, and a click on the row shows the build again. A space that finishes while you are elsewhere says "… is ready
 · Open" (and a notification of the Mac too while something is in the background, if you turned notifications on). Its
@@ -40,10 +42,11 @@ fails, or that you stop, keeps your words and their level on New Space to try ag
 it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the way. Click it
 (or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says so beside it;
 Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small again, ⌘. stops
-the assistant. Its three chips, "Claude Code", "Sonnet 5.5 · High" and "Accepts
-Edits", change the program, the model and its effort, and what it does on its own, for that space's conversation: each
-model says in one line what it is, under the name the agent gives it, and for a program something has not run yet the
-chip says "Reading its models…" while something starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them, from the first try (↑↓, Return
+the assistant. Its first two chips, "Claude Code" and "Sonnet 5.5 · High", change the program, model and effort of
+that space's conversation. The third, "Accepts Edits" or "Asks First" where offered, changes whether your assistants
+ask before building work, from their next conversation. Each model says in one line what it is, under the name the
+agent gives it, and for a program something has not run yet the chip says "Reading its models…" while something
+starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them, from the first try (↑↓, Return
 sends one as you wrote it, Tab leaves it for its text; a command that needs text waits for it). Codex, pi and Amp give
 no list: "/" says so, and you can type a command yourself. something remembers each agent's list for the next time it
 is not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
@@ -158,8 +161,8 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   that sentence: a click on a word changes it at once, and the list under it, This Space Sees, is the page's own list.
   Hide an agent and the page no longer has it, show one and the page has it, each with Undo; neither touches the agent.
   Its Info tab holds the file, its size, Export, its memory, its versions and
-  the agent its assistant works with. Settings › Permissions lists every space with its level, and changes one the same
-  way; Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
+  the agent its assistant works with. Settings › Permissions lists every space with its level and lets you change it;
+  its Folders section lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. A question comes the same way: each answer says what it means, you
   may type your own, and Skip lets the agent decide and say so. What your assistant asks before or while it builds is
@@ -194,11 +197,12 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   takes that file, a folder, an .html file or an older `.something` file: something checks it first, locked off the
   network, says what it found, and brings it in as a copy.
 
-something reads each agent's own files read-only, and takes only what a space is shown. It writes nothing into your
-agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
+something reads each agent's own files read-only, and takes only what a space is shown or what you open in the panel.
+It writes nothing into your agents' configuration: no hook, no MCP server, no skill, no setting. What a launch needs is passed on the command line
 or the agent's channel, for that launch only. It writes only in `~/something/` and
-`~/Library/Application Support/something/`, plus the exports you ask for in `~/Downloads` and the snapshots
-`something check` takes in `$TMPDIR/something-check`; what it removes goes to the Trash.
+`~/Library/Application Support/something/`, plus the exports you ask for in `~/Downloads`, the snapshots
+`something check` takes in `$TMPDIR/something-check`, and the one-use file Continue in Terminal hands to Terminal,
+in `$TMPDIR`; what it removes goes to the Trash.
 
 ## No network for spaces
 

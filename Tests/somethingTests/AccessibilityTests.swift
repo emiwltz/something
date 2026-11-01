@@ -79,7 +79,8 @@ struct AccessibilityTests {
         let building = await Self.walk(shell.window)
         #expect(building.count > 20 && building.unnamed.isEmpty, "\(building)")
         #expect(await wait(until: { !model.building && model.rows.last == .reply("Invented reply.") }))
-        let answered = await Self.walk(shell.window)
+        // The model can finish before SwiftUI replaces the build's accessibility tree.
+        let answered = await Self.walk(shell.window, until: { $0.contains("Your assistant: Invented reply.") })
         #expect(answered.words.contains("Your assistant: Invented reply.") && answered.unnamed.isEmpty, "\(answered)")
         await AcceptanceBuild.finish(model)
     }
