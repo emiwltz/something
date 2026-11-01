@@ -920,7 +920,7 @@ struct AcceptanceBuild {
         defer { scene.remove() }
         for _ in 0..<2 { scene.model.go(1) }
         try await scene.draw("f1-3") { words in
-            #expect(words == Self.beatWords(.roles, schema: Self.rolesWords + [AgentModelChip.label(scene.assistant), "Your assistant’s folder gives a space nothing."], back: true), "\(words)")
+            #expect(words == Self.beatWords(.roles, schema: Self.rolesWords + AgentChips.labels(scene.assistant).prefix(2) + ["Your assistant’s folder gives a space nothing."], back: true), "\(words)")
         }
     }
 

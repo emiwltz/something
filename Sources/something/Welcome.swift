@@ -179,7 +179,7 @@ struct WelcomeView: View {
         if assistant.kind == nil {
             Text("an agent you install").font(Look.fixed(.ui, size: 12.5, weight: .semibold))
         } else {
-            AgentModelChip(model: assistant).boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
+            AgentChips(model: assistant, own: false).boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
         }
     }
 
