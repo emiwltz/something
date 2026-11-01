@@ -1,6 +1,8 @@
-// A space as one `.something` file: one JSON document with its files in base64 and its memory or null,
-// written from the space's own files only, never through a link; and the reading and placing of one, which refuses a
-// path that is not a plain path inside the space, a newer contract, and a file too big, before anything is written.
+// A space as one file: its page, exact to the byte, with one block after its doctype that holds a `.something` document
+// without the page, something.js and offline.js, so a browser shows the page and an import gets the space back. The
+// `.something` document itself is one JSON object with its files in base64 and its memory or null, written from the
+// space's own files only, never through a link. Reading and placing one refuses a path that is not a plain path inside
+// the space, a newer contract, and a file too big, before anything is written.
 // Grants and journals are never read here, so they cannot travel; whoever imports drops the grants of the name the
 // space receives before placing it.
 import Foundation
@@ -52,6 +54,70 @@ public enum Export {
             throw SpaceError("The export of \(space.name) would weigh \(Size.words(document.count)) with its files in base64; an import takes at most 20 MB, about 15 MB of files.")
         }
         return document
+    }
+
+    /// The one HTML file for `space`: its page with the block after its doctype. The block holds what `document` gives,
+    /// less the page's own bytes, so what a browser shows is what an import brings in; `bridge` and `offline` are the
+    /// texts of something.js and offline.js. Throws as `document` does.
+    public static func page(_ space: Space, data: [String: Any]?, app: String, bridge: String, offline: String, at: Date = Date()) throws -> Data {
+        let path = space.form == .file ? "\(space.name).html" : "index.html"
+        guard var object = try JSONSerialization.jsonObject(with: try document(space, data: data, app: app, at: at)) as? [String: Any],
+              var files = object["files"] as? [String: String], let page = files.removeValue(forKey: path).flatMap({ Data(base64Encoded: $0) }) else {
+            throw SpaceError("The page of \(space.name) cannot be read, so it was not exported.")
+        }
+        object["files"] = files
+        // Nothing in JSON but a string holds a "<", so no value can end its script.
+        let json = String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]), as: UTF8.self)
+            .replacingOccurrences(of: "<", with: "\\u003c")
+        let block = """
+            <!-- something export -->
+            <meta charset="utf-8">
+            <meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:; form-action 'none'">
+            \(opener)\(json)</script>
+            <script>if (!window.something) { \(bridge) }</script>
+            <script>\(offline)</script>
+            <!-- /something export -->
+
+            """
+        let at = opening(of: page)
+        return Data(page[..<at]) + Data(block.utf8) + Data(page[at...])
+    }
+
+    /// The `.something` document an HTML file from `page` holds, its page put back byte for byte, for `read`; nil when
+    /// the file has no block, or one that does not read: then it is a plain page.
+    public static func unwrap(_ html: Data) -> Data? {
+        // Its files are lighter here than in base64, so past this the document could not be read either.
+        guard html.count <= limit + 1_000_000 else { return nil }
+        let at = opening(of: html)
+        guard html[at...].starts(with: begin), let end = html.range(of: Data("<!-- /something export -->\n".utf8), in: at..<html.endIndex),
+              let from = html.range(of: Data(opener.utf8), in: at..<end.lowerBound),
+              let to = html.range(of: Data("</script>".utf8), in: from.upperBound..<end.lowerBound),
+              var object = (try? JSONSerialization.jsonObject(with: html[from.upperBound..<to.lowerBound])) as? [String: Any],
+              var files = object["files"] as? [String: String], let name = object["name"] as? String else { return nil }
+        files[object["form"] as? String == "file" ? "\(name).html" : "index.html"] = (Data(html[..<at]) + Data(html[end.upperBound...])).base64EncodedString()
+        object["files"] = files
+        return try? JSONSerialization.data(withJSONObject: object)
+    }
+
+    private static let begin = Data("<!-- something export -->\n".utf8), opener = "<script type=\"application/json\" id=\"something-export\">"
+
+    /// Where the block goes in `page`, or stands in a file made from one: past a byte order mark, white space, comments
+    /// and the doctype, since anything else before a doctype would turn the page to quirks mode. HTML allows the place:
+    /// the `<html>` and `<head>` that come after only merge. The same bytes come before it in both, so both find it.
+    private static func opening(of page: Data) -> Data.Index {
+        var at = page.startIndex + (page.starts(with: [0xEF, 0xBB, 0xBF]) ? 3 : 0)
+        while true {
+            while at < page.endIndex, [0x09, 0x0A, 0x0C, 0x0D, 0x20].contains(page[at]) { at += 1 }
+            let rest = page[at...]
+            if rest.starts(with: begin) { return at }
+            if rest.starts(with: Data("<!--".utf8)), let end = page.range(of: Data("-->".utf8), in: at..<page.endIndex) {
+                at = end.upperBound
+            } else if String(decoding: rest.prefix(9), as: UTF8.self).lowercased() == "<!doctype", let end = rest.firstIndex(of: 0x3E) {
+                return end + 1
+            } else {
+                return at
+            }
+        }
     }
 
     /// The paths of the links in a folder space, sorted: what its export leaves out. A file space has none here (a

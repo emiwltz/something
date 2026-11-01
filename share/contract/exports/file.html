@@ -1,0 +1,250 @@
+<!doctype html><!-- something export -->
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'unsafe-inline' data: blob:; form-action 'none'">
+<script type="application/json" id="something-export">{"app":"1.0.0","contract":1,"data":null,"exported":"2026-10-17T12:00:00Z","files":{},"form":"file","format":"something-space","name":"morning-review"}</script>
+<script>if (!window.something) { // The bridge a space talks to something through: contract 1, as the guide describes it under "The bridge". Plain
+// JavaScript, no dependency. The engine injects it before the page's scripts, then calls _granted and _push. Each call
+// posts {contract, id, method, params} to WebKit's "something" message handler, which answers {result} or {error}.
+(function () {
+  "use strict";
+  const listeners = { change: [], granted: [] };
+  let granted = { rights: [], refused: [], unavailable: [], limits: {}, agents: { folders: [] }, folder: null };
+  let next = 1;
+
+  // An Error with a bridge code of contract 1, so a page can branch on .code and show .message.
+  function failure(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function host() {
+    const webkit = window.webkit;
+    return webkit && webkit.messageHandlers && webkit.messageHandlers.something;
+  }
+
+  function call(method, params) {
+    const handler = host();
+    if (!handler) {
+      return Promise.reject(failure("NO_HOST", "This page is not open in something; open the space in something to reach its agents."));
+    }
+    const request = { contract: 1, id: next++, method: method, params: params };
+    // Inside the promise, so a post that throws (WebKit cannot copy a function, for example) rejects instead.
+    return new Promise(function (resolve) { resolve(handler.postMessage(request)); })
+      .then(function (answer) {
+        if (answer && answer.error) throw failure(answer.error.code, answer.error.message);
+        return answer && answer.result !== undefined ? answer.result : null;
+      }, function (error) {
+        if (error && error.code) throw error;
+        throw failure("BAD_PARAMS", method + " was given a value that cannot be sent to something; pass only JSON values.");
+      });
+  }
+
+  // Keys left undefined are left out: the engine reads a missing key as "not given".
+  function given(params, values, keys) {
+    keys.forEach(function (key) { if (values && values[key] !== undefined) params[key] = values[key]; });
+    return params;
+  }
+
+  // A listener that throws must not stop the others; its error still reaches the page as uncaught, with its file
+  // and line: reportError keeps them, where a throw from this injected script would reach the page as "Script error.".
+  function tell(event, value) {
+    listeners[event].slice().forEach(function (fn) {
+      try { fn(value); } catch (error) {
+        if (typeof reportError === "function") reportError(error); else setTimeout(function () { throw error; });
+      }
+    });
+  }
+
+  const something = {
+    state: function () { return call("state", {}); },
+    on: function (event, fn) {
+      if (!Object.prototype.hasOwnProperty.call(listeners, event)) {
+        throw failure("UNKNOWN_EVENT", "something.on takes \"change\" or \"granted\", not " + JSON.stringify(event) + ".");
+      }
+      if (typeof fn !== "function") throw failure("BAD_PARAMS", "something.on needs a function to call.");
+      listeners[event].push(fn);
+      return function () {
+        const at = listeners[event].indexOf(fn);
+        if (at >= 0) listeners[event].splice(at, 1);
+      };
+    },
+    // Without `when` the engine holds the message for the next turn ("next", the default). With `command`, one of the
+    // agent's `commands`, the text is that command's argument and may be left out: "/command text" goes to the agent.
+    send: function (agent, text, options) {
+      return call("send", given(given({ agent: agent }, { text: text }, ["text"]), options, ["when", "command"]));
+    },
+    interrupt: function (agent) { return call("interrupt", { agent: agent }); },
+    set: function (agent, values) { return call("set", given({ agent: agent }, values, ["model", "mode", "effort"])); },
+    launch: function (kind, options) { return call("launch", given({ kind: kind }, options, ["folder", "model", "mode", "effort"])); },
+    resume: function (kind, threadId) { return call("resume", { kind: kind, thread: threadId }); },
+    store: Object.freeze({
+      get: function (path) { return call("store.get", { path: path }); },
+      set: function (path, value) { return call("store.set", { path: path, value: value === undefined ? null : value }); },
+    }),
+    open: function (url) { return call("open", { url: url }); },
+    // For the engine only: a new state, and new rights (a revocation reaches an open space this way).
+    _push: function (state) { tell("change", state); },
+    _granted: function (value) { granted = value; tell("granted", value); },
+  };
+  Object.defineProperty(something, "contract", { value: 1, enumerable: true });
+  Object.defineProperty(something, "granted", { get: function () { return granted; }, enumerable: true });
+  window.something = Object.freeze(something);
+})();
+ }</script>
+<script>// What an exported space's HTML file runs in a browser, after something.js: there is no host, so every agent call stays
+// refused with NO_HOST, and a page written to the guide hides what needs agents. Its memory works over the `data` the
+// file carries, kept in this browser. A folder's other files, which the file carries too, become blob URLs: each `src`
+// and `href` is rewritten as the parser adds it, and `fetch` answers for those paths. An image or a font named inside a
+// stylesheet stays empty. Inside something it does nothing: the real bridge is there.
+(function () {
+  "use strict";
+  const base = window.something, webkit = window.webkit;
+  if (webkit && webkit.messageHandlers && webkit.messageHandlers.something) return;
+  const exported = JSON.parse(document.getElementById("something-export").textContent);
+
+  function failure(code, message) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  // The memory, with the rules of the engine's: paths of keys joined by "/", null removes, 5 MB at most.
+  const place = "something-export:" + exported.name + ":" + exported.exported;
+  let memory = exported.data || {};
+  try {
+    const kept = localStorage.getItem(place);
+    if (kept) memory = JSON.parse(kept);
+  } catch (error) { /* A browser that keeps nothing still shows the file's memory. */ }
+
+  function keys(path) {
+    if (typeof path !== "string" || path.split("/").includes("") && path !== "") {
+      throw failure("BAD_PARAMS", JSON.stringify(path) + " is no path: a path is keys joined by /, for example settings/theme.");
+    }
+    return path === "" ? [] : path.split("/");
+  }
+
+  function put(object, path, value) {
+    const key = path[0];
+    const own = Object.prototype.hasOwnProperty.call(object, key);
+    if (path.length === 1) {
+      if (value === null) delete object[key]; else object[key] = value;
+      return;
+    }
+    if (!own && value === null) return;
+    if (!own) object[key] = {};
+    const child = object[key];
+    if (child === null || typeof child !== "object" || Array.isArray(child)) {
+      throw failure("BAD_PARAMS", JSON.stringify(key) + " holds a value that is not an object, so nothing can be put inside it.");
+    }
+    put(child, path.slice(1), value);
+  }
+
+  function keep(next) {
+    const text = JSON.stringify(next);
+    if (new Blob([text]).size > 5000000) throw failure("STORE_FULL", "The memory would weigh more than the limit of 5 MB.");
+    memory = next;
+    try { localStorage.setItem(place, text); } catch (error) { /* It lasts as long as the page, then. */ }
+  }
+
+  const store = Object.freeze({
+    get: function (path) {
+      if (!stores()) return base.store.get(path);
+      return new Promise(function (resolve) {
+        const value = keys(path).reduce(function (held, key) {
+          return held !== null && typeof held === "object" && !Array.isArray(held) && Object.prototype.hasOwnProperty.call(held, key) ? held[key] : null;
+        }, memory);
+        resolve(value === undefined ? null : JSON.parse(JSON.stringify(value)));
+      });
+    },
+    set: function (path, value) {
+      if (!stores()) return base.store.set(path, value);
+      return new Promise(function (resolve) {
+        const steps = keys(path), plain = value === undefined ? null : JSON.parse(JSON.stringify(value));
+        if (steps.length === 0) {
+          if (plain !== null && (typeof plain !== "object" || Array.isArray(plain))) {
+            throw failure("BAD_PARAMS", "The whole memory is one JSON object: store.set(\"\", value) takes an object, or null to empty it.");
+          }
+          keep(plain || {});
+        } else {
+          const next = JSON.parse(JSON.stringify(memory));
+          put(next, steps, plain);
+          keep(next);
+        }
+        resolve(null);
+      });
+    },
+  });
+
+  // Read at each call: the declaration comes after this script, and before the page's own.
+  function stores() {
+    try {
+      return JSON.parse(document.getElementById("something").textContent).rights.includes("store");
+    } catch (error) { return false; }
+  }
+
+  window.something = Object.freeze(Object.create(base, {
+    store: { value: store, enumerable: true },
+    granted: { get: function () { return Object.assign({}, base.granted, { rights: stores() ? ["store"] : [] }); }, enumerable: true },
+  }));
+
+  const files = exported.files, made = {};
+  if (Object.keys(files).length === 0) return;
+  const types = {
+    css: "text/css", js: "text/javascript", mjs: "text/javascript", html: "text/html", json: "application/json", svg: "image/svg+xml",
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", woff2: "font/woff2", woff: "font/woff",
+    ttf: "font/ttf", otf: "font/otf", mp3: "audio/mpeg", wav: "audio/wav", mp4: "video/mp4", webm: "video/webm", wasm: "application/wasm",
+  };
+
+  // The file's path a page's address means, read as the space's own server reads it; undefined for any other address.
+  function path(address) {
+    const folder = document.baseURI.replace(/[^/]*$/, ""), relative = address.startsWith(folder) ? address.slice(folder.length) : address;
+    try {
+      const url = new URL(relative, "http://space.invalid/");
+      const named = url.host === "space.invalid" ? decodeURIComponent(url.pathname.slice(1)) : undefined;
+      return Object.prototype.hasOwnProperty.call(files, named) ? named : undefined;
+    } catch (error) { return undefined; }
+  }
+
+  function blob(name) {
+    if (!made[name]) {
+      const type = types[name.split(".").pop().toLowerCase()] || "application/octet-stream";
+      made[name] = new Blob([Uint8Array.from(atob(files[name]), function (c) { return c.charCodeAt(0); })], { type: type });
+    }
+    return made[name];
+  }
+
+  function rewrite(element, attribute) {
+    const name = element.hasAttribute(attribute) ? path(element.getAttribute(attribute)) : undefined;
+    if (name !== undefined) element.setAttribute(attribute, URL.createObjectURL(blob(name)));
+  }
+
+  function rewriteAll(element) {
+    ["src", "href"].forEach(function (attribute) { rewrite(element, attribute); });
+  }
+
+  // Parsing stops at each script's end tag for these records, so a script's `src` is rewritten before it loads.
+  new MutationObserver(function (records) {
+    records.forEach(function (record) {
+      if (record.type === "attributes") rewrite(record.target, record.attributeName);
+      record.addedNodes.forEach(function (node) {
+        if (node.nodeType !== 1) return;
+        rewriteAll(node);
+        node.querySelectorAll("[src], [href]").forEach(rewriteAll);
+      });
+    });
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "href"] });
+
+  const fetched = window.fetch;
+  window.fetch = function (input, options) {
+    const name = path(typeof input === "string" ? input : String(input && input.url || input));
+    if (name === undefined) return fetched.call(window, input, options);
+    return Promise.resolve(new Response(blob(name), { headers: { "Content-Type": blob(name).type } }));
+  };
+})();
+</script>
+<!-- /something export -->
+
+<title>Morning review</title>
+<script type="application/json" id="something">{ "contract": 1 }</script>
+<p>Invented page.</p>

@@ -1,5 +1,5 @@
-// The .something export: each fixture of share/contract/exports read as it says, a file space and a
-// folder space through a round trip, every hostile document refused with its code before anything is written, a
+// The export: each fixture of share/contract/exports read as it says, the one HTML file back to its page byte for byte,
+// a file space and a folder space through a round trip, every hostile document refused with its code before anything is written, a
 // taken name, and a string planted in an invented agent session never reaches an export.
 import Foundation
 import Testing
@@ -55,6 +55,99 @@ import Testing
             #expect(received.name == expect["name"] as? String, "\(name)")
             #expect(received.files.keys.sorted() == expect["files"] as? [String], "\(name)")
             #expect(received.data as NSDictionary? == expect["data"] as? NSDictionary, "\(name)")
+        }
+    }
+
+    /// The one HTML file for `space`, with the scripts of share/.
+    func html(_ space: Space, data: [String: Any]? = nil) throws -> Data {
+        let share = ContractFiles.root.appendingPathComponent("share")
+        return try Export.page(space, data: data, app: "1.0.0-test", bridge: String(contentsOf: share.appendingPathComponent("something.js"), encoding: .utf8),
+                               offline: String(contentsOf: share.appendingPathComponent("offline.js"), encoding: .utf8))
+    }
+
+    /// Each .html beside a .json fixture is the same space in the file `Export.page` writes: an older something's file
+    /// must import for as long as contract 1 lasts, so these never follow the scripts of share/.
+    @Test func eachOneFileFixtureHoldsTheSameSpaceAsItsDocument() throws {
+        for name in ["file", "folder"] {
+            let bytes = try ContractFiles.data("exports/\(name).html")
+            let received = try Export.read(Export.unwrap(bytes) ?? Data())
+            let document = try ContractFiles.object("exports/\(name).json")["export"] ?? [:]
+            let same = try Export.read(try JSONSerialization.data(withJSONObject: document))
+            #expect(received.name == same.name && received.form == same.form && received.files == same.files, "\(name)")
+            #expect(received.data as NSDictionary? == same.data as NSDictionary?, "\(name)")
+            let block = String(decoding: bytes, as: UTF8.self).components(separatedBy: "id=\"something-export\">")[1].components(separatedBy: "</script>")[0]
+            let keys = try #require(try JSONSerialization.jsonObject(with: Data(block.utf8)) as? [String: Any])
+            #expect(Shape(try ContractFiles.object("shape.json")).problems(keys, type: "Export").isEmpty, "\(name): every key of Export")
+        }
+    }
+
+    /// The bytes of a page never change, whatever they are: this is what makes an export a copy.
+    @Test func aPageComesBackByteForByte() throws {
+        let pages: [Data] = [
+            "<!doctype html><title>Invented</title>", "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01//EN\">\r\n<html lang=\"fr\"><body>é\r\n</body></html>\r\n",
+            "<p>No doctype, no newline at its end</p>", "\u{FEFF}<!doctype html><p>A byte order mark</p>", "  \n<!-- Before -->\n<!doctype html>\n<p>A comment first</p>",
+            "<!-- not closed", "<!doctype html", "", "\n", "<!doctype html><!-- something export -->\n<p>Its marks in the page</p><!-- /something export -->\n",
+            "<!-- something export -->\n<p>A mark first</p>", "<script>document.write('</script>')</script>", "<!doctype html><script type=\"application/json\" id=\"something-export\">{}</script>",
+        ].map { Data($0.utf8) } + [Data([0x3C, 0x70, 0x3E, 0xFF, 0xFE, 0x00, 0x80])]
+        for (index, page) in pages.enumerated() {
+            let from = Place()
+            defer { from.remove() }
+            let name = "invented-\(index)"
+            try FileManager.default.createDirectory(at: from.spaces.root, withIntermediateDirectories: true)
+            try page.write(to: from.spaces.root.appendingPathComponent("\(name).html"))
+            let exported = try html(try #require(from.spaces.named(name)), data: ["note": "</script><!-- /something export -->\n"])
+            let received = try Export.read(try #require(Export.unwrap(exported), "page \(index)"))
+            #expect(received.files == ["\(name).html": page], "page \(index)")
+            #expect(received.data?["note"] as? String == "</script><!-- /something export -->\n", "page \(index)")
+            // Exported twice over, as a file put in the spaces folder would be: each export takes off its own block.
+            try exported.write(to: from.spaces.root.appendingPathComponent("\(name).html"))
+            let wrapped = try html(try #require(from.spaces.named(name)))
+            let again = try Export.read(try #require(Export.unwrap(wrapped), "page \(index)"))
+            #expect(again.files == ["\(name).html": exported], "page \(index)")
+        }
+    }
+
+    @Test func aFolderSpaceTravelsInOneFileAndPlacesExact() throws {
+        let from = Place(), to = Place()
+        defer { from.remove(); to.remove() }
+        try from.write("<!doctype html><title>Invented</title><img src=\"img/logo.svg\">", "something/spaces/board/index.html")
+        try from.write("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", "something/spaces/board/img/logo.svg")
+        let space = try #require(from.spaces.named("board"))
+        let exported = try html(space, data: ["seen": ["a1"]])
+        let text = String(decoding: exported, as: UTF8.self)
+        #expect(text.hasPrefix("<!doctype html><!-- something export -->\n<meta charset=\"utf-8\">\n<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'unsafe-inline' data: blob:; form-action 'none'\">\n<script type=\"application/json\" id=\"something-export\">"))
+        #expect(text.hasSuffix("<!-- /something export -->\n<title>Invented</title><img src=\"img/logo.svg\">"), "the rest of the page's own bytes")
+        // The block's declaration is not the page's: `Declaration.block` takes only id="something".
+        #expect(Declaration.block(in: text) == nil)
+        let placed = try place(try Export.read(try #require(Export.unwrap(exported))), to)
+        for file in ["index.html", "img/logo.svg"] {
+            #expect(try Data(contentsOf: placed.location.appendingPathComponent(file)) == Data(contentsOf: space.location.appendingPathComponent(file)))
+        }
+        #expect(try Memory(folder: to.data, space: "board").get("seen") as? [String] == ["a1"])
+    }
+
+    /// `Export.unwrap` only gives back a document: everything `read` refuses, it still refuses.
+    @Test func whatTheBlockHoldsIsCheckedAsAnyDocument() throws {
+        let bytes = try ContractFiles.data("exports/folder.html")
+        let text = String(decoding: bytes, as: UTF8.self)
+        func changed(_ old: String, _ new: String) -> Data {
+            #expect(text.contains(old))
+            return Data(text.replacingOccurrences(of: old, with: new).utf8)
+        }
+        #expect(code(Export.unwrap(changed("img/logo.svg\":", "../logo.svg\":")) ?? Data()) == "IMPORT_UNSAFE_PATH")
+        #expect(code(Export.unwrap(changed("\"contract\":1", "\"contract\":99")) ?? Data()) == "IMPORT_TOO_NEW")
+        #expect(code(Export.unwrap(changed("\"format\":\"something-space\"", "\"format\":\"another\"")) ?? Data()) == "IMPORT_NOT_A_SPACE")
+        // A file whose marks are gone is a plain page; the document format was never HTML.
+        #expect(Export.unwrap(changed("<!-- /something export -->\n", "")) == nil && Export.unwrap(changed("<!-- something export -->\n", "")) == nil)
+        #expect(Export.unwrap(changed("id=\"something-export\">{", "id=\"something-export\">{{")) == nil)
+        #expect(Export.unwrap(Data("<!doctype html><p>Invented</p>".utf8)) == nil && Export.unwrap(Data()) == nil)
+    }
+
+    /// The scripts sit inside the block: nothing in them may end a script, or look like the block's end.
+    @Test func theScriptsCanLiveInAPage() throws {
+        for name in ["something.js", "offline.js"] {
+            let text = try String(contentsOf: ContractFiles.root.appendingPathComponent("share/\(name)"), encoding: .utf8).lowercased()
+            for word in ["</script", "<!--", "-->"] { #expect(!text.contains(word), "\(name) holds \(word)") }
         }
     }
 
