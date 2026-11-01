@@ -44,6 +44,8 @@ final class Panels {
     var counted: (Int) -> Void = { _ in }
     /// Whether a request is answered elsewhere, by something's own page: never queued or shown here, only counted.
     var inline: (Request) -> Bool = { _ in false }
+    /// Whether a request is nobody's to answer (a reading's agent): it is not seen here at all, not even counted.
+    var hidden: (Request) -> Bool = { _ in false }
     /// The rule "Always for this space" would keep for a request, nil when it is not offered; and keeping it.
     var offer: (Request, Prompt) -> Rule? = { _, _ in nil }
     var keep: (Rule, Request) -> Void = { _, _ in }
@@ -71,7 +73,7 @@ final class Panels {
     /// one on screen, or goes away when none waits. Called at each change of the state. A panel that says an answer
     /// was lost stays until the person puts it away.
     func refresh() {
-        let requests = source.requests
+        let requests = source.requests.filter { !hidden($0) }
         elsewhere = requests.filter(inline)
         // A new one something answers by itself never joins the queue; one whose answer did not go through does.
         for request in requests where !inline(request) && !queue.knows(request.id) {

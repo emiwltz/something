@@ -1,7 +1,8 @@
 // Settings › Spaces: where the spaces live, whether an export carries their memory, how many versions each keeps,
-// whether a new space's words bring a few questions first, and what something keeps weighs against the storage limit, in three parts (the spaces' versions, their memory, the
-// spaces themselves), measured off the main queue because a store of spaces can hold thousands of files. Past the
-// limit the oldest versions go first (Versions); spaces and their memory are never removed here.
+// whether a new space's words bring a few questions first, and what something keeps weighs against the storage limit,
+// in three parts (the spaces' versions, their memory, the spaces themselves), measured off the main queue because a
+// store of spaces can hold thousands of files. Past the limit the oldest versions go first (Versions); spaces and their
+// memory are never removed here.
 import AppKit
 import SomethingCore
 import SwiftUI

@@ -45,6 +45,7 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
     }
 
     var assistants: Set<String> { engine.assistants }
+    var unseen: Set<String> { engine.unseen }
 
     var memory: Memory? { Memory(folder: places.data, space: space.name) }
 

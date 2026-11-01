@@ -250,6 +250,8 @@ public final class Engine {
 
     /// Every agent launched as the person's assistant (`launchAssistant`), which no space may write to or read.
     public private(set) var assistants: Set<String> = []
+    /// The assistants launched for the app's own use, nobody's agent: no space ever lists them (Bridge.visible).
+    public private(set) var unseen: Set<String> = []
     /// The assistant's folder, the spaces folder, which the app sets once before any reading: no conversation in or
     /// below it, from this run, an earlier one or a terminal, is ever shown as seen elsewhere (`elsewhere`).
     public var assistantFolder: String?
@@ -260,13 +262,15 @@ public final class Engine {
     /// `effort` when given, and continues the conversation `resume` when given (a space's own, woken again, or a Quick
     /// Change's); a resume keeps the assistant's rights, and its lent tools depend on the driver (one may offer them only to
     /// a new thread). Only the app calls this: a space launches through `launch`, which never makes an assistant. Throws as
-    /// `launch`, and BAD_PARAMS for an empty `resume` or one an agent could read as an option.
+    /// `launch`, and BAD_PARAMS for an empty `resume` or one an agent could read as an option. With `unseen`, `unseen` holds it too.
     public func launchAssistant(_ kind: String, folder: String, model: String? = nil, effort: String? = nil, resume: String? = nil,
-                                askEverything: Bool, lent: Lent? = nil) throws -> String {
+                                askEverything: Bool, lent: Lent? = nil, unseen hidden: Bool = false) throws -> String {
         try registry.checkLaunch(kind, model: model, mode: nil, effort: effort)
         if let resume, resume.isEmpty || resume.hasPrefix("-") { throw CodedError("BAD_PARAMS", "resume is a conversation's id.") }
-        return try launch(kind, folder: HeldFiles.real(folder), model: model, mode: nil, effort: effort, planB: false, resume: resume,
-                          assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
+        let id = try launch(kind, folder: HeldFiles.real(folder), model: model, mode: nil, effort: effort, planB: false, resume: resume,
+                            assistant: askEverything ? .askingEverything : .building, lent: askEverything ? nil : lent)
+        if hidden { unseen.insert(id) }
+        return id
     }
 
     /// `something try`'s launch, from a terminal: in `folder`, with its kind's plan B forced when `planB`, as an

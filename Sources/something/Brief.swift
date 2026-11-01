@@ -22,13 +22,15 @@ struct Brief: Equatable {
     /// The line of a build whose agent decides everything.
     static let nothing = "[something] Brief: none, decide and say so."
     private static let mark = "[something] Questions: "
-    static let limits = (questions: 3, options: 2...3, text: 120, label: 40, about: 120)
+    static let limits = (questions: 3, options: 2...3, text: 120, label: 40, about: 120, name: 64)
+    /// The name in the turn's example: a model that echoes it named nothing.
+    private static let example = "a-short-file-name"
 
     /// The turn that asks: `line` says what the person chose for the space, as the build's own message does.
     static func asking(_ words: String, line: String) -> String {
         """
         [something] Questions first. Do not build yet, do not read the guide, use no tool. Read the person's words below and answer with one line only, which starts `\(mark)` and goes on with one JSON object on that line:
-        {"name":"a-short-file-name","questions":[{"text":"…?","options":[{"label":"…","about":"…"}],"pick":0,"remember":false}]}
+        {"name":"\(example)","questions":[{"text":"…?","options":[{"label":"…","about":"…"}],"pick":0,"remember":false}]}
         At most 3 questions, only what their words truly leave open; never what they already say, never what the next line says, never the name. 2 or 3 options each: short labels, one sentence each; `pick` is the one you would choose; `remember` true on the question that decides whether the space keeps things. Nothing open: "questions":[]. In their language. Under 3,000 characters.
         \(line)
         \(words)
@@ -42,12 +44,12 @@ struct Brief: Equatable {
 
     /// The brief in `text`: the marked line found anywhere in it, from its first `{` to the last `}`, so that a code
     /// fence or words before it change nothing. Empty when there is none or it is not JSON. A question that breaks a
-    /// limit is dropped alone; `name` is kept only as a valid name not in `taken`.
+    /// limit is dropped alone; `name` is kept only as a valid, short name not in `taken` and not the example's.
     static func read(_ text: String, taken: Set<String> = []) -> Brief {
         guard let marked = text.range(of: mark), let open = text[marked.upperBound...].firstIndex(of: "{"),
               let close = text.lastIndex(of: "}"), open < close,
               let json = try? JSONSerialization.jsonObject(with: Data(text[open...close].utf8)) as? [String: Any] else { return Brief() }
-        let name = (json["name"] as? String).flatMap { Spaces.isName($0) && !taken.contains($0) ? $0 : nil }
+        let name = (json["name"] as? String).flatMap { Spaces.isName($0) && $0.count <= limits.name && $0 != example && !taken.contains($0) ? $0 : nil }
         let questions = (json["questions"] as? [[String: Any]] ?? []).compactMap(question)
         return Brief(name: name, questions: Array(questions.prefix(limits.questions)))
     }
@@ -56,14 +58,17 @@ struct Brief: Equatable {
     /// nil when it breaks a limit.
     private static func question(_ json: [String: Any]) -> Question? {
         let text = line(json["text"]), options = (json["options"] as? [[String: Any]] ?? []).map { Option(label: line($0["label"]), about: line($0["about"])) }
-        guard !text.isEmpty, text.count <= limits.text, limits.options.contains(options.count),
-              options.allSatisfy({ !$0.label.isEmpty && $0.label.count <= limits.label && $0.about.count <= limits.about }) else { return nil }
+        // Counted in scalars: one Character can carry thousands of combining marks.
+        guard !text.isEmpty, text.unicodeScalars.count <= limits.text, limits.options.contains(options.count),
+              options.allSatisfy({ !$0.label.isEmpty && $0.label.unicodeScalars.count <= limits.label && $0.about.unicodeScalars.count <= limits.about }) else { return nil }
         let pick = (json["pick"] as? Int).flatMap { options.indices.contains($0) ? $0 : nil } ?? 0
         return Question(text: text, options: options, pick: pick, remember: json["remember"] as? Bool ?? false)
     }
 
+    /// `value` on one line, without control or direction marks, which would make the person read another answer.
     private static func line(_ value: Any?) -> String {
-        (value as? String ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let words = (value as? String ?? "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return String(String.UnicodeScalarView(words.unicodeScalars.filter { !$0.properties.isBidiControl && $0.properties.generalCategory != .control }))
     }
 
     /// The lines of the build's message: each question answered, in full since the builder never saw them, then the

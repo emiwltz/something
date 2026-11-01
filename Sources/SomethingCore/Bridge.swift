@@ -13,6 +13,8 @@ public protocol BridgeHost: AnyObject {
     var launched: Set<String> { get }
     /// The agents launched as the person's assistant, which no space may write to or read the words of.
     var assistants: Set<String> { get }
+    /// The assistants that are nobody's agent, a space lists none of them.
+    var unseen: Set<String> { get }
     /// The space's memory; nil for a space opened by path, outside the spaces folder, which has none.
     var memory: Memory? { get }
     /// Keeps one line of the space's journal; a journal that cannot be written must not fail the call it records.
@@ -150,10 +152,12 @@ public enum Bridge {
 
     /// The state as this space sees it. The person's assistant is listed, honestly, as an agent no space can write
     /// to, without its conversation, its held messages, its requests or the words of its error (which may quote the
-    /// person or the model), or what it asked its sub-agents: those are the person's, not a space's.
+    /// person or the model), or what it asked its sub-agents: those are the person's, not a space's. One the app
+    /// launched for itself, which is nobody's agent, is not listed at all.
     public static func visible(_ host: BridgeHost) -> State {
         var state = Rights.visible(host.state, host.granted, launched: host.launched)
         let mine = host.assistants
+        state.agents.removeAll { host.unseen.contains($0.id) }
         for index in state.agents.indices where mine.contains(state.agents[index].id) {
             (state.agents[index].can, state.agents[index].thread, state.agents[index].queue, state.agents[index].detail, state.agents[index].subagents) = (Can(), nil, [], [:], nil)
             state.agents[index].error = state.agents[index].error.map { AgentError(code: $0.code, message: "The person's assistant met an error.") }

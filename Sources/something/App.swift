@@ -85,6 +85,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         panels.beside = { [weak self] in self?.shell.window }
         panels.counted = { [weak self] _ in self?.counted() }
         panels.inline = { [weak self] in self?.assistant.answersInline($0) == true }
+        panels.hidden = { [weak self] in self?.assistant.reads($0) == true }
         panels.attention = Attention(dock: NSApp, notifier: SystemNotifier.make { [weak self] id in
             self?.front()
             // A space said ready opens; any other notification is a request's.
@@ -418,7 +419,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// What quitting ends now, from the app's own sources.
     func leaving() -> Leaving {
-        App.leaving(agents: engine.state.agents, threads: engine.state.threads, waiting: panels.queue.waiting, who: who) { agent in
+        App.leaving(agents: engine.state.agents.filter { !engine.unseen.contains($0.id) }, threads: engine.state.threads, waiting: panels.queue.waiting, who: who) { agent in
             self.space(ofAgent: agent.id).map { self.library.entry($0)?.title ?? $0 }
         }
     }

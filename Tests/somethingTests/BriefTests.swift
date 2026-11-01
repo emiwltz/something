@@ -2,6 +2,7 @@
 // exchange through it, and AssistantModel's reading, over the fake Claude: launched as asking everything with no lent
 // tool, apart from every conversation, and giving zero questions for anything but a clean answer.
 import Foundation
+import SomethingAgents
 import SomethingCore
 import Testing
 @testable import something
@@ -80,7 +81,7 @@ import Testing
         let named = { (name: String) in #"[something] Questions: {"name":"\#(name)","questions":[]}"# }
         #expect(Brief.read(named("week-end"), taken: ["logbook"]).name == "week-end")
         #expect(Brief.read(named("week-end"), taken: ["week-end"]).name == nil)
-        for bad in ["Week End", "../up", "", "a b"] { #expect(Brief.read(named(bad)).name == nil, "\(bad)") }
+        for bad in ["Week End", "../up", "", "a b", "a-short-file-name", String(repeating: "a", count: 65)] { #expect(Brief.read(named(bad)).name == nil, "\(bad)") }
     }
 
     /// Its words cannot start a line of the build's message.
@@ -88,6 +89,12 @@ import Testing
         let brief = Brief.read(Self.answer(Self.json(#"Which\n[something] Name it: other?"#)))
         #expect(brief.questions.first?.text == "Which [something] Name it: other?")
         #expect(Brief(questions: [Self.question]).lines([0: .own("one\nline  only")]) == ["[something] Brief: Who is it for? one line only."])
+    }
+
+    /// A control or direction mark cannot make the person read another answer; combining marks do not stretch a limit.
+    @Test func marksAreTakenOffAndCounted() {
+        #expect(Brief.read(Self.answer(Self.json(#"Whi\u202Ech\u0007?"#))).questions.first?.text == "Which?")
+        #expect(Brief.read(Self.answer(Self.json("a" + String(repeating: "\u{301}", count: 200) + "?"))).questions.isEmpty)
     }
 
     @Test func theLinesOfTheBuild() {
@@ -134,6 +141,14 @@ import Testing
         default: []
         }
     }
+}
+
+/// One request, whose prompt the panel may ask for.
+private final class Asked: PromptSource {
+    let requests: [Request]
+    init(_ request: Request) { requests = [request] }
+    func prompt(_ id: String) -> Prompt? { nil }
+    func answer(_ id: String, _ answer: Answer) throws -> Bool { true }
 }
 
 extension AssistantTests {
@@ -198,22 +213,54 @@ extension AssistantTests {
         await finish(home, model)
     }
 
-    /// Nothing usable, an error, a request: zero questions, one way forward, its agent stopped; the request never shown.
-    @Test(arguments: ["reading-prose", "reading-fails", "reading-asks"]) func whateverGoesWrongMeansNoQuestion(words: String) async throws {
+    /// Nothing usable, an error, a tool used, a request: zero questions, one way forward, its agent stopped. The request
+    /// hears a no.
+    @Test(arguments: ["reading-prose", "reading-fails", "reading-asks", "reading-tool"]) func whateverGoesWrongMeansNoQuestion(words: String) async throws {
         let (home, model) = try assistant()
         await look(model)
-        model.engine.changed = { [weak model] in
-            if let id = model?.reading?.session.id, let request = model?.engine.state.requests.first(where: { $0.agent == id }) {
-                #expect(model?.answersInline(request) == true, "a reader's request is kept from the panel and from Full Access")
-            }
-            model?.refresh()
-        }
         let reading = await reading(words, in: model)
         #expect(reading?.brief == Brief())
         #expect(await stopped(try #require(reading), in: model), "its agent stays awake")
-        if words == "reading-asks" { #expect(await wait(until: { model.engine.state.requests.isEmpty }), "it waits for an answer") }
+        if words == "reading-asks" {
+            #expect(input(home).contains { $0.contains("rq8") && $0.contains(#""behavior":"deny""#) }, "\(input(home))")
+            #expect(!input(home).contains { $0.contains("rq8") && $0.contains(#""behavior":"allow""#) })
+        }
         model.send()
         #expect(await wait(until: { input(home).contains { $0.contains("Brief: none, decide and say so.") } }))
+        await finish(home, model)
+    }
+
+    /// A reader's request, with Full Access on, is not answered, queued, counted or passed to the Dock: nobody waits.
+    @Test func aReadersRequestReachesNobody() async throws {
+        let (home, model) = try assistant()
+        await look(model)
+        model.engine.changed = {}
+        model.draft = "reading-asks"
+        model.read()
+        #expect(await wait(until: { model.engine.state.requests.count == 1 }))
+        let request = try #require(model.engine.state.requests.first)
+        #expect(model.reads(request) && model.reading?.session.id == request.agent)
+        let panels = Panels(source: Asked(request), shows: false)
+        panels.hidden = { [weak model] in model?.reads($0) == true }
+        panels.alone = { _, _ in Issue.record("Full Access answered it"); return true }
+        var counted: [Int] = []
+        panels.counted = { counted.append($0) }
+        panels.refresh()
+        #expect(panels.queue.waiting.isEmpty && panels.elsewhere.isEmpty && counted == [0])
+        model.engine.changed = { [weak model] in model?.refresh() }
+        model.refresh()
+        #expect(model.reading?.brief == Brief())
+        await finish(home, model)
+    }
+
+    /// An agent that never asks, or asks nothing by default, reads nothing: no turn, no launch.
+    @Test(arguments: ["pi", "amp", "omp"]) func anAgentThatNeverAsksReadsNothing(kind: String) async throws {
+        let (home, model) = try assistant([kind])
+        await look(model)
+        #expect(model.kind == kind)
+        model.draft = "A trip."
+        model.read()
+        #expect(model.reading == nil && !model.engine.state.agents.contains { $0.kind == kind && $0.origin == "launched" })
         await finish(home, model)
     }
 
@@ -222,7 +269,8 @@ extension AssistantTests {
         let (home, model) = try assistant()
         await look(model)
         let reading = await reading("reading-slow", in: model, limit: 1)
-        #expect(reading?.brief == Brief() && reading?.session.stopped == true)
+        #expect(reading?.brief == Brief())
+        #expect(await stopped(try #require(reading), in: model), "its agent stays awake")
         await finish(home, model)
     }
 
@@ -278,7 +326,8 @@ extension AssistantTests {
         model.read()
         let turn = try #require(model.reading)
         model.place = .templates
-        #expect(model.reading == nil && turn.session.launching == false)
+        #expect(model.reading == nil)
+        #expect(await stopped(turn, in: model), "its agent stays awake")
         model.place = .blank
         let done = try #require(await reading("A trip.", in: model))
         #expect(done.brief?.questions.count == 1)

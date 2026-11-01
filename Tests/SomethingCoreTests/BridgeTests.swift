@@ -9,7 +9,7 @@ final class FakeHost: BridgeHost {
     var state: State
     var granted: Granted
     var launched: Set<String> = []
-    var assistants: Set<String> = []
+    var assistants: Set<String> = [], unseen: Set<String> = []
     var memory: Memory?
     var lines: [JournalLine] = []
     var calls: [String] = []
@@ -118,6 +118,15 @@ struct BridgeTests {
         host.state.agents[0].commands = nil
         #expect(code("send", ["agent": "a1", "command": "review"], host) == "VALUE_NOT_OFFERED")
         #expect(host.calls.count == 2)
+    }
+
+    /// An assistant the app launched for itself is nobody's agent: no space lists it, or can tell it exists.
+    @Test func noSpaceSeesAnUnseenAssistant() throws {
+        let host = try FakeHost(["state", "send", "store"])
+        (host.assistants, host.unseen) = (["a1"], ["a1"])
+        let state = Bridge.visible(host)
+        #expect(!state.agents.contains { $0.id == "a1" } && !state.threads.contains { $0.agent == "a1" } && !state.requests.contains { $0.agent == "a1" })
+        #expect(code("send", ["agent": "a1", "text": "Invented."], host) == "AGENT_NOT_FOUND")
     }
 
     /// The person's assistant (a1 here): a space with every right, seeing every agent, even one that launched it,
