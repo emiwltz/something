@@ -1,8 +1,8 @@
 // Settings: each control writes only its own key, the values shown at first are the mockup's (CM_PREFS and v6.2's),
 // the model and the effort share one menu, Auto lets the Mac choose the appearance and Dark sets darkAqua, the shortcuts
-// are Keys' own, the window takes each tab's height, and "When something opens" decides the space opened at the start.
-// Agents lists each space's level as its grant says it and changes it as Info does, and the agents found, read only,
-// looking again once; the default level pre-sets New Space when the words name no agent; the menu items open their
+// are Keys' own, the window keeps one size with its tabs in a column, and "When something opens" decides the space opened at the start.
+// Permissions lists each space's level as its grant says it and changes it as Info does, Agents the agents found, read
+// only, looking again once; the default level pre-sets New Space when the words name no agent; the menu items open their
 // tabs. The store's parts add up to what the folders weigh.
 import AppKit
 import SomethingAgents
@@ -57,7 +57,7 @@ import Testing
 
     /// Every row of every tab: each section's rows, then its more rows.
     static func rows(_ model: SettingsModel) -> [SettingsRow] {
-        SettingsTab.allCases.flatMap { model.sections($0) }.flatMap { $0.rows + $0.more }
+        SettingsTab.allCases.flatMap { model.sections($0) }.flatMap { $0.rows + $0.more }.flatMap { [$0] + $0.beside }
     }
 
     @Test func eachControlWritesOnlyItsKey() throws {
@@ -69,7 +69,7 @@ import Testing
         model.preferences.listed["claude"] = listed
         // The sidebar, a space's level, the words and the buttons write no key: the window, the grants or nothing.
         let expected: [String: String?] = ["When something opens": "openAtStart", "Theme": "appearance", "Interface size": "size", "Sidebar": nil,
-                                           "Agent": "assistant", "Model and effort": "model", "A new space may": "level",
+                                           "Program · Model and effort": "assistant", "Model and effort": "model", "A new space may": "level",
                                            "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil, "/Users/example/code/atelier": nil,
                                            "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
                                            "Keep": "versionsKept", "Storage limit": "storageLimit",
@@ -95,7 +95,7 @@ import Testing
             case .said(let words):
                 #expect(["Their Own Settings", "Not known"].contains(words), "\(row.title)")
             case .nothing:
-                #expect(row.symbol == "folder" && row.note == "Project watch", "\(row.title): only Advanced › Folders says without a control")
+                #expect(row.symbol == "folder" && row.note == "Project watch", "\(row.title): only Permissions › Folders says without a control")
             }
             let after = try Self.keys(model.preferences.values)
             let changed = Set(after.keys).union(before.keys).filter { before[$0] != after[$0] }
@@ -128,14 +128,14 @@ import Testing
         }
         #expect(shown == ["When something opens": "The last space you had open", "Theme": "Auto", "Interface size": "Default", "Sidebar": "Pinned",
                           // Before Claude Code ever listed its models, nothing is guessed (rule 3).
-                          "Agent": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
+                          "Program · Model": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
                           "Notify me when an agent asks": "off", "Daily brief": "Watch", "Project watch": "Run", "Unread": "Not known",
                           "Where they live": "Show in Finder", "Include a space’s memory when you export it": "off", "Keep": "50",
                           "Storage limit": "500 MB", "Full Access": "off", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
                           "Resume each space’s conversation": "on", "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3",
                           "/Users/example/code/atelier": "Project watch", "Keyboard shortcuts": "Show Shortcuts"])
-        #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Advanced"])
-        let run = try #require(model.sections(.agents)[1].more.first { $0.title == "Project watch" })
+        #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Permissions"])
+        let run = try #require(model.sections(.permissions)[1].more.first { $0.title == "Project watch" })
         #expect(run.note == "in `/Users/example/code/atelier`" || run.note == "in `~/code/atelier`", "\(run.note)")
         let opening = model.sections(.general)[0].rows[0]
         guard case .choice(let options, _, _) = opening.control else { Issue.record("not a choice"); return }
@@ -153,7 +153,7 @@ import Testing
         (listed.model, listed.effort) = ([Option(value: "opus", label: "Opus 5.5"), Option(value: "sonnet", label: "Sonnet 5.5")],
                                          [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")])
         model.preferences.listed["claude"] = listed
-        let row = try #require(model.sections(.agents)[0].rows.last)
+        let row = try #require(model.sections(.agents)[0].rows[0].beside.first)
         guard case .choice(let options, let get, let set) = row.control else { Issue.record("not a choice"); return }
         #expect(row.title == "Model and effort" && row.note == "“Default” follows the agent’s own setting.")
         #expect(RowControl.sections(options).map(\.heading) == ["Model", "Effort"])
@@ -165,7 +165,7 @@ import Testing
         set("effort:")
         #expect(model.preferences.effort == nil && model.preferences.model == "opus")
         model.preferences.assistant = "amp"
-        let amp = try #require(model.sections(.agents)[0].rows.last)
+        let amp = try #require(model.sections(.agents)[0].rows[0].beside.first)
         guard case .said(let words) = amp.control else { Issue.record("not words"); return }
         #expect(amp.title == "Model" && words == "Amp chooses its own model")
     }
@@ -205,13 +205,13 @@ import Testing
         _ = await wait(until: { model.found != nil })
         #expect(model.agents == [.init(id: "claude", name: "Claude Code", line: "Version 2.1.4"), .init(id: "codex", name: "Codex", line: "Version unknown"),
                                  .init(id: "cursor", name: "Cursor", line: "Seen only")])
-        #expect(model.lookedLine == "Found 3 agents · looked today at 17:40. something never installs them or changes their settings.")
+        #expect(model.lookedLine == "Found 3 programs · looked today at 17:40. something never installs them or changes their settings.")
         model.clock = { now }
         model.again()
         #expect(effects.looks == 1, "Look Again asks the engine once")
         #expect(model.lookedLine == "Looking for agents on this Mac…", "while the new look runs")
         _ = await wait(until: { model.found != nil })
-        #expect(model.lookedLine.hasPrefix("Found 3 agents · looked today at 18:02."))
+        #expect(model.lookedLine.hasPrefix("Found 3 programs · looked today at 18:02."))
     }
 
     /// The Assistant menu's Ask Before Every Change… and the assistant's Defaults for New Spaces… send their actions.
@@ -237,55 +237,71 @@ import Testing
             return settings
         }
         defer { Settings.shown?.window.close(); Settings.shown = nil }
-        Settings.open(.advanced, make: make)
-        #expect(Settings.shown?.tab == .advanced)
+        Settings.open(.permissions, make: make)
+        #expect(Settings.shown?.tab == .permissions)
         Settings.open(.agents, make: make)
         #expect(Settings.shown?.tab == .agents && made == 1)
         Settings.open(nil, make: make)
         #expect(Settings.shown?.tab == .agents, "where it was left")
     }
 
-    /// The window: the bar with the four tabs, which its own buttons choose, 720 points wide, as high as each tab,
-    /// titled by it.
-    @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowTakesEachTabsHeight() async throws {
+    /// The window: the column with the four tabs, which its own buttons choose, 720 × 560 at every tab, titled by it.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowKeepsOneSize() async throws {
         let home = Home(prefix: "something-settings-")
         defer { home.remove() }
         let settings = SettingsWindow(model(home).0)
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
         settings.window.alphaValue = 0
         defer { settings.window.close() }
-        #expect(settings.window.toolbar == nil, "a bar of its own, not the toolbar's boxed items")
-        let content = try #require(settings.window.contentView)
-        var heights: [CGFloat] = [], top: CGFloat?
+        #expect(settings.window.toolbar != nil && settings.window.toolbar?.items.isEmpty == true, "an empty toolbar, to centre the lights")
+        let content = try #require(settings.window.contentView), frame = settings.window.frame
         for tab in SettingsTab.allCases {
             settings.select(tab)
-            _ = await wait(until: { abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - content.fittingSize.height) <= 1
-                && (settings.model.heights[tab] ?? 0) > 0 })
-            let size = settings.window.contentRect(forFrameRect: settings.window.frame).size
+            await wait(0.05)
             #expect(settings.tab == tab && settings.window.title == tab.label)
-            #expect(abs(size.width - 720) < 1, "\(tab)")
-            #expect(abs(size.height - content.fittingSize.height) <= 1, "\(tab) takes its page's height")
-            // The top edge holds, as the Mac's own settings: the bar stays under the pointer.
-            top = top ?? settings.window.frame.maxY
-            #expect(abs(settings.window.frame.maxY - (top ?? 0)) <= 1, "\(tab) keeps the window's top edge")
-            heights.append(size.height)
+            #expect(settings.window.frame == frame, "\(tab) moves nothing")
+            #expect(settings.window.contentRect(forFrameRect: frame).size == SettingsWindow.size, "\(tab)")
         }
-        // VoiceOver hears the bar as the window's first four elements, one per tab, before the page's scroll area.
+        // VoiceOver hears the column as the window's first four elements, one per tab, before the page's scroll area.
         // Offscreen, SwiftUI's elements carry only their words (AXAttributedDescription): no role, no selected trait,
-        // and no press reaches them, so the choice is proved by calling the bar's `choose`.
+        // and no press reaches them, so the choice is proved by calling the column's `choose`.
         let labels = SettingsTab.allCases.map(\.label)
-        var bar: [String] = []
+        var column: [String] = []
         _ = await AcceptanceBuild.read(content) { _ in
-            bar = (content.accessibilityChildren() ?? []).prefix(4).map(AcceptanceBuild.said)
-            return bar == labels
+            column = (content.accessibilityChildren() ?? []).prefix(4).map(AcceptanceBuild.said)
+            return column == labels
         }
-        #expect(bar == labels, "the bar's tabs, heard: \(bar)")
+        #expect(column == labels, "the column's tabs, heard: \(column)")
         settings.select(.general)
-        let frame = try #require(content as? NSHostingView<SettingsFrame>).rootView
-        frame.choose(.advanced)
-        #expect(settings.tab == .advanced && settings.window.title == "Advanced")
-        #expect(Set(heights.map { Int($0) }).count > 1, "the tabs are not one height: \(heights)")
+        let view = try #require(content as? NSHostingView<SettingsFrame>).rootView
+        view.choose(.permissions)
+        #expect(settings.tab == .permissions && settings.window.title == "Permissions")
         #expect(settings.window.styleMask.contains(.miniaturizable), "three lights, as the Mac's own settings")
+    }
+
+    /// Over the main window, inside its screen, until the person moves it: then it stays, and the interface size
+    /// keeps its top edge.
+    @Test(.enabled(if: windowServer, windowServerMissing)) func theWindowOpensOverTheMainWindowUntilMoved() async throws {
+        let main = NSRect(x: 100, y: 100, width: 1200, height: 760), screen = NSRect(x: 0, y: 0, width: 1440, height: 875)
+        #expect(SettingsWindow.spot(NSSize(width: 720, height: 560), over: main, in: screen) == NSPoint(x: 340, y: 200))
+        #expect(SettingsWindow.spot(NSSize(width: 720, height: 560), over: NSRect(x: 1200, y: 700, width: 400, height: 300), in: screen) == NSPoint(x: 720, y: 315),
+                "kept inside the screen")
+        let home = Home(prefix: "something-settings-")
+        defer { home.remove() }
+        let settings = SettingsWindow(model(home).0), window = NSWindow(contentRect: main, styleMask: .titled, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        settings.window.alphaValue = 0
+        defer { settings.window.close(); window.close() }
+        settings.place(over: window)
+        let spot = settings.window.frame
+        #expect(abs(spot.midX - window.frame.midX) <= 1 && abs(spot.midY - window.frame.midY) <= 1 || window.screen == nil)
+        window.setFrame(window.frame.offsetBy(dx: 10, dy: 0), display: false)
+        settings.place()
+        #expect(settings.window.frame.minX != spot.minX, "not moved by the person, it follows")
+        let moved = NSPoint(x: 40, y: 50)
+        settings.window.setFrameOrigin(moved)
+        settings.place(over: window)
+        #expect(settings.window.frame.origin == moved, "moved by the person, it stays")
     }
 
     /// "When something opens": New Space opens nothing, a space opens that space while it is there, else the last one.

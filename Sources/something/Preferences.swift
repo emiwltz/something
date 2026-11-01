@@ -29,7 +29,7 @@ import SomethingCore
         /// The commands each kind's agent last listed, by kind: "/" in the card offers them before it runs.
         var commands: [String: [Option]] = [:]
         var askEverything = false, resume = true, toured = false
-        /// Full Access: something allows every permission the person's assistant asks, by itself (Settings › Advanced).
+        /// Full Access: something allows every permission the person's assistant asks, by itself (Settings › Permissions).
         var fullAccess = false
         /// The hints already shown (Hint.swift), each once.
         var hinted: [String] = []

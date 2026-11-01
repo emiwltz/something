@@ -1,18 +1,18 @@
-// Settings (⌘,): a window of its own whose bar holds four tabs, as the Mac's own settings do, sized to each tab:
-// General (the start, the theme, the interface size, the sidebar), Spaces (where they live, export, versions and
-// storage, Storage.swift), Agents (your assistant, what a new space may do, each space's level, and the agents on this
-// Mac, found by a look at files that never runs one) and Advanced (Full Access, how your assistant and the agents a
-// space starts ask, the lasting rules with Revoke, the folders agents run in, the assistants' rest and resume, the
-// shortcuts). Each tab is a list of rows given as data (a title, a note, a control), so that a test can work every
-// control and see which key it wrote. The theme applies at once, everywhere.
+// Settings (⌘,): a window of one size, four tabs in a column on its left as in the Mac's System Settings, so that nothing
+// jumps from one tab to the next: General (the start, the theme, the interface size, the sidebar, the shortcuts), Spaces
+// (where they live, export, versions and storage, Storage.swift), Agents (your assistants, their rest and resume, and
+// the programs on this Mac, found by a look at files that never runs one) and Permissions (Full Access, how your
+// assistant and the agents a space starts ask, what a new space may do, each space's level, the lasting rules with
+// Revoke, the folders agents run in). Each tab is a list of rows given as data (a title, a note, a control), so that a
+// test can work every control and see which key it wrote. The theme applies at once, everywhere.
 import AppKit
 import SomethingAgents
 import SomethingCore
 import SwiftUI
 
-/// The tabs, in the bar's order.
+/// The tabs, in the column's order.
 enum SettingsTab: String, CaseIterable {
-    case general, spaces, agents, advanced
+    case general, spaces, agents, permissions
 
     var label: String { rawValue.capitalized }
 
@@ -21,7 +21,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: "gearshape"
         case .spaces: "doc"
         case .agents: "powerplug.portrait"
-        case .advanced: "checkmark.shield"
+        case .permissions: "checkmark.shield"
         }
     }
 }
@@ -56,6 +56,8 @@ struct SettingsRow: Identifiable {
     var keys: [(key: String, words: String)] = []
     /// What tells two rows of one title apart (two spaces of one name).
     var tag: String?
+    /// A second control after this row's, in the same row: the other row's, who keeps its title for VoiceOver.
+    var beside: [SettingsRow] = []
     /// The title in code (a command, a path), after the monogram of the agent named `mark` or the system `symbol`;
     /// a menu shows the monogram in its button instead, before the agent chosen.
     var code = false, mark: String?, symbol: String?
@@ -124,8 +126,8 @@ struct SettingsSection: Identifiable {
     var tab = SettingsTab.general
     private(set) var spaceLevels: [SpaceLevel] = []
     private(set) var lasting: [LastingRule] = []
-    /// How tall each tab's rows are, as last drawn: its page is as tall, up to SettingsPage.most.
-    var heights: [SettingsTab: CGFloat] = [:]
+    /// Whether the page goes on below what shows: its fade says so.
+    var more = false
     /// What the store weighs (Storage.swift); nil until it was first measured.
     var storage: Storage?
     /// Weighs the store, off the main queue; tests give invented weights.
@@ -169,7 +171,7 @@ struct SettingsSection: Identifiable {
         case .general: general()
         case .spaces: storageSections()
         case .agents: agentSections()
-        case .advanced: advancedSections()
+        case .permissions: permissionSections()
         }
     }
 
@@ -196,7 +198,7 @@ struct SettingsSection: Identifiable {
         })
     }
 
-    /// General: the start; the theme, the interface size and the sidebar.
+    /// General: the start; the theme, the interface size and the sidebar; the shortcuts.
     private func general() -> [SettingsSection] {
         let preferences = preferences
         let sidebar = SettingsRow.Control.choice([.init(value: "pinned", label: "Pinned"), .init(value: "floating", label: "Floating")],
@@ -206,52 +208,52 @@ struct SettingsSection: Identifiable {
             floats = floating()
         })
         return [
-            SettingsSection(title: "Start", rows: [SettingsRow(title: "When something opens", note: "The page you see first.", control: opening())]),
+            SettingsSection(title: "Start", rows: [SettingsRow(title: "When something opens", note: "What you see first.", control: opening())]),
             SettingsSection(title: "Look", rows: [
                 SettingsRow(title: "Theme", note: "Auto follows your Mac, day and night.",
                             control: choice(\.appearance, [(.system, "Auto"), (.light, "Light"), (.dark, "Dark")]) { [weak self] in self?.apply(preferences.appearance) },
-                            style: .thumbs),
+                            style: .thumbs, wrap: true),
                 SettingsRow(title: "Interface size",
-                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces’ pages.",
+                            note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces.",
                             control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }) { [weak self] in self?.resize(preferences.size) },
-                            style: .tiles, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
+                            style: .tiles, wrap: true, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
                 SettingsRow(title: "Sidebar", note: floats ? "Over the page when the pointer rests on the window’s left edge."
                                 : "Always beside your spaces. ⌃⌘S hides it for a while.", control: sidebar, style: .segments),
+            ]),
+            SettingsSection(title: "", rows: [
+                SettingsRow(title: "Keyboard shortcuts", note: "⌘/ shows them all, wherever you are.",
+                            control: .button("Show Shortcuts", symbol: "keyboard") { [weak self] in self?.shortcuts() }),
             ]),
         ]
     }
 
-    /// Agents: your assistant, what a new space may do and each space's level, then the agents on this Mac.
+    /// Agents: your assistants, how they rest and resume, then the programs on this Mac.
     private func agentSections() -> [SettingsSection] {
-        let preferences = preferences, registry = Registry.app
-        let first = offered().first ?? registry.builders.first?.kind ?? "", kind = preferences.assistant ?? first
+        let preferences = preferences, registry = Registry.app, builders = registry.builders
+        let first = offered().first ?? builders.first?.kind ?? "", kind = preferences.assistant ?? first
         let kinds = offered() + (offered().contains(kind) || kind.isEmpty ? [] : [kind])
-        let levels = Grant.Level.allCases.map { ($0, $0.title) }
+        let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
+        let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
+        let tuning = model(of: kind)
         return [
-            SettingsSection(title: "Your assistant", rows: [
-                SettingsRow(title: "Agent", note: agentNote(kind),
+            SettingsSection(title: "Assistants", rows: [
+                SettingsRow(title: "Program · " + tuning.title, note: agentNote(kind),
                             control: .choice(kinds.map { SettingsRow.Option(value: $0, label: registry.name(of: $0)) }, get: { [preferences.assistant ?? first] }, set: { [weak self] chosen in
                                 // Another agent's model and effort mean nothing to this one (AssistantModel.keepDefault).
                                 preferences.change { if $0.assistant != chosen { ($0.assistant, $0.model, $0.effort) = (chosen, nil, nil) } }
                                 self?.chose(chosen)
-                            }), mark: registry.name(of: kind)),
-                model(of: kind),
+                            }), beside: [tuning], mark: registry.name(of: kind)),
             ]),
-            SettingsSection(title: "Spaces and your agents", rows: [
-                SettingsRow(title: "A new space may", note: preferences.level.sentence + " New Space starts here when your words name no agent.",
-                            control: choice(\.level, levels), style: .segments, wrap: true),
-                SettingsRow(title: "Notify me when an agent asks", note: "A banner of the Mac when something is in the background. It never shows the command.",
-                            control: toggle(\.notify)),
-            ], lead: "Each space and what it may do. One click changes it.", more: spaceLevels.map { space in
-                SettingsRow(title: space.title, note: space.level == .run ? space.folder.map { "in `\(Words.path($0, home: places.home.path))`" } ?? "" : "",
-                            control: space.level.map { level in
-                                .choice(levels.map { SettingsRow.Option(value: $0.0.rawValue, label: $0.1) }, get: { [level.rawValue] }, set: { [weak self] in
-                                    self?.setLevel(space.id, Grant.Level(rawValue: $0) ?? .none)
-                                    self?.look()
-                                })
-                            } ?? .said("Not known"), tag: space.id)
-            }),
-            SettingsSection(title: "On this Mac", rows: [], block: .found),
+            SettingsSection(title: "Conversations and rest", rows: [
+                SettingsRow(title: "Resume each space’s conversation",
+                            note: "\(Words.list(resuming, "and")) \(resuming.count == 1 ? "picks" : "pick") up here. The others start a new one here, and say so.",
+                            control: toggle(\.resume)),
+                SettingsRow(title: "Put idle assistants to sleep after", note: "The open space’s assistant and working ones stay awake.",
+                            control: number(\.sleepAfter, minutes)),
+                SettingsRow(title: "Keep at most", note: "When one more wakes, the one idle the longest goes to sleep. A sleeping assistant wakes on your next message.",
+                            control: number(\.awakeAtMost, (1...5).map { ($0, String($0)) }), trail: "assistants awake"),
+            ]),
+            SettingsSection(title: "Programs on this Mac", rows: [], block: .found),
         ]
     }
 
@@ -259,13 +261,13 @@ struct SettingsSection: Identifiable {
     /// Allow shows (Ask.warning).
     private func agentNote(_ kind: String) -> String {
         guard let agent = Registry.app.agent(kind), agent.neverAsks || agent.asksNothingByDefault, let warning = Ask.warning(for: "launch:" + kind) else {
-            return "It builds and changes your spaces in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
+            return "Each builds and changes its space, in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
         }
         return warning + "."
     }
 
     /// The model, and the effort when the agent takes one, in one menu: the names the agent last listed for `kind`,
-    /// "Default" its own setting; before any list, what is known.
+    /// "Default" its own setting; before any list, what is known. Shown beside the program: its note is not drawn.
     private func model(of kind: String) -> SettingsRow {
         let preferences = preferences, limits = Registry.app.limits[kind] ?? [], listed = preferences.listed[kind]
         guard !limits.contains("model"), let models = listed?.model else {
@@ -286,14 +288,12 @@ struct SettingsSection: Identifiable {
         }))
     }
 
-    /// Advanced: who asks, the lasting rules, the folders agents run in, the assistants' rest and resume, the shortcuts.
-    private func advancedSections() -> [SettingsSection] {
+    /// Permissions: who asks, what a new space may do and each space's level, the lasting rules, the folders agents run in.
+    private func permissionSections() -> [SettingsSection] {
         let preferences = preferences, builders = Registry.app.builders
-        let resuming = builders.filter { Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
-        let fresh = builders.filter { !Registry.resumesAsBuilt.contains($0.kind) }.map(\.name)
         let assistant = preferences.assistant ?? offered().first ?? builders.first?.kind ?? ""
         let preAllowed = Registry.app.agent(assistant)?.builder?.preAllowed == true
-        let minutes = [(5, "5 minutes"), (10, "10 minutes"), (30, "30 minutes"), (60, "1 hour"), (0, "Never")]
+        let levels = Grant.Level.allCases.map { ($0, $0.title) }
         // The folders the spaces at Run start agents in, each with those spaces: what the levels already hold.
         let folders = spaceLevels.reduce(into: [(key: String, value: [String])]()) { all, space in
             guard space.level == .run, let folder = space.folder else { return }
@@ -314,6 +314,20 @@ struct SettingsSection: Identifiable {
             ] : []) + [
                 SettingsRow(title: "Agents a space starts", note: "Each agent asks you as it usually does.", control: .said("Their Own Settings")),
             ], lead: Promise.sentence),
+            SettingsSection(title: "Spaces and your agents", rows: [
+                SettingsRow(title: "A new space may", note: preferences.level.sentence + " New Space starts here when your words name no agent.",
+                            control: choice(\.level, levels), style: .segments, wrap: true),
+                SettingsRow(title: "Notify me when an agent asks", note: "A banner of the Mac when something is in the background. It never shows the command.",
+                            control: toggle(\.notify)),
+            ], lead: "Each space and what it may do. One click changes it.", more: spaceLevels.map { space in
+                SettingsRow(title: space.title, note: space.level == .run ? space.folder.map { "in `\(Words.path($0, home: places.home.path))`" } ?? "" : "",
+                            control: space.level.map { level in
+                                .choice(levels.map { SettingsRow.Option(value: $0.0.rawValue, label: $0.1) }, get: { [level.rawValue] }, set: { [weak self] in
+                                    self?.setLevel(space.id, Grant.Level(rawValue: $0) ?? .none)
+                                    self?.look()
+                                })
+                            } ?? .said("Not known"), tag: space.id)
+            }),
             SettingsSection(title: "Lasting rules", rows: [], lead: "Made with “Always for this space” in the request panel, and shown in each space’s Info."
                                 + (lasting.isEmpty ? " None yet." : ""), more: lasting.map { kept in
                 SettingsRow(title: kept.rule.command, note: Rules.line(kept.rule, space: kept.title, home: places.home.path, now: clock()),
@@ -326,18 +340,6 @@ struct SettingsSection: Identifiable {
                 SettingsRow(title: Words.path(folder.key, home: places.home.path), note: Words.list(folder.value, "and"), control: .nothing,
                             tag: "folder:" + folder.key, code: true, symbol: "folder")
             }),
-            SettingsSection(title: "Assistants", rows: [
-                SettingsRow(title: "Resume each space’s conversation",
-                            note: "\(Words.list(resuming, "and")) can. \(Words.list(fresh, "and")) start fresh, and say so.", control: toggle(\.resume)),
-                SettingsRow(title: "Put idle assistants to sleep after", note: "The open space’s assistant and working ones stay awake.",
-                            control: number(\.sleepAfter, minutes)),
-                SettingsRow(title: "Keep at most", note: "When one more wakes, the one idle the longest goes to sleep. A sleeping assistant wakes on your next message.",
-                            control: number(\.awakeAtMost, (1...5).map { ($0, String($0)) }), trail: "assistants awake"),
-            ]),
-            SettingsSection(title: "Keyboard", rows: [
-                SettingsRow(title: "Keyboard shortcuts", note: "⌘/ shows them all, wherever you are.",
-                            control: .button("Show Shortcuts", symbol: "keyboard") { [weak self] in self?.shortcuts() }),
-            ]),
         ]
     }
 
@@ -359,7 +361,7 @@ struct SettingsSection: Identifiable {
         guard found != nil, let looked else { return "Looking for agents on this Mac…" }
         let count = agents.count, day = Info.day(looked, now: clock())
         let when = ["Today", "Yesterday"].contains(day) ? day.lowercased() : "on " + day
-        return "Found \(count) agent\(count == 1 ? "" : "s") · looked \(when) at \(Presence.clock.string(from: looked)). "
+        return "Found \(count) program\(count == 1 ? "" : "s") · looked \(when) at \(Presence.clock.string(from: looked)). "
             + "something never installs them or changes their settings."
     }
 
@@ -379,13 +381,15 @@ struct SettingsSection: Identifiable {
 @MainActor enum Settings {
     static var shown: SettingsWindow?
 
-    /// Shows the one Settings window, made by `make` the first time, at `tab` when given, else where it was left.
-    @discardableResult static func open(_ tab: SettingsTab?, make: () -> SettingsWindow) -> SettingsWindow {
+    /// Shows the one Settings window, made by `make` the first time, at `tab` when given, else where it was left, over
+    /// `main` unless the person moved it.
+    @discardableResult static func open(_ tab: SettingsTab?, over main: NSWindow? = nil, make: () -> SettingsWindow) -> SettingsWindow {
         let window = shown ?? make()
         shown = window
         if let tab { window.select(tab) }
         window.model.look()
         window.model.measure()
+        window.place(over: main)
         window.window.makeKeyAndOrderFront(nil)
         return window
     }
@@ -418,8 +422,8 @@ extension App {
     @MainActor @objc func smallerInterface(_ sender: Any?) { shell.resize(by: -1) }
     @MainActor @objc func defaultInterfaceSize(_ sender: Any?) { shell.resize(by: nil) }
 
-    @MainActor func settings(_ tab: SettingsTab?) {
-        Settings.open(tab) {
+    @MainActor @discardableResult func settings(_ tab: SettingsTab?) -> SettingsWindow {
+        Settings.open(tab, over: shell.window) {
             let model = SettingsModel(preferences: library.preferences, places: places)
             model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
             model.floating = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed ?? false }
@@ -440,22 +444,19 @@ extension App {
             model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
             model.look()
             model.find()
-            let made = SettingsWindow(model)
-            made.window.center()
-            return made
+            return SettingsWindow(model)
         }
     }
 
-    /// Assistant › Ask Before Every Change…: Settings › Advanced, where the switch and what it means are.
-    @MainActor @objc func showPermissions(_ sender: Any?) { settings(.advanced) }
+    /// Assistant › Ask Before Every Change…: Settings › Permissions, where the switch and what it means are.
+    @MainActor @objc func showPermissions(_ sender: Any?) { settings(.permissions) }
 
     /// Defaults for New Spaces…, under the agent chip and Build With ▸: Settings › Agents.
     @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(.agents) }
 
-    /// Look for Agents Again, from the assistant's menu: as Agents' Look Again; a Settings window made later looks itself.
+    /// Look for Agents Again, from the assistant's menu or ⌘P: Settings › Agents opens, then looks, so that the look shows.
     @MainActor @objc func lookForAgentsAgain(_ sender: Any?) {
-        if let model = Settings.shown?.model { return model.again() }
-        assistant.lookAgain()
+        settings(.agents).model.again()
     }
 }
 
@@ -487,114 +488,146 @@ enum Found {
     }
 }
 
-/// The window: the four tabs in a bar of our own, the title in ink over them, then the tab's page, 720 points wide and
-/// as tall as the page. NSTabViewController's toolbar boxes each item on this SDK; the mockup's bar has borderless items
-/// and one soft pill behind the selected one.
+/// The window: 720 × 560 at every tab, as the interface grows it, over the main window until the person moves it. Its
+/// empty toolbar centres the lights on the title's row, which a window without one would leave near its corner.
 @MainActor final class SettingsWindow {
+    static let size = NSSize(width: 720, height: 560)
     let model: SettingsModel
     let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: true)
+    private weak var main: NSWindow?
+    /// Where the window last put itself: found anywhere else, the person moved it, and it stays.
+    private var placed: NSPoint?
 
     init(_ model: SettingsModel) {
         self.model = model
-        // The title is drawn with the tabs, in ink, under a transparent title bar that still moves the window.
+        // The title is drawn beside the tabs, in ink, under a transparent title bar that still moves the window.
         (window.titlebarAppearsTransparent, window.titleVisibility, window.isReleasedWhenClosed) = (true, .hidden, false)
+        (window.toolbar, window.toolbarStyle) = (NSToolbar(), .unified)
         let host = NSHostingView(rootView: SettingsFrame(model: model) { [weak self] in self?.select($0) })
         // The title shares the title bar's height with the lights: no safe area pushes it under them.
         host.safeAreaRegions = []
+        // The window has one size, given here: the page never asks for its own.
+        host.sizingOptions = []
         window.contentView = host
         select(model.tab)
-        fit()
+        place()
         follow()
     }
 
-    /// Takes the page's size as SwiftUI measures it, at each tab and interface size: the hosting view resizes its
-    /// window only on a display cycle, which a busy Mac or a window off the screen may not give.
+    /// Follows the interface size: the hosting view asks for nothing, so the window has to be told.
     private func follow() {
-        withObservationTracking { _ = (model.heights, model.tab, Look.scale.size) } onChange: { [weak self] in
+        withObservationTracking { _ = Look.scale.size } onChange: { [weak self] in
             DispatchQueue.main.async { [weak self] in
-                self?.fit()
+                self?.place()
                 self?.follow()
             }
         }
     }
 
-    /// Sizes the window to its content, its top edge kept, as the Mac's own settings do: the bar stays under the
-    /// pointer from one tab to the next (setContentSize would keep the bottom edge and move the bar).
-    private func fit() {
-        guard let host = window.contentView else { return }
-        let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: host.fittingSize)).size
-        window.setFrame(NSRect(origin: NSPoint(x: window.frame.minX, y: window.frame.maxY - size.height), size: size), display: true)
+    /// Takes the size of the interface's moment, centred on the main window; moved by the person, it keeps its top edge
+    /// where they left it.
+    func place(over main: NSWindow? = nil) {
+        self.main = main ?? self.main
+        let factor = Look.scale.size.factor, inside = NSSize(width: (Self.size.width * factor).rounded(), height: (Self.size.height * factor).rounded())
+        let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: inside)).size
+        let moved = placed.map { $0 != window.frame.origin } ?? false
+        let stays = NSPoint(x: window.frame.minX, y: window.frame.maxY - size.height)
+        let origin = moved ? stays : self.main.map { Self.spot(size, over: $0.frame, in: ($0.screen ?? NSScreen.main)?.visibleFrame) } ?? stays
+        window.setFrame(NSRect(origin: origin, size: size), display: true)
+        if !moved { placed = origin }
+    }
+
+    /// Where a window of `size` stands centred on `main`, kept inside `screen` when one is known.
+    static func spot(_ size: NSSize, over main: NSRect, in screen: NSRect?) -> NSPoint {
+        let centre = NSPoint(x: main.midX - size.width / 2, y: main.midY - size.height / 2)
+        guard let screen else { return centre }
+        return NSPoint(x: max(screen.minX, min(centre.x, screen.maxX - size.width)), y: max(screen.minY, min(centre.y, screen.maxY - size.height)))
     }
 
     var tab: SettingsTab { model.tab }
 
-    /// Shows `tab`'s page, and names the window after it (the Window menu, VoiceOver).
+    /// Shows `tab`'s page from its top, and names the window after it (the Window menu, VoiceOver).
     func select(_ tab: SettingsTab) {
-        model.tab = tab
+        // A new page starts at its top, its scroll view new; it says itself whether it goes on.
+        if tab != model.tab { (model.tab, model.more) = (tab, false) }
         window.title = tab.label
     }
 }
 
-/// The bar, then the page: the window's whole content, which sizes the window.
+/// The column of tabs, then the tab's name over its page: the window's whole content.
 struct SettingsFrame: View {
     let model: SettingsModel
     let choose: (SettingsTab) -> Void
-    /// A tab's size and its pill's rounding, the mockup's .sf-tab (X7.1): 88 wide, rounded 8, a step above Look.control.
-    static let tab = (width: 88.0, height: 48.0, radius: 8.0)
+    /// The mockup's column and its tab (.yp-b .sf-tabs, .sf-tab).
+    static let column = 186.0, tab = (height: 30.0, radius: 7.0)
+    /// The row of the title: where the empty toolbar puts the lights, whatever the interface size (the mockup's is 46).
+    static let row = 52.0
 
     var body: some View {
         let factor = Look.scale.size.factor
-        VStack(spacing: 0) {
-            VStack(spacing: 6) {
-                Text(model.tab.label).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                    .frame(height: 28 * factor).accessibilityHidden(true)
-                HStack(spacing: 2) {
-                    ForEach(SettingsTab.allCases, id: \.self) { tab in
-                        let on = tab == model.tab
-                        Button { choose(tab) } label: {
-                            VStack(spacing: 4) {
-                                Image(systemName: tab.symbol).font(.system(size: 14 * factor)).frame(height: 18 * factor)
-                                Text(tab.label).font(Look.font(.ui, size: 11, weight: on ? .semibold : .medium).ui)
-                            }
-                            .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
-                            .frame(width: Self.tab.width * factor, height: Self.tab.height * factor)
-                            .background { if on { RoundedRectangle(cornerRadius: Self.tab.radius, style: .continuous).fill(Look.Token.sel.ui) } }
-                            .contentShape(Rectangle())
+        HStack(spacing: 0) {
+            VStack(spacing: 2) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    let on = tab == model.tab
+                    Button { choose(tab) } label: {
+                        HStack(spacing: 9 * factor) {
+                            Image(systemName: tab.symbol).font(.system(size: 13 * factor)).frame(width: 16 * factor)
+                            Text(tab.label).font(Look.font(.ui, size: 13, weight: on ? .semibold : .medium).ui)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(tab.label)
-                        .accessibilityAddTraits(on ? [.isSelected] : [])
+                        .foregroundStyle((on ? Look.Token.ink : .ink2).ui)
+                        .padding(.horizontal, 10 * factor)
+                        .frame(maxWidth: .infinity, minHeight: Self.tab.height * factor, alignment: .leading)
+                        .background { if on { RoundedRectangle(cornerRadius: Self.tab.radius, style: .continuous).fill(Look.Token.sel.ui) } }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab.label)
+                    .accessibilityAddTraits(on ? [.isSelected] : [])
                 }
-                .padding(.bottom, 8)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.top, Self.row).padding(.horizontal, 10 * factor)
+            .frame(width: Self.column * factor, alignment: .top).frame(maxHeight: .infinity, alignment: .top)
             .background(Look.Token.side.ui)
-            .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
-            SettingsPage(model: model, tab: model.tab)
+            .overlay(alignment: .trailing) { Rectangle().fill(Look.Token.line.ui).frame(width: 1) }
+            VStack(spacing: 0) {
+                Text(model.tab.label).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                    .padding(.horizontal, 24 * factor).frame(maxWidth: .infinity, minHeight: Self.row, alignment: .leading).accessibilityHidden(true)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+                SettingsPage(model: model, tab: model.tab)
+            }
         }
-        .fixedSize()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Look.Token.bg.ui)
     }
 }
 
 // MARK: The pages
 
-/// One tab's page: its sections, each its title, its rows in a card, a line, and more rows or its block. As tall as
-/// they are up to `most` points, as the mockup's window; past it, they scroll.
+/// One tab's page: its sections, each its title, its rows in a card, a line, and more rows or its block. It scrolls under
+/// a soft fade, which says there is more below and leaves at the end.
 struct SettingsPage: View {
     let model: SettingsModel
     let tab: SettingsTab
-    static let most: CGFloat = 680
+    /// The fade's height, and how close to the end it leaves (.yp-more).
+    static let fade = (height: 44.0, end: 6.0)
 
     var body: some View {
-        let factor = Look.scale.size.factor
-        ScrollView {
-            sections.frame(width: 720 * factor, alignment: .topLeading).fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { model.heights[tab] = $0 }
+        let motion = Look.motion(model.preferences.motion)
+        ZStack {
+            ScrollView { sections.frame(maxWidth: .infinity, alignment: .topLeading) }
+                .scrollBounceBehavior(.basedOnSize)
+                .onScrollGeometryChange(for: Bool.self) { $0.contentSize.height - $0.visibleRect.maxY > Self.fade.end } action: { model.more = $1 }
+                // A new tab fades in where the last one stood; the old one leaves at once (.yp-in).
+                .id(tab).transition(.asymmetric(insertion: .opacity, removal: .identity))
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(width: 720 * factor, height: min(max(model.heights[tab] ?? 0, 1), Self.most * factor))
-        .background(Look.Token.bg.ui)
+        .animation(Look.douce.animation(Look.duration(0.18, motion)), value: tab)
+        .overlay(alignment: .bottom) {
+            LinearGradient(stops: [.init(color: Look.Token.bg.ui.opacity(0), location: 0), .init(color: Look.Token.bg.ui.opacity(0.92), location: 0.78),
+                                   .init(color: Look.Token.bg.ui, location: 1)], startPoint: .top, endPoint: .bottom)
+                .frame(height: Self.fade.height * Look.scale.size.factor)
+                .opacity(model.more ? 1 : 0).animation(Look.douce.animation(Look.duration(0.2, motion)), value: model.more)
+                .allowsHitTesting(false).accessibilityHidden(true)
+        }
     }
 
     private var sections: some View {
@@ -620,7 +653,7 @@ struct SettingsPage: View {
                 }
             }
         }
-        .padding(.top, 16).padding(.horizontal, 28).padding(.bottom, 24)
+        .padding(.top, 14).padding(.horizontal, 24).padding(.bottom, 30)
     }
 }
 
@@ -675,6 +708,7 @@ private struct RowView: View {
                     }
                     words.frame(maxWidth: .infinity, alignment: .leading)
                     if row.trail == nil { RowControl(row: row) }
+                    ForEach(row.beside) { RowControl(row: $0) }
                 }
             }
         }
@@ -863,7 +897,7 @@ private struct Thumb: View {
     }
 }
 
-/// On this Mac: the agents found, three to a line, each its tile, its name and its version, read only; then how many
+/// On this Mac: the agents found, two to a line, each its tile, its name and its version, read only; then how many
 /// were found and when, and Look Again.
 private struct AgentsFound: View {
     let model: SettingsModel
@@ -872,9 +906,9 @@ private struct AgentsFound: View {
         let agents = model.agents
         if !agents.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(stride(from: 0, to: agents.count, by: 3)), id: \.self) { start in
+                ForEach(Array(stride(from: 0, to: agents.count, by: 2)), id: \.self) { start in
                     HStack(spacing: 12) {
-                        ForEach(start..<start + 3, id: \.self) { index in
+                        ForEach(start..<start + 2, id: \.self) { index in
                             HStack(spacing: 9) {
                                 if index < agents.count {
                                     Monogram(name: agents[index].name, side: 22)

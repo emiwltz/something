@@ -70,8 +70,8 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
    run something’s own commands without asking; everything else it does asks you, as your agent’s own settings
    decide." A lasting rule ("Always for this space", a checkbox beside Allow Once) is offered only for one plain command
    of an agent a space started; it keeps that exact command, kind and folder in the space's grant, and something then
-   answers it alone (`decision.by` `rule`, a journal line), until Revoke in Info or Settings › Advanced. Full Access
-   (Settings › Advanced, one confirmation, an orange mark while on) covers the assistant's permissions only: agents a
+   answers it alone (`decision.by` `rule`, a journal line), until Revoke in Info or Settings › Permissions. Full Access
+   (Settings › Permissions, one confirmation, an orange mark while on) covers the assistant's permissions only: agents a
    space starts keep their own settings, and questions always wait. The assistant's building work: for Claude Code that
    is exactly edits and writes in `~/something/spaces` and the lent tools; its rules fail toward asking, never a broader
    path, a `Bash(...)` rule or a whole MCP server. "Ask Before Every Change" turns it off. Nothing of either is written

@@ -1,5 +1,5 @@
-// Acceptance scenarios of the palette, the menus and the shortcuts card (g1, g2, g9, g10), Settings' four tabs
-// (x7-1 to x7-4), the picture (x8-1, x8-2, x0-1) and the interface size (6-1, 6-3).
+// Acceptance scenarios of the palette, the menus and the shortcuts card (g1, g2, g9, g10), Settings' window and four
+// tabs (r6-1, r6-2, x7-1 to x7-4), the picture (x8-1, x8-2, x0-1) and the interface size (6-1, 6-3).
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -107,16 +107,17 @@ struct AcceptanceCommand {
         #expect(chosen.map(\.kind) == [.ask(.newSpace, text: sentence, none: false)] && Palette.shown(in: shell.layer) == nil)
     }
     /// X7.1, General: the start, then Look (the theme's three pictures, the interface size's tiles and its keys, the
-    /// sidebar Pinned or Floating). The open menu of "When something opens" is a menu the window server draws, so its
-    /// items are checked as text (x7-1-menu.txt).
+    /// sidebar Pinned or Floating), then the shortcuts. The open menu of "When something opens" is a menu the window
+    /// server draws, so its items are checked as text (x7-1-menu.txt).
     @Test("x7-1: Settings, General") func x7_1() async throws {
         let shows = ["Start", "When something opens", "The last space you had open", "Look", "Theme", "Auto follows your Mac", "Auto", "Light",
                      "Dark", "Interface size", "Default", "Large", "Larger", "Sidebar", "Pinned", "Floating"]
         try await settings(.general, "x7-1", shows: shows, hears: ["When something opens: The last space you had open", "Interface size: Default",
-                                                                   "Sidebar: Pinned", "Light"]) { settings, _ in
+                                                                   "Sidebar: Pinned", "Light", "Show Shortcuts"]) { settings, _ in
             let sections = settings.model.sections(.general)
-            #expect(sections.map(\.title) == ["Start", "Look"] && sections.flatMap(\.rows).map(\.title) == ["When something opens", "Theme", "Interface size", "Sidebar"])
-            #expect(sections[1].rows.map(\.style) == [.thumbs, .tiles, .segments])
+            #expect(sections.map(\.title) == ["Start", "Look", ""])
+            #expect(sections.flatMap(\.rows).map(\.title) == ["When something opens", "Theme", "Interface size", "Sidebar", "Keyboard shortcuts"])
+            #expect(sections[1].rows.map(\.style) == [.thumbs, .tiles, .segments] && sections[1].rows.map(\.wrap) == [true, true, false])
             guard case .choice(let options, let get, _) = sections[0].rows[0].control else { Issue.record("not a choice"); return }
             let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
             #expect(menu == ["✓ The last space you had open", "  New Space", "# A space", "  Daily brief", "  My agents", "  Project watch",
@@ -125,35 +126,30 @@ struct AcceptanceCommand {
         }
     }
 
-    /// X7.2, Agents: your assistant (the agent, then the model and the effort in one menu, checked as text in
-    /// x7-2-menu.txt since the window server draws it), what a new space may do (None: the mockup's Watch would let a
-    /// page whose words name no agent see them) and the notifications, each
-    /// space with its level (Run with its folder), and the agents on this Mac, read only.
+    /// X7.2, Agents: your assistants (the program, then the model and the effort in one menu beside it, checked as text
+    /// in x7-2-menu.txt since the window server draws it), their rest and resume, and the programs on this Mac, read only.
     @Test("x7-2: Settings, Agents") func x7_2() async throws {
-        // The page scrolls past 680 points, as the mockup's: what is below is heard, not seen.
-        let shows = ["Your assistant", "Agent", "Claude Code", "Model and effort", "Opus 5.5", "High", "Spaces and your agents", "A new space may",
-                     "None", "Watch", "Talk", "Run", "when an agent asks", "Each space and what it may do", "My agents", "Project watch",
-                     // Vision reads ~ and the space before a path in code as anything; "Daily brief" as "Daily briet": heard.
-                     "code/atelier"]
-        try await settings(.agents, "x7-2", shows: shows, hears: ["Agent: Claude Code", "Model and effort: Opus 5.5 · High", "A new space may: None",
-                                                                  "Daily brief: Watch", "Project watch: Run", "Stack: None", "Look Again"]) { settings, stage in
+        // The page scrolls past the window, as the mockup's: what is below is heard, not seen.
+        let shows = ["Assistants", "Program", "Model and effort", "Claude Code", "Opus 5.5", "High", "Conversations and rest",
+                     "Resume each space's conversation", "picks up here", "Put idle assistants to sleep after", "10 minutes", "assistants awake",
+                     "Programs on this Mac"]
+        try await settings(.agents, "x7-2", shows: shows, hears: ["Model and effort: Opus 5.5 · High", "Put idle assistants to sleep after: 10 minutes", "Look Again"]) { settings, stage in
             let sections = settings.model.sections(.agents)
-            #expect(sections.map(\.title) == ["Your assistant", "Spaces and your agents", "On this Mac"] && sections[2].block == .found)
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Agent", "Model and effort", "A new space may", "Notify me when an agent asks"])
-            #expect(sections[1].lead == "Each space and what it may do. One click changes it.")
-            #expect(sections[1].more.map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
-            #expect(sections[1].more.map(\.note) == ["", "", "in `~/code/atelier`", "", "", "", ""], "\(stage.home.places.home.path)")
+            #expect(sections.map(\.title) == ["Assistants", "Conversations and rest", "Programs on this Mac"] && sections[2].block == .found)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Program · Model and effort", "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most"])
+            #expect(sections[1].rows[0].note == "Claude Code picks up here. The others start a new one here, and say so.")
             #expect(settings.model.agents.count == 8 && settings.model.agents.suffix(2).allSatisfy { $0.line == "Seen only" })
+            #expect(settings.model.lookedLine.hasPrefix("Found 8 programs · looked"))
             // The note says what the chosen agent asks: Claude Code as the README says it, pi as Allow warns of it; and
             // Ask Before Every Change only for an assistant it can hold.
             let agent = sections[0].rows[0], chosen = settings.model.preferences.assistant
-            #expect(agent.mark == "Claude Code" && agent.note == "It builds and changes your spaces in ~/something/spaces. "
+            #expect(agent.mark == "Claude Code" && agent.note == "Each builds and changes its space, in ~/something/spaces. "
                         + "Everything else it does asks you, as your agent’s own settings decide.")
             settings.model.preferences.change { $0.assistant = "pi" }
             #expect(settings.model.sections(.agents)[0].rows[0].note == "pi runs commands and edits files without asking you first.")
-            #expect(!settings.model.sections(.advanced)[0].rows.map(\.title).contains("Your assistant asks before every change"))
+            #expect(!settings.model.sections(.permissions)[0].rows.map(\.title).contains("Your assistant asks before every change"))
             settings.model.preferences.change { $0.assistant = chosen }
-            guard case .choice(let options, let get, _) = sections[0].rows[1].control else { Issue.record("not a choice"); return }
+            guard case .choice(let options, let get, _) = agent.beside[0].control else { Issue.record("not a choice"); return }
             let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
             #expect(menu == ["# Model", "  Default model", "✓ Opus 5.5", "  Sonnet 5.5", "# Effort", "  Default effort", "  Medium", "✓ High"])
             try Self.dump(menu, "x7-2-menu.txt")
@@ -176,28 +172,29 @@ struct AcceptanceCommand {
         }
     }
 
-    /// X7.4, Advanced: Full Access (off; turning it on asks once), whether your assistant asks before every change (off)
-    /// and the agents a space starts (their own settings); the lasting rules, each with Revoke (Project watch's, the
-    /// mockup's); the assistants' rest and resume, and the shortcuts.
-    @Test("x7-4: Settings, Advanced") func x7_4() async throws {
+    /// X7.4, Permissions until S6 redraws it: Full Access (off; turning it on asks once), whether your assistant asks
+    /// before every change (off) and the agents a space starts (their own settings); what a new space may do (None: the
+    /// mockup's Watch would let a page whose words name no agent see them), the notifications and each space with its
+    /// level (Run with its folder); the lasting rules, each with Revoke (Project watch's, the mockup's); the folders.
+    @Test("x7-4: Settings, Permissions") func x7_4() async throws {
+        // The page scrolls past the window: what is below is heard, not seen.
         let shows = ["Permissions", "Full Access", "something allows every permission your assistant asks", "Your assistant asks before every change",
-                     "Agents a space starts", "Their Own Settings", "something answers for you only where you said so", "Lasting rules",
-                     "git log --oneline -20", "code/atelier", "for Project watch", "Revoke", "Folders", "Assistants",
-                     "Resume each space's conversation", "Put idle assistants to sleep after", "10 minutes"]
-        try await settings(.advanced, "x7-4", shows: shows, hears: ["Full Access", "Your assistant asks before every change", "Revoke",
-                                                                   "Put idle assistants to sleep after: 10 minutes", "Show Shortcuts"]) { settings, _ in
-            let model = settings.model, sections = model.sections(.advanced)
-            #expect(sections.map(\.title) == ["Permissions", "Lasting rules", "Folders", "Assistants", "Keyboard"] && sections[0].lead == Promise.sentence)
+                     "Agents a space starts", "Their Own Settings", "something answers for you only where you said so"]
+        try await settings(.permissions, "x7-4", shows: shows, hears: ["Full Access", "Your assistant asks before every change", "Revoke", "A new space may: None",
+                                                                       "Daily brief: Watch", "Project watch: Run", "Stack: None"]) { settings, stage in
+            let model = settings.model, sections = model.sections(.permissions)
+            #expect(sections.map(\.title) == ["Permissions", "Spaces and your agents", "Lasting rules", "Folders"] && sections[0].lead == Promise.sentence)
             #expect(sections.flatMap(\.rows).map(\.title) == ["Full Access", "Your assistant asks before every change", "Agents a space starts",
-                                                              "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most",
-                                                              "Keyboard shortcuts"])
-            let kept = try #require(sections[1].more.first)
-            #expect(sections[1].more.count == 1 && kept.title == "git log --oneline -20" && kept.code && kept.mark == "Claude Code")
+                                                              "A new space may", "Notify me when an agent asks"])
+            #expect(sections[1].lead == "Each space and what it may do. One click changes it.")
+            #expect(sections[1].more.map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
+            #expect(sections[1].more.map(\.note) == ["", "", "in `~/code/atelier`", "", "", "", ""], "\(stage.home.places.home.path)")
+            let kept = try #require(sections[2].more.first)
+            #expect(sections[2].more.count == 1 && kept.title == "git log --oneline -20" && kept.code && kept.mark == "Claude Code")
             #expect(kept.note == "Claude Code · in ~/code/atelier · for Project watch · since yesterday")
             // Folders: what the levels hold, each Run folder with its spaces (X7.4), and nothing to change there.
-            let folder = try #require(sections[2].more.first)
-            #expect(sections[2].more.count == 1 && folder.title == "~/code/atelier" && folder.note == "Project watch" && folder.code && folder.symbol == "folder")
-            #expect(sections[3].rows[0].note == "Claude Code can. Codex, OpenCode, pi, OMP and Amp start fresh, and say so.")
+            let folder = try #require(sections[3].more.first)
+            #expect(sections[3].more.count == 1 && folder.title == "~/code/atelier" && folder.note == "Project watch" && folder.code && folder.symbol == "folder")
             // Full Access goes through the app, which asks once; Revoke too.
             var turned: [Bool] = [], revoked: [LastingRule] = []
             (model.fullAccess, model.revoke) = ({ turned.append($0) }, { revoked.append($0) })
@@ -217,6 +214,76 @@ struct AcceptanceCommand {
         }
     }
 
+    /// R6.1: one size at every tab and every interface size (720 × 560, 806 × 627, 893 × 694), the tabs in a column that
+    /// does not move, the lights centred on the title's row, the tab's name in that row. Settings' own opening, at
+    /// Agents then a look, is Look for Agents Again's: it shows itself.
+    @Test("r6-1: One size, a column on the left") func r6_1() async throws {
+        let shows = ["General", "Spaces", "Agents", "Permissions", "Assistants", "Conversations and rest"]
+        try await settings(.agents, "r6-1", shows: shows) { settings, _ in
+            let frame = settings.window.frame
+            for tab in SettingsTab.allCases {
+                settings.select(tab)
+                #expect(settings.window.frame == frame && settings.window.title == tab.label, "\(tab)")
+            }
+            settings.select(.agents)
+            #expect(SettingsFrame.column == 186 && SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Permissions"])
+            let close = try #require(settings.window.standardWindowButton(.closeButton)), bar = try #require(settings.window.contentView?.superview)
+            let place = close.convert(close.bounds, to: bar)
+            #expect(abs((bar.isFlipped ? place.midY : bar.bounds.height - place.midY) - SettingsFrame.row / 2) <= 1, "\(place) in \(bar.bounds)")
+            var looks = 0
+            settings.model.lookAgain = { looks += 1 }
+            defer { Settings.shown = nil }
+            Settings.shown = settings
+            settings.select(.general)
+            Settings.open(.agents) { settings }.model.again()
+            #expect(settings.tab == .agents && looks == 1 && settings.model.found == nil, "Look for Agents Again shows itself: Agents, then the look")
+            _ = await wait(until: { settings.model.found != nil })
+        }
+        try await Stage.alone {
+            defer { Look.scale.size = .standard }
+            let home = Home(prefix: "something-accept-command-")
+            defer { home.remove() }
+            let settings = SettingsWindow(SettingsModel(preferences: Preferences(home.places), places: home.places))
+            settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
+            defer { settings.window.close() }
+            for (size, width, height) in [(Look.Size.large, 806.0, 627.0), (.larger, 893.0, 694.0), (.standard, 720.0, 560.0)] {
+                Look.scale.size = size
+                @MainActor func now() -> NSSize { settings.window.contentRect(forFrameRect: settings.window.frame).size }
+                #expect(await wait(until: { abs(now().width - width) < 1 && abs(now().height - height) < 1 }), "\(size): \(now())")
+            }
+        }
+    }
+
+    /// R6.2: a long tab scrolls under a fade that leaves at its end; a new tab starts at its top. The fade is off the
+    /// column, inside the page.
+    @Test("r6-2: A long tab scrolls under a fade") func r6_2() async throws {
+        try await settings(.permissions, "r6-2", shows: ["Permissions", "Full Access"]) { settings, _ in
+            let model = settings.model, content = try #require(settings.window.contentView)
+            func settled(_ holds: () -> Bool) async -> Bool {
+                await wait(until: {
+                    content.layoutSubtreeIfNeeded()
+                    content.displayIfNeeded()
+                    return holds()
+                })
+            }
+            #expect(await settled { model.more }, "a long page says there is more")
+            let scroll = try #require(Self.scroller(in: content)), page = try #require(scroll.documentView)
+            #expect(scroll.convert(scroll.bounds, to: content).minX >= SettingsFrame.column, "the page and its fade are off the column")
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: page.frame.height - scroll.contentView.bounds.height))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            #expect(await settled { !model.more }, "the fade leaves at the end")
+            settings.select(.agents)
+            #expect(await settled { model.more }, "the next long page says so")
+            let new = try #require(Self.scroller(in: content))
+            #expect(new !== scroll && new.contentView.bounds.minY == 0, "a new tab starts at its top")
+        }
+    }
+
+    /// The first scroll view under `view`: a page's, which SwiftUI gives no other way to scroll offscreen.
+    static func scroller(in view: NSView) -> NSScrollView? {
+        (view as? NSScrollView) ?? view.subviews.lazy.compactMap(scroller).first
+    }
+
     /// Writes `lines` as `name` in the gallery, when there is one.
     static func dump(_ lines: [String], _ name: String) throws {
         guard let gallery else { return }
@@ -225,12 +292,12 @@ struct AcceptanceCommand {
     }
 
     /// Settings at `tab` on the Stage's home, its spaces at the mockup's levels, drawn as `id` in both appearances: the
-    /// window's frame (title bar, the tabs' bar) by cacheDisplay, its lights in their key colors. Each picture is read
+    /// window's frame (title bar, the column) by cacheDisplay, its lights in their key colors. Each picture is read
     /// by Vision and must show every line of `shows`: what the screen shows, not what the model says; VoiceOver must
-    /// hear each of `hears` in the page, and the bar's tabs. Drawn at `size`, set only while the pictures are drawn
+    /// hear each of `hears` in the page, and the column's tabs. Drawn at `size`, set only while the pictures are drawn
     /// (Look.scale is the whole process's), then Default.
     func settings(_ tab: SettingsTab, _ id: String, shows: [String], hears: [String] = [], size: Look.Size = .standard,
-                  _ check: (SettingsWindow, Stage) throws -> Void) async throws {
+                  _ check: (SettingsWindow, Stage) async throws -> Void) async throws {
         let stage = try Stage("command")
         defer { stage.remove() }
         let (_, library, _) = stage.window()
@@ -273,9 +340,9 @@ struct AcceptanceCommand {
         settings.window.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
         defer { settings.window.close() }
         settings.select(tab)
-        #expect(settings.window.title == tab.label && settings.window.toolbar == nil)
-        try check(settings, stage)
-        // The bar's four tabs are heard with the page, as four buttons.
+        #expect(settings.window.title == tab.label && settings.window.toolbar?.items.isEmpty == true)
+        try await check(settings, stage)
+        // The column's four tabs are heard with the page, as four buttons.
         let page = try #require(settings.window.contentView), hears = hears + SettingsTab.allCases.map(\.label)
         let heard = await AcceptanceBuild.read(page) { words in hears.allSatisfy(words.contains) }
         for words in hears { #expect(heard.contains(words), "\(id) hears “\(words)”; heard: \(heard)") }
@@ -286,16 +353,10 @@ struct AcceptanceCommand {
             defer { (Look.scale.size, library.preferences.size) = (.standard, .standard) }
             settings.window.layoutIfNeeded()
             await wait(1.2)
-            // The page grows with the size on SwiftUI's time, and the window with it: wait until both hold, the page measured.
-            let content = try #require(settings.window.contentView)
-            _ = await wait(until: {
-                // An offscreen window gets no display cycle under load: lay it out here, as the screen would.
-                settings.window.layoutIfNeeded()
-                let now = settings.window.contentRect(forFrameRect: settings.window.frame).size
-                return abs(now.width - 720 * size.factor) < 1 && abs(now.height - content.fittingSize.height) <= 1 && (settings.model.heights[tab] ?? 0) > 0
-            })
-            #expect(abs(settings.window.contentRect(forFrameRect: settings.window.frame).width - 720 * size.factor) < 1)
-            #expect(abs(settings.window.contentRect(forFrameRect: settings.window.frame).height - content.fittingSize.height) <= 1, "the window holds its page whole")
+            // The window follows the size on the main queue's time.
+            @MainActor func now() -> NSSize { settings.window.contentRect(forFrameRect: settings.window.frame).size }
+            _ = await wait(until: { abs(now().width - 720 * size.factor) < 1 })
+            #expect(abs(now().width - 720 * size.factor) < 1 && abs(now().height - 560 * size.factor) < 1, "\(now())")
             let frame = try #require(settings.window.contentView?.superview)
             // Vision reads … as ..., ’ as ' and a middle dot as anything: compare the words alone.
             func plain(_ text: String) -> String { text.replacingOccurrences(of: "…", with: "...").replacingOccurrences(of: "’", with: "'") }
@@ -496,12 +557,12 @@ struct AcceptanceCommand {
     }
 
     /// 6.1, the interface size, in Settings › General's Look at Large: the row says what grows and the three keys, and
-    /// Settings grows with the app (a page 806 points wide, its type 12 % larger). The View menu says the size and greys
+    /// Settings grows with the app (a window of 806 × 627, its type 12 % larger). The View menu says the size and greys
     /// what cannot act there (6.2); ⌘+ ⌘− ⌘0 reach the menu before a page (KeysTests), and say the size in a toast.
     @Test("6-1: the interface size") func v6_1() async throws {
         let shows = ["Look", "Interface size", "The whole app grows", "Large"]
         try await settings(.general, "6-1", shows: shows, size: .large) { settings, _ in
-            let look = try #require(settings.model.sections(.general).last), row = look.rows[1]
+            let look = settings.model.sections(.general)[1], row = look.rows[1]
             #expect(look.title == "Look" && row.title == "Interface size")
             #expect(row.style == .tiles && row.keys.map(\.key) == ["⌘+", "⌘−", "⌘0"])
             guard case .choice(let options, let get, _) = row.control else { Issue.record("not a choice"); return }
@@ -607,8 +668,6 @@ struct AcceptanceCommand {
 
     // MARK: Round 4, the final mockup
 
-    @Test("r6-1: One size, a column on the left", .disabled("not built yet: S5")) func r6_1() async throws {}
-    @Test("r6-2: A long tab scrolls under a fade", .disabled("not built yet: S5")) func r6_2() async throws {}
     @Test("r7-1: Permissions: the map, two questions, the promise", .disabled("not built yet: S6")) func r7_1() async throws {}
     @Test("r7-2: One ladder, its two columns follow", .disabled("not built yet: S6")) func r7_2() async throws {}
     @Test("r7-3: Lasting Rules, Revoke", .disabled("not built yet: S6")) func r7_3() async throws {}

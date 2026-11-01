@@ -1,6 +1,6 @@
 // What something answers by itself, only where the person said so (AGENTS.md rule 2): a lasting rule kept with "Always
 // for this space" (one exact command, one kind of agent, one folder, in the space's grant, so that a rename, an import
-// or a deletion drops it as it drops the level), and Full Access for the person's assistant alone (Settings › Advanced,
+// or a deletion drops it as it drops the level), and Full Access for the person's assistant alone (Settings › Permissions,
 // one confirmation, an orange mark in the toolbar while it is on). Agents a space starts keep their own settings under
 // Full Access, and a question always waits for the person. Here: the rule a request could keep, whether one applies,
 // keeping and revoking one, every rule for Settings, Full Access's confirmation and its mark.
@@ -153,7 +153,7 @@ extension App {
         }
     }
 
-    /// Settings › Advanced's Full Access: turning it on asks once, in a sheet over Settings; turning it off does not.
+    /// Settings › Permissions's Full Access: turning it on asks once, in a sheet over Settings; turning it off does not.
     /// The toolbar's mark follows.
     func fullAccess(_ on: Bool, over window: NSWindow?) {
         guard on else { return setFullAccess(false) }

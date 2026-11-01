@@ -55,7 +55,7 @@ its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload 
 the interface size: ⌘+ and ⌘− grow or shrink the whole app, pages included, to Large or Larger, ⌘0 brings it back
 (also in Settings › General). Hide the sidebar (⌃⌘S) and it floats: rest the pointer on the window's left edge and it comes over the page, its pin keeps it. **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open
-space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Advanced changes both: Put
+space's, and any that works or waits for you, are never put to sleep). Settings (⌘,) › Agents changes both: Put
 idle assistants to sleep after, and Keep at most; Put Idle Assistants to Sleep (Assistant menu) does it at once. A
 sleeping assistant wakes on your next message and picks its conversation up, unless Resume each space's conversation is
 off in the same tab, kept in `~/Library/Application Support/something/assistants/`: its agent, model, effort and last
@@ -132,7 +132,7 @@ runs them in its shell instead. What "without asking" means for each:
   refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
   space's Run, where you choose it and in Info.
 
-"Ask Before Every Change", for Claude Code and Codex, in the assistant card's menu or Settings › Advanced (Your
+"Ask Before Every Change", for Claude Code and Codex, in the assistant card's menu or Settings › Permissions (Your
 assistant asks before every change), turns the exception off from the next conversation. No space can see what you say to your assistant, or write
 to it. something writes `AGENTS.md` and `CLAUDE.md` in `~/something/spaces` to tell your assistant what something is;
 a copy whose first line you removed is yours and left alone.
@@ -153,7 +153,7 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   space, says it all in three parts: the space (its file, its size, Export, History), your agents (its level, one
   control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent and model,
   its last reply, Open Conversation). Settings › Agents lists every space with its level, and changes one the same way;
-  Settings › Advanced › Folders lists each folder your spaces run agents in, with those spaces.
+  Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
@@ -166,9 +166,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   Once also keeps a lasting rule: exactly that command, for that kind of agent, in that folder, for that space. The next
   time the same request comes, something answers it by itself, says "Allowed by your rule" in a quiet note, and writes
   it in the space's journal; any other command, folder, agent or space still asks. The rules are listed in the space's
-  Info and in Settings › Advanced, each with Revoke. Renaming, importing over or deleting the space drops them, as it
+  Info and in Settings › Permissions, each with Revoke. Renaming, importing over or deleting the space drops them, as it
   drops its level. Nothing is written into the agent's own settings. Your assistant's requests are never kept this way.
-- **Full Access.** Settings › Advanced › Full Access, after one confirmation, lets something allow every permission your
+- **Full Access.** Settings › Permissions › Full Access, after one confirmation, lets something allow every permission your
   assistant asks, by itself, each said in a quiet notice; an orange mark stays in the toolbar while it is on, and a click
   on it turns it off. The
   agents your spaces start keep their own settings and still ask, and a question still waits for you.

@@ -1,6 +1,6 @@
 // The shortcut sheet (⌘/): a card on a scrim in the window layer (ScrimCard, WindowLayer.swift), "Keyboard Shortcuts"
 // and ✕, Keys' lines in two columns (ShortcutColumns), and a footer that says where the menu keys are changed. Esc, ✕,
-// a click on the scrim or ⌘/ again closes it; Settings › Advanced's Show Shortcuts opens it too.
+// a click on the scrim or ⌘/ again closes it; Settings › General's Show Shortcuts opens it too.
 import AppKit
 import SwiftUI
 
