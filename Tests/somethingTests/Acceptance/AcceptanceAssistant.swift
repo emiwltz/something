@@ -613,7 +613,7 @@ struct AcceptanceAssistant {
         }
         // A center too narrow for the card, the panel open (only its width counts): the card keeps its margins and its
         // header stays inside it, the title cut, its two buttons there.
-        shell.window.setContentSize(NSSize(width: 800, height: 700))
+        shell.window.setContentSize(NSSize(width: 640, height: 700))
         shell.toggleInfo(spaceOpen: true)
         shell.window.layoutIfNeeded()
         let room = shell.glass.bounds.width
