@@ -26,9 +26,11 @@ import Testing
         var times = seen(["g": 0.2, "m": 0.4, "n": 0.9, "w": 1.0])
         var ladder = Ladder.read(items, seen: times, from: Self.start)
         #expect(ladder.steps.map(\.mark) == [.done, .now, .later] && ladder.eyes == .think)
-        #expect(ladder.say == "I’ll make “Waiting room”: one card per agent." && ladder.wrote == "waiting-room.html" && !ladder.ran)
+        #expect(ladder.say == nil && ladder.wrote == "waiting-room.html" && !ladder.ran)
+        #expect(ladder.steps[0].lines.map(\.text) == ["Read the guide", "Named it waiting-room", "Planned: I’ll make “Waiting room”: one card per agent."])
+        #expect(ladder.titled("Waiting room").steps[0].lines[1].text == "Named it Waiting room")
         #expect(Ladder.took(ladder.steps[0], now: Self.start + 9) == "0.9 s" && Ladder.took(ladder.steps[1], now: Self.start + 6.4) == "5.5 s")
-        #expect(Ladder.took(ladder.steps[2], now: Self.start + 9) == nil && ladder.steps[1].file == "waiting-room.html")
+        #expect(Ladder.took(ladder.steps[2], now: Self.start + 9) == nil && ladder.steps[1].lines == [.init(text: "Writing waiting-room.html", mark: .now)])
 
         // The lent check reports a page with problems as done: it says only that it checked.
         items[3].tool?.status = "done"
@@ -85,13 +87,30 @@ import Testing
 
     /// Stop says what stays on disk: the page unchecked, what a command changed, or nothing.
     @Test func stopSaysWhatStaysOnDisk() {
-        let writing = Ladder.read([tool("w", "Write", Self.room, "running")], seen: seen(["w": 1]), from: Self.start).halted()
-        #expect(writing.steps.map(\.mark) == [.done, .off, .off] && writing.stopped && writing.eyes == .sleep)
-        #expect(writing.say == "Stopped. waiting-room.html stays in your spaces folder, unchecked.")
-        let ran = Ladder.read([tool("b", "Bash", "npm install")], seen: [:], from: Self.start).halted()
-        #expect(ran.say == "Stopped. What it changed stays in your spaces folder." && ran.steps.map(\.mark) == [.off, .off, .off])
-        let nothing = Ladder.read([], seen: [:], from: Self.start).halted()
-        #expect(nothing.say == "Stopped before writing. Nothing was saved.")
+        let writing = Ladder.read([tool("w", "Write", Self.room, "running")], seen: seen(["w": 1]), from: Self.start)
+        #expect(writing.stoppedWords == "Stopped · waiting-room.html stays in your spaces folder, unchecked")
+        let ran = Ladder.read([tool("b", "Bash", "npm install")], seen: [:], from: Self.start)
+        #expect(ran.stoppedWords == "Stopped · what it changed stays in your spaces folder")
+        #expect(Ladder.read([], seen: [:], from: Self.start).stoppedWords == "Stopped before writing · nothing was saved · your words are back")
+    }
+
+    /// Only what is observed: a step says what it is for until an item shows it at work; a guide under way, a write under
+    /// way, the size only when the file gives one, a failed write nothing, one line per file however many edits, the
+    /// fixes after a check no line of Write's, and words after the first write no plan.
+    @Test func linesAreWhatWasObserved() {
+        var ladder = Ladder.read([], seen: [:], from: Self.start)
+        #expect(ladder.steps.allSatisfy(\.lines.isEmpty) && ladder.steps.map(\.note) == ["Reads the guide, then plans the space", "Writes the space", "Opens it, reads it, looks for errors"])
+        ladder = Ladder.read([tool("g", "something_guide", "something guide", "running")], seen: [:], from: Self.start)
+        #expect(ladder.steps[0].lines == [.init(text: "Reading the guide", mark: .now)])
+        #expect(Ladder.read([tool("g", "something_guide", "something guide", "failed")], seen: [:], from: Self.start).steps[0].lines.isEmpty)
+        let late = Item(id: "m", kind: "message", author: "agent", text: "Written.", at: "2026-10-23T16:20:00Z")
+        let items = [tool("a", "Write", Self.room), tool("b", "Edit", Self.room, "running"), tool("c", "Write", "/Users/example/something/spaces/notes.md"),
+                     tool("d", "Write", "/Users/example/something/spaces/gone.md", "failed"), late]
+        ladder = Ladder.read(items, seen: [:], from: Self.start) { $0 == "notes.md" ? 14_000 : nil }
+        #expect(ladder.steps[0].lines.map(\.text) == ["Named it waiting-room"])
+        #expect(ladder.steps[1].lines == [.init(text: "Writing waiting-room.html", mark: .now), .init(text: "Wrote notes.md · 14 KB")])
+        ladder = Ladder.read([tool("a", "Write", Self.room), tool("k", "Bash", "something check waiting-room", "running")], seen: [:], from: Self.start)
+        #expect(ladder.steps[2].lines == [.init(text: "Checking, locked off the network", mark: .now)])
     }
 
     // MARK: Through the fake claude
@@ -104,25 +123,27 @@ import Testing
         return (home, model)
     }
 
-    /// Stop mid-Write: the turn is interrupted, the ladder stays saying what stays on disk, the sentence is back in the
-    /// field, and Build Again sends it.
+    /// Stop mid-Write: the turn is interrupted, a toast says what stays on disk, the field has the sentence back, what
+    /// the agent had said stays away from it, and Return sends it again.
     @Test func stopMidWriteKeepsTheWords() async throws {
         let (home, model) = try await assistant()
+        var noted: [String] = []
+        model.noted = { noted.append($0) }
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.ladder?.steps[1].mark == .now }))
-        #expect(model.ladder?.say == "I’ll make “Waiting room”: one card per agent that waits for you, oldest first." && model.draft.isEmpty)
+        #expect(model.ladder?.steps[0].lines.last?.text == "Planned: I’ll make “Waiting room”: one card per agent that waits for you, oldest first." && model.draft.isEmpty)
         model.nudge()
         #expect(model.nudged && model.building, "Esc only says how to stop")
         model.stop()
-        #expect(!model.building && !model.nudged && model.draft == "Who is waiting for me" && model.halted?.stopped == true)
-        #expect(model.ladder?.say == "Stopped. waiting-room.html stays in your spaces folder, unchecked.")
+        #expect(!model.building && !model.nudged && model.draft == "Who is waiting for me" && model.ladder == nil && model.halted)
+        #expect(noted == ["Stopped · waiting-room.html stays in your spaces folder, unchecked"])
         #expect(await wait(until: { !model.working && AssistantTests().input(home).contains { $0.contains("\"subtype\":\"interrupt\"") } }))
-        #expect(model.ladder?.stopped == true, "the stopped ladder stays")
+        #expect(BlankView.reply(in: model, since: 0) == nil, "the field comes back alone")
         model.place = .space(title: "My agents", name: "agents", page: "/Users/example/something/spaces/agents.html")
         model.place = .blank
-        #expect(model.ladder == nil && model.draft == "Who is waiting for me", "leaving puts the stopped ladder away, not the words")
+        #expect(!model.halted && model.draft == "Who is waiting for me", "leaving forgets the stop, not the words")
         model.send()
-        #expect(model.building && model.halted == nil && model.ladder?.stopped == false && model.draft.isEmpty)
+        #expect(model.building && !model.halted && model.draft.isEmpty)
         await AssistantTests().finish(home, model)
     }
 
@@ -143,7 +164,7 @@ import Testing
         model.place = .blank
         #expect(model.ladder == nil && model.draft == "Half written" && !model.building)
         model.watch(first)
-        #expect(model.building && model.ladder?.steps[1].mark == .now && model.ladder?.say?.hasPrefix("I’ll make") == true)
+        #expect(model.building && model.ladder?.steps[1].mark == .now && model.ladder?.steps[0].lines.last?.text.hasPrefix("Planned: I’ll make") == true)
         // A second build, from New Space's field, while the first goes on.
         model.watch(nil)
         Preferences.at(home.places).awakeAtMost = 1
@@ -327,7 +348,7 @@ import Testing
         #expect(model.asked != nil && model.engine.state.requests.count == 1 && model.arming(now: model.clock()) == 0.5)
         model.clock = { Date() + RequestPanel.arming }
         model.answer(0)
-        #expect(await wait(until: { model.ladder?.steps[1].mark == .now && model.ladder?.say == "One card per agent. Writing it now." }))
+        #expect(await wait(until: { model.ladder?.steps[1].mark == .now && model.ladder?.say == nil }))
         #expect(AssistantTests().input(home).contains { $0.contains("\"answers\"") && $0.contains("One card per agent") })
         #expect(panels.panel == nil && model.engine.state.requests.isEmpty)
         await AssistantTests().finish(home, model)

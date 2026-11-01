@@ -45,6 +45,15 @@ extension LevelChoice {
         }
     }
 
+    /// The sentence in plain words, for a page that shows it and changes nothing.
+    func said(home: String) -> String {
+        switch level {
+        case .none: "This space may \(level.word) your agents."
+        case .run: "This space may \(level.word) \(starts) in \(folder == .blank ? "a blank folder of its own" : place(home: home))."
+        default: "This space may \(level.word) \(LevelChoice.agents(scope, home: home))."
+        }
+    }
+
     /// The line something adds to the first message of a build, for the assistant to declare exactly this. Run's folder
     /// is always known by then: New Space sends only once it is chosen.
     func line(home: String) -> String {

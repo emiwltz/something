@@ -2,11 +2,10 @@
 // Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model, Build Now and Continue;
 // under it, the sentence of what the space may do with your agents (Sentence.swift), pre-set from the words, which is the
 // consent; and three suggestions that each fill the field. Without a coding agent, the notice takes the field's place.
-// Build makes it a build of its own, which the page then shows: its name for now as the title, the sentence sent held
-// in the field with the level chosen under it, the ladder saying what it does (Ladder.swift); the person may leave, it
-// goes on, and its row in the sidebar brings it back here. A build stopped leaves its ladder and the sentence back in
-// the field. The assistant's card stays away here (the page is its own composer), so when a build ends without a new
-// space, its reply stays above the field, to be answered there; a template's preview fills the page.
+// Build makes it a build of its own, which has its own page (BuildView.swift); the person may leave, it goes on, and its
+// row in the sidebar brings it back here. A build stopped comes back to the field with its words, and a toast. The
+// assistant's card stays away here (the page is its own composer), so when a build ends without a new space, its reply
+// stays above the field, to be answered there; a template's preview fills the page.
 import AppKit
 import SwiftUI
 
@@ -38,7 +37,13 @@ struct BlankView: View {
 
     var body: some View {
         Group {
-            if gallery.previewing != nil { GalleryView(library: library, model: gallery) } else { page }
+            if gallery.previewing != nil {
+                GalleryView(library: library, model: gallery)
+            } else if let build = model.before {
+                BuildView(build: build, model: model, library: library)
+            } else {
+                page
+            }
         }
         .background(Look.Token.bg.ui)
     }
@@ -46,64 +51,38 @@ struct BlankView: View {
     private var page: some View {
         GeometryReader { window in
             ScrollView {
-                let inner = max(0, window.size.width - 80), field = min(BlankView.width, inner), ladder = model.ladder
+                let inner = max(0, window.size.width - 80), field = min(BlankView.width, inner)
                 VStack(spacing: 0) {
-                    hero(ladder)
+                    hero
                     if model.noAgent {
                         if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 30) }
                     } else {
-                        if let reply, ladder == nil { answer(reply).frame(width: field).padding(.top, 30) }
-                        BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 30 : 14)
-                        if let build = model.before { chosen(build).frame(width: field, alignment: .leading).padding(.top, 10) }
-                        if !model.building { LevelCard(model: model).frame(width: field).padding(.top, 12) }
-                        if let ladder { LadderView(ladder: ladder, model: model, motion: library.preferences.motion).frame(width: field).padding(.top, 22) }
+                        if let reply { answer(reply).frame(width: field).padding(.top, 30) }
+                        BuildField(model: model).frame(width: field).padding(.top, reply == nil ? 30 : 14)
+                        LevelCard(model: model).frame(width: field).padding(.top, 12)
                         // The question the page answers needs no notice sending the person to the panel.
                         if let notice = model.notice, model.asked == nil { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
+                        suggestions.padding(.top, 20)
                     }
-                    if !model.building, !model.noAgent { suggestions.padding(.top, 20) }
                 }
-                .padding(EdgeInsets(top: ladder != nil ? 40 : 58, leading: 40, bottom: 64, trailing: 40))
+                .padding(EdgeInsets(top: 58, leading: 40, bottom: 64, trailing: 40))
                 .frame(maxWidth: .infinity)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
     }
 
-    /// The sign landing, its eyes following the build, the question, and where the space is made (folded away while
-    /// it builds).
-    private func hero(_ ladder: Ladder?) -> some View {
+    /// The sign landing, the question, and where the space is made.
+    private var hero: some View {
         VStack(spacing: 10) {
-            PageSign(state: model.building ? ladder?.eyes == .wait ? .listen : ladder?.eyes ?? .think : .listen, joy: ladder?.done == true,
-                     side: 52, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
-            Text(title).font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
+            PageSign(state: .listen, side: 52, lands: true, motion: library.preferences.motion).padding(.bottom, 10)
+            Text("What do you want to make?").font(Look.titleXL.font.ui).kerning(-1.32).foregroundStyle(Look.Token.ink.ui)
                 .multilineTextAlignment(.center).accessibilityAddTraits(.isHeader)
                 // The mockup's line is 1.04 of the size; Fraunces's own leading is taller.
                 .padding(.vertical, -6)
-            if !model.building {
-                // One text, so that a narrow window wraps it as a sentence; the path in code on the hover fill.
-                Text(BlankView.where(model.folder)).font(Look.font(.ui, size: 14).ui).foregroundStyle(Look.Token.ink2.ui).multilineTextAlignment(.center)
-            }
+            // One text, so that a narrow window wraps it as a sentence; the path in code on the hover fill.
+            Text(BlankView.where(model.folder)).font(Look.font(.ui, size: 14).ui).foregroundStyle(Look.Token.ink2.ui).multilineTextAlignment(.center)
         }
-    }
-
-    /// The question, or the name of the space the page shows building: its page's title once written, else its words.
-    private var title: String {
-        guard let build = model.before else { return "What do you want to make?" }
-        return model.space(of: build).flatMap { library.entry($0)?.title } ?? AssistantModel.provisional(build.sentence)
-    }
-
-    /// What the build may do with the person's agents, chosen before Build: one chip under its words.
-    private func chosen(_ build: AssistantModel.Build) -> some View {
-        let level = build.choice.level, folder = level == .run ? build.choice.folder.path.map { " in " + Words.path($0, home: library.places.home.path) } ?? "" : ""
-        return HStack(spacing: 6) {
-            Image(systemName: "person.2").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-            Text("\(level.title) · your agents\(folder)")
-        }
-        .font(Look.font(.ui, size: 12, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
-        .padding(.horizontal, 10).frame(height: 26)
-        .background(Capsule(style: .circular).strokeBorder(Look.Token.line2.ui))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("With your agents: \(level.title)\(folder)")
     }
 
     /// "Describe it in your words…", the folder `path` drawn as code.
@@ -115,12 +94,6 @@ struct BlankView: View {
         return AttributedString("Describe it in your words. Your assistant builds it in ") + code + AttributedString(".")
     }
 
-    /// The sentence the build started with: the person's last message.
-    private var sent: String? {
-        guard model.building else { return nil }
-        return model.rows.last { $0.mine != nil }?.mine ?? ""
-    }
-
     /// The assistant's last words when a build asked here ended without a space (a question, an error), while the page
     /// stays New Space (a space made is opening).
     private var reply: String? { library.selection == .newSpace ? BlankView.reply(in: model, since: start) : nil }
@@ -128,7 +101,7 @@ struct BlankView: View {
     /// The last reply, when it came at or after row `since` and answers a message sent from the blank page; else nil.
     static func reply(in model: AssistantModel, since: Int) -> String? {
         let rows = model.rows
-        guard !model.building, let at = rows.lastIndex(where: { $0.reply != nil }), at >= since, let text = rows[at].reply,
+        guard !model.building, !model.halted, let at = rows.lastIndex(where: { $0.reply != nil }), at >= since, let text = rows[at].reply,
               !rows[at...].contains(where: { $0.mine != nil }), case .mine(let caption, _)? = rows[..<at].last(where: { $0.mine != nil }),
               caption == "on the blank page" else { return nil }
         return text
@@ -188,33 +161,25 @@ struct Key: View {
 /// New Space's field: flat, bg2 in a line2 ring that turns ink with the focus, no shadow; Onest 16, two lines high;
 /// its bar under the words: who builds it and with which model in one chip, then Build Now and Continue, greyed while
 /// nothing is written. Return builds, ⇧Return adds a line, and Return that confirms what an input method composes
-/// builds nothing. While it builds it holds `sent`, read only, and its bar steps aside.
+/// builds nothing.
 struct BuildField: View {
     @Bindable var model: AssistantModel
-    let sent: String?
     @FocusState private var typing: Bool
 
     var body: some View {
-        let busy = sent != nil, shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         VStack(alignment: .leading, spacing: 4) {
-            Group {
-                if let sent {
-                    Text(sent).foregroundStyle(Look.Token.ink2.ui).lineLimit(1...3).frame(maxWidth: .infinity, minHeight: 26, alignment: .topLeading)
-                } else {
-                    TextField("", text: $model.draft, prompt: Text(BlankView.placeholder).foregroundStyle(Look.Token.ink3.ui), axis: .vertical)
-                        .textFieldStyle(.plain)
-                        .foregroundStyle(Look.Token.ink.ui)
-                        .lineLimit(2...6)
-                        .frame(minHeight: 50, alignment: .topLeading)
-                        .accessibilityLabel("Describe the space you want")
-                        .composing(model, $typing)
-                }
-            }
-            .font(Look.font(.ui, size: 16).ui).kerning(-0.16).lineSpacing(4.5)
-            .padding(EdgeInsets(top: 12, leading: 16, bottom: busy ? 12 : 0, trailing: 16))
-            if !busy { bar }
+            TextField("", text: $model.draft, prompt: Text(BlankView.placeholder).foregroundStyle(Look.Token.ink3.ui), axis: .vertical)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Look.Token.ink.ui)
+                .lineLimit(2...6)
+                .frame(minHeight: 50, alignment: .topLeading)
+                .accessibilityLabel("Describe the space you want")
+                .composing(model, $typing)
+                .font(Look.font(.ui, size: 16).ui).kerning(-0.16).lineSpacing(4.5)
+                .padding(EdgeInsets(top: 12, leading: 16, bottom: 0, trailing: 16))
+            bar
         }
-        .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink.ui : Look.Token.line2.ui)
+        .boxed(RoundedRectangle(cornerRadius: 12, style: .continuous), Look.Token.bg2.ui, ring: typing ? Look.Token.ink.ui : Look.Token.line2.ui)
     }
 
     /// The agent and its model in one chip, Build Now ⌘↵ and Continue ↵. Both build, until a reading of the words

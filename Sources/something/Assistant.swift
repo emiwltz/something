@@ -90,7 +90,7 @@ import SomethingCore
             if let space = place.space, space == fromTemplate { threadShown = true }
             // Leaving New Space stops nothing: its builds go on, followed from their rows.
             if oldValue == .blank, place != .blank {
-                (halted, nudged, watched) = (nil, false, nil)
+                (halted, nudged, watched) = (false, false, nil)
                 dropReading()
             }
             resolve()
@@ -121,7 +121,7 @@ import SomethingCore
     /// New Space shows the build `number`, or its own field for nil: a click on a building row, or on New Space.
     func watch(_ number: Int?) {
         watched = number.flatMap { n in builds.contains { $0.id == n } ? n : nil }
-        if watched != nil { halted = nil }
+        if watched != nil { halted = false }
         resolve()
         follow()
     }
@@ -189,8 +189,9 @@ import SomethingCore
     /// The build that just ended, while the window looks for the space it made (`appeared`), and whether New Space
     /// showed it then.
     @ObservationIgnored private var ending: (build: Build, shown: Bool)?
-    /// The ladder of the build the person stopped on the blank page, kept until they build again or leave.
-    private(set) var halted: Ladder?
+    /// Whether the person just stopped a build shown on New Space: what it had said stays away from the field, until
+    /// they build again or leave.
+    private(set) var halted = false
     /// Whether Esc was just pressed while the blank page builds: its ladder says how to stop, for a moment.
     private(set) var nudged = false
     @ObservationIgnored private var nudges = 0
@@ -209,6 +210,8 @@ import SomethingCore
     @ObservationIgnored private var commenting: [String: Commenting] = [:]
     /// Says a sentence in a toast: the window's.
     @ObservationIgnored var told: (String) -> Void = { _ in }
+    /// Says something quietly where the person stands: what a Stop left.
+    @ObservationIgnored var noted: (String) -> Void = { _ in }
     /// The spaces builds made while the person was elsewhere, until each is opened: their rows carry a dot.
     var ready: Set<String> = []
     /// The space just made from a template, until the person writes: the input offers to make it theirs.
@@ -369,14 +372,16 @@ import SomethingCore
     /// Whether `request` comes from a reading's agent, stopped or not: it hears a no (`followReading`), nobody is asked.
     func reads(_ request: Request) -> Bool { engine.unseen.contains(request.agent) }
 
-    /// The ladder New Space shows: the build's it follows as it goes, or the one stopped there; nil when there is neither.
-    var ladder: Ladder? { halted ?? before.map(ladder) }
+    /// The ladder of the build New Space shows; nil when it shows none.
+    var ladder: Ladder? { before.map(ladder) }
 
     /// The ladder of `build` as it goes; its question only while New Space shows it, where it is answered.
     func ladder(_ build: Build) -> Ladder {
         let turn = build.session.turn.flatMap { $0.id == build.turn ? nil : $0 }
         let asked = build.id == watched ? asked : nil
-        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] })
+        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] }) { [places] file in
+            (try? FileManager.default.attributesOfItem(atPath: places.spaces.appendingPathComponent(file).path))?[.size] as? Int
+        }
     }
 
     /// The space `build` writes, by its name, once its ladder names the page; nil before.
@@ -647,7 +652,7 @@ import SomethingCore
         }
         if sentence == nil { draft = "" }
         fromTemplate = nil
-        halted = nil
+        halted = false
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
         // Behind messages already held it waits too, so they leave in the order they were written; and while a Quick
         // Change works on this space, until it ends.
@@ -717,18 +722,19 @@ import SomethingCore
         stop(place == .blank ? before : nil)
     }
 
-    /// Stops the running turn, and `build`, asked from the blank page, with it: its ladder stays as it was, saying what
-    /// stays on disk, and the sentence goes back into the field, to change or build again. The watch ends here: a space
-    /// it began is not opened by itself.
+    /// Stops the running turn, and `build`, asked from the blank page, with it: the page goes back to the field with the
+    /// words in it, to change or build again, and a toast says what stays on disk. The watch ends here: a space it began
+    /// is not opened by itself.
     private func stop(_ build: Build?) {
         if let build {
             dropped = question(of: build)?.request
-            let left = ladder(build).halted()
+            let left = ladder(build).stoppedWords
             (asked, nudged) = (nil, false)
             remove(build)
             back(build)
             keepLevel(build)
-            halted = left
+            halted = true
+            noted(left)
         }
         takeBack()
         // Comments at work come back to their tray: a stopped turn did not do them, whatever the agent's state says.
@@ -752,7 +758,7 @@ import SomethingCore
             return resolve()
         }
         halt(session)
-        halted = nil
+        halted = false
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
         save(session)

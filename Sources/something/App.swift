@@ -107,6 +107,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         assistant.told = { [weak self] words in
             _ = self?.shell.toast(words, action: Toast.Action(label: "Back to New Space") { self?.library.select(.newSpace) })
         }
+        assistant.noted = { [weak self] words in _ = self?.shell.toast(words, quiet: true) }
         assistant.arrived = { [weak self] name, title in
             guard let self else { return }
             _ = shell.toast("\(title) is ready", action: Toast.Action(label: "Open") { [weak self] in self?.library.select(.space(name)) }, seconds: 6)
