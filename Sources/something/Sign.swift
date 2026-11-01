@@ -9,16 +9,16 @@ enum Sign {
     enum State: String, CaseIterable {
         case listen, think, wait, done, sleep, limit, unknown
 
-        /// The word VoiceOver reads and a tooltip shows.
+        /// The one list of state words, everywhere an agent or a space is said: the sticker, the card, the panel, ⌘P, Go,
+        /// a row and VoiceOver. A turn just done is Idle: its smile is an expression, not a word.
         var word: String {
             switch self {
-            case .listen: "Ready"
+            case .listen, .done: "Idle"
             case .think: "Working"
-            case .wait: "Waiting for you"
-            case .done: "Done"
+            case .wait: "Waiting for You"
             case .sleep: "Asleep"
-            case .limit: "Stopped"
-            case .unknown: "Unknown"
+            case .limit: "Ended"
+            case .unknown: "Can’t Tell"
             }
         }
 
@@ -27,7 +27,7 @@ enum Sign {
     }
 
     /// What VoiceOver reads of a sign in `state`, smiling with `joy`: the smile is an expression, not a state, so the
-    /// state is still said as it is ("Ready, smiling"), never as Done.
+    /// state is still said as it is ("Idle, smiling").
     static func words(_ state: State, joy: Bool) -> String { joy ? "\(state.word), smiling" : state.word }
 
     /// The proportions, as fractions of the sign's side: the corner's arm, the stroke (in a 100-unit corner, as the
@@ -316,7 +316,7 @@ final class SignView: NSView {
     var lean = CGSize.zero { didSet { if lean != oldValue { needsDisplay = true } } }
     /// The person's Motion choice; the system's Reduce Motion is folded in by `systemReduces`.
     var motion: Look.Motion = .calm { didSet { refresh() } }
-    /// What VoiceOver calls it before its state's word ("something, Ready"); empty makes it decoration.
+    /// What VoiceOver calls it before its state's word ("something, Idle"); empty makes it decoration.
     var name: String? { didSet { setAccessibilityElement(name != "") } }
     /// Seams for tests: the clock in seconds and the system's Reduce Motion.
     var clock: () -> TimeInterval = { CACurrentMediaTime() }

@@ -43,7 +43,7 @@ public struct Registry: Sendable {
     /// Whether a conversation seen elsewhere can be continued here, and why not, as its kind's `resume` says: only one
     /// no process holds, since one still held would get a second writer; for an agent that refuses a second writer
     /// itself, also one whose holder is unknown.
-    func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
+    package func continuable(_ kind: String, alive: Bool?, pid: Int?) -> (Bool, String?) {
         let name = name(of: kind), resume = agent(kind)?.resume ?? .never
         guard resume != .never else { return (false, "something cannot continue \(name) conversations started elsewhere yet.") }
         switch alive {

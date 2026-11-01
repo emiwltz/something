@@ -232,7 +232,7 @@ struct AcceptanceAssistant {
                                               Choice(title: "Max", value: "max", effort: true, checked: false)]),
         ])
         #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code")
-        #expect(model.title == "Project watch" && model.presence.header == "Listening" && !model.threadShown)
+        #expect(model.title == "Project watch" && model.presence.header == "Idle" && !model.threadShown)
         #expect(model.placeholder == "Ask for a change · / for Claude Code’s commands")
         // This space's alone: the defaults for new spaces are unchanged.
         #expect(Preferences(stage.home.places).model == nil && Preferences(stage.home.places).effort == nil)
@@ -339,15 +339,15 @@ struct AcceptanceAssistant {
         done.tool?.status = "done"
         let facts = Presence.Facts(name: "Claude Code", installed: true)
         let states: [(Sign.State, Presence, String)] = [
-            (.listen, Presence(facts, agent: agent("idle"), turn: nil, now: now), "Listening"),
+            (.listen, Presence(facts, agent: agent("idle"), turn: nil, now: now), "Idle"),
             (.think, Presence(facts, agent: agent("working"), turn: Turn(id: "t1", state: "working", started: at(2), ended: nil, items: [edit]), now: now),
              "Editing project.html…"),
-            (.wait, Presence(facts, agent: agent("waiting"), turn: nil, now: now), "Waiting for you"),
+            (.wait, Presence(facts, agent: agent("waiting"), turn: nil, now: now), "Waiting for You"),
             (.done, Presence(facts, agent: agent("idle"), turn: Turn(id: "t1", state: "done", started: at(9), ended: at(1), items: [done]), now: now),
-             "Just finished · changed project.html"),
+             "Idle · changed project.html"),
             (.sleep, Presence(facts, agent: nil, turn: nil, now: now), "Asleep · wakes on your next message"),
-            (.limit, Presence(facts, agent: agent("error"), turn: nil, now: now), "Stopped · can’t reach its model"),
-            (.unknown, Presence(facts, agent: agent("unknown"), turn: nil, now: now), "State unknown · something cannot read it"),
+            (.limit, Presence(facts, agent: agent("error"), turn: nil, now: now), "Ended · can’t reach its model"),
+            (.unknown, Presence(facts, agent: agent("unknown"), turn: nil, now: now), "Can’t Tell · something can’t read it"),
         ]
         for (state, presence, words) in states {
             sticker.show(presence, title: "Project watch")
@@ -412,8 +412,8 @@ struct AcceptanceAssistant {
         (state.agents[index].state, state.agents[index].updated) = ("unknown", iso8601.string(from: at.addingTimeInterval(-4 * 60 - 5)))
         model.session.read(state)
         let unknown = try #require(model.notice)
-        #expect(model.presence.state == .unknown && model.presence.header == "State unknown · something cannot read it")
-        #expect(unknown.title == "State unknown · something cannot read it" && !unknown.bad && unknown.actions.isEmpty)
+        #expect(model.presence.state == .unknown && model.presence.header == "Can’t Tell · something can’t read it")
+        #expect(unknown.title == "Can’t Tell · something can’t read it" && !unknown.bad && unknown.actions.isEmpty)
         #expect(unknown.text == "Claude Code gave no sign for 4 minutes. It may still be working; something will not guess.")
         #expect(!model.blocked && model.placeholder == "Ask for a change · / for Claude Code’s commands")
         try await draw(logbook, ["c8-unknown"])
@@ -626,7 +626,7 @@ struct AcceptanceAssistant {
         model.clock = { later }
         model.tick()
         shell.toggleConversation(nil)
-        #expect(model.threadShown && model.presence.header == "Listening" && model.presence.now == nil)
+        #expect(model.threadShown && model.presence.header == "Idle" && model.presence.now == nil)
         #expect(model.rows.contains(.mine(caption: "about Daily brief", text: "Show the time in the weather corner, 24-hour like the masthead.")))
         #expect(model.rows.suffix(3) == [.tool(failed: false, words: "Read brief.html", command: nil), .tool(failed: false, words: "Edited brief.html", command: nil),
                                          .reply("Done. The weather corner now shows the time, 18:20, in 24-hour format like the masthead. It reads nothing from the Internet.")])

@@ -45,14 +45,84 @@ import Testing
         #expect(Info.day(now.addingTimeInterval(-86_400), now: now, calendar: calendar) == "Yesterday")
         #expect(Info.day(now.addingTimeInterval(-14 * 86_400), now: now, calendar: calendar) == "8 Oct")
         #expect(Info.day(now.addingTimeInterval(-365 * 86_400), now: now, calendar: calendar) == "22 Oct 2025")
-        var agent = Agent(id: "a1", kind: "claude", origin: "elsewhere")
-        #expect(Info.doing(agent) == "state unknown", "what no source gives is said, never guessed")
-        for (state, words) in [("working", "working"), ("waiting", "waits for you"), ("idle", "idle"), ("error", "stopped on an error")] {
-            agent.state = state
-            #expect(Info.doing(agent) == words)
+    }
+
+    /// One reading of an agent: each phase, its word and its eyes, what no source gives said as such.
+    @Test func anAgentHasOneReading() {
+        let runs = RunsIn { _ in [] }
+        func reading(_ origin: String = "elsewhere", kind: String = "claude", alive: Bool?, state: String, thread: String? = "t1", resume: Bool = false) -> AgentReading {
+            var agent = Agent(id: "a1", kind: kind, origin: origin)
+            (agent.alive, agent.state, agent.thread, agent.can.resume) = (alive, state, thread, resume)
+            return AgentReading(agent, thread: nil, runs: runs)
         }
-        agent.alive = false
-        #expect(Info.doing(agent) == "ended")
+        let table: [(AgentReading, AgentReading.Phase, String)] = [
+            (reading("launched", alive: true, state: "working"), .here, "Working"),
+            (reading("launched", alive: true, state: "waiting"), .here, "Waiting for You"),
+            (reading("launched", alive: true, state: "idle"), .here, "Idle"),
+            (reading("launched", alive: true, state: "interrupted"), .here, "Idle"),
+            (reading("launched", alive: true, state: "error"), .here, "Can’t Tell"),
+            (reading("launched", alive: false, state: "done"), .asleep, "Asleep"),
+            (reading("launched", alive: false, state: "done", thread: nil), .ended, "Ended"),
+            (reading("launched", kind: "pi", alive: false, state: "done"), .ended, "Ended"),
+            (reading(alive: true, state: "idle"), .away, "Idle"),
+            (reading(alive: true, state: "unknown"), .away, "Can’t Tell"),
+            (reading(alive: false, state: "done", resume: true), .asleep, "Asleep"),
+            (reading(alive: false, state: "done"), .ended, "Ended"),
+            (reading(alive: nil, state: "idle", resume: true), .seen, "Can’t Tell"),
+            (reading(alive: nil, state: "done"), .seen, "Can’t Tell"),
+            (reading(kind: "cursor", alive: true, state: "unknown", thread: nil), .seen, "Can’t Tell"),
+        ]
+        for (reading, phase, word) in table {
+            #expect((reading.phase, reading.word) == (phase, word), "\(reading.agent.origin) \(String(describing: reading.agent.alive)) \(reading.agent.state ?? "")")
+        }
+        #expect(reading(alive: nil, state: "idle", resume: true).continues, "Can't Tell, and Continue still offered: its program refuses a second writer")
+        #expect(!reading("launched", alive: true, state: "idle").continues && reading("launched", alive: false, state: "done").continues)
+        #expect(Set(Sign.State.allCases.map(\.word)) == ["Working", "Waiting for You", "Idle", "Asleep", "Ended", "Can’t Tell"], "one list")
+    }
+
+    /// Its title: the reader's, else the person's first words; never the folder's name that stands in for it.
+    @Test func anAgentGoesByItsTitle() {
+        var agent = Agent(id: "claude-1", kind: "claude", origin: "launched")
+        (agent.name, agent.folder, agent.alive, agent.thread) = ("shop", "/Users/example/code/shop", true, "t1")
+        let said = { (title: String?, items: [Item]) in
+            AgentReading(agent, thread: AgentThread(id: "t1", agent: "claude-1", title: title, started: nil,
+                                                    turns: [Turn(id: "u1", state: "done", started: nil, ended: nil, items: items)]), runs: RunsIn { _ in [] })
+        }
+        let words = Item(id: "m1", kind: "message", author: "person", text: "Fix the cart total\nand the rest", at: "2026-10-19T09:00:00Z")
+        #expect((said("Login form", [words]).title, said("Login form", [words]).named) == ("Login form", true))
+        #expect(said(nil, [words]).title == "Fix the cart total" && said("shop", [words]).title == "Fix the cart total")
+        #expect(said(nil, [Item(id: "m2", kind: "message", author: "person", text: String(repeating: "a", count: 70), at: "2026-10-19T09:00:00Z")]).title.count == 59)
+        let none = AgentReading(agent, thread: nil, runs: RunsIn { _ in [] })
+        #expect((none.title, none.named, none.program, none.talked, none.tag) == ("Claude Code", false, "Claude Code", false, "In something"))
+        #expect(AgentReading(agent, thread: nil, known: "Login form", runs: RunsIn { _ in [] }).title == "Login form", "a title read once stays")
+        #expect(none.key == "claude:t1")
+    }
+
+    /// Where it runs: the outermost app of the nearest ancestor in one, read once per process; nothing guessed.
+    @Test func anAgentRunsInTheAppItsParentsSay() {
+        var asked = 0
+        var chains: [Int32: [String]] = [
+            10: ["/opt/homebrew/bin/claude", "/usr/bin/login", "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal", "/sbin/launchd"],
+            11: ["/Users/example/.local/bin/claude", "/Applications/Claude.app/Contents/Frameworks/Claude Helper.app/Contents/MacOS/Claude Helper", "/sbin/launchd"],
+            12: ["/opt/homebrew/bin/codex", "/opt/homebrew/bin/tmux", "/sbin/launchd"],
+        ]
+        let runs = RunsIn { asked += 1; return chains[$0] ?? [] }
+        func app(_ pid: Int?) -> String? {
+            var agent = Agent(id: "a\(pid ?? 0)", kind: "claude", origin: "elsewhere")
+            agent.pid = pid
+            return runs.app(of: agent).map(RunsIn.name)
+        }
+        #expect(app(10) == "Terminal" && app(11) == "Claude", "past a root login; a helper's app is part of its app")
+        #expect(app(12) == nil && app(nil) == nil && app(99) == nil, "a server launchd holds, no process, a process gone")
+        chains[10] = []
+        #expect(app(10) == "Terminal" && asked == 4, "read once while it runs")
+        var other = Agent(id: "a10", kind: "claude", origin: "elsewhere")
+        other.pid = 11
+        runs.keep([other])
+        #expect(app(10) == nil, "a process no longer shown is forgotten")
+        var here = Agent(id: "claude-1", kind: "claude", origin: "launched")
+        (here.alive, here.pid) = (true, 10)
+        #expect(AgentReading(here, thread: nil, runs: runs).tag == "In something" && asked == 5, "no walk for one of something's own")
     }
 
     @Test func thePanelOpensAtOnce() async throws {

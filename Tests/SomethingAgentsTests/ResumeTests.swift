@@ -102,6 +102,53 @@ import SomethingCore
         try await stop(engine)
     }
 
+    /// bc7361e's defect, by the engine: a launched agent that moved to Terminal is forgotten at once, so its conversation
+    /// shows as the live one seen elsewhere rather than as Ended for ten minutes; while its program runs it stays.
+    @Test func aStoppedAgentIsForgottenAndItsConversationSeenElsewhere() async throws {
+        let home = try Home()
+        defer { home.place.remove() }
+        let engine = home.engine()
+        let id = try engine.launch("claude", folder: home.place.work.path, model: nil, mode: nil, effort: nil)
+        let thread = try #require(engine.state.agents.first { $0.id == id }?.thread)
+        engine.forget(id)
+        #expect(engine.state.agents.contains { $0.id == id }, "not while its program runs")
+        var stopped = false
+        engine.stopAll(within: 6, only: id) { stopped = true }
+        try await until("the stop") { stopped }
+        // Terminal has taken the conversation: the reader sees it alive. Until the agent is forgotten it stays hidden by its key.
+        let sessions = home.place.root.appendingPathComponent(".claude/sessions/47000.json")
+        try Data(try String(contentsOf: sessions, encoding: .utf8).replacingOccurrences(of: ResumeTests.claude, with: thread).utf8).write(to: sessions)
+        home.processes = [home.claudeRunning]
+        engine.saw(engine.watch.tick(now: Date()))
+        #expect(engine.state.agents.filter { $0.thread == thread }.map(\.origin) == ["launched"])
+        #expect(engine.state.agents.first { $0.id == id }?.alive == false, "the false Ended, before the fix")
+        engine.forget(id)
+        let moved = try #require(engine.state.agents.first { $0.thread == thread })
+        #expect(engine.state.agents.filter { $0.thread == thread }.count == 1 && moved.origin == "elsewhere" && moved.alive == true)
+        #expect(moved.id == Engine.seenID("claude", thread: thread) && Rights.key(moved) == "claude:\(thread)")
+        #expect(!engine.state.agents.contains { $0.id == id })
+        engine.forget(id)
+        try await stop(engine)
+    }
+
+    /// One's own ended agent can be continued at once: `elsewhere` hides its conversation, so it was THREAD_NOT_FOUND. The
+    /// new launch takes its place: one row, the same key.
+    @Test func anEndedAgentOfOnesOwnIsContinued() async throws {
+        let home = try Home()
+        defer { home.place.remove() }
+        let engine = home.engine()
+        let id = try engine.launch("claude", folder: home.place.work.path, model: nil, mode: nil, effort: nil)
+        let thread = try #require(engine.state.agents.first { $0.id == id }?.thread)
+        var stopped = false
+        engine.stopAll(within: 6, only: id) { stopped = true }
+        try await until("the stop") { stopped }
+        try await until("its end") { engine.state.agents.first { $0.id == id }?.alive == false }
+        #expect(throws: CodedError.self) { try engine.resume("claude", thread: "other", of: id) }
+        let again = try engine.resume("claude", thread: thread, of: id)
+        #expect(again != id && engine.state.agents.filter { $0.thread == thread }.map(\.id) == [again])
+        try await stop(engine)
+    }
+
     @Test func aCodexConversationIsContinuedUnlessItsServiceHoldsIt() async throws {
         let home = try Home()
         defer { home.place.remove() }

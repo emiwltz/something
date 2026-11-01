@@ -336,16 +336,34 @@ public final class Engine {
     /// and returns the id of the agent launched for it, which lists it from then on. Throws THREAD_NOT_FOUND when no
     /// agent seen now holds that conversation, STILL_RUNNING while its process runs, NOT_SUPPORTED when it cannot be
     /// continued here, then as `launch` does. A holder only the agent itself sees comes after the launch, as the
-    /// agent's HELD_ELSEWHERE error.
+    /// agent's HELD_ELSEWHERE error. `agent` may be one of something's own that ended: `elsewhere` hides its conversation
+    /// until it is forgotten, and the new launch takes its place.
     public func resume(_ kind: String, thread: String, of agent: String) throws -> String {
-        guard let seen = elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
+        let own = launched.map(\.agent.agent).first { $0.id == agent && $0.kind == kind && $0.thread == thread && $0.alive == false }
+        guard let seen = own ?? elsewhere.agents.first(where: { $0.id == agent && $0.kind == kind && $0.thread == thread }), let folder = seen.folder else {
             throw CodedError("THREAD_NOT_FOUND", "No \(registry.name(of: kind)) conversation \(thread) is seen on this Mac now; use a thread id from the latest state.")
         }
-        guard seen.can.resume, registry.launchable[kind] != nil else {
-            throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", seen.because["resume"] ?? "This conversation cannot be continued here.")
+        let (can, why) = own == nil ? (seen.can.resume, seen.because["resume"]) : registry.continuable(kind, alive: false, pid: nil)
+        guard can, registry.launchable[kind] != nil else {
+            throw CodedError(seen.alive == true ? "STILL_RUNNING" : "NOT_SUPPORTED", why ?? "This conversation cannot be continued here.")
         }
-        return try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
+        let id = try launch(kind, folder: folder, model: nil, mode: nil, effort: nil, planB: false, resume: thread)
+        if own != nil { forget(agent) }
+        return id
     }
+
+    /// Forgets at once the launched agent `id`, once its program ended, rather than `endedKept` seconds later: its
+    /// conversation has moved on, and is now the one seen elsewhere, not an agent that ended here.
+    public func forget(_ id: String) {
+        guard launched.contains(where: { $0.agent.agent.id == id && !$0.spawn.running }) else { return }
+        launched.removeAll { $0.agent.agent.id == id }
+        stopping.remove(id)
+        ended.removeAll { $0.id == id }
+        update()
+    }
+
+    /// The id of conversation `thread` of `kind` as an agent seen elsewhere.
+    public static func seenID(_ kind: String, thread: String) -> String { "\(kind)-\(thread)" }
 
     /// Stops every agent something launched, or only `only`, all at once, within `seconds`, then calls `done` on the main queue.
     public func stopAll(within seconds: TimeInterval, only: String? = nil, done: @escaping () -> Void) {

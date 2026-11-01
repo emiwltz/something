@@ -725,7 +725,7 @@ struct AcceptanceTrust {
         #expect(PanelsTests.texts(sheet.contentView) == texts)
         // The sign in its tile first, then each row's eyes.
         let eyes = Self.images(sheet.contentView).compactMap { $0.accessibilityLabel() }.dropFirst()
-        #expect(Array(eyes) == leaving.requests.map { _ in "Waiting for you" } + leaving.working.map { _ in "Working" })
+        #expect(Array(eyes) == leaving.requests.map { _ in "Waiting for You" } + leaving.working.map { _ in "Working" })
         let denied = try #require(Self.fields(sheet.contentView).first { $0.stringValue == "will be denied" })
         #expect(denied.textColor == Look.Token.bad.color)
         #expect(sheet.buttons.map(\.title) == ["Quit", "Cancel"] && sheet.buttons.map(\.role) == [.secondary, .primary])

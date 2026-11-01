@@ -89,8 +89,11 @@ struct Presence: Equatable {
         case (.cannotReachModel?, _) where agent?.state == "working": "Retrying · can’t reach its model"
         case (nil, .sleep) where facts.waking: "Waking up…"
         case (nil, .think): step
-        case (nil, .done) where !edited.isEmpty: "Just finished · changed \(edited[edited.count - 1])"
-        default: Presence.sentence(state)
+        case (nil, .done) where !edited.isEmpty: "\(state.word) · changed \(edited[edited.count - 1])"
+        case (_, .sleep): "\(state.word) · wakes on your next message"
+        case (_, .limit): "\(state.word) · can’t reach its model"
+        case (_, .unknown): "\(state.word) · something can’t read it"
+        default: state.word
         }
         let seen = agent?.updated.flatMap(iso8601.date)
         notice = switch stuck {
@@ -108,7 +111,7 @@ struct Presence: Equatable {
         case .undelivered?:
             Notice(title: "Your message didn’t reach \(name)", text: facts.failure ?? "")
         case .unknown?:
-            Notice(title: "State unknown · something cannot read it",
+            Notice(title: word,
                    text: "\(name) gave no sign\(seen.map { Presence.minutes(date.timeIntervalSince($0)) } ?? ""). It may still be working; something will not guess.")
         case nil: nil
         }
@@ -126,7 +129,7 @@ struct Presence: Equatable {
 
     /// The state from the facts first (a missing program, a failure with no agent or a dead one, a start under way, a stop), then from the
     /// agent. What no source gives is `unknown`, never `listen`: an agent whose life nothing proves is never idle.
-    private static func state(_ facts: Facts, _ agent: Agent?, justDone: Bool) -> (Sign.State, Stuck?) {
+    static func state(_ facts: Facts, _ agent: Agent?, justDone: Bool) -> (Sign.State, Stuck?) {
         if facts.installed == false { return (.limit, .missing) }
         if facts.failure != nil, agent == nil || agent?.alive == false { return (.limit, .crashed) }
         guard !facts.waking, !facts.stopped, let agent else { return (.sleep, nil) }
@@ -160,19 +163,6 @@ struct Presence: Equatable {
     private static func edited(_ turn: Turn) -> [String] {
         turn.items.filter { Step.of($0) == .edit && $0.tool?.status != "failed" && $0.decision?.outcome != "denied" && !$0.text.contains(where: \.isNewline) }
             .map { ($0.text as NSString).lastPathComponent }.reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
-    }
-
-    /// The long words of each state, the mockup's.
-    private static func sentence(_ state: Sign.State) -> String {
-        switch state {
-        case .listen: "Listening"
-        case .think: "Working"
-        case .wait: "Waiting for you"
-        case .done: "Just finished"
-        case .sleep: "Asleep · wakes on your next message"
-        case .limit: "Stopped · can’t reach its model"
-        case .unknown: "State unknown · something cannot read it"
-        }
     }
 
     /// " for 4 minutes", or nothing under a minute.

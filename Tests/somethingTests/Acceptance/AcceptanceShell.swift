@@ -83,8 +83,8 @@ struct AcceptanceShell {
         #expect(library.needing().map(\.title) == ["My agents"])
         #expect(library.sections().allSatisfy { $0.group.map(library.folded) == false })
         let labels = library.order().map { Library.label($0, Stage.moment[$0.id] ?? .unknown) }
-        #expect(labels == ["Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready", "Logbook, Asleep", "Oracle, Ready",
-                           "Pebble, Done", "Stack, Asleep"], "\(labels)")
+        #expect(labels == ["Daily brief, Working", "My agents, Waiting for You", "Project watch, Idle", "Logbook, Asleep", "Oracle, Idle",
+                           "Pebble, Idle", "Stack, Asleep"], "\(labels)")
         let drawn = try stage.drawn(shell)
         // Vision may read the f of "brief" as a t beside "pages of your own": the title's start is enough.
         for line in ["Needs You", "Work", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
@@ -385,8 +385,8 @@ struct AcceptanceShell {
         let host = shell.split.splitViewItems[0].viewController.view
         let read = await AcceptanceBuild.read(host) { $0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
         let rows = read.filter { $0.contains(", ") && !$0.lowercased().contains("space") }
-        #expect(rows == ["My agents, Waiting for you", "Daily brief, Working", "My agents, Waiting for you", "Project watch, Ready",
-                         "Logbook, Asleep", "Oracle, Ready", "Pebble, Done", "Stack, Asleep"], "\(read)")
+        #expect(rows == ["My agents, Waiting for You", "Daily brief, Working", "My agents, Waiting for You", "Project watch, Idle",
+                         "Logbook, Asleep", "Oracle, Idle", "Pebble, Idle", "Stack, Asleep"], "\(read)")
         #expect(read.contains("Needs You, 1 space") && read.contains("Work, 3 spaces, open") && read.contains("Settings"), "\(read)")
         let drawn = try stage.drawn(shell)
         for line in ["Needs You", "Work", "Daily brief", "Project watch", "Templates", "something"] {
@@ -464,7 +464,7 @@ struct AcceptanceShell {
         let (shell, library, brief) = try await Self.calm(stage, NSSize(width: 760, height: 680))
         defer { brief.close() }
         let agents = try #require(library.entry("agents"))
-        #expect(Rail.tip(agents, .wait) == "My agents · Waiting for you" && Library.label(agents, .wait) == "My agents, Waiting for you")
+        #expect(Rail.tip(agents, .wait) == "My agents · Waiting for You" && Library.label(agents, .wait) == "My agents, Waiting for You")
         library.sidebar.hovered = .space("agents")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "j4-1" + suffix, root: stage.home.root)
@@ -758,16 +758,9 @@ struct AcceptanceShell {
         }
         #expect(info.level == .watch && info.folder == nil && info.about == "A countdown to Saturday, your plans, and what your agents still have to finish.")
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
-        // The agents its page sees: X5's, all of them, as its page receives them, each with what it did last.
+        // The agents its page sees: X5's, all of them, as its page receives them, each with its one word.
         #expect(Set(info.shown.map(\.id)) == Set(Self.weekendWorld(stage.home.places.home).agents.map(\.id)), "\(info.shown.map(\.id))")
-        #expect(Set(info.shown.map(info.doing)) == ["working: write the login form", "waits for you: run the tests?", "idle since 16:10"],
-                "\(info.shown.map(info.doing))")
-        // Lower-cased after the colon, but for an acronym's capitals and "I".
-        #expect(["Write the form", "API key added", "README updated", "I wrote it", "A file"].map(Info.afterColon)
-                == ["write the form", "API key added", "README updated", "I wrote it", "a file"])
-        var unknown = Agent(id: "other-1", kind: "other", origin: "elsewhere")
-        unknown.state = "unknown"
-        #expect(Info.doing(unknown) == "state unknown", "the unknown is said")
+        #expect(Set(info.shown.map(\.word)) == ["Working", "Waiting for You", "Idle"], "\(info.shown.map(\.word))")
         // As VoiceOver reads the panel: every button named, the three parts, the level as one choice of four.
         let panel = shell.inspector.viewController.view
         let heard = ["Week-end", "Close Info", "Space", "Show in Finder", "Export", "History", "Your agents", "With your agents: Watch",
@@ -786,7 +779,7 @@ struct AcceptanceShell {
         let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         // Vision reads a middle dot as a bullet: the words around it are enough.
         for words in ["A countdown to Saturday", "~/something/spaces/week-end.html", "one file", "changed today, 18:04", "It sees your agents",
-                      "Amp waits for you", "Claude Code working", "Codex idle since 16:10", "~/code/shop", "Whatever an agent asks still waits for you", "Claude Code",
+                      "Amp Waiting for You", "Claude Code Working", "Codex Idle", "~/code/shop", "Whatever an agent asks still waits for you", "Claude Code",
                       "Week-end is ready. It counts down to"] {
             #expect(drawn.contains(words), "the panel shows \(words): \(drawn)")
         }
@@ -827,11 +820,12 @@ struct AcceptanceShell {
         let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
         defer { view.close() }
         let home = stage.home.root, id = try view.launch("claude", folder: stage.home.places.spaces.path, model: nil, mode: nil, effort: nil)
-        let agent: () -> Agent? = { info.refresh(); return info.shown.first { $0.id == id } }
+        let reading: () -> AgentReading? = { info.refresh(); return info.shown.first { $0.id == id } }
+        let agent: () -> Agent? = { reading()?.agent }
         #expect(await wait(until: { agent()?.options.model?.isEmpty == false && agent()?.commands?.isEmpty == false }))
-        #expect(try #require(agent()).can.model && info.terminalWords(try #require(agent())) == nil, "no conversation yet")
+        #expect(try #require(agent()).can.model && info.terminalWords(try #require(reading())) == nil, "no conversation yet")
         _ = try view.deliver("Make the tiles wider.", to: try #require(agent()), when: "next")
-        #expect(await wait(until: { info.terminalWords(agent()!) != nil && agent()?.state == "idle" }))
+        #expect(await wait(until: { info.terminalWords(reading()!) != nil && agent()?.state == "idle" }))
         let lines = { (try? String(contentsOf: home.appendingPathComponent("out/input"), encoding: .utf8)) ?? "" }
         info.set(try #require(agent()), model: "sonnet")
         #expect(await wait(until: { lines().contains(#""set_model""#) }), "the model goes to the agent")
@@ -842,17 +836,30 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "info-settings" + suffix, root: stage.home.root)
         }
-        var opened: URL?
-        info.terminal = { opened = $0 }
-        info.continueInTerminal(try #require(agent()))
-        #expect(await wait(until: { opened != nil }), "Terminal gets its file once the agent stopped")
-        let file = try #require(opened)
+        // Continue in Terminal: one click or two, one Terminal, and the launched row leaves at once, never reading Ended.
+        var opened: [URL] = []
+        info.terminal = { opened.append($0) }
+        let moving = try #require(reading()), thread = try #require(moving.agent.thread)
+        info.continueInTerminal(moving)
+        info.continueInTerminal(moving)
+        #expect(info.moving == [id], "the button waits")
+        #expect(await wait(until: { !opened.isEmpty }), "Terminal gets its file once the agent stopped")
+        let file = try #require(opened.first)
         defer { try? FileManager.default.removeItem(at: file) }
-        let thread = try #require(agent()?.thread)
+        #expect(reading() == nil && !view.engine.state.agents.contains { $0.id == id }, "no agent ended here: its conversation moved")
+        info.continueInTerminal(moving)
+        await wait(0.2)
+        #expect(opened.count == 1, "a second click opens no second Terminal")
+        // The reader then sees it, as an agent elsewhere; this space keeps it in sight, by the same key, with no Ended.
+        var seen = Agent(id: Engine.seenID("claude", thread: thread), kind: "claude", origin: "elsewhere")
+        (seen.alive, seen.thread, seen.state, seen.pid) = (true, thread, "idle", 4_200)
+        #expect(view.launched.contains(seen.id) && Rights.key(seen) == moving.key)
+        let after = AgentReading(seen, thread: nil, known: moving.title, runs: RunsIn { _ in ["/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"] })
+        #expect((after.title, after.word, after.tag, after.phase) == (moving.title, "Idle", "In Terminal", .away))
         #expect(try String(contentsOf: file, encoding: .utf8) == "#!/bin/sh\nrm -- \"$0\"\ncd '\(stage.home.places.spaces.path)' && exec 'claude' '--resume' '\(thread)'\n")
         #expect(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int == 0o700)
         #expect(Info.script(["x"], in: "/a'b") == "#!/bin/sh\nrm -- \"$0\"\ncd '/a'\\''b' && exec 'x'\n", "a quote stays in its word")
-        #expect(agent()?.alive == false && Registry.app.agent("pi")?.terminal == nil, "stopped; only proven ways")
+        #expect(Registry.app.agent("pi")?.terminal == nil, "only proven ways")
     }
 
     /// The level in one click (X5.2): None and the page shows no agent at once, nothing asked; Run takes a folder

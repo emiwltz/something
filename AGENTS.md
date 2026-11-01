@@ -83,8 +83,8 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
    read its conversation.
 5. **Nothing leaves the machine.** No telemetry, no connection to the Internet, from the app or from a space.
 6. **Minimal.** Swift and the system's frameworks, no package dependency, no build step for spaces. Budgets, checked by
-   `BudgetTests`, every line counted: the core 1,855 lines in all; the host 2,750 in all and 450 per file; in each
-   `Agent*` target, 650 per driver and 450 per other file; the app 19,943 in all, a soft budget Emi raises per block on
+   `BudgetTests`, every line counted: the core 1,858 lines in all; the host 2,750 in all and 450 per file; in each
+   `Agent*` target, 650 per driver and 450 per other file; the app 20,014 in all, a soft budget Emi raises per block on
    measured lines; an agent described only by data, 40 lines. `TemplatesTests` keeps each template under 700 lines.
 7. **Agents are extensions.** `SomethingCore` knows no agent. No line of the host's code names one. A family imports
    the host and never another family; what the host shares with them is `package`, public only where the app needs

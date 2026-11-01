@@ -102,15 +102,15 @@ import Testing
         let edits = [tool("Read", "/Users/example/something/spaces/brief.html"), tool("Edit", "/Users/example/something/spaces/brief.html"),
                      tool("Write", "/Users/example/something/spaces/notes.html", "failed")]
         let done = of(agent("idle"), turn("done", started: 20, ended: 3, edits))
-        #expect((done.state, done.now, done.header) == (.done, .changed("brief.html"), "Done"))
-        #expect(done.word == "Just finished · changed brief.html")
+        #expect((done.state, done.now, done.header) == (.done, .changed("brief.html"), "Idle"))
+        #expect(done.word == "Idle · changed brief.html")
         var refused = tool("Edit", "/Users/example/something/spaces/agents.html")
         refused.decision = Decision(by: "person", outcome: "denied")
         #expect(of(agent("idle"), turn("done", started: 20, ended: 3, [refused])).now == nil, "a refused edit wrote nothing")
         let quiet = of(agent("idle"), turn("done", started: 20, ended: 1, [tool("Read", "brief.html")]))
-        #expect((quiet.state, quiet.now, quiet.header) == (.done, nil, "Just finished"))
+        #expect((quiet.state, quiet.now, quiet.header) == (.done, nil, "Idle"))
         let later = of(agent("idle"), turn("done", started: 20, ended: 4, edits))
-        #expect((later.state, later.now, later.word) == (.listen, nil, "Listening"))
+        #expect((later.state, later.now, later.word) == (.listen, nil, "Idle"))
         #expect(of(agent("idle"), turn("interrupted", started: 20, ended: 1, edits)).state == .listen, "a stopped turn is not done")
     }
 
@@ -153,7 +153,7 @@ import Testing
         #expect(refused.notice == .init(title: "Your message didn’t reach Claude Code", text: "The message could not be delivered."))
 
         let unknown = of(agent("unknown"))
-        #expect(unknown.word == "State unknown · something cannot read it")
+        #expect(unknown.word == "Can’t Tell · something can’t read it")
         #expect(unknown.notice?.text == "Claude Code gave no sign for 4 minutes. It may still be working; something will not guess.")
         var silent = agent("unknown")
         silent.updated = nil
@@ -161,10 +161,10 @@ import Testing
     }
 
     @Test func theStickerSaysWhoseAssistantItIsAndItsState() {
-        #expect(of(agent("idle")).label("Daily brief") == "Assistant of Daily brief, Listening. Open with ⌘K")
+        #expect(of(agent("idle")).label("Daily brief") == "Assistant of Daily brief, Idle. Open with ⌘K")
         #expect(of(nil).label("Logbook") == "Assistant of Logbook, Asleep · wakes on your next message. Open with ⌘K")
         let waking = of(Presence.Facts(name: "Claude Code", waking: true), nil)
         #expect((waking.now, waking.header) == (.waking, "Waking up…"))
-        #expect(of(agent("waiting")).header == "Waiting for you")
+        #expect(of(agent("waiting")).header == "Waiting for You")
     }
 }

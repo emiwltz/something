@@ -218,7 +218,7 @@ package final class Watch {
     static func elsewhere(_ seen: Seen, registry: Registry, groups: Set<Int32>, keys: Set<String>, now: Date) -> (agents: [Agent], threads: [AgentThread]) {
         var agents: [Agent] = [], threads: [AgentThread] = []
         for sighting in seen.sightings where !keys.contains(sighting.key) && !(sighting.group.map(groups.contains) ?? false) {
-            var agent = Agent(id: "\(sighting.kind)-\(sighting.key)", kind: sighting.kind, origin: "elsewhere")
+            var agent = Agent(id: Engine.seenID(sighting.kind, thread: sighting.key), kind: sighting.kind, origin: "elsewhere")
             // A process proves its holder alive, not what it does: the state words are those of an unknown holder.
             let facts = sighting.processOnly ? StateMap.Facts(alive: nil, evidence: "process")
                 : sighting.stateKnown ? sighting.facts : StateMap.Facts(alive: nil, evidence: sighting.facts.evidence)

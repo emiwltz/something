@@ -74,11 +74,11 @@ import Testing
             let eye = try #require(rep.colorAt(x: Int(15.73 * 2), y: Int((24.475 + 2.75) * 2))?.usingColorSpace(.sRGB))
             #expect(eye.redComponent > 0.7 && eye.greenComponent < 0.55, "\(appearance.name.rawValue): \(eye)")
         }
-        #expect(Sign.image(.done, side: 30).accessibilityDescription == "Done")
+        #expect(Sign.image(.done, side: 30).accessibilityDescription == "Idle")
         // A smile is an expression, not a state: the state is still said, never as Done.
         let smiling = SignView(.listen)
         (smiling.name, smiling.joy) = ("something", true)
-        #expect(smiling.accessibilityLabel() == "something, Ready, smiling" && Sign.miniEyes(.listen, joy: true).accessibilityDescription == "Ready, smiling")
+        #expect(smiling.accessibilityLabel() == "something, Idle, smiling" && Sign.miniEyes(.listen, joy: true).accessibilityDescription == "Idle, smiling")
     }
 
     @Test func calmMotionMovesAndReducedHoldsItAtRest() throws {
@@ -129,14 +129,14 @@ import Testing
             pictures.insert(try render(image.size) { image.draw(in: NSRect(origin: .zero, size: image.size)) }.tiffRepresentation)
         }
         #expect(pictures.count == Sign.State.allCases.count)
-        #expect(Sign.State.allCases.map(\.word) == ["Ready", "Working", "Waiting for you", "Done", "Asleep", "Stopped", "Unknown"])
+        #expect(Sign.State.allCases.map(\.word) == ["Idle", "Working", "Waiting for You", "Idle", "Asleep", "Ended", "Can’t Tell"])
         #expect(!Sign.miniEyes(.limit, template: false).isTemplate)
     }
 
     @Test func theViewSaysItsStateToVoiceOver() {
         let view = SignView(.wait)
         #expect(view.accessibilityRole() == .image && view.isAccessibilityElement())
-        #expect(view.accessibilityLabel() == "Waiting for you")
+        #expect(view.accessibilityLabel() == "Waiting for You")
         view.name = "Your assistant"
         view.state = .sleep
         #expect(view.accessibilityLabel() == "Your assistant, Asleep")

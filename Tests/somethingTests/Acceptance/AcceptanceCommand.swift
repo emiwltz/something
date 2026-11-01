@@ -37,8 +37,8 @@ struct AcceptanceCommand {
         #expect(rows.prefix(3).map(\.kind) == [.space(.wait, open: false), .space(.done, open: false), .space(.sleep, open: false)])
         #expect(rows[3].kind == .space(.think, open: true) && rows[7].title == "New Space" && model.selected == 0 && model.enter == "Open")
         let card = palette.card
-        let shows = ["Go to a space, or ask its assistant", "RECENT", "My agents", "Waiting for you", "Pebble", "Breaks", "Done", "Logbook",
-                     "Asleep", "SPACES", "Daily brief", "Working", "Project watch", "Ready", "ACTIONS", "New Space", "something", "Move", "Close"]
+        let shows = ["Go to a space, or ask its assistant", "RECENT", "My agents", "Waiting for You", "Pebble", "Breaks", "Idle", "Logbook",
+                     "Asleep", "SPACES", "Daily brief", "Working", "Project watch", "Idle", "ACTIONS", "New Space", "something", "Move", "Close"]
         try await stage.appearances { suffix in
             shell.window.layoutIfNeeded()
             await wait { card.frame.width == 640 && abs(card.frame.maxY - (760 - 84)) < 1 }
@@ -590,7 +590,7 @@ struct AcceptanceCommand {
         editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
         editor.doCommand(by: #selector(NSResponder.moveDown(_:)))
         editor.doCommand(by: #selector(NSResponder.moveUp(_:)))
-        #expect(model.selected == 1 && said == ["Pebble, Done", "Logbook, Asleep", "Pebble, Done"], "\(said)")
+        #expect(model.selected == 1 && said == ["Pebble, Idle", "Logbook, Asleep", "Pebble, Idle"], "\(said)")
         editor.insertText("A reading list", replacementRange: editor.selectedRange())
         editor.doCommand(by: #selector(NSResponder.insertTab(_:)))
         #expect(said.last == "New Space, built from this sentence" && shell.window.firstResponder === editor)

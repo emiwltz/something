@@ -222,7 +222,7 @@ import Testing
         #expect(try await inked(side) < 20, "no eyes at the rows' end")
         for group in ["Agents", "Notes", "Breaks"] { library.preferences.fold(group, true) }
         #expect(try await inked(side, from: 120) < 20, "no eyes on a folded group's header")
-        #expect(Library.label(try #require(library.entry("agents")), .wait) == "My agents, Waiting for you")
+        #expect(Library.label(try #require(library.entry("agents")), .wait) == "My agents, Waiting for You")
     }
 
     /// Needs You lists the spaces whose requests wait, in the order the window gave (oldest first), a space the
@@ -269,7 +269,7 @@ import Testing
         library.preferences.fold("Agents", true)
         #expect(library.label(group: "Agents", count: 2) == "Agents, 2 spaces, folded")
         #expect(library.label(group: "Notes", count: 1) == "Notes, 1 space, open")
-        #expect(Library.label(try #require(library.entry("pet")), .unknown) == "Pebble, Unknown", "unknown is said, never idle")
+        #expect(Library.label(try #require(library.entry("pet")), .unknown) == "Pebble, Can’t Tell", "unknown is said, never idle")
     }
 
     /// Go lists each space with its assistant's still eyes and state word, the name alone as its title.
@@ -283,7 +283,7 @@ import Testing
         bar.refresh()
         let go = try #require(bar.submenu("Go")).items.filter { $0.identifier?.rawValue.hasPrefix("space:") == true }
         #expect(go.map(\.title) == ["Daily brief", "My agents", "Logbook", "Pebble", "Oracle"])
-        #expect(go.map { $0.attributedTitle?.string ?? "" } == ["Daily brief\tWorking", "My agents\tWaiting for you", "Logbook\tAsleep", "Pebble\tAsleep",
+        #expect(go.map { $0.attributedTitle?.string ?? "" } == ["Daily brief\tWorking", "My agents\tWaiting for You", "Logbook\tAsleep", "Pebble\tAsleep",
                                                                 "Oracle\tAsleep"])
         #expect(go.allSatisfy { $0.image?.isTemplate == true }, "still template eyes the menu colours")
         #expect(go.first?.toolTip == "Daily brief · Working", "the state in words, not only drawn")

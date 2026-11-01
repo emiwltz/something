@@ -3,7 +3,7 @@
 // once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
 // parts that follow what a space is (X5.1): Space (its file, its size and last change, Export in one click, History),
 // Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now,
-// each with what it offers: model, effort, mode, its commands, Continue in Terminal)
+// each with its reading and what it offers: model, effort, mode, its commands, Continue in Terminal)
 // and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
 // quietly at the foot. A level chosen here is the person's answer: kept in the grants file, it reaches the open space
 // at once as a `granted` event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
@@ -51,10 +51,14 @@ import SwiftUI
     private(set) var changed: Date?
     private(set) var size: Size?
     /// The agents its page sees now, as it receives them; and the folders the Mac's agents work in, Run's choices.
-    private(set) var shown: [Agent] = []
+    private(set) var shown: [AgentReading] = []
     private(set) var folders: [String] = []
-    /// What each agent shown did last, by its id, as its page sees it: the last step or message of its conversation.
-    private(set) var lasts: [String: String] = [:]
+    /// The launched agents leaving for Terminal, by id, from the click on: each goes once. Ids are not reused in a run.
+    private(set) var moving: Set<String> = []
+    /// Where the agents shown run; a test gives its own lineage.
+    @ObservationIgnored var runs = RunsIn()
+    /// The titles read so far, by `Rights.key`: a title outlives the turns a conversation drops, and a move.
+    @ObservationIgnored private var titles: [String: String] = [:]
 
     init(places: Places, ask: Asking) {
         self.places = places
@@ -95,9 +99,11 @@ import SwiftUI
         let view = open()
         let visible = view.map { Bridge.visible($0) }, agents = visible?.agents ?? []
         let known = view.map { Levels.folders($0.engine.state) } ?? []
-        let said = visible.map(Info.lasts) ?? [:]
-        if agents != shown { shown = agents }
-        if said != lasts { lasts = said }
+        let threads = Dictionary((visible?.threads ?? []).map { ($0.agent, $0) }) { first, _ in first }
+        let readings = agents.map { AgentReading($0, thread: threads[$0.id], known: titles[Rights.key($0)], runs: runs) }
+        for reading in readings where reading.named { titles[reading.key] = reading.title }
+        runs.keep(agents)
+        if readings != shown { shown = readings }
         if known != folders { folders = known }
     }
 
@@ -144,21 +150,31 @@ import SwiftUI
     }
 
     /// The words that continue `agent`'s conversation in Terminal, when it has one and its kind has a proven way.
-    func terminalWords(_ agent: Agent) -> [String]? {
-        guard agent.origin == "launched", lasts[agent.id] != nil, let thread = agent.thread else { return nil }
-        return Registry.app.agent(agent.kind)?.terminal?(thread)
+    func terminalWords(_ reading: AgentReading) -> [String]? {
+        guard reading.agent.origin == "launched", reading.talked, let thread = reading.agent.thread else { return nil }
+        return Registry.app.agent(reading.agent.kind)?.terminal?(thread)
     }
 
-    /// Continue in Terminal: something stops holding the conversation, then Terminal takes it, in the agent's folder.
-    func continueInTerminal(_ agent: Agent) {
-        guard let view = open(), let words = terminalWords(agent), let folder = agent.folder else { return }
+    /// Continue in Terminal, once for an agent: something stops holding the conversation, then Terminal takes it, in the
+    /// agent's folder, and the agent leaves the launched ones at once. It did not end: its row is now the conversation
+    /// seen elsewhere, still in this space's sight, while nothing shows it as Ended. A failure says so and keeps the
+    /// stopped agent, so the person can try again.
+    func continueInTerminal(_ reading: AgentReading) {
+        let agent = reading.agent
+        guard let view = open(), let words = terminalWords(reading), let folder = agent.folder, let thread = agent.thread,
+              moving.insert(agent.id).inserted else { return }
         view.engine.stopAll(within: 5, only: agent.id) { [self] in
             let file = FileManager.default.temporaryDirectory.appendingPathComponent("something-\(UUID().uuidString).command")
             do {
                 try Data(Info.script(words, in: folder).utf8).write(to: file)
                 try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: file.path)
                 terminal(file)
-            } catch { ask.tell(error.sentence) }
+                view.launched.insert(Engine.seenID(agent.kind, thread: thread))
+                view.engine.forget(agent.id)
+            } catch {
+                moving.remove(agent.id)
+                ask.tell(error.sentence)
+            }
         }
     }
 
@@ -186,48 +202,6 @@ import SwiftUI
     static func weight(_ size: Size, form: Space.Form, changed: Date?, now: Date) -> String {
         Size.words(size.bytes) + " · " + (form == .file ? "one file" : "\(size.files) file\(size.files == 1 ? "" : "s")")
             + (changed.map { " · changed " + day($0, now: now, time: true).inSentence } ?? "")
-    }
-
-    /// What an agent is doing, as a page that sees it would say it in a word or two; the unknown is said as such.
-    static func doing(_ agent: Agent) -> String {
-        if agent.alive == false { return "ended" }
-        return switch agent.state {
-        case "working": "working"
-        case "waiting": "waits for you"
-        case "idle": "idle"
-        case "interrupted": "stopped"
-        case "done": "done"
-        case "error": "stopped on an error"
-        default: "state unknown"
-        }
-    }
-
-    /// The last step or message of each agent's conversation in `state`, by agent, on one line: the last words a page
-    /// that sees it has of what it does.
-    static func lasts(_ state: SomethingCore.State) -> [String: String] {
-        state.threads.reduce(into: [:]) { lasts, thread in
-            guard let item = thread.turns.last?.items.last else { return }
-            let line = item.text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
-            if !line.isEmpty { lasts[thread.agent] = line.count > 60 ? String(line.prefix(58)) + "…" : line }
-        }
-    }
-
-    /// What an agent shown is doing, with what it did last when its page has it; idle, since when.
-    func doing(_ agent: Agent) -> String {
-        let doing = Info.doing(agent)
-        if agent.alive != false, agent.state == "idle", let updated = agent.updated.flatMap(iso8601.date) {
-            return doing + " since " + Info.day(updated, now: clock(), time: true).inSentence.replacingOccurrences(of: "today, ", with: "")
-        }
-        guard ["working", "waiting"].contains(agent.state), agent.alive != false, let last = lasts[agent.id] else { return doing }
-        return doing + ": " + Self.afterColon(last)
-    }
-
-    /// `words` joined after a colon: lower-case first, as the page beside it says them, unless they begin with "I" or
-    /// an acronym ("API key"), whose capitals are the word's own.
-    static func afterColon(_ words: String) -> String {
-        let first = words.prefix { $0.isLetter }
-        let own = first == "I" || (first.count > 1 && first.allSatisfy(\.isUppercase))
-        return own ? words : words.prefix(1).lowercased() + words.dropFirst()
     }
 
     /// The open space's view, when it is the one shown here.
@@ -456,10 +430,10 @@ struct InspectorView: View {
     /// The agents the page shows now: who, what it does, where.
     private var now: some View {
         VStack(alignment: .leading, spacing: 2) {
-            ForEach(info.shown, id: \.id) { agent in
+            ForEach(info.shown, id: \.id) { reading in
                 VStack(alignment: .leading, spacing: 5) {
-                    row(agent)
-                    controls(agent)
+                    row(reading)
+                    controls(reading)
                 }
             }
         }
@@ -468,37 +442,35 @@ struct InspectorView: View {
         .accessibilityElement(children: .contain).accessibilityLabel("The agents it shows now")
     }
 
-    /// One agent: who, what it does, where.
-    private func row(_ agent: Agent) -> some View {
-        Group {
-                // A program something only sees by its process goes by that process's name.
-                let name = Registry.app.agent(agent.kind)?.name ?? agent.name ?? agent.kind, doing = info.doing(agent)
-                let folder = agent.folder.map { Words.path($0, home: info.places.home.path) }
-                HStack(alignment: .center, spacing: 8) {
-                    Monogram(name: name)
-                    VStack(alignment: .leading, spacing: 1) {
-                        (Text(name).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui) + Text(" " + doing))
-                            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
-                        if let folder { Text(folder).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.head) }
-                    }
-                }
-                .padding(.horizontal, 6).padding(.vertical, 5).frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityElement(children: .ignore).accessibilityLabel([name, doing, folder].compactMap { $0 }.joined(separator: ", "))
+    /// One agent: its title and state word; under them its program, its folder and where it runs.
+    private func row(_ reading: AgentReading) -> some View {
+        let folder = reading.folder.map { Words.path($0, home: info.places.home.path) }
+        let under = [reading.program, folder, reading.tag].compactMap { $0 }.joined(separator: " · ")
+        return HStack(alignment: .center, spacing: 8) {
+            Monogram(name: reading.program)
+            VStack(alignment: .leading, spacing: 1) {
+                (Text(reading.title).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui) + Text(" " + reading.word))
+                    .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                Text(under).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.middle)
+            }
         }
+        .padding(.horizontal, 6).padding(.vertical, 5).frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore).accessibilityLabel([reading.title, reading.word, under].joined(separator: ", "))
     }
 
     /// What the person can change of an agent, as it lists it; what it cannot do says why. Nothing for one only seen.
-    @ViewBuilder private func controls(_ agent: Agent) -> some View {
+    @ViewBuilder private func controls(_ reading: AgentReading) -> some View {
+        let agent = reading.agent
         if agent.origin == "launched", agent.alive != false, agent.can.send {
             setting("Model", agent.options.model, agent.model, agent.can.model, agent.because["model"]) { info.set(agent, model: $0) }
             setting("Effort", agent.options.effort, agent.effort, agent.can.effort, agent.because["effort"]) { info.set(agent, effort: $0) }
             setting("Mode", agent.options.mode, agent.mode, agent.can.mode, agent.because["mode"]) { info.set(agent, mode: $0) }
             setting("Command", agent.commands, nil, true, nil) { info.command($0, to: agent) }
         }
-        if info.terminalWords(agent) != nil {
-            let busy = agent.alive != false && ["working", "waiting"].contains(agent.state)
-            wide("Continue in Terminal", "terminal") { info.continueInTerminal(agent) }.disabled(busy)
-                .help(busy ? "It can continue in Terminal once this turn ends." : "something stops this agent, and Terminal continues its conversation.")
+        if info.terminalWords(reading) != nil {
+            let busy = agent.alive != false && ["working", "waiting"].contains(agent.state), moving = info.moving.contains(agent.id)
+            wide("Continue in Terminal", "terminal") { info.continueInTerminal(reading) }.disabled(busy || moving)
+                .help(moving ? "It is moving to Terminal." : busy ? "It can continue in Terminal once this turn ends." : "something stops this agent, and Terminal continues its conversation.")
                 .padding(.horizontal, 6)
         }
     }
