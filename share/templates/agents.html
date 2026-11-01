@@ -366,7 +366,7 @@
     q("[value=next]").textContent = steer ? "After This Turn" : "Send";
     q(".now").hidden = q(".after").hidden = !steer;
     q("textarea").placeholder = `Write to ${label(agent.kind)}…`;
-    shown(".why", agent.can.send ? (may ? "" : `You did not allow this space to write to ${label(agent.kind)}. Allow it in the space's Info.`)
+    shown(".why", agent.can.send ? (may ? "" : `You did not allow this space to write to ${label(agent.kind)}. Change its sentence beside it (⌘I).`)
       : agent.because.send || "");
   }
 
@@ -404,8 +404,8 @@
     board.querySelectorAll(".empty").forEach((n) => n.remove());
     if (!order.length) {
       board.append(make("div", "empty", has("state", "")
-        ? "No agent on this Mac right now. Start one in a terminal, and it appears here."
-        : "This space may not see your agents. Allow “See your agents” in the space's Info."));
+        ? "This space sees no agent right now."
+        : "This space may not see your agents. Change its sentence beside it (⌘I)."));
     }
     // A program whose files changed shape says so once, quietly under the cards, while one of its agents is here.
     const notes = Object.entries(state.kinds).filter(([kind, k]) => k.note && state.agents.some((a) => a.kind === kind)).map(([, k]) => k.note);

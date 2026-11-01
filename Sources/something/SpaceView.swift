@@ -22,13 +22,18 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     let area = NSView()
     private(set) var title: String
     private(set) var granted = Granted()
+    /// The person's own list (`Grant.listed`), which decides what the page sees and never reaches it.
+    private(set) var listed: [String]?
+    /// Whether keeping the list failed once: said once, and not tried at each push.
+    private var unlisted = false
     /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
     /// (`Launches`): a space closed and opened again still sees and drives them. A space with no answers kept is new
     /// to the person, and `answer` drops them: it never inherits another's agents.
     let launches: Launches
     var launched: Set<String> {
-        get { launches.ids[space.name] ?? [] }
-        set { launches.ids[space.name] = newValue }
+        get { launches.seen(by: space.name) }
+        // What the person hid stays this space's own: only its sight changes.
+        set { launches.ids[space.name] = newValue.union(launches.hidden[space.name] ?? []) }
     }
     /// The problems that keep the space from being displayed; empty while it is displayed.
     private(set) var blocked: [Problem] = []
@@ -292,7 +297,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         blocked = reading.declaration == nil ? reading.problems.filter { Codes.all[$0.code]?.blocks == true } : []
         title = reading.declaration?.title ?? space.name
         if let declaration = reading.declaration {
-            granted = Rights.granted(reading, answer(declaration), limits: Registry.app.limits, home: places.home)
+            let grant = answer(declaration)
+            (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), grant?.listed)
             inject()
             web.load(URLRequest(url: Scheme.shell))
         } else {
@@ -337,7 +343,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
         let grant: Grant?
         do { grant = try Grants(places.grants).read().spaces[space.name] } catch { return ask.tell(error.sentence) }
-        granted = Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home)
+        (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), grant?.listed)
         inject()
         if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceView.json(granted)))", in: frame, in: .page) }
         push()
@@ -357,7 +363,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         if readOnly { return grant }
         // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
         // not this space's.
-        if grant == nil { launched = [] }
+        if grant == nil { launches.forget(space.name) }
         let asked = Rights.toAsk(declaration, since: grant)
         guard !asked.isEmpty else { return grant }
         // Under an import's sheet, which lets the app run: nobody answered, so nothing is kept, and the next opening asks.
@@ -400,8 +406,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// is not sent again.
     func push() {
         guard blocked.isEmpty, let frame else { return }
+        if keepListed() { return }
         let state = Bridge.visible(self)
-        if keepListed(state) { return }
         var bare = state
         // `at` changes at every reading; only a change of what the space sees is worth a push.
         bare.at = ""
@@ -410,13 +416,23 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         SpaceView.push(data, in: web, frame: frame)
     }
 
-    /// An agent this space launched under the person's list joins it once its key is known: a key outlives the id that
-    /// shows it now. Hidden ones left `launched`, so none comes back. Returns whether it wrote: `regrant` has pushed.
-    private func keepListed(_ state: SomethingCore.State) -> Bool {
-        guard !readOnly, let listed = granted.listed else { return false }
-        let known = state.agents.filter { launched.contains($0.id) && $0.thread != nil }.map(Rights.key).filter { !listed.contains($0) }
-        guard !known.isEmpty else { return false }
-        do { try Grants(places.grants).update { $0.spaces[space.name]?.listed?.append(contentsOf: known) } } catch { ask.tell(error.sentence) }
+    /// Keeps the person's list true to its agents: an entry that held an id takes the key its thread gives, so a late
+    /// thread takes no agent from the page, and an agent this space launched joins once it has a key. Hidden ones are not
+    /// `launched`, so none comes back. Returns whether it wrote: `regrant` has pushed. A write that fails is said once,
+    /// and the agents stay in sight by `launched` and by id.
+    private func keepListed() -> Bool {
+        guard !readOnly, !unlisted, let listed else { return false }
+        let agents = engine.state.agents, mine = Bridge.visible(self).agents.filter { launched.contains($0.id) && $0.thread != nil }.map(Rights.key)
+        var kept = listed.map { entry in agents.first { $0.id == entry && $0.thread != nil }.map(Rights.key) ?? entry }
+        kept += Set(mine).subtracting(kept).sorted()
+        guard kept != listed else { return false }
+        do {
+            try Grants(places.grants).update { $0.spaces[space.name]?.listed = kept }
+        } catch {
+            unlisted = true
+            ask.tell(error.sentence)
+            return false
+        }
         regrant()
         return true
     }

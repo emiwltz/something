@@ -78,7 +78,7 @@ struct AcceptanceAgents {
         #expect(said.listed)
         (said.scope, said.listed) = (.all, false)
         info.say(said)
-        #expect(view.granted.agents == .all && view.granted.listed == nil && info.shown.count == 11 && info.others.isEmpty, "\(info.shown.count)")
+        #expect(view.granted.agents == .all && view.listed == nil && info.shown.count == 11 && info.others.isEmpty, "\(info.shown.count)")
         said.scope = .folders([stage.home.places.home.path + "/code/shop"])
         info.say(said)
         #expect(try info.shown.count == 3 && AppFile.read(stage.home.places.grants).spaces["week-end"]?.scope == said.scope)
@@ -207,7 +207,7 @@ struct AcceptanceAgents {
         info.showHere(login)
         let raised = try #require(try grants.read().spaces["week-end"])
         #expect(raised.level == .watch && raised.listed == ["claude:login"] && raised.granted == ["state"])
-        #expect(view.granted.listed == ["claude:login"] && Bridge.visible(view).agents.map(\.id) == ["claude-login"], "only that agent")
+        #expect(view.listed == ["claude:login"] && Bridge.visible(view).agents.map(\.id) == ["claude-login"], "only that agent")
         #expect(info.shown.map(\.id) == ["claude-login"] && info.level == .watch && info.choice.listed && info.raised && info.fresh == ["claude:login"])
         #expect((view.ask as? FakeAsk)?.questions.count == asked, "it asks nothing")
         #expect(shell.layer.subviews.compactMap { $0 as? Toast }.last?.words == "Week-end may now watch Login form")
@@ -231,6 +231,77 @@ struct AcceptanceAgents {
         said.level = .watch
         info.say(said)
         #expect(info.shown.map(\.id) == ["claude-login"], "the list came back with the level")
+    }
+
+    /// Show at None brings that one agent and not what the space launched, and Undo gives its launches back; a lasting
+    /// rule survives Hide; a sentence moved since leaves Undo with nothing to do.
+    @Test("Show and Undo change only what the gesture said") func onlyTheGesture() async throws {
+        let stage = try Stage("agents-only")
+        defer { stage.remove() }
+        let (_, _, info, view) = try await panel(stage, "agents", level: .none, folder: nil)
+        defer { view.close() }
+        let grants = Grants(stage.home.places.grants)
+        var said: [String] = [], action: Toast.Action?
+        info.told = { words, undo in
+            said.append(words)
+            action = undo ?? action
+        }
+        view.launched.insert("claude-slides")
+        info.showHere(try #require(info.others.first { $0.id == "claude-login" }))
+        #expect(Bridge.visible(view).agents.map(\.id) == ["claude-login"] && view.listed == ["claude:login"], "not what it launched")
+        try #require(action).act()
+        #expect(view.launched.contains("claude-slides") && info.level == Grant.Level.none)
+        // Hide keeps the space's rule and owner: a request still belongs to it.
+        info.showHere(try #require(info.others.first { $0.id == "claude-slides" }))
+        view.launches.show(["claude-slides"], in: "agents")
+        let rule = Rule(kind: "claude", command: "npm test", folder: "/Users/example/code/atelier", at: "t")
+        try Rules.keep(rule, in: "agents", grants)
+        info.hide(try #require(info.shown.first { $0.id == "claude-slides" }))
+        #expect(RequestQueue.space(of: "claude-slides", assistant: false, working: nil, launches: view.launches.ids) == "agents")
+        #expect(try Rights.rule(in: grants.read().spaces["agents"], kind: "claude", command: "npm test", folder: rule.folder) == rule)
+        // The sentence moved: Undo restores nothing, and says so.
+        var moved = info.choice
+        moved.level = .talk
+        info.say(moved)
+        try #require(action).act()
+        #expect(said.last == "Couldn’t undo: this space changed since." && info.level == .talk)
+    }
+
+    /// The list follows its agents: a launch joins by its key, a late thread keeps a shown agent, a hidden one stays out,
+    /// and a list that cannot be written is said once, with no loop.
+    @Test("keepListed") func keepListed() async throws {
+        let stage = try Stage("agents-keep")
+        defer { stage.remove() }
+        let (_, _, info, view) = try await panel(stage, "agents", level: .talk, folder: nil, listed: true)
+        defer { view.close() }
+        let grants = Grants(stage.home.places.grants)
+        view.launched.insert("claude-login")
+        view.push()
+        #expect(view.listed?.contains("claude:login") == true, "a launch joins by its key")
+        var world = Self.world(stage.home.places.home.path)
+        var late = Agent(id: "amp-9", kind: "amp", origin: "launched")
+        (late.folder, late.alive) = ("/Users/example/code/shop", true)
+        world.agents.append(late)
+        view.engine.update(outside: world)
+        info.refresh()
+        info.showHere(try #require(info.others.first { $0.id == "amp-9" }))
+        #expect(view.listed?.contains("amp-9") == true)
+        world.agents[world.agents.count - 1].thread = "t9"
+        view.engine.update(outside: world)
+        view.push()
+        #expect(view.listed?.contains("amp:t9") == true && view.listed?.contains("amp-9") == false && Bridge.visible(view).agents.contains { $0.id == "amp-9" })
+        info.refresh()
+        info.hide(try #require(info.shown.first { $0.id == "claude-login" }))
+        view.push()
+        #expect(view.listed?.contains("claude:login") == false, "a hidden launch does not come back")
+        // A grants file that cannot be written: one sentence, no recursion.
+        view.launched.insert("omp-old")
+        let ask = try #require(view.ask as? FakeAsk), told = ask.told.count
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: grants.url.deletingLastPathComponent().path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: grants.url.deletingLastPathComponent().path) }
+        view.push()
+        view.push()
+        #expect(ask.told.count <= told + 1)
     }
 
     /// Undo of Show at None puts the level back with the list, and a page without `state` gains nothing.
@@ -270,9 +341,9 @@ struct AcceptanceAgents {
         info.hide(chase)
         #expect(told == ["Chase mode hidden from My agents. This space now lists its agents."], "\(told)")
         #expect(info.choice.listed && info.shown.count == 10 && info.others.map(\.id) == ["claude-pacman"] && info.fresh == ["claude:pacman"])
-        #expect(!view.launched.contains(chase.id) && !Bridge.visible(view).agents.contains { $0.id == chase.id }, "the page has lost it")
+        #expect(!view.launched.contains(chase.id) && view.launches.ids["agents"]?.contains(chase.id) == true && !Bridge.visible(view).agents.contains { $0.id == chase.id }, "the page has lost it")
         #expect(view.engine.state.agents.contains { $0.id == chase.id }, "it keeps running")
-        #expect(view.granted.listed?.contains("claude:pacman") == false && view.granted.listed?.count == 10)
+        #expect(view.listed?.contains("claude:pacman") == false && view.listed?.count == 10)
         try await stage.appearances { suffix in
             let held = shell.toast("Chase mode hidden from My agents", action: Toast.Action(label: "Undo") {}, seconds: 60)
             try await Picture.window(shell, library: library, web: view.web, "a1-7" + suffix, root: stage.home.root)

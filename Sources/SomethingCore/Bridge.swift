@@ -9,8 +9,10 @@ public protocol BridgeHost: AnyObject {
     /// The whole state, before the space's scope is applied.
     var state: State { get }
     var granted: Granted { get }
-    /// The agents this space launched or resumed: always in its scope.
+    /// The agents this space launched or resumed: in its sight while it holds a right over agents.
     var launched: Set<String> { get }
+    /// The person's own list (`Grant.listed`): it decides what the space sees, and never reaches the space.
+    var listed: [String]? { get }
     /// The agents launched as the person's assistant, which no space may write to or read the words of.
     var assistants: Set<String> { get }
     /// The assistants that are nobody's agent, a space lists none of them.
@@ -155,7 +157,7 @@ public enum Bridge {
     /// person or the model), or what it asked its sub-agents: those are the person's, not a space's. One the app
     /// launched for itself, which is nobody's agent, is not listed at all.
     public static func visible(_ host: BridgeHost) -> State {
-        var state = Rights.visible(host.state, host.granted, launched: host.launched)
+        var state = Rights.visible(host.state, host.granted, launched: host.launched, listed: host.listed)
         let mine = host.assistants
         state.agents.removeAll { host.unseen.contains($0.id) }
         for index in state.agents.indices where mine.contains(state.agents[index].id) {

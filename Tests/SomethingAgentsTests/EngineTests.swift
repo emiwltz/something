@@ -116,6 +116,22 @@ import SomethingCore
         func remove() { try? FileManager.default.removeItem(at: root) }
     }
 
+    /// Hidden from a page: what was held for the agent goes, the agent runs on and answers what it had.
+    @Test func droppingHeldMessagesLeavesTheTurnRunning() async throws {
+        let place = try Place()
+        defer { place.remove() }
+        let engine = Engine.throwaway(place.environment)
+        let id = try engine.launch("claude", folder: place.work.path, model: nil, mode: nil, effort: nil)
+        try await until("the models") { engine.state.agents.first?.options.model != nil }
+        #expect(try engine.deliver("Hello.", to: id, when: "next") == "started")
+        #expect(try engine.deliver("Held.", to: id, when: "next") == "queued")
+        #expect(engine.dropHeld(id) == 1 && engine.dropHeld("unknown") == 0)
+        #expect(engine.state.agents.first?.queue.isEmpty == true)
+        try await until("the reply") { engine.state.agents.first?.state == "idle" }
+        #expect(engine.state.agents.first?.alive == true && engine.state.threads.first?.turns.count == 1)
+        engine.stopAll(within: 1) {}
+    }
+
     @Test func aLaunchedClaudeTalksStopsAndIsShown() async throws {
         let place = try Place()
         defer { place.remove() }

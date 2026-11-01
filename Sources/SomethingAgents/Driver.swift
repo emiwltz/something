@@ -314,10 +314,10 @@ package final class Launched {
         driver.afterAskedStop()
     }
 
-    /// Forgets the messages held for it; its running turn goes on.
-    func dropHeld() {
-        queue.drop()
-        changed()
+    /// Forgets the messages held for it, and says how many; its running turn goes on.
+    func dropHeld() -> Int {
+        defer { changed() }
+        return queue.drop()
     }
 
     /// Empties the queue and stops the running turn. Returns whether a turn was running. Throws AGENT_STOPPED.

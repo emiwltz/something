@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   const listeners = { change: [], granted: [] };
-  let granted = { rights: [], refused: [], unavailable: [], limits: {}, agents: { folders: [] }, folder: null, listed: null };
+  let granted = { rights: [], refused: [], unavailable: [], limits: {}, agents: { folders: [] }, folder: null };
   let next = 1;
 
   // An Error with a bridge code of contract 1, so a page can branch on .code and show .message.

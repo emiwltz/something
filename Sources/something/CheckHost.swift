@@ -14,6 +14,7 @@ final class CheckHost: BridgeHost {
 
     let state: State, granted: Granted
     var launched: Set<String> = []
+    let listed: [String]? = nil
     /// No assistant runs in a check.
     let assistants: Set<String> = [], unseen: Set<String> = []
     let memory: Memory?

@@ -42,6 +42,8 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Before any space opens, so that no page meets an id of the run before.
+        do { try Grants(places.grants).update(Rights.endRun) } catch { ask.tell(error.sentence) }
         menuBar.install()
         menuBar.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
         menuBar.open = { [weak self] in self?.current.map { ($0.space.name, $0.title) } }
@@ -480,13 +482,32 @@ struct Leaving: Equatable {
 }
 
 /// The agents each space launched or resumed, by space name, for the app's whole life: an agent outlives the opening
-/// of the space that launched it, and that space, opened again, still sees and drives it.
+/// of the space that launched it, and that space, opened again, may still see and drive it. `ids` says who started an
+/// agent, which requests and lasting rules go by; `hidden` the ones among them the person took from that space's sight.
 final class Launches {
     var ids: [String: Set<String>] = [:]
+    private(set) var hidden: [String: Set<String>] = [:]
+
+    /// The agents `space` sees as its own launches.
+    func seen(by space: String) -> Set<String> { (ids[space] ?? []).subtracting(hidden[space] ?? []) }
+
+    /// `agents` leave `space`'s sight, and stay its own; returns those that were in it, for Undo.
+    func hide(_ agents: Set<String>, in space: String) -> Set<String> {
+        let leaving = seen(by: space).intersection(agents)
+        hidden[space, default: []].formUnion(leaving)
+        return leaving
+    }
+
+    /// `agents` come back into `space`'s sight.
+    func show(_ agents: Set<String>, in space: String) { hidden[space]?.subtract(agents) }
+
+    /// A space's name is free again: what was launched under it is no one's.
+    func forget(_ space: String) { (ids[space], hidden[space]) = (nil, nil) }
 
     /// The agent `id` now goes by `seen`, as a conversation seen elsewhere: the space that launched it keeps it, and no
     /// other space gains anything.
     func moved(_ id: String, to seen: String) {
         for space in ids.keys where ids[space]?.remove(id) != nil { ids[space]?.insert(seen) }
+        for space in hidden.keys where hidden[space]?.remove(id) != nil { hidden[space]?.insert(seen) }
     }
 }

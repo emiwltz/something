@@ -21,84 +21,102 @@ struct MiniEyes: View {
     }
 }
 
+/// What one gesture on the page's list wrote: the grant before and after it, and whether it raised the level.
+private struct ListChange {
+    let before: Grant, after: Grant
+    var raised: Bool { Rights.level(of: before) != Rights.level(of: after) }
+}
+
 extension Info {
-    /// Hide from This Space: the page loses `reading` at once, and only that. It keeps running; what the page held for it
-    /// is dropped, or the page's words would reach it after the person took the link away. Under a scope, the list starts
-    /// as what the page sees now. Its requests still reach the person, and its rules stay.
+    private var pageTitle: String? { space.map { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.title ?? $0.name } }
+
+    /// Hide from This Space: the page loses `reading` at once, and only that. It keeps running, its requests still reach
+    /// the person, its rules stay, and it stays the space's own. The messages held for it are dropped, so held words do not
+    /// reach it after the person took the link away. Under a scope, the list starts as the agents the page sees now.
     func hide(_ reading: AgentReading) {
-        guard let view = open(), let name = space?.name else { return }
+        guard let view = open(), let name = space?.name, let title = pageTitle else { return }
         refresh()
-        let seen = shown.map(\.key), title = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.title } ?? name
+        let seen = shown.map(\.key)
         var wide = false
-        let before = write(name) { grant, _ in
+        guard let change = write(name, { grant, _ in
             wide = grant.listed == nil
             grant.listed = (grant.listed ?? seen).filter { $0 != reading.key }
-        }
-        guard let before else { return }
-        let launched = view.launched.remove(reading.id) != nil
-        view.engine.dropHeld(reading.id)
+        }) else { return }
+        // Once continued in Terminal its id may be the conversation's, seen again later.
+        let ids = Set([reading.id] + [reading.agent.thread.map { Engine.seenID(reading.agent.kind, thread: $0) }].compactMap { $0 })
+        let left = view.launches.hide(ids, in: name), dropped = view.engine.dropHeld(reading.id)
         settle(view, [reading.key])
         (opened, othersOpen) = (nil, true)
-        told("\(reading.title) hidden from \(title)\(wide ? ". This space now lists its agents." : "")", undo(before, name) { [weak self] in
-            if launched { view.launched.insert(reading.id) }
-            self?.told("\(reading.title) is back in \(title)", nil)
+        let gone = dropped == 0 ? "" : dropped == 1 ? ". Its waiting message is gone." : ". Its \(dropped) waiting messages are gone."
+        told("\(reading.title) hidden from \(title)\(wide ? ". This space now lists its agents." : "")", undo(change, name) { [weak self] in
+            view.launches.show(left, in: name)
+            self?.told("\(reading.title) is back in \(title)\(gone)", nil)
         })
     }
 
     /// Show to This Space: the page gets `reading`, and no more. At None the level rises to Watch in the same write as the
-    /// list, or a page that declares every agent would see them all between the two. A right the page did not declare stays
-    /// out, and a page without `state` still shows nothing.
+    /// list, or a page that declares every agent would see them all between the two, and what the space launched stays out
+    /// of its sight. A right the page did not declare stays out, and a page without `state` still shows nothing.
     func showHere(_ reading: AgentReading) {
-        guard let view = open(), let name = space?.name, let level else { return }
+        guard let view = open(), let name = space?.name, let title = pageTitle else { return }
         refresh()
-        let seen = shown.map(\.key), title = space.flatMap { Declaration.read($0, home: places.home, kinds: Registry.app.kinds).declaration?.title } ?? name
-        let before = write(name) { grant, raised in
-            if level == .none { grant = raised(grant) }
-            grant.listed = level == .none ? [reading.key] : (grant.listed ?? seen).filter { $0 != reading.key } + [reading.key]
-        }
-        guard let before else { return }
+        let seen = shown.map(\.key)
+        var word = ""
+        guard let change = write(name, { grant, raised in
+            let level = Rights.level(of: grant), none = level == .none
+            if none { grant = raised(grant) }
+            grant.listed = none ? [reading.key] : (grant.listed ?? seen).filter { $0 != reading.key } + [reading.key]
+            word = (none ? Grant.Level.watch : level == .run ? .talk : level).word
+        }) else { return }
+        let left = change.raised ? view.launches.hide(view.launched.subtracting([reading.id]), in: name) : []
         settle(view, [reading.key])
         opened = nil
-        if level == .none { raise() }
-        told("\(title) may now \((level == .none ? Grant.Level.watch : level == .run ? .talk : level).word) \(reading.title)", undo(before, name) { [weak self] in
+        if change.raised { raise() }
+        told("\(title) may now \(word) \(reading.title)", undo(change, name) { [weak self] in
+            view.launches.show(left, in: name)
             self?.told("\(title) no longer sees \(reading.title)", nil)
         })
     }
 
     /// One write under the grants lock, so the page never sees a level without its list. `change` gets the grant and what
-    /// raises it to Watch. Returns the grant as it was (itself optional, none before), or nil when it could not be written,
-    /// which it says.
-    private func write(_ name: String, _ change: (inout Grant, (Grant) -> Grant) -> Void) -> Grant?? {
+    /// raises it to Watch. Returns what it wrote, or nil when it could not, which it says.
+    private func write(_ name: String, _ change: (inout Grant, (Grant) -> Grant) -> Void) -> ListChange? {
         guard let space, let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return nil }
         let at = iso8601.string(from: clock())
-        var before: Grant?
+        var written: ListChange?
         do {
             try Grants(places.grants).update { file in
-                before = file.spaces[name]
-                var grant = before ?? Rights.leveled(.none, folder: nil, declaration: declaration, at: at, after: nil)
+                let before = file.spaces[name] ?? Rights.leveled(.none, folder: nil, declaration: declaration, at: at, after: nil)
+                var grant = before
                 change(&grant) { Rights.leveled(.watch, folder: nil, declaration: declaration, at: at, after: $0) }
                 file.spaces[name] = grant
+                written = ListChange(before: before, after: grant)
             }
         } catch {
             ask.tell(error.sentence)
-            return nil
         }
-        return .some(before)
+        return written
     }
 
-    /// Undo: the level and the list as they were, together; a rule kept since stays. Then `after`, and the rows light.
-    private func undo(_ before: Grant?, _ name: String, after: @escaping () -> Void) -> Toast.Action {
+    /// Undo: only what the gesture changed, the list, and the level if it raised it; nothing at all once the sentence moved
+    /// since, as a level put back would be one the person left. A rule made since is untouched. Then `after`.
+    private func undo(_ change: ListChange, _ name: String, after: @escaping () -> Void) -> Toast.Action {
         Toast.Action(label: "Undo") { [weak self] in
             guard let self else { return }
+            var undone = false
             do {
                 try Grants(places.grants).update { file in
-                    var back = before
-                    back?.rules = file.spaces[name]?.rules
-                    file.spaces[name] = back
+                    guard var grant = file.spaces[name], (Rights.level(of: grant), grant.scope, grant.folder, grant.start)
+                        == (Rights.level(of: change.after), change.after.scope, change.after.folder, change.after.start) else { return }
+                    grant.listed = change.before.listed
+                    if change.raised { (grant.level, grant.granted, grant.refused, grant.at) = (change.before.level, change.before.granted, change.before.refused, change.before.at) }
+                    file.spaces[name] = grant
+                    undone = true
                 }
             } catch { return ask.tell(error.sentence) }
-            if space?.name == name, let view = open() { settle(view, []) }
+            guard undone else { return told("Couldn’t undo: this space changed since.", nil) }
             after()
+            if space?.name == name, let view = open() { settle(view, []) }
         }
     }
 

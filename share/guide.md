@@ -259,15 +259,13 @@ if (agent) {
   "unavailable": [],
   "limits": { "amp": ["effort", "interrupt", "mode", "model"], "opencode": ["steer"], "pi": ["mode"], "omp": ["steer"] },
   "agents": { "see": "all" },
-  "folder": "/Users/example/code/shop",
-  "listed": null
+  "folder": "/Users/example/code/shop"
 }
 ```
 
 `rights`: what the person allowed. `refused`: what they refused. `unavailable`: rights something cannot honour.
 `limits`: per kind, what its agents can never do here, so you can hide a button before any agent exists. `agents`: the
-scope in force. `listed`: `null`, or the person's own list when they chose the agents one by one, as opaque keys; it
-then wins over `agents`, and `state` gives those agents. `folder`: the folder for launches, or `null`. A right counts for a kind when `rights` holds it plainly
+scope in force. `folder`: the folder for launches, or `null`. A right counts for a kind when `rights` holds it plainly
 (`send`) or for that kind (`send:claude`).
 
 ## The state

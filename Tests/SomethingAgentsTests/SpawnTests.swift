@@ -297,7 +297,7 @@ func processExists(_ pid: pid_t) -> Bool { kill(pid, 0) == 0 || errno == EPERM }
         _ = try queue.send("Hello.", when: "next", at: at)
         _ = queue.record(.turnStarted(id: "t1"), at: at)
         _ = try queue.send("Then the tests.", when: "next", at: at)
-        queue.drop()
+        #expect(queue.drop() == 1)
         #expect(queue.fold.agent.queue.isEmpty)
         #expect(try queue.send("Now.", when: "now", at: at) == .steered, "the turn is still open")
         #expect(queue.record(.turnEnded(.done), at: at) == nil)

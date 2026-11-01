@@ -1163,7 +1163,7 @@ import SomethingCore
     private func consent(_ name: String, _ choice: LevelChoice) {
         // The name was free when the build began: agents kept under it were launched by a space since deleted, and
         // the grant written here would hide that from the opening, which drops them only when it finds no grant.
-        launches.ids[name] = nil
+        launches.forget(name)
         guard let space = Spaces(root: places.spaces).list().first(where: { $0.name == name }),
               let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
         let folder = choice.folder == .blank ? places.blank(name) : choice.folder.path

@@ -306,30 +306,50 @@ struct RightsTests {
         var world = State(at: "2026-10-22T18:00:00Z", kinds: [:], agents: [agent("a", thread: "one", folder: "/shop"), agent("b", thread: "two", folder: "/shop"), agent("c", thread: nil, folder: "/blog")])
         world.threads = [AgentThread(id: "one", agent: "a", title: nil, started: nil, turns: []), AgentThread(id: "two", agent: "b", title: nil, started: nil, turns: [])]
         var room = Granted()
-        (room.rights, room.agents, room.listed) = (["state"], .all, ["claude:one", "c"])
-        #expect(Rights.visible(world, room, launched: []).agents.map(\.id) == ["a", "c"], "the scope says all, the list wins")
-        #expect(Rights.visible(world, room, launched: []).threads.map(\.id) == ["one"], "threads follow")
-        #expect(Rights.visible(world, room, launched: ["b"]).agents.map(\.id) == ["a", "b", "c"], "a launch not yet in the list shows")
+        (room.rights, room.agents) = (["state"], .all)
+        let list = ["claude:one", "c"]
+        #expect(Rights.visible(world, room, launched: [], listed: list).agents.map(\.id) == ["a", "c"], "the scope says all, the list wins")
+        #expect(Rights.visible(world, room, launched: [], listed: list).threads.map(\.id) == ["one"], "threads follow")
+        #expect(Rights.visible(world, room, launched: ["b"], listed: list).agents.map(\.id) == ["a", "b", "c"], "a launch not yet in the list shows")
         world.agents[0].id = "a2"
-        #expect(Rights.visible(world, room, launched: []).agents.map(\.id) == ["a2", "c"], "the key outlives the id")
+        #expect(Rights.visible(world, room, launched: [], listed: list).agents.map(\.id) == ["a2", "c"], "the key outlives the id")
         var bare = room
         bare.rights = ["store"]
-        #expect(Rights.visible(world, bare, launched: ["b"]).agents.isEmpty, "at None, none")
+        #expect(Rights.visible(world, bare, launched: ["b"], listed: list).agents.isEmpty, "at None, none")
         bare.rights = ["send"]
-        #expect(Rights.visible(world, bare, launched: ["b"]).agents.map(\.id) == ["b"], "without state, only what it launched")
+        #expect(Rights.visible(world, bare, launched: ["b"], listed: list).agents.map(\.id) == ["b"], "without state, only what it launched")
     }
 
-    /// A list survives a level, a scope chosen ends it, it reaches the page, and what was written before it reads.
+    /// A key with no conversation is an id, which the next run gives to another agent: none crosses a run.
+    @Test func anIdDoesNotOutliveItsRun() throws {
+        var file = AppFile()
+        var grant = Rights.leveled(.talk, folder: nil, declaration: declaration(["state", "send"]), at: "t", after: nil)
+        grant.listed = ["amp-1", "claude:t", "antigravity-pid-55000"]
+        file.spaces["a"] = grant
+        Rights.endRun(&file)
+        #expect(file.spaces["a"]?.listed == ["claude:t"])
+        var world = State(at: "t", kinds: [:], agents: [Agent(id: "amp-1", kind: "amp", origin: "launched")])
+        world.agents[0].folder = "/shop"
+        var room = Granted()
+        (room.rights, room.agents) = (["state", "send"], .folders(["/blog"]))
+        let kept = file.spaces["a"]?.listed
+        let seen = Rights.visible(world, room, launched: [], listed: kept)
+        #expect(seen.agents.isEmpty)
+    }
+
+    /// A list survives a level, a scope chosen ends it, and it is kept with the level.
     @Test func aScopeEndsTheListAndALevelKeepsIt() throws {
         let declared = declaration(["state", "send"])
         var grant = Rights.leveled(.watch, folder: nil, declaration: declared, at: "t", after: nil)
         grant.listed = ["claude:one"]
         #expect(Rights.leveled(.none, folder: nil, declaration: declared, at: "t", after: grant).listed == ["claude:one"])
         #expect(Rights.leveled(.talk, folder: nil, declaration: declared, at: "t", after: grant, scope: .all).listed == nil)
-        var page = DeclarationReading()
-        page.declaration = declared
-        #expect(Rights.granted(page, grant, limits: [:], home: URL(fileURLWithPath: "/Users/example")).listed == ["claude:one"])
-        let older = try JSONDecoder().decode(Granted.self, from: Data(#"{"rights":[],"refused":[],"unavailable":[],"limits":{},"agents":{"see":"all"}}"#.utf8))
-        #expect(older.listed == nil)
+        // The raised grant and its list are one value: one write, nothing between them.
+        var raised = Rights.leveled(.watch, folder: nil, declaration: declared, at: "t", after: nil)
+        raised.listed = ["claude:one"]
+        var file = AppFile()
+        file.spaces["a"] = raised
+        let read = try JSONDecoder().decode(AppFile.self, from: JSONEncoder().encode(file))
+        #expect(read.spaces["a"]?.listed == ["claude:one"] && read.spaces["a"]?.level == .watch)
     }
 }

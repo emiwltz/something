@@ -374,8 +374,11 @@ public struct HeldQueue: Sendable {
         return next
     }
 
-    /// Empties the queue and nothing else: the turn runs on.
-    public mutating func drop() { fold.emptyQueue() }
+    /// Empties the queue and nothing else: the turn runs on. Returns how many messages went.
+    public mutating func drop() -> Int {
+        defer { fold.emptyQueue() }
+        return fold.agent.queue.count
+    }
 
     /// Empties the queue, whatever happens next. Returns whether a turn was open, so the driver interrupts it.
     public mutating func interrupt() -> Bool {

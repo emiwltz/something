@@ -190,8 +190,10 @@ public final class Engine {
     /// Returns whether a turn was running; the queue is emptied either way. Throws AGENT_NOT_FOUND, AGENT_STOPPED.
     public func interrupt(_ agent: String) throws -> Bool { try running(agent).interrupt() }
 
-    /// Forgets what a page held for `agent`: hidden from it, the page's words must not reach it afterwards. The agent runs on.
-    public func dropHeld(_ agent: String) { launched.first { $0.agent.agent.id == agent }?.agent.dropHeld() }
+    /// Forgets the messages held for `agent` and says how many: hidden from a page, the words held must not reach it
+    /// afterwards. The agent runs on. A queue keeps no owner, so all of them go, whoever held them; a message steered into
+    /// its running turn has already left.
+    @discardableResult public func dropHeld(_ agent: String) -> Int { launched.first { $0.agent.agent.id == agent }?.agent.dropHeld() ?? 0 }
 
     /// Returns "now" or "next-turn". Throws AGENT_NOT_FOUND, AGENT_STOPPED, NOT_SUPPORTED.
     public func set(_ agent: String, model: String?, mode: String?, effort: String?) throws -> String {

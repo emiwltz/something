@@ -250,6 +250,7 @@ final class EngineHost: BridgeHost {
     let engine: Engine
     var granted = Granted()
     var launched: Set<String> = []
+    var listed: [String]? { nil }
     var state: State { engine.state }
     var assistants: Set<String> { engine.assistants }
     var unseen: Set<String> { engine.unseen }

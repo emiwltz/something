@@ -9,6 +9,7 @@ final class FakeHost: BridgeHost {
     var state: State
     var granted: Granted
     var launched: Set<String> = []
+    var listed: [String]?
     var assistants: Set<String> = [], unseen: Set<String> = []
     var memory: Memory?
     var lines: [JournalLine] = []
@@ -177,9 +178,25 @@ struct BridgeTests {
     /// Hidden by the person, an agent is absent: the same answer as out of scope, nothing to probe.
     @Test func aHiddenAgentIsNotFound() throws {
         let host = try FakeHost(["state", "send"])
-        host.granted.listed = []
+        host.listed = []
         #expect(code("send", ["agent": "a1", "text": "Hello."], host) == "AGENT_NOT_FOUND")
         #expect(code("interrupt", ["agent": "a1"], host) == "AGENT_NOT_FOUND")
+        #expect(code("set", ["agent": "a1", "mode": "plan"], host) == "AGENT_NOT_FOUND")
+        let resumable = try #require(host.state.agents.first { $0.can.resume && $0.thread != nil })
+        #expect(code("resume", ["agent": resumable.id, "thread": resumable.thread ?? ""], host) != "ok")
+        #expect(Bridge.visible(host).agents.isEmpty && Bridge.visible(host).threads.isEmpty && Bridge.visible(host).requests.isEmpty)
+        // The list decides, and is no key of what the page is given.
+        let told = try #require(String(data: JSONEncoder().encode(host.granted), encoding: .utf8))
+        #expect(!told.contains("listed"))
+    }
+
+    /// At None, nothing: a launch of the space's own neither shows nor answers.
+    @Test func atNoneNothingExists() throws {
+        let host = try FakeHost(["store"])
+        let id = try #require(host.state.agents.first?.id)
+        host.launched = [id]
+        #expect(Bridge.visible(host).agents.isEmpty)
+        #expect(code("send", ["agent": id, "text": "Hello."], host) == "RIGHT_NOT_GRANTED")
     }
 
     @Test func withoutTheStateRightOnlyItsOwnAgentsExist() throws {

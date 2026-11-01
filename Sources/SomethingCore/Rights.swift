@@ -26,7 +26,8 @@ public struct Grant: Codable, Equatable, Sendable {
     /// The one agent Run may start, when the person named it.
     public var start: Start?
     /// The agents `state` shows when the person chose them one by one, by `Rights.key`: it wins over any scope, and a key
-    /// outlives a launch's id. nil follows the scope.
+    /// outlives a launch's id. A key that names no conversation lasts one run (`endRun`). A page never reads this list: it
+    /// sees fewer agents and learns nothing else. nil follows the scope.
     public var listed: [String]?
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
 }
@@ -134,7 +135,8 @@ public struct ToAsk: Equatable, Sendable {
 }
 
 public enum Rights {
-    /// What an agent stays across its launches: its program and its conversation, else its id, which lasts as its process does.
+    /// What an agent stays across its launches: its program and its conversation, else its id, which lasts as its process
+    /// does, and which a later process or run may reuse.
     public static func key(_ agent: Agent) -> String { agent.thread.map { "\(agent.kind):\($0)" } ?? agent.id }
 
     /// The words a level grants or refuses; `store` is never asked.
@@ -172,6 +174,12 @@ public enum Rights {
         return next
     }
 
+    /// A new run of the app begins: the keys that name no conversation go. Ids start again at each run, so one kept would
+    /// give a page whichever agent gets it next. A process-only agent goes back to Others, which fails closed.
+    public static func endRun(_ file: inout AppFile) {
+        for name in file.spaces.keys { file.spaces[name]?.listed?.removeAll { !$0.contains(":") } }
+    }
+
     /// Whether `command` is one plain command a rule may keep: no chain, pipe, redirection, substitution, variable or
     /// second line, so that a rule never allows more than the person read.
     public static func single(_ command: String) -> Bool {
@@ -202,12 +210,13 @@ public enum Rights {
     }
 
     /// The state limited to what a space sees: the agents it launched, and when it holds `state` those of the person's
-    /// list, else of its scope; at None nothing, not even what it launched; the threads and requests of those agents only.
-    public static func visible(_ state: State, _ granted: Granted, launched: Set<String>) -> State {
+    /// `listed`, else of its scope; with no right over agents nothing, not even what it launched, which is None and also a
+    /// page that lost the one right it declared; the threads and requests of those agents only.
+    public static func visible(_ state: State, _ granted: Granted, launched: Set<String>, listed: [String]? = nil) -> State {
         var state = state
-        let sees = covers(granted.rights, "state"), level = ["state", "send", "launch"].contains { word in granted.rights.contains { covers([word], $0) } }
+        let sees = covers(granted.rights, "state"), any = ["state", "send", "launch"].contains { word in granted.rights.contains { covers([word], $0) } }
         state.agents = state.agents.filter { agent in
-            level && (launched.contains(agent.id) || (sees && (granted.listed?.contains(key(agent)) ?? contains(granted.agents, agent.folder))))
+            any && (launched.contains(agent.id) || (sees && (listed?.contains(key(agent)) ?? contains(granted.agents, agent.folder))))
         }
         let ids = Set(state.agents.map(\.id))
         (state.threads, state.requests) = (state.threads.filter { ids.contains($0.agent) }, state.requests.filter { ids.contains($0.agent) })
@@ -218,7 +227,7 @@ public enum Rights {
     /// each kind cannot do; `~` in the scope is `home`, so a space compares absolute paths only.
     public static func granted(_ reading: DeclarationReading, _ grant: Grant?, limits: [String: [String]], home: URL) -> Granted {
         var granted = Granted()
-        (granted.unavailable, granted.limits, granted.folder, granted.listed) = (reading.unavailable, limits, grant?.folder, grant?.listed)
+        (granted.unavailable, granted.limits, granted.folder) = (reading.unavailable, limits, grant?.folder)
         guard let declaration = reading.declaration else { return granted }
         // A space's memory needs no permission: it never leaves the space.
         let allowed = (grant?.granted ?? []) + ["store"], refused = grant?.refused ?? []
