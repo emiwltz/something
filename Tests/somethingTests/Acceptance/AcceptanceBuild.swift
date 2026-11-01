@@ -457,8 +457,8 @@ struct AcceptanceBuild {
         #expect(model.warning == "Reading list and Shop tests never ask: this space can make them act without you.", "\(model.warning ?? "")")
         // A folder narrows who it reaches: the warning, the line and what the page will see follow.
         #expect(sentence.scopeFolderMenu.title == "Which folder")
-        #expect(sentence.scopeFolderMenu.rows.map(\.title) == ["~/code/pacman", "~/code/portfolio", "~/code/shop", "~/notes", "Choose Folder…"])
-        sentence.scopeFolderMenu.rows[2].pick()
+        #expect(sentence.scopeFolderMenu.rows.map(\.title) == ["atelier", "blog", "pacman", "portfolio", "shop", "site"].map { "~/code/" + $0 } + ["~/notes", "Choose Folder…"])
+        sentence.scopeFolderMenu.rows[4].pick()
         #expect(model.choice.scope == .folders(["/Users/example/code/shop"]) && model.warning == "Shop tests never asks: this space can make it act without you.")
         #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Talk, in ~/code/shop.")
         sentence.scopeMenu.rows[0].pick()
@@ -491,9 +491,9 @@ struct AcceptanceBuild {
         #expect(model.choice.start == Grant.Start(kind: "claude"), "the assistant's program, until Settings gives another")
         #expect(await wait(until: { shown.count == 1 }), "the folder menu opens at once")
         #expect(shown.first?.title == "Where it starts them")
-        #expect(shown.first?.rows.map(\.title).suffix(2) == ["No Folder", "Choose Folder…"] && shown.first?.rows.count == 6)
-        shown.first?.rows[2].pick()
-        #expect(model.warning == nil)
+        #expect(shown.first?.rows.map(\.title).suffix(2) == ["No Folder", "Choose Folder…"] && shown.first?.rows.count == 9)
+        shown.first?.rows[4].pick()
+        #expect(model.warning == "Shop tests never asks: this space can make it act without you.", "start also writes to its folder's agents")
         #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Run, starts Claude Code, in ~/code/shop.")
         await wait(0.1)
         #expect(shown.count == 1, "it opens once")
@@ -502,43 +502,16 @@ struct AcceptanceBuild {
         #expect(sentence.agentMenu.title == "Which agent it starts" && sentence.agentMenu.rows.map(\.title) == ["Claude Code", "pi"])
         #expect(sentence.agentMenu.rows.map(\.note) == [nil, "never asks"] && sentence.agentMenu.rows.map(\.on) == [true, false])
         sentence.agentMenu.rows[1].pick()
-        #expect(model.warning == "pi never asks: this space can make it act without you.")
-        // As the mockup draws it: a folder under this home reads ~/code/shop.
+        #expect(model.warning == "pi and Shop tests never ask: this space can make them act without you.")
+        // As the mockup draws it: a folder under this home reads ~/code/shop, and none of the Stage's agents works there.
         model.runFolder = .path(stage.home.root.appendingPathComponent("code/shop").path)
+        #expect(model.warning == "pi never asks: this space can make it act without you.")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "r1-2" + suffix, root: stage.home.root)
             let words = await Self.read(host) { $0 == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.startLine) }
             #expect(words == Self.newSpaceWords(BlankView.chips[0].1, sentence: Self.startLine), "\(words)")
         }
         if let gallery { try (Self.text(sentence.agentMenu) + Self.text(sentence.folderMenu)).write(to: gallery.appendingPathComponent("r1-2-menu.txt"), atomically: true, encoding: .utf8) }
-        await Self.finish(model)
-    }
-
-    /// R5.3, No Folder: the folder menu's row, said in the sentence, on the line sent to the assistant, and made once the
-    /// build's space appears: the grant holds its blank folder, the agent chosen, and `launch` narrowed to it.
-    @Test("r5-3: No Folder") func r5_3() async throws {
-        let stage = try Stage("build")
-        defer { stage.remove() }
-        let (shell, library, _) = try await Self.newSpace(stage, builder: true)
-        Stage.work(library)
-        shell.waiting([], mine: 0)
-        let model = shell.assistant
-        model.engine.update(outside: Stage.world)
-        model.draft = BlankView.chips[0].1
-        model.chosenLevel = .run
-        (model.runFolder, model.chosenStart) = (.path(stage.home.root.appendingPathComponent("code/shop").path), Grant.Start(kind: "claude"))
-        let row = try #require(Self.sentence(model).folderMenu.rows.first { $0.title == "No Folder" })
-        #expect(row.note == "It starts in a blank folder of its own.\n~/something/agents" && row.on == false && row.apart)
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: nil, "r5-3" + suffix, root: stage.home.root)
-        }
-        if let gallery { try Self.text(Self.sentence(model).folderMenu).write(to: gallery.appendingPathComponent("r5-3-menu.txt"), atomically: true, encoding: .utf8) }
-        row.pick()
-        #expect(model.runFolder == .blank)
-        #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Run, starts Claude Code, in a blank folder of its own.")
-        model.send("A page for my mornings.")
-        #expect(model.before?.choice.folder == .blank && model.chosenLevel == nil && model.chosenStart == nil)
-        #expect(await wait(until: { !model.building }))
         await Self.finish(model)
     }
 
@@ -941,8 +914,6 @@ struct AcceptanceBuild {
     @Test("f1-8: Open an Example: My agents, nothing started, no sheet", .disabled("not built yet: S9")) func f1_8() async throws {}
     @Test("f1-9: No program found: beats 2, 3 and 5, Look Again", .disabled("not built yet: S8")) func f1_9() async throws {}
     @Test("f1-10: Help › How something Works: four schemas, one button each", .disabled("not built yet: S9")) func f1_10() async throws {}
-    @Test("r1-1: The sentence, each word a menu", .disabled("not built yet: C1")) func r1_1() async throws {}
-    @Test("r1-2: start: program, model, folder, pi's warning", .disabled("not built yet: C1")) func r1_2() async throws {}
     @Test("r2-1: Up to three questions, one agent turn", .disabled("not built yet: C7")) func r2_1() async throws {}
     @Test("r2-2: Build Now skips them", .disabled("not built yet: C7")) func r2_2() async throws {}
     @Test("r3-1: The summary, one row for the sentence", .disabled("not built yet: C7")) func r3_1() async throws {}

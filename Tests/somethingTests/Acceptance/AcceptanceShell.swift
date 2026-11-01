@@ -1295,7 +1295,33 @@ struct AcceptanceShell {
     @Test("f3-1: What waits, the drawer closed: dot, count, ⌘P", .disabled("not built yet: AG8")) func f3_1() async throws {}
     @Test("r5-1: Delete Group…, Undo", .disabled("not built yet: S4")) func r5_1() async throws {}
     @Test("r5-2: The root on top, Move to ▸ No Group", .disabled("not built yet: S4")) func r5_2() async throws {}
-    @Test("r5-3: No Folder", .disabled("not built yet: C1")) func r5_3() async throws {}
+    /// R5.3, No Folder: the folder menu's row, said in the sentence, on the line sent to the assistant, and made once the
+    /// build's space appears: the grant holds its blank folder, the agent chosen, and `launch` narrowed to it.
+    @Test("r5-3: No Folder") func r5_3() async throws {
+        let stage = try Stage("build")
+        defer { stage.remove() }
+        let (shell, library, _) = try await AcceptanceBuild.newSpace(stage, builder: true)
+        Stage.work(library)
+        shell.waiting([], mine: 0)
+        let model = shell.assistant
+        model.engine.update(outside: Stage.world)
+        model.draft = BlankView.chips[0].1
+        model.chosenLevel = .run
+        (model.runFolder, model.chosenStart) = (.path(stage.home.root.appendingPathComponent("code/shop").path), Grant.Start(kind: "claude"))
+        let row = try #require(AcceptanceBuild.sentence(model).folderMenu.rows.first { $0.title == "No Folder" })
+        #expect(row.note == "It starts in a blank folder of its own.\n~/something/agents" && row.on == false && row.apart)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "r5-3" + suffix, root: stage.home.root)
+        }
+        if let gallery { try AcceptanceBuild.text(AcceptanceBuild.sentence(model).folderMenu).write(to: gallery.appendingPathComponent("r5-3-menu.txt"), atomically: true, encoding: .utf8) }
+        row.pick()
+        #expect(model.runFolder == .blank)
+        #expect(model.choice.line(home: "/Users/example") == "[something] With your agents: Run, starts Claude Code, in a blank folder of its own.")
+        model.send("A page for my mornings.")
+        #expect(model.before?.choice.folder == .blank && model.chosenLevel == nil && model.chosenStart == nil)
+        #expect(await wait(until: { !model.building }))
+        await AcceptanceBuild.finish(model)
+    }
     @Test("f3-2: Trash with Undo, the next space opens", .disabled("not built yet: C8")) func f3_2() async throws {}
     @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
     @Test("f6-1: Export as one HTML file, then a browser", .disabled("not built yet: C8")) func f6_1() async throws {}
