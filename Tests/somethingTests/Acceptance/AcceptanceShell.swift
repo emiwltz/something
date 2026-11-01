@@ -1584,5 +1584,57 @@ struct AcceptanceShell {
     @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
     @Test("f6-2: Import, checked first", .disabled("not built yet: C9")) func f6_2() async throws {}
     @Test("f6-2b: A file dropped on the window", .disabled("not built yet: C9")) func f6_2b() async throws {}
-    @Test("f6-3: The white tile", .disabled("not built yet: FIN3")) func f6_3() async throws {}
+    /// F6.3: packaging/something.icns holds every size of a white tile on Apple's grid, the sign on it, and nothing
+    /// around it. Day and night it is the same picture. Its place in the Dock is seen by hand only.
+    @Test("f6-3: The white tile") func f6_3() async throws {
+        let stage = try Stage("shell")
+        defer { stage.remove() }
+        let file = Home.share.deletingLastPathComponent().appendingPathComponent("packaging/something.icns")
+        let reps = try #require(NSImage(contentsOf: file)).representations.compactMap { $0 as? NSBitmapImageRep }
+        #expect(Set(reps.map(\.pixelsWide)).isSuperset(of: [16, 32, 64, 128, 256, 512, 1024]), "\(reps.map(\.pixelsWide))")
+        let big = try #require(reps.first { $0.pixelsWide == 1024 })
+        func at(_ x: Int, _ y: Int) -> NSColor { big.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) ?? .clear }
+        #expect(at(40, 40).alphaComponent == 0 && at(512, 40).alphaComponent < 0.2, "the grid's margin stays clear")
+        #expect(at(512, 130).redComponent == 1 && at(512, 130).alphaComponent == 1, "white, opaque")
+        #expect((0..<1024).map { at($0, 512) }.contains { $0.redComponent < 0.3 && $0.alphaComponent == 1 }, "the sign's ink on the tile")
+        try await stage.appearances { suffix in
+            try Picture.png(of: NSSize(width: 340, height: 300), "f6-3" + suffix) {
+                NSImage(contentsOf: file)?.draw(in: NSRect(x: 20, y: 40, width: 240, height: 240))
+                for (side, y) in [(64, 200), (32, 140), (16, 100)] { NSImage(contentsOf: file)?.draw(in: NSRect(x: 270, y: y, width: side, height: side)) }
+            }
+        }
+    }
+
+    /// With SOMETHING_ICON naming an .iconset folder, draws it (tools/icon.sh): the tile, 824 of 1024 with a radius of
+    /// 22.4 %, Apple's soft shadow under it, and the sign at rest at 64 % of it, always in the day's colours.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["SOMETHING_ICON"] != nil)) func drawsTheIcon() throws {
+        let folder = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["SOMETHING_ICON"]))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        func draw(_ pixels: Int) throws -> Data {
+            let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8, samplesPerPixel: 4,
+                                                    hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            NSGraphicsContext.current?.imageInterpolation = .high
+            let scale = CGFloat(pixels) / 1024
+            NSGraphicsContext.current?.cgContext.scaleBy(x: scale, y: scale)
+            NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
+                let tile = NSRect(x: 100, y: 100, width: 824, height: 824), side = 824 * 0.64
+                let shadow = NSShadow()
+                (shadow.shadowColor, shadow.shadowOffset, shadow.shadowBlurRadius) = (NSColor.black.withAlphaComponent(0.28), NSSize(width: 0, height: -10 * scale), 24 * scale)
+                NSGraphicsContext.saveGraphicsState()
+                shadow.set()
+                NSColor.white.setFill()
+                NSBezierPath(roundedRect: tile, xRadius: 824 * 0.224, yRadius: 824 * 0.224).fill()
+                NSGraphicsContext.restoreGraphicsState()
+                Sign.draw(.listen, in: tile.insetBy(dx: (824 - side) / 2, dy: (824 - side) / 2), flipped: false)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            return try #require(rep.representation(using: .png, properties: [:]))
+        }
+        for points in [16, 32, 128, 256, 512] {
+            try draw(points).write(to: folder.appendingPathComponent("icon_\(points)x\(points).png"))
+            try draw(points * 2).write(to: folder.appendingPathComponent("icon_\(points)x\(points)@2x.png"))
+        }
+    }
 }
