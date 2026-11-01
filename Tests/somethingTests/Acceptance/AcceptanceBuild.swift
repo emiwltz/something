@@ -1,5 +1,5 @@
-// Acceptance scenarios of the first start and making a space: the welcome, the first space and the hints, New Space, the build ladder, the arrival, templates and the level sheet. The welcome is drawn alone, as it
-// stands on the screen.
+// Acceptance scenarios of the first start and making a space: the welcome, the first space and the hints, New Space,
+// the build ladder, the arrival, templates and the level sheet. The welcome is drawn alone, as it stands on the screen.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
 // its slice lands (AcceptanceTests reads these traits).
@@ -884,7 +884,7 @@ struct AcceptanceBuild {
     @Test("f1-3: Beat 3: ≠, three chips, no Full Access rung here", .disabled("not built yet: S8")) func f1_3() async throws {}
     @Test("f1-4: Beat 4: Settings' map, the real window, the two powers", .disabled("not built yet: S8")) func f1_4() async throws {}
     /// F1.5, the last beat: the title above the whole Hero, which now speaks, Back, the sentence that nothing starts, and
-    /// the two doors. → stays here; Return is the second door's neighbour, Make My First Space.
+    /// the two doors. → stays here.
     @Test("f1-5: Beat 5: \"Ready to build something today?\", the whole Hero, two doors") func f1_5() async throws {
         let scene = try await Self.welcome()
         defer { scene.remove() }

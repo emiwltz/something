@@ -179,7 +179,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     /// Help › Welcome, and the first start: the welcome alone on the screen, then the window on New Space.
     @objc func showWelcome(_ sender: Any?) {
-        let welcome = WelcomeModel(places: places)
+        let welcome = WelcomeModel(places: places, again: sender != nil)
         welcome.finished = { [weak self] in self?.shell.welcomed($0) }
         shell.welcome(welcome)
         NSApp.activate()

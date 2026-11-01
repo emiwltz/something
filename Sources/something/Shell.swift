@@ -568,6 +568,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     @discardableResult
     func welcome(_ model: WelcomeModel, onScreen: Bool = true) -> NSWindow {
         welcoming?.close()
+        model.announce = { [layer] in layer.announce($0) }
         let welcome = Welcome.window(model, assistant: assistant, motion: library.preferences.motion)
         welcome.setFrame(Welcome.place(on: window.screen ?? NSScreen.main), display: false)
         welcoming = welcome
@@ -578,22 +579,28 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     }
 
     /// The welcome ended: it goes, and this window arrives, fading in under Calm motion, on the example or on New
-    /// Space, its field taking the keys. Skipped, it says where the story is. This window's first arrival.
+    /// Space, its field taking the keys; or as it was, when Help's welcome was left. Skipped, it says where the story is.
     func welcomed(_ ending: WelcomeModel.Ending = .made) {
         guard let welcome = welcoming else { return }
         welcoming = nil
         welcome.close()
-        let example = ending == .example ? library.templates.first { $0.id == "agents" } : nil
-        if let example { library.use(example) } else { library.select(.newSpace) }
+        let example = [.example, .skippedToExample].contains(ending)
+        if example, library.entry("agents") != nil {
+            library.select(.space("agents"))
+        } else if example, let template = library.templates.first(where: { $0.id == "agents" }) {
+            library.use(template)
+        } else if ending != .left {
+            library.select(.newSpace)
+        }
         let calm = Look.duration(0.45, Look.motion(library.preferences.motion))
         if !window.isVisible, calm > 0 { window.alphaValue = 0 }
         front()
-        if example == nil { assistant.focus() }
+        if !example, ending != .left { assistant.focus() }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = calm
             window.animator().alphaValue = 1
         }
-        if ending == .skipped { toast("Help › Welcome shows this again", quiet: true) }
+        if [.skipped, .skippedToExample].contains(ending) { toast("Help › Welcome shows this again", quiet: true) }
     }
 
     /// The toolbar's title and subtitle when no space is shown, its space's items hidden, and Info closed.

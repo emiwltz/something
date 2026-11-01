@@ -12,7 +12,7 @@ import SwiftUI
 enum Welcome {
     /// The mockup's window, which everything in it is placed against.
     static let base = NSSize(width: 980, height: 640)
-    static var size: NSSize { NSSize(width: base.width * Look.scale.size.factor, height: base.height * Look.scale.size.factor) }
+    static var size: NSSize { NSSize(width: (base.width * Look.scale.size.factor).rounded(), height: (base.height * Look.scale.size.factor).rounded()) }
 
     /// Where the welcome stands: centred on the visible part of `screen`.
     static func place(on screen: NSScreen?) -> NSRect {
@@ -59,15 +59,16 @@ final class WelcomeKeys: NSView, NSWindowDelegate {
     override func cancelOperation(_ sender: Any?) { model.skip(assistant) }
     override func moveRight(_ sender: Any?) { model.go(1) }
     override func moveLeft(_ sender: Any?) { model.go(-1) }
-    /// Tab and ⇧Tab still move the focus, to the Built by chip and back.
+    /// Tab and ⇧Tab still move the focus through the window's key loop.
     override func insertTab(_ sender: Any?) { window?.selectNextKeyView(sender) }
     override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(sender) }
     /// Any other command of the text system does nothing, without the beep.
     override func doCommand(by selector: Selector) { if responds(to: selector) { super.doCommand(by: selector) } }
 
-    /// The close button leaves it as Make My First Space does, with nothing said; whoever opened the window closes it.
+    /// The close button leaves it as Make My First Space does, with nothing said, or as it was when Help opened it;
+    /// whoever opened the window closes it.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        model.end()
+        model.end(model.again ? .left : .made)
         return false
     }
 }
@@ -96,7 +97,7 @@ struct WelcomeView: View {
             Rectangle().fill(Look.Token.line.ui).frame(height: 1)
             footer(beat)
         }
-        .animation(calm ? Look.douce.animation(0.6) : nil, value: beat)
+        .animation(calm ? Look.out.animation(0.62) : nil, value: beat)
         .font(Look.fixed(.ui, size: 13)).foregroundStyle(Look.Token.ink.ui)
         .frame(width: Welcome.base.width, height: Welcome.base.height, alignment: .topLeading)
         .scaleEffect(Look.scale.size.factor, anchor: .topLeading)
@@ -116,7 +117,7 @@ struct WelcomeView: View {
         }
         .multilineTextAlignment(whole ? .center : .leading).fixedSize(horizontal: false, vertical: true)
         .frame(width: whole ? 720 : 280, alignment: whole ? .top : .topLeading)
-        .id(beat).transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: model.forward ? 14 : -14)), removal: .opacity))
+        .id(beat).transition(.asymmetric(insertion: .opacity.combined(with: .offset(x: model.forward ? 14 : -14)), removal: .opacity.animation(Look.douce.animation(0.3))))
         .offset(x: whole ? 130 : 40, y: whole ? 40 : 72)
     }
 
@@ -136,17 +137,19 @@ struct WelcomeView: View {
         guard let part = beat.lit?.first.map(Hero.place) else { return .opacity }
         let zoom = part.width * Self.map / Schemas.paper.width
         return .asymmetric(insertion: AnyTransition.scale(scale: zoom, anchor: .topLeading)
-            .combined(with: .offset(x: 40 + part.minX * Self.map - 344, y: 430 + part.minY * Self.map - 24)).combined(with: .opacity), removal: .opacity)
+            .combined(with: .offset(x: 40 + part.minX * Self.map - 344, y: 430 + part.minY * Self.map - 24)).combined(with: .opacity), removal: .opacity.animation(Look.douce.animation(0.22)))
     }
 
     /// The Hero, small with a lens on each part lit; on the last beat it grows to its whole size and speaks.
     private func smallMap(_ beat: WelcomeModel.Beat, _ whole: Bool) -> some View {
         Hero(lit: beat.lit, builder: builder, motion: motion)
             .scaleEffect(whole ? 1 : Self.map, anchor: .topLeading)
+            .animation(Look.motion(motion) == .calm ? Look.douce.animation(0.7) : nil, value: whole)
             .overlay(alignment: .topLeading) {
                 ZStack(alignment: .topLeading) {
                     RoundedRectangle(cornerRadius: 9).strokeBorder(Look.Token.line.ui).frame(width: 216, height: 126)
-                    ForEach(Array((beat.lit ?? []).sorted { $0.rawValue < $1.rawValue }), id: \.self) { piece in
+                    // By position, so a lens glides from one part to the next.
+                    ForEach(Array((beat.lit ?? []).enumerated()), id: \.offset) { _, piece in
                         let part = Hero.place(piece)
                         RoundedRectangle(cornerRadius: 8).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5)
                             .frame(width: part.width * Self.map + 2, height: part.height * Self.map + 2)
@@ -210,7 +213,7 @@ struct WelcomeView: View {
                 .buttonStyle(.plain)
             }
             Button { model.next(assistant) } label: {
-                HStack(spacing: 8) { Cap("↵", primary: true); Text(primary).padding(.trailing, 5) }.font(ghost)
+                HStack(spacing: 8) { Cap("↵", primary: true); Text(primary).padding(.trailing, 5) }.font(ghost).frame(minWidth: 102)
             }
             .buttonStyle(Primary(height: 34, padding: 8)).disabled(searching).opacity(searching ? 0.5 : 1)
             .accessibilityLabel(primary)
@@ -283,8 +286,8 @@ struct PageSign: NSViewRepresentable {
         var lit: [Hero.Piece]? { [[.page], [.agents], [.assistant, .agents], [.panel], nil][rawValue] }
     }
 
-    /// How it ended: what the window does next.
-    enum Ending { case made, skipped, example }
+    /// How it ended: what the window does next. `left` leaves the app as Help › Welcome found it.
+    enum Ending { case made, skipped, example, skippedToExample, left }
 
     private(set) var beat = Beat.page
     /// When the beat arrived, which its schema plays from, and which way it came.
@@ -296,9 +299,13 @@ struct PageSign: NSViewRepresentable {
     private(set) var copied: String?
     /// Called once it ended, with how.
     @ObservationIgnored var finished: (Ending) -> Void = { _ in }
+    /// Says a new beat to VoiceOver, since everything on the screen changed under the person.
+    @ObservationIgnored var announce: (String) -> Void = { _ in }
     let places: Places
+    /// Whether Help › Welcome opened it again, the app behind it, rather than a first start.
+    let again: Bool
 
-    init(places: Places) { self.places = places }
+    init(places: Places, again: Bool = false) { (self.places, self.again) = (places, again) }
 
     /// Whether Look Again is busy: it was just clicked, or the builders were never looked for yet.
     func searching(_ assistant: AssistantModel) -> Bool { looking || (assistant.kind == nil && !assistant.noAgent) }
@@ -307,6 +314,7 @@ struct PageSign: NSViewRepresentable {
     func go(_ step: Int) {
         guard let next = Beat(rawValue: beat.rawValue + step) else { return }
         (beat, since, forward) = (next, Date(), step > 0)
+        announce("\(next.title) \(next.sentence)")
     }
 
     /// Return: the next beat. At the last, Look Again when no builder was found, else the end.
@@ -332,8 +340,8 @@ struct PageSign: NSViewRepresentable {
         }
     }
 
-    /// Escape: no more story. With no builder New Space could not build, and the example needs none.
-    func skip(_ assistant: AssistantModel) { end(assistant.kind == nil ? .example : .skipped) }
+    /// Escape: no more story. Once no builder was found New Space could not build, and the example needs none.
+    func skip(_ assistant: AssistantModel) { end(again ? .left : assistant.noAgent ? .skippedToExample : .skipped) }
 
     /// The second door, which needs no agent.
     func example() { end(.example) }

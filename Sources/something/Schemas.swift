@@ -32,11 +32,11 @@ enum Schemas {
     }
 
     /// Thirty frames a second for `length` seconds, then none: a schema that ended costs nothing.
-    private struct Frames: TimelineSchedule {
+    struct Frames: TimelineSchedule {
         let start: Date, length: Double
 
         func entries(from date: Date, mode: Mode) -> [Date] {
-            stride(from: 0.0, through: length + 1 / 30, by: 1 / 30).map { start.addingTimeInterval($0) }.filter { $0 >= date } + [date]
+            [date] + stride(from: 0.0, through: length + 1 / 30, by: 1 / 30).map { start.addingTimeInterval($0) }.filter { $0 > date }
         }
     }
 }
@@ -84,7 +84,7 @@ struct PageSchema: View {
                 Text("Nothing leaves your Mac.")
             }
             .font(Look.fixed(.ui, size: 12.5, weight: .semibold)).padding(.horizontal, 13).frame(height: 28)
-            .boxed(RoundedRectangle(cornerRadius: 14), Look.Token.bg2.ui, ring: Look.Token.ink.ui, width: 1.5)
+            .background(Look.Token.bg2.ui, in: Capsule()).overlay(Capsule().stroke(Look.Token.ink.ui, lineWidth: 1.5))
             .frame(width: Schemas.paper.width).offset(y: 478).opacity(Schemas.ease(t, 4, 0.5))
         }
         .accessibilityElement(children: .ignore).accessibilityLabel(Self.label).accessibilityAddTraits(.isImage)
@@ -114,8 +114,11 @@ struct PageSchema: View {
         }
         .frame(width: 304, height: 404)
         .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        // The sun rises over the foot too, as the page's own fixed part would.
+        .overlay(alignment: .bottom) { sun.offset(y: -2) }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
     }
 
     /// The page itself, the Week-end page's own colours: white paper, then its dusk and sun, then its words.
@@ -124,9 +127,6 @@ struct PageSchema: View {
         return ZStack(alignment: .topLeading) {
             Color(red: 1, green: 254 / 255, blue: 252 / 255)
             Schemas.gradient([(0x26335E, 0), (0x5B4B83, 0.3), (0xB86A7E, 0.58), (0xEE9A72, 0.8), (0xF7C98B, 1)]).opacity(Schemas.ease(t, 0.8, 0.9))
-            Circle().fill(RadialGradient(stops: [.init(color: Schemas.color(0xFFE2A0).opacity(0.95), location: 0), .init(color: Schemas.color(0xFFD68C).opacity(0.32), location: 0.62),
-                                                 .init(color: Schemas.color(0xFFD68C).opacity(0), location: 0.72)], center: .center, startRadius: 0, endRadius: 75))
-                .frame(width: 150, height: 150).rising(Schemas.ease(t, 1.5, 1.3), by: 46).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).offset(y: 40)
             VStack(alignment: .leading, spacing: 12) {
                 Text("UNTIL THE WEEKEND").font(Look.fixed(.ui, size: 11, weight: .semibold)).kerning(0.77).opacity(0.7).rising(row(0))
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -149,6 +149,13 @@ struct PageSchema: View {
             .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20)).foregroundStyle(.white)
         }
         .clipped()
+    }
+
+    /// CSS's farthest corner: on its 150 box the gradient's radius is 106.
+    private var sun: some View {
+        Circle().fill(RadialGradient(stops: [.init(color: Schemas.color(0xFFE2A0).opacity(0.95), location: 0), .init(color: Schemas.color(0xFFD68C).opacity(0.32), location: 0.62),
+                                             .init(color: Schemas.color(0xFFD68C).opacity(0), location: 0.72)], center: .center, startRadius: 0, endRadius: 106))
+            .frame(width: 150, height: 150).rising(Schemas.ease(t, 1.5, 1.3), by: 46)
     }
 
     private var file: some View {

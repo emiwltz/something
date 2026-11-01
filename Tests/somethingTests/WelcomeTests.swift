@@ -1,5 +1,5 @@
-// The welcome and the blank page: the welcome alone on the screen, done by keyboard, Look Again with no builder at its
-// last beat, Skip, its end on New Space with no agent started, and the menus greyed while it is open, the request panel over it; the
+// The welcome and the blank page: the welcome alone on the screen, done by keyboard, Look Again with no builder at
+// its last beat, Skip, its end on New Space with no agent started, and the menus greyed while it is open, the request panel over it; the
 // space the assistant made opened or said ready, the level sheet's first line; and the hints, each once.
 import AppKit
 import Foundation
@@ -18,23 +18,25 @@ import Testing
         let (home, model) = try assistants.assistant([], prefix: "something-tour-")
         defer { home.remove() }
         let welcome = WelcomeModel(places: home.places)
+        var ended: [WelcomeModel.Ending] = []
+        welcome.finished = { ended.append($0) }
         let window = Welcome.window(welcome, assistant: model, motion: .reduced)
         #expect(window.contentView?.frame.size == Welcome.size && window.title == "Welcome to something")
         #expect(welcome.searching(model), "nothing is said before the programs were looked for")
+        Self.press(window, .escape)
+        #expect(ended == [.skipped], "still looking: this may well be someone with an agent")
         for _ in 0..<5 { Self.press(window, .return) }
         #expect(!welcome.looking && welcome.beat == .whole)
         model.engine.lookAgain()
         #expect(await wait(until: { model.noAgent }))
-        var ended: [WelcomeModel.Ending] = []
-        welcome.finished = { ended.append($0) }
         Self.press(window, .escape)
-        #expect(ended == [.example])
+        #expect(ended == [.skipped, .skippedToExample])
         try assistants.install("claude", in: home.root.appendingPathComponent("bin"))
         Self.press(window, .return)
         #expect(welcome.looking)
         #expect(await wait(until: { model.kind == "claude" && !welcome.looking }))
         Self.press(window, .escape)
-        #expect(ended == [.example, .skipped] && Preferences(home.places).toured)
+        #expect(ended == [.skipped, .skippedToExample, .skipped] && Preferences(home.places).toured)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 
@@ -82,6 +84,60 @@ import Testing
         second.performClose(nil)
         #expect(shell.welcoming == nil && library.selection == .newSpace)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty && model.id == nil)
+    }
+
+    /// What each ending does to the window: Skip says where the story is, Open an Example makes My agents once and opens
+    /// it again the next time, and Help's welcome, left, leaves the window where it was. A beat says itself to VoiceOver.
+    @Test func eachEndingArrivesWhereItSays() async throws {
+        let (home, model) = try assistants.assistant(["claude"], prefix: "something-tour-")
+        defer { home.remove() }
+        let (shell, library, _) = window(home, model)
+        library.preferences.motion = .reduced
+        await assistants.look(model)
+        var said: [String] = []
+        shell.layer.announce = { said.append($0) }
+        func run(_ ending: WelcomeModel.Ending, again: Bool = false) {
+            let welcome = WelcomeModel(places: home.places, again: again)
+            welcome.finished = { shell.welcomed($0) }
+            shell.welcome(welcome, onScreen: false)
+            welcome.end(ending)
+            #expect(shell.welcoming == nil)
+        }
+        run(.skipped)
+        #expect(library.selection == .newSpace && shell.layer.subviews.compactMap { ($0 as? Toast)?.words } == ["Help › Welcome shows this again"])
+        run(.example)
+        #expect(library.selection == .space("agents"))
+        run(.skippedToExample, again: true)
+        #expect(library.selection == .space("agents") && library.entries.filter(\.isSpace).count == 1, "no second copy")
+        library.select(.templates)
+        run(.left, again: true)
+        #expect(library.selection == .templates)
+        let beat = WelcomeModel(places: home.places)
+        shell.welcome(beat, onScreen: false)
+        beat.go(1)
+        #expect(said.last == "\(WelcomeModel.Beat.agent.title) \(WelcomeModel.Beat.agent.sentence)")
+        beat.end(.left)
+        shell.welcoming?.close()
+    }
+
+    /// The schema's frames run in order from now, past its end, and one that ended asks for no more.
+    @Test func aSchemaPlaysOnceAndStops() {
+        let start = Date(timeIntervalSinceReferenceDate: 1000), schedule = Schemas.Frames(start: start, length: 2)
+        let frames = schedule.entries(from: start, mode: .normal)
+        #expect(frames == frames.sorted() && frames.first == start && (frames.last ?? start) >= start.addingTimeInterval(2))
+        #expect(schedule.entries(from: start.addingTimeInterval(9), mode: .normal) == [start.addingTimeInterval(9)])
+    }
+
+    /// The window and its one scale follow the interface size.
+    @Test func theWelcomeGrowsAsOne() async throws {
+        try await Stage.alone {
+            defer { Look.scale.size = .standard }
+            Look.scale.size = .larger
+            let (home, model) = try assistants.assistant([], prefix: "something-tour-")
+            defer { home.remove() }
+            let window = Welcome.window(WelcomeModel(places: home.places), assistant: model, motion: .reduced)
+            #expect(Welcome.size == NSSize(width: 1215, height: 794) && window.contentView?.frame.size == Welcome.size)
+        }
     }
 
     /// Tab leaves the welcome's keys for the next view of the window's key loop, and ⇧Tab for the one before. A field

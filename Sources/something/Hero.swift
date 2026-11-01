@@ -104,7 +104,7 @@ struct Hero: View {
     private func agent(_ name: String, _ folder: String, dot: Color) -> some View {
         card(160, 54) {
             HStack(spacing: 9) {
-                Monogram(name: name).scaleEffect(26 / 18).frame(width: 26, height: 26)
+                Monogram(name: name, fixed: true).scaleEffect(26 / 18).frame(width: 26, height: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(name).font(Look.fixed(.ui, size: 12.5, weight: .semibold)).foregroundStyle(Look.Token.ink.ui)
                     Text(folder).font(Look.fixed(.code, size: 9.5)).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
@@ -188,7 +188,7 @@ struct Hero: View {
                 Text("Your assistant").font(Look.fixed(.ui, size: 12.5, weight: .semibold)).foregroundStyle(Look.Token.ink.ui)
                 HStack(spacing: 5) {
                     // The agent's monogram, when the line names one the app knows.
-                    if let name = builder.components(separatedBy: " · ").first, Registry.app.agents.contains(where: { $0.name == name }) { Monogram(name: name, side: 15) }
+                    if let name = builder.components(separatedBy: " · ").first, Registry.app.agents.contains(where: { $0.name == name }) { Monogram(name: name, side: 15, fixed: true) }
                     Text(builder).font(Look.fixed(.ui, size: 10.5)).foregroundStyle(Look.Token.ink2.ui).lineLimit(1).minimumScaleFactor(0.8)
                 }
                 code("~/something/spaces")
@@ -235,7 +235,7 @@ struct Hero: View {
     var lit: Hero.Part?
     @ObservationIgnored private var cycles = 0
 
-    /// Lights the three parts once, in turn, then the whole picture, as the mockup's welcome does; nothing moves under
+    /// Lights the three parts once, in turn, then the whole picture, as Help's Replay asks; nothing moves under
     /// Reduced `motion`. A new cycle, or a part lit by hand, ends the one playing.
     func cycle(_ motion: Look.Motion) {
         cycles += 1
@@ -358,11 +358,11 @@ struct HowItWorksView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("How something Works").font(Look.fixed(.ui, size: 13, weight: .medium)).frame(maxWidth: .infinity).frame(height: 37)
+            Text("How something Works").font(Look.font(.ui, size: 13, weight: .medium).ui).frame(maxWidth: .infinity).frame(height: 37)
                 .background(Look.Token.side.ui).overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
                 .padding(.horizontal, -40).accessibilityHidden(true)
-            Text("something in one picture").font(Look.fixed(.ui, size: 11.5, weight: .medium)).foregroundStyle(Look.Token.ink3.ui).padding(.top, 22)
-            Text("A space, your agents, your assistant").font(Look.fixed(.title, size: 22, weight: .semibold)).padding(.top, 4)
+            Text("something in one picture").font(Look.font(.ui, size: 11.5, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui).padding(.top, 22)
+            Text("A space, your agents, your assistant").font(Look.font(.title, size: 22, weight: .semibold).ui).padding(.top, 4)
                 .accessibilityAddTraits(.isHeader)
             Text("Three things, and how they meet. Everything stays on this Mac.").foregroundStyle(Look.Token.ink2.ui).padding(.top, 2)
             Hero(lit: light.lit?.pieces, builder: builder, motion: motion).frame(maxWidth: .infinity).padding(.top, 18)
@@ -371,11 +371,11 @@ struct HowItWorksView: View {
                     let on = light.lit == part.0
                     Button { light.light(on ? nil : part.0) } label: {
                         HStack(alignment: .top, spacing: 9) {
-                            Text("\(index + 1)").font(Look.fixed(.ui, size: 11, weight: .semibold)).foregroundStyle((on ? Look.Token.actfg : .ink2).ui)
+                            Text("\(index + 1)").font(Look.font(.ui, size: 11, weight: .semibold).ui).foregroundStyle((on ? Look.Token.actfg : .ink2).ui)
                                 .frame(width: 20, height: 20).boxed(RoundedRectangle(cornerRadius: 6), (on ? Look.Token.act : .bg2).ui, ring: Look.Token.line2.ui)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(part.1).font(Look.fixed(.ui, size: 12.5, weight: .semibold))
-                                Text(part.2).font(Look.fixed(.ui, size: 11.5)).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                                Text(part.1).font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
+                                Text(part.2).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer(minLength: 0)
                         }
@@ -394,14 +394,14 @@ struct HowItWorksView: View {
                 Text("You answer, in a window of your Mac, unless you said so. A space can’t see or answer it.")
                 Button { light.cycle(motion) } label: {
                     HStack(spacing: 6) { Image(systemName: "arrow.clockwise").font(.system(size: 11)); Text("Replay") }
-                        .font(Look.fixed(.ui, size: 12.5, weight: .semibold))
+                        .font(Look.font(.ui, size: 12.5, weight: .semibold).ui)
                 }
                 .buttonStyle(Secondary()).padding(.leading, 12)
                 Spacer()
             }
-            .font(Look.fixed(.ui, size: 12)).foregroundStyle(Look.Token.ink2.ui).padding(.top, 12)
+            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(.top, 12)
         }
-        .font(Look.fixed(.ui, size: 13)).foregroundStyle(Look.Token.ink.ui)
+        .font(Look.font(.ui, size: 13).ui).foregroundStyle(Look.Token.ink.ui)
         .padding(EdgeInsets(top: 0, leading: 40, bottom: 18, trailing: 40))
         .frame(width: HowItWorks.size.width, height: HowItWorks.size.height, alignment: .topLeading)
         .background(Look.Token.bg.ui)

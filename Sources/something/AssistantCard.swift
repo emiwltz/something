@@ -526,6 +526,8 @@ struct NoticeView: View {
 struct Monogram: View {
     let name: String
     var side: CGFloat = 18
+    /// Inside a drawing that grows as one (Look.fixed).
+    var fixed = false
     @Environment(\.colorScheme) private var scheme
 
     static func letters(_ name: String) -> String {
@@ -551,7 +553,8 @@ struct Monogram: View {
     @MainActor private static var images: [String: NSImage] = [:]
 
     var body: some View {
-        Text(Monogram.letters(name)).font(Look.font(.ui, size: side * 0.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui)
+        Text(Monogram.letters(name)).font(fixed ? Look.fixed(.ui, size: side * 0.5, weight: .semibold) : Look.font(.ui, size: side * 0.5, weight: .semibold).ui)
+            .foregroundStyle(Look.Token.ink2.ui)
             .frame(width: side, height: side)
             .background((scheme == .dark ? Look.Token.mist : .sunk).ui, in: RoundedRectangle(cornerRadius: side * 0.28))
             .accessibilityHidden(true)
