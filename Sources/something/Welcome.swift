@@ -213,7 +213,7 @@ struct WelcomeView: View {
                 .buttonStyle(.plain)
             }
             Button { model.next(assistant) } label: {
-                HStack(spacing: 8) { Cap("↵", primary: true); Text(primary).padding(.trailing, 5) }.font(ghost).frame(minWidth: 102)
+                HStack(spacing: 8) { Cap("↵", primary: true); Text(primary).padding(.trailing, 5) }.font(ghost).frame(minWidth: 102, alignment: .leading)
             }
             .buttonStyle(Primary(height: 34, padding: 8)).disabled(searching).opacity(searching ? 0.5 : 1)
             .accessibilityLabel(primary)

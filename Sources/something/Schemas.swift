@@ -84,7 +84,7 @@ struct PageSchema: View {
                 Text("Nothing leaves your Mac.")
             }
             .font(Look.fixed(.ui, size: 12.5, weight: .semibold)).padding(.horizontal, 13).frame(height: 28)
-            .background(Look.Token.bg2.ui, in: Capsule()).overlay(Capsule().stroke(Look.Token.ink.ui, lineWidth: 1.5))
+            .boxed(RoundedRectangle(cornerRadius: 13, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.ink.ui, width: 1.5)
             .frame(width: Schemas.paper.width).offset(y: 478).opacity(Schemas.ease(t, 4, 0.5))
         }
         .accessibilityElement(children: .ignore).accessibilityLabel(Self.label).accessibilityAddTraits(.isImage)
@@ -114,41 +114,45 @@ struct PageSchema: View {
         }
         .frame(width: 304, height: 404)
         .background(Look.Token.bg2.ui, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        // The sun rises over the foot too, as the page's own fixed part would.
+        // The sun rises over the page and its foot, under the page's words.
         .overlay(alignment: .bottom) { sun.offset(y: -2) }
+        .overlay { words.padding(.top, 26).padding(.bottom, 42) }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Look.Token.ink.ui, lineWidth: 1.5))
         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
     }
 
-    /// The page itself, the Week-end page's own colours: white paper, then its dusk and sun, then its words.
+    /// The page itself, the Week-end page's own colours: white paper, then its dusk.
     private var page: some View {
-        func row(_ k: Double) -> Double { Schemas.ease(t, 1.3 + k * 0.2, 0.55) }
-        return ZStack(alignment: .topLeading) {
+        ZStack {
             Color(red: 1, green: 254 / 255, blue: 252 / 255)
             Schemas.gradient([(0x26335E, 0), (0x5B4B83, 0.3), (0xB86A7E, 0.58), (0xEE9A72, 0.8), (0xF7C98B, 1)]).opacity(Schemas.ease(t, 0.8, 0.9))
-            VStack(alignment: .leading, spacing: 12) {
-                Text("UNTIL THE WEEKEND").font(Look.fixed(.ui, size: 11, weight: .semibold)).kerning(0.77).opacity(0.7).rising(row(0))
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    ForEach([("1", "day"), ("05", "hours"), ("40", "min")], id: \.0) { number, unit in
-                        Text(number).font(Look.fixed(.title, size: 44, weight: .semibold)).kerning(-1.1)
-                        Text(unit).font(Look.fixed(.ui, size: 13)).opacity(0.7).padding(.trailing, 10)
-                    }
-                }
-                .rising(row(1))
-                Text("Saturday 24 October.").font(Look.fixed(.title, size: 17, weight: .semibold)).rising(row(2))
-                Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("SATURDAY PLANS").font(Look.fixed(.ui, size: 10.5, weight: .semibold)).kerning(0.95).foregroundStyle(Schemas.color(0x7A5A68))
-                    Text("Market at nine. Call Léa about the bikes.").font(Look.fixed(.title, size: 14, weight: .semibold)).lineSpacing(2).foregroundStyle(Schemas.color(0x2A2238))
-                        .fixedSize(horizontal: false, vertical: true).rising(row(4))
-                }
-                .padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Schemas.color(0xFFFAF6).opacity(0.94), in: RoundedRectangle(cornerRadius: 10)).rising(row(3))
-            }
-            .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20)).foregroundStyle(.white)
         }
-        .clipped()
+    }
+
+    /// What fills the page, one row after another.
+    private var words: some View {
+        func row(_ k: Double) -> Double { Schemas.ease(t, 1.3 + k * 0.2, 0.55) }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("UNTIL THE WEEKEND").font(Look.fixed(.ui, size: 11, weight: .semibold)).kerning(0.77).opacity(0.7).rising(row(0))
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                ForEach([("1", "day"), ("05", "hours"), ("40", "min")], id: \.0) { number, unit in
+                    Text(number).font(Look.fixed(.title, size: 44, weight: .semibold)).kerning(-1.1)
+                    Text(unit).font(Look.fixed(.ui, size: 13)).opacity(0.7).padding(.trailing, 10)
+                }
+            }
+            .rising(row(1))
+            Text("Saturday 24 October.").font(Look.fixed(.title, size: 17, weight: .semibold)).rising(row(2))
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("SATURDAY PLANS").font(Look.fixed(.ui, size: 10.5, weight: .semibold)).kerning(0.95).foregroundStyle(Schemas.color(0x7A5A68))
+                Text("Market at nine. Call Léa about the bikes.").font(Look.fixed(.title, size: 14, weight: .semibold)).lineSpacing(2).foregroundStyle(Schemas.color(0x2A2238))
+                    .fixedSize(horizontal: false, vertical: true).rising(row(4))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Schemas.color(0xFFFAF6).opacity(0.94), in: RoundedRectangle(cornerRadius: 10)).rising(row(3))
+        }
+        .padding(EdgeInsets(top: 20, leading: 20, bottom: 16, trailing: 20)).foregroundStyle(.white)
     }
 
     /// CSS's farthest corner: on its 150 box the gradient's radius is 106.
