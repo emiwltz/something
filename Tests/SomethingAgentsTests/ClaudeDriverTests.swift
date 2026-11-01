@@ -138,7 +138,7 @@ import SomethingCore
         let replay = try Replay.play("stop")
         #expect(replay.fold.agent.error == nil)
         #expect(replay.fold.agent.can == Can(), "an ended agent can do nothing")
-        #expect(replay.fold.agent.model == "claude-opus-5-5")
+        #expect(replay.fold.agent.model == "default", "the row of the list, never the raw id")
     }
 }
 
@@ -389,6 +389,54 @@ import SomethingCore
         #expect(replay.agent.agent.can.effort == false)
         replay.feed(["type": "system", "subtype": "init", "model": "claude-example", "permissionMode": "default"])
         #expect(replay.fold.agent.options.effort == [Option(value: "xhigh", label: "Extra high"), Option(value: "turbo", label: "turbo")])
+    }
+
+    /// Friendly names: Claude's description gives the full name and its line, prices left out; its default row says
+    /// which model it is now; a reported id comes back as the row's value, the row asked for first.
+    @Test func aRowReadsInPlainWordsAndARawIdReachesNoOne() throws {
+        let opus: [String: Any] = ["value": "opus", "resolvedModel": "claude-opus-5-5", "displayName": "Opus", "description": "Opus 5.5 · The most capable · $4/$20 per Mtok"]
+        let own: [String: Any] = ["value": "default", "resolvedModel": "claude-opus-5-5", "displayName": "Default (recommended)", "description": "Use the default model (currently Opus 5.5) · $4/$20 per Mtok"]
+        #expect(ClaudeDriver.option(opus) == Option(value: "opus", label: "Opus 5.5", about: "The most capable"))
+        #expect(ClaudeDriver.option(own) == Option(value: "default", label: "Default · Opus 5.5"))
+        #expect(ClaudeDriver.option(["value": "x", "displayName": "X", "description": "Something else"]) == Option(value: "x", label: "X", about: "Something else"))
+        let replay = Replay()
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["models": [own, opus]]]] as [String: Any])
+        replay.feed(["type": "system", "subtype": "init", "model": "claude-opus-5-5", "permissionMode": "default"])
+        #expect(replay.fold.agent.model == "default")
+        _ = try replay.agent.driver.set(model: "opus", mode: nil, effort: nil)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(replay.lines().last?["request_id"] as? String)]])
+        replay.feed(["type": "system", "subtype": "init", "model": "claude-opus-5-5", "permissionMode": "default"])
+        #expect(replay.fold.agent.model == "opus")
+    }
+
+    /// Ultracode comes after the levels only while Claude's `get_settings` says it can be on, for an assistant, and is
+    /// sent as its own setting; a level then turns it off by name. A refused `get_settings` is no error.
+    @Test func ultracodeIsReadNeverGuessed() throws {
+        let models = ["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["models": [
+            ["value": "default", "resolvedModel": "claude-example", "displayName": "Default", "supportedEffortLevels": ["low", "high"]]]]]] as [String: Any]
+        let plain = Replay()
+        plain.feed(models)
+        #expect(!plain.lines().contains { ($0["request"] as? [String: Any])?["subtype"] as? String == "get_settings" }, "only an assistant asks")
+        let replay = Replay(assistant: true)
+        replay.feed(models)
+        replay.feed(["type": "system", "subtype": "init", "model": "claude-example", "permissionMode": "default"])
+        let asked = try #require(replay.lines().last { ($0["request"] as? [String: Any])?["subtype"] as? String == "get_settings" })
+        let id = try #require(asked["request_id"] as? String)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": id, "response": ["applied": ["ultracodeAvailable": false]]]] as [String: Any])
+        #expect(replay.fold.agent.options.effort?.map(\.value) == ["low", "high"])
+        _ = try replay.agent.driver.set(model: "default", mode: nil, effort: nil)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(replay.lines().last?["request_id"] as? String)]])
+        let again = try #require(replay.lines().last)
+        #expect((again["request"] as? [String: Any])?["subtype"] as? String == "get_settings", "it depends on the model")
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try #require(again["request_id"] as? String), "response": ["applied": ["ultracodeAvailable": true]]]] as [String: Any])
+        #expect(replay.fold.agent.options.effort?.last == Option(value: "ultracode", label: "Ultracode", about: "A longer, deeper pass for a hard change."))
+        _ = try replay.agent.driver.set(model: nil, mode: nil, effort: "ultracode")
+        #expect(replay.lines().last?["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["ultracode": true]])
+        _ = try replay.agent.driver.set(model: nil, mode: nil, effort: "low")
+        #expect(replay.lines().last?["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["effortLevel": "low", "ultracode": false]])
+        replay.feed(["type": "control_response", "response": ["subtype": "error", "request_id": "something-999", "error": "no"]] as [String: Any])
+        #expect(replay.fold.agent.error == nil)
+        #expect(!ClaudeDriver.command(Launch(agent: "claude-1", folder: "/Users/example/shop", effort: "ultracode")).arguments.contains { $0.hasPrefix("--effort") })
     }
 
     @Test func aLaunchPassesItsEffort() {

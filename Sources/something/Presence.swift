@@ -106,7 +106,7 @@ struct Presence: Equatable {
                 + (facts.resumes ? "Your conversation is kept; starting again picks it up." : "Starting again begins a new conversation."))
         case .cannotReachModel?:
             Notice(title: word,
-                   text: "\(agent?.model ?? "Its model") did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
+                   text: "\(agent?.model.map { Words.model($0, in: agent?.options.model) } ?? "Its model") did not answer\(agent?.state == "working" ? "; \(name) keeps trying" : ""). "
                        + (untouched ? "Your last message is kept and nothing in the space changed." : "Your last message is kept."))
         case .undelivered?:
             Notice(title: "Your message didn’t reach \(name)", text: facts.failure ?? "")

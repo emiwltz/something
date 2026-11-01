@@ -402,7 +402,7 @@ final class ACPDriver: Driver {
         }
         func choices(_ entry: [String: Any]?) -> [Option]? {
             (entry?["options"] as? [[String: Any]])?.compactMap { option in
-                (option["value"] as? String).map { Option(value: $0, label: option["name"] as? String ?? $0) }
+                (option["value"] as? String).map { Option(value: $0, label: option["name"] as? String ?? $0, about: option["description"] as? String) }
             }
         }
         var options = Options()

@@ -37,6 +37,8 @@ struct SettingsRow: Identifiable {
         case toggle(get: () -> Bool, set: (Bool) -> Void)
         /// A button, its symbol before its title.
         case button(String, symbol: String? = nil, () -> Void)
+        /// The model chip, what opening it asks read.
+        case model(() -> ModelChoice, read: () -> Void)
         /// Words in place of a control: what is not chosen here.
         case said(String)
         /// Nothing: the row only says.
@@ -103,6 +105,8 @@ struct SettingsSection: Identifiable {
     @ObservationIgnored var offered: () -> [String] = { Registry.app.builders.map(\.kind) }
     /// The default agent just chosen, for the assistant to take (Build With's own path, AssistantModel.buildNew).
     @ObservationIgnored var chose: (String) -> Void = { _ in }
+    /// Who reads a program's models, for the model chip.
+    @ObservationIgnored weak var models: AssistantModel?
     /// Ask Before Every Change just turned on or off, for the assistant to take from its next conversation.
     @ObservationIgnored var asking: (Bool) -> Void = { _ in }
     /// Looks for the agents again (AssistantModel.lookAgain, then Engine.lookAgain).
@@ -257,26 +261,13 @@ struct SettingsSection: Identifiable {
         return "Each builds and changes its space, in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
     }
 
-    /// The model, and the effort when the agent takes one, in one menu: the names the agent last listed for `kind`,
-    /// "Default" its own setting; before any list, what is known. Shown beside the program.
+    /// The model and its effort, when the agent takes one, beside the program: the same chip and picker as anywhere an
+    /// agent is chosen, for new spaces.
     private func model(of kind: String) -> SettingsRow {
-        let preferences = preferences, limits = Registry.app.limits[kind] ?? [], listed = preferences.listed[kind]
-        guard !limits.contains("model"), let models = listed?.model else {
-            return SettingsRow(title: "Model", note: "", control: .said(limits.contains("model") ? "\(Registry.app.name(of: kind)) chooses its own model"
-                                                                                                    : "Its models show after its first run"))
-        }
-        let effort = !limits.contains("effort")
-        func options(_ prefix: String, _ own: String, _ listed: [Option]) -> [SettingsRow.Option] {
-            [SettingsRow.Option(value: prefix, label: own)] + listed.map { SettingsRow.Option(value: prefix + $0.value, label: $0.label) }
-        }
-        let all = (effort ? [SettingsRow.Option(value: "", label: "Model", heading: true)] : []) + options("", "Default model", models)
-            + (effort ? [SettingsRow.Option(value: "", label: "Effort", heading: true)] + options("effort:", "Default effort", listed?.effort ?? []) : [])
-        return SettingsRow(title: effort ? "Model and effort" : "Model", note: "", control: .choice(all, get: {
-            [preferences.model ?? "", "effort:" + (preferences.effort ?? "")]
-        }, set: { value in
-            let effort = value.hasPrefix("effort:"), chosen = effort ? String(value.dropFirst(7)) : value
-            preferences.change { $0[keyPath: effort ? \Preferences.Values.effort : \.model] = chosen.isEmpty ? nil : chosen }
-        }))
+        let preferences = preferences, models = models, effort = !(Registry.app.limits[kind] ?? []).contains("effort")
+        return SettingsRow(title: effort ? "Model and effort" : "Model", note: "", control: .model(
+            { ModelChoice(defaultsOf: kind, preferences, reading: models?.reading.contains(kind) == true) },
+            read: { models?.readModels(of: kind) }))
     }
 
     /// Permissions: who asks, what a new space may do and each space's level, the lasting rules, the folders agents run in.
@@ -431,6 +422,7 @@ extension App {
         }
         model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
         model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
+        model.models = assistant
         model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
         model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
         let grants = Grants(places.grants)
@@ -741,6 +733,8 @@ struct RowControl: View {
                 if let symbol { Label(title, systemImage: symbol) } else { Text(title) }
             }
             .buttonStyle(Secondary()).font(Look.font(.ui, size: 12.5, weight: .medium).ui)
+        case .model(let choice, let read):
+            ModelChip(choice: choice, opening: read)
         case .said(let words):
             Text(words).font(Look.small.font.ui).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel("\(row.title): \(words)")
         case .nothing:

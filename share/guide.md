@@ -289,9 +289,9 @@ at most four times a second, only when it changed. A shortened example (the full
       "thread": "c0ffee00-0000-4000-8000-000000000001",
       "model": "claude-example-model", "mode": "default", "effort": null,
       "options": {
-        "model": [{ "value": "claude-example-model", "label": "Example model" }],
-        "mode": [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
-        "effort": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }]
+        "model": [{ "value": "claude-example-model", "label": "Example model", "about": null }],
+        "mode": [{ "value": "default", "label": "Ask before acting", "about": null }, { "value": "plan", "label": "Plan only", "about": null }],
+        "effort": [{ "value": "low", "label": "Low", "about": null }, { "value": "high", "label": "High", "about": null }]
       },
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
       "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": true, "resume": false },
@@ -348,9 +348,9 @@ sentence for the person when something is off (for a kind something does not lau
 | `state` | A state word (below). |
 | `waiting` | `permission`, `answer`, `none`, or `null` when no source can say. |
 | `thread` | The id of its conversation in `threads`, what `resume` takes; or `null`. |
-| `model`, `mode`, `effort` | What the agent last reported, never what was asked; each may be `null`. |
-| `options` | `{model, mode, effort}`: each a list of `{value, label}` the agent offers, or `null`. |
-| `commands` | The agent's own commands, as it lists them: `[{value, label}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does. `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
+| `model`, `mode`, `effort` | What the agent last reported, never what was asked, by the `value` of its `options` when they list it; each may be `null`. |
+| `options` | `{model, mode, effort}`: each a list of `{value, label, about}` the agent offers, or `null`; `about` is one line on what it is, `null` when the agent says nothing. |
+| `commands` | The agent's own commands, as it lists them: `[{value, label, about}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does. `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
 | `queue` | `[{id, text, at}]`: messages something holds for the agent's next turn. |
 | `subagents` | The sub-agents it started that its stream marks, oldest first, the last 50: `[{name, status}]`, `name` what it asked each to do, `status` `running`, `done`, `failed` or `null`, `null` when its end was not seen (its turn broke off or its agent stopped). `null` until one shows. Their work is in the thread, as items of kind `subagent`. |
 | `can` | `send steer queue interrupt model mode effort resume`: what a call would do now. Always booleans. |

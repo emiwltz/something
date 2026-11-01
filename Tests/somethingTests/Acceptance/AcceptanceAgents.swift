@@ -237,9 +237,138 @@ struct AcceptanceAgents {
     @Test("a1-10: Continue in Terminal and in something, the sheet", .disabled("not built yet: AG7")) func a1_10() async throws {}
     @Test("a1-11: Quit and come back: who can't continue, Asleep", .disabled("not built yet: AG7")) func a1_11() async throws {}
     @Test("a1-12: ⌘P finds an agent; the window says its title; Show Agent", .disabled("not built yet: AG8")) func a1_12() async throws {}
-    @Test("r9-1: Three chips, the picker", .disabled("not built yet: AG4")) func r9_1() async throws {}
-    @Test("r9-2: A long list, search and groups", .disabled("not built yet: AG4")) func r9_2() async throws {}
-    @Test("r9-3: Amp, and what is not known", .disabled("not built yet: AG4")) func r9_3() async throws {}
+    /// The card of Daily brief, its assistant the fake claude with a conversation, ready for a chip.
+    private static func card(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let brief = try await stage.open("brief", in: shell, library)
+        model.draft = "Put the agents that wait for me first."
+        model.send()
+        #expect(await wait(until: { AssistantModel.messages(model.rows) == 2 && !model.working && model.agent?.state == "idle" }), "rows: \(model.rows)")
+        shell.glass.card.isHidden = false
+        model.focus()
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
+        return (shell, library, brief)
+    }
+
+    private static func stop(_ shell: Shell) async {
+        Popover.shown?.close()
+        var stopped = false
+        shell.assistant.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
+
+    /// The card's three chips; the model chip opens the drawn picker over the card, with each model's line, the gauge
+    /// of the levels the model lists and the foot's scope. A click elsewhere closes it, Esc too.
+    @Test("r9-1: Three chips, the picker") func r9_1() async throws {
+        let stage = try Stage("agents-r9-1")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAgents.card(stage)
+        defer { brief.close() }
+        let model = shell.assistant
+        model.choose(model: "opus")
+        model.choose(effort: "high")
+        #expect(await wait(until: { model.agent?.effort == "high" }))
+        #expect(AgentChips.labels(model) == ["Program: Claude Code. Change", "Model: Opus 5.5 · High. Change", "On Its Own: Accepts Edits. Change"])
+        let choice = model.modelChoice
+        #expect(choice.models == .rows && choice.rows.map(\.name) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && choice.rows.map(choice.isChosen) == [true, false, false])
+        #expect(choice.efforts.map(\.label) == ["Low", "Medium", "High", "Max"] && choice.scope == "For Daily brief only" && choice.defaults)
+        ModelChip.open({ model.modelChoice }, from: shell.glass.card)
+        let popover = try #require(Popover.shown)
+        #expect(popover.superview === shell.layer && Popover.open.part == "model" && popover.accessibilityLabel() == "Model and effort")
+        let card = shell.glass.card.convert(shell.glass.card.bounds, to: shell.layer).insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
+        #expect(await wait { Popover.shown?.frame.width ?? 0 > 344 })
+        let drawn = popover.frame.insetBy(dx: Popover.margin, dy: Popover.margin)
+        #expect(abs(drawn.minY - card.maxY - 6) < 1 && abs(drawn.maxX - card.maxX) < 1, "over the card, to its right edge: \(popover.frame)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "r9-1" + suffix, root: stage.home.root)
+        }
+        // The keys: ↓ then Return picks the next model; Esc alone closes it.
+        popover.press(.down)
+        popover.press(.enter)
+        #expect(Popover.shown == nil && Popover.open.part == nil && model.session.model == "sonnet")
+        ModelChip.open({ model.modelChoice }, from: shell.glass.card)
+        Popover.shown?.press(.escape)
+        #expect(Popover.shown == nil)
+        // The program chip's picker: the programs found, then those something only sees, each with why.
+        AgentChips.open(model, from: shell.glass.card)
+        #expect(Popover.open.part == "program" && model.entries.map(\.id) == ["claude"] && AssistantModel.seenOnly.map(\.name) == ["Antigravity", "Cursor"])
+        #expect(await wait { Popover.shown?.frame.height ?? 0 > 200 })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "r9-1-program" + suffix, root: stage.home.root)
+        }
+        await AcceptanceAgents.stop(shell)
+    }
+
+    /// From seven models: the search field, the providers' groups, a word that narrows them, and none that matches.
+    @Test("r9-2: A long list, search and groups") func r9_2() async throws {
+        let stage = try Stage("agents-r9-2")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAgents.card(stage)
+        defer { brief.close() }
+        let opencode = ["anthropic/opus": "Anthropic/Opus 5.5", "anthropic/haiku": "Anthropic/Haiku 5.5", "openai/gpt": "OpenAI/GPT-5.5", "openai/mini": "OpenAI/GPT-5.5 Mini",
+                        "google/pro": "Google/Gemini 3 Pro", "google/flash": "Google/Gemini 3 Flash", "mistral/large": "Mistral/Large 3", "mistral/small": "Mistral/Small 3"]
+        var choice = ModelChoice(name: "OpenCode", models: .rows)
+        choice.rows = ModelChoice.rows(opencode.sorted { $0.key < $1.key }.map { Option(value: $0.key, label: $0.value) }, name: "OpenCode", plain: true)
+        (choice.chosen, choice.scope, choice.defaults) = ("google/flash", "For Daily brief only", true)
+        #expect(choice.isLong && choice.from == "From the providers set in OpenCode" && choice.rows.count == 9 && choice.rows[0].name == "Default")
+        #expect(Set(choice.rows.compactMap(\.group)) == ["Anthropic", "OpenAI", "Google", "Mistral"] && !choice.rows.map(\.name).contains { $0.contains("/") })
+        #expect(choice.shown("gemini flash").map(\.name) == ["Gemini 3 Flash"] && choice.shown("openai").count == 2 && choice.shown("nothing").isEmpty)
+        let held = choice
+        ModelChip.open({ held }, from: shell.glass.card)
+        #expect(await wait { Popover.shown?.frame.height ?? 0 > 300 })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "r9-2" + suffix, root: stage.home.root)
+        }
+        await AcceptanceAgents.stop(shell)
+    }
+
+    /// What is not known says so: a program that picks its own model, a list being read, a list not read yet with its
+    /// effort unknown; and pi's short list says its providers under the names. An id is never drawn.
+    @Test("r9-3: Amp, and what is not known") func r9_3() async throws {
+        let stage = try Stage("agents-r9-3")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await AcceptanceAgents.card(stage)
+        defer { brief.close() }
+        let cases: [(String, ModelChoice)] = [
+            ("own", ModelChoice(name: "Amp", models: .own, scope: "For Daily brief only", defaults: true)),
+            ("reading", ModelChoice(name: "OMP", models: .reading, scope: "For Daily brief only", defaults: true)),
+            ("unread", ModelChoice(name: "OMP", models: .unread, scope: "For Daily brief only", defaults: true)),
+        ]
+        for (name, choice) in cases {
+            ModelChip.open({ choice }, from: shell.glass.card)
+            #expect(await wait { Popover.shown?.frame.height ?? 0 > 100 })
+            try await stage.appearances { suffix in
+                try await Picture.window(shell, library: library, web: brief.web, "r9-3-\(name)" + suffix, root: stage.home.root)
+            }
+            Popover.shown?.close()
+        }
+        var short = ModelChoice(name: "pi", models: .rows)
+        short.rows = ModelChoice.rows([Option(value: "anthropic/sonnet", label: "Sonnet 5.5"), Option(value: "openai/gpt", label: "GPT-5.5")], name: "pi", plain: true)
+        short.effortUnread = true
+        #expect(short.rows.map(\.about) == ["Follows pi’s own choice", "Anthropic", "Openai"] && short.from == "From pi’s own settings" && short.rows.allSatisfy { $0.group == nil })
+        #expect(Words.model("claude-example-5", in: nil) == "Another model" && Words.model("sonnet", in: nil) == "Sonnet", "an id is never drawn")
+        #expect(Words.model("default", in: [Option(value: "default", label: "Default · Opus 5.5")]) == "Opus 5.5")
+        // A running agent's chip: its own list, by the name it gives, no row it could not go back to, and the change goes to it.
+        var running = Agent(id: "a1", kind: "claude", origin: "launched")
+        (running.model, running.effort, running.options.model, running.options.effort, running.can.effort) = ("opus", "high", [Option(value: "opus", label: "Opus 5.5"), Option(value: "haiku", label: "Haiku 5.5")], [Option(value: "high", label: "High")], true)
+        var asked: (String?, String?)?
+        let row = ModelChoice(agent: running) { asked = ($0, $1) }
+        #expect(row.chip == "Opus 5.5 · High" && row.rows.map(\.name) == ["Opus 5.5", "Haiku 5.5"] && row.scope == "For this agent · From its next turn" && !row.defaults)
+        row.pick("haiku")
+        #expect(asked?.0 == "haiku" && asked?.1 == nil)
+        ModelChip.open({ short }, from: shell.glass.card)
+        #expect(await wait { Popover.shown?.frame.height ?? 0 > 100 })
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "r9-3-noeffort" + suffix, root: stage.home.root)
+        }
+        await AcceptanceAgents.stop(shell)
+    }
+
     @Test("r8-1: Full Access, the last rung", .disabled("not built yet: AG4")) func r8_1() async throws {}
     @Test("r8-2: The mark's two gestures", .disabled("not built yet: AG4")) func r8_2() async throws {}
     @Test("f4-1: A build's question in full", .disabled("not built yet: AG5")) func f4_1() async throws {}

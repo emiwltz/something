@@ -196,9 +196,8 @@ struct AcceptanceAssistant {
     }
     /// Project watch open with its card: its assistant answered a first message and listens. The model chip's menu
     /// offers the models and efforts Claude Code listed; Sonnet 5.5 at Medium is chosen for this space alone, which the
-    /// chip then says. An open menu is drawn by the window server, which no picture here reaches (cannot_native): its
-    /// structure is checked by value, and written beside the picture as c5-menu.txt.
-    @Test("c5: model and effort") func c5() async throws {
+    /// chip then says. Its structure is checked by value, and written beside the picture as c5-menu.txt.
+    @Test("A model and an effort chosen for one space") func chosenForOneSpace() async throws {
         let stage = try Stage("assistant")
         defer { stage.remove() }
         try AcceptanceAssistant.fake(in: stage)
@@ -220,17 +219,10 @@ struct AcceptanceAssistant {
         model.focus()
         model.choose(model: "sonnet")
         model.choose(effort: "medium")
-        #expect(await wait(until: { model.agent?.effort == "medium" && model.modelMenu.last?.choices.count == 4 }))
-        typealias Choice = AssistantModel.ModelPart.Choice
-        #expect(model.modelMenu == [
-            .init(header: "Model · this space", choices: [Choice(title: "Opus 5.5", value: "opus", effort: false, checked: false),
-                                                         Choice(title: "Sonnet 5.5", value: "sonnet", effort: false, checked: true),
-                                                         Choice(title: "Haiku 5.5", value: "haiku", effort: false, checked: false)]),
-            .init(header: "Effort", choices: [Choice(title: "Low", value: "low", effort: true, checked: false),
-                                              Choice(title: "Medium", value: "medium", effort: true, checked: true),
-                                              Choice(title: "High", value: "high", effort: true, checked: false),
-                                              Choice(title: "Max", value: "max", effort: true, checked: false)]),
-        ])
+        #expect(await wait(until: { model.agent?.effort == "medium" && model.modelChoice.efforts.count == 4 }))
+        let choice = model.modelChoice
+        #expect(choice.rows.map(\.name) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && choice.rows.map(choice.isChosen) == [false, true, false])
+        #expect(choice.efforts.map(\.label) == ["Low", "Medium", "High", "Max"] && choice.effort == "medium" && choice.scope == "For Project watch only")
         #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.name == "Claude Code")
         #expect(model.title == "Project watch" && model.presence.header == "Idle" && !model.threadShown)
         #expect(model.placeholder == "Ask for a change · / for Claude Code’s commands")
@@ -242,7 +234,7 @@ struct AcceptanceAssistant {
             try await Picture.window(shell, library: library, web: project.web, "c5" + suffix, root: stage.home.root)
         }
         if let gallery {
-            let lines = model.modelMenu.flatMap { part in [part.header.uppercased()] + part.choices.map { "  \($0.title)\($0.checked ? "  ✓" : "")" } }
+            let shown = model.modelChoice, lines = ["MODEL"] + shown.rows.map { "  \($0.name)\(shown.isChosen($0) ? "  ✓" : "")" } + ["EFFORT"] + shown.efforts.map { "  \($0.label)\($0.value == shown.effort ? "  ✓" : "")" }
             try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("c5-menu.txt"), atomically: true, encoding: .utf8)
         }
         var stopped = false
@@ -599,7 +591,7 @@ struct AcceptanceAssistant {
         #expect(model.cardShown && model.threadShown && model.title == "Daily brief" && model.notice == nil)
         #expect(model.presence.now == .changed("brief.html"), "said: \(String(describing: model.presence.now))")
         #expect(model.name == "Claude Code" && model.modelWords == ("Sonnet 5.5", "Medium"))
-        #expect(AgentModelChip.label(model) == "Claude Code, Sonnet 5.5, effort Medium. Change agent, model or effort")
+        #expect(AgentChips.labels(model) == ["Program: Claude Code. Change", "Model: Sonnet 5.5 · Medium. Change", "On Its Own: Accepts Edits. Change"])
         #expect(Monogram.letters(model.name) == "CC" && model.commands.map(\.value) == ["compact", "explain", "init", "review", "tidy"])
         #expect(model.placeholder == "Ask for a change · / for Claude Code’s commands" && model.slashed == nil)
         let field = try #require(AcceptanceTrust.fields(shell.glass.card).first)

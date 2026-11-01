@@ -24,7 +24,7 @@ enum Catalog {
     /// Every screen id and the slice that removes its `.disabled` trait (the plan's screen map, one owner each).
     static let owners: [(id: String, slice: String)] = [
         ("b1", "W3"), ("b3", "W2"), ("b5", "W5"), ("b6", "W2"),
-        ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c5", "AB11"), ("c6", "AB09b"), ("c7", "AB05"),
+        ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c6", "AB09b"), ("c7", "AB05"),
         ("c8", "AB08"), ("c9", "AB06"), ("c10", "AB07"),
         ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
         ("e1", "T2"), ("e2", "T3"), ("e3", "T2"), ("e4", "T5"), ("e5", "T6"), ("e6", "T4"), ("e7", "T7"), ("e8", "T8"),
@@ -92,7 +92,7 @@ enum Catalog {
     /// Settings' seven tabs, gone with v6.2's four (x7-1 to x7-4); b7, the rail, which subject 4 C removes; b2, La page,
     /// with its variants: the final mockup's f3 steps are its screens. An old id whose heir is not built stays, and
     /// stays asserted, until the heir's slice retires it.
-    static let retired: Set<String> = ["d1", "b2", "b4", "b7", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14",
+    static let retired: Set<String> = ["c5", "d1", "b2", "b4", "b7", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14",
                                        "g3", "g4", "g5", "g6", "g7", "g8", "g11"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
     /// f9–f11, the last ones, have their shots and are built (T18): none waits.

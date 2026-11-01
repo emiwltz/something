@@ -33,7 +33,7 @@ extension LevelChoice {
     /// The agent the sentence names, its model after it once chosen; any agent while none is.
     var starts: String {
         guard let start else { return "any agent" }
-        return ([Registry.app.name(of: start.kind)] + [start.model].compactMap { $0 }).joined(separator: " · ")
+        return ([Registry.app.name(of: start.kind)] + [start.model.map { Words.model($0, in: nil) }].compactMap { $0 }).joined(separator: " · ")
     }
 
     /// The folder as the sentence's word reads.
@@ -117,7 +117,7 @@ struct WordMenu {
 }
 
 /// The word's place in AppKit's coordinates, and the moment to open at once: right after the view exists.
-private struct WordPlace: NSViewRepresentable {
+struct WordPlace: NSViewRepresentable {
     let spot: WordSpot
     var opens: WordMenu?
 

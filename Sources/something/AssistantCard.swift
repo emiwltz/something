@@ -3,8 +3,8 @@
 // the conversation (⌘J: your bubbles in ink, the agent's voice in Young Serif, tool lines in code, a line between days,
 // the messages held for the turn's end outlined with Take Back; a finished build said short: what was made, the reply's
 // first paragraph, the steps and the rest folded under Details), one notice when it is stuck or waits for you, the
-// present-tense line while it works, and the composer: the agent's own commands while "/" starts the field, one chip
-// for the agent, its model and effort, the held messages' strip while the conversation is folded, and a flat field
+// present-tense line while it works, and the composer: the agent's own commands while "/" starts the field, its three
+// chips (Chips.swift), the held messages' strip while the conversation is folded, and a flat field
 // whose Send turns into Stop (New Space reuses it and the notice).
 // Its words are the model's and Presence's; the card keeps only the field's focus. A request is never answered here:
 // the notice leads to the native panel. CardHost holds it in the glass (Glass.swift) and lets the clicks beside it
@@ -321,7 +321,7 @@ struct AssistantCard: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            AgentModelChip(model: model).padding(.bottom, 4)
+            AgentChips(model: model).padding(.bottom, 4)
             if !model.threadShown, !model.held.isEmpty { heldStrip }
             Field(model: model)
         }
@@ -564,62 +564,6 @@ struct Monogram: View {
     }
 }
 
-/// The agent and its model in one chip, its monogram first, opening one menu: the agents, the model and the effort
-/// (the card, New Space's bar and Info's Assistant).
-struct AgentModelChip: View {
-    let model: AssistantModel
-
-    var body: some View {
-        let words = model.modelWords
-        Menu {
-            AgentMenu(model: model)
-            ModelMenu(model: model)
-            Divider()
-            Button(AssistantModel.defaultsTitle) { Keys.send("defaults") }
-        } label: {
-            HStack(spacing: 6) {
-                Monogram(name: model.name, side: 16)
-                // The agent in semibold ink, its model after it in regular ink2, as the mockup's chip.
-                HStack(spacing: 0) {
-                    Text(model.name).fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui)
-                    Text(" · \(words.model)")
-                }
-                .lineLimit(1)
-                Chevron()
-            }
-            .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-            .padding(.leading, 4).padding(.trailing, 8).frame(height: 26).contentShape(Rectangle())
-        }
-        .plainMenu()
-        .accessibilityLabel(AgentModelChip.label(model))
-        .disabled(model.blocked)
-    }
-
-    /// Its VoiceOver label: the agent, the model and the effort, and what it changes.
-    static func label(_ model: AssistantModel) -> String {
-        let words = model.modelWords
-        return "\(model.name), \(words.model)\(words.effort.map { ", effort \($0)" } ?? ""). Change agent, model or effort"
-    }
-}
-
-/// The model chip's menu: each part's choices for this conversation alone, or its sentence when there is none.
-struct ModelMenu: View {
-    let model: AssistantModel
-
-    var body: some View {
-        ForEach(model.modelMenu, id: \.header) { part in
-            Section(part.header) {
-                ForEach(part.choices, id: \.value) { choice in
-                    Toggle(choice.title, isOn: Binding(get: { choice.checked }, set: { _ in
-                        choice.effort ? model.choose(effort: choice.value) : model.choose(model: choice.value)
-                    }))
-                }
-                if let note = part.note { Button(note) {}.disabled(true) }
-            }
-        }
-    }
-}
-
 private struct Chevron: View {
     var body: some View { Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui) }
 }
@@ -653,28 +597,6 @@ struct ConversationMenu: View {
     }
 }
 
-/// The chip's agents: the builders found, each with its monogram, then the agents something only sees, greyed with
-/// their reason.
-struct AgentMenu: View {
-    let model: AssistantModel
-
-    var body: some View {
-        Section(model.inSpace ? "Builds this space" : "Builds your spaces") {
-            ForEach(model.entries) { entry in
-                Toggle(isOn: Binding(get: { entry.checked }, set: { _ in model.choose(entry.id) })) {
-                    Label { Text(entry.title) } icon: { Monogram.image(Registry.app.name(of: entry.id)).map { Image(nsImage: $0) } }
-                }
-                .disabled(!entry.enabled).help(entry.note ?? "")
-            }
-        }
-        Section("Seen only") {
-            ForEach(AssistantModel.seenOnly, id: \.name) { seen in
-                Button("\(seen.name) · Can’t build yet") {}.disabled(true).help(seen.why)
-            }
-        }
-    }
-}
-
 // MARK: What the card says
 
 extension AssistantModel {
@@ -702,33 +624,8 @@ extension AssistantModel {
         }
     }
 
-    /// The last item of the agent menu and of Build With ▸: Settings › Agents.
+    /// The way from a picker's foot and Build With ▸ to Settings › Agents.
     static let defaultsTitle = "Defaults for New Spaces…"
-
-    /// One part of the model chip's menu: its header, the values to choose, checked when they are this
-    /// conversation's, and a sentence when there is nothing to choose.
-    struct ModelPart: Equatable {
-        struct Choice: Equatable { let title: String, value: String, effort: Bool, checked: Bool }
-        let header: String
-        var choices: [Choice] = []
-        var note: String?
-    }
-
-    /// The model chip's menu: the models, then the efforts, that the running agent lists, else those its kind last
-    /// listed; before any, a sentence. A builder that picks its own model says so, and offers none.
-    var modelMenu: [ModelPart] {
-        let offered = offered, chosen = (model: session.model ?? agent?.model, effort: session.effort ?? agent?.effort)
-        var model = ModelPart(header: inSpace ? "Model · this space" : "Model")
-        if ownModel {
-            model.note = "\(name) chooses its own model. Change it in " + Words.possessive(name) + " settings."
-        } else if let models = offered.model, !models.isEmpty {
-            model.choices = models.map { .init(title: $0.label, value: $0.value, effort: false, checked: $0.value == chosen.model) }
-        } else {
-            model.note = "Its models show after its first run."
-        }
-        guard let efforts = offered.effort, !efforts.isEmpty, Registry.app.limits[kind ?? ""]?.contains("effort") != true else { return [model] }
-        return [model, ModelPart(header: "Effort", choices: efforts.map { .init(title: $0.label, value: $0.value, effort: true, checked: $0.value == chosen.effort) })]
-    }
 
     /// What the running agent lists, else what its kind last listed (Preferences.listed).
     var offered: Options {
@@ -799,9 +696,7 @@ extension AssistantModel {
     var modelWords: (model: String, effort: String?) {
         let offered = offered
         if ownModel { return ("Its own model", nil) }
-        // A model the agent names by a bare word ("sonnet") is said as a name, never as an id.
-        let model = (session.model ?? agent?.model).map { m in offered.model?.first { $0.value == m }?.label ?? (m.allSatisfy(\.isLowercase) ? m.capitalized : m) }
-            ?? "Default model"
+        let model = (session.model ?? agent?.model).map { Words.model($0, in: offered.model) } ?? "Default model"
         let effort = (session.effort ?? agent?.effort).map { e in offered.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
         return (model, effort)
     }

@@ -25,12 +25,10 @@ struct AcceptanceBuild {
         try await scene.draw("x2-2") { words in
             #expect(words == Self.beatWords(.page), "\(words)")
         }
-        // The chip's menu is a system menu, drawn by the window server where no picture here reaches (cannot_native):
-        // its agents and model are written beside the picture as x2-2-menu.txt.
+        // The picker's agents and models, written beside the picture as x2-2-menu.txt.
         if let gallery {
             let agents = model.entries.map { "  \($0.title)\($0.checked ? "  ✓" : "")" }
-            let models = model.modelMenu.flatMap { part in [part.header.uppercased()] + part.choices.map { "  \($0.title)\($0.checked ? "  ✓" : "")" }
-                + (part.note.map { ["  \($0)"] } ?? []) }
+            let shown = model.modelChoice, models = ["MODEL"] + shown.rows.map { "  \($0.name)\(shown.isChosen($0) ? "  ✓" : "")" }
             try (["BUILDS THIS SPACE"] + agents + models).joined(separator: "\n").appending("\n")
                 .write(to: gallery.appendingPathComponent("x2-2-menu.txt"), atomically: true, encoding: .utf8)
         }
@@ -297,7 +295,7 @@ struct AcceptanceBuild {
     /// What VoiceOver reads of New Space with `draft` in its field, as far as an offscreen SwiftUI view gives it (its
     /// menus, plain texts and the sign are out of reach here; the level, its sentence and Run's folder are the model's).
     static func newSpaceWords(_ draft: String = "", sentence: [String] = ["Your default", "What it may do", "Who answers"]) -> [String] {
-        ["What do you want to make?"] + (draft.isEmpty ? [] : [draft]) + ["Build Now", "Continue"] + sentence + BlankView.chips.map(\.0)
+        ["What do you want to make?"] + (draft.isEmpty ? [] : [draft]) + ["Program: Claude Code. Change", "Model: Default model. Change", "On Its Own: Accepts Edits. Change", "Build Now", "Continue"] + sentence + BlankView.chips.map(\.0)
     }
 
     /// New Space in a window of `stage`, the toolbar's chip at the mockup's one request; with `builder`, AssistantTests'

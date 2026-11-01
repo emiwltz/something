@@ -73,7 +73,8 @@
     },
     "Option": {
       "value": ["string"],
-      "label": ["string"]
+      "label": ["string"],
+      "about": ["string", "null"]
     },
     "Queued": {
       "id": ["string"],

@@ -181,11 +181,11 @@ struct BuildField: View {
         .boxed(RoundedRectangle(cornerRadius: 12, style: .continuous), Look.Token.bg2.ui, ring: typing ? Look.Token.ink.ui : Look.Token.line2.ui)
     }
 
-    /// The agent and its model in one chip, Build Now ⌘↵ and Continue ↵. Both build, until a reading of the words
+    /// The three chips, Build Now ⌘↵ and Continue ↵. Both build, until a reading of the words
     /// stands between them.
     private var bar: some View {
         HStack(spacing: 8) {
-            AgentModelChip(model: model)
+            AgentChips(model: model)
             Spacer(minLength: 8)
             Button { model.send() } label: {
                 HStack(spacing: 5) {

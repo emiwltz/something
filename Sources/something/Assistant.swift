@@ -48,7 +48,7 @@ import SomethingCore
         var title: String, name: String, codes: [String]
     }
     /// One builder in the agent menu.
-    struct Entry: Identifiable { let id: String, title: String, checked: Bool, enabled: Bool, note: String? }
+    struct Entry: Identifiable { let id: String, title: String, checked: Bool, enabled: Bool, note: String?; var because: String? = nil }
 
     @ObservationIgnored let engine: Engine
     @ObservationIgnored let places: Places
@@ -163,6 +163,8 @@ import SomethingCore
     var failure: String? { session.failure }
     var asleep: Bool { session.asleep }
     private(set) var askEverything: Bool
+    /// The kinds whose models are being read, for the model chip.
+    private(set) var reading: Set<String> = []
     /// Full Access in Settings › Permissions, kept here so that the first lines follow it while they show.
     var fullAccess: Bool
     /// What the state says of each builder: installed or not; absent while not known.
@@ -285,7 +287,7 @@ import SomethingCore
             }
             if each.read(state) { save(each) }
             // What its agent lists is what the chip offers for its kind, the next time too.
-            if let kind = each.kind, let options = each.agent?.options, options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options { Preferences.at(places).listed[kind] = options }
+            if let kind = each.kind, let options = each.agent.map({ AssistantModel.kept($0.options) }), options.model?.isEmpty == false, Preferences.at(places).listed[kind] != options { Preferences.at(places).listed[kind] = options }
             if let kind = each.kind, let commands = each.agent?.commands, Preferences.at(places).commands[kind] != commands { Preferences.at(places).commands[kind] = commands }
             if ["working", "waiting"].contains(each.agent?.state) { each.active = clock() }
         }
@@ -627,7 +629,8 @@ import SomethingCore
             let because = refused[kind] != nil ? "can’t build spaces" : agent?.neverAsks == true ? "never asks before acting"
                 : agent?.asksNothingByDefault == true ? "asks nothing by default" : nil
             let title = [Registry.app.name(of: kind), because].compactMap { $0 }.joined(separator: " · ") + (notes[kind] == nil ? "" : " ⚠")
-            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind])
+            return Entry(id: kind, title: title, checked: kind == self.kind, enabled: refused[kind] == nil, note: refused[kind] ?? notes[kind],
+                         because: agent?.neverAsks == true ? "Never asks" : agent?.asksNothingByDefault == true ? "Never asks by default" : nil)
         }
     }
 
@@ -867,6 +870,13 @@ import SomethingCore
         do { _ = try engine.set(id, model: model, mode: nil, effort: effort) } catch { session.failure = error.sentence }
     }
 
+    /// The model chip's pick: a row the agent lists, or nil, its own choice, which holds from its next launch.
+    func chooseModel(_ value: String?) {
+        guard value == nil else { return choose(model: value) }
+        session.model = nil
+        save(session)
+    }
+
     /// Whether the builder chooses its model alone, which something cannot set (its kind's limits).
     var ownModel: Bool { Registry.app.limits[kind ?? ""]?.contains("model") == true }
 
@@ -882,8 +892,26 @@ import SomethingCore
     private func keepDefault(_ kind: String) {
         preferred = kind
         Preferences.at(places).change { if $0.assistant != kind { ($0.assistant, $0.model, $0.effort) = (kind, nil, nil) } }
-        guard Preferences.at(places).listed[kind] == nil, Registry.app.limits[kind]?.contains("model") != true else { return }
-        engine.peek(kind, folder: places.spaces.path) { [self] in if let options = $0 { Preferences.at(places).listed[kind] = options } }
+        readModels(of: kind)
+    }
+
+    /// Starts `kind` without a message to read what it offers, once it has no list yet and picks its model through
+    /// something: the model chip says "Reading its models…" meanwhile, and what it says after a failure.
+    func readModels(of chosen: String? = nil) {
+        guard let kind = chosen ?? (agent == nil || agent?.alive == false ? self.kind : nil), Preferences.at(places).listed[kind] == nil,
+              Registry.app.limits[kind]?.contains("model") != true, !reading.contains(kind) else { return }
+        reading.insert(kind)
+        engine.peek(kind, folder: places.spaces.path) { [self] in
+            reading.remove(kind)
+            if let options = $0 { Preferences.at(places).listed[kind] = AssistantModel.kept(options) }
+        }
+    }
+
+    /// What a kind's list keeps: what a conversation's program offers it alone waits for that conversation.
+    static func kept(_ options: Options) -> Options {
+        var options = options
+        options.effort = options.effort?.filter { $0.about == nil }
+        return options
     }
 
     /// Build With ▸: the builder of new spaces from now on, kept as the default. New Space's conversation takes it
@@ -1291,7 +1319,7 @@ import SomethingCore
         let own = Registry.app.limits[kind]?.contains("model") == true
         let options = main.agent?.alive != false ? main.agent?.options : nil
         let model = own ? nil : main.model ?? main.agent?.model
-        let label = model.map { m in (options ?? Preferences.at(places).listed[kind])?.model?.first { $0.value == m }?.label ?? m }
+        let label = model.map { Words.model($0, in: (options ?? Preferences.at(places).listed[kind])?.model) }
         let chip = ["Quick session", Registry.app.name(of: kind), own ? "its own model" : label].compactMap { $0 }.joined(separator: " · ")
         let temporary = Session(kind: kind, model: model, effort: main.effort)
         quicks[name] = Quick(space: name, sentence: text, session: temporary, chip: chip, parts: parts)

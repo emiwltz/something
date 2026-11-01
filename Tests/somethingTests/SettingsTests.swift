@@ -90,6 +90,9 @@ import Testing
             case .button(let title, _, let run):
                 #expect(["Show in Finder", "Show Shortcuts"].contains(title))
                 run()
+            case .model(let choice, _):
+                choice().pick("opus")
+                #expect(choice().chip == "Opus 5.5", "\(row.title)")
             case .said(let words):
                 #expect(["Their Own Settings", "Not known"].contains(words), "\(row.title)")
             case .nothing:
@@ -120,6 +123,7 @@ import Testing
             case .choice(let options, let get, _): shown[row.title] = options.filter { !$0.heading && get().contains($0.value) }.map(\.label).joined(separator: " · ")
             case .toggle(let get, _): shown[row.title] = get() ? "on" : "off"
             case .button(let title, _, _), .said(let title): shown[row.title] = title
+            case .model(let choice, _): shown[row.title] = choice().models == .unread ? "Its models show after its first run" : choice().chip
             case .nothing: shown[row.title] = row.note
             }
         }
@@ -151,20 +155,18 @@ import Testing
                                          [Option(value: "medium", label: "Medium"), Option(value: "high", label: "High")])
         model.preferences.listed["claude"] = listed
         let row = try #require(model.sections(.agents)[0].rows[0].beside.first)
-        guard case .choice(let options, let get, let set) = row.control else { Issue.record("not a choice"); return }
+        guard case .model(let read, _) = row.control else { Issue.record("not the chip"); return }
         #expect(row.title == "Model and effort")
-        #expect(RowControl.sections(options).map(\.heading) == ["Model", "Effort"])
-        #expect(RowControl.sections(options).map { $0.items.map(\.label) } == [["Default model", "Opus 5.5", "Sonnet 5.5"], ["Default effort", "Medium", "High"]])
-        #expect(get() == ["", "effort:"])
-        set("opus")
-        set("effort:high")
-        #expect(get() == ["opus", "effort:high"] && model.preferences.model == "opus" && model.preferences.effort == "high")
-        set("effort:")
-        #expect(model.preferences.effort == nil && model.preferences.model == "opus")
+        #expect(read().rows.map(\.name) == ["Default", "Opus 5.5", "Sonnet 5.5"] && read().efforts.map(\.label) == ["Medium", "High"] && read().scope == "For new spaces" && !read().defaults)
+        read().pick("opus")
+        read().pickEffort("high")
+        #expect(read().chip == "Opus 5.5 · High" && model.preferences.model == "opus" && model.preferences.effort == "high")
+        read().pick(nil)
+        #expect(model.preferences.model == nil && read().chip == "Default model · High")
         model.preferences.assistant = "amp"
         let amp = try #require(model.sections(.agents)[0].rows[0].beside.first)
-        guard case .said(let words) = amp.control else { Issue.record("not words"); return }
-        #expect(amp.title == "Model" && words == "Amp chooses its own model")
+        guard case .model(let own, _) = amp.control else { Issue.record("not the chip"); return }
+        #expect(amp.title == "Model" && own().models == .own && own().chip.hasPrefix("Its own model"))
     }
 
     @Test func autoLetsTheMacChooseAndDarkIsDarkAqua() {

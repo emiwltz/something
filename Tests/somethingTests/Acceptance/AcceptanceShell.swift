@@ -1122,7 +1122,7 @@ struct AcceptanceShell {
         model.focus()
         #expect(model.cardShown && model.title == "Logbook" && model.place.space == "logbook")
         #expect(await wait { shell.glass.grown == true && !shell.glass.morphing }, "the card grew from the sticker")
-        #expect(model.name == "Claude Code" && AgentModelChip.label(model).hasPrefix("Claude Code, "), "\(AgentModelChip.label(model))")
+        #expect(model.name == "Claude Code" && AgentChips.labels(model)[0] == "Program: Claude Code. Change", "\(AgentChips.labels(model))")
         #expect(model.presence.header == "Asleep · wakes on your next message" && model.placeholder == "Ask for a change · / for Claude Code’s commands", "\(model.presence.header) \(model.placeholder)")
         let bar = MenuBar(builders: nil)
         bar.open = { ("logbook", "Logbook") }

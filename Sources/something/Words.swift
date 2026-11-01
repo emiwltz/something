@@ -7,6 +7,13 @@ import SomethingAgents
 import SomethingCore
 
 enum Words {
+    /// A model as a person reads it: the label its agent lists for `value` ("Default · " left out, which only its row
+    /// says), a bare word as a name, words as they are, and never an id.
+    static func model(_ value: String, in list: [Option]?) -> String {
+        if let label = list?.first(where: { $0.value == value })?.label { return label.replacingOccurrences(of: "Default · ", with: "") }
+        return value.contains(" ") ? value : value.allSatisfy(\.isLowercase) ? value.capitalized : "Another model"
+    }
+
     /// `path` with ~ for the home folder `home`. While `fits` refuses it, the names of its middle give way to one
     /// "…", from the middle out; its first name and its last always stay, even when it still does not fit.
     static func path(_ path: String, home: String, fits: (String) -> Bool = { _ in true }) -> String {

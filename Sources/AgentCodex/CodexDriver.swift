@@ -482,7 +482,7 @@ final class CodexDriver: Driver {
         var options = Options()
         options.mode = Driving.codex.modes
         let shown = models?.filter { $0["hidden"] as? Bool != true }
-        options.model = shown?.compactMap { entry in (entry["model"] as? String).map { Option(value: $0, label: entry["displayName"] as? String ?? $0) } }
+        options.model = shown?.compactMap { entry in (entry["model"] as? String).map { Option(value: $0, label: entry["displayName"] as? String ?? $0, about: entry["description"] as? String) } }
         let entry = models?.first { $0["model"] as? String == model || $0["id"] as? String == model }
         options.effort = (entry?["supportedReasoningEfforts"] as? [[String: Any]])?.compactMap { effort in
             (effort["reasoningEffort"] as? String).map { Option(value: $0, label: Option.effortLabels[$0] ?? $0) }

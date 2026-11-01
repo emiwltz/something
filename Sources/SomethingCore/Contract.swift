@@ -110,8 +110,9 @@ public struct Options: Codable, Equatable, Sendable, EveryKey {
 }
 
 public struct Option: Codable, Equatable, Sendable, EveryKey {
-    public var value: String, label: String
-    public init(value: String, label: String) { (self.value, self.label) = (value, label) }
+    public var value: String, label: String, about: String?
+    /// `about`: one line on what it is, when its agent says.
+    public init(value: String, label: String, about: String? = nil) { (self.value, self.label, self.about) = (value, label, about) }
 }
 
 /// A message something holds for the agent's next turn.

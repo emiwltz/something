@@ -126,14 +126,14 @@ struct AcceptanceCommand {
         }
     }
 
-    /// X7.2, Agents: your assistants (the program, then the model and the effort in one menu beside it, checked as text
-    /// in x7-2-menu.txt since the window server draws it), their rest and resume, and the programs on this Mac, read only.
+    /// X7.2, Agents: your assistants (the program, then the model chip beside it, its picker checked as text in
+    /// x7-2-menu.txt), their rest and resume, and the programs on this Mac, read only.
     @Test("x7-2: Settings, Agents") func x7_2() async throws {
         // The page scrolls past the window, as the mockup's: what is below is heard, not seen.
         let shows = ["Assistants", "Program", "Model and effort", "Claude Code", "Opus 5.5", "High", "Conversations and rest",
                      "Resume each space's conversation", "picks up here", "Put idle assistants to sleep after", "10 minutes", "assistants awake",
                      "Programs on this Mac"]
-        try await settings(.agents, "x7-2", shows: shows, hears: ["Program · Model and effort: Claude Code", "Model and effort: Opus 5.5 · High", "Put idle assistants to sleep after: 10 minutes", "Look Again"]) { settings, stage in
+        try await settings(.agents, "x7-2", shows: shows, hears: ["Program · Model and effort: Claude Code", "Model: Opus 5.5 · High. Change", "Put idle assistants to sleep after: 10 minutes", "Look Again"]) { settings, stage in
             let sections = settings.model.sections(.agents)
             #expect(sections.map(\.title) == ["Assistants", "Conversations and rest", "Programs on this Mac"] && sections[2].block == .found)
             #expect(sections.flatMap(\.rows).map(\.title) == ["Program · Model and effort", "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most"])
@@ -151,9 +151,9 @@ struct AcceptanceCommand {
             #expect(settings.model.sections(.agents)[0].rows[0].note == "Never asks by default.")
             #expect(!settings.model.sections(.permissions)[0].rows.map(\.title).contains("Your assistant asks before every change"))
             settings.model.preferences.change { $0.assistant = chosen }
-            guard case .choice(let options, let get, _) = agent.beside[0].control else { Issue.record("not a choice"); return }
-            let menu = options.map { ($0.heading ? "# " : get().contains($0.value) ? "✓ " : "  ") + $0.label }
-            #expect(menu == ["# Model", "  Default model", "✓ Opus 5.5", "  Sonnet 5.5", "# Effort", "  Default effort", "  Medium", "✓ High"])
+            guard case .model(let read, _) = agent.beside[0].control else { Issue.record("not the chip"); return }
+            let choice = read(), menu = choice.rows.map { (choice.isChosen($0) ? "✓ " : "  ") + $0.name } + choice.efforts.map { ($0.value == choice.effort ? "✓ " : "  ") + $0.label }
+            #expect(menu == ["  Default", "✓ Opus 5.5", "  Sonnet 5.5", "  Medium", "✓ High"] && choice.scope == "For new spaces")
             try Self.dump(menu, "x7-2-menu.txt")
         }
     }

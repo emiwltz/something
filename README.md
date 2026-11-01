@@ -40,9 +40,10 @@ fails, or that you stop, keeps your words and their level on New Space to try ag
 it as a small sticker in a corner, whose eyes say what it does; drag it to the other side if it is in the way. Click it
 (or ⌘K) to ask for a change: the space reloads as your agent saves it. The first time, a small hint says so beside it;
 Info and Point each have one too, once, at a later opening. ⌘J shows the conversation, ⌘\ makes it small again, ⌘. stops
-the assistant. Its one chip, "Claude Code · Sonnet 5.5", changes the agent, the model and the effort of that space's
-conversation: models go by the names the agent gives them, and a kind something has not run yet says "Its models show
-after its first run". "/" at the start of its field lists the agent's own commands as the agent lists them (↑↓, Return
+the assistant. Its three chips, "Claude Code", "Sonnet 5.5 · High" and "Accepts
+Edits", change the program, the model and its effort, and what it does on its own, for that space's conversation: each
+model says in one line what it is, under the name the agent gives it, and for a program something has not run yet the
+chip says "Reading its models…" while something starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them (↑↓, Return
 sends one as you wrote it, Tab leaves it for its text); something remembers each agent's list for the next time it is
 not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
 name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a New Space

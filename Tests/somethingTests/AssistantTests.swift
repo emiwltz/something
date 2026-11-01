@@ -1095,27 +1095,27 @@ import WebKit
         let agents = AssistantModel.Place.space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
         model.place = agents
         #expect(model.modelWords.model == "Default model" && model.modelWords.effort == nil)
-        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Its models show after its first run.")])
+        #expect(model.modelChoice.models == .unread && model.modelChoice.effortUnread && model.modelChoice.scope == "For My agents only")
         model.draft = "Make the tiles wider."
         model.send()
         #expect(await wait(until: { model.rows.contains(.reply("Invented reply.")) && model.light == .ready }))
         #expect(Preferences(home.places).listed["claude"]?.model?.map(\.label) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"], "kept for the kind")
         // The reply was Haiku's: it is checked, with the efforts Haiku offers.
-        #expect(model.modelMenu.map(\.header) == ["Model · this space", "Effort"])
-        #expect(model.modelMenu[0].choices.map(\.title) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && model.modelMenu[0].choices.map(\.checked) == [false, false, true])
-        #expect(model.modelMenu[1].choices.map(\.title) == ["Low", "Medium", "High"] && !model.modelMenu[1].choices.contains { $0.checked })
+        let running = model.modelChoice
+        #expect(running.rows.map(\.name) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && running.rows.map(running.isChosen) == [false, false, true])
+        #expect(running.efforts.map(\.label) == ["Low", "Medium", "High"] && running.effort == nil)
         model.choose(model: "sonnet")
         #expect(model.modelWords.model == "Sonnet 5.5" && model.session.model == "sonnet")
-        #expect(await wait(until: { model.modelMenu.last?.choices.map(\.title) == ["Low", "Medium", "High", "Max"] }), "Sonnet's efforts")
+        #expect(await wait(until: { model.modelChoice.efforts.map(\.label) == ["Low", "Medium", "High", "Max"] }), "Sonnet's efforts")
         model.choose(effort: "medium")
         #expect(await wait(until: { model.agent?.effort == "medium" }))
-        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.modelMenu[1].choices.map(\.checked) == [false, true, false, false])
+        #expect(model.modelWords == ("Sonnet 5.5", "Medium") && model.modelChoice.effort == "medium" && model.modelChoice.chip == "Sonnet 5.5 · Medium")
         #expect(input(home).contains { $0.contains(#""model":"sonnet""#) && $0.contains("set_model") })
         #expect(input(home).contains { $0.contains(#""effortLevel":"medium""#) })
         // Another space, never launched, offers what Claude Code listed, its own choice still the default.
         model.place = .space(title: "Logbook", name: "logbook", page: home.places.spaces.appendingPathComponent("logbook.html").path)
-        #expect(model.id == nil && model.modelWords.model == "Default model" && model.modelMenu[0].choices.count == 3)
-        #expect(!model.modelMenu[0].choices.contains { $0.checked })
+        #expect(model.id == nil && model.modelWords.model == "Default model" && model.modelChoice.rows.map(\.name) == ["Default", "Opus 5.5", "Sonnet 5.5", "Haiku 5.5"])
+        #expect(model.modelChoice.rows.map(model.modelChoice.isChosen) == [true, false, false, false], "nothing runs, so its own choice is a row")
         // Asleep, a choice is kept for the wake, which launches with it.
         model.place = agents
         model.putToSleep()
@@ -1141,7 +1141,7 @@ import WebKit
         await look(model)
         model.place = .space(title: "My agents", name: "agents", page: home.places.spaces.appendingPathComponent("agents.html").path)
         #expect(model.kind == "amp" && model.ownModel && model.modelWords == ("Its own model", nil))
-        #expect(model.modelMenu == [.init(header: "Model · this space", note: "Amp chooses its own model. Change it in Amp’s settings.")])
+        #expect(model.modelChoice.models == .own && model.modelChoice.chip == "Its own model" && model.modelChoice.efforts.isEmpty)
         model.choose(model: "anything")
         #expect(model.session.model == nil)
         home.remove()
@@ -1309,7 +1309,7 @@ import WebKit
 
         #expect(model.quickChange("go-slow, make it blue.", parts: [part], at: place) == nil)
         let quick = try #require(model.quicks["brief"])
-        #expect(quick.chip == "Quick session · Claude Code · opus" && quick.phase == .working && model.works(on: "brief"))
+        #expect(quick.chip == "Quick session · Claude Code · Opus" && quick.phase == .working && model.works(on: "brief"))
         #expect(await wait(until: { quick.session.agent?.state == "working" && !users().isEmpty }), "the quick session did not start")
         let id = try #require(quick.session.id)
         #expect(arguments().contains("--model=opus") && arguments().contains("--effort=high"), "\(arguments())")

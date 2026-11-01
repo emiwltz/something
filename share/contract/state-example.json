@@ -28,11 +28,11 @@
       "mode": "default",
       "effort": null,
       "options": {
-        "model": [{ "value": "claude-example-model", "label": "Example model" }],
-        "mode":  [{ "value": "default", "label": "Ask before acting" }, { "value": "plan", "label": "Plan only" }],
-        "effort": [{ "value": "low", "label": "Low" }, { "value": "high", "label": "High" }]
+        "model": [{ "value": "claude-example-model", "label": "Example model", "about": null }],
+        "mode":  [{ "value": "default", "label": "Ask before acting", "about": null }, { "value": "plan", "label": "Plan only", "about": null }],
+        "effort": [{ "value": "low", "label": "Low", "about": null }, { "value": "high", "label": "High", "about": null }]
       },
-      "commands": [{ "value": "review", "label": "Reviews the recent changes" }, { "value": "compact", "label": "Shortens the conversation" }],
+      "commands": [{ "value": "review", "label": "Reviews the recent changes", "about": null }, { "value": "compact", "label": "Shortens the conversation", "about": null }],
       "queue": [{ "id": "q1", "text": "Then run the tests.", "at": "2026-10-17T09:00:02Z" }],
       "subagents": [{ "name": "Find where the footer is drawn", "status": "done" }],
       "can": { "send": true, "steer": true, "queue": true, "interrupt": true, "model": true, "mode": true, "effort": true, "resume": false },

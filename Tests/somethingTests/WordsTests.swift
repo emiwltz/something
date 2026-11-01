@@ -75,7 +75,7 @@ import Testing
         #expect(LevelChoice(level: .talk, scope: .folders([shop])).line(home: home) == "[something] With your agents: Talk, in ~/code/shop.")
         #expect(LevelChoice().line(home: home) == "[something] With your agents: None.")
         #expect(LevelChoice.agents(.folders([shop, home]), home: home) == "the agents in 2 folders" && LevelChoice.agents(nil, home: home) == "all your agents")
-        #expect(LevelChoice(start: Grant.Start(kind: "pi", model: "invented")).starts == "pi · invented" && LevelChoice().starts == "any agent")
+        #expect(LevelChoice(start: Grant.Start(kind: "pi", model: "invented")).starts == "pi · Invented" && LevelChoice().starts == "any agent")
         #expect(AssistantModel.shown("[something] No space is open: the person is on the blank page.\n[something] With your agents: Watch.\nA countdown.")
                 == ("on the blank page", "A countdown."), "the conversation shows the person's words only")
     }

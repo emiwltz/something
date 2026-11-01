@@ -50,7 +50,7 @@ final class ClaudeDriver: Driver {
         arguments += ["--include-hook-events", "--permission-mode", launch.mode ?? "default", launch.resume ? "--resume" : "--session-id", launch.thread]
         // One argument, so a model is never read as an option.
         if let model = launch.model { arguments.append("--model=\(model)") }
-        if let effort = launch.effort { arguments.append("--effort=\(effort)") }
+        if let effort = launch.effort, effort != ClaudeDriver.ultracode { arguments.append("--effort=\(effort)") }   // it goes on the channel
         if let config = launch.lent?.mcpConfig { arguments += ["--mcp-config", config] }
         if launch.assistant == .building { arguments += ["--allowedTools"] + building(launch.folder, launch.lent) }
         return Command(arguments: arguments, adding: ["CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS": "1"], removing: credentials)
@@ -93,6 +93,9 @@ final class ClaudeDriver: Driver {
     /// says why. Changed through `remember(retry:)`, which tells the state.
     private var retry: [String: JSONValue] = [:]
     private var heard = false
+    /// Whether Claude says an assistant can turn Ultracode on (`get_settings`, never guessed); no page can write to one.
+    private var ultracodeOffered = false
+    static let ultracode = "ultracode"
     /// The models `initialize` listed, and the one in use: the one asked for (an alias such as "opus"), then the one
     /// Claude reports running (a model id, an entry's resolvedModel). The efforts offered are that model's; nil until
     /// one is known, since the person's own settings may pick a model other than "default".
@@ -117,6 +120,7 @@ final class ClaudeDriver: Driver {
     func begin() throws {
         emit(.options(options()))
         try control("initialize", [:])
+        if launch.effort == ClaudeDriver.ultracode, launch.assistant != nil { try setEffort(ClaudeDriver.ultracode) }
     }
 
     @discardableResult func receive(_ line: Data) -> Bool {
@@ -169,8 +173,15 @@ final class ClaudeDriver: Driver {
     func set(model: String?, mode: String?, effort: String?) throws -> String {
         if let mode { try control("set_permission_mode", ["mode": mode], value: mode) }
         if let model { try control("set_model", ["model": model], value: model) }
-        if let effort { try control("apply_flag_settings", ["settings": ["effortLevel": effort]], value: effort) }
+        if let effort { try setEffort(effort) }
         return (model != nil || effort != nil) && turnOpen ? "next-turn" : "now"
+    }
+
+    /// Ultracode is a setting of its own, not a level; a plain `effortLevel` does not always turn it off (Claude's text).
+    private func setEffort(_ effort: String) throws {
+        var settings: [String: Any] = effort == ClaudeDriver.ultracode ? [:] : ["effortLevel": effort]
+        if ultracodeOffered || settings.isEmpty { settings["ultracode"] = settings.isEmpty }
+        try control("apply_flag_settings", ["settings": settings], value: effort)
     }
 
     func prompt(_ request: String) -> Prompt? { asks[request]?.prompt }
@@ -256,7 +267,7 @@ final class ClaudeDriver: Driver {
     private func system(_ frame: [String: Any]) {
         switch frame["subtype"] as? String {
         case "init":
-            emit(.reported(model: frame["model"] as? String, mode: frame["permissionMode"] as? String, effort: frame["effort"] as? String))
+            emit(.reported(model: (frame["model"] as? String).map(listed), mode: frame["permissionMode"] as? String, effort: frame["effort"] as? String))
             if let model = frame["model"] as? String { running(model) }
             if !statesSeen { turn(open: true) }
         case "session_state_changed":
@@ -309,7 +320,7 @@ final class ClaudeDriver: Driver {
         // A subagent's frames carry the tool call that started it; its model (often a smaller one) is not the agent's.
         let sub = !(frame["parent_tool_use_id"] is NSNull) && frame["parent_tool_use_id"] != nil
         if !sub, let model = message["model"] as? String {
-            emit(.reported(model: model, mode: nil, effort: nil))
+            emit(.reported(model: listed(model), mode: nil, effort: nil))
             running(model)
         }
         // One frame per block, several frames per message: the frame's own uuid tells the items apart.
@@ -412,6 +423,7 @@ final class ClaudeDriver: Driver {
         guard let raw = response["request_id"] as? String, let asked = sent.removeValue(forKey: raw) else { return }
         guard response["subtype"] as? String == "success" else {
             if asked.subtype == "initialize", fallingBack() { return }
+            if asked.subtype == "get_settings" { return }   // an older Claude offers no Ultracode
             let refused = ClaudeDriver.refusals[asked.subtype] ?? "Claude Code refused what something asked"
             let words = (response["error"] as? String).map { "\(refused): \($0)" } ?? "\(refused)."
             return emit(.error(AgentError(code: "AGENT_ERROR", message: words)))
@@ -423,10 +435,15 @@ final class ClaudeDriver: Driver {
             emit(.options(options()))
             if let commands = payload["commands"] as? [Any] { emit(.commands(ClaudeDriver.commands(commands))) }
             if let mode = payload["current_permission_mode"] as? String { emit(.reported(model: nil, mode: mode, effort: nil)) }
+            readUltracode()
         // set_model's success says nothing of the model in use: the next `init` or reply names it, so nothing is
         // reported here (an alias such as "opus" is not a model). The efforts offered become the new model's.
         case "set_model":
             model = asked.value ?? model
+            emit(.options(options()))
+            readUltracode()
+        case "get_settings":
+            ultracodeOffered = (payload["applied"] as? [String: Any])?["ultracodeAvailable"] as? Bool == true
             emit(.options(options()))
         case "set_permission_mode": emit(.reported(model: nil, mode: payload["mode"] as? String ?? asked.value, effort: nil))
         // Claude took the setting; its success carries no value, and no later frame names the effort.
@@ -521,10 +538,19 @@ final class ClaudeDriver: Driver {
 
     private static func names(_ entry: [String: Any]) -> [String] { [entry["value"], entry["resolvedModel"]].compactMap { $0 as? String } }
 
+    /// The `value` of the row Claude's `reported` model is, by the match Claude documents, so a raw id reaches no one:
+    /// the row asked for first, since two may resolve to one model; `reported` itself when no row is it.
+    private func listed(_ reported: String) -> String {
+        let row = entry(model).flatMap { ClaudeDriver.names($0).contains(reported) ? $0 : nil } ?? entry(reported)
+        return row?["value"] as? String ?? reported
+    }
+
+    /// Whether Ultracode can be on depends on the model: an assistant asks after each.
+    private func readUltracode() { if launch.assistant != nil { try? control("get_settings", [:]) } }
+
     private func id(_ claudeID: String) -> String { "\(launch.agent):\(claudeID)" }
 
-    /// The tools that start a sub-agent.
-    static let starters: Set = ["Agent", "Task"]
+    static let starters: Set = ["Agent", "Task"]   // the tools that start a sub-agent
 
     /// The commands initialize lists, by name, with what each does (else its argument's hint, else its name).
     static func commands(_ list: [Any]) -> [Option] {
@@ -538,11 +564,21 @@ final class ClaudeDriver: Driver {
     private func options() -> Options {
         var options = Options()
         options.mode = Driving.claude.modes
-        options.model = models?.compactMap { model in
-            (model["value"] as? String).map { Option(value: $0, label: model["displayName"] as? String ?? $0) }
-        }
+        options.model = models?.compactMap(ClaudeDriver.option)
         options.effort = (entry(model)?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: Option.effortLabels[$0] ?? $0) } }
+        if ultracodeOffered { options.effort?.append(Option(value: ClaudeDriver.ultracode, label: "Ultracode", about: "A longer, deeper pass for a hard change.")) }
         return options
+    }
+
+    /// A row of `initialize`'s models in plain words: Claude's description starts with the full name ("Sonnet 5.5 ·
+    /// Efficient for routine tasks · $2/$10 per Mtok"), and its default row says which model it is now. Prices stay out.
+    static func option(_ model: [String: Any]) -> Option? {
+        guard let value = model["value"] as? String else { return nil }
+        let label = model["displayName"] as? String ?? value
+        let parts = (model["description"] as? String ?? "").components(separatedBy: " · ").filter { !$0.contains("$") }, first = parts.first ?? ""
+        if value == "default", let now = first.range(of: "(currently ") { return Option(value: value, label: "Default · " + first[now.upperBound...].dropLast()) }
+        let named = first.hasPrefix(label), about = parts.dropFirst(named ? 1 : 0).joined(separator: " · ")
+        return Option(value: value, label: named ? first : label, about: about.isEmpty ? nil : about)
     }
 
     private func control(_ subtype: String, _ fields: [String: Any], value: String? = nil) throws {
