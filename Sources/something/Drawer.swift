@@ -305,12 +305,14 @@ extension Shell {
     func drawerMoved() {
         let state = drawer.state
         column.constant = state.dock ? Drawer.column : 0
+        readPageSoon()
         (library.sidebar.kept, library.sidebar.room) = (state.kept, state.room)
         reveals()
         let button = toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view as? ToolButton, words = state.shown ? "Hide Sidebar" : "Show Sidebar"
         button?.pressed = state.shown
         button?.toolTip = Keys.tooltip("sidebar", words)
         button?.setAccessibilityLabel(words)
+        sayWaiting()
     }
 
     /// The pin and View › Keep Sidebar Open.

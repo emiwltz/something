@@ -380,13 +380,18 @@ enum Picture {
                 held.append((image, view.convert(view.bounds, to: frame), cover.alphaValue))
             }
         }
-        // In Page Full Screen the toolbar brought back lies over the page, on its band.
-        let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.topEdge].filter(\.filled)
+        // In Page Full Screen the header brought back lies over the page; else the frame drew it, under the toolbar's
+        // items, and the chrome over it must not draw it again.
+        let header = shell.pageFull && !shell.band.isHidden
+        let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + (header ? [shell.band] : []) as [NSView]
             + [shell.chrome] + [shell.layer].filter { !$0.isHidden }
         let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) }
         let over = try placed.map { view, place in
             let drawn = try bitmap(view.bounds.size)
+            let band = shell.band.alphaValue
+            if view === shell.chrome { shell.band.alphaValue = 0 }
             view.cacheDisplay(in: view.bounds, to: drawn)
+            shell.band.alphaValue = band
             return (drawn, place)
         }
         // The toolbar draws above the window layer: what the layer holds over its band (a scrim card's scrim) dims the
@@ -394,7 +399,7 @@ enum Picture {
         let band = shell.window.contentLayoutRect.maxY
         let reaches = shell.layer.subviews.contains { !shell.layer.isHidden && $0.convert($0.bounds, to: frame).maxY > band }
         // The toolbar back over the page in Page Full Screen: its items whole, the group of tools in one row.
-        let items = shell.topEdge.filled ? (shell.window.toolbar?.items ?? []).compactMap(\.view) : reaches ? shell.toolbarItems.compactMap(\.view) : []
+        let items = header ? (shell.window.toolbar?.items ?? []).compactMap(\.view) : reaches ? shell.toolbarItems.compactMap(\.view) : []
         let bar = try items.filter { $0.window != nil && !$0.isHiddenOrHasHiddenAncestor }.map { view in
             let drawn = try bitmap(view.bounds.size)
             view.cacheDisplay(in: view.bounds, to: drawn)

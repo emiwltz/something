@@ -39,6 +39,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Called once per load when the space's own frame has loaded (its first `scrolled`): History takes its picture.
     var landed: () -> Void = {}
     private var landedLoad = -1
+    /// Called each time the page comes to rest, loaded or scrolled: the header wears its top rows (Header.swift).
+    var rested: () -> Void = {}
     /// When the page's process ended since the space opened, oldest first; `stopped` from the last end to the next
     /// load; `paused`, after two, until a load the person asks for or Ask to Fix.
     private(set) var stops: [Date] = []
@@ -475,6 +477,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
                   let x = (place[1] as? NSNumber)?.doubleValue, let y = (place[2] as? NSNumber)?.doubleValue else { return }
             scrolled = (page, x, y)
             if landedLoad != loads { landedLoad = loads; landed() }
+            rested()
             // The page loaded or scrolled by itself (a key, an anchor, its own script): the frames follow it.
             pointer?.followSoon()
             note?.follow()

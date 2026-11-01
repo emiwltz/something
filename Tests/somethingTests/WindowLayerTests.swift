@@ -28,7 +28,7 @@ import Testing
             #expect(shell.window.contentMinSize == NSSize(width: 640, height: 480))
             #expect(shell.inspector.minimumThickness == 320 && shell.inspector.maximumThickness == 320 && shell.inspector.isCollapsed)
             #expect(shell.column.constant == 270, "held open on New Space")
-            #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
+            #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools])
             let items = shell.toolbarItems
             #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full], "no Reload, no waiting chip")
             @MainActor func item(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? { items.first { $0.itemIdentifier == id } }
@@ -99,8 +99,8 @@ import Testing
         }
     }
 
-    /// The mockup's right-hand cluster (X9.1): Point, Info and Page Full Screen, 28-point buttons 4 points apart, Page
-    /// Full Screen 10 points from the window's edge (the mockup's centres: 1176, 1143).
+    /// The mockup's right-hand cluster (X9.1): Point, the panel's 34-point button and Page Full Screen, 4 points apart, Page
+    /// Full Screen 10 points from the window's edge.
     @Test func theToolsSitAsTheMockupsDo() async throws {
         try await window { shell in
             shell.heading("Daily brief", "", space: true)
@@ -110,8 +110,8 @@ import Testing
                 return view.superview?.convert(view.alignmentRect(forFrame: view.frame), to: nil) ?? .zero
             }
             let (point, info, full) = (try frame(Shell.point), try frame(Shell.info), try frame(Shell.full))
-            #expect([info, full].allSatisfy { $0.size == NSSize(width: 28, height: 28) }, "\(point) \(info) \(full)")
-            #expect(abs(full.midX - 1176) <= 2 && abs(info.midX - full.midX + 32) <= 0.5, "\(info) \(full)")
+            #expect(info.size == NSSize(width: 34, height: 28) && full.size == NSSize(width: 28, height: 28), "\(point) \(info) \(full)")
+            #expect(abs(full.midX - 1176) <= 2 && abs(info.midX - full.midX + 35) <= 0.5, "\(info) \(full)")
             #expect(abs(info.minX - point.maxX - 4) <= 0.5, "\(point) \(info)")
         }
     }
@@ -139,10 +139,15 @@ import Testing
             #expect(shell.window.contentView?.frame.width == 640)
             #expect(full.window === shell.window && !full.isHiddenOrHasHiddenAncestor)
             #expect(full.convert(full.bounds, to: nil).maxX <= 640 - 10 + 2, "\(full.convert(full.bounds, to: nil))")
+            let pill = shell.jump.convert(shell.jump.bounds, to: nil)
+            #expect(shell.jump.window === shell.window && shell.titleLine.convert(shell.titleLine.bounds, to: nil).maxX <= pill.minX, "the title stops at the pill")
             #expect(shell.titleLine.intrinsicContentSize.width < whole)
             shell.window.setContentSize(NSSize(width: 1200, height: 760))
-            settle { shell.titleLine.intrinsicContentSize.width == whole }
-            #expect(shell.titleLine.intrinsicContentSize.width == whole)
+            // It stops at the pill; a shorter one gets its whole line back.
+            shell.heading("A morning brief", "", space: true)
+            let short = ceil(shell.titleLine.line.size().width) + TitleLine.indent + TitleLine.trail
+            settle { shell.titleLine.intrinsicContentSize.width == short }
+            #expect(shell.titleLine.intrinsicContentSize.width == short)
         }
     }
 

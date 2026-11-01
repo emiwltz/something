@@ -1,6 +1,6 @@
 // More room for the page, inside the window. Page Full Screen (⇧⌘F, the toolbar's last button): the sidebar floats, Info
-// closes, the toolbar and the lights go, and the page fills the window from its top; the pointer at the top edge
-// brings the toolbar back over the page until it leaves it, and Esc or ⇧⌘F again ends it. It is not the Mac's full
+// closes, the header and the lights go, and the page fills the window from its top; the pointer at the top edge
+// brings the header back over the page until it leaves it, and Esc or ⇧⌘F again ends it. It is not the Mac's full
 // screen (⌃⌘F), which stays: asking for one leaves the other. The window's left edge: while the sidebar is away, a
 // 4 × 40 mark shows where the pointer rests, and 200 ms later, or at a click, the sidebar comes over the page
 // (Drawer.swift). In both full screens the sticker is discreet (Glass).
@@ -28,7 +28,6 @@ extension Shell {
         top?.isActive = false
         top = shown.map(pin)
         top?.isActive = true
-        edge.isHidden = on
         glass.discreet = on
         toolbar(!on)
         let button = controls[Shell.full] as? ToolButton
@@ -53,13 +52,13 @@ extension Shell {
         }
     }
 
-    /// Shows the toolbar and the lights (`shown`) or hides them; in Page Full Screen the top edge then holds the
-    /// toolbar's band over the page, for as long as the pointer stays in it.
+    /// Shows the toolbar and the lights (`shown`) or hides them; in Page Full Screen the top edge then stays as high as
+    /// the header brought back over the page, for as long as the pointer is in it.
     func toolbar(_ shown: Bool) {
         window.toolbar?.isVisible = shown
         [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].forEach { window.standardWindowButton($0)?.isHidden = !shown }
-        topEdge.filled = pageFull && shown
-        topEdge.height?.constant = topEdge.filled ? bar : 6
+        topEdge.height?.constant = pageFull && shown ? bar : 6
+        placeBand()
     }
 
     /// The two edges, made once: each a strip over the page that the pointer brings something back from.
@@ -95,21 +94,14 @@ extension Shell {
 }
 
 /// A strip at an edge of the page that brings something back: the pointer resting on it for `delay`, or a click, calls
-/// `came`; leaving it for `leave` calls `went`. Empty, it lets every click but its own through, and one that takes
-/// clicks shows its mark where the pointer rests; `filled`, it is the band behind the toolbar brought back over the
-/// page, the window's background, its lower edge and a soft shadow.
+/// `came`; leaving it for `leave` calls `went`. It lets every click but its own through, and one that takes clicks shows
+/// its mark where the pointer rests.
 final class Reveal: NSView {
     let delay: TimeInterval, leave: TimeInterval
     var came: () -> Void = {}, went: () -> Void = {}
     var height: NSLayoutConstraint?
     /// Whether a click on the empty strip is its own: the left edge's; the top edge lets every click through.
     let clicks: Bool
-    var filled = false {
-        didSet {
-            needsDisplay = true
-            layer?.shadowOpacity = filled ? 0.35 : 0
-        }
-    }
     private var timer: Timer?
     private let mark = EdgeMark()
 
@@ -117,19 +109,8 @@ final class Reveal: NSView {
         (self.delay, self.leave, self.clicks) = (delay, leave, clicks)
         super.init(frame: .zero)
         setAccessibilityElement(false)
-        // The band brought back lies over the page with a soft shadow under it (the mockup's 0 12 30 -16).
-        wantsLayer = true
-        layer?.masksToBounds = false
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowRadius = 15
-        layer?.shadowOffset = CGSize(width: 0, height: -12)
         mark.alphaValue = 0
         if clicks { addSubview(mark) }
-    }
-
-    override func layout() {
-        super.layout()
-        layer?.shadowPath = CGPath(rect: bounds.insetBy(dx: 16, dy: 16), transform: nil)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -175,16 +156,8 @@ final class Reveal: NSView {
         timer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { _ in act() }
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard filled else { return }
-        Look.Token.bg.color.setFill()
-        bounds.fill()
-        Look.Token.line.color.setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
-    }
-
-    /// The band takes nothing: the toolbar over it has the clicks. The strip at the left edge takes its click.
-    override func hitTest(_ point: NSPoint) -> NSView? { filled || !clicks ? nil : super.hitTest(point) }
+    /// The strip at the left edge takes its click; the top edge's is the toolbar's, or the page's.
+    override func hitTest(_ point: NSPoint) -> NSView? { clicks ? super.hitTest(point) : nil }
 }
 
 /// The left edge's mark: ink, with a ring of the page's background so that it shows over any page.

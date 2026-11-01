@@ -52,9 +52,10 @@ built from it, or another space), Tab changes it, and nothing is sent before Ret
 
 **One assistant per space**: each space has its own conversation with your agent, so several can work at once, each on
 its own space. The sidebar lists your spaces by name, in groups you make; **Needs You**, at its top, lists the spaces
-whose agents wait for your answer (each stays in its group too). The toolbar holds only the sidebar button, the space's
-name (click it for Info), Point, Info and Page Full Screen (⇧⌘F: the page fills the window, the toolbar comes back at
-its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload is in the View menu (⌘R), and so is
+whose agents wait for your answer (each stays in its group too). The page takes the whole window, under a glass header that holds only the sidebar button, the
+space's name (click it for Info), "Jump to a space or an action" (⌘P), with a yellow dot and a count while something
+waits, Point, your agents (their eyes and a count, ⌘I) and Page Full Screen (⇧⌘F: the page fills the window, the header
+comes back at its top edge, Esc leaves), and Full Access's orange mark while it is on; Reload is in the View menu (⌘R), and so is
 the interface size: ⌘+ and ⌘− grow or shrink the whole app, pages included, to Large or Larger, ⌘0 brings it back
 (also in Settings › General). The sidebar floats: rest the pointer on the window's left edge, or press ⌃⌘S, and it comes over the page, then leaves with the pointer. Its pin keeps it beside the page, and Settings › General says which you start with. On New Space and Templates it stays open. It is the same sidebar at every window size. **something stops
 idle assistants on its own** to save memory: one idle for 10 minutes falls asleep, and at most 3 stay awake (the open

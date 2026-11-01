@@ -25,7 +25,7 @@ struct AcceptanceShell {
         let (shell, library, _) = stage.window()
         #expect(shell.window.contentView?.frame.size == Stage.Size.main)
         #expect(shell.split.splitViewItems.count == 2 && shell.inspector.isCollapsed)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools])
         let items = shell.toolbarItems
         #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         let titles = Stage.templates.map(\.1) + ["Oracle"]
@@ -278,7 +278,7 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.calm(stage)
         defer { brief.close() }
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools])
         #expect(shell.toolbarItems.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         #expect(shell.toolbarItems.allSatisfy { !["reload", "chip"].contains($0.itemIdentifier.rawValue) })
         let title = shell.titleLine
@@ -993,14 +993,14 @@ struct AcceptanceShell {
         #expect(!shell.topEdge.isHidden && Self.inWindow(shell.topEdge, shell.topEdge.bounds).height == 6)
         shell.topEdge.mouseEntered(with: try Self.pointer(true, shell.topEdge))
         shell.window.layoutIfNeeded()
-        #expect(shell.window.toolbar?.isVisible == true && lights() == [false, false, false] && shell.topEdge.filled)
+        #expect(shell.window.toolbar?.isVisible == true && lights() == [false, false, false] && !shell.band.isHidden)
         #expect(Self.inWindow(shell.topEdge, shell.topEdge.bounds).height == shell.bar && top() == height, "over the page, which does not move")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "2-6" + suffix, root: stage.home.root)
         }
         shell.topEdge.mouseExited(with: try Self.pointer(false, shell.topEdge))
         #expect(shell.window.toolbar?.isVisible == true, "not at once")
-        #expect(await wait(until: { shell.window.toolbar?.isVisible == false }) && lights() == [true, true, true] && !shell.topEdge.filled)
+        #expect(await wait(until: { shell.window.toolbar?.isVisible == false }) && lights() == [true, true, true] && shell.band.isHidden)
         // ⌃⌘S floats the sidebar from the window's top; the pin is away: no room.
         shell.drawer.toggle()
         shell.drawer.layoutSubtreeIfNeeded()
@@ -1264,7 +1264,7 @@ struct AcceptanceShell {
         library.select(.templates)
         shell.show(nil, templates: true)
         #expect(shell.window.title == "Templates" && shown() == [false, false, false] && shell.titleLine.accessibilityRole() == .staticText)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "2-10" + suffix, root: stage.home.root)
         }
@@ -1275,7 +1275,66 @@ struct AcceptanceShell {
 
     // MARK: Round 4, the final mockup
 
-    @Test("r4-1: At rest: the glass header, no rail", .disabled("not built yet: S3")) func r4_1() async throws {}
+    /// The window at rest (R4.1): the page under a band that wears its top rows, across the window, the toolbar on it;
+    /// the pill in the middle, the panel's button with its eyes and count, the sidebar's button saying what it will do.
+    /// What waits comes to the pill while the sidebar is closed (F3.1's pill; f3-1 takes ⌘P's section). Off a space the
+    /// tint lies on the background. Page Full Screen and the Mac's full screen are 2-6's and b5's.
+    @Test("r4-1: At rest: the glass header, no rail") func r4_1() async throws {
+        let stage = try Stage("shell-r4-1")
+        defer { stage.remove() }
+        let (shell, library, _, view) = try await Self.weekend(stage)
+        defer { view.close() }
+        shell.showInfo(false)
+        try stage.moment(shell)
+        #expect(await wait(until: { shell.band.strip != nil }), "the band wears the page")
+        shell.window.layoutIfNeeded()
+        // The page takes the window; the band spans it, down to the toolbar's lower edge, and takes no click.
+        let band = shell.band.convert(shell.band.bounds, to: nil), width = shell.window.frame.width
+        #expect(band.minX == 0 && band.width == width && band.minY == shell.window.contentLayoutRect.maxY && band.maxY == shell.window.frame.height)
+        #expect(view.web.convert(view.web.bounds, to: nil).maxY == band.minY && view.web.convert(view.web.bounds, to: nil).width == width, "under it, whole")
+        #expect(shell.band.hitTest(NSPoint(x: 100, y: band.midY)) == nil && (shell.band.strip?.size.width ?? 0) >= HeaderBand.wide)
+        #expect(!shell.drawer.state.shown && shell.column.constant == 0)
+        // The toolbar: the middle is the pill, centred in the window.
+        let toolbar = try #require(shell.window.toolbar)
+        #expect(toolbar.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools])
+        #expect(toolbar.centeredItemIdentifiers == [Shell.middle])
+        let pill = shell.jump
+        #expect(pill.window === shell.window && pill.action == #selector(App.showPalette(_:)) && pill.target == nil)
+        #expect(pill.accessibilityRole() == .button && pill.accessibilityLabel() == "Jump to a space or an action" && pill.toolTip == nil)
+        #expect(abs(pill.convert(pill.bounds, to: nil).midX - width / 2) <= 1 && pill.frame.width == 296, "\(pill.convert(pill.bounds, to: nil))")
+        // The sidebar's button says what it will do, in its bubble too.
+        let button = try #require(shell.toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view as? ToolButton)
+        #expect(button.toolTip == "Show Sidebar (⌃⌘S)" && button.accessibilityLabel() == "Show Sidebar" && !button.pressed)
+        // What waits, the sidebar closed: a count, in the bubble and for VoiceOver.
+        shell.waiting(["agents"], mine: 0)
+        #expect(pill.waiting == 1 && pill.toolTip == "1 needs you (⌘P)" && pill.accessibilityLabel() == "Jump to a space or an action. 1 needs you")
+        shell.waiting(["agents", "pebble", "agents"], mine: 0)
+        #expect(pill.waiting == 2 && pill.toolTip == "2 need you (⌘P)" && pill.accessibilityLabel() == "Jump to a space or an action. 2 need you")
+        // With the panel's button, whose count and eyes the panel gives.
+        let panel = try #require(shell.controls[Shell.info] as? AgentsButton)
+        panel.show(count: 3, eyes: .listen)
+        shell.window.layoutIfNeeded()
+        #expect(panel.attributedTitle.string.hasSuffix("3") && panel.image?.accessibilityDescription == "Info" && panel.frame.width > 34)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "r4-1" + suffix, root: stage.home.root)
+        }
+        // The sidebar open says it itself: the dot goes, and comes back with the sidebar closed.
+        shell.drawer.open()
+        #expect(pill.waiting == 0 && pill.toolTip == nil && pill.accessibilityLabel() == "Jump to a space or an action")
+        #expect(button.toolTip == "Hide Sidebar (⌃⌘S)" && button.accessibilityLabel() == "Hide Sidebar" && button.pressed)
+        shell.drawer.close()
+        #expect(pill.waiting == 2)
+        shell.waiting([], mine: 0)
+        #expect(pill.waiting == 0)
+        // A narrow window: the pill narrows, the tools stay.
+        shell.window.setContentSize(NSSize(width: 800, height: 760))
+        shell.window.layoutIfNeeded()
+        #expect(pill.constraints.first { $0.firstAttribute == .width }?.constant == 176)
+        // Off a space the band takes the picture off, the pill stays, the tools go (2-10).
+        library.select(.newSpace)
+        shell.show(nil)
+        #expect(shell.band.strip == nil && pill.window === shell.window && shell.controls[Shell.full]?.isHidden == true)
+    }
 
     /// The sidebar by the edge or ⌃⌘S (R4.2): at rest the page has the window; a strip at the left edge under the
     /// toolbar, no control for VoiceOver; the pointer resting there shows a mark, and 200 ms later, or at a click, the

@@ -1,11 +1,12 @@
 // The one window: a split view with the center and Info (the inspector, hidden at first), the center moved right by a
-// docked sidebar; over both the `chrome` layer, which holds the sidebar (Drawer.swift), and over it the window layer. A calm toolbar: the sidebar's button beside the space's name alone (a click on it
-// opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
-// its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
-// while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on, its orange mark, which
-// turns it off (Rules.swift). Off the spaces only the name shows. Reload is in the View menu; what waits for the person
-// is said by the panel, the sidebar's Needs You and the Dock, never here. Its backgrounds are the identity's, opaque:
-// no vibrancy lets the desktop through. The center holds the open space's web view edge to edge under the toolbar, what
+// docked sidebar; over both the `chrome` layer, which holds the header's band (Header.swift) and the sidebar
+// (Drawer.swift), and over it the window layer. A calm toolbar on the band: the sidebar's button beside the space's name
+// alone (a click on it opens Info), "Jump to a space or an action" in the middle, which opens ⌘P and shows what waits
+// while the sidebar is closed, Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick
+// Change leaves its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), the
+// panel's button (pressed while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on,
+// its orange mark, which turns it off (Rules.swift). Off the spaces only the name and the pill show. Reload is in the
+// View menu. Its backgrounds are the identity's: no vibrancy lets the desktop through. The center holds the open space's web view edge to edge under the toolbar, what
 // keeps a space from being shown, New Space or the templates; over a space, the glass, which holds the assistant
 // (Glass.swift). Off the spaces the assistant is away: New Space has its own field. While the welcome is open, the
 // window is out of sight; it arrives once it ends. In full screen the space is alone: the system hides the toolbar and
@@ -29,29 +30,35 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let assistant: AssistantModel, library: Library
     /// What the center shows, and the page in it when a space is open.
     private(set) var shown: NSView?
-    private weak var page: NSView?
+    private(set) weak var page: NSView?
     /// The space shown in the center, when one is.
     private(set) weak var space: SpaceView?
     /// Quick Change answers without a change, by space name, waiting for their space to be shown (showNote).
     private var unread: [String: (words: String, part: Pointing.Part)] = [:]
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
-    /// What lies over the columns, under the window layer: the sidebar and the toolbar's lower edge.
+    /// What lies over the columns, under the window layer: the header's band and the sidebar.
     let chrome: WindowLayer
     let drawer: Drawer
+    let band = HeaderBand()
+    /// The header's middle, always there.
+    let jump = JumpPill()
     /// The center's left side in its column: the room it leaves a docked sidebar.
     let column: NSLayoutConstraint
     /// What covers the whole window: the toast, the palette and the shortcut sheet.
     let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
                tools = NSToolbarItem.Identifier("tools"), point = NSToolbarItem.Identifier("point"),
-               info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full")
+               info = NSToolbarItem.Identifier("info"), full = NSToolbarItem.Identifier("full"),
+               middle = NSToolbarItem.Identifier("jump")
     /// The items that act on the open space, hidden while none is open.
     static let onSpace = [point, info, full]
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
     /// How many agents the open space's page sees and what their eyes say with its assistant's: the panel button's.
     private(set) var agentsShown = (count: 0, eyes: Sign.State.listen)
+    /// The room the group of tools takes, with the gap before it.
+    private(set) var toolsWidth: CGFloat = 0
     /// The space's name, which opens Info.
     let titleLine = TitleLine()
     /// Full Access's mark, hidden while it is off.
@@ -78,8 +85,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var leftTop: (under: NSLayoutConstraint, top: NSLayoutConstraint)?
     /// What holds the top of what the center shows: the toolbar's lower edge, or in full screen the window's top.
     var top: NSLayoutConstraint?
-    /// The toolbar's lower edge, across the window.
-    let edge = NSBox()
 
     /// A window under this width has no room for a docked sidebar.
     static let narrow: CGFloat = 860
@@ -107,6 +112,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         chrome = WindowLayer(over: split.view)
         (drawer.frame, drawer.autoresizingMask) = (chrome.bounds, [.width, .height])
         chrome.hold(drawer)
+        band.translatesAutoresizingMaskIntoConstraints = false
+        chrome.addSubview(band, positioned: .below, relativeTo: drawer)
         layer = WindowLayer(over: split.view)
         glass = Glass(over: center, model: assistant)
         super.init()
@@ -127,6 +134,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         let toolbar = NSToolbar(identifier: "main-" + UUID().uuidString)
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
+        toolbar.centeredItemIdentifiers = [Shell.middle]
         window.toolbar = toolbar
         window.toolbarStyle = .unified
         window.center()
@@ -158,12 +166,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         let preferences = library.preferences
         glass.spot = preferences.sticker
         glass.moved = { [weak preferences] in preferences?.sticker = $0 }
-        // The toolbar's lower edge, across the window, whatever lies under it.
-        (edge.boxType, edge.borderWidth, edge.fillColor, edge.translatesAutoresizingMaskIntoConstraints) = (.custom, 0, Look.Token.line.color, false)
-        chrome.addSubview(edge)
-        NSLayoutConstraint.activate([edge.heightAnchor.constraint(equalToConstant: 1), edge.leadingAnchor.constraint(equalTo: chrome.leadingAnchor),
-                                     edge.trailingAnchor.constraint(equalTo: chrome.trailingAnchor),
-                                     edge.bottomAnchor.constraint(equalTo: chrome.safeAreaLayoutGuide.topAnchor)])
+        // Behind the toolbar, across the window, whatever lies under it.
+        NSLayoutConstraint.activate([band.topAnchor.constraint(equalTo: chrome.topAnchor), band.leadingAnchor.constraint(equalTo: chrome.leadingAnchor),
+                                     band.trailingAnchor.constraint(equalTo: chrome.trailingAnchor),
+                                     band.bottomAnchor.constraint(equalTo: chrome.safeAreaLayoutGuide.topAnchor)])
+        band.changed = { [weak self] in self?.readPage() }
+        jump.motion = { [weak library] in library?.preferences.motion ?? .calm }
         edges()
         drawer.busy = { [weak self] in self?.holdsDrawer ?? false }
         drawer.moved = { [weak self] in self?.drawerMoved() }
@@ -199,10 +207,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         closed()
     }
 
-    /// The columns moved: the title measures the room it has again, and the layers stay above a column the split view
-    /// may have added after them; Info shown, a note leaves the right edge to it.
+    /// The columns moved, which a resize of the window does too: the title measures the room it has again, the band looks
+    /// at the page again, and the layers stay above a column the split view may have added after them; Info shown, a note
+    /// leaves the right edge to it.
     @objc private func columnsMoved() {
         titleLine.invalidateIntrinsicContentSize()
+        readPageSoon()
         if split.view.subviews.suffix(2) != [chrome, layer] {
             split.view.addSubview(chrome, positioned: .above, relativeTo: nil)
             split.view.addSubview(layer, positioned: .above, relativeTo: nil)
@@ -214,7 +224,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The window changed size, which does not always move the columns: the title measures its room again, and the
     /// sidebar sees whether it still has room.
     func windowDidResize(_ notification: Notification) {
-        titleLine.invalidateIntrinsicContentSize()
+        fitHeader()
         arrange()
     }
 
@@ -252,7 +262,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         top?.isActive = false
         top = shown.map(pin)
         top?.isActive = true
-        edge.isHidden = on
+        placeBand()
         glass.discreet = on
         reveals()
     }
@@ -286,11 +296,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
         space?.web.pageZoom = now.factor
         (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
+        fitHeader()
         arrange()
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools]
+        [Shell.sidebar, Shell.title, .flexibleSpace, Shell.middle, .flexibleSpace, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -301,8 +312,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         func item(_ id: NSToolbarItem.Identifier, _ label: String, _ symbol: String, _ tip: String, _ action: Selector?, words: String? = nil) -> NSToolbarItem {
             let item = NSToolbarItem(itemIdentifier: id)
             let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label) ?? NSImage()
-            let button = ToolButton(image: image, target: nil, action: action)
-            (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, Look.Token.ink2.color, tip)
+            let button = id == Shell.info ? AgentsButton(image: image, target: nil, action: action) : ToolButton(image: image, target: nil, action: action)
+            (button.chip, button.isBordered, button.contentTintColor, button.toolTip) = (id == Shell.point, false, ToolButton.ink, tip)
             let k = Look.scale.size.factor
             button.symbolConfiguration = Shell.symbol(id)
             // The mockup's .ib is 28 points square; Point is its .chip, 9 points of padding around the icon and words.
@@ -314,6 +325,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
                 width = (9 + 13 + 6 + 9) * k + ceil(words.size(withAttributes: [.font: font]).width)
             }
             NSLayoutConstraint.activate([button.heightAnchor.constraint(equalToConstant: 28 * k), button.widthAnchor.constraint(equalToConstant: width)])
+            (button as? AgentsButton)?.show(count: 0, eyes: .listen)
             // The image and action serve the overflow menu, where the toolbar puts an item without its view.
             (item.view, item.label, item.isBordered, item.autovalidates, item.image, item.action) = (button, label, false, false, button.image, action)
             return item
@@ -323,9 +335,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             let item = NSToolbarItem(itemIdentifier: id)
             (item.view, item.isBordered) = (titleLine, false)
             return item
+        case Shell.middle:
+            let item = NSToolbarItem(itemIdentifier: id)
+            (item.view, item.isBordered, item.label) = (jump, false, JumpPill.words)
+            return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
         case Shell.sidebar:
-            let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Show Sidebar"), #selector(sidebarButton))
+            let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", drawer.state.shown ? "Hide Sidebar" : "Show Sidebar"), #selector(sidebarButton))
             (sidebar.view as? NSButton)?.target = self
             sidebar.target = self
             (sidebar.view as? ToolButton)?.pressed = drawer.state.shown
@@ -343,7 +359,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             fullMark.isHidden = !library.preferences.fullAccess
             // The mockup's toolbar ends 10 points from the window's edge; the toolbar keeps 8.
             row.edgeInsets.right = 2
-            titleLine.reserve = row.fittingSize.width + 24
+            toolsWidth = row.fittingSize.width + 24
+            fitHeader()
             let group = NSToolbarItemGroup(itemIdentifier: id)
             (group.subitems, group.view, group.isBordered, group.autovalidates) = (tools, row, false, false)
             return group
@@ -401,12 +418,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if item.identifier?.rawValue == "keepSidebar" { item.state = drawer.state.kept ? .on : .off }
     }
 
-    /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You; `mine`,
-    /// the open space's own, to the sticker's label.
+    /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You and, while
+    /// it is closed, the header's pill; `mine`, the open space's own, to the sticker's label.
     func waiting(_ spaces: [String], mine: Int) {
         glass.mine = mine
         let needs = spaces.reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         if library.sidebar.needs != needs { library.sidebar.needs = needs }
+        sayWaiting()
     }
 
     /// Shows `words` at the bottom of the center for a moment; see Toast.
@@ -434,6 +452,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         pressPoint(space?.pointer != nil)
         guard let space else {
             page = nil
+            band.wear(nil)
             let gallery = Gallery(home: templates ? Gallery.page : ("New Space", ""), told: { [weak self] title, subtitle in
                 self?.heading(title, subtitle, space: false)
                 self?.library.previewing = templates && title != Gallery.page.0
@@ -444,6 +463,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return bare(gallery.home.0, gallery.home.1)
         }
         page = space.blocked.isEmpty ? space.web : nil
+        space.rested = { [weak self, weak space] in if self?.space === space { self?.readPage() } }
+        readPage()
         if space.blocked.isEmpty {
             put(space.area)
             space.cover(space.stopped ? Stopped(space, assistant: assistant, motion: library.preferences.motion) : nil)
@@ -837,11 +858,13 @@ private struct CardFace: View {
 
 /// A toolbar button that shows itself pressed, as the mockup's .ib[aria-pressed]: the selection's fill under an ink icon.
 /// Point is a `chip`: pressed, it is filled in the action's colours, as the mockup's pressed chip, its words too.
-final class ToolButton: NSButton {
+class ToolButton: NSButton {
+    /// Greys on the glass are the ink at less strength: they stay readable over any page.
+    static var ink: NSColor { Look.Token.ink.color.withAlphaComponent(0.76) }
     var chip = false
     var pressed = false {
         didSet {
-            contentTintColor = (pressed ? chip ? Look.Token.actfg : .ink : .ink2).color
+            contentTintColor = pressed ? (chip ? Look.Token.actfg : .ink).color : ToolButton.ink
             if chip {
                 attributedTitle = NSAttributedString(string: title, attributes: [.font: font ?? Look.font(.ui, size: 12, weight: .medium),
                                                                                  .foregroundColor: contentTintColor ?? Look.Token.ink2.color])
