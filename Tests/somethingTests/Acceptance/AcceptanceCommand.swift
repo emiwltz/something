@@ -45,7 +45,7 @@ struct AcceptanceCommand {
             #expect(card.frame.size == NSSize(width: 640, height: 500) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
-            let read = try Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "…", with: "...")
+            let read = try await Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "…", with: "...")
             for line in shows { #expect(read.contains(line), "g1\(suffix) shows “\(line)”; read: \(read)") }
             // The footer's "↵ Open" and Daily brief's badge: the badge is the second.
             #expect(read.components(separatedBy: "Open").count - 1 == 2, "g1\(suffix) shows Daily brief's Open badge; read: \(read)")
@@ -97,7 +97,7 @@ struct AcceptanceCommand {
             #expect(card.frame.size == NSSize(width: 640, height: 196) && abs(card.frame.minX - 280) < 1 && abs(card.frame.maxY - 676) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
-            let read = try Picture.text(rep).joined(separator: "\n")
+            let read = try await Picture.text(rep).joined(separator: "\n")
             for line in shows { #expect(read.contains(line), "g2\(suffix) shows “\(line)”; read: \(read)") }
             #expect(!read.contains("RECENT") && !read.contains("Open"), "g2\(suffix) shows the ask row alone; read: \(read)")
             try await Picture.window(shell, library: library, web: brief.web, "g2" + suffix, root: stage.home.root)
@@ -306,7 +306,7 @@ struct AcceptanceCommand {
                 frame.layoutSubtreeIfNeeded()
                 rep = try Picture.bitmap(frame.bounds.size)
                 frame.cacheDisplay(in: frame.bounds, to: rep)
-                read = plain(try Picture.text(rep).joined(separator: "\n"))
+                read = plain(try await Picture.text(rep).joined(separator: "\n"))
                 if shows.allSatisfy({ read.contains(plain($0)) }) { break }
                 await wait(1)
             }
@@ -384,7 +384,7 @@ struct AcceptanceCommand {
             #expect(card.frame.size.width == 680 && abs(card.frame.midX - 600) < 1 && abs(card.frame.midY - 380) < 1)
             let rep = try Picture.bitmap(card.bounds.size)
             card.cacheDisplay(in: card.bounds, to: rep)
-            let read = try Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "’", with: "'")
+            let read = try await Picture.text(rep).joined(separator: "\n").replacingOccurrences(of: "’", with: "'")
             for line in shows { #expect(read.contains(line), "g10\(suffix) shows “\(line)”; read: \(read)") }
             try await Picture.window(shell, library: library, web: brief.web, "g10" + suffix, root: stage.home.root)
         }

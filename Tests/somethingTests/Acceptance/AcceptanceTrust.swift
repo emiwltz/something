@@ -174,7 +174,7 @@ struct AcceptanceTrust {
         #expect(info.level == .run && info.rules.isEmpty && info.folder?.hasSuffix("/code/shop") == true)
         let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
         #expect(read.contains("Always for this space") && read.contains("With your agents: Run"), "\(read)")
-        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         for words in ["Starts them in", "~/code/shop", "Always for this space", "None yet. Tick", "when an agent asks"] {
             #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
         }
@@ -252,7 +252,7 @@ struct AcceptanceTrust {
         for words in ["Always for this space", "Claude Code: git log --oneline -20, in ~/code/atelier", "Revoke git log --oneline -20"] {
             #expect(read.contains(words), "VoiceOver hears \(words): \(read)")
         }
-        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         for words in ["Always for this space", "git log --oneline -20", "in ~/code/atelier", "Revoke"] {
             #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
         }

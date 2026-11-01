@@ -9,7 +9,6 @@ import SwiftUI
 @testable import SomethingAgents
 import SomethingCore
 import Testing
-import CoreML
 import Vision
 import WebKit
 @testable import something
@@ -189,8 +188,8 @@ final class Stage {
 
     /// The lines of text the drawn sidebar shows, read off its picture by Vision: what the screen shows, not what the
     /// model computes. SwiftUI builds no accessibility tree while no assistive app asks, so the picture is read.
-    func drawn(_ shell: Shell) throws -> [String] {
-        try Picture.text(sidebar(shell))
+    func drawn(_ shell: Shell) async throws -> [String] {
+        try await Picture.text(sidebar(shell))
     }
 
     /// The sidebar of `shell` drawn offscreen at its size, as `drawn` reads it; `shown`, at the size of its part below
@@ -478,35 +477,52 @@ enum Picture {
         zip(layers, before).forEach { $0.backgroundColor = $1 }
     }
 
-    /// The lines of text `rep` shows, read by Vision. On a loaded Mac the neural engine may refuse to make the reading's
-    /// compute operation (an e5rtError, while other processes use it): the same reading then runs on the processor,
-    /// which always can, only slower.
-    static func text(_ rep: NSBitmapImageRep) throws -> [String] {
-        try lines(rep).map(\.words)
+    /// The lines of text `rep` shows, read by Vision.
+    static func text(_ rep: NSBitmapImageRep) async throws -> [String] {
+        try await lines(rep).map(\.words)
     }
 
-    /// As `text`, each line with where it is drawn, in the picture's pixels, measured from its top left.
-    static func lines(_ rep: NSBitmapImageRep) throws -> [(words: String, box: CGRect)] {
+    /// Vision's one queue: a reading can take a minute on a loaded Mac, so it leaves the main actor, where it would
+    /// stop every other test and the deadlines they count; one at a time, as the memory it takes is large.
+    private static let reader = DispatchQueue(label: "acceptance.vision")
+
+    /// As `text`, each line with where it is drawn, in the picture's pixels, measured from its top left. The classic
+    /// reading needs its model made ready by the system's neural services: on a loaded Mac that may take a minute, then
+    /// fail with an e5rtError (13), for any process and on any device, and the process remembers the failure, so asking
+    /// again changes nothing. That says nothing of the picture: the document reading, as accurate, reads it instead;
+    /// when it is refused too, the scenario ends cancelled, said in the log: no verdict, neither a pass nor a false red.
+    /// The fast reading never refuses, but misreads what the scenarios assert word for word. Any other error is thrown.
+    static func lines(_ rep: NSBitmapImageRep) async throws -> [(words: String, box: CGRect)] {
         let image = try #require(rep.cgImage)
         let (wide, high) = (CGFloat(image.width), CGFloat(image.height))
-        func read(processor: Bool) throws -> [(words: String, box: CGRect)] {
-            let read = VNRecognizeTextRequest()
-            read.recognitionLevel = .accurate
-            read.usesLanguageCorrection = false
-            if processor {
-                for (stage, devices) in try read.supportedComputeStageDevices {
-                    read.setComputeDevice(devices.first { if case .cpu = $0 { true } else { false } }, for: stage)
+        func place(_ box: CGRect) -> CGRect {
+            CGRect(x: box.minX * wide, y: (1 - box.maxY) * high, width: box.width * wide, height: box.height * high)
+        }
+        do {
+            return try await withCheckedThrowingContinuation { done in
+                reader.async {
+                    done.resume(with: Result {
+                        let read = VNRecognizeTextRequest()
+                        read.recognitionLevel = .accurate
+                        read.usesLanguageCorrection = false
+                        try VNImageRequestHandler(cgImage: image).perform([read])
+                        return (read.results ?? []).compactMap { line in line.topCandidates(1).first.map { ($0.string, place(line.boundingBox)) } }
+                    })
                 }
             }
-            try VNImageRequestHandler(cgImage: image).perform([read])
-            return (read.results ?? []).compactMap { line in
-                line.topCandidates(1).first.map { word in
-                    let box = line.boundingBox
-                    return (word.string, CGRect(x: box.minX * wide, y: (1 - box.maxY) * high, width: box.width * wide, height: box.height * high))
-                }
+        } catch where "\(error)".contains("e5rtError") {
+            guard #available(macOS 26, *) else { throw error }
+            do {
+                let page = try await RecognizeDocumentsRequest().perform(on: image).first
+                return (page?.document.text.lines ?? []).map { ($0.transcript, place($0.boundingRegion.boundingBox.cgRect)) }
+            } catch where "\(error)".contains("e5rtError") {
+                #if compiler(>=6.3)
+                try Test.cancel("No verdict: this Mac's neural services refuse Vision's text reading (e5rtError 13)")
+                #else
+                throw error
+                #endif
             }
         }
-        do { return try read(processor: false) } catch { return try read(processor: true) }
     }
 
     static func bitmap(_ size: NSSize) throws -> NSBitmapImageRep {

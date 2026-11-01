@@ -187,11 +187,11 @@ struct GalleryTests {
                                                    options: ["src/cart", "src/checkout"], multiple: true)])
         try draw(try #require(panel(question).contentView), "question-panel" + suffix, fixture)
         // At Larger, the panel's fixed frame holds type 24 % larger: every word read at Default is read there too.
-        let standard = try words(try #require(panel(permission).contentView))
+        let standard = try await words(try #require(panel(permission).contentView))
         Look.scale.size = .larger
         defer { Look.scale.size = .standard }
         let larger = try #require(panel(permission).contentView)
-        let cut = standard.subtracting(try words(larger))
+        let cut = standard.subtracting(try await words(larger))
         #expect(cut.isEmpty, "the panel at Larger loses \(cut)")
         try draw(larger, "permission-panel-larger" + suffix, fixture)
         Look.scale.size = .standard
@@ -394,16 +394,16 @@ struct GalleryTests {
         await wait(1)
         try draw(center, name, fixture)
         defer { withExtendedLifetime((offscreen, glass)) {} }
-        return try words(center)
+        return try await words(center)
     }
 
     /// The words Vision reads in `view` drawn, without their punctuation: a word cut by a fixed frame is missing.
-    func words(_ view: NSView) throws -> Set<String> {
+    func words(_ view: NSView) async throws -> Set<String> {
         if view.frame.isEmpty { view.frame.size = view.fittingSize }
         view.layoutSubtreeIfNeeded()
         let rep = try Picture.bitmap(view.bounds.size)
         view.cacheDisplay(in: view.bounds, to: rep)
-        let read = try Picture.text(rep).joined(separator: " ").lowercased()
+        let read = try await Picture.text(rep).joined(separator: " ").lowercased()
         return Set(read.components(separatedBy: CharacterSet.letters.inverted).filter { $0.count > 2 })
     }
 

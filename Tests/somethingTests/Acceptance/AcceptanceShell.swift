@@ -84,7 +84,7 @@ struct AcceptanceShell {
         let labels = library.order().map { Library.label($0, Stage.moment[$0.id] ?? .unknown) }
         #expect(labels == ["Daily brief, Working", "My agents, Waiting for You", "Project watch, Idle", "Logbook, Asleep", "Oracle, Idle",
                            "Pebble, Idle", "Stack, Asleep"], "\(labels)")
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         // Vision may read the f of "brief" as a t beside "pages of your own": the title's start is enough.
         for line in ["Needs You", "Work", "Notes", "Breaks", "Daily bri", "Pebble", "Stack", "Templates"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
@@ -108,7 +108,7 @@ struct AcceptanceShell {
         // Folded, Work hides its rows, My agents too, which Needs You still lists.
         library.preferences.fold("Work", true)
         #expect(library.label(group: "Work", count: 3) == "Work, 3 spaces, folded")
-        let folded = try stage.drawn(shell)
+        let folded = try await stage.drawn(shell)
         #expect(folded.filter { $0.contains("My agents") }.count == 1 && !folded.contains { $0.contains("Project watch") }, "\(folded)")
         library.preferences.fold("Work", false)
     }
@@ -142,12 +142,12 @@ struct AcceptanceShell {
             try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
             try (menu.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("b3-menu.txt"), atomically: true, encoding: .utf8)
         }
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         for line in ["Work", "Notes", "Breaks", "Daily bri", "Project watch", "Oracle"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
-        let seen = try Picture.lines(try stage.sidebar(shell, shown: true))
+        let seen = try await Picture.lines(try stage.sidebar(shell, shown: true))
         let breaks = try #require(seen.first { $0.words == "Breaks" }?.box, "\(seen.map(\.words))")
         #expect(seen.contains { $0.words == "2" && abs($0.box.midY - breaks.midY) < 4 }, "a folded group keeps its count at rest")
         library.sidebar.hovered = .space("project")
@@ -256,7 +256,7 @@ struct AcceptanceShell {
         #expect(library.entries.isEmpty && library.selection == .newSpace)
         #expect(library.stops() == [.newSpace], "no header shows while no space is listed")
         #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         #expect(drawn.contains { $0.contains("Your spaces appear here") }, "the drawn sidebar says where the spaces will be: \(drawn)")
         #expect(!drawn.contains { ["Work", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
         try await stage.appearances { suffix in
@@ -305,7 +305,7 @@ struct AcceptanceShell {
         #expect(rows == ["My agents, Waiting for You", "Daily brief, Working", "My agents, Waiting for You", "Project watch, Idle",
                          "Logbook, Asleep", "Oracle, Idle", "Pebble, Idle", "Stack, Asleep"], "\(read)")
         #expect(read.contains("Needs You, 1 space") && read.contains("Work, 3 spaces, open") && read.contains("Settings"), "\(read)")
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         for line in ["Needs You", "Work", "Daily brief", "Project watch", "Templates", "something"] {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
@@ -472,7 +472,7 @@ struct AcceptanceShell {
         let model = shell.assistant
         #expect(String(BlankView.where(model.folder).characters) == "Describe it in your words. Your assistant builds it in \u{2009}~/something/spaces\u{2009}.")
         #expect(model.level == .none && model.chosenLevel == nil)
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         #expect(drawn.contains { $0.contains("pages of your own") }, "the drawn sidebar explains the word: \(drawn)")
         let side = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
         let said = await AcceptanceBuild.read(side.view) { $0.contains("Spaces, pages of your own") }
@@ -596,14 +596,14 @@ struct AcceptanceShell {
     }
 
     /// The lines of text Info shows, read off its picture by Vision, as tall as the window's center.
-    static func drawnInfo(_ shell: Shell) throws -> [String] {
+    static func drawnInfo(_ shell: Shell) async throws -> [String] {
         let controller = try #require(shell.inspector.viewController as? InfoController)
         let offscreen = Offscreen(NSHostingView(rootView: controller.rootView))
         offscreen.window.setContentSize(NSSize(width: 320, height: shell.window.contentLayoutRect.height))
         offscreen.view.layoutSubtreeIfNeeded()
         let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
         offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
-        return try Picture.text(rep)
+        return try await Picture.text(rep)
     }
 
     /// One panel, three parts (X5.1): Space (its file, Show in Finder, its weight and last change, Export, History),
@@ -643,7 +643,7 @@ struct AcceptanceShell {
             #expect(!read.contains { $0.hasPrefix(gone) }, "Info no longer holds \(gone)")
         }
         // Its sentences, as the panel draws them (offscreen, SwiftUI gives a text no element of its own).
-        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         // Vision reads a middle dot as a bullet: the words around it are enough.
         for words in ["A countdown to Saturday", "~/something/spaces/week-end.html", "one file", "changed today, 18:04", "It sees your agents",
                       "Amp Waiting for You", "Claude Code Working", "Codex Idle", "~/code/shop", "Whatever an agent asks still waits for you", "Claude Code",
@@ -752,7 +752,7 @@ struct AcceptanceShell {
         let panel = shell.inspector.viewController.view
         let none = await AcceptanceBuild.read(panel) { !$0.contains("The agents it shows now") && $0.contains("Watch") }
         #expect(!none.contains("The agents it shows now"), "\(none)")
-        #expect(try AcceptanceShell.drawnInfo(shell).joined(separator: " ").contains("It shows no agent."))
+        #expect(try await AcceptanceShell.drawnInfo(shell).joined(separator: " ").contains("It shows no agent."))
 
         let shop = stage.home.places.home.appendingPathComponent("code/shop")
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
@@ -769,7 +769,7 @@ struct AcceptanceShell {
         #expect(await lists("No agent shown.", not: true), "it sees them again")
         let running = await AcceptanceBuild.read(panel) { $0.contains("The agents it shows now") }
         #expect(running.contains("The agents it shows now"), "\(running)")
-        let drawn = try AcceptanceShell.drawnInfo(shell).joined(separator: " ")
+        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
         for words in ["It sees them, writes to them", "Starts them in", "~/code/shop"] {
             #expect(drawn.contains(words), "the panel shows \(words): \(drawn)")
         }
@@ -905,7 +905,7 @@ struct AcceptanceShell {
         // A row's menu open keeps it, past the leaving delay, until the menu closes.
         try #require(over()).mouseExited(with: try Self.pointer(false, laid))
         NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: NSMenu())
-        try await Task.sleep(for: .milliseconds(600))
+        await wait(0.6)
         #expect(over() != nil, "a menu is open")
         NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: NSMenu())
         #expect(shell.escape(try Self.escape(shell)) && over() == nil, "Esc")
@@ -1094,7 +1094,7 @@ struct AcceptanceShell {
         #expect(said.contains("Spaces, pages of your own") && said.contains("New Space") && said.contains("Templates"), "\(said)")
         #expect(library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
         #expect(!said.contains { $0.hasPrefix("Agents,") }, "no group is called Agents: \(said)")
-        let drawn = try stage.drawn(shell)
+        let drawn = try await stage.drawn(shell)
         #expect(drawn.contains { $0.contains("pages of your own") }, "the drawn sidebar explains the word: \(drawn)")
         let bar = MenuBar(builders: nil)
         bar.open = { ("brief", "Daily brief") }
@@ -1173,7 +1173,7 @@ struct AcceptanceShell {
         #expect(said.contains("Settings") && said.contains("Templates"), "\(said)")
         #expect(Keys.tooltip("settings", "Settings") == "Settings (⌘,)")
         // The word alone, no sign: the sign with eyes is the assistant's.
-        let whole = try stage.sidebar(shell), lines = try Picture.lines(whole), drawn = lines.map(\.words)
+        let whole = try stage.sidebar(shell), lines = try await Picture.lines(whole), drawn = lines.map(\.words)
         #expect(drawn.last == "something", "the foot says something alone: \(drawn)")
         #expect(drawn.contains("Templates") && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
         // The list is longer than its column, and it ends on a whole row that fades out above Templates. Drawn as the
@@ -1183,7 +1183,7 @@ struct AcceptanceShell {
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
         let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
         #expect((list.documentView?.frame.height ?? 0) > list.contentView.bounds.height, "the list overflows its column")
-        let shown = try stage.sidebar(shell, shown: true), seen = try Picture.lines(shown)
+        let shown = try stage.sidebar(shell, shown: true), seen = try await Picture.lines(shown)
         let templates = try #require(seen.first { $0.words.hasSuffix("Templates") }?.box, "\(seen.map(\.words))")
         let last = try #require(seen.filter { $0.box.maxY < templates.minY }.max { $0.box.minY < $1.box.minY })
         let full = try #require(lines.first { $0.words == last.words }?.box, "\(last.words) is a row of the whole list")
@@ -1198,18 +1198,18 @@ struct AcceptanceShell {
         // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24, and the nav
         // rows, 30 × 1.24: New Space's and Go to…'s tops, as drawn, one row apart (the same letters' caps, so the same
         // height above each row's middle).
-        func row() throws -> CGFloat {
-            let rep = try stage.sidebar(shell), lines = try Picture.lines(rep), scale = CGFloat(rep.pixelsHigh) / rep.size.height
+        func row() async throws -> CGFloat {
+            let rep = try stage.sidebar(shell), lines = try await Picture.lines(rep), scale = CGFloat(rep.pixelsHigh) / rep.size.height
             let new = try #require(lines.first { $0.words.contains("New Space") }), go = try #require(lines.first { $0.words.contains("Go to") })
             return (go.box.minY - new.box.minY) / scale
         }
         #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
-        let normal = try row()
+        let normal = try await row()
         #expect(abs(normal - 30) < 1, "\(normal)")
         try await Stage.alone {
             Look.scale.size = .larger
             #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
-            let larger = try row()
+            let larger = try await row()
             #expect(abs(larger - 30 * 1.24) < 1, "\(larger)")
         }
     }
