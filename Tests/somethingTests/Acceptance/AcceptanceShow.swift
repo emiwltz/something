@@ -237,7 +237,7 @@ struct AcceptanceShow {
         for _ in 0..<250 where !reflowed {
             let inner = try? await brief.web.callAsyncJavaScript("return window.innerWidth", in: frame, contentWorld: .defaultClient) as? Double
             reflowed = inner.map { abs($0 - brief.web.frame.width) < 1 && brief.web.frame.width < width } ?? false
-            if !reflowed { try? await Task.sleep(nanoseconds: 20_000_000) }
+            if !reflowed { await wait(0.02) }
         }
         #expect(reflowed, "the page did not reflow beside Info")
         await Picture.settle(brief)
@@ -610,7 +610,8 @@ struct AcceptanceShow {
         let changes = Changes(places: stage.home.places, undo: shell.undo)
         changes.follow(shell.assistant, in: shell, library: library)
         changes.clock = { Stage.local.addingTimeInterval(60) }
-        changes.toast = { words, action, quiet, _ in _ = shell.toast(words, action: action, quiet: quiet, seconds: 60) }
+        // It stays until Show What Changed: a turn to read it or draw it can take minutes on a loaded Mac.
+        changes.toast = { words, action, quiet, _ in _ = shell.toast(words, action: action, quiet: quiet, seconds: 3600) }
         let all = try await Self.keepVersions(of: brief, info)
         // As the app wires each open space's watch (App.open).
         brief.changed = { changes.seen("brief") }
@@ -621,14 +622,14 @@ struct AcceptanceShow {
         try edited.write(to: page, atomically: true, encoding: .utf8)
 
         // The watch, which looks each second, keeps it and reloads the page.
-        #expect(await wait(10, until: { info.history.versions.count == 13 && brief.loads > loads }), "the watch did not keep the edit")
+        #expect(await wait(until: { info.history.versions.count == 13 && brief.loads > loads }), "the watch did not keep the edit")
         #expect(await wait(until: { !brief.web.isLoading && brief.frame != nil }))
         let newest = try #require(info.history.versions.first)
         #expect(newest.kind == .outside && newest.who == nil && newest.summary == "brief.html · one line added" && newest.first == nil)
         #expect(try String(contentsOf: page, encoding: .utf8) == edited, "nothing is undone by itself")
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
         #expect(toast.words == "Daily brief changed outside something" && announced.last == toast.words)
-        let toastRead = await AcceptanceBuild.read(toast)
+        let toastRead = await AcceptanceBuild.read(toast) { $0.contains("Show What Changed") }
         #expect(toastRead.contains("Show What Changed") && !toastRead.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(toastRead)")
         await Picture.settle(brief)
         await Stage.alone {

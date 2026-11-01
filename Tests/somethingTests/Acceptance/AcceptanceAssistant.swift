@@ -701,7 +701,7 @@ struct AcceptanceAssistant {
 
     /// Lets the card take the size of what it now shows before a picture: SwiftUI asks for it a turn later.
     static func fit(_ shell: Shell) async throws {
-        try await Task.sleep(for: .milliseconds(400))
+        await wait(0.4)
         shell.glass.place()
         shell.window.layoutIfNeeded()
     }

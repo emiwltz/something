@@ -240,6 +240,7 @@ final class Stage {
         shell.show(view)
         shell.assistant.place = AssistantModel.place(view)
         await Picture.settle(view)
+        await Stage.aside()
         return view
     }
 
@@ -279,6 +280,25 @@ final class Stage {
 
     /// Whether the running task holds the drawing turn.
     @TaskLocal private static var holding = false
+
+    /// Sets the running test aside while another holds the interface at another size; how long, in seconds. The size
+    /// is the whole process's and every window follows it, so a test that ran on meanwhile would measure Larger's
+    /// sizes or draw Larger's type in Default's column. All tests share the main actor and meet at each await, and
+    /// `wait` comes here, so none runs on; once the size is back, the windows are given the turns they take to follow.
+    @discardableResult
+    static func aside() async -> TimeInterval {
+        guard !holding, Look.scale.size != .standard else { return 0 }
+        let start = Date()
+        while Look.scale.size != .standard {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+            guard Look.scale.size == .standard else { continue }
+            for _ in 0..<8 {
+                await withCheckedContinuation { turn in DispatchQueue.main.async { turn.resume() } }
+                NSApp.windows.forEach { $0.layoutIfNeeded() }
+            }
+        }
+        return Date().timeIntervalSince(start)
+    }
 }
 
 /// How a picture is drawn: the window's frame by cacheDisplay, the page by WebKit's snapshot (it draws in another

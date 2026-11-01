@@ -18,7 +18,7 @@ struct AccessibilityTests {
 
     /// The whole tree under `root`, read as an assistive app asks (AXEnhancedUserInterface on, so SwiftUI makes its
     /// elements), once `says` holds of its words, else once it holds still: two reads 0.1 s apart with the same words
-    /// (none only after a second: SwiftUI may not have made them yet); or after a minute with `says`, ten seconds
+    /// (none only after a second: SwiftUI may not have made them yet); or after `patience` with `says`, ten seconds
     /// without. Holding still is not enough on a loaded Mac, where SwiftUI may pause between parts of a view.
     /// The mode is the whole process's, and slows every SwiftUI view made meanwhile: the walk takes Stage's turn, as
     /// what is timed does.
@@ -27,7 +27,7 @@ struct AccessibilityTests {
             let enhanced = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
             NSApp.accessibilitySetValue(true, forAttribute: enhanced)
             defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
-            let end = Date() + (says == nil ? 10 : 60)
+            let end = Date() + (says == nil ? 10 : patience)
             var last: [String]?
             while true {
                 await wait(0.1)

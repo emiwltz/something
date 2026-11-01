@@ -49,7 +49,14 @@ struct Home {
         return engine
     }
 
-    func remove() { try? FileManager.default.removeItem(at: root) }
+    /// Removes the home, again while something it ended still writes there, which makes the removal fail on a busy Mac.
+    func remove() {
+        for _ in 0..<100 {
+            try? FileManager.default.removeItem(at: root)
+            guard FileManager.default.fileExists(atPath: root.path) else { return }
+            usleep(20_000)
+        }
+    }
 }
 
 /// A page with a declaration block and a body.
@@ -199,14 +206,34 @@ func offMain<T>(_ work: @escaping () throws -> T) async throws -> T {
     }
 }
 
+/// How long something that must come is waited for: only a guard against a hang, so a minute on a quiet Mac, and up to
+/// five as the processors are asked for several times over: WebKit's first process has taken more than a minute to
+/// start with a hundred others ready to run on ten cores.
+var patience: Double {
+    var load = [0.0]
+    getloadavg(&load, 1)
+    return 60 * min(5, max(1, load[0] / Double(ProcessInfo.processInfo.activeProcessorCount)))
+}
+
 /// Waits, without blocking the main actor, until `condition` holds or `seconds` pass; whether it holds. The tests
-/// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on. The default is
-/// only a guard against a hang: WebKit's first processes start slowly on a busy Mac.
+/// await: turning the run loop by hand inside a test would hold the main queue that WebKit answers on. A test set
+/// aside while another changes the interface size (`Stage.aside`) neither asks nor counts that time.
 @MainActor @discardableResult
-func wait(_ seconds: Double = 60, until condition: () -> Bool = { false }) async -> Bool {
-    let end = Date().addingTimeInterval(seconds)
-    while !condition(), Date() < end { try? await Task.sleep(nanoseconds: 20_000_000) }
-    return condition()
+func wait(_ seconds: Double = patience, until condition: () -> Bool = { false }) async -> Bool {
+    var end = Date().addingTimeInterval(seconds)
+    while true {
+        end += await Stage.aside()
+        if condition() { return true }
+        if Date() >= end { return false }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+    }
+}
+
+/// Returns once what was given to the main queue up to `seconds` from now has run: its timers fire in order of their
+/// deadlines, and a late one is late for both, where `wait(seconds)` reads a clock that does not wait for it.
+@MainActor
+func mainQueue(after seconds: Double) async {
+    await withCheckedContinuation { done in DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { done.resume() } }
 }
 
 /// Whether a field inside `view()`, shown, has had the keys of `window` (its editor the first responder) since this was
@@ -233,6 +260,7 @@ final class FieldKeys {
 @MainActor
 func run(_ window: SpaceView, _ code: String) async throws -> Any? {
     let value = try await window.web.callAsyncJavaScript(code, in: window.frame, contentWorld: .page)
+    await Stage.aside()
     return value is NSNull ? nil : value
 }
 
@@ -242,7 +270,8 @@ func ready(_ window: SpaceView) async throws {
     guard await wait(until: { !window.web.isLoading && window.frame != nil }) else {
         throw SpaceError("The space did not load: \(window.web.isLoading) \(String(describing: window.web.url)).")
     }
-    for _ in 0..<600 where try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
+    let end = Date() + patience
+    while Date() < end, try await run(window, "return window.done === true") as? Bool != true { await wait(0.05) }
 }
 
 /// An invented permission request of Claude's, as its plan-B hook reads it on its input.

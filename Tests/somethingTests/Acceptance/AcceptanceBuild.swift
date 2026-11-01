@@ -102,7 +102,8 @@ struct AcceptanceBuild {
         model.open = true
         shell.show(room)
         #expect(model.cardShown)
-        await wait(1.8)
+        // Past the 1.3 s the hint waits, by that clock: closing the card before it looked would race the sticker's return.
+        await mainQueue(after: 1.8)
         #expect(HintBubble.shown(in: shell.layer) == nil && shell.made == "waiting-room" && library.preferences.hinted.isEmpty)
         model.open = false
         #expect(await wait(until: { HintBubble.shown(in: shell.layer)?.kind == .ask }), "by the sticker once the card is reduced")
@@ -762,7 +763,7 @@ struct AcceptanceBuild {
 
 
     /// The labels VoiceOver reads in `view`, depth first, once `says` holds of them (else once two reads 0.1 s apart
-    /// agree, for a view with no live clock), or after a minute. A SwiftUI view offscreen gives only the description of
+    /// agree, for a view with no live clock), or after `patience`. A SwiftUI view offscreen gives only the description of
     /// its outer elements (AXAttributedDescription): what is inside a card or a bar is out of reach here. With `whole`,
     /// also what its static texts and menu buttons say (their value and title), as VoiceOver reads them.
     static func read(_ view: NSView, whole: Bool = false, until says: (([String]) -> Bool)? = nil) async -> [String] {
@@ -774,9 +775,9 @@ struct AcceptanceBuild {
             NSApp.accessibilitySetValue(true, forAttribute: enhanced)
             defer { NSApp.accessibilitySetValue(false, forAttribute: enhanced) }
             // The first question makes them, and SwiftUI updates them, on the run loop, as late as a busy runner lets
-            // it: read again until they hold still and say what is awaited. The minute only stops a hang.
+            // it: read again until they hold still and say what is awaited. The limit only stops a hang.
             _ = view.accessibilityChildren()
-            let end = Date() + 60
+            let end = Date() + patience
             var last: [String]?
             while true {
                 await wait(0.1)
