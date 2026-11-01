@@ -22,12 +22,12 @@ something
 `something` opens with one welcome screen, alone on your desktop: a space (a page of your own), your agents, and your
 assistant, beside one picture of how they meet. The coding agent found on your Mac is already chosen to build your
 spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
-the window. Notifications (Settings › Agents) stay off until you turn them on. Help › Welcome shows the welcome
+the window. Notifications (Settings › Permissions) stay off until you turn them on. Help › Welcome shows the welcome
 again, and Help › How something Works the picture, one part at a time if you like.
 
 The welcome ends on the blank page (New Space, ⌘N): **What do you want to make?** Describe a space (a suggestion fills
 the field with an example). Under the field one sentence says what it may do with your agents, "This space may [watch]
-[all your agents].", pre-set from your words, else from Settings › Agents, "not see" at first; each bracketed word opens
+[all your agents].", pre-set from your words, else from Settings › Permissions, "not see" at first; each bracketed word opens
 a menu that explains its choices. Build, or ⌘↵ at any moment, starts it: your assistant builds it, decides what you left
 open and says so, and the space opens by itself when ready, with nothing more to allow. The space appears in the sidebar
 at once, with a ring that fills as it builds; you may leave New Space meanwhile, or build several at a time: nothing
@@ -145,21 +145,21 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   see** them; **watch** them, it sees their state, folder and last messages; **talk to** them, it also writes to them (a
   message, stop one, change its model); **start** one, it also starts one in a folder you pick. Its second word says
   which agents: all agents on this Mac, or only those in a folder. In the contract these are the levels None, Watch,
-  Talk and Run. On New Space you choose it before Build, pre-set from your words (else from Settings › Agents, "not see"
+  Talk and Run. On New Space you choose it before Build, pre-set from your words (else from Settings › Permissions, "not see"
   at first): that choice is your consent, and the space opens without asking. A space made elsewhere (a template, an
   import, an agent outside something) asks in a sheet at its first opening, with the same sentence, pre-set to what it
   declares; Don't Allow is kept, and it does not ask again by itself. What a space declares above its level stays
   refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel beside the
   space, says it all in three parts: the space (its file, its size, Export, History), your agents (its level, one
   control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent and model,
-  its last reply, Open Conversation). Settings › Agents lists every space with its level, and changes one the same way;
+  its last reply, Open Conversation). Settings › Permissions lists every space with its level, and changes one the same way;
   Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
   the panel's); its permissions still open the panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
-  the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Agents), and
+  the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Permissions), and
   never the command.
 - **Always for this space.** When an agent a space started asks to run one plain command (no `&&`, `|`, `;`,
   redirection, `$` or second line), the panel offers a checkbox beside Allow Once: "Always for this space". Ticked, Allow

@@ -153,7 +153,7 @@ import SomethingCore
     var failure: String? { session.failure }
     var asleep: Bool { session.asleep }
     private(set) var askEverything: Bool
-    /// Settings › Permissions's Full Access, kept here so that the first lines follow it while they show.
+    /// Full Access in Settings › Permissions, kept here so that the first lines follow it while they show.
     var fullAccess: Bool
     /// What the state says of each builder: installed or not; absent while not known.
     private(set) var installed: [String: Bool] = [:]

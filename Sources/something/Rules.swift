@@ -153,7 +153,7 @@ extension App {
         }
     }
 
-    /// Settings › Permissions's Full Access: turning it on asks once, in a sheet over Settings; turning it off does not.
+    /// Full Access in Settings › Permissions: turning it on asks once, in a sheet over Settings; turning it off does not.
     /// The toolbar's mark follows.
     func fullAccess(_ on: Bool, over window: NSWindow?) {
         guard on else { return setFullAccess(false) }

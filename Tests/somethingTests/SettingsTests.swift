@@ -155,7 +155,7 @@ import Testing
         model.preferences.listed["claude"] = listed
         let row = try #require(model.sections(.agents)[0].rows[0].beside.first)
         guard case .choice(let options, let get, let set) = row.control else { Issue.record("not a choice"); return }
-        #expect(row.title == "Model and effort" && row.note == "“Default” follows the agent’s own setting.")
+        #expect(row.title == "Model and effort")
         #expect(RowControl.sections(options).map(\.heading) == ["Model", "Effort"])
         #expect(RowControl.sections(options).map { $0.items.map(\.label) } == [["Default model", "Opus 5.5", "Sonnet 5.5"], ["Default effort", "Medium", "High"]])
         #expect(get() == ["", "effort:"])
@@ -294,7 +294,7 @@ import Testing
         defer { settings.window.close(); window.close() }
         settings.place(over: window)
         let spot = settings.window.frame
-        #expect(abs(spot.midX - window.frame.midX) <= 1 && abs(spot.midY - window.frame.midY) <= 1 || window.screen == nil)
+        #expect(spot.origin == SettingsWindow.spot(spot.size, over: window.frame, in: (window.screen ?? NSScreen.main)?.visibleFrame))
         window.setFrame(window.frame.offsetBy(dx: 10, dy: 0), display: false)
         settings.place()
         #expect(settings.window.frame.minX != spot.minX, "not moved by the person, it follows")
@@ -302,6 +302,13 @@ import Testing
         settings.window.setFrameOrigin(moved)
         settings.place(over: window)
         #expect(settings.window.frame.origin == moved, "moved by the person, it stays")
+        let top = settings.window.frame.maxY
+        try await Stage.alone {
+            defer { Look.scale.size = .standard }
+            Look.scale.size = .large
+            settings.place()
+            #expect(settings.window.frame.maxY == top && settings.window.frame.minX == moved.x, "the interface size keeps its top edge")
+        }
     }
 
     /// "When something opens": New Space opens nothing, a space opens that space while it is there, else the last one.

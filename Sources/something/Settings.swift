@@ -257,17 +257,16 @@ struct SettingsSection: Identifiable {
         ]
     }
 
-    /// What the assistant `kind` asks, as the README says it; for an agent that acts without asking, the warning
-    /// Allow shows (Ask.warning).
+    /// What the assistant `kind` asks, in a row's few words: the mockup's for an agent that acts without asking.
     private func agentNote(_ kind: String) -> String {
-        guard let agent = Registry.app.agent(kind), agent.neverAsks || agent.asksNothingByDefault, let warning = Ask.warning(for: "launch:" + kind) else {
-            return "Each builds and changes its space, in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
-        }
-        return warning + "."
+        let agent = Registry.app.agent(kind)
+        if agent?.neverAsks == true { return "Never asks, by design." }
+        if agent?.asksNothingByDefault == true { return "Never asks by default." }
+        return "Each builds and changes its space, in ~/something/spaces. Everything else it does asks you, as your agent’s own settings decide."
     }
 
     /// The model, and the effort when the agent takes one, in one menu: the names the agent last listed for `kind`,
-    /// "Default" its own setting; before any list, what is known. Shown beside the program: its note is not drawn.
+    /// "Default" its own setting; before any list, what is known. Shown beside the program.
     private func model(of kind: String) -> SettingsRow {
         let preferences = preferences, limits = Registry.app.limits[kind] ?? [], listed = preferences.listed[kind]
         guard !limits.contains("model"), let models = listed?.model else {
@@ -280,7 +279,7 @@ struct SettingsSection: Identifiable {
         }
         let all = (effort ? [SettingsRow.Option(value: "", label: "Model", heading: true)] : []) + options("", "Default model", models)
             + (effort ? [SettingsRow.Option(value: "", label: "Effort", heading: true)] + options("effort:", "Default effort", listed?.effort ?? []) : [])
-        return SettingsRow(title: effort ? "Model and effort" : "Model", note: "“Default” follows the agent’s own setting.", control: .choice(all, get: {
+        return SettingsRow(title: effort ? "Model and effort" : "Model", note: "", control: .choice(all, get: {
             [preferences.model ?? "", "effort:" + (preferences.effort ?? "")]
         }, set: { value in
             let effort = value.hasPrefix("effort:"), chosen = effort ? String(value.dropFirst(7)) : value
@@ -394,6 +393,11 @@ struct SettingsSection: Identifiable {
         return window
     }
 
+    /// Look for Agents Again: Settings › Agents opens, then looks, so that the look shows.
+    static func lookAgain(over main: NSWindow? = nil, make: () -> SettingsWindow) {
+        open(.agents, over: main, make: make).model.again()
+    }
+
     /// Applies the person's appearance and motion to the whole app, at the start.
     static func apply(_ appearance: Preferences.Appearance, _ motion: Look.Motion) {
         NSApp.appearance = Look.appearance(appearance)
@@ -422,30 +426,31 @@ extension App {
     @MainActor @objc func smallerInterface(_ sender: Any?) { shell.resize(by: -1) }
     @MainActor @objc func defaultInterfaceSize(_ sender: Any?) { shell.resize(by: nil) }
 
-    @MainActor @discardableResult func settings(_ tab: SettingsTab?) -> SettingsWindow {
-        Settings.open(tab, over: shell.window) {
-            let model = SettingsModel(preferences: library.preferences, places: places)
-            model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
-            model.floating = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed ?? false }
-            model.float = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed = $0 }
-            model.shortcuts = { [weak self] in self?.showKeys(nil) }
-            model.levels = { [weak self] in self?.library.levels() ?? [] }
-            model.setLevel = { [weak self] name, level in
-                if let space = self?.library.entry(name)?.space { self?.info.choose(level, in: space) }
-            }
-            model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
-            model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
-            model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
-            model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
-            let grants = Grants(places.grants)
-            model.rules = { [weak model] in Rules.all(grants, spaces: model?.spaces() ?? []) }
-            model.revoke = { [weak self] kept in self?.info.revoke(kept.rule, in: kept.space) }
-            model.fullAccess = { [weak self] in self?.fullAccess($0, over: Settings.shown?.window) }
-            model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
-            model.look()
-            model.find()
-            return SettingsWindow(model)
+    @MainActor func settings(_ tab: SettingsTab?) { Settings.open(tab, over: shell.window, make: makeSettings) }
+
+    /// The Settings window, wired to the app.
+    @MainActor private func makeSettings() -> SettingsWindow {
+        let model = SettingsModel(preferences: library.preferences, places: places)
+        model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
+        model.floating = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed ?? false }
+        model.float = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed = $0 }
+        model.shortcuts = { [weak self] in self?.showKeys(nil) }
+        model.levels = { [weak self] in self?.library.levels() ?? [] }
+        model.setLevel = { [weak self] name, level in
+            if let space = self?.library.entry(name)?.space { self?.info.choose(level, in: space) }
         }
+        model.offered = { [weak self] in self.map { app in app.assistant.builders.filter { app.assistant.installed[$0] == true } } ?? [] }
+        model.chose = { [weak self] in _ = self?.assistant.buildNew(with: $0) }
+        model.asking = { [weak self] on in if let assistant = self?.assistant, assistant.askEverything != on { assistant.toggleAsking() } }
+        model.lookAgain = { [weak self] in self?.assistant.lookAgain() }
+        let grants = Grants(places.grants)
+        model.rules = { [weak model] in Rules.all(grants, spaces: model?.spaces() ?? []) }
+        model.revoke = { [weak self] kept in self?.info.revoke(kept.rule, in: kept.space) }
+        model.fullAccess = { [weak self] in self?.fullAccess($0, over: Settings.shown?.window) }
+        model.versions = { [weak self] in self?.engine.state.kinds.compactMapValues(\.seen) ?? [:] }
+        model.look()
+        model.find()
+        return SettingsWindow(model)
     }
 
     /// Assistant › Ask Before Every Change…: Settings › Permissions, where the switch and what it means are.
@@ -454,10 +459,8 @@ extension App {
     /// Defaults for New Spaces…, under the agent chip and Build With ▸: Settings › Agents.
     @MainActor @objc func showNewSpaceDefaults(_ sender: Any?) { settings(.agents) }
 
-    /// Look for Agents Again, from the assistant's menu or ⌘P: Settings › Agents opens, then looks, so that the look shows.
-    @MainActor @objc func lookForAgentsAgain(_ sender: Any?) {
-        settings(.agents).model.again()
-    }
+    /// Look for Agents Again, from the assistant's menu or ⌘P.
+    @MainActor @objc func lookForAgentsAgain(_ sender: Any?) { Settings.lookAgain(over: shell.window, make: makeSettings) }
 }
 
 extension Library {
@@ -534,7 +537,7 @@ enum Found {
         let stays = NSPoint(x: window.frame.minX, y: window.frame.maxY - size.height)
         let origin = moved ? stays : self.main.map { Self.spot(size, over: $0.frame, in: ($0.screen ?? NSScreen.main)?.visibleFrame) } ?? stays
         window.setFrame(NSRect(origin: origin, size: size), display: true)
-        if !moved { placed = origin }
+        if !moved { placed = window.frame.origin }
     }
 
     /// Where a window of `size` stands centred on `main`, kept inside `screen` when one is known.
@@ -653,7 +656,7 @@ struct SettingsPage: View {
                 }
             }
         }
-        .padding(.top, 14).padding(.horizontal, 24).padding(.bottom, 30)
+        .padding(.top, 14).padding(.horizontal, 24 * Look.scale.size.factor).padding(.bottom, 30)
     }
 }
 
@@ -897,7 +900,7 @@ private struct Thumb: View {
     }
 }
 
-/// On this Mac: the agents found, two to a line, each its tile, its name and its version, read only; then how many
+/// Programs on this Mac: the agents found, two to a line, each its tile, its name and its version, read only; then how many
 /// were found and when, and Look Again.
 private struct AgentsFound: View {
     let model: SettingsModel

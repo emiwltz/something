@@ -133,7 +133,7 @@ struct AcceptanceCommand {
         let shows = ["Assistants", "Program", "Model and effort", "Claude Code", "Opus 5.5", "High", "Conversations and rest",
                      "Resume each space's conversation", "picks up here", "Put idle assistants to sleep after", "10 minutes", "assistants awake",
                      "Programs on this Mac"]
-        try await settings(.agents, "x7-2", shows: shows, hears: ["Model and effort: Opus 5.5 · High", "Put idle assistants to sleep after: 10 minutes", "Look Again"]) { settings, stage in
+        try await settings(.agents, "x7-2", shows: shows, hears: ["Program · Model and effort: Claude Code", "Model and effort: Opus 5.5 · High", "Put idle assistants to sleep after: 10 minutes", "Look Again"]) { settings, stage in
             let sections = settings.model.sections(.agents)
             #expect(sections.map(\.title) == ["Assistants", "Conversations and rest", "Programs on this Mac"] && sections[2].block == .found)
             #expect(sections.flatMap(\.rows).map(\.title) == ["Program · Model and effort", "Resume each space’s conversation", "Put idle assistants to sleep after", "Keep at most"])
@@ -146,7 +146,9 @@ struct AcceptanceCommand {
             #expect(agent.mark == "Claude Code" && agent.note == "Each builds and changes its space, in ~/something/spaces. "
                         + "Everything else it does asks you, as your agent’s own settings decide.")
             settings.model.preferences.change { $0.assistant = "pi" }
-            #expect(settings.model.sections(.agents)[0].rows[0].note == "pi runs commands and edits files without asking you first.")
+            #expect(settings.model.sections(.agents)[0].rows[0].note == "Never asks, by design.")
+            settings.model.preferences.change { $0.assistant = "omp" }
+            #expect(settings.model.sections(.agents)[0].rows[0].note == "Never asks by default.")
             #expect(!settings.model.sections(.permissions)[0].rows.map(\.title).contains("Your assistant asks before every change"))
             settings.model.preferences.change { $0.assistant = chosen }
             guard case .choice(let options, let get, _) = agent.beside[0].control else { Issue.record("not a choice"); return }
@@ -234,8 +236,10 @@ struct AcceptanceCommand {
             settings.model.lookAgain = { looks += 1 }
             defer { Settings.shown = nil }
             Settings.shown = settings
+            settings.window.alphaValue = 0
+            defer { settings.window.alphaValue = 1 }
             settings.select(.general)
-            Settings.open(.agents) { settings }.model.again()
+            Settings.lookAgain { settings }
             #expect(settings.tab == .agents && looks == 1 && settings.model.found == nil, "Look for Agents Again shows itself: Agents, then the look")
             _ = await wait(until: { settings.model.found != nil })
         }
@@ -257,7 +261,7 @@ struct AcceptanceCommand {
     /// R6.2: a long tab scrolls under a fade that leaves at its end; a new tab starts at its top. The fade is off the
     /// column, inside the page.
     @Test("r6-2: A long tab scrolls under a fade") func r6_2() async throws {
-        try await settings(.permissions, "r6-2", shows: ["Permissions", "Full Access"]) { settings, _ in
+        try await settings(.permissions, "r6-2", shows: ["Permissions", "Folders", "code/atelier"]) { settings, _ in
             let model = settings.model, content = try #require(settings.window.contentView)
             func settled(_ holds: () -> Bool) async -> Bool {
                 await wait(until: {
@@ -267,15 +271,24 @@ struct AcceptanceCommand {
                 })
             }
             #expect(await settled { model.more }, "a long page says there is more")
-            let scroll = try #require(Self.scroller(in: content)), page = try #require(scroll.documentView)
+            @MainActor func toTheEnd() throws -> NSScrollView {
+                let scroll = try #require(Self.scroller(in: content)), page = try #require(scroll.documentView)
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: page.frame.height - scroll.contentView.bounds.height))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                return scroll
+            }
+            let scroll = try toTheEnd()
             #expect(scroll.convert(scroll.bounds, to: content).minX >= SettingsFrame.column, "the page and its fade are off the column")
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: page.frame.height - scroll.contentView.bounds.height))
-            scroll.reflectScrolledClipView(scroll.contentView)
             #expect(await settled { !model.more }, "the fade leaves at the end")
             settings.select(.agents)
             #expect(await settled { model.more }, "the next long page says so")
             let new = try #require(Self.scroller(in: content))
             #expect(new !== scroll && new.contentView.bounds.minY == 0, "a new tab starts at its top")
+            // The picture is the frozen one: the end of Permissions, no fade.
+            settings.select(.permissions)
+            #expect(await settled { model.more })
+            _ = try toTheEnd()
+            #expect(await settled { !model.more })
         }
     }
 

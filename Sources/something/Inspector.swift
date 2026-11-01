@@ -107,7 +107,7 @@ import SwiftUI
         if known != folders { folders = known }
     }
 
-    /// The person chose `level` here, or for `other` in Settings › Agents: it becomes the space's grant at once, as on
+    /// The person chose `level` here, or for `other` in Settings › Permissions: it becomes the space's grant at once, as on
     /// New Space, and the space, when open, hears it. Run takes `chosen`, else the folder in force, else the one its page
     /// declares when it is on this Mac, else asks for one; a folder not chosen changes nothing. Says a failure.
     func choose(_ level: Grant.Level, folder chosen: String? = nil, in other: Space? = nil) {

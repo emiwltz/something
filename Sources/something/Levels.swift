@@ -48,7 +48,7 @@ extension Grant.Level {
             : says("agent|agents|who is (waiting|working)|who['’]s (waiting|working)|waiting for me|who needs me") ? .watch : nil
     }
 
-    /// A hint the person sees and changes in one click; words it does not know suggest `otherwise` (Settings › Agents).
+    /// A hint the person sees and changes in one click; words it does not know suggest `otherwise` (Settings › Permissions).
     static func guess(_ words: String, otherwise: Grant.Level = .none) -> Grant.Level { guessed(words) ?? otherwise }
 }
 
