@@ -132,7 +132,7 @@ final class CodexDriver: Driver {
 
     /// A command or a file change is accepted once or declined (the turn goes on, and the model is told). A request
     /// for more permissions takes the permissions granted, not a decision: all of those asked, or none. A question
-    /// takes each answer by its question's id; refused, it gets none.
+    /// takes each answer by its question's id; refused, each is told to decide alone.
     func answer(_ request: String, _ answer: Answer) throws -> Bool {
         guard let ask = asks[request] else { return false }
         let questions = ask.prompt.questions
@@ -146,7 +146,7 @@ final class CodexDriver: Driver {
             reply = ["answers": answers]
             allowed = true
         case ("item/tool/requestUserInput", _):
-            reply = ["answers": [String: Any]()]
+            reply = ["answers": Dictionary(ask.questionIDs.map { ($0, ["answers": [Question.skipped]]) }, uniquingKeysWith: { first, _ in first })]
             allowed = false
         case ("item/permissions/requestApproval", _) where answer.allows:
             reply = ["permissions": ask.params["permissions"] ?? [:], "scope": "turn"]

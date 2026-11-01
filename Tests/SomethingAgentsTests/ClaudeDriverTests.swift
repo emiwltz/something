@@ -57,6 +57,17 @@ import SomethingCore
         #expect(try replay.agent.driver.answer(request.id, .once) == false, "an answered request is closed")
     }
 
+    /// Skip tells the agent to decide, and to say so.
+    @Test func aSkippedQuestionTellsTheAgentToDecide() throws {
+        let replay = Replay()
+        replay.feed(["type": "control_request", "request_id": "q-1", "request": ["subtype": "can_use_tool", "tool_name": "AskUserQuestion", "tool_use_id": "toolu_example",
+                     "input": ["questions": [["question": "Which colour?", "options": [["label": "Blue"]]]]]]])
+        #expect(try replay.agent.driver.answer(try #require(replay.fold.requests.first).id, .deny))
+        let reply = try #require(replay.lines().last?["response"] as? [String: Any])
+        let denied = reply["response"] as? [String: Any]
+        #expect(denied?["behavior"] as? String == "deny" && denied?["message"] as? String == "The person skipped this question: decide yourself, and say what you chose.")
+    }
+
     @Test func steerAndQueueOrder() throws {
         let replay = try Replay.play("steer-queue")
         #expect(replay.fold.turns.map(\.state) == ["done", "done", "done"])
@@ -493,10 +504,11 @@ import SomethingCore
     @Test func itsCommandsAreThoseInitializeLists() throws {
         let replay = Replay()
         replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": [
-            "commands": [["name": "review", "description": "Invented: reviews the changes", "argumentHint": ""], ["name": "goal", "description": "", "argumentHint": "Describe the goal"],
-                         ["name": "plain"], ["name": "optional", "description": "Invented", "argumentHint": "[what]"], ["description": "Invented: no name"], "garbage"]]]] as [String: Any])
-        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: reviews the changes"), Option(value: "goal", label: "Describe the goal", about: "Describe the goal"),
-                                               Option(value: "plain", label: "plain"), Option(value: "optional", label: "Invented")])
+            "commands": [["name": "review", "description": "Invented: reviews the changes", "argumentHint": ""], ["name": "goal", "description": "", "argumentHint": "<goal>"],
+                         ["name": "plain"], ["name": "optional", "description": "Invented", "argumentHint": "[what]"], ["name": "free", "description": "Invented", "argumentHint": "add | list"],
+                         ["name": "soft", "description": "Invented", "argumentHint": "<optional notes>"], ["description": "Invented: no name"], "garbage"]]]] as [String: Any])
+        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: reviews the changes"), Option(value: "goal", label: "<goal>", about: "<goal>"),
+                                               Option(value: "plain", label: "plain"), Option(value: "optional", label: "Invented"), Option(value: "free", label: "Invented"), Option(value: "soft", label: "Invented")])
         let other = Replay()
         other.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["commands": "garbage"]]] as [String: Any])
         #expect(other.fold.agent.commands == nil)

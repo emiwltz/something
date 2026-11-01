@@ -61,6 +61,9 @@ public struct Prompt: Equatable, Sendable {
 
 public struct Question: Equatable, Sendable {
     public var header: String?, text: String, options: [String], multiple: Bool
+    /// What an agent is told when the person skips a question.
+    package static let skipped = "The person skipped this question: decide yourself, and say what you chose."
+
     /// What each option means, as the agent wrote it, beside `options`; empty when it wrote none.
     public var details: [String?]
     public init(header: String?, text: String, options: [String], multiple: Bool, details: [String?] = []) {

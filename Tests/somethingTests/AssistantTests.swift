@@ -950,6 +950,8 @@ import WebKit
             #expect(model.kind == kind && model.command == kind)
             let fresh = kind == "claude" ? [] : ["\(Registry.app.name(of: kind)) cannot resume a conversation, so each one starts fresh."]
             #expect(model.firstLines == [line] + fresh, "\(kind)")
+            let listless = ["codex", "pi", "amp"].contains(kind)
+            #expect(model.gaveNoList == listless && model.noCommands.hasSuffix("gives no list of its commands. Type one and send it: it goes as you wrote it.") == listless, "\(kind)")
             if kind == "claude" || kind == "opencode" {
                 // Full Access on, something allows what the assistant asks: the line says so rather than "asks you".
                 model.fullAccess = true

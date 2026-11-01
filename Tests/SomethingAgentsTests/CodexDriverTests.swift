@@ -456,7 +456,7 @@ import SomethingCore
         #expect(replay.fold.agent.waiting == "answer")
         #expect(throws: CodedError.self) { try replay.agent.answer("codex-1:1", .choice([])) }
         #expect(try replay.agent.answer("codex-1:1", .deny))
-        #expect(((replay.lines().last?["result"] as? [String: Any])?["answers"] as? [String: Any])?.isEmpty == true)
+        #expect((replay.lines().last?["result"] as? [String: Any])?["answers"] as? [String: [String: [String]]] == ["colour": ["answers": [Question.skipped]]])
         replay.feed(["id": 2, "method": "mcpServer/elicitation/request", "params": ["threadId": Self.thread]])
         let error = try #require(replay.lines().last?["error"] as? [String: Any])
         #expect(error["code"] as? Int == -32601)

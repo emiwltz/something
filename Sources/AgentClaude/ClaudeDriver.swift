@@ -210,7 +210,7 @@ final class ClaudeDriver: Driver {
         }
         let allow = allowed != nil
         let reply: [String: Any] = allowed.map { ["behavior": "allow", "updatedInput": $0] }
-            ?? ["behavior": "deny", "message": question ? "The person skipped this question: decide yourself, and say what you chose." : "The person refused this in something."]
+            ?? ["behavior": "deny", "message": question ? Question.skipped : "The person refused this in something."]
         if ask.hook {
             switch spool?.answer(ask.claudeID, reply) ?? .gone {
             case .written: asks[request] = nil

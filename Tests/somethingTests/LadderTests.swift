@@ -407,16 +407,22 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
-    /// Skip denies the question, and the build goes on: the agent decides. Before its answers have armed, it waits too.
+    /// Skip denies the question, and the build goes on: the agent decides, and the steps keep it. Not before its answers
+    /// have armed.
     @Test func skipLetsTheAgentDecide() async throws {
         let (home, model) = try await assistant("ask")
         defer { home.remove() }
         model.send("Who is waiting for me")
         #expect(await wait(until: { model.asked != nil }))
+        let shown = Date()
+        model.clock = { shown }
         model.skip()
-        #expect(await wait(until: { model.arming(now: model.clock()) >= 1 }))
-        if model.asked != nil { model.skip() }
-        #expect(await wait(until: { model.asked == nil && model.engine.state.requests.isEmpty }))
+        if model.arming(now: shown) < 1 { #expect(model.asked != nil, "not yet armed") }
+        model.clock = { shown + 5 }
+        model.skip()
+        #expect(model.asked == nil)
+        #expect(await wait(until: { model.engine.state.requests.isEmpty }))
+        #expect(model.ladder?.steps[0].lines.last?.text == "Skipped · it decides and says so")
         var stopped = false
         model.engine.stopAll(within: 6) { stopped = true }
         _ = await wait(until: { stopped })

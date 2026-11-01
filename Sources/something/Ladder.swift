@@ -166,13 +166,13 @@ struct Ladder: Equatable {
         return ran ? "Stopped · what it changed stays in your spaces folder" : "Stopped before writing · nothing was saved · your words are back"
     }
 
-    /// The choice a key answers: a digit from 1 to 9 typed with no modifier while no text is edited, which keeps a
-    /// digit typed in Go to or a sheet's field from answering the agent; nil otherwise.
     /// Whether a key skips the build's question: Tab, when no text is edited.
     static func skips(_ keyCode: UInt16, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Bool {
         keyCode == 48 && !editing && modifiers.isDisjoint(with: [.command, .control, .option, .shift])
     }
 
+    /// The choice a key answers: a digit from 1 to 9 typed with no modifier while no text is edited, which keeps a
+    /// digit typed in Go to or a sheet's field from answering the agent; nil otherwise.
     static func choice(_ characters: String?, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Int? {
         guard !editing, modifiers.isDisjoint(with: [.command, .control, .option]), let digit = characters.flatMap(Int.init),
               (1...9).contains(digit) else { return nil }

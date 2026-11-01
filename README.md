@@ -158,7 +158,11 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   the agent its assistant works with. Settings › Permissions lists every space with its level, and changes one the same
   way; Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
-  sees that the agent waits, and can never answer. A question comes the same way: each answer says what it means, you may type your own, and Skip lets the agent decide and say so. What your assistant asks before or while it builds is answered on New Space while it shows that build (elsewhere, in that window); its permissions still open the window, across the main window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
+  sees that the agent waits, and can never answer. A question comes the same way: each answer says what it means, you
+  may type your own, and Skip lets the agent decide and say so. What your assistant asks before or while it builds is
+  answered on New Space while it shows that build (elsewhere, in that window); its permissions still open the window,
+  across the main window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs
+  You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
   the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Permissions), and
   never the command.

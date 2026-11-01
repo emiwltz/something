@@ -325,7 +325,7 @@ struct AssistantCard: View {
         HStack(spacing: 8) {
             Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
             Text(command.label).font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
-            Text(command.about ?? "").font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
+            Text(command.about == command.label ? "" : command.about ?? "").font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 9).frame(height: 26)
@@ -680,7 +680,7 @@ extension AssistantModel {
     /// The list's line when no command shows: the program gives none, it is being read, or none starts so.
     var noCommands: String {
         if gaveNoList { return "\(name) gives no list of its commands. Type one and send it: it goes as you wrote it." }
-        if commands.isEmpty { return kind.map { reading.contains($0) } == true ? "Reading its commands…" : "\(name) lists no commands here." }
+        if commands.isEmpty { return kind.map { readingModels.contains($0) } == true ? "Reading its commands…" : agent == nil ? "Its commands show once it has started." : "\(name) lists no commands here." }
         return "No command of \(name) starts with that."
     }
 

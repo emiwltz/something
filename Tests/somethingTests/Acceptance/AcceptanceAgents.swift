@@ -431,6 +431,7 @@ struct AcceptanceAgents {
         model.ownAnswer = "Biggest first"
         model.answerOwn()
         #expect(await wait(until: { model.asked == nil && model.ownAnswer.isEmpty && model.ladder?.steps[1].mark == .now }))
+        #expect(model.ladder?.steps[0].lines.last?.text == "“Biggest first”. Writing it now.", "the answer stays in the steps")
         await AcceptanceBuild.finish(model)
     }
 

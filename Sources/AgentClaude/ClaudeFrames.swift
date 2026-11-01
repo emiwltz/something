@@ -56,14 +56,14 @@ extension ClaudeDriver {
         return Option(value: value, label: named ? first : label, about: about.isEmpty ? nil : about)
     }
 
-    /// The commands initialize lists, by name, with what each does (else its argument's hint, else its name). A hint
-    /// in brackets is an optional argument: only another says what the command waits for.
+    /// The commands initialize lists, by name, with what each does (else its argument's hint, else its name). Only a
+    /// hint in angle brackets says the command needs its text: any other shape may be optional, and stays sendable.
     static func commands(_ list: [Any]) -> [Option] {
         list.compactMap { $0 as? [String: Any] }.compactMap { entry in
             let hint = (entry["argumentHint"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             return (entry["name"] as? String).map {
                 Option(value: $0, label: [entry["description"] as? String, hint].compactMap { $0 }.first { !$0.isEmpty } ?? $0,
-                       about: hint?.hasPrefix("[") == false ? hint : nil)
+                       about: hint.flatMap { $0.hasPrefix("<") && !$0.lowercased().contains("optional") ? $0 : nil })
             }
         }
     }

@@ -856,8 +856,10 @@ struct AcceptanceBuild {
             #expect(words.contains("One card per agent, Big and easy to scan., 1") && words.contains("A single list, oldest first, Compact., 2")
                     && words.contains("Write, waits for you, Waits for your answer"), "\(words)")
         }
+        #expect(await wait { model.arming(now: model.clock()) >= 1 })
         model.answer(1)
         #expect(await wait(until: { model.asked == nil && model.ladder?.steps[1].mark == .now }))
+        #expect(model.ladder?.steps[0].lines.last?.text == "A single list, oldest first. Writing it now.")
         await Self.finish(model)
     }
 

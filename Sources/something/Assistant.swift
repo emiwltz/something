@@ -184,6 +184,8 @@ import SomethingCore
     struct Build: Identifiable {
         let id: Int, spaces: Set<String>, session: Session, turn: String?, at: Date, sentence: String
         var seen: [String: Date] = [:]
+        /// What became of its question, as its steps keep it; nil until it is answered.
+        var said: String?
         /// What the space may do with the person's agents, chosen before Build: written as its grant once it appears.
         var choice = LevelChoice()
     }
@@ -228,8 +230,7 @@ import SomethingCore
     /// The spaces made while the person waited for one: their level sheet says the agent made them.
     private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
-    /// The programs being read for what they offer, without a message, and those read since the app started.
-    private(set) var reading: Set<String> = []
+    /// The programs read for what they offer since the app started.
     @ObservationIgnored private var lookedAt: Set<String> = []
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
@@ -388,8 +389,10 @@ import SomethingCore
     func ladder(_ build: Build) -> Ladder {
         let turn = build.session.turn.flatMap { $0.id == build.turn ? nil : $0 }
         let asked = build.id == watched ? asked : nil
-        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] },
-                           spaces: build.spaces, size: bytes)
+        var ladder = Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] },
+                                 spaces: build.spaces, size: bytes)
+        if let said = build.said { ladder.steps[0].lines.append(Ladder.Line(text: said)) }
+        return ladder
     }
 
     /// The bytes of `file`, a path or a name in the spaces folder; nil when it is not there.
@@ -424,23 +427,25 @@ import SomethingCore
     /// Answers the build's question with its choice `index`.
     func answer(_ index: Int) {
         guard let asked, asked.question.options.indices.contains(index) else { return }
-        reply(.choice([[asked.question.options[index]]]))
+        let label = asked.question.options[index]
+        reply(.choice([[label]]), said: label + ". Writing it now.")
     }
 
     /// Answers the build's question with the person's own words, `ownAnswer`.
     func answerOwn() {
         let words = ownAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !words.isEmpty { reply(.choice([[words]])) }
+        if !words.isEmpty { reply(.choice([[words]]), said: "“\(words)”. Writing it now.") }
     }
 
     /// Skip: the agent decides, and says so.
-    func skip() { reply(.deny) }
+    func skip() { reply(.deny, said: "Skipped · it decides and says so") }
 
-    /// Answers the build's question, once its choices have armed; before, nothing happens. An answer that did not
-    /// reach the agent is its failure.
-    private func reply(_ answer: Answer) {
+    /// Answers the build's question, once its choices have armed; before, nothing happens. Its steps keep `said`. An
+    /// answer that did not reach the agent is its failure.
+    private func reply(_ answer: Answer, said: String) {
         guard let asked, arming(now: clock()) >= 1 else { return }
         (self.asked, ownAnswer) = (nil, "")
+        if let index = builds.firstIndex(where: { $0.id == watched }) { builds[index].said = said }
         do { try engine.answer(asked.request, answer) } catch { before?.session.failure = error.sentence }
     }
 
