@@ -84,8 +84,6 @@ final class Stage {
         "claude-shop": "iTerm", "claude-pacman": "something", "claude-portfolio": "VS Code", "pi-notes": "something", "antigravity-site": "Antigravity",
         "claude-login": "something", "amp-tests": "something", "codex-eval": "something", "claude-slides": "something", "claude-post": nil, "omp-old": nil,
     ]
-    /// The space that started an agent of `world`, where one did.
-    static let startedBy = ["codex-eval": "project"]
     /// The agents each space lists (the mockup's YA_THESE), by space name; a space not named here sees them all.
     static let these = ["agents": ["claude-shop", "claude-pacman", "claude-portfolio", "pi-notes", "antigravity-site"],
                         "brief": ["claude-shop", "claude-pacman", "claude-portfolio"], "project": ["codex-eval", "claude-slides"],

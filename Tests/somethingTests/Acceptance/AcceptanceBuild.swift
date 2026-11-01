@@ -800,7 +800,7 @@ struct AcceptanceBuild {
     @Test("r2-1: Up to three questions, one agent turn", .disabled("not built yet: C7")) func r2_1() async throws {}
     @Test("r2-2: Build Now skips them", .disabled("not built yet: C7")) func r2_2() async throws {}
     @Test("r3-1: The summary, one row for the sentence", .disabled("not built yet: C7")) func r3_1() async throws {}
-    @Test("r3-2: Two columns, the page as it is written", .disabled("not built yet: C2")) func r3_2() async throws {}
+    @Test("r3-2: Two columns, the page as it is written", .disabled("not built yet: C3")) func r3_2() async throws {}
     @Test("r3-3: A build finished elsewhere", .disabled("not built yet: C4")) func r3_3() async throws {}
     @Test("r3-4: A failed build keeps its place, Try Again", .disabled("not built yet: C4")) func r3_4() async throws {}
     @Test("f2-1: Problems said in clear", .disabled("not built yet: C5")) func f2_1() async throws {}

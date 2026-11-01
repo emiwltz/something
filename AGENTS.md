@@ -169,7 +169,7 @@ header of each `*Trial.swift` says what it proves.
   own sessions, read-only, and print counts only. `SOMETHING_TRIAL_REST=1` measures the app's timers at rest.
 - **The screens are the approved mockup's.** `Tests/somethingTests/Acceptance/` holds one scenario per screen id
   (its catalog in `AcceptanceTests.swift`, the invented home in `Stage.swift`): each asserts structure, words, counts
-  and VoiceOver labels at every run. Every step of the frozen mockup (v6.2) has its scenario, or is retired with its
+  and VoiceOver labels at every run. Every step of the final mockup (round 4) has its scenario, or is retired with its
   reason in the catalog (`retiredSteps`). `SOMETHING_GALLERY=<folder> swift test --filter Acceptance` also draws each
   screen, day and night (`<id>.png`, `<id>-dark.png`), to set beside the mockup's; `SOMETHING_ACCEPT_STRICT=1` fails
   while a screen that counts is still unbuilt or waits for its shots. The same `SOMETHING_GALLERY` with `--filter GalleryTests` draws what

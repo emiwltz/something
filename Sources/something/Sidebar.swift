@@ -425,14 +425,14 @@ struct SidebarView: View {
     /// What VoiceOver says of a building row.
     static func building(_ title: String, _ progress: Double) -> String { "\(title), building, \(Int((progress * 100).rounded())) %" }
 
-    func step(_ by: Int) -> KeyPress.Result {
+    private func step(_ by: Int) -> KeyPress.Result {
         guard let stop = library.step(by) else { return .ignored }
         if stop == .newSpace { assistant.focus() }
         return .handled
     }
 
     /// Notes which row the pointer is over, and forgets it when the pointer leaves that row.
-    func hover(_ key: SidebarState.Hover, _ inside: Bool) {
+    private func hover(_ key: SidebarState.Hover, _ inside: Bool) {
         if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil }
     }
 

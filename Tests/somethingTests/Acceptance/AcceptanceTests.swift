@@ -45,13 +45,14 @@ enum Catalog {
         ("x4-1", "S11"), ("x4-2", "S11"), ("x4-3", "S11"),
         ("x1-1", "S14b"), ("x1-3", "S14b"), ("2-9", "S14b"), ("2-10", "S14b"),
     ]
-    /// Round 4's final steps, each with the slice that builds it (plan: promises.md C3, whose owners are the slices').
+    /// Round 4's final steps, each with the slice that finishes it: a step several slices build in turn keeps its trait
+    /// until the last, the earlier ones asserting in a test without an id, so that the gate never counts half a screen.
     static let final: [(id: String, slice: String)] = [
         ("f1-1", "S7"), ("f1-2", "S8"), ("f1-3", "S8"), ("f1-4", "S8"), ("f1-5", "S7"), ("f1-6", "S7"), ("f1-7", "S9"),
         ("f1-8", "S9"), ("f1-9", "S8"), ("f1-10", "S9"), ("r1-1", "C1"), ("r1-2", "C1"), ("r2-1", "C7"), ("r2-2", "C7"),
-        ("r3-1", "C7"), ("r3-2", "C2"), ("r3-3", "C4"), ("r3-4", "C4"), ("f2-1", "C5"), ("f2-1b", "C5"), ("r4-1", "S3"),
-        ("r4-2", "S2"), ("r4-3", "S2"), ("r4-4", "S2"), ("f3-1", "S3"), ("r5-1", "S4"), ("r5-2", "S4"), ("r5-3", "C1"),
-        ("f3-2", "C8"), ("f3-3", "S10"), ("a1-1", "AG2"), ("a1-2", "AG2"), ("a1-3", "AG3"), ("a1-4", "AG4"), ("a1-5", "AG5"),
+        ("r3-1", "C7"), ("r3-2", "C3"), ("r3-3", "C4"), ("r3-4", "C4"), ("f2-1", "C5"), ("f2-1b", "C5"), ("r4-1", "S3"),
+        ("r4-2", "S2"), ("r4-3", "S2"), ("r4-4", "S2"), ("f3-1", "AG8"), ("r5-1", "S4"), ("r5-2", "S4"), ("r5-3", "C1"),
+        ("f3-2", "C8"), ("f3-3", "S10"), ("a1-1", "AG2"), ("a1-2", "AG7"), ("a1-3", "AG3"), ("a1-4", "AG4"), ("a1-5", "AG5"),
         ("a1-6", "AG5"), ("a1-7", "AG3"), ("a1-8", "AG6"), ("a1-9", "AG2"), ("a1-10", "AG7"), ("a1-11", "AG7"), ("a1-12", "AG8"),
         ("r9-1", "AG4"), ("r9-2", "AG4"), ("r9-3", "AG4"), ("r8-1", "AG4"), ("r8-2", "AG4"), ("f4-1", "AG5"), ("f4-1b", "AG5"),
         ("f4-2", "AG5"), ("f4-4", "AG6"), ("r6-1", "S5"), ("r6-2", "S5"), ("r7-1", "S6"), ("r7-2", "S6"), ("r7-3", "S6"),
@@ -72,7 +73,7 @@ enum Catalog {
         "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",
         "xe-1": "the whole mockup to try, every axis at Emi's letter: no screen of its own, each part asserted by its step",
         "x9-2": "the rail's tiles: subject 4 C removes the rail, r4-2 proves the list",
-        "j4-1": "finding a space in the rail: subject 4 C removes it, r4-2 and ⌘P find a space",
+        "j4-1": "finding a space in the rail: subject 4 C removes it; r4-2 finds a space, f3-1 says what waits",
         "f0-1": "a note for Emi, his choices: no screen",
         "f0-2": "a note for Emi, the vision: no screen",
         "f0-3": "a note for Emi, his recovered requests: no screen",
@@ -145,11 +146,14 @@ enum Catalog {
             guard id.contains("-") || id.range(of: #"^[a-g][0-9]+$"#, options: .regularExpression) != nil else { return nil }
             let traits = part(match, 1) ?? ""
             let slice = unbuilt.firstMatch(in: traits, range: NSRange(traits.startIndex..., in: traits)).flatMap { Range($0.range(at: 1), in: traits) }
-            // The body runs from the function's name to the next test, or to the end of the file.
-            let end = index + 1 < matches.count ? matches[index + 1].range.location : (text as NSString).length
-            let body = (text as NSString).substring(with: NSRange(location: match.range.upperBound, length: end - match.range.upperBound))
+            // The body runs from the function's name to the next test or the first brace at column 0, the suite's end:
+            // what follows the suite in its file (an extension's #require) is no part of the last scenario.
+            let next = index + 1 < matches.count ? matches[index + 1].range.location : (text as NSString).length
+            var body = (text as NSString).substring(with: NSRange(location: match.range.upperBound, length: next - match.range.upperBound))
+            if let close = body.range(of: "\n}") { body = String(body[..<close.upperBound]) }
             let asserts = body.contains("#expect") || body.contains("#require")
-            return Scenario(id: id, unbuilt: slice.map { String(traits[$0]) }, asserts: asserts)
+            // Any other .disabled is unbuilt too: a scenario switched off proves nothing.
+            return Scenario(id: id, unbuilt: slice.map { String(traits[$0]) } ?? (traits.contains(".disabled(") ? "?" : nil), asserts: asserts)
         }
     }
 
@@ -222,6 +226,11 @@ enum Catalog {
                 == [Catalog.Scenario(id: "2-6", unbuilt: nil, asserts: true)])
         #expect(try Catalog.scenarios(in: "@Test(\"f2-1b: one problem left\") func f2_1b() async throws {\n#expect(true)\n}")
                 == [Catalog.Scenario(id: "f2-1b", unbuilt: nil, asserts: true)])
+        // A stub that ends its suite does not take in what follows the suite, nor does a foreign .disabled build it.
+        let last = "@Test(\"f2-1b: one\") func f2_1b() async throws {}\n}\n\nextension Picture {\n    func f() { #expect(true) }\n}"
+        #expect(try Catalog.scenarios(in: last) == [Catalog.Scenario(id: "f2-1b", unbuilt: nil, asserts: false)])
+        #expect(try Catalog.scenarios(in: "@Test(\"x9-1: a\", .disabled(\"flaky\")) func x9_1() async throws {\n#expect(true)\n}")
+                == [Catalog.Scenario(id: "x9-1", unbuilt: "?", asserts: true)])
         let scenarios = try Catalog.scenarios(in: text)
         #expect(scenarios == [Catalog.Scenario(id: "b1", unbuilt: nil, asserts: false), Catalog.Scenario(id: "b3", unbuilt: nil, asserts: true),
                               Catalog.Scenario(id: "b4", unbuilt: "W4", asserts: false)])

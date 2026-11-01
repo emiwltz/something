@@ -112,7 +112,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior.insert(.fullScreenPrimary)
-        let toolbar = NSToolbar(identifier: "main")
+        // Its own identifier: toolbars of one identifier share their state, and the tests hold many windows in one process.
+        let toolbar = NSToolbar(identifier: "main-" + UUID().uuidString)
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar

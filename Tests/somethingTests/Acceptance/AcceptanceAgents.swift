@@ -10,7 +10,7 @@ import Testing
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-agents-"))
 struct AcceptanceAgents {
     @Test("a1-1: The panel at rest: Agents, Info, History; the button's count", .disabled("not built yet: AG2")) func a1_1() async throws {}
-    @Test("a1-2: Reading a row, each kind of agent", .disabled("not built yet: AG2")) func a1_2() async throws {}
+    @Test("a1-2: Reading a row, each kind of agent", .disabled("not built yet: AG7")) func a1_2() async throws {}
     @Test("a1-3: At not see: the fallback, Show to This Space, Undo", .disabled("not built yet: AG3")) func a1_3() async throws {}
     @Test("a1-4: Modify: three chips, the ladder, the confirmation", .disabled("not built yet: AG4")) func a1_4() async throws {}
     @Test("a1-5: Talk: one card, its title's menu", .disabled("not built yet: AG5")) func a1_5() async throws {}

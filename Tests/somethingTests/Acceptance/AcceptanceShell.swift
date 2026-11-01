@@ -266,8 +266,8 @@ struct AcceptanceShell {
 
     /// The mockup's window for round 2 (X9.1): its groups (Work, Notes, Breaks), Daily brief open, My
     /// agents waiting for the answer to its request, the rows' states at the mockup's moment.
-    static func calm(_ stage: Stage, _ size: NSSize = Stage.Size.main) async throws -> (Shell, Library, SpaceView) {
-        let (shell, library, _) = stage.window(size)
+    static func calm(_ stage: Stage) async throws -> (Shell, Library, SpaceView) {
+        let (shell, library, _) = stage.window()
         Stage.work(library)
         try Self.eyes(shell, Stage.moment)
         shell.waiting(["agents"], mine: 0)
@@ -389,7 +389,7 @@ struct AcceptanceShell {
         #expect(counted["counts"] as? [String] == ["1 waiting for you", "2 working", "1 idle", "1 unknown"], "\(counted)")
         #expect(counted["first"] as? String == "claude-pacman" && counted["open"] as? Bool == true, "\(counted)")
         #expect(counted["chips"] as? [String] == ["Sonnet 5.5", "Medium", "Ask"] && counted["labels"] as? [String] == ["Model", "Effort", "Mode"], "\(counted)")
-        #expect((counted["waits"] as? String)?.hasPrefix("waits ") == true && counted["waitsWrite"] as? Bool == true, "\(counted)")
+        #expect(counted["waits"] as? String == "waits 34 min" && counted["waitsWrite"] as? Bool == true, "\(counted)")
         #expect(counted["thread"] as? [String] == ["you", "it", "you", "step"], "\(counted)")
         #expect(counted["buttons"] as? [String] == ["Its commands", "Send Now", "After This Turn"], "\(counted)")
         let read = """
@@ -1292,7 +1292,7 @@ struct AcceptanceShell {
     @Test("r4-2: The drawer by the edge or ⌃⌘S", .disabled("not built yet: S2")) func r4_2() async throws {}
     @Test("r4-3: The pin", .disabled("not built yet: S2")) func r4_3() async throws {}
     @Test("r4-4: Night, over a light page", .disabled("not built yet: S2")) func r4_4() async throws {}
-    @Test("f3-1: What waits, the drawer closed: dot, count, ⌘P", .disabled("not built yet: S3")) func f3_1() async throws {}
+    @Test("f3-1: What waits, the drawer closed: dot, count, ⌘P", .disabled("not built yet: AG8")) func f3_1() async throws {}
     @Test("r5-1: Delete Group…, Undo", .disabled("not built yet: S4")) func r5_1() async throws {}
     @Test("r5-2: The root on top, Move to ▸ No Group", .disabled("not built yet: S4")) func r5_2() async throws {}
     @Test("r5-3: No Folder", .disabled("not built yet: C1")) func r5_3() async throws {}
