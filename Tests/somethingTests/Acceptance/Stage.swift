@@ -78,44 +78,92 @@ final class Stage {
 
     func remove() { home.remove() }
 
-    /// The mockup's agents (core/data.js), as the watch would see them started outside something, their words invented:
-    /// Amp waiting 34 minutes in its terminal in shop, two Claude Code at work (pacman, portfolio), pi idle in notes,
-    /// and one program something sees only by its process, its state unknown. Times are the mockup's, in this Mac's zone.
+    /// Where each agent of `world` runs, by id, as the panel's tag says it: "something" for one it launched, a terminal
+    /// or an editor for one started there, nil for one that is closed.
+    static let runs: [String: String?] = [
+        "claude-shop": "iTerm", "claude-pacman": "something", "claude-portfolio": "VS Code", "pi-notes": "something", "antigravity-site": "Antigravity",
+        "claude-login": "something", "amp-tests": "something", "codex-eval": "something", "claude-slides": "something", "claude-post": nil, "omp-old": nil,
+    ]
+    /// The space that started an agent of `world`, where one did.
+    static let startedBy = ["codex-eval": "project"]
+    /// The agents each space lists (the mockup's YA_THESE), by space name; a space not named here sees them all.
+    static let these = ["agents": ["claude-shop", "claude-pacman", "claude-portfolio", "pi-notes", "antigravity-site"],
+                        "brief": ["claude-shop", "claude-pacman", "claude-portfolio"], "project": ["codex-eval", "claude-slides"],
+                        "logbook": ["claude-pacman", "pi-notes"], "pet": ["claude-pacman"], "week-end": ["claude-shop", "claude-login", "amp-tests"],
+                        "oracle": [], "stack": []]
+
+    /// The final mockup's eleven agents (YA.seed in v7a/v7a.js), their words invented: `name` and the thread's title are
+    /// the row's title. Fix the cart total waits 34 minutes in iTerm; Draft the post is asleep, it can resume; Image
+    /// sizes has ended; Antigravity is seen only by its process, its state unknown. Times are the mockup's, in this Mac's zone.
     static var world: (agents: [Agent], threads: [AgentThread]) {
         func at(_ minutes: Double) -> String { iso8601.string(from: local.addingTimeInterval(-60 * minutes)) }
-        func agent(_ key: String, _ kind: String, _ folder: String?, _ state: String, started: Double, updated: Double) -> Agent {
+        func agent(_ key: String, _ kind: String, _ title: String, _ folder: String, _ state: String, started: Double, updated: Double) -> Agent {
             var agent = Agent(id: "\(kind)-\(key)", kind: kind, origin: "elsewhere")
-            (agent.folder, agent.state, agent.alive, agent.evidence) = (folder.map { "/Users/example/\($0)" }, state, true, "log")
-            (agent.name, agent.thread, agent.started, agent.updated) = (folder.map { ($0 as NSString).lastPathComponent }, key, at(started), at(updated))
+            (agent.folder, agent.state, agent.alive, agent.evidence) = ("/Users/example/\(folder)", state, true, "log")
+            (agent.name, agent.thread, agent.started, agent.updated) = (title, key, at(started), at(updated))
             agent.waiting = state == "waiting" ? "permission" : state == "unknown" ? nil : "none"
             agent.because = ["send": "This agent was started outside something; something only reads it."]
+            if runs[agent.id] == "something" { (agent.origin, agent.can.send, agent.because) = ("launched", true, [:]) }
             return agent
         }
-        func thread(_ key: String, _ kind: String, _ turns: [(state: String, start: Double, end: Double?, items: [(String, String, String?, Double)])]) -> AgentThread {
-            AgentThread(id: key, agent: "\(kind)-\(key)", title: nil, started: turns.first.map { at($0.start) }, turns: turns.enumerated().map { index, turn in
+        func thread(_ key: String, _ kind: String, _ title: String, _ turns: [(state: String, start: Double, end: Double?, items: [(String, String, String?, Double)])]) -> AgentThread {
+            AgentThread(id: key, agent: "\(kind)-\(key)", title: title, started: turns.first.map { at($0.start) }, turns: turns.enumerated().map { index, turn in
                 Turn(id: "\(key)-\(index)", state: turn.state, started: at(turn.start), ended: turn.end.map(at), items: turn.items.enumerated().map { n, item in
                     Item(id: "\(key)-\(index)-\(n)", kind: item.2 == nil ? "message" : "tool", author: item.0, text: item.1, at: at(item.3),
                          tool: item.2.map { Tool(name: $0, status: turn.state == "working" && n == turn.items.count - 1 ? "running" : "done") })
                 })
             })
         }
-        var other = Agent(id: "other-4210", kind: "other", origin: "elsewhere")
-        (other.name, other.pid, other.alive, other.evidence) = ("node", 4210, true, "process")
-        let agents = [agent("shop", "amp", "code/shop", "waiting", started: 52, updated: 38), agent("pacman", "claude", "code/pacman", "working", started: 12, updated: 1),
-                      agent("portfolio", "claude", "code/portfolio", "working", started: 25, updated: 2), agent("notes", "pi", "notes", "idle", started: 200, updated: 190), other]
+        /// One finished or running turn: what the person asked, what the agent answered.
+        func exchange(_ key: String, _ kind: String, _ title: String, _ state: String, _ start: Double, _ asked: String, _ said: String) -> AgentThread {
+            thread(key, kind, title, [(state, start, state == "working" ? nil : start - 1, [("person", asked, nil, start), ("agent", said, nil, start - 1)])])
+        }
+        var pacman = agent("pacman", "claude", "Chase mode", "code/pacman", "working", started: 12, updated: 1)
+        pacman.subagents = ["Explore: read the ghost files", "Writer: chase for Blinky", "Writer: chase for Pinky"].map { Tool(name: $0, status: "running") }
+        var antigravity = Agent(id: "antigravity-site", kind: "antigravity", origin: "elsewhere")
+        (antigravity.name, antigravity.folder, antigravity.pid, antigravity.alive, antigravity.evidence) = ("Antigravity", "/Users/example/code/site", 4210, true, "process")
+        var post = agent("post", "claude", "Draft the post", "code/blog", "idle", started: 3000, updated: 2900)
+        (post.alive, post.can.resume) = (false, true)
+        var old = agent("old", "omp", "Image sizes", "code/blog", "done", started: 4500, updated: 4400)
+        old.alive = false
+        let agents = [agent("shop", "claude", "Fix the cart total", "code/shop", "waiting", started: 52, updated: 38), pacman,
+                      agent("portfolio", "claude", "Portfolio images", "code/portfolio", "working", started: 25, updated: 2),
+                      agent("notes", "pi", "Reading list", "notes", "idle", started: 200, updated: 190), antigravity,
+                      agent("login", "claude", "Login form", "code/shop", "working", started: 9, updated: 1), agent("tests", "amp", "Shop tests", "code/shop", "idle", started: 170, updated: 160),
+                      agent("eval", "codex", "Evaluation page", "code/atelier", "idle", started: 150, updated: 130), agent("slides", "claude", "Slides", "code/atelier", "working", started: 20, updated: 3),
+                      post, old]
         let threads = [
-            thread("shop", "amp", [("done", 52, 40, [("person", "Fix the total on the cart page", nil, 52), ("agent", "Read cart.js", "Read", 50),
-                                                       ("agent", "The total adds the delivery twice.", nil, 41)]),
-                                    ("working", 39, nil, [("person", "Go on, but run the tests first", nil, 39), ("agent", "npm test", "Bash", 38)])]),
-            thread("pacman", "claude", [("working", 12, nil, [("person", "Bring the chase mode back, and keep the ghosts out of the walls.", nil, 12),
-                                                               ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 6),
-                                                               ("person", "Now give each ghost its own way of chasing.", nil, 4),
-                                                               ("agent", "Started the workflow “Chase mode” · step 2 of 4", "Workflow", 1)])]),
-            thread("portfolio", "claude", [("working", 25, nil, [("person", "Resize the images for the projects page", nil, 25),
-                                                                  ("agent", "Resizing images for the projects page, 14 of 28", "Bash", 2)])]),
-            thread("notes", "pi", [("done", 200, 190, [("person", "Summarise the reading list", nil, 200), ("agent", "Done: six books, two articles.", nil, 190)])]),
+            thread("shop", "claude", "Fix the cart total", [("working", 52, nil, [("person", "The cart total is off by one cent on discounts.", nil, 52), ("agent", "Read cart.js and discounts.js", "Read", 50),
+                                                                                    ("agent", "Found it: the discount rounds twice.", nil, 41), ("agent", "npm test", "Bash", 38)])]),
+            thread("pacman", "claude", "Chase mode", [("working", 12, nil, [("person", "Bring the chase mode back, and keep the ghosts out of the walls.", nil, 12),
+                                                                             ("agent", "The chase mode is back. The ghosts no longer walk through walls.", nil, 6),
+                                                                             ("person", "Now give each ghost its own way of chasing.", nil, 4),
+                                                                             ("agent", "Started the workflow “Chase mode” · step 2 of 4", "Workflow", 1)])]),
+            thread("portfolio", "claude", "Portfolio images", [("working", 25, nil, [("person", "Resize the images for the projects page", nil, 25),
+                                                                                       ("agent", "Resizing images for the projects page, 14 of 28", "Bash", 2)])]),
+            exchange("notes", "pi", "Reading list", "done", 200, "Summarise the reading list.", "Done: three books, each in two lines, in notes/reading.md."),
+            exchange("login", "claude", "Login form", "working", 9, "Add a login form, with an error under each field.", "Writing it now."),
+            exchange("tests", "amp", "Shop tests", "done", 170, "Run the shop’s tests.", "24 passed. Nothing to fix."),
+            exchange("eval", "codex", "Evaluation page", "done", 150, "Add the evaluation page.", "Added, with the three scores side by side."),
+            exchange("slides", "claude", "Slides", "working", 20, "Draft the slides from the milestones.", "Six slides so far. I’m on the results."),
+            exchange("post", "claude", "Draft the post", "done", 3000, "Draft a post about the new shop.", "Here is a first draft, 600 words. The ending needs your voice."),
+            exchange("old", "omp", "Image sizes", "done", 4500, "Check the image sizes.", "All of them fit. Nothing to change."),
         ]
         return (agents, threads)
+    }
+
+    /// What Look Again finds after `world`: a twelfth agent, Cursor in ~/code/site, its state unknown; then nothing new.
+    static var twelfth: Agent {
+        var cursor = Agent(id: "cursor-site", kind: "cursor", origin: "elsewhere")
+        (cursor.name, cursor.folder, cursor.pid, cursor.alive, cursor.evidence) = ("Cursor", "/Users/example/code/site", 4388, true, "process")
+        return cursor
+    }
+
+    /// `world` as the space `name` lists it.
+    static func world(of name: String) -> (agents: [Agent], threads: [AgentThread]) {
+        guard let listed = these[name] else { return world }
+        let all = world, shown = all.agents.filter { listed.contains($0.id) }
+        return (shown, all.threads.filter { thread in shown.contains { $0.id == thread.agent } })
     }
 
     /// Notes the person wrote in Logbook, as the mockup's page shows them (invented), with its time stamps.
@@ -184,7 +232,7 @@ final class Stage {
         let view = try await home.window(try #require(library.entry(name)?.space))
         // The pages see the mockup's agents; the engine is never started, so no watch tick replaces them. The show
         // screens (f) keep the quiet page: their frames and comments are measured on its parts.
-        if seeded { view.engine.update(outside: Stage.world) }
+        if seeded { view.engine.update(outside: Stage.world(of: name)) }
         // The pages' clock stands at the mockup's moment, in this Mac's own zone, whatever the day of the run, in every
         // run and not only a picture's: the brief's dateline is wider on a Wednesday, and f4's pick moved with it.
         view.staged = [WKUserScript(source: Stage.fixedClock, injectionTime: .atDocumentStart, forMainFrameOnly: false)]

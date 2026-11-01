@@ -604,4 +604,14 @@ struct AcceptanceCommand {
         sheet.cancelOperation(nil)
         #expect(KeysSheet.shown(in: shell.layer) == nil && shell.layer.isHidden)
     }
+
+    // MARK: Round 4, the final mockup
+
+    @Test("r6-1: One size, a column on the left", .disabled("not built yet: S5")) func r6_1() async throws {}
+    @Test("r6-2: A long tab scrolls under a fade", .disabled("not built yet: S5")) func r6_2() async throws {}
+    @Test("r7-1: Permissions: the map, two questions, the promise", .disabled("not built yet: S6")) func r7_1() async throws {}
+    @Test("r7-2: One ladder, its two columns follow", .disabled("not built yet: S6")) func r7_2() async throws {}
+    @Test("r7-3: Lasting Rules, Revoke", .disabled("not built yet: S6")) func r7_3() async throws {}
+    @Test("f5-1: A level too high says so", .disabled("not built yet: S6")) func f5_1() async throws {}
+    @Test("f5-2: The program a space starts", .disabled("not built yet: S6")) func f5_2() async throws {}
 }

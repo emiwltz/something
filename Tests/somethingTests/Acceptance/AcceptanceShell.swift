@@ -514,15 +514,15 @@ struct AcceptanceShell {
                      first: document.querySelector('#board').firstElementChild.dataset.id, open: card.classList.contains('open'),
                      chips: [...card.querySelectorAll('.chips select')].map((s) => s.selectedOptions[0].textContent),
                      labels: [...card.querySelectorAll('.chips select')].map((s) => s.getAttribute('aria-label')),
-                     amp: document.querySelector('.agent[data-id="amp-shop"] .pill').textContent,
-                     ampWrite: document.querySelector('.agent[data-id="amp-shop"] .acts').hidden,
+                     waits: document.querySelector('.agent[data-id="claude-shop"] .pill').textContent,
+                     waitsWrite: document.querySelector('.agent[data-id="claude-shop"] .acts').hidden,
                      thread: [...card.querySelectorAll('.thread li')].map((li) => li.className),
                      buttons: [...card.querySelectorAll('form button')].filter((b) => !b.hidden).map((b) => b.getAttribute('aria-label') || b.textContent) };
             """)
         #expect(counted["counts"] as? [String] == ["1 waiting for you", "2 working", "1 idle", "1 unknown"], "\(counted)")
         #expect(counted["first"] as? String == "claude-pacman" && counted["open"] as? Bool == true, "\(counted)")
         #expect(counted["chips"] as? [String] == ["Sonnet 5.5", "Medium", "Ask"] && counted["labels"] as? [String] == ["Model", "Effort", "Mode"], "\(counted)")
-        #expect((counted["amp"] as? String)?.hasPrefix("waits ") == true && counted["ampWrite"] as? Bool == true, "\(counted)")
+        #expect((counted["waits"] as? String)?.hasPrefix("waits ") == true && counted["waitsWrite"] as? Bool == true, "\(counted)")
         #expect(counted["thread"] as? [String] == ["you", "it", "you", "step"], "\(counted)")
         #expect(counted["buttons"] as? [String] == ["Its commands", "Send Now", "After This Turn"], "\(counted)")
         let read = """
@@ -572,7 +572,7 @@ struct AcceptanceShell {
     /// The mockup's agents, Claude Code in pacman launched by My agents, with its own commands, its sub-agents, and
     /// its model, effort and mode as its driver offers them.
     static var inFull: (agents: [Agent], threads: [AgentThread]) {
-        var world = Stage.world
+        var world = Stage.world(of: "agents")
         guard let index = world.agents.firstIndex(where: { $0.id == "claude-pacman" }) else { return world }
         world.agents[index].origin = "launched"
         (world.agents[index].can.send, world.agents[index].can.steer, world.agents[index].can.queue, world.agents[index].can.interrupt) = (true, true, true, true)
@@ -1428,4 +1428,21 @@ struct AcceptanceShell {
         defer { brief.close() }
         #expect(shown() == [true, true, true] && shell.titleLine.accessibilityRole() == .button)
     }
+
+    // MARK: Round 4, the final mockup
+
+    @Test("r4-1: At rest: the glass header, no rail", .disabled("not built yet: S3")) func r4_1() async throws {}
+    @Test("r4-2: The drawer by the edge or ⌃⌘S", .disabled("not built yet: S2")) func r4_2() async throws {}
+    @Test("r4-3: The pin", .disabled("not built yet: S2")) func r4_3() async throws {}
+    @Test("r4-4: Night, over a light page", .disabled("not built yet: S2")) func r4_4() async throws {}
+    @Test("f3-1: What waits, the drawer closed: dot, count, ⌘P", .disabled("not built yet: S3")) func f3_1() async throws {}
+    @Test("r5-1: Delete Group…, Undo", .disabled("not built yet: S4")) func r5_1() async throws {}
+    @Test("r5-2: The root on top, Move to ▸ No Group", .disabled("not built yet: S4")) func r5_2() async throws {}
+    @Test("r5-3: No Folder", .disabled("not built yet: C1")) func r5_3() async throws {}
+    @Test("f3-2: Trash with Undo, the next space opens", .disabled("not built yet: C8")) func f3_2() async throws {}
+    @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
+    @Test("f6-1: Export as one HTML file, then a browser", .disabled("not built yet: C8")) func f6_1() async throws {}
+    @Test("f6-2: Import, checked first", .disabled("not built yet: C9")) func f6_2() async throws {}
+    @Test("f6-2b: A file dropped on the window", .disabled("not built yet: C9")) func f6_2b() async throws {}
+    @Test("f6-3: The white tile", .disabled("not built yet: S10")) func f6_3() async throws {}
 }

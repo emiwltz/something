@@ -582,7 +582,7 @@ struct AcceptanceBuild {
         let question = room.question(declaration, nil)
         #expect(question == RightsQuestion(space: "Waiting room", description: nil, level: .watch, folder: nil,
                                            folders: Levels.folders(room.engine.state), page: space.location.path))
-        #expect(question.folders == ["/Users/example/code/pacman", "/Users/example/code/portfolio", "/Users/example/code/shop", "/Users/example/notes"],
+        #expect(question.folders == ["atelier", "blog", "pacman", "portfolio", "shop", "site"].map { "/Users/example/code/\($0)" } + ["/Users/example/notes"],
                 "the folders the stage's agents work in")
         let (sheet, answer) = Ask.rights(question, home: stage.home.root.path)
         #expect(sheet.title == "Waiting room would like to work with your agents" && sheet.frame.width == 440 && !sheet.isAlert)
@@ -782,6 +782,29 @@ struct AcceptanceBuild {
         }
         await Self.finish(model)
     }
+
+    // MARK: Round 4, the final mockup
+
+    @Test("f1-1: Beat 1, alone on the desktop, 980 × 640, footer \"1 of 5\", Skip", .disabled("not built yet: S7")) func f1_1() async throws {}
+    @Test("f1-2: Beat 2: a tile redraws the schema, the tag In iTerm", .disabled("not built yet: S8")) func f1_2() async throws {}
+    @Test("f1-3: Beat 3: ≠, three chips, no Full Access rung here", .disabled("not built yet: S8")) func f1_3() async throws {}
+    @Test("f1-4: Beat 4: Settings' map, the real window, the two powers", .disabled("not built yet: S8")) func f1_4() async throws {}
+    @Test("f1-5: Beat 5: \"Ready to build something today?\", the whole Hero, two doors", .disabled("not built yet: S7")) func f1_5() async throws {}
+    @Test("f1-6: Make My First Space: the window arrives on New Space", .disabled("not built yet: S7")) func f1_6() async throws {}
+    @Test("f1-7: Five bubbles, once each, no counter", .disabled("not built yet: S9")) func f1_7() async throws {}
+    @Test("f1-8: Open an Example: My agents, nothing started, no sheet", .disabled("not built yet: S9")) func f1_8() async throws {}
+    @Test("f1-9: No program found: beats 2, 3 and 5, Look Again", .disabled("not built yet: S8")) func f1_9() async throws {}
+    @Test("f1-10: Help › How something Works: four schemas, one button each", .disabled("not built yet: S9")) func f1_10() async throws {}
+    @Test("r1-1: The sentence, each word a menu", .disabled("not built yet: C1")) func r1_1() async throws {}
+    @Test("r1-2: start: program, model, folder, pi's warning", .disabled("not built yet: C1")) func r1_2() async throws {}
+    @Test("r2-1: Up to three questions, one agent turn", .disabled("not built yet: C7")) func r2_1() async throws {}
+    @Test("r2-2: Build Now skips them", .disabled("not built yet: C7")) func r2_2() async throws {}
+    @Test("r3-1: The summary, one row for the sentence", .disabled("not built yet: C7")) func r3_1() async throws {}
+    @Test("r3-2: Two columns, the page as it is written", .disabled("not built yet: C2")) func r3_2() async throws {}
+    @Test("r3-3: A build finished elsewhere", .disabled("not built yet: C4")) func r3_3() async throws {}
+    @Test("r3-4: A failed build keeps its place, Try Again", .disabled("not built yet: C4")) func r3_4() async throws {}
+    @Test("f2-1: Problems said in clear", .disabled("not built yet: C5")) func f2_1() async throws {}
+    @Test("f2-1b: One problem left", .disabled("not built yet: C5")) func f2_1b() async throws {}
 }
 
 extension Picture {
