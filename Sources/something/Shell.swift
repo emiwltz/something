@@ -413,6 +413,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// Shows `space` in the center, or the blank page for nil (the templates with `templates`), with its title and file
     /// in the toolbar.
     func show(_ space: SpaceView?, templates: Bool = false) {
+        if Popover.shown?.window === window { Popover.shown?.close() }
         library.previewing = false
         self.space = space
         // Off the spaces, the page's full screen ends.
@@ -540,13 +541,15 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func forget(_ name: String) { unread[name] = nil }
 
     /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
-    /// all; else nothing while a name in the sidebar is being edited; else a floating sidebar; else the panel when it has
+    /// all; else a chip's picker, whose search it clears first; else nothing while a name in the sidebar is being edited;
+    /// else a floating sidebar; else the panel when it has
     /// the keys; else point mode's step back; else a margin note; else the card; else the panel, even from a page; else
     /// Page Full Screen. Returns whether one closed, the key then used up (the assistant's nudge waits for an Esc
     /// nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
         if ScrimCard.close(in: layer) { return true }
+        if let popover = Popover.shown, popover.window === window { return popover.press(.escape) }
         guard window.attachedSheet == nil else { return false }
         // A name being edited takes its own Esc.
         if library.sidebar.renaming != nil { return false }

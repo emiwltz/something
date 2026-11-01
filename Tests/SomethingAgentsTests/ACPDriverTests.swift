@@ -414,6 +414,14 @@ import SomethingCore
     }
 
     /// A complete list without an effort (a model without variants) leaves no effort in use, not the last one.
+    /// An effort's line stays out: on an effort, `about` says it is no level.
+    @Test func anEffortsDescriptionIsNoAbout() throws {
+        let replay = Self.opened()
+        replay.feed(Self.update(["sessionUpdate": "config_option_update", "configOptions": [
+            ["id": "effort", "category": "thought_level", "currentValue": "high", "options": [["value": "high", "name": "High", "description": "Invented: thinks longer"]]]]]))
+        #expect(replay.fold.agent.options.effort == [Option(value: "high", label: "High")])
+    }
+
     @Test func anEffortNoLongerOfferedIsNone() throws {
         let replay = Self.opened()
         let model: [String: Any] = ["id": "model", "category": "model", "currentValue": "fake/fake-model",

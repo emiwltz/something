@@ -434,9 +434,34 @@ import SomethingCore
         #expect(replay.lines().last?["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["ultracode": true]])
         _ = try replay.agent.driver.set(model: nil, mode: nil, effort: "low")
         #expect(replay.lines().last?["request"] as? [String: Any] as NSDictionary? == ["subtype": "apply_flag_settings", "settings": ["effortLevel": "low", "ultracode": false]])
-        replay.feed(["type": "control_response", "response": ["subtype": "error", "request_id": "something-999", "error": "no"]] as [String: Any])
+        // A model without it: the word follows what Claude says is in effect. A refused `get_settings` is no error.
+        _ = try replay.agent.driver.set(model: nil, mode: nil, effort: "ultracode")
+        func next(_ subtype: String) throws -> String {
+            let row = try #require(replay.lines().last { ($0["request"] as? [String: Any])?["subtype"] as? String == subtype })
+            return try #require(row["request_id"] as? String)
+        }
+        _ = try replay.agent.driver.set(model: "default", mode: nil, effort: nil)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try next("set_model")]] as [String: Any])
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try next("get_settings"), "response": ["applied": ["ultracode": false, "ultracodeAvailable": false, "effort": "high"]]]] as [String: Any])
+        #expect(replay.fold.agent.effort == "high" && replay.fold.agent.options.effort?.map(\.value) == ["low", "high"])
+        _ = try replay.agent.driver.set(model: "default", mode: nil, effort: nil)
+        replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": try next("set_model")]] as [String: Any])
+        replay.feed(["type": "control_response", "response": ["subtype": "error", "request_id": try next("get_settings"), "error": "no"]] as [String: Any])
         #expect(replay.fold.agent.error == nil)
         #expect(!ClaudeDriver.command(Launch(agent: "claude-1", folder: "/Users/example/shop", effort: "ultracode")).arguments.contains { $0.hasPrefix("--effort") })
+    }
+
+    /// A saved Ultracode waits for Claude's word: sent once it says it can be on, never otherwise.
+    @Test func aSavedUltracodeWaitsForClaude() throws {
+        for available in [true, false] {
+            let replay = Replay(assistant: true, effort: "ultracode")
+            replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": [:]]] as [String: Any])
+            let settings = { replay.lines().filter { ($0["request"] as? [String: Any])?["subtype"] as? String == "apply_flag_settings" } }
+            #expect(settings().isEmpty, "nothing before Claude says")
+            let asked = try #require(replay.lines().last?["request_id"] as? String)
+            replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": asked, "response": ["applied": ["ultracodeAvailable": available]]]] as [String: Any])
+            #expect(settings().count == (available ? 1 : 0))
+        }
     }
 
     @Test func aLaunchPassesItsEffort() {

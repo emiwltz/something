@@ -161,8 +161,10 @@ import Testing
         read().pick("opus")
         read().pickEffort("high")
         #expect(read().chip == "Opus 5.5 · High" && model.preferences.model == "opus" && model.preferences.effort == "high")
+        read().pickEffort("high")
+        #expect(model.preferences.effort == nil, "the chosen notch again: the agent's own")
         read().pick(nil)
-        #expect(model.preferences.model == nil && read().chip == "Default model · High")
+        #expect(model.preferences.model == nil && read().chip == "Default model")
         model.preferences.assistant = "amp"
         let amp = try #require(model.sections(.agents)[0].rows[0].beside.first)
         guard case .model(let own, _) = amp.control else { Issue.record("not the chip"); return }

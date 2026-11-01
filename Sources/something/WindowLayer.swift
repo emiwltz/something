@@ -89,6 +89,7 @@ class ScrimCard: NSView {
     /// `motion`. The layer lays the card out first: a SwiftUI card makes its AppKit views on its first layout.
     static func toggle<Card: ScrimCard>(in layer: WindowLayer, motion: Look.Motion, _ make: () -> Card) -> Card? {
         if Card.close(in: layer) { return nil }
+        if Popover.shown?.window === layer.window { Popover.shown?.close() }
         let card = make()
         layer.subviews.compactMap { $0 as? ScrimCard }.forEach { $0.close() }
         (card.frame, card.autoresizingMask) = (layer.bounds, [.width, .height])

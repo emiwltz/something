@@ -20,18 +20,22 @@ struct ModelChoice {
     enum Models: Equatable { case rows, own, reading, unread }
 
     let name: String, models: Models
-    var rows: [Row] = [], chosen: String? = nil
+    /// The models as the program lists them, the rows drawn from them, and the value chosen.
+    var list: [Option] = [], rows: [Row] = [], chosen: String? = nil
     /// The levels the gauge shows, the chosen one, and whether the agent has no list of them yet.
     var efforts: [Option] = [], effort: String? = nil, effortUnread = false
-    /// The foot's words, and whether it links to the defaults.
-    var scope = "", defaults = false
+    /// The foot's words, whether it links to the defaults, and whether the chosen notch clicked again clears it.
+    var scope = "", defaults = false, clears = false
     var pick: (String?) -> Void = { _ in }, pickEffort: (String) -> Void = { _ in }
-    /// What the model and the effort read now.
-    var words: (model: String, effort: String?) = ("Default model", nil)
 
     /// From this many rows a list has a search field and its providers' groups.
     static let long = 7
 
+    /// What the model and the effort read now, by name, never an id.
+    var words: (model: String, effort: String?) {
+        (models == .own ? "Its own model" : chosen.map { Words.model($0, in: list) } ?? "Default model",
+         models == .own ? nil : effort.map { e in efforts.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e.capitalized })
+    }
     var chip: String { [words.model, words.effort].compactMap { $0 }.joined(separator: " · ") }
     var isLong: Bool { rows.count >= ModelChoice.long }
     /// The line beside MODEL: whose list this is, when it is the person's own setting rather than the program's.
@@ -48,7 +52,7 @@ struct ModelChoice {
         let rows = models.map { option -> Row in
             if option.value == "default" { return Row(value: option.value, name: option.label, about: "Follows " + Words.possessive(name) + " own choice") }
             let parts = option.label.split(separator: "/", maxSplits: 1).map(String.init), provider = option.value.split(separator: "/", maxSplits: 1).first.map(String.init)
-            let group = parts.count > 1 ? parts[0] : option.value.contains("/") ? provider?.capitalized : nil
+            let group = parts.count > 1 ? parts[0] : option.value.contains("/") ? provider : nil
             return Row(value: option.value, name: parts.last ?? option.label, about: option.about ?? (long ? nil : group), group: long ? group : nil)
         }
         let own = Row(value: nil, name: "Default", about: "Follows " + Words.possessive(name) + " own choice")
@@ -62,65 +66,57 @@ struct ModelChoice {
     }
 }
 
+extension Options {
+    /// The efforts that are levels. An effort with an `about` is the program's one beyond them (only a driver writes
+    /// one, for that): it comes last in the gauge, apart, and stays with its conversation.
+    var levels: [Option] { effort?.filter { $0.about == nil } ?? [] }
+}
+
 extension ModelChoice {
-    /// The chip of an agent in a space's panel: its list as it gives it, nil words for what it does not report. Its
-    /// change goes through `set`, which is how the panel reaches it.
+    /// The chip of an agent in a space's panel: its list as it gives it, its change going through `set`, which is how
+    /// the panel reaches it.
     init(agent: Agent, set: @escaping (String?, String?) -> Void) {
         let name = Registry.app.name(of: agent.kind), list = agent.options.model ?? []
-        self.init(name: name, models: list.isEmpty ? .unread : .rows)
-        rows = ModelChoice.rows(list, name: name, plain: false)
-        chosen = agent.model
-        efforts = agent.can.effort ? agent.options.effort ?? [] : []
-        effort = agent.effort
-        scope = "For this agent · From its next turn"
-        (pick, pickEffort) = ({ set($0, nil) }, { set(nil, $0) })
-        words = (agent.model.map { Words.model($0, in: list) } ?? "Default model", agent.effort.map { e in efforts.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e })
+        self.init(name: name, models: list.isEmpty ? .unread : .rows, list: list, rows: ModelChoice.rows(list, name: name, plain: false), chosen: agent.model,
+                  efforts: agent.can.effort ? agent.options.effort ?? [] : [], effort: agent.effort, scope: "For this agent · From its next turn",
+                  pick: { set($0, nil) }, pickEffort: { set(nil, $0) })
     }
 
-    /// Settings: what new spaces start with, from what the program last listed. An effort that is no level stays with
-    /// a conversation.
+    /// Settings: what new spaces start with, from what the program last listed. Only levels: what is beyond them stays
+    /// with a conversation. A gauge sets a level, so the chosen notch clicked again gives the agent's own back.
     init(defaultsOf kind: String, _ preferences: Preferences, reading: Bool) {
         let name = Registry.app.name(of: kind), limits = Registry.app.limits[kind] ?? [], listed = preferences.listed[kind], list = listed?.model ?? []
-        self.init(name: name, models: limits.contains("model") ? .own : reading ? .reading : list.isEmpty ? .unread : .rows)
-        rows = ModelChoice.rows(list, name: name, plain: true)
-        chosen = preferences.model
-        efforts = limits.contains("effort") ? [] : (listed?.effort ?? []).filter { $0.about == nil }
-        effort = preferences.effort
-        scope = "For new spaces"
-        pick = { value in preferences.change { $0.model = value } }
-        pickEffort = { value in preferences.change { $0.effort = value } }
-        let word = preferences.model.map { Words.model($0, in: list) } ?? "Default model"
-        words = (limits.contains("model") ? "Its own model" : word, preferences.effort.map { e in efforts.first { $0.value == e }?.label ?? e })
+        self.init(name: name, models: limits.contains("model") ? .own : reading ? .reading : list.isEmpty ? .unread : .rows, list: list,
+                  rows: ModelChoice.rows(list, name: name, plain: true), chosen: preferences.model,
+                  efforts: limits.contains("effort") ? [] : listed?.levels ?? [], effort: preferences.effort, scope: "For new spaces", clears: true,
+                  pick: { value in preferences.change { $0.model = value } },
+                  pickEffort: { value in preferences.change { $0.effort = $0.effort == value ? nil : value } })
     }
 }
 
 extension AssistantModel {
     /// This conversation's model chip. Its own choice shows as a row only while nothing runs: a running agent has no
-    /// way back to it but the row its list has.
+    /// way back to it but the row its list has. The choice comes first, since an agent reports a new model only with
+    /// its next turn; an effort the running agent no longer offers is what it reports instead.
     var modelChoice: ModelChoice {
-        let offered = offered, list = offered.model ?? [], words = modelWords, kind = kind ?? ""
+        let offered = offered, list = offered.model ?? [], kind = kind ?? "", running = awake(session)
         let known: ModelChoice.Models = ownModel ? .own : reading.contains(kind) ? .reading : list.isEmpty ? .unread : .rows
-        var choice = ModelChoice(name: name, models: known)
-        choice.rows = ModelChoice.rows(list, name: name, plain: !awake(session))
-        choice.chosen = session.model ?? agent?.model
+        var choice = ModelChoice(name: name, models: known, list: list, rows: ModelChoice.rows(list, name: name, plain: !running), chosen: session.model ?? agent?.model)
         if Registry.app.limits[kind]?.contains("effort") != true {
             choice.efforts = offered.effort ?? []
-            choice.effortUnread = choice.efforts.isEmpty && !awake(session)
+            choice.effortUnread = choice.efforts.isEmpty && !running
         }
-        choice.effort = session.effort ?? agent?.effort
+        let gone = running && !choice.efforts.isEmpty && !choice.efforts.contains { $0.value == session.effort }
+        choice.effort = gone ? agent?.effort : session.effort ?? agent?.effort
         choice.scope = (inSpace ? "For \(title) only" : "For this space only") + (working ? " · From its next turn" : "")
         choice.defaults = true
         (choice.pick, choice.pickEffort) = ({ [self] in chooseModel($0) }, { [self] in choose(effort: $0) })
-        choice.words = words
         return choice
     }
 
     /// What the third chip says of this conversation: a rung that can change, or the program's own way, said plainly.
     var ownWords: String {
-        guard let agent = kind.flatMap(Registry.app.agent) else { return "" }
-        if agent.neverAsks { return "Never asks, by design." }
-        if agent.asksNothingByDefault { return "Never asks by default." }
-        return !canAskEverything ? "Its Own Settings" : askEverything ? "Asks First" : "Accepts Edits"
+        AgentChips.fixed(kind) ?? (!canAskEverything ? "Its Own Settings" : askEverything ? "Asks First" : "Accepts Edits")
     }
 
     /// The third chip's menu, for a program whose building work is allowed ahead.
@@ -192,8 +188,8 @@ struct ModelChip: View {
 
     /// Opens the picker over `choice`, by the chip at `view`.
     static func open(_ choice: @escaping () -> ModelChoice, from view: NSView) {
-        let keyboard = ModelPicker.Keyboard(choice)
-        Popover.toggle(from: view, part: "model", label: "Model and effort", keys: keyboard.press) { popover in
+        let keyboard = PickerKeys(choice)
+        Popover.toggle(from: view, part: "model", keys: keyboard.press) { popover in
             ModelPicker(choice: choice, keyboard: keyboard, close: { popover?.close() })
         }
     }
@@ -228,7 +224,14 @@ struct AgentChips: View {
 
     /// Opens the programs' picker of `model`, by the chip at `view`.
     static func open(_ model: AssistantModel, from view: NSView) {
-        Popover.toggle(from: view, part: "program", label: "Program", keys: nil) { popover in ProgramPicker(model: model, close: { popover?.close() }) }
+        let keyboard = PickerKeys(model)
+        Popover.toggle(from: view, part: "program", keys: keyboard.press) { popover in ProgramPicker(model: model, keyboard: keyboard, close: { popover?.close() }) }
+    }
+
+    /// The third chip's words for a program with no choice to give; nil for any other.
+    static func fixed(_ kind: String?) -> String? {
+        let agent = kind.flatMap(Registry.app.agent)
+        return agent?.neverAsks == true ? "Never asks, by design." : agent?.asksNothingByDefault == true ? "Never asks by default." : kind == nil ? "" : nil
     }
 
     /// What VoiceOver reads on the three chips.
@@ -246,25 +249,22 @@ struct AgentChips: View {
     }
 }
 
-/// A running agent's chips on its row: its program, fixed while it runs, its model and what it does on its own.
+/// A running agent's chips on its row: its program, fixed while it runs, its model and what it does on its own. `agent`
+/// reads it now: its picker stays up through a pick.
 struct RowChips: View {
-    let agent: Agent, set: (_ model: String?, _ mode: String?, _ effort: String?) -> Void
+    let agent: () -> Agent, set: (_ model: String?, _ mode: String?, _ effort: String?) -> Void
 
     var body: some View {
-        let name = Registry.app.name(of: agent.kind), descriptor = Registry.app.agent(agent.kind), set = set, agent = agent
+        let agent = agent, set = set, now = agent(), name = Registry.app.name(of: now.kind)
+        let choice = { ModelChoice(agent: agent()) { model, effort in set(model, nil, effort) } }
         HStack(spacing: 2) {
-            FixedChip(monogram: name, words: nil, why: "\(name), fixed while it runs")
-            if agent.can.model, agent.options.model?.isEmpty == false {
-                ModelChip(choice: { ModelChoice(agent: agent) { model, effort in set(model, nil, effort) } })
-            } else {
-                let words = ModelChoice(agent: agent) { _, _ in }
-                FixedChip(words: words.chip, why: agent.because["model"] ?? "\(name) chooses its own")
-            }
-            if descriptor?.neverAsks == true { OwnChip(words: "Never asks, by design.") }
-            else if descriptor?.asksNothingByDefault == true { OwnChip(words: "Never asks by default.") }
-            else if agent.can.mode, let modes = agent.options.mode, !modes.isEmpty {
-                OwnChip(words: modes.first { $0.value == agent.mode }?.label ?? "Its Own Settings", menu: WordMenu(title: "On Its Own · From its next turn", rows: modes.map { mode in
-                    WordMenu.Row(title: mode.label, on: mode.value == agent.mode) { set(nil, mode.value, nil) }
+            FixedChip(monogram: name, why: "\(name), fixed while it runs")
+            if now.can.model, now.options.model?.isEmpty == false { ModelChip(choice: choice) }
+            else { FixedChip(words: choice().chip, why: now.because["model"] ?? "\(name) chooses its own") }
+            if let words = AgentChips.fixed(now.kind) { OwnChip(words: words) }
+            else if now.can.mode, let modes = now.options.mode, !modes.isEmpty {
+                OwnChip(words: modes.first { $0.value == now.mode }?.label ?? "Its Own Settings", menu: WordMenu(title: "On Its Own · From its next turn", rows: modes.map { mode in
+                    WordMenu.Row(title: mode.label, on: mode.value == now.mode) { set(nil, mode.value, nil) }
                 }))
             } else { OwnChip(words: "Its Own Settings") }
         }

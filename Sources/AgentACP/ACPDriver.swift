@@ -409,7 +409,7 @@ final class ACPDriver: Driver {
         options.model = choices(entry("model"))
         (model, models) = (entry("model")?["currentValue"] as? String, options.model?.map(\.value) ?? [])
         options.mode = choices(entry("mode"))
-        options.effort = choices(entry(profile.effortCategory))
+        options.effort = choices(entry(profile.effortCategory))?.map { Option(value: $0.value, label: $0.label) }   // an effort's `about` means it is no level
         emit(.options(options))
         emit(.settings(model: entry("model")?["currentValue"] as? String, mode: entry("mode")?["currentValue"] as? String,
                        effort: entry(profile.effortCategory)?["currentValue"] as? String))

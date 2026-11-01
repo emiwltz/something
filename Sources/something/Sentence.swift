@@ -121,7 +121,12 @@ struct WordPlace: NSViewRepresentable {
     let spot: WordSpot
     var opens: WordMenu?
 
-    func makeNSView(context: Context) -> NSView { NSView() }
+    /// A chip's place: when the chip leaves, its picker does too.
+    final class Place: NSView {
+        override func viewDidMoveToWindow() { if window == nil, Popover.shown?.anchor === self { Popover.shown?.close() } }
+    }
+
+    func makeNSView(context: Context) -> NSView { Place() }
     func updateNSView(_ view: NSView, context: Context) {
         spot.view = view
         if let opens {

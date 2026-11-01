@@ -165,6 +165,8 @@ import SomethingCore
     private(set) var askEverything: Bool
     /// The kinds whose models are being read, for the model chip.
     private(set) var reading: Set<String> = []
+    /// The kinds read in this run: a failed read does not start a program at each opening of the chip.
+    @ObservationIgnored private var triedModels: Set<String> = []
     /// Full Access in Settings › Permissions, kept here so that the first lines follow it while they show.
     var fullAccess: Bool
     /// What the state says of each builder: installed or not; absent while not known.
@@ -899,7 +901,7 @@ import SomethingCore
     /// something: the model chip says "Reading its models…" meanwhile, and what it says after a failure.
     func readModels(of chosen: String? = nil) {
         guard let kind = chosen ?? (agent == nil || agent?.alive == false ? self.kind : nil), Preferences.at(places).listed[kind] == nil,
-              Registry.app.limits[kind]?.contains("model") != true, !reading.contains(kind) else { return }
+              Registry.app.limits[kind]?.contains("model") != true, !reading.contains(kind), triedModels.insert(kind).inserted else { return }
         reading.insert(kind)
         engine.peek(kind, folder: places.spaces.path) { [self] in
             reading.remove(kind)
@@ -910,7 +912,7 @@ import SomethingCore
     /// What a kind's list keeps: what a conversation's program offers it alone waits for that conversation.
     static func kept(_ options: Options) -> Options {
         var options = options
-        options.effort = options.effort?.filter { $0.about == nil }
+        options.effort = options.effort.map { _ in options.levels }
         return options
     }
 

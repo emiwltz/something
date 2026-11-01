@@ -277,25 +277,49 @@ struct AcceptanceAgents {
         let choice = model.modelChoice
         #expect(choice.models == .rows && choice.rows.map(\.name) == ["Opus 5.5", "Sonnet 5.5", "Haiku 5.5"] && choice.rows.map(choice.isChosen) == [true, false, false])
         #expect(choice.efforts.map(\.label) == ["Low", "Medium", "High", "Max"] && choice.scope == "For Daily brief only" && choice.defaults)
-        ModelChip.open({ model.modelChoice }, from: shell.glass.card)
+        // The picture's list, as the mockup's: the program's own choice, a line under each model, Ultracode after the levels.
+        var drawn = ModelChoice(name: "Claude Code", models: .rows, chosen: "opus", effort: "high", scope: "For Daily brief only", defaults: true)
+        drawn.list = [Option(value: "default", label: "Default · Sonnet 5.5"), Option(value: "opus", label: "Opus 5.5", about: "The most capable"), Option(value: "haiku", label: "Haiku 5.5", about: "The fastest")]
+        drawn.rows = ModelChoice.rows(drawn.list, name: "Claude Code", plain: false)
+        drawn.efforts = ["low", "medium", "high", "max"].map { Option(value: $0, label: $0.capitalized) } + [Option(value: "ultracode", label: "Ultracode", about: "A longer, deeper pass for a hard change.")]
+        #expect(drawn.rows.map(\.about) == ["Follows Claude Code’s own choice", "The most capable", "The fastest"] && drawn.chip == "Opus 5.5 · High")
+        let shown = drawn
+        ModelChip.open({ shown }, from: shell.glass.card)
         let popover = try #require(Popover.shown)
-        #expect(popover.superview === shell.layer && Popover.open.part == "model" && popover.accessibilityLabel() == "Model and effort")
+        #expect(popover.superview === shell.layer && Popover.open.part == "model")
         let card = shell.glass.card.convert(shell.glass.card.bounds, to: shell.layer).insetBy(dx: AssistantCard.margin, dy: AssistantCard.margin)
         #expect(await wait { Popover.shown?.frame.width ?? 0 > 344 })
-        let drawn = popover.frame.insetBy(dx: Popover.margin, dy: Popover.margin)
-        #expect(abs(drawn.minY - card.maxY - 6) < 1 && abs(drawn.maxX - card.maxX) < 1, "over the card, to its right edge: \(popover.frame)")
+        let placed = popover.frame.insetBy(dx: Popover.margin, dy: Popover.margin)
+        #expect(abs(placed.minY - card.maxY - 6) < 1 && abs(placed.maxX - card.maxX) < 1, "over the card, to its right edge: \(popover.frame)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "r9-1" + suffix, root: stage.home.root)
         }
-        // The keys: ↓ then Return picks the next model; Esc alone closes it.
-        popover.press(.down)
-        popover.press(.enter)
-        #expect(Popover.shown == nil && Popover.open.part == nil && model.session.model == "sonnet")
+        #expect(Popover.shown === popover && popover.superview === shell.layer && popover.frame.width > 344, "still up after the picture: \(popover.frame)")
+        popover.close()
+        // The keys: ↓ then Return picks the next model, each step said; Tab goes to the gauge and back.
+        var said: [String] = []
+        shell.layer.announce = { said.append($0) }
         ModelChip.open({ model.modelChoice }, from: shell.glass.card)
-        Popover.shown?.press(.escape)
+        let keys = try #require(Popover.shown)
+        keys.press(.down)
+        #expect(said.last == "Sonnet 5.5")
+        keys.press(.tab)
+        keys.press(.left)
+        #expect(await wait(until: { model.modelChoice.effort == "medium" }), "← on the gauge")
+        keys.press(.tab)
+        keys.press(.enter)
+        #expect(Popover.shown == nil && Popover.open.part == nil && model.session.model == "sonnet")
+        // Esc, through the window's own path: the picker leaves, and the card under it stays.
+        let escape = try AcceptanceShell.escape(shell)
+        ModelChip.open({ model.modelChoice }, from: shell.glass.card)
+        #expect(shell.escape(escape) && Popover.shown == nil && model.open)
+        // The picker leaves with what holds it: a space shown, a card over all.
+        ModelChip.open({ model.modelChoice }, from: shell.glass.card)
+        shell.show(brief)
         #expect(Popover.shown == nil)
         // The program chip's picker: the programs found, then those something only sees, each with why.
         AgentChips.open(model, from: shell.glass.card)
+        #expect(Popover.shown?.press(.down) == true, "the keys walk the programs")
         #expect(Popover.open.part == "program" && model.entries.map(\.id) == ["claude"] && AssistantModel.seenOnly.map(\.name) == ["Antigravity", "Cursor"])
         #expect(await wait { Popover.shown?.frame.height ?? 0 > 200 })
         try await stage.appearances { suffix in
@@ -319,11 +343,20 @@ struct AcceptanceAgents {
         #expect(Set(choice.rows.compactMap(\.group)) == ["Anthropic", "OpenAI", "Google", "Mistral"] && !choice.rows.map(\.name).contains { $0.contains("/") })
         #expect(choice.shown("gemini flash").map(\.name) == ["Gemini 3 Flash"] && choice.shown("openai").count == 2 && choice.shown("nothing").isEmpty)
         let held = choice
+        let keyboard = PickerKeys({ held })
+        #expect(keyboard.row == choice.rows.firstIndex { $0.value == "google/flash" }, "it opens on the chosen row")
         ModelChip.open({ held }, from: shell.glass.card)
         #expect(await wait { Popover.shown?.frame.height ?? 0 > 300 })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "r9-2" + suffix, root: stage.home.root)
         }
+        // Esc in a search clears it, then closes.
+        Popover.shown?.close()
+        Popover.toggle(from: shell.glass.card, part: "model", keys: keyboard.press) { _ in ModelPicker(choice: { held }, keyboard: keyboard, close: {}) }
+        keyboard.query = "gemini"
+        let escape = try AcceptanceShell.escape(shell)
+        #expect(shell.escape(escape) && keyboard.query.isEmpty && Popover.shown != nil)
+        #expect(shell.escape(escape) && Popover.shown == nil)
         await AcceptanceAgents.stop(shell)
     }
 
@@ -350,14 +383,17 @@ struct AcceptanceAgents {
         var short = ModelChoice(name: "pi", models: .rows)
         short.rows = ModelChoice.rows([Option(value: "anthropic/sonnet", label: "Sonnet 5.5"), Option(value: "openai/gpt", label: "GPT-5.5")], name: "pi", plain: true)
         short.effortUnread = true
-        #expect(short.rows.map(\.about) == ["Follows pi’s own choice", "Anthropic", "Openai"] && short.from == "From pi’s own settings" && short.rows.allSatisfy { $0.group == nil })
+        #expect(short.rows.map(\.about) == ["Follows pi’s own choice", "anthropic", "openai"] && short.from == "From pi’s own settings" && short.rows.allSatisfy { $0.group == nil })
         #expect(Words.model("claude-example-5", in: nil) == "Another model" && Words.model("sonnet", in: nil) == "Sonnet", "an id is never drawn")
         #expect(Words.model("default", in: [Option(value: "default", label: "Default · Opus 5.5")]) == "Opus 5.5")
         // A running agent's chip: its own list, by the name it gives, no row it could not go back to, and the change goes to it.
         var running = Agent(id: "a1", kind: "claude", origin: "launched")
         (running.model, running.effort, running.options.model, running.options.effort, running.can.effort) = ("opus", "high", [Option(value: "opus", label: "Opus 5.5"), Option(value: "haiku", label: "Haiku 5.5")], [Option(value: "high", label: "High")], true)
         var asked: (String?, String?)?
+        // Read again as the picker is drawn: a pick shows while it stays up.
         let row = ModelChoice(agent: running) { asked = ($0, $1) }
+        running.effort = nil
+        #expect(ModelChoice(agent: running) { _, _ in }.chip == "Opus 5.5")
         #expect(row.chip == "Opus 5.5 · High" && row.rows.map(\.name) == ["Opus 5.5", "Haiku 5.5"] && row.scope == "For this agent · From its next turn" && !row.defaults)
         row.pick("haiku")
         #expect(asked?.0 == "haiku" && asked?.1 == nil)

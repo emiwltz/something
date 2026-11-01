@@ -691,15 +691,8 @@ extension AssistantModel {
     /// The caption of a message written here, which the conversation leaves out.
     var here: String? { AssistantModel.shown(AssistantModel.context(place, home: places.home.path) + "\n").caption }
 
-    /// The model chosen for this conversation, else the one its agent reported, by the name its options give; and its
-    /// effort likewise. The choice comes first: an agent reports a new model only with its next turn.
-    var modelWords: (model: String, effort: String?) {
-        let offered = offered
-        if ownModel { return ("Its own model", nil) }
-        let model = (session.model ?? agent?.model).map { Words.model($0, in: offered.model) } ?? "Default model"
-        let effort = (session.effort ?? agent?.effort).map { e in offered.effort?.first { $0.value == e }?.label ?? Option.effortLabels[e] ?? e }
-        return (model, effort)
-    }
+    /// The chip's words for this conversation.
+    var modelWords: (model: String, effort: String?) { modelChoice.words }
 
     /// The model and effort `kind` would build with: modelWords for the kind chosen; for another, "Its own model" when
     /// it picks its own, else "Default model" until it has run, since something reads no agent's settings.

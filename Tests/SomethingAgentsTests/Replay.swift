@@ -24,8 +24,8 @@ final class Replay {
 
     /// A Claude launched in /Users/example/shop as agent claude-1; with `assistant`, the person's assistant, in
     /// /Users/example/something/spaces, lent something's tools over MCP.
-    init(mode: String = "default", assistant: Bool = false, reading: Bool = false) {
-        var launch = Launch(agent: "claude-1", folder: assistant || reading ? Replay.spaces : "/Users/example/shop", mode: mode,
+    init(mode: String = "default", assistant: Bool = false, reading: Bool = false, effort: String? = nil) {
+        var launch = Launch(agent: "claude-1", folder: assistant || reading ? Replay.spaces : "/Users/example/shop", mode: mode, effort: effort,
                             thread: "5b2e0000-0000-4000-8000-000000000001")
         if reading { launch.assistant = .askingEverything }
         if assistant {

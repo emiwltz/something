@@ -1079,7 +1079,14 @@ import WebKit
         var shown = false
         model.engine.changed = { [weak model] in if model?.engine.state.agents.isEmpty == false { shown = true } }
         model.buildNew(with: "claude").map { _ in }
+        #expect(model.reading.contains("claude") && model.modelChoice.models == .reading, "the chip says so meanwhile")
         #expect(await wait(until: { Preferences(home.places).listed["claude"]?.model?.isEmpty == false }))
+        #expect(await wait(until: { model.reading.isEmpty }))
+        // A kind that cannot be read: nothing kept, the chip's sentence, and no second start at the next opening.
+        model.readModels(of: "opencode")
+        #expect(await wait(until: { model.reading.isEmpty }) && Preferences(home.places).listed["opencode"] == nil)
+        model.readModels(of: "opencode")
+        #expect(model.reading.isEmpty)
         #expect(model.id == nil && !shown)
         #expect(input(home).first?.contains("initialize") == true && !input(home).contains { $0.contains(#"\"type\":\"user\""#) }, "no message: \(input(home))")
         await finish(home, model)

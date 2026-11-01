@@ -95,6 +95,8 @@ final class ClaudeDriver: Driver {
     private var heard = false
     /// Whether Claude says an assistant can turn Ultracode on (`get_settings`, never guessed); no page can write to one.
     private var ultracodeOffered = false
+    /// A launch asks Ultracode only once Claude said it can: the wait, and whether it is what was last set.
+    private var ultracodeWaits: Bool, ultracodeOn = false
     static let ultracode = "ultracode"
     /// The models `initialize` listed, and the one in use: the one asked for (an alias such as "opus"), then the one
     /// Claude reports running (a model id, an entry's resolvedModel). The efforts offered are that model's; nil until
@@ -113,14 +115,13 @@ final class ClaudeDriver: Driver {
 
     init(_ launch: Launch, write: @escaping (Data) throws -> Void, emit: @escaping (AgentEvent) -> Void, now: @escaping () -> String) {
         (self.launch, self.write, self.emit, self.now) = (launch, write, emit, now)
-        model = launch.model
+        (model, ultracodeWaits) = (launch.model, launch.effort == ClaudeDriver.ultracode)
     }
 
     /// `initialize` is optional, but its answer lists the models this account offers.
     func begin() throws {
         emit(.options(options()))
         try control("initialize", [:])
-        if launch.effort == ClaudeDriver.ultracode, launch.assistant != nil { try setEffort(ClaudeDriver.ultracode) }
     }
 
     @discardableResult func receive(_ line: Data) -> Bool {
@@ -179,8 +180,10 @@ final class ClaudeDriver: Driver {
 
     /// Ultracode is a setting of its own, not a level; a plain `effortLevel` does not always turn it off (Claude's text).
     private func setEffort(_ effort: String) throws {
-        var settings: [String: Any] = effort == ClaudeDriver.ultracode ? [:] : ["effortLevel": effort]
-        if ultracodeOffered || settings.isEmpty { settings["ultracode"] = settings.isEmpty }
+        let on = effort == ClaudeDriver.ultracode
+        var settings: [String: Any] = on ? ["ultracode": true] : ["effortLevel": effort]
+        if !on, ultracodeOffered { settings["ultracode"] = false }
+        ultracodeOn = on
         try control("apply_flag_settings", ["settings": settings], value: effort)
     }
 
@@ -423,7 +426,8 @@ final class ClaudeDriver: Driver {
         guard let raw = response["request_id"] as? String, let asked = sent.removeValue(forKey: raw) else { return }
         guard response["subtype"] as? String == "success" else {
             if asked.subtype == "initialize", fallingBack() { return }
-            if asked.subtype == "get_settings" { return }   // an older Claude offers no Ultracode
+            // An older Claude offers no Ultracode.
+            if asked.subtype == "get_settings" { return settled(ultracode: nil) }
             let refused = ClaudeDriver.refusals[asked.subtype] ?? "Claude Code refused what something asked"
             let words = (response["error"] as? String).map { "\(refused): \($0)" } ?? "\(refused)."
             return emit(.error(AgentError(code: "AGENT_ERROR", message: words)))
@@ -443,8 +447,7 @@ final class ClaudeDriver: Driver {
             emit(.options(options()))
             readUltracode()
         case "get_settings":
-            ultracodeOffered = (payload["applied"] as? [String: Any])?["ultracodeAvailable"] as? Bool == true
-            emit(.options(options()))
+            settled(ultracode: payload["applied"] as? [String: Any])
         case "set_permission_mode": emit(.reported(model: nil, mode: payload["mode"] as? String ?? asked.value, effort: nil))
         // Claude took the setting; its success carries no value, and no later frame names the effort.
         case "apply_flag_settings": emit(.reported(model: nil, mode: nil, effort: asked.value))
@@ -545,19 +548,25 @@ final class ClaudeDriver: Driver {
         return row?["value"] as? String ?? reported
     }
 
+    /// What `get_settings` said of Ultracode, `applied` nil when it said nothing: offered or not, sent if a launch waits
+    /// for it, and, once Claude says it is not in effect, the effort it does use is the one reported.
+    private func settled(ultracode applied: [String: Any]?) {
+        ultracodeOffered = applied?["ultracodeAvailable"] as? Bool == true
+        if ultracodeWaits, ultracodeOffered { try? setEffort(ClaudeDriver.ultracode) }
+        ultracodeWaits = false
+        emit(.options(options()))
+        guard ultracodeOn, !ultracodeOffered || applied?["ultracode"] as? Bool == false, let applied else { return }
+        ultracodeOn = false
+        emit(.reported(model: nil, mode: nil, effort: applied["effort"] as? String))
+    }
+
     /// Whether Ultracode can be on depends on the model: an assistant asks after each.
     private func readUltracode() { if launch.assistant != nil { try? control("get_settings", [:]) } }
 
     private func id(_ claudeID: String) -> String { "\(launch.agent):\(claudeID)" }
 
-    static let starters: Set = ["Agent", "Task"]   // the tools that start a sub-agent
-
-    /// The commands initialize lists, by name, with what each does (else its argument's hint, else its name).
-    static func commands(_ list: [Any]) -> [Option] {
-        list.compactMap { $0 as? [String: Any] }.compactMap { entry in
-            (entry["name"] as? String).map { Option(value: $0, label: [entry["description"], entry["argumentHint"]].compactMap { $0 as? String }.first { !$0.isEmpty } ?? $0) }
-        }
-    }
+    /// The tools that start a sub-agent.
+    static let starters: Set = ["Agent", "Task"]
 
     /// The efforts are those of the model in use, as `initialize` listed them; nil until it did and the model is
     /// known, or when Claude names none for that model (an older Claude), so a space cannot ask for one.
@@ -568,17 +577,6 @@ final class ClaudeDriver: Driver {
         options.effort = (entry(model)?["supportedEffortLevels"] as? [String]).map { $0.map { Option(value: $0, label: Option.effortLabels[$0] ?? $0) } }
         if ultracodeOffered { options.effort?.append(Option(value: ClaudeDriver.ultracode, label: "Ultracode", about: "A longer, deeper pass for a hard change.")) }
         return options
-    }
-
-    /// A row of `initialize`'s models in plain words: Claude's description starts with the full name ("Sonnet 5.5 ·
-    /// Efficient for routine tasks · $2/$10 per Mtok"), and its default row says which model it is now. Prices stay out.
-    static func option(_ model: [String: Any]) -> Option? {
-        guard let value = model["value"] as? String else { return nil }
-        let label = model["displayName"] as? String ?? value
-        let parts = (model["description"] as? String ?? "").components(separatedBy: " · ").filter { !$0.contains("$") }, first = parts.first ?? ""
-        if value == "default", let now = first.range(of: "(currently ") { return Option(value: value, label: "Default · " + first[now.upperBound...].dropLast()) }
-        let named = first.hasPrefix(label), about = parts.dropFirst(named ? 1 : 0).joined(separator: " · ")
-        return Option(value: value, label: named ? first : label, about: about.isEmpty ? nil : about)
     }
 
     private func control(_ subtype: String, _ fields: [String: Any], value: String? = nil) throws {
@@ -593,45 +591,6 @@ final class ClaudeDriver: Driver {
         try write(JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]))
     }
 
-    /// The start of the sentence for a control request Claude refused.
-    static let refusals = ["initialize": "Claude Code refused to start the session", "interrupt": "Claude Code refused to stop the turn",
-                           "set_model": "Claude Code refused the new model", "set_permission_mode": "Claude Code refused the new mode",
-                           "apply_flag_settings": "Claude Code refused the new effort"]
-
-    /// Who let a tool run or stopped it, as the tool's result says (`tool_result_meta`, seen on 2.1.296): its own
-    /// settings ("config") are a rule; the person's answers are known already, from `answer`.
-    static func decision(_ frame: [String: Any], _ toolID: String) -> Decision? {
-        let meta = (frame["tool_result_meta"] as? [[String: Any]] ?? []).first { $0["id"] as? String == toolID }
-        guard let decided = meta?["permission_decision"] as? [String: Any],
-              let outcome = ["accept": "allowed", "reject": "denied"][decided["decision"] as? String ?? ""],
-              let by = ["config": "rule", "rule": "rule", "hook": "hook", "mode": "mode", "classifier": "mode"][decided["source"] as? String ?? ""]
-        else { return nil }
-        return Decision(by: by, outcome: outcome)
-    }
-
-    static func questions(_ input: [String: Any]) -> [Question] {
-        (input["questions"] as? [[String: Any]] ?? []).compactMap { question in
-            guard let text = question["question"] as? String else { return nil }
-            let options = (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
-            return Question(header: question["header"] as? String, text: text, options: options, multiple: question["multiSelect"] as? Bool == true)
-        }
-    }
-
-    /// One line for a tool's input: the command, path or address it acts on, else its input as JSON.
-    static func summary(_ input: Any?) -> String {
-        let input = input as? [String: Any] ?? [:]
-        for key in ["command", "file_path", "path", "pattern", "url", "query", "description", "prompt"] {
-            if let value = input[key] as? String, !value.isEmpty { return value }
-        }
-        return shown(input) ?? ""
-    }
-
-    /// The input as Claude sent it, readable in a native window.
-    static func shown(_ input: [String: Any]) -> String? {
-        if let command = input["command"] as? String { return command }
-        guard let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]) else { return nil }
-        return String(decoding: data, as: UTF8.self)
-    }
 }
 
 extension Driving {

@@ -8,7 +8,7 @@ import SomethingAgents
 import SomethingCore
 import SwiftUI
 
-@MainActor final class Popover: NSHostingView<AnyView> {
+final class Popover: NSHostingView<AnyView> {
     /// Which chip is open, for its soft fill.
     @Observable final class Open { var part: String? }
     enum Key { case up, down, left, right, enter, tab, escape }
@@ -18,14 +18,15 @@ import SwiftUI
     static let open = Open()
     private(set) static weak var shown: Popover?
 
-    private weak var anchor: NSView?, before: NSResponder?
+    private(set) weak var anchor: NSView?
+    private weak var before: NSResponder?
     private var part = "", keys: Keys?, clicks: Any?
     private var placed = NSSize.zero
     /// The room the card keeps around itself for its shadow.
     static let margin: CGFloat = 10
 
     /// Opens the picker of the chip at `anchor`, or closes it when it is the one up. Any other picker up closes first.
-    static func toggle(from anchor: NSView, part: String, label: String, keys: Keys?, @ViewBuilder content: (Popover?) -> some View) {
+    static func toggle(from anchor: NSView, part: String, keys: Keys?, @ViewBuilder content: (Popover?) -> some View) {
         let same = shown?.anchor === anchor
         shown?.close()
         guard !same, let window = anchor.window, let root = window.contentView else { return }
@@ -34,10 +35,6 @@ import SwiftUI
         popover.rootView = AnyView(content(popover))
         (popover.anchor, popover.part, popover.keys, popover.before) = (anchor, part, keys, window.firstResponder)
         popover.sizingOptions = [.intrinsicContentSize]
-        popover.setAccessibilityElement(true)
-        popover.setAccessibilityRole(.group)
-        popover.setAccessibilityRoleDescription("dialog")
-        popover.setAccessibilityLabel(label)
         (root.subviews.lazy.compactMap { $0 as? WindowLayer }.first ?? WindowLayer(over: root)).hold(popover)
         popover.place()
         window.makeFirstResponder(popover)
@@ -46,6 +43,7 @@ import SwiftUI
             return event
         }
         (shown, open.part) = (popover, part)
+        NSAccessibility.post(element: popover, notification: .layoutChanged, userInfo: [.uiElements: [popover]])
     }
 
     /// A click elsewhere closes it; one on its own chip is left to the chip, which toggles it.
@@ -82,6 +80,8 @@ import SwiftUI
         frame = NSRect(origin: origin, size: size)
         placed = size
     }
+
+    override func resize(withOldSuperviewSize oldSize: NSSize) { place() }
 
     /// A list that grows, a pane that takes its place: it stays by its chip.
     override func invalidateIntrinsicContentSize() {
@@ -199,46 +199,68 @@ private struct PickerFoot: View {
     }
 }
 
-/// The models of a program, the effort under them, and the foot; or, for what is not known, a sentence saying so.
-struct ModelPicker: View {
-    /// Where the keys are, and the search: a plain object, since no view here may hold state.
-    @MainActor @Observable final class Keyboard {
-        let choice: () -> ModelChoice
-        var query = ""
-        var row = 0
-        var onEffort = false
-        /// Whether the pointer or the keys came here: until then no row is lit.
-        var moved = false
-        init(_ choice: @escaping () -> ModelChoice) {
-            self.choice = choice
-            let now = choice()
-            row = now.rows.firstIndex(where: now.isChosen) ?? 0
-        }
+/// Where a picker's keys are, and its search: a plain object, since no view here may hold state. It walks the rows it is
+/// given, then the gauge when there is one, and says each step to VoiceOver, for the list is not where its cursor is.
+@MainActor @Observable final class PickerKeys {
+    typealias Line = (words: String, pick: () -> Void)
+    private let lines: (String) -> [Line], gauge: () -> ModelChoice?
+    var query = ""
+    var row: Int
+    var onEffort = false
+    /// Whether the pointer or the keys came here: until then no row is lit.
+    var moved = false
 
-        func press(_ key: Popover.Key, _ popover: Popover) -> Bool {
-            moved = true
-            let now = choice(), rows = now.shown(query), levels = now.efforts
-            let at = levels.firstIndex { $0.value == now.effort } ?? -1
-            switch key {
-            case .down where onEffort: break
-            case .down, .tab:
-                if row + 1 < rows.count, key == .down { row += 1 } else if !levels.isEmpty { onEffort = true }
-            case .up where onEffort: (onEffort, row) = (false, max(0, rows.count - 1))
-            case .up: row = max(0, row - 1)
-            case .left where onEffort && at > 0: now.pickEffort(levels[at - 1].value)
-            case .right where onEffort && at + 1 < levels.count: now.pickEffort(levels[at + 1].value)
-            case .enter:
-                if !onEffort, rows.indices.contains(row) { now.pick(rows[row].value) }
-                popover.close()
-            case .escape where !query.isEmpty: (query, row) = ("", 0)
-            default: return key != .escape && key != .tab
-            }
-            return true
-        }
+    init(lines: @escaping (String) -> [Line], row: Int, gauge: @escaping () -> ModelChoice? = { nil }) {
+        (self.lines, self.row, self.gauge) = (lines, row, gauge)
     }
 
+    /// Over a model chip's choice.
+    convenience init(_ choice: @escaping () -> ModelChoice) {
+        let now = choice()
+        self.init(lines: { query in
+            let now = choice()
+            return now.shown(query).map { row in
+                ([row.name, row.about, now.isChosen(row) ? "selected" : nil].compactMap { $0 }.joined(separator: ", "), { now.pick(row.value) })
+            }
+        }, row: now.rows.firstIndex(where: now.isChosen) ?? 0, gauge: choice)
+    }
+
+    /// Over the programs an assistant can choose.
+    convenience init(_ model: AssistantModel) {
+        let open = model.entries.filter(\.enabled)
+        self.init(lines: { _ in open.map { entry in (Registry.app.name(of: entry.id), { model.choose(entry.id) }) } }, row: open.firstIndex(where: \.checked) ?? 0)
+    }
+
+    func press(_ key: Popover.Key, _ popover: Popover) -> Bool {
+        moved = true
+        let rows = lines(query), now = gauge(), levels = now?.efforts ?? []
+        let at = levels.firstIndex { $0.value == now?.effort } ?? -1
+        switch key {
+        case .down where onEffort: break
+        case .tab where onEffort: onEffort = false
+        case .down where row + 1 < rows.count: row += 1
+        case .down, .tab: onEffort = !levels.isEmpty
+        case .up where onEffort: (onEffort, row) = (false, max(0, rows.count - 1))
+        case .up: row = max(0, row - 1)
+        case .left where onEffort && at > 0: now?.pickEffort(levels[at - 1].value)
+        case .right where onEffort && at + 1 < levels.count: now?.pickEffort(levels[at + 1].value)
+        case .enter:
+            popover.close()
+            if !onEffort, rows.indices.contains(row) { rows[row].pick() }
+            return true
+        case .escape where !query.isEmpty: (query, row) = ("", 0)
+        default: return false
+        }
+        let said = onEffort ? gauge().flatMap { $0.words.effort } : rows.indices.contains(row) ? lines(query)[row].words : nil
+        if let said { (popover.superview as? WindowLayer)?.announce(said) }
+        return true
+    }
+}
+
+/// The models of a program, the effort under them, and the foot; or, for what is not known, a sentence saying so.
+struct ModelPicker: View {
     let choice: () -> ModelChoice
-    @Bindable var keyboard: Keyboard
+    @Bindable var keyboard: PickerKeys
     let close: () -> Void
     @FocusState private var searching: Bool
 
@@ -270,11 +292,16 @@ struct ModelPicker: View {
                     .onAppear { DispatchQueue.main.async { searching = true } }
                     .onKeyPress(.upArrow) { field(.up) }.onKeyPress(.downArrow) { field(.down) }.onKeyPress(.return) { field(.enter) }
                     .onKeyPress(.tab) { field(.tab) }.onKeyPress(.escape) { field(.escape) }
+                    .onKeyPress(.leftArrow) { keyboard.onEffort ? field(.left) : .ignored }.onKeyPress(.rightArrow) { keyboard.onEffort ? field(.right) : .ignored }
             }
             .padding(.horizontal, 9).frame(height: 28)
             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Look.Token.line2.ui))
             .padding(EdgeInsets(top: 1, leading: 3, bottom: 5, trailing: 3))
-            ScrollView { rows(now) }.frame(height: 276)
+            ScrollViewReader { list in
+                ScrollView { rows(now) }.frame(height: 276)
+                    .onChange(of: keyboard.row) { list.scrollTo(keyboard.row) }
+                    .onAppear { list.scrollTo(keyboard.row, anchor: .center) }
+            }
         } else {
             rows(now).padding(.bottom, 6)
         }
@@ -299,6 +326,7 @@ struct ModelPicker: View {
                 }
                 PickerRow(name: row.name, about: row.about, chosen: now.isChosen(row), lit: keyboard.moved && !keyboard.onEffort && keyboard.row == index,
                           hover: { (keyboard.row, keyboard.moved, keyboard.onEffort) = (index, true, false) }, lead: { EmptyView() }) { now.pick(row.value) }
+                .id(index)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,7 +346,7 @@ struct ModelPicker: View {
                 }
                 .frame(minHeight: 28)
                 if !now.efforts.isEmpty {
-                    Text(now.efforts.first { $0.value == now.effort }?.about ?? "Higher is slower and uses your limits faster.")
+                    Text(now.efforts.first { $0.value == now.effort }?.about ?? (now.clears && now.effort != nil ? "Click it again for the agent’s own effort." : "Higher is slower and uses your limits faster."))
                         .font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
                 }
             }
@@ -329,14 +357,14 @@ struct ModelPicker: View {
     }
 
     private func gauge(_ now: ModelChoice) -> some View {
-        let levels = now.efforts.filter { $0.about == nil }, at = now.efforts.firstIndex { $0.value == now.effort } ?? -1
+        let at = now.efforts.firstIndex { $0.value == now.effort } ?? -1, top = CGFloat(max(1, now.efforts.filter { $0.about == nil }.count - 1))
         return HStack(alignment: .bottom, spacing: 1) {
             ForEach(Array(now.efforts.enumerated()), id: \.offset) { index, level in
                 let beyond = level.about != nil, on = index <= at
                 Button { now.pickEffort(level.value) } label: {
                     RoundedRectangle(cornerRadius: 2).fill((on ? Look.Token.ink : beyond ? .bg2 : .mist).ui)
                         .overlay { if beyond && !on { RoundedRectangle(cornerRadius: 2).strokeBorder(Look.Token.ink3.ui, lineWidth: 1.5) } }
-                        .frame(width: beyond ? 7 : 5, height: beyond ? 21 : 8 + 13 * CGFloat(index) / CGFloat(max(1, levels.count - 1)))
+                        .frame(width: beyond ? 7 : 5, height: beyond ? 21 : 8 + 13 * CGFloat(index) / top)
                         .frame(width: beyond ? 14 : 12, height: 24, alignment: .bottom).padding(.bottom, 3).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).padding(.leading, beyond ? 7 : 0)
@@ -373,16 +401,21 @@ struct ModelPicker: View {
 
 /// The programs found, each with its monogram and what to know of it, then the ones something only sees.
 struct ProgramPicker: View {
-    let model: AssistantModel, close: () -> Void
+    let model: AssistantModel
+    @Bindable var keyboard: PickerKeys
+    let close: () -> Void
 
     var body: some View {
         PopoverCard {
             VStack(alignment: .leading, spacing: 1) {
                 PickerHead(title: "Program")
+                let open = model.entries.filter(\.enabled)
                 ForEach(model.entries) { entry in
-                    PickerRow(name: Registry.app.name(of: entry.id), about: entry.note ?? entry.because, chosen: entry.checked, dim: !entry.enabled, lead: { Monogram(name: Registry.app.name(of: entry.id), side: 22) }) {
-                        model.choose(entry.id)
+                    let at = open.firstIndex { $0.id == entry.id }
+                    PickerRow(name: Registry.app.name(of: entry.id), about: entry.note ?? entry.because, chosen: entry.checked, lit: keyboard.moved && at == keyboard.row, dim: !entry.enabled,
+                              lead: { Monogram(name: Registry.app.name(of: entry.id), side: 22) }) {
                         close()
+                        model.choose(entry.id)
                     }
                     .disabled(!entry.enabled)
                 }
