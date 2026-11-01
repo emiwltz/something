@@ -422,18 +422,18 @@ struct AcceptanceShow {
         let page = brief.space.location, was = try String(contentsOf: page, encoding: .utf8), store = info.history.store
         let all = try await Self.keepVersions(of: brief, info)
 
-        // Info: its Space part, History beside Export. The page's width before Info opens, at Default's size.
+        // Info: its Space part, History a tab beside it. The page's width before the panel opens, at Default's size.
         let wide = await Stage.alone { shell.window.layoutIfNeeded(); return brief.web.frame.width }
-        shell.showInfo(true)
+        shell.showInfo(true, on: .info)
         shell.window.layoutIfNeeded()
         let panel = shell.inspector.viewController.view
         let infoRead = await AcceptanceBuild.read(panel)
-        #expect(infoRead.contains("Space") && infoRead.contains("History") && infoRead.contains("Export…"), "\(infoRead)")
+        #expect(infoRead.contains("Space") && infoRead.contains("Show History") && infoRead.contains("Export…"), "\(infoRead)")
         #expect(info.history.bytes == store.weight("brief") && History.when(all[0].when, now: info.clock()) == "Today 18:12")
-        // History: in Info's place, at its width; Info's button no longer pressed. The 320 points are Default's: read
+        // History: a tab of the panel, at its width, its button still pressed. The 320 points are Default's: read
         // in the drawing turn, which no other suite holds at Large meanwhile.
-        info.showHistory()
-        #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
+        info.select(.history)
+        #expect(shell.infoShown && info.content == .history && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         await Stage.alone {
             let width = { shell.inspector.viewController.view.frame.width }
             #expect(await wait(10) { shell.window.layoutIfNeeded(); return width() == 320 && brief.web.frame.width == wide - 320 },
@@ -446,7 +446,7 @@ struct AcceptanceShow {
         for words in ["History", "“Add a weather corner, top right”, Today 18:12 · Claude Code, now",
                       "Edited outside something, Today 16:40 · Changed on disk, not by its assistant",
                       "“Use a newspaper look, like a morning paper”, Monday 09:20 · Claude Code", "6 older versions, back to 12 October",
-                      "Hold Space to compare", "Restore This Version", "Close History"] {
+                      "Hold Space to compare", "Restore This Version", "Close the panel"] {
             #expect(read.contains(words), "History reads \(words): \(read)")
         }
         #expect(!read.contains { $0.contains("Before its first change") }, "the oldest is folded")
@@ -465,7 +465,7 @@ struct AcceptanceShow {
         for code: UInt16 in [125, 125, 126] { shell.window.sendEvent(try #require(arrow(code))) }
         #expect(history.chosen == all[2].id)
         shell.toggleInfo(spaceOpen: true)
-        #expect(shell.infoShown && info.content == .info)
+        #expect(!shell.infoShown, "⌘I closes the panel on any tab")
         #expect(Keys.command("history")?.action == #selector(App.showHistory(_:)) && Keys.enabled("history", Keys.Situation(space: true)))
         shell.showHistory()
         #expect(info.content == .history && history.chosen == all[1].id)

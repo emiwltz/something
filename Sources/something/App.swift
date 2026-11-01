@@ -299,7 +299,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
             self?.pushing = false
             self?.current?.push()
-            if self?.shell.infoShown == true { self?.info.refresh() }
+            self?.info.refresh()
             self?.panels.refresh()
             self?.assistant.refresh()
         }
@@ -363,7 +363,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         menu.addItem(NSMenuItem(title: AssistantModel.defaultsTitle, action: Keys.command("defaults")?.action, keyEquivalent: ""))
     }
 
-    /// Greyed, never hidden: Keys says when each command can act. Show Info says "Hide Info" while it shows.
+    /// Greyed, never hidden: Keys says when each command can act. Show Agents says "Hide Agents" while the panel shows.
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard let id = item.identifier?.rawValue else { return true }
         shell.retitle(item)

@@ -134,7 +134,7 @@ struct AcceptanceShell {
         let row = try #require(library.entry("project"))
         #expect(Library.label(row, Stage.moment["project"] ?? .unknown) == "Project watch, \(Sign.State.listen.word)")
         let menu = SidebarMenu.text(library.menu(for: row))
-        #expect(menu == ["Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Work  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
+        #expect(menu == ["Open", "Show Agents  ⌘I", "Rename…", "Show in Group  ▸", "  Work  ✓  (dimmed)", "  Notes", "  Breaks", "  —",
                          "  New Group…", "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export…", "—",
                          "Move to Trash…  (red)"])
         if let gallery {
@@ -283,12 +283,12 @@ struct AcceptanceShell {
         #expect(shell.toolbarItems.allSatisfy { !["reload", "chip"].contains($0.itemIdentifier.rawValue) })
         let title = shell.titleLine
         #expect(title.line.string == "Daily brief" && shell.window.subtitle == "" && title.accessibilityLabel() == "Daily brief")
-        #expect(title.accessibilityRole() == .button && title.toolTip == "Show Info (⌘I)")
+        #expect(title.accessibilityRole() == .button && title.toolTip == "Show Info")
         let labels = [Shell.point, Shell.info, Shell.full].map { shell.controls[$0]?.image?.accessibilityDescription }
         #expect(labels == ["Point", "Info", "Page Full Screen"], "\(labels)")
         // The name opens Info, as ⌘I: the button pressed, View's item says Hide Info; again, it closes.
-        #expect(shell.infoWords == "Show Info" && title.accessibilityPerformPress())
-        #expect(shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == true && shell.infoWords == "Hide Info")
+        #expect(shell.infoWords == "Show Agents" && title.accessibilityPerformPress())
+        #expect(shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == true && shell.infoWords == "Hide Agents")
         #expect(title.accessibilityPerformPress() && !shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
         // Needs You, then the groups; My agents in both, so ⌘1–9 keep the groups' order.
         #expect(library.needing().map(\.title) == ["My agents"] && library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
@@ -316,11 +316,11 @@ struct AcceptanceShell {
         #expect(infos.count == 2)
         shell.showInfo(true)
         infos.forEach(shell.retitle)
-        #expect(infos.allSatisfy { $0.title == "Hide Info" }, "\(infos.map(\.title))")
+        #expect(infos.allSatisfy { $0.title == "Hide Agents" }, "\(infos.map(\.title))")
         shell.showInfo(false)
         infos.forEach(shell.retitle)
         let lines = Mockup.lines(view)
-        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Keep Sidebar Open", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
+        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Keep Sidebar Open", "Show Agents  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
                           "# Interface Size · Default", "Make Interface Bigger  ⌘+", "Make Interface Smaller  ⌘−", "Default Size  ⌘0", "---",
                           "Enter Page Full Screen  ⇧⌘F", "Enter Full Screen  ⌃⌘F"], "\(lines)")
         #expect(!space.items.contains { $0.identifier?.rawValue == "reload" }, "Reload lives in View only")
@@ -590,26 +590,14 @@ struct AcceptanceShell {
         return (shell, library, info, view)
     }
 
-    /// The lines of text Info shows, read off its picture by Vision, as tall as the window's center.
-    static func drawnInfo(_ shell: Shell) async throws -> [String] {
-        let controller = try #require(shell.inspector.viewController as? InfoController)
-        let offscreen = Offscreen(NSHostingView(rootView: controller.rootView))
-        offscreen.window.setContentSize(NSSize(width: 320, height: shell.window.contentLayoutRect.height))
-        offscreen.view.layoutSubtreeIfNeeded()
-        let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
-        offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
-        return try await Picture.text(rep)
-    }
-
-    /// One panel, three parts (X5.1): Space (its file, Show in Finder, its weight and last change, Export, History),
-    /// Your agents (the level, its sentence, the agents its page shows now, what still waits for you) and Assistant
-    /// (its eyes, the agent and model, its last reply, Open Conversation); Move to Trash… quiet at the foot. No switch,
-    /// no About, no Activity. ⌘I and ✕ close it, and Esc in it; Open Conversation opens the card on its conversation.
+    /// The panel's Info tab: Space (its file, Show in Finder, its weight and last change, Export), Memory, Versions and
+    /// Assistant; Move to Trash… quiet at the foot. No agents, no level. ⌘I, ✕ and Esc close the panel.
     @Test("x5-1: Info in one place") func x5_1() async throws {
         let stage = try Stage("shell-x5-1")
         defer { stage.remove() }
         let (shell, library, info, view) = try await AcceptanceShell.weekend(stage)
         defer { view.close() }
+        shell.showInfo(true, on: .info)
         #expect(shell.infoShown && info.content == .info && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         // Info's 320 points are Default's: read in the drawing turn, which no other suite holds at Large meanwhile.
         let open = await Stage.alone {
@@ -620,31 +608,19 @@ struct AcceptanceShell {
         }
         #expect(info.level == .watch && info.folder == nil && info.about == "A countdown to Saturday, your plans, and what your agents still have to finish.")
         #expect(Info.weight(try #require(info.size), form: .file, changed: info.changed, now: Stage.local).hasSuffix("one file · changed today, 18:04"))
-        // The agents its page sees: X5's, all of them, as its page receives them, each with its one word.
-        #expect(Set(info.shown.map(\.id)) == Set(Self.weekendWorld(stage.home.places.home).agents.map(\.id)), "\(info.shown.map(\.id))")
-        #expect(Set(info.shown.map(\.word)) == ["Working", "Waiting for You", "Idle"], "\(info.shown.map(\.word))")
-        // As VoiceOver reads the panel: every button named, the three parts, the level as one choice of four.
+        // As VoiceOver reads the tab: every button named, its parts.
         let panel = shell.inspector.viewController.view
-        let heard = ["Week-end", "Close Info", "Space", "Show in Finder", "Export…", "History", "Your agents", "With your agents: Watch",
-                     "The agents it shows now", "Assistant", "Its assistant: Asleep", "Open Conversation", "Move to Trash…"]
+        let heard = ["This space: Info", "Close the panel", "Week-end", "Space", "Show in Finder", "Export…", "Memory", "Versions", "Show History", "Assistant", "Move to Trash…"]
         // SwiftUI makes the panel's elements part by part, as late as a loaded Mac lets it: read until all are there.
         let tree = await AccessibilityTests.walk(panel) { words in heard.allSatisfy(words.contains) }, read = tree.words
         #expect(tree.unnamed.isEmpty, "\(tree.unnamed)")
         for words in heard {
             #expect(read.contains(words), "the panel reads \(words): \(read)")
         }
-        #expect(read.filter { ["Space", "Your agents", "Assistant"].contains($0) }.count == 3, "three parts: \(read)")
-        for gone in ["What it may do", "Versions", "About", "Activity", "Group", "Put to Sleep", "New Conversation", "Ask Again", "Show Request"] {
+        for gone in ["Your agents", "With your agents", "Open Conversation", "Group", "Put to Sleep", "New Conversation", "Ask Again", "Show Request"] {
             #expect(!read.contains { $0.hasPrefix(gone) }, "Info no longer holds \(gone)")
         }
-        // Its sentences, as the panel draws them (offscreen, SwiftUI gives a text no element of its own).
-        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
-        // Vision reads a middle dot as a bullet: the words around it are enough.
-        for words in ["A countdown to Saturday", "~/something/spaces/week-end.html", "one file", "changed today, 18:04", "It sees your agents",
-                      "Amp Waiting for You", "Claude Code Working", "Codex Idle", "~/code/shop", "Whatever an agent asks still waits for you", "Claude Code",
-                      "Week-end is ready. It counts down to"] {
-            #expect(drawn.contains(words), "the panel shows \(words): \(drawn)")
-        }
+        #expect(info.memory == "It keeps no memory." && info.history.versions.isEmpty)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "x5-1" + suffix, root: stage.home.root)
         }
@@ -662,16 +638,12 @@ struct AcceptanceShell {
         shell.toggleInfo(spaceOpen: false)
         #expect(!shell.infoShown, "⌘I opens nothing while no space is open")
         shell.toggleInfo(spaceOpen: true)
-        #expect(shell.infoShown && info.content == .info)
+        #expect(shell.infoShown)
         shell.toggleInfo(spaceOpen: true)
         #expect(!shell.infoShown)
         shell.toggleInfo(spaceOpen: true)
         info.close()
         #expect(!shell.infoShown, "✕")
-        // Open Conversation: the panel goes, the card opens on its conversation.
-        shell.showInfo(true)
-        info.converse()
-        #expect(!shell.infoShown && shell.assistant.open && shell.assistant.threadShown)
     }
 
     /// Info also holds what an agent a space started offers: its model, effort, mode and commands, from what it lists;
@@ -744,11 +716,6 @@ struct AcceptanceShell {
         }
         #expect(await lists("No agent shown."), "the page shows no agent at once")
         #expect(info.level == Grant.Level.none && info.shown.isEmpty && view.granted.rights == ["store"])
-        let panel = shell.inspector.viewController.view
-        let none = await AcceptanceBuild.read(panel) { !$0.contains("The agents it shows now") && $0.contains("Watch") }
-        #expect(!none.contains("The agents it shows now"), "\(none)")
-        #expect(try await AcceptanceShell.drawnInfo(shell).joined(separator: " ").contains("It shows no agent."))
-
         let shop = stage.home.places.home.appendingPathComponent("code/shop")
         try FileManager.default.createDirectory(at: shop, withIntermediateDirectories: true)
         var picks = 0
@@ -762,12 +729,6 @@ struct AcceptanceShell {
         #expect(grant.level == .run && grant.granted == ["state", "send", "launch"] && grant.folder == shop.path)
         #expect((view.ask as? FakeAsk)?.questions.count == asked, "a level chosen in Info asks nothing more")
         #expect(await lists("No agent shown.", not: true), "it sees them again")
-        let running = await AcceptanceBuild.read(panel) { $0.contains("The agents it shows now") }
-        #expect(running.contains("The agents it shows now"), "\(running)")
-        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
-        for words in ["It sees them, writes to them", "Starts them in", "~/code/shop"] {
-            #expect(drawn.contains(words), "the panel shows \(words): \(drawn)")
-        }
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "x5-2" + suffix, root: stage.home.root)
         }
@@ -952,8 +913,8 @@ struct AcceptanceShell {
             #expect(held.shown && held.superview != nil, "the toast is in the picture")
             held.leave(now: true)
         }
-        // History, beside Export: the versions in Info's place.
-        info.showHistory()
+        // History, a tab of the panel.
+        info.select(.history)
         #expect(shell.infoShown && info.content == .history)
     }
     // MARK: Round 2, S6: Page Full Screen and the floating sidebar

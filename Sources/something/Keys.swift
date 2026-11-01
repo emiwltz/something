@@ -46,7 +46,7 @@ enum Keys {
         Command(id: "goto", title: "Go to Space", owner: "F5", area: .spaces, line: "Go to space 1 to 9", words: "⌘1 … ⌘9", mine: true),
         Command(id: "reload", title: "Reload Space", key: "r", action: #selector(App.reloadSpace(_:)), owner: "F5", area: .spaces,
                 line: "Reload the space", mine: true, needsSpace: true),
-        Command(id: "insp", title: "Show Info", key: "i", action: #selector(App.toggleInfo(_:)), owner: "W4", area: .spaces, line: "Your agents, Info and History",
+        Command(id: "insp", title: "Show Agents", key: "i", action: #selector(App.toggleInfo(_:)), owner: "W4", area: .spaces, line: "Your agents, Info and History",
                 mine: true, needsSpace: true),
         Command(id: "escpanel", title: "Close the Panel", owner: "W4", area: .spaces, line: "Close the panel", words: "esc"),
         Command(id: "ask", title: "Ask…", key: "k", action: #selector(App.askAssistant(_:)), owner: "F5", area: .assistant,

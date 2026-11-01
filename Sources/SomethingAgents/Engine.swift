@@ -80,6 +80,15 @@ public final class Engine {
         }
     }
 
+    /// Reads the Mac's agents now rather than at the next tick, walking the readers' folders, then calls `then` on the
+    /// main queue, the state up to date. It looks for no program: `lookAgain` does.
+    public func lookNow(then: @escaping () -> Void) {
+        watch.look { [weak self] seen in
+            self?.saw(seen)
+            then()
+        }
+    }
+
     /// Forgets the ended agents whose time is over, makes the state again and tells the app (internal: a test calls it).
     /// `outside` is the agents seen elsewhere when `saw` just built them; otherwise they are built here.
     func update(outside: (agents: [Agent], threads: [AgentThread])? = nil) {

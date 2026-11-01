@@ -168,8 +168,8 @@ The person answers with one **level** for the whole space, never right by right:
 `store` needs no permission: declared, it is always granted. A space made on something's New Space opens with the level
 the person chose there, before it was built; any other space (a template, an import, a page an agent wrote outside
 something) asks for its level in a window of the Mac at its first opening, pre-set to the highest level its rights use.
-A right above the level is refused without asking again, until the person changes it in Info, where the level is one
-control that applies at once (your page hears `"granted"`). Which agents `state` shows starts as the scope you declare
+A right above the level is refused without asking again, until the person changes it in the panel beside your space,
+one sentence that applies at once (your page hears `"granted"`). Which agents `state` shows starts as the scope you declare
 in `agents`: keep it to the folders the page is about. The person may then change it: all agents on this Mac or one
 folder. **So never assume a right or an agent: read `something.granted`**, listen to `"granted"` for changes, and take
 the agents from the latest state.
@@ -483,10 +483,9 @@ await something.store.set("seen", [...seen, "a1"]);
   part, so a custom element placed directly in `body` cannot be pointed at. Plain, standard elements around what a
   person may want changed make it easy to point at. A comment shows as a numbered pin at its part's top-left corner
   and a tray along the bottom of your space; neither is your page's, and both follow the part as it scrolls.
-- **Info and History.** Info (⌘I) and History open in one panel, 320 points wide, docked at the window's right edge:
-  your space narrows beside it and gets a `resize`, nothing hides under it: lay your page out for narrow widths too.
-  Info also lets the person change the model, effort and mode of an agent your page shows, send it one of its commands,
-  and continue a `claude` or `codex` conversation in Terminal, which stops that agent: your page sees it in the state.
+- **The panel.** Agents, Info and History are one panel, 320 points wide, docked at the window's right edge: your space
+  narrows beside it and gets a `resize`, nothing hides under it: lay your page out for narrow widths too. The panel is
+  the person's: your page cannot see it, draw it or press it, and it works at every level.
   While the person holds a version in History, that version of your files shows over your page in a second, read-only
   view: it reads today's state and memory, and every other call is refused with `NOT_SUPPORTED` ("This is an older
   version of the space, shown to compare: it cannot act.") before it reaches your journal. Do not count on how many
@@ -497,7 +496,7 @@ await something.store.set("seen", [...seen, "a1"]);
 - **Keys.** These keys are something's, even while your page has the focus: ⌘P, ⌘N, ⇧⌘T, ⌘1 … ⌘9, ⌘R, ⌘I, ⌘K,
   ⌘J, ⇧⌘K, ⌘\, ⌘., ⌥⌘P, ⌥⌘S, ⇧⌘F, ⌃⌘F, ⌃⌘S, ⌘+, ⌘−, ⌘0, ⌘, and ⌘/. They go to something's menus before your page sees
   them, and `preventDefault()` cannot keep them. While comments wait over your space, ⌘↵ sends them; while one of
-  something's notes shows over it, Escape closes it; in Page Full Screen (⇧⌘F), where your space fills the window,
+  something's notes or its panel shows, Escape closes it; in Page Full Screen (⇧⌘F), where your space fills the window,
   Escape ends it. Every other key is your page's.
 
 ## Checking your space

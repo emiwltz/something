@@ -107,6 +107,7 @@ package final class Watch {
     /// Seen elsewhere, an agent is listed while alive and for this long after its last activity.
     package static let recent: TimeInterval = 24 * 3600
     static let discoveryEvery = 15
+    static let lookLimit: TimeInterval = 5
 
     private let lanes: [Lane]
     private let snapshot: () -> Snapshot
@@ -146,6 +147,16 @@ package final class Watch {
         cancel = repeating(seconds, queue) { [weak self] in
             guard let self else { return }
             let result = tick(now: Date(), within: seconds / 2)
+            DispatchQueue.main.async { seen(result) }
+        }
+    }
+
+    /// One tick now rather than at the next beat, a walk of the readers' folders, whose result goes to `seen` on the main
+    /// queue. Runs on the watch's queue, as a tick does, and waits for no reader past `lookLimit`.
+    func look(_ seen: @escaping (Seen) -> Void) {
+        queue.async { [self] in
+            ticks = 0
+            let result = tick(now: Date(), within: Watch.lookLimit)
             DispatchQueue.main.async { seen(result) }
         }
     }

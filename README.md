@@ -78,7 +78,7 @@ it, with Undo (⌘Z); Redo (⇧⌘Z) puts it back.
 
 A space's past is kept as **versions** in `~/Library/Application Support/something/versions/`, never in the spaces
 folder: after each change, its files, each content stored once, named by the sentence that asked for it, or "Edited
-outside something" when no turn of its assistant made it. History (in Info, ⌘I, or View › Show History…) lists them with
+outside something" when no turn of its assistant made it. History (the panel's third tab, or View › Show History…) lists them with
 a picture of each; hold one (or press Space) to see it over the page, let go to come back. Restore This Version is
 itself a version, undone by ⌘Z, and the files it did not have go to the Trash. 50 versions per space and 500 MB in all
 are kept by default; the oldest go first, never a space's latest, its files or its memory. A space heavier than 15 MB or
@@ -150,11 +150,11 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   at first): that choice is your consent, and the space opens without asking. A space made elsewhere (a template, an
   import, an agent outside something) asks in a sheet at its first opening, with the same sentence, pre-set to what it
   declares; Don't Allow is kept, and it does not ask again by itself. What a space declares above its level stays
-  refused, without asking again. Its memory needs no permission: it stays with the space. Info (⌘I), a panel beside the
-  space, says it all in three parts: the space (its file, its size, Export, History), your agents (its level, one
-  control that changes it at once, Run's folder, and the agents it shows now) and its assistant (its agent and model,
-  its last reply, Open Conversation). Settings › Permissions lists every space with its level, and changes one the same way;
-  Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
+  refused, without asking again. Its memory needs no permission: it stays with the space. The panel (⌘I) opens on
+  that sentence: a click on a word changes it at once, and the list under it, This Space Sees, is the page's own list.
+  Its Info tab holds the file, its size, Export, its memory, its versions and who built it. Settings › Permissions lists
+  every space with its level, and changes one the same way; Settings › Permissions › Folders lists each folder your
+  spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is

@@ -21,7 +21,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let split = NSSplitViewController()
     /// The center: one of its three states at a time.
     let center = NSView()
-    /// The docked panel at the right edge, Info or History (Inspector.swift), collapsed at first.
+    /// The docked panel at the right edge, its tabs Agents, Info and History (Inspector.swift), collapsed at first.
     let inspector: NSSplitViewItem
     let info: Info
     let assistant: AssistantModel, library: Library
@@ -48,6 +48,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     static let onSpace = [point, info, full]
     /// The buttons of the group of tools, by their item: the toolbar would take a subitem's own view out of the group.
     private(set) var controls: [NSToolbarItem.Identifier: NSButton] = [:]
+    /// How many agents the open space's page sees and what their eyes say with its assistant's: the panel button's.
+    private(set) var agentsShown = (count: 0, eyes: Sign.State.listen)
     /// The space's name, which opens Info.
     let titleLine = TitleLine()
     /// Full Access's mark, hidden while it is off.
@@ -130,9 +132,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         followSize(Look.scale.size)
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
-        titleLine.opened = { [weak self] in self.map { $0.toggleInfo(spaceOpen: $0.space != nil) } }
-        info.showHistory = { [weak self] in self?.showHistory() }
-        info.converse = { [weak self] in self?.converse() }
+        titleLine.opened = { [weak self] in self?.toggleTitle() }
+        info.select = { [weak self] in self?.show(tab: $0) }
+        info.counted = { [weak self] count, eyes in
+            guard let self else { return }
+            agents(count: count, eyes: Info.mood(eyes + [assistant.presence.state]))
+        }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
         assistant.noted = { [weak self] words in self?.toast(words, quiet: true) }
@@ -370,10 +375,17 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The toolbar's sidebar button, ⌃⌘S.
     @objc private func sidebarButton() { drawer.toggle() }
 
-    /// What View's and Space's Info items say: what they will do.
-    var infoWords: String { infoShown && info.content == .info ? "Hide Info" : "Show Info" }
+    /// The space's agents, for the panel's button: a count the eyes go with. VoiceOver says the count from now on; the
+    /// header's button draws both.
+    func agents(count: Int, eyes: Sign.State) {
+        agentsShown = (count, eyes)
+        controls[Shell.info]?.setAccessibilityLabel("Your agents: \(count). Open the panel")
+    }
 
-    /// Names a menu item as it reads now: the Info items, in View and Space, say Hide Info while Info shows; Page Full
+    /// What View's and Space's panel items say: what they will do.
+    var infoWords: String { infoShown ? "Hide Agents" : "Show Agents" }
+
+    /// Names a menu item as it reads now: the panel's items, in View and Space, say Hide Agents while it shows; Page Full
     /// Screen's says Exit while it is on; the sidebar's says what it will do, and Keep Sidebar Open is checked while pinned.
     func retitle(_ item: NSMenuItem) {
         if item.identifier?.rawValue == "insp" { item.title = infoWords }
@@ -560,6 +572,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
         // Page Full Screen is under everything else, and an input method's Esc ends its composition, not the page's.
         if let typing = window.firstResponder as? NSTextInputClient, typing.hasMarkedText() { return false }
+        // The panel closes wherever the focus is: this takes Esc from a page while it shows, as the guide says.
+        if !inspector.isCollapsed {
+            showInfo(false)
+            return true
+        }
         guard pageFull else { return false }
         pageFullScreen(false)
         return true
@@ -693,8 +710,8 @@ final class TitleLine: NSView {
     var space = false {
         didSet {
             setAccessibilityRole(space ? .button : .staticText)
-            setAccessibilityHelp(space ? Keys.tooltip("insp") : nil)
-            toolTip = space ? Keys.tooltip("insp") : nil
+            setAccessibilityHelp(space ? "Show Info" : nil)
+            toolTip = space ? "Show Info" : nil
             window?.invalidateCursorRects(for: self)
             invalidateIntrinsicContentSize()
             needsDisplay = true

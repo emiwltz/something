@@ -46,7 +46,7 @@ import Testing
             #expect(Shell.onSpace.allSatisfy { shell.controls[$0]?.isHidden == false && item($0)?.isEnabled == true })
             #expect(item(Shell.full)?.isEnabled == true && shell.controls[Shell.full]?.isHidden == false)
             #expect(shell.titleLine.accessibilityRole() == .button && shell.titleLine.accessibilityLabel() == "Daily brief")
-            #expect(shell.titleLine.toolTip == "Show Info (⌘I)" && shell.titleLine.line.string == "Daily brief")
+            #expect(shell.titleLine.toolTip == "Show Info" && shell.titleLine.line.string == "Daily brief")
             // Window › Zoom acts on this window.
             let zoom = NSMenuItem(title: "Zoom", action: Keys.command("zoom")?.action, keyEquivalent: "")
             #expect(shell.window.validateUserInterfaceItem(zoom))

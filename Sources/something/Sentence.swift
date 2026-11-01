@@ -134,6 +134,7 @@ private struct WordPlace: NSViewRepresentable {
 /// One word of the sentence: a button over its system menu.
 private struct Word: View {
     let text: String, label: String, menu: WordMenu
+    let size: CGFloat
     var monogram: String? = nil
     /// Open by itself at this drawing.
     var opens = false
@@ -143,7 +144,7 @@ private struct Word: View {
         Button { spot.open(menu) } label: {
             HStack(spacing: 4) {
                 if let monogram { Monogram(name: monogram, side: 15) }
-                Text(text).font(Look.font(.ui, size: 14.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).lineLimit(1).truncationMode(.middle)
+                Text(text).font(Look.font(.ui, size: size, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).lineLimit(1).truncationMode(.middle)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
             }
             .padding(.leading, 7).padding(.trailing, 6).frame(height: 26)
@@ -197,19 +198,21 @@ struct Sentence: View {
     let locks: Bool
     /// Whether "any agent" is a choice: a page with a plain `launch`.
     let anyAgent: Bool
+    /// The size of its words: smaller in the panel's column.
+    let size: CGFloat
 
     private let scopeSpot = WordSpot()
 
-    init(_ subject: String, choice: Binding<LevelChoice>, folders: [String], home: String, warning: String?, agents: [String]? = nil, space: String? = nil, locks: Bool = true, anyAgent: Bool = false) {
+    init(_ subject: String, choice: Binding<LevelChoice>, folders: [String], home: String, warning: String?, agents: [String]? = nil, space: String? = nil, locks: Bool = true, anyAgent: Bool = false, size: CGFloat = 15) {
         (self.subject, self.choice, self.folders, self.home, self.warning) = (subject, choice, folders, home, warning)
-        (self.agents, self.space, self.locks, self.anyAgent) = (agents ?? Registry.app.builders.map(\.kind), space, locks, anyAgent)
+        (self.agents, self.space, self.locks, self.anyAgent, self.size) = (agents ?? Registry.app.builders.map(\.kind), space, locks, anyAgent, size)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Flow {
                 plain(subject + " may")
-                Word(text: choice.wrappedValue.level.word, label: "What it may do", menu: levelMenu)
+                Word(text: choice.wrappedValue.level.word, label: "What it may do", menu: levelMenu, size: size - 0.5)
                 words
             }
             if let warning { Levels.note(warning, warns: true) } else if locks { lock }
@@ -221,11 +224,11 @@ struct Sentence: View {
         switch chosen.level {
         case .none: plain("your agents.")
         case .run:
-            Word(text: chosen.starts, label: "The agent it starts", menu: agentMenu, monogram: chosen.start == nil ? nil : chosen.starts)
+            Word(text: chosen.starts, label: "The agent it starts", menu: agentMenu, size: size - 0.5, monogram: chosen.start == nil ? nil : chosen.starts)
             plain("in")
-            ended(Word(text: chosen.place(home: home), label: "Where it starts it", menu: folderMenu, opens: WordSpot.opening))
+            ended(Word(text: chosen.place(home: home), label: "Where it starts it", menu: folderMenu, size: size - 0.5, opens: WordSpot.opening))
         default:
-            ended(Word(text: LevelChoice.agents(chosen.scope, home: home), label: "Which agents it shows", menu: scopeMenu, spot: scopeSpot))
+            ended(Word(text: LevelChoice.agents(chosen.scope, home: home), label: "Which agents it shows", menu: scopeMenu, size: size - 0.5, spot: scopeSpot))
         }
     }
 
@@ -238,7 +241,7 @@ struct Sentence: View {
     }
 
     private func plain(_ words: String) -> some View {
-        Text(words).font(Look.font(.ui, size: 15).ui).kerning(-0.15).foregroundStyle(Look.Token.ink.ui)
+        Text(words).font(Look.font(.ui, size: size).ui).kerning(-0.15).foregroundStyle(Look.Token.ink.ui)
     }
 
     private var lock: some View {

@@ -228,7 +228,7 @@ enum Mockup {
         #expect(listed == mine, "the guide lists \(listed.subtracting(mine).sorted()) too, and not \(mine.subtracting(listed).sorted())")
         // The two keys the window takes from a focused page only for a while (Shell.sendComments, Shell.escape).
         let flatGuide = guide.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        #expect(flatGuide.contains("While comments wait over your space, ⌘↵ sends them; while one of something's notes shows over it, Escape closes it; "
+        #expect(flatGuide.contains("While comments wait over your space, ⌘↵ sends them; while one of something's notes or its panel shows, Escape closes it; "
                                    + "in Page Full Screen (⇧⌘F), where your space fills the window, Escape ends it."))
         // The README names a few of them as examples: each must be one something keeps.
         let readme = try String(contentsOf: Home.share.deletingLastPathComponent().appendingPathComponent("README.md"), encoding: .utf8)

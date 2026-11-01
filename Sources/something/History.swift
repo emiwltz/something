@@ -240,12 +240,10 @@ import WebKit
 struct HistoryView: View {
     @Bindable var history: History
     let title: String
-    let close: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            DockHeader(title: "History", sub: "\(title) · \(history.versions.count) version\(history.versions.count == 1 ? "" : "s") · \(Size.words(history.bytes))",
-                        close: ("Close History", close))
+            DockHeader(title: "History", sub: "\(title) · \(history.versions.count) version\(history.versions.count == 1 ? "" : "s") · \(Size.words(history.bytes))")
             ScrollViewReader { scroller in
                 ScrollView {
                     VStack(spacing: 1) {

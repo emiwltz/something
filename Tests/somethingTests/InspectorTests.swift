@@ -150,7 +150,7 @@ import Testing
         info.show(library.entry("board")?.space)
         info.content = .history
         shell.showInfo(true)
-        #expect(shell.infoShown && info.content == .info, "⌘I opens Info, whatever the panel held")
+        #expect(shell.infoShown && info.content == .agents, "the panel opens on Agents, whatever it held")
         // Default's sizes: read in Stage's drawing turn, which no size test of another suite holds at Large meanwhile.
         await Stage.alone {
             shell.window.layoutIfNeeded()

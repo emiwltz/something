@@ -1,12 +1,10 @@
-// Info, docked at the window's right edge at full height, 320 points: the space narrows beside it, nothing hides under
-// it. One panel holds Info or History (History.swift), swapped by `content` without a relayout; it opens and closes at
-// once, the page laid out again a single time (SP10). Info is everything about the open space in one place, in three
-// parts that follow what a space is (X5.1): Space (its file, its size and last change, Export, History),
-// Your agents (its level, one control, Run's folder, its lasting rules with Revoke, and the agents its page shows now,
-// each with its reading and what it offers: model, effort, mode, its commands, Continue in Terminal)
-// and Assistant (its eyes, the agent and model in one chip, its last reply, Open Conversation); Move to Trash… waits
-// quietly at the foot. A level chosen here is the person's answer: kept in the grants file, it reaches the open space
-// at once as a `granted` event (X5.2). ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
+// The panel, docked at the window's right edge at full height, 320 points: the space narrows beside it, nothing hides
+// under it. One panel with three tabs, Agents (AgentsPanel.swift), Info and History (History.swift), swapped by `content`
+// without a relayout; it opens and closes at once, the page laid out again a single time (SP10). It is the person's: it
+// works at every level, whatever the page draws, and no page can see it, draw it or press it. Info holds the space's
+// file, its size and last change, Export, its memory, its versions and its assistant; Move to Trash… waits quietly at
+// the foot. A level chosen in the panel's sentence is the person's answer: kept in the grants file, it reaches the open
+// space at once as a `granted` event. ✕ and ⌘I close it, and Esc while the focus is in it: an Esc of the whole window
 // would take it from every page and field.
 import Observation
 import SomethingAgents
@@ -14,8 +12,8 @@ import SomethingCore
 import SwiftUI
 
 @Observable final class Info {
-    /// What the docked panel holds.
-    enum Content { case info, history }
+    /// The panel's tabs.
+    enum Content: String, CaseIterable { case agents = "Agents", info = "Info", history = "History" }
 
     @ObservationIgnored let places: Places
     @ObservationIgnored let ask: Asking
@@ -25,24 +23,31 @@ import SwiftUI
     @ObservationIgnored var close: () -> Void = {}
     /// The clock the dates are said by; a test sets it.
     @ObservationIgnored var clock: () -> Date = Date.init
-    /// Shows History in the panel: the window's.
-    @ObservationIgnored var showHistory: () -> Void = {}
-    /// Open Conversation: the window closes the panel and opens the assistant's card on its conversation.
-    @ObservationIgnored var converse: () -> Void = {}
+    /// Shows a tab of the panel: the window's.
+    @ObservationIgnored var select: (Content) -> Void = { _ in }
+    /// Hears how many agents the page sees and what their eyes say, at each reading: the window's panel button.
+    @ObservationIgnored var counted: (Int, [Sign.State]) -> Void = { _, _ in }
     /// Asks the person for Run's folder and gives it on; a test answers in its place.
     @ObservationIgnored var pick: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
     /// Opens a command file in Terminal; a test sets it.
     @ObservationIgnored var terminal: (URL) -> Void = { NSWorkspace.shared.open($0) }
     /// The open space's versions, which History shows.
     let history: History
-    var content = Content.info
+    var content = Content.agents
     private(set) var space: Space?
     /// Its declared description: the line under its title.
     private(set) var about: String?
     /// The level in force; nil while it cannot be shown (no declaration in force) or its grants do not read.
     private(set) var level: Grant.Level?
-    /// Where the agents it starts work, for Run.
+    /// Where the agents it starts work, for Run, and the one its page declares when it is on this Mac.
     private(set) var folder: String?
+    private var declared: String?
+    /// Which agents it shows, the one agent it may start, and the kinds its page declares it starts.
+    private var scope: Scope?
+    private var start: Grant.Start?
+    private(set) var kinds: [String] = []
+    /// The sentence while Run waits for its folder: nothing is granted until then.
+    private var draft: LevelChoice?
     /// Its lasting rules, oldest first (Rules.swift).
     private(set) var rules: [Rule] = []
     /// Why the level cannot be shown: the grants file does not read.
@@ -50,11 +55,25 @@ import SwiftUI
     /// Its last change (the newest of a folder's files) and its weight; nil when unread.
     private(set) var changed: Date?
     private(set) var size: Size?
-    /// The agents its page sees now, as it receives them; and the folders the Mac's agents work in, Run's choices.
+    /// The agents its page sees now, and the others on this Mac, assistants apart; and the folders the Mac's agents work
+    /// in, Run's choices.
     private(set) var shown: [AgentReading] = []
+    private(set) var others: [AgentReading] = []
     private(set) var folders: [String] = []
+    /// The warning that replaces the sentence's lock line, when an agent in reach never asks.
+    private(set) var warning: String?
     /// The launched agents leaving for Terminal, by id, from the click on: each goes once. Ids are not reused in a run.
     private(set) var moving: Set<String> = []
+    /// Whether Look Again is at work; what it found; and the rows of what it found, by key, for their halo.
+    private(set) var looking = false
+    private(set) var said: String?
+    private(set) var fresh: Set<String> = []
+    /// Looks at the Mac now, then calls back; a test gives what is found.
+    @ObservationIgnored var look: (Engine, @escaping () -> Void) -> Void = { $0.lookNow(then: $1) }
+    /// The row opened in place and the row under the pointer, by id; and Others, folded or not, once the person chose.
+    var opened: String?
+    var hovered: String?
+    var othersOpen: Bool?
     /// Where the agents shown run; a test gives its own lineage.
     @ObservationIgnored var runs = RunsIn()
     /// The titles read so far, by `Rights.key`: a title outlives the turns a conversation drops, and a move.
@@ -71,17 +90,22 @@ import SwiftUI
 
     /// Shows `space`, or nothing when no space is open. Read again at each change: it is a few small files.
     func show(_ space: Space?) {
+        if space?.name != self.space?.name { (opened, othersOpen, said, fresh) = (nil, nil, nil, []) }
         self.space = space
         history.show(space)
         (about, level, folder, problem, changed, size, rules) = (nil, nil, nil, nil, nil, nil, [])
+        (declared, scope, start, kinds, draft) = (nil, nil, nil, [], nil)
         defer { refresh() }
         guard let space else { return }
-        let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration
+        let reading = Declaration.read(space, home: places.home, kinds: Registry.app.kinds), declaration = reading.declaration
         about = declaration?.description
-        if declaration != nil {
+        if let declaration {
+            kinds = declaration.rights.filter { $0.hasPrefix("launch:") }.map { String($0.dropFirst("launch:".count)) }
+            declared = Levels.onThisMac(declaration.folder, home: places.home)
             do {
                 let grant = try Grants(places.grants).read().spaces[space.name]
-                (level, folder, rules) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder, grant?.rules ?? [])
+                (level, folder, rules, start) = (grant.map(Rights.level(of:)) ?? Grant.Level.none, grant?.folder, grant?.rules ?? [], grant?.start)
+                scope = Rights.granted(reading, grant, limits: [:], home: places.home).agents
             } catch {
                 problem = error.sentence
             }
@@ -93,31 +117,93 @@ import SwiftUI
         size = Size(bytes: files.compactMap(\.fileSize).reduce(0, +), files: files.count)
     }
 
-    /// Reads again which agents the open space's page sees and where the Mac's agents work: at each change of the
-    /// state, while the panel shows. Only a change is set, so the panel is drawn again only then.
+    /// Reads again the Mac's agents, which of them the open space's page sees, and where they work: at each change of
+    /// the state, as the panel's button counts them even while the panel is closed. The panel is the person's, so it reads
+    /// the state as it is; only which agents the page sees comes through the page's own sight. Only a change is set, so
+    /// the panel is drawn again only then.
     func refresh() {
-        let view = open()
-        let visible = view.map { Bridge.visible($0) }, agents = visible?.agents ?? []
-        let known = view.map { Levels.folders($0.engine.state) } ?? []
-        let threads = Dictionary((visible?.threads ?? []).map { ($0.agent, $0) }) { first, _ in first }
+        let view = open(), state = view?.engine.state
+        let sees = Set(view.map { Bridge.visible($0).agents.map(\.id) } ?? []), mine = view?.engine.assistants ?? []
+        let agents = (state?.agents ?? []).filter { !mine.contains($0.id) }
+        let threads = Dictionary((state?.threads ?? []).map { ($0.agent, $0) }) { first, _ in first }
         let readings = agents.map { AgentReading($0, thread: threads[$0.id], known: titles[Rights.key($0)], runs: runs) }
         for reading in readings where reading.named { titles[reading.key] = reading.title }
         runs.keep(agents)
-        if readings != shown { shown = readings }
+        let seen = readings.filter { sees.contains($0.id) }, rest = readings.filter { !sees.contains($0.id) }
+        // The list holds only what the page sees: its reach is that list, whatever the sentence's scope.
+        let warns = Levels.warning(choice, agents: seen.map(\.agent), threads: seen.compactMap { threads[$0.id] }, reach: .all)
+        let known = state.map(Levels.folders) ?? []
+        if seen != shown { shown = seen }
+        if rest != others { others = rest }
+        if warns != warning { warning = warns }
         if known != folders { folders = known }
+        counted(seen.count, seen.map(\.eyes))
     }
+
+    /// The sentence as it stands: Run waiting for its folder, else the grant in force. The folder is kept ready under Run,
+    /// so that choosing Run opens no menu when it is already known.
+    var choice: LevelChoice {
+        draft ?? LevelChoice(level: level ?? .none, scope: scope, start: start ?? (kinds.count == 1 ? Grant.Start(kind: kinds[0]) : nil),
+                             folder: (folder ?? declared).map { .path($0) } ?? .none)
+    }
+
+    /// The person changed a word of the sentence: it applies at once, but for Run, which waits for its folder.
+    func say(_ chosen: LevelChoice) {
+        guard let space else { return }
+        guard chosen.level != .run || chosen.folder != .none else {
+            draft = chosen
+            return refresh()
+        }
+        draft = nil
+        choose(chosen.level, folder: chosen.folder == .blank ? places.blank(space.name) : chosen.folder.path, start: chosen.start,
+               scope: chosen.scope == scope ? nil : chosen.scope)
+    }
+
+    /// Look Again: reads the Mac now, then says what it found since this look began, its rows lit for a moment.
+    func lookAgain() {
+        guard !looking, let engine = open()?.engine else { return }
+        let before = Set((shown + others).map(\.key))
+        (looking, said) = (true, nil)
+        look(engine) { [weak self] in
+            guard let self else { return }
+            refresh()
+            let found = (shown + others).filter { !before.contains($0.key) }
+            looking = false
+            said = found.count > 1 ? "Found \(found.count) agents." : found.first.map { [home = places.home.path] reading in
+                "Found \(reading.title)\(reading.folder.map { " in " + Words.path($0, home: home) } ?? "")."
+            } ?? "Nothing new."
+            guard !found.isEmpty else { return }
+            if !Set(others.map(\.key)).isDisjoint(with: found.map(\.key)) { othersOpen = true }
+            fresh = Set(found.map(\.key))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.9) { [weak self] in self?.fresh = [] }
+        }
+    }
+
+    /// Others by folder, each folder where its first agent stands; agents whose folder is unknown make one group.
+    var groups: [(folder: String?, rows: [AgentReading])] {
+        others.reduce(into: []) { groups, reading in
+            if let at = groups.firstIndex(where: { $0.folder == reading.folder }) { groups[at].rows.append(reading) } else { groups.append((reading.folder, [reading])) }
+        }
+    }
+
+    /// Whether Others is folded: when long, unless the person chose or the page sees nothing, where it is all there is.
+    var othersFolded: Bool { othersOpen.map { !$0 } ?? (level != nil && level != Grant.Level.none && others.count > 3) }
+
+    /// What the eyes of a list say together: what needs the person, else what works, else what cannot be told.
+    static func mood(_ eyes: [Sign.State]) -> Sign.State { [.wait, .think, .unknown].first(where: eyes.contains) ?? .listen }
 
     /// The person chose `level` here, or for `other` in Settings › Permissions: it becomes the space's grant at once, as on
     /// New Space, and the space, when open, hears it. Run takes `chosen`, else the folder in force, else the one its page
-    /// declares when it is on this Mac, else asks for one; a folder not chosen changes nothing. Says a failure.
-    func choose(_ level: Grant.Level, folder chosen: String? = nil, in other: Space? = nil) {
+    /// declares when it is on this Mac, else asks for one; a folder not chosen changes nothing. `start` and `scope`, given,
+    /// are the sentence's. Says a failure.
+    func choose(_ level: Grant.Level, folder chosen: String? = nil, in other: Space? = nil, start: Grant.Start? = nil, scope: Scope? = nil) {
         guard let space = other ?? space, let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
         let kept = other == nil ? self.folder : (try? Grants(places.grants).read())?.spaces[space.name]?.folder
         let folder = level == .run ? chosen ?? kept ?? Levels.onThisMac(declaration.folder, home: places.home) : nil
-        if level == .run, folder == nil { return pick { [weak self] in self?.choose(.run, folder: $0, in: other) } }
+        if level == .run, folder == nil { return pick { [weak self] in self?.choose(.run, folder: $0, in: other, start: start, scope: scope) } }
         do {
             try Grants(places.grants).update {
-                $0.spaces[space.name] = Rights.leveled(level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: $0.spaces[space.name])
+                $0.spaces[space.name] = Rights.leveled(level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: $0.spaces[space.name], start: start, scope: scope)
             }
         } catch {
             ask.tell(error.sentence)
@@ -204,6 +290,14 @@ import SwiftUI
             + (changed.map { " · changed " + day($0, now: now, time: true).inSentence } ?? "")
     }
 
+    /// What its memory holds, in words.
+    var memory: String {
+        guard let space, let bytes = try? Memory(folder: places.data, space: space.name).file.resourceValues(forKeys: [.fileSizeKey]).fileSize, bytes > 2 else {
+            return "It keeps no memory."
+        }
+        return "\(Size.words(bytes)) of \(Size.words(Memory.limit))"
+    }
+
     /// The open space's view, when it is the one shown here.
     private func open() -> SpaceView? { current().flatMap { $0.space.name == space?.name ? $0 : nil } }
 }
@@ -264,9 +358,9 @@ extension Shell {
     /// Whether the docked panel shows.
     var infoShown: Bool { !inspector.isCollapsed }
 
-    /// Opens Info, or closes the panel, at once: the page is laid out again a single time, never through an animation.
-    func showInfo(_ shown: Bool) {
-        if shown { info.content = .info }
+    /// Opens the panel on `tab`, or closes it, at once: the page is laid out again a single time, never through an animation.
+    func showInfo(_ shown: Bool, on tab: Info.Content = .agents) {
+        if shown { info.content = tab }
         if shown { HintBubble.close(in: layer, only: .info) }
         info.history.closed()
         // Keys that were in the panel go back to the page as it closes, or to point mode's overlay while it is on.
@@ -276,31 +370,31 @@ extension Shell {
         }
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
-        titleLine.held = shown && info.content == .info
+        titleLine.held = shown && tab == .info
     }
 
-    /// Shows History in the panel, in Info's place, while a space is open, with the keys: ↑ ↓, Space and Esc are
-    /// History's at once. Info's button is not pressed for it.
+    /// Shows History in the panel, while a space is open, with the keys: ↑ ↓, Space and Esc are History's at once.
     func showHistory() {
         guard space != nil else { return }
         if info.content != .history || inspector.isCollapsed { info.history.opened() }
         info.content = .history
         inspector.isCollapsed = false
-        (controls[Shell.info] as? ToolButton)?.pressed = false
+        (controls[Shell.info] as? ToolButton)?.pressed = true
         titleLine.held = false
         window.makeFirstResponder(inspector.viewController.view)
     }
 
-    /// Info's Open Conversation: the panel closes, the assistant's card opens on its conversation, its field ready.
-    func converse() {
-        showInfo(false)
-        assistant.threadShown = true
-        assistant.focus()
-    }
+    /// A tab of the panel, chosen.
+    func show(tab: Info.Content) { tab == .history ? showHistory() : showInfo(true, on: tab) }
 
-    /// ⌘I and the toolbar's Info: opens Info while a space is open (in History's place when it shows), else closes
-    /// the panel.
-    func toggleInfo(spaceOpen: Bool) { showInfo(!(infoShown && info.content == .info) && spaceOpen) }
+    /// ⌘I and the toolbar's button: opens the panel on Agents while a space is open, else closes it.
+    func toggleInfo(spaceOpen: Bool) { showInfo(!infoShown && spaceOpen) }
+
+    /// The title: opens the panel on Info, or closes it from there.
+    func toggleTitle() {
+        guard space != nil else { return }
+        showInfo(!(infoShown && info.content == .info), on: .info)
+    }
 }
 
 struct InspectorView: View {
@@ -311,14 +405,16 @@ struct InspectorView: View {
     var body: some View {
         Group {
             if let space = info.space {
-                let title = library.entry(space.name)?.title ?? space.name
+                let title = title(space)
                 VStack(spacing: 0) {
                     // The toolbar's lower edge goes on over the panel.
                     Rectangle().fill(Look.Token.line.ui).frame(height: 1)
-                    if info.content == .history {
-                        HistoryView(history: info.history, title: title, close: info.close)
-                    } else {
-                        DockHeader(title: title, sub: info.about ?? "", close: ("Close Info", info.close), titleSize: 19, lines: 3)
+                    top
+                    switch info.content {
+                    case .agents: AgentsPanel(info: info, assistant: assistant, title: title, motion: library.preferences.motion)
+                    case .history: HistoryView(history: info.history, title: title)
+                    case .info:
+                        DockHeader(title: title, sub: info.about ?? "", titleSize: 19, lines: 3)
                         details(space)
                     }
                 }
@@ -333,13 +429,30 @@ struct InspectorView: View {
         .overlay(alignment: .leading) { Rectangle().fill(Look.Token.line.ui).frame(width: 1) }
     }
 
-    /// Info's three parts and its foot, scrolled.
+    /// The tabs and ✕, the same on all three.
+    private var top: some View {
+        HStack(spacing: 8) {
+            Segments(title: "This space", options: Info.Content.allCases.map { .init(value: $0.rawValue, label: $0.rawValue) }, chosen: info.content.rawValue,
+                     set: { tab in if let tab = Info.Content(rawValue: tab) { info.select(tab) } }, wide: true)
+            Button(action: info.close) {
+                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink2.ui)
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).help(Keys.tooltip("insp", "Close")).accessibilityLabel("Close the panel")
+        }
+        .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 10))
+        .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+    }
+
+    /// Info's parts and its foot, scrolled.
     private func details(_ space: Space) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 part("Space") { file(space) }
-                part("Your agents") { agents }
-                if assistant.place.space == space.name { part("Assistant") { yours } }
+                if info.level == .run || !info.rules.isEmpty { part("Lasting Rules") { always } }
+                part("Memory") { Text(info.memory).foot() }
+                part("Versions") { versions }
+                if assistant.place.space == space.name { part("Assistant") { Text("\(Words.possessive(title(space))) assistant works with \(assistant.name) · \(assistant.modelWords.model).").foot() } }
                 Button {
                     if let entry = library.entry(space.name) { library.trashing(entry) }
                 } label: {
@@ -352,7 +465,23 @@ struct InspectorView: View {
         .scrollIndicators(.never)
     }
 
-    /// Space: where its file is, with Show in Finder; its weight and last change; Export and History.
+    /// How many versions it keeps, and the way to them.
+    private var versions: some View {
+        let count = info.history.versions.count
+        return HStack(spacing: 8) {
+            Text("\(count) version\(count == 1 ? "" : "s")").foot()
+            Spacer(minLength: 0)
+            Button { info.select(.history) } label: {
+                Text("Show History").font(Look.font(.ui, size: 12, weight: .medium).ui).underline(color: Look.Token.line2.ui).foregroundStyle(Look.Token.ink.ui)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Its title. Whether its assistant built the page is not kept: a template's or an imported page's has an assistant too.
+    private func title(_ space: Space) -> String { library.entry(space.name)?.title ?? space.name }
+
+    /// Space: where its file is, with Show in Finder; its weight and last change; Export.
     private func file(_ space: Space) -> some View {
         let path = Words.path(space.location.path, home: info.places.home.path)
         return VStack(alignment: .leading, spacing: 9) {
@@ -369,41 +498,13 @@ struct InspectorView: View {
             if let size = info.size {
                 Text(Info.weight(size, form: space.form, changed: info.changed, now: info.clock())).foot()
             }
-            HStack(spacing: 8) {
-                wide("Export…", "square.and.arrow.up") { library.export(space.name) }.help(Keys.tooltip("export", "Export to Downloads"))
-                wide("History", "clock") { info.showHistory() }
-            }
-        }
-    }
-
-    /// Your agents: the level, Run's folder, the agents the page shows now, and what a level never covers.
-    @ViewBuilder private var agents: some View {
-        if let problem = info.problem {
-            Text(problem).foot()
-        } else if let level = info.level {
-            LevelPicker(level: Binding(get: { level }, set: { info.choose($0) }), wide: true)
-            Text(level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
-            if level == .run {
-                HStack(spacing: 8) {
-                    Text("Starts them in").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-                    Spacer(minLength: 0)
-                    FolderChip(folder: info.folder, folders: info.folders, home: info.places.home.path) { info.choose(.run, folder: $0) }
-                }
-                Levels.runNote
-            }
-            if level == .run || !info.rules.isEmpty { always }
-            if level != .none, !info.shown.isEmpty { now }
-            Levels.note(Levels.sheetFine)
-        } else {
-            Text("It can’t be shown now, so it shows no agent.").foot()
+            wide("Export…", "square.and.arrow.up") { library.export(space.name) }.help(Keys.tooltip("export", "Export to Downloads"))
         }
     }
 
     /// Always for this space: each lasting rule, its agent, its command and its folder, with Revoke; or how one is made.
     private var always: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Always for this space").font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink3.ui)
-                .accessibilityAddTraits(.isHeader)
             if info.rules.isEmpty {
                 Text("None yet. Tick “Always for this space” when an agent asks.").foot()
             }
@@ -424,100 +525,6 @@ struct InspectorView: View {
                 .boxed(RoundedRectangle(cornerRadius: 9), Look.Token.sunk.ui, ring: Look.Token.line.ui)
             }
         }
-        .padding(.top, 2)
-    }
-
-    /// The agents the page shows now: who, what it does, where.
-    private var now: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(info.shown, id: \.id) { reading in
-                VStack(alignment: .leading, spacing: 5) {
-                    row(reading)
-                    controls(reading)
-                }
-            }
-        }
-        .padding(4)
-        .boxed(RoundedRectangle(cornerRadius: 9), Look.Token.bg2.ui, ring: Look.Token.line.ui)
-        .accessibilityElement(children: .contain).accessibilityLabel("The agents it shows now")
-    }
-
-    /// One agent: its title and state word; under them its program, its folder and where it runs.
-    private func row(_ reading: AgentReading) -> some View {
-        let folder = reading.folder.map { Words.path($0, home: info.places.home.path) }
-        let under = [reading.named ? reading.program : nil, folder, reading.tag].compactMap { $0 }.joined(separator: " · ")
-        return HStack(alignment: .center, spacing: 8) {
-            Monogram(name: reading.program)
-            VStack(alignment: .leading, spacing: 1) {
-                (Text(reading.title).font(Look.font(.ui, size: 12, weight: .semibold).ui).foregroundColor(Look.Token.ink.ui) + Text(" " + reading.word))
-                    .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
-                Text(under).font(Look.font(.code, size: 10.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1).truncationMode(.middle)
-            }
-        }
-        .padding(.horizontal, 6).padding(.vertical, 5).frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore).accessibilityLabel([reading.title, reading.word, under].joined(separator: ", "))
-    }
-
-    /// What the person can change of an agent, as it lists it; what it cannot do says why. Nothing for one only seen.
-    @ViewBuilder private func controls(_ reading: AgentReading) -> some View {
-        let agent = reading.agent
-        if agent.origin == "launched", agent.alive != false, agent.can.send {
-            setting("Model", agent.options.model, agent.model, agent.can.model, agent.because["model"]) { info.set(agent, model: $0) }
-            setting("Effort", agent.options.effort, agent.effort, agent.can.effort, agent.because["effort"]) { info.set(agent, effort: $0) }
-            setting("Mode", agent.options.mode, agent.mode, agent.can.mode, agent.because["mode"]) { info.set(agent, mode: $0) }
-            setting("Command", agent.commands, nil, true, nil) { info.command($0, to: agent) }
-        }
-        if info.terminalWords(reading) != nil {
-            let busy = agent.alive != false && ["working", "waiting"].contains(agent.state), moving = info.moving.contains(agent.id)
-            wide("Continue in Terminal", "terminal") { info.continueInTerminal(reading) }.disabled(busy || moving)
-                .help(moving ? "It is moving to Terminal." : busy ? "It can continue in Terminal once this turn ends." : "something stops this agent, and Terminal continues its conversation.")
-                .padding(.horizontal, 6)
-        }
-    }
-
-    /// One line of an agent's settings: a menu of what it lists, else why not; nothing when neither is known.
-    @ViewBuilder private func setting(_ title: String, _ list: [Option]?, _ chosen: String?, _ can: Bool, _ why: String?,
-                                      _ run: @escaping (String) -> Void) -> some View {
-        if can, let list, !list.isEmpty {
-            HStack(spacing: 8) {
-                Text(title).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-                Spacer(minLength: 0)
-                Menu(list.first { $0.value == chosen }?.label ?? chosen ?? "Choose…") {
-                    ForEach(list, id: \.value) { option in Button(option.label) { run(option.value) } }
-                }
-                .menuStyle(.borderlessButton).fixedSize().font(Look.font(.ui, size: 12).ui).accessibilityLabel(title)
-            }
-            .padding(.horizontal, 6)
-        } else if let why {
-            Text("\(title): \(why)").foot().padding(.horizontal, 6)
-        }
-    }
-
-    /// Assistant: its eyes, the agent and model in one chip, its last reply, Open Conversation.
-    private var yours: some View {
-        let state = assistant.presence.state
-        let last = assistant.rows.last { $0.reply != nil }?.reply.map { $0.split(whereSeparator: \.isNewline).joined(separator: " ") }
-        return VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 8) {
-                PageSign(state: state, side: 22, lands: false, motion: library.preferences.motion)
-                    .accessibilityElement().accessibilityLabel("Its assistant: \(state.word)")
-                AgentModelChip(model: assistant)
-            }
-            if let last {
-                Text("“\(last.count > 110 ? String(last.prefix(108)) + "…" : last)”").font(Look.font(.voice, size: 12).ui).lineSpacing(3)
-                    .foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityLabel("Its last reply: \(last)")
-            }
-            Button(action: info.converse) {
-                HStack(spacing: 6) {
-                    Image(systemName: "bubble.left").font(.system(size: 11)).foregroundStyle(Look.Token.ink2.ui)
-                    Text("Open Conversation").font(Look.font(.ui, size: 12.5, weight: .medium).ui)
-                    Text(Keys.shown("ask")).font(Look.font(.ui, size: 10, weight: .medium).ui).foregroundStyle(Look.Token.ink3.ui)
-                }
-            }
-            .buttonStyle(Secondary(height: 30, leading: 10, trailing: 10)).fixedSize()
-            .accessibilityLabel("Open Conversation")
-        }
     }
 
     /// A part of the panel, above a line: its title in small capitals, then its content.
@@ -531,7 +538,7 @@ struct InspectorView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
     }
 
-    /// One of two buttons sharing a row, each as wide as the other.
+    /// A button as wide as its part.
     private func wide(_ title: String, _ symbol: String, _ run: @escaping () -> Void) -> some View {
         Button(action: run) {
             HStack(spacing: 6) {
@@ -544,11 +551,10 @@ struct InspectorView: View {
     }
 }
 
-/// The panel's header, Info's and History's: its title, a line under it (none when empty; Info's description wraps on
-/// up to `lines`), and ✕ (`close`: its label and action).
+/// The head of Info's and History's tab: its title, and a line under it (none when empty; Info's description wraps on
+/// up to `lines`).
 struct DockHeader: View {
     let title: String, sub: String
-    let close: (label: String, run: () -> Void)
     var titleSize: CGFloat = 17, lines = 1
 
     var body: some View {
@@ -562,18 +568,13 @@ struct DockHeader: View {
             }
             .padding(.top, 1)
             Spacer(minLength: 0)
-            Button(action: close.run) {
-                Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink2.ui)
-                    .frame(width: 24, height: 24).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).help(Keys.tooltip("insp", "Close")).accessibilityLabel(close.label)
         }
         .padding(EdgeInsets(top: 14, leading: 16, bottom: 11, trailing: 12))
         .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
     }
 }
 
-private extension View {
+extension View {
     /// The mockup's small foot under a part: 11.5 in ink3.
     func foot() -> some View {
         font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true)

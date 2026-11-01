@@ -45,4 +45,14 @@ import SomethingCore
         let kind = try #require(engine.state.kinds["antigravity"])
         #expect(!kind.launch && kind.installed == nil && kind.tested == "none" && kind.reader == "none" && kind.note == reason)
     }
+
+    /// Look Again: a tick now, whatever the watch's beat, its result in the state before the caller hears of it.
+    @MainActor @Test func lookingNowReadsTheMacAtOnce() async throws {
+        let snapshot = Snapshot([Running(pid: 55000, parent: 1, group: 55000, started: Date(), name: "agy", arguments: ["agy"], folder: "/Users/example/notes")])
+        let engine = Engine.throwaway([:])
+        engine.watch = Watch(readers: [try #require(AgentDescriptor.antigravity.reader?([:]))], snapshot: { snapshot })
+        #expect(engine.state.agents.isEmpty)
+        await withCheckedContinuation { done in engine.lookNow { done.resume() } }
+        #expect(engine.state.agents.map(\.kind) == ["antigravity"])
+    }
 }

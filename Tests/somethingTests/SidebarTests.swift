@@ -169,7 +169,7 @@ import Testing
         defer { test.remove() }
         let library = try library(test)
         #expect(SidebarMenu.text(library.menu(for: try #require(library.entry("agents")))) == [
-            "Open", "Show Info  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —", "  New Group…",
+            "Open", "Show Agents  ⌘I", "Rename…", "Show in Group  ▸", "  Agents  ✓  (dimmed)", "  Notes", "  Breaks", "  —", "  New Group…",
             "  (Groups are only in the sidebar. The file does not move.)", "—", "Show in Finder", "Export…", "—", "Move to Trash…  (red)",
         ])
         #expect(SidebarMenu.text(library.menu(forGroup: "Notes")) == ["Rename…", "New Group"])

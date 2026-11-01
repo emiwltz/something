@@ -410,7 +410,7 @@ struct AcceptanceCommand {
         let (fixture, _) = try Mockup.menus()
         #expect(bar.menu.items.compactMap(\.submenu).map { Mockup.lines($0) } == fixture.map(\.lines))
         let closed = Mockup.dump(bar.menu, Keys.Situation())
-        for line in ["  # No space open", "  Show Info  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P",
+        for line in ["  # No space open", "  Show Agents  ⌘I  (greyed)", "  Ask…  ⌘K  (greyed)", "  Go to…  ⌘P",
                      "  New Space  ⌘N", "  Daily brief  ⌘1"] {
             #expect(closed.contains(line + "\n"), "\(line)")
         }
@@ -422,7 +422,7 @@ struct AcceptanceCommand {
         #expect(go.count == library.entries.filter(\.isSpace).count && go.count == 7)
         #expect(go.filter { $0.state == .on }.map(\.title) == ["Daily brief"])
         let opened = Mockup.dump(bar.menu, Keys.Situation(space: true))
-        for line in ["  # Daily brief", "  # Daily brief’s assistant", "  Show Info  ⌘I", "  Ask…  ⌘K", "  ✓ Daily brief  ⌘1",
+        for line in ["  # Daily brief", "  # Daily brief’s assistant", "  Show Agents  ⌘I", "  Ask…  ⌘K", "  ✓ Daily brief  ⌘1",
                      "  Show History…", "  Put Idle Assistants to Sleep"] {
             #expect(opened.contains(line + "\n"), "\(line)")
         }

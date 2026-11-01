@@ -20,7 +20,7 @@
       {"separator": true, "system": true}, {"title": "Emoji & Symbols", "key": "fn E", "system": true}
     ]},
     {"title": "View", "items": [
-      {"title": "Show Sidebar", "key": "⌃⌘S"}, {"title": "Keep Sidebar Open"}, {"title": "Show Info", "key": "⌘I", "needsSpace": true}, {"separator": true},
+      {"title": "Show Sidebar", "key": "⌃⌘S"}, {"title": "Keep Sidebar Open"}, {"title": "Show Agents", "key": "⌘I", "needsSpace": true}, {"separator": true},
       {"title": "Show History…", "needsSpace": true}, {"title": "Show Keyboard Shortcuts", "key": "⌘/"}, {"separator": true},
       {"title": "Reload Space", "key": "⌘R", "needsSpace": true}, {"separator": true},
       {"header": "Interface Size · Default"}, {"title": "Make Interface Bigger", "key": "⌘+"},
@@ -35,7 +35,7 @@
     ]},
     {"title": "Space", "items": [
       {"header": "No space open"},
-      {"title": "Show Info", "key": "⌘I", "needsSpace": true},
+      {"title": "Show Agents", "key": "⌘I", "needsSpace": true},
       {"title": "What It May Do…", "needsSpace": true}, {"title": "Show History…", "needsSpace": true}, {"separator": true},
       {"title": "Show in Finder", "key": "⌥⌘R", "needsSpace": true}, {"title": "Export Space…", "key": "⇧⌘E", "needsSpace": true}, {"separator": true},
       {"title": "Move to Trash…", "key": "⌘⌫", "needsSpace": true}

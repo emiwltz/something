@@ -397,7 +397,7 @@ struct PaletteCard: View {
 
     private func segment(_ segment: PaletteModel.Segment) -> some View {
         let name = segment.space.flatMap { model.library.entry($0)?.title } ?? ""
-        func eyes() -> some View { Image(nsImage: drawn(Sign.miniEyes(model.eyes(segment.space ?? ""), template: false))).scaleEffect(0.85) }
+        func eyes() -> some View { MiniEyes(state: model.eyes(segment.space ?? "")).scaleEffect(0.85) }
         func named() -> some View { Text(name).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(segment.on ? Look.Token.ink2.ui : Look.Token.ink3.ui).truncationMode(.tail).frame(maxWidth: 130, alignment: .leading).fixedSize() }
         return HStack(spacing: 5) {
             switch segment.place {
@@ -486,7 +486,7 @@ struct PaletteCard: View {
                 }
                 Text(state.word).font(Look.font(.ui, size: 11.5, weight: state == .wait ? .medium : .regular).ui)
                     .foregroundStyle(state == .wait ? Look.Token.ink.ui : Look.Token.ink3.ui)
-                Image(nsImage: drawn(Sign.miniEyes(state, template: false))).frame(width: 18)
+                MiniEyes(state: state).frame(width: 18)
             }
         case .action(let key): if !key.isEmpty { Keycap(words: key) }
         case .template, .ask: EmptyView()

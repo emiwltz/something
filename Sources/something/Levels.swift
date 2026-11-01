@@ -57,8 +57,6 @@ enum Levels {
     static let fine = "Whatever an agent asks still waits for you."
     /// What a person must read before choosing Run, when an agent here acts without asking; else nil.
     static var runWarning: String? { Ask.warning(for: "launch").map { $0 + "." } }
-    /// That warning under Run, when there is one.
-    @ViewBuilder static var runNote: some View { if let runWarning { note(runWarning, warns: true) } }
     /// The one warning that replaces that line, at Talk and at Run: the agent it starts, when that one never asks, and
     /// those it can write to that never ask, by their titles; an agent it only reads is out of its reach. With no agent
     /// named at Run, what any launch may reach. `reach` is the agents' scope when it is not the sentence's. Else nil.
@@ -119,48 +117,6 @@ enum Levels {
         panel.message = "The folder where agents this space starts will work."
         let picked = { (answer: NSApplication.ModalResponse) in if answer == .OK, let url = panel.url { chosen(url.path) } }
         if let window = NSApp.keyWindow { panel.beginSheetModal(for: window, completionHandler: picked) } else { picked(panel.runModal()) }
-    }
-}
-
-/// The four levels side by side (Segments), read by VoiceOver as "With your agents: Watch". As wide as its words, or
-/// as its column (`wide`, Info's).
-struct LevelPicker: View {
-    let level: Binding<Grant.Level>
-    var wide = false
-
-    var body: some View {
-        Segments(title: "With your agents", options: Grant.Level.allCases.map { .init(value: $0.rawValue, label: $0.title) },
-                 chosen: level.wrappedValue.rawValue, set: { level.wrappedValue = Grant.Level(rawValue: $0) ?? .none }, wide: wide)
-    }
-}
-
-/// Run's folder: the folder in force, or Choose Folder…; its menu lists the folders the Mac's agents work in.
-struct FolderChip: View {
-    let folder: String?, folders: [String], home: String
-    let chosen: (String) -> Void
-
-    var body: some View {
-        Menu {
-            Section("Where it may start them") {
-                ForEach(folders, id: \.self) { path in
-                    Toggle(Words.path(path, home: home), isOn: Binding(get: { path == folder }, set: { _ in chosen(path) }))
-                }
-            }
-            Divider()
-            Button("Choose Folder…") { Levels.chooseFolder(chosen) }
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "folder").font(.system(size: 10.5)).foregroundStyle(Look.Token.ink3.ui)
-                Text(folder.map { Words.path($0, home: home) } ?? "Choose Folder…")
-                    .font(folder == nil ? Look.font(.ui, size: 12, weight: .medium).ui : Look.font(.code, size: 12).ui)
-                    .foregroundStyle(Look.Token.ink.ui).lineLimit(1).truncationMode(.middle)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
-            }
-            .padding(.horizontal, 8).frame(height: 26)
-            .boxed(RoundedRectangle(cornerRadius: Look.control), Look.Token.bg.ui, ring: Look.Token.line2.ui)
-        }
-        .plainMenu()
-        .accessibilityLabel("Folder: \(folder.map { Words.path($0, home: home) } ?? "none chosen")")
     }
 }
 

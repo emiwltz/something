@@ -160,7 +160,7 @@ struct AcceptanceTrust {
         let view = try await stage.open(name, in: shell, library)
         (info.current, info.clock) = ({ view }, { Stage.local })
         info.show(view.space)
-        shell.showInfo(true)
+        shell.showInfo(true, on: .info)
         shell.window.layoutIfNeeded()
         return (shell, library, info, view)
     }
@@ -173,11 +173,7 @@ struct AcceptanceTrust {
         defer { view.close() }
         #expect(info.level == .run && info.rules.isEmpty && info.folder?.hasSuffix("/code/shop") == true)
         let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
-        #expect(read.contains("Always for this space") && read.contains("With your agents: Run"), "\(read)")
-        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
-        for words in ["Starts them in", "~/code/shop", "Always for this space", "None yet. Tick", "when an agent asks"] {
-            #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
-        }
+        #expect(read.contains("Lasting Rules"), "\(read)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "x4-1" + suffix, root: stage.home.root)
         }
@@ -250,12 +246,8 @@ struct AcceptanceTrust {
         await Picture.settle(view)
         #expect(info.level == .run && info.rules == [rule])
         let read = await AccessibilityTests.walk(shell.inspector.viewController.view).words
-        for words in ["Always for this space", "Claude Code: git log --oneline -20, in ~/code/atelier", "Revoke git log --oneline -20"] {
+        for words in ["Lasting Rules", "Claude Code: git log --oneline -20, in ~/code/atelier", "Revoke git log --oneline -20"] {
             #expect(read.contains(words), "VoiceOver hears \(words): \(read)")
-        }
-        let drawn = try await AcceptanceShell.drawnInfo(shell).joined(separator: " ")
-        for words in ["Always for this space", "git log --oneline -20", "in ~/code/atelier", "Revoke"] {
-            #expect(drawn.contains(words), "Info shows \(words): \(drawn)")
         }
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: view.web, "x4-3" + suffix, root: stage.home.root)

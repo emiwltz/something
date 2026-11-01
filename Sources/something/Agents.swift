@@ -75,27 +75,37 @@ struct AgentReading: Equatable {
 
 /// The app each agent runs in, read once per process, only for the agents the panel shows.
 final class RunsIn {
-    private let lineage: (Int32) -> [String]
+    private let find: (Agent) -> URL?
     private var kept: [String: URL?] = [:]
 
-    init(lineage: @escaping (Int32) -> [String] = { Processes.lineage($0) }) { self.lineage = lineage }
+    /// `find` says where an agent runs; a stage gives its own invented world.
+    init(find: @escaping (Agent) -> URL?) { self.find = find }
 
-    /// The outermost `.app` of the nearest of `agent` and its ancestors inside one, or nil: a server launchd holds (tmux), a
-    /// service, an agent with no process known. A process keeps its parents: the answer holds while it runs.
+    /// By the agent's process: the outermost `.app` of the nearest of it and its ancestors inside one, or nil: a server
+    /// launchd holds (tmux), a service, an agent with no process known.
+    convenience init(lineage: @escaping (Int32) -> [String] = { Processes.lineage($0) }) {
+        self.init { agent in
+            guard let pid = agent.pid.flatMap(Int32.init(exactly:)), pid > 0 else { return nil }
+            return lineage(pid).lazy.compactMap(RunsIn.outermost).first
+        }
+    }
+
+    /// Where `agent` runs. A process keeps its parents: the answer holds while it runs.
     func app(of agent: Agent) -> URL? {
-        guard let pid = agent.pid.flatMap(Int32.init(exactly:)), pid > 0 else { return nil }
-        let held = "\(agent.id):\(pid)"
+        let held = RunsIn.held(agent)
         if let known = kept[held] { return known }
-        let found = lineage(pid).lazy.compactMap(RunsIn.outermost).first
+        let found = find(agent)
         kept[held] = .some(found)
         return found
     }
 
     /// Forgets all but the processes of `agents`.
     func keep(_ agents: [Agent]) {
-        let held = Set(agents.compactMap { agent in agent.pid.map { "\(agent.id):\($0)" } })
+        let held = Set(agents.map(RunsIn.held))
         kept = kept.filter { held.contains($0.key) }
     }
+
+    private static func held(_ agent: Agent) -> String { "\(agent.id):\(agent.pid ?? 0)" }
 
     /// The outermost `.app` of `path`: a helper's own app inside an app is part of it.
     static func outermost(_ path: String) -> URL? {

@@ -171,7 +171,7 @@ extension Library {
         }
         return [
             .item("Open", symbol: "doc") { [weak self] in self?.select(.space(id)) },
-            .item("Show Info", symbol: "info.circle", key: "insp") { [weak self] in
+            .item("Show Agents", symbol: "info.circle", key: "insp") { [weak self] in
                 self?.select(.space(id))
                 NSApp.sendAction(#selector(App.showSpaceInfo(_:)), to: nil, from: nil)
             },
@@ -218,7 +218,7 @@ extension Library {
 }
 
 extension App {
-    /// Show Info from a row's menu: Info opens beside the space the menu just selected, and stays open when it was.
+    /// Show Agents from a row's menu: the panel opens beside the space the menu just selected, and stays open when it was.
     @objc func showSpaceInfo(_ sender: Any?) {
         shell.showInfo(true)
     }
