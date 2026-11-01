@@ -253,7 +253,7 @@ struct AcceptanceAgents {
         #expect(view.launched.contains("claude-slides") && info.level == Grant.Level.none)
         // Hide keeps the space's rule and owner: a request still belongs to it.
         info.showHere(try #require(info.others.first { $0.id == "claude-slides" }))
-        view.launches.show(["claude-slides"], in: "agents")
+        #expect(view.launched.contains("claude-slides"), "Show lifts what was set aside")
         let rule = Rule(kind: "claude", command: "npm test", folder: "/Users/example/code/atelier", at: "t")
         try Rules.keep(rule, in: "agents", grants)
         info.hide(try #require(info.shown.first { $0.id == "claude-slides" }))
@@ -302,6 +302,26 @@ struct AcceptanceAgents {
         view.push()
         view.push()
         #expect(ask.told.count <= told + 1)
+    }
+
+    /// An id the start could not drop from the file counts for nothing: it may be another agent's in this run.
+    @Test("a list that could not end its run fails closed") func unended() async throws {
+        let stage = try Stage("agents-unended")
+        defer { stage.remove() }
+        let (_, _, _, view) = try await panel(stage, "agents", level: .talk, folder: "nowhere")
+        defer { view.close() }
+        var world = Stage.world
+        var amp = Agent(id: "amp-1", kind: "amp", origin: "launched")
+        amp.alive = true
+        world.agents.append(amp)
+        view.engine.update(outside: world)
+        try Grants(stage.home.places.grants).update { $0.spaces["agents"]?.listed = ["amp-1", "claude:shop"] }
+        view.launches.unended = "Invented."
+        view.regrant()
+        #expect(Bridge.visible(view).agents.map(\.id) == ["claude-shop"])
+        view.launches.unended = nil
+        view.regrant()
+        #expect(Set(Bridge.visible(view).agents.map(\.id)) == ["claude-shop", "amp-1"], "the same run's id counts")
     }
 
     /// Undo of Show at None puts the level back with the list, and a page without `state` gains nothing.

@@ -27,7 +27,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     /// Whether keeping the list failed once: said once, and not tried at each push.
     private var unlisted = false
     /// The agents the space launched or resumed. The app keeps them by the space's name for its whole life
-    /// (`Launches`): a space closed and opened again still sees and drives them. A space with no answers kept is new
+    /// (`Launches`): a space closed and opened again may still see and drive them. A space with no answers kept is new
     /// to the person, and `answer` drops them: it never inherits another's agents.
     let launches: Launches
     var launched: Set<String> {
@@ -298,7 +298,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         title = reading.declaration?.title ?? space.name
         if let declaration = reading.declaration {
             let grant = answer(declaration)
-            (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), grant?.listed)
+            (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), kept(grant))
             inject()
             web.load(URLRequest(url: Scheme.shell))
         } else {
@@ -343,7 +343,7 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         guard blocked.isEmpty, let reading, reading.declaration != nil else { return }
         let grant: Grant?
         do { grant = try Grants(places.grants).read().spaces[space.name] } catch { return ask.tell(error.sentence) }
-        (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), grant?.listed)
+        (granted, listed) = (Rights.granted(reading, grant, limits: Registry.app.limits, home: places.home), kept(grant))
         inject()
         if let frame { web.evaluateJavaScript("window.something && something._granted(\(SpaceView.json(granted)))", in: frame, in: .page) }
         push()
@@ -415,6 +415,9 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         pushed = bare
         SpaceView.push(data, in: web, frame: frame)
     }
+
+    /// `grant`'s list as it counts: an id the file could not forget may be another agent's by now, so it sees nothing.
+    func kept(_ grant: Grant?) -> [String]? { launches.unended == nil ? grant?.listed : grant?.listed?.filter(Rights.names) }
 
     /// Keeps the person's list true to its agents: an entry that held an id takes the key its thread gives, so a late
     /// thread takes no agent from the page, and an agent this space launched joins once it has a key. Hidden ones are not

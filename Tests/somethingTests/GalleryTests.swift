@@ -109,7 +109,7 @@ struct GalleryTests {
         board.open()
         #expect(await wait(until: { !board.web.isLoading && board.frame != nil }), "the agents template did not load")
         board.launched = ["a1"]
-        SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"]).json(), in: board.web, frame: try #require(board.frame))
+        SpaceView.push(try Rights.visible(elsewhere(invented), board.granted, launched: ["a1"], listed: nil).json(), in: board.web, frame: try #require(board.frame))
         library.select(.space("agents"))
         shell.show(board)
         shell.assistant.place = AssistantModel.place(board)
@@ -444,7 +444,7 @@ struct GalleryTests {
         await wait(1)
         // The page then sees the invented agents, through the same filter of rights as the state of the Engine.
         open.launched = ["a1"]
-        let visible = Rights.visible(state, open.granted, launched: open.launched)
+        let visible = Rights.visible(state, open.granted, launched: open.launched, listed: nil)
         SpaceView.push(try visible.json(), in: open.web, frame: try #require(open.frame))
         await wait(0.5)
         let snapshot = try await open.web.takeSnapshot(configuration: nil)

@@ -154,7 +154,7 @@ struct RightsTests {
         var (inside, outside, mine) = (Agent(id: "in", kind: "pi", origin: "elsewhere"), Agent(id: "out", kind: "pi", origin: "elsewhere"), Agent(id: "mine", kind: "pi", origin: "launched"))
         (inside.folder, outside.folder, mine.folder) = ("/Users/example/code/shop", "/Users/example/notes", "/Users/example/notes")
         let world = State(at: at, kinds: [:], agents: [inside, outside, mine])
-        #expect(Rights.visible(world, room, launched: ["mine"]).agents.map(\.id) == ["in", "mine"])
+        #expect(Rights.visible(world, room, launched: ["mine"], listed: nil).agents.map(\.id) == ["in", "mine"])
 
         var file = AppFile()
         file.spaces["a"] = run

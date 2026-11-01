@@ -229,8 +229,8 @@ import WebKit
         let id = try first.launch("claude", folder: shop.path, model: nil, mode: nil, effort: nil)
         first.close()
         let again = try opened(board), elsewhere = try opened(other)
-        #expect(Rights.visible(engine.state, again.granted, launched: again.launched).agents.map(\.id) == [id])
-        #expect(Rights.visible(engine.state, elsewhere.granted, launched: elsewhere.launched).agents.isEmpty)
+        #expect(Rights.visible(engine.state, again.granted, launched: again.launched, listed: nil).agents.map(\.id) == [id])
+        #expect(Rights.visible(engine.state, elsewhere.granted, launched: elsewhere.launched, listed: nil).agents.isEmpty)
         again.close()
         elsewhere.close()
 
@@ -238,7 +238,7 @@ import WebKit
         let new = try opened(board)
         defer { new.close() }
         #expect(new.launched.isEmpty)
-        #expect(Rights.visible(engine.state, new.granted, launched: new.launched).agents.isEmpty)
+        #expect(Rights.visible(engine.state, new.granted, launched: new.launched, listed: nil).agents.isEmpty)
         var stopped = false
         engine.stopAll(within: 6) { stopped = true }
         #expect(await wait(until: { stopped }))

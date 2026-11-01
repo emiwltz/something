@@ -177,8 +177,11 @@ public enum Rights {
     /// A new run of the app begins: the keys that name no conversation go. Ids start again at each run, so one kept would
     /// give a page whichever agent gets it next. A process-only agent goes back to Others, which fails closed.
     public static func endRun(_ file: inout AppFile) {
-        for name in file.spaces.keys { file.spaces[name]?.listed?.removeAll { !$0.contains(":") } }
+        for name in file.spaces.keys { file.spaces[name]?.listed?.removeAll { !names($0) } }
     }
+
+    /// Whether `key` names a conversation, and so outlasts a run.
+    public static func names(_ key: String) -> Bool { key.contains(":") }
 
     /// Whether `command` is one plain command a rule may keep: no chain, pipe, redirection, substitution, variable or
     /// second line, so that a rule never allows more than the person read.
@@ -212,7 +215,7 @@ public enum Rights {
     /// The state limited to what a space sees: the agents it launched, and when it holds `state` those of the person's
     /// `listed`, else of its scope; with no right over agents nothing, not even what it launched, which is None and also a
     /// page that lost the one right it declared; the threads and requests of those agents only.
-    public static func visible(_ state: State, _ granted: Granted, launched: Set<String>, listed: [String]? = nil) -> State {
+    public static func visible(_ state: State, _ granted: Granted, launched: Set<String>, listed: [String]?) -> State {
         var state = state
         let sees = covers(granted.rights, "state"), any = ["state", "send", "launch"].contains { word in granted.rights.contains { covers([word], $0) } }
         state.agents = state.agents.filter { agent in

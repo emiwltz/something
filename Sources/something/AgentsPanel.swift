@@ -56,7 +56,8 @@ extension Info {
 
     /// Show to This Space: the page gets `reading`, and no more. At None the level rises to Watch in the same write as the
     /// list, or a page that declares every agent would see them all between the two, and what the space launched stays out
-    /// of its sight. A right the page did not declare stays out, and a page without `state` still shows nothing.
+    /// of its sight until shown one by one, even if the sentence rises later. A right the page did not declare stays out,
+    /// and a page without `state` still shows nothing but its own launch, which Show lifts from `hidden`.
     func showHere(_ reading: AgentReading) {
         guard let view = open(), let name = space?.name, let title = pageTitle else { return }
         refresh()
@@ -68,12 +69,15 @@ extension Info {
             grant.listed = none ? [reading.key] : (grant.listed ?? seen).filter { $0 != reading.key } + [reading.key]
             word = (none ? Grant.Level.watch : level == .run ? .talk : level).word
         }) else { return }
+        let lifted = view.launches.hidden[name]?.contains(reading.id) == true
         let left = change.raised ? view.launches.hide(view.launched.subtracting([reading.id]), in: name) : []
+        view.launches.show([reading.id], in: name)
         settle(view, [reading.key])
         opened = nil
         if change.raised { raise() }
         told("\(title) may now \(word) \(reading.title)", undo(change, name) { [weak self] in
             view.launches.show(left, in: name)
+            if lifted { _ = view.launches.hide([reading.id], in: name) }
             self?.told("\(title) no longer sees \(reading.title)", nil)
         })
     }

@@ -56,6 +56,6 @@ final class TrashUndo {
         shell.library.forget(trashed)
         shell.assistant.forget(trashed.name)
         shell.forget(trashed.name)
-        shell.assistant.launches.ids[trashed.name] = nil
+        shell.assistant.launches.forget(trashed.name)
     }
 }

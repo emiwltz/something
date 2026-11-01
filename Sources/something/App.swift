@@ -43,7 +43,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Before any space opens, so that no page meets an id of the run before.
-        do { try Grants(places.grants).update(Rights.endRun) } catch { ask.tell(error.sentence) }
+        do { try Grants(places.grants).update(Rights.endRun) } catch { launches.unended = error.sentence }
         menuBar.install()
         menuBar.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
         menuBar.open = { [weak self] in self?.current.map { ($0.space.name, $0.title) } }
@@ -137,6 +137,7 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
         Task { @MainActor in
             defer { if shell.welcoming == nil { shell.front() } }
             do { rules = try await Lockdown.ruleList() } catch { fail(error.sentence) }
+            if let unended = launches.unended { ask.tell(unended) }
             do { try Library.prepare(places) } catch { fail(error.sentence) }
             do { try AssistantModel.writeKnowledge(places, share: Resources.share) } catch { ask.tell(error.sentence) }
             // A space deleted or renamed while the app was not running loses its grants before any space opens.
@@ -500,6 +501,9 @@ final class Launches {
 
     /// `agents` come back into `space`'s sight.
     func show(_ agents: Set<String>, in space: String) { hidden[space]?.subtract(agents) }
+
+    /// Why the keys of the run before could not be dropped from the file, when so: they then count for nothing in this run.
+    var unended: String?
 
     /// A space's name is free again: what was launched under it is no one's.
     func forget(_ space: String) { (ids[space], hidden[space]) = (nil, nil) }
