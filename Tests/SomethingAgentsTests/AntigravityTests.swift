@@ -52,7 +52,11 @@ import SomethingCore
         let engine = Engine.throwaway([:])
         engine.watch = Watch(readers: [try #require(AgentDescriptor.antigravity.reader?([:]))], snapshot: { snapshot })
         #expect(engine.state.agents.isEmpty)
-        await withCheckedContinuation { done in engine.lookNow { done.resume() } }
-        #expect(engine.state.agents.map(\.kind) == ["antigravity"])
+        let walked = await withCheckedContinuation { done in engine.lookNow { done.resume(returning: $0) } }
+        #expect(walked && engine.state.agents.map(\.kind) == ["antigravity"])
+        // A snapshot that is not whole proves nothing: the look says so.
+        engine.watch = Watch(readers: [], snapshot: { Snapshot([], whole: false) })
+        let refused = await withCheckedContinuation { done in engine.lookNow { done.resume(returning: $0) } }
+        #expect(!refused)
     }
 }

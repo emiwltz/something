@@ -51,6 +51,7 @@ struct AcceptanceAgents {
         defer { view.close() }
         #expect(info.content == .agents && shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == true)
         #expect(info.shown.map(\.title) == ["Fix the cart total", "Login form", "Shop tests"], "\(info.shown.map(\.title))")
+        #expect(Set(info.shown.map(\.id)) == Set(Bridge.visible(view).agents.map(\.id)).subtracting(view.engine.assistants), "the page's own list")
         #expect(info.shown.map(\.word) == ["Waiting for You", "Working", "Idle"] && info.shown.map(\.tag) == ["In iTerm", "In something", "In something"])
         #expect(info.others.count == 8 && info.othersFolded && info.opened == nil)
         info.refresh()
@@ -110,6 +111,25 @@ struct AcceptanceAgents {
         #expect(shell.escape(escape) && !shell.infoShown)
     }
 
+    /// A page that sees an assistant (decision 12): its own row keeps it out of the list, one quiet line says it, the
+    /// count stays true, and what the page gets of it stays its state.
+    @Test("the assistants a page sees") func seenAssistants() async throws {
+        let stage = try Stage("agents-seen")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, info, view) = try await panel(stage, "agents", level: .watch, folder: "something/spaces")
+        defer { view.close() }
+        let id = try view.engine.launchAssistant("claude", folder: stage.home.places.spaces.path, askEverything: false)
+        defer { view.engine.stopAll(within: 1, only: id) {} }
+        #expect(await wait(until: { info.refresh(); return info.seenAssistants == 1 }))
+        #expect(!info.shown.contains { $0.id == id } && !info.others.contains { $0.id == id })
+        let held = try #require(Bridge.visible(view).agents.first { $0.id == id })
+        #expect(held.can == Can() && held.thread == nil)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "a1-1-assistant" + suffix, root: stage.home.root)
+        }
+    }
+
     /// A row's detail, in place, one at a time: what it says by where the agent stands, an error's words included; a
     /// person with one agent keeps a short panel.
     @Test("a row opened in place, by phase") func openedRows() async throws {
@@ -129,8 +149,17 @@ struct AcceptanceAgents {
         #expect(opened("claude-pacman") == [.fact("On Its Own", "Its own settings")])
         #expect(opened("claude-shop") == [.fact("On Its Own", "Its own settings"), .plain("It runs in iTerm. Answer it there.")])
         #expect(opened("pi-notes") == [.fact("On Its Own", "Never asks, by design.")])
+        var omp = Agent(id: "omp-live", kind: "omp", origin: "launched")
+        omp.alive = true
+        #expect(AgentReading(omp, thread: nil, runs: RunsIn { _ in [] }).opened == [.fact("On Its Own", "Never asks by default.")])
+        var unheld = Agent(id: "codex-held", kind: "codex", origin: "elsewhere")
+        unheld.thread = "t1"
+        #expect(AgentReading(unheld, thread: nil, runs: RunsIn { _ in [] }).opened == [.plain("something can’t tell whether it still runs. It doesn’t guess.")])
         #expect(opened("claude-post") == [.plain("Its conversation is closed.")])
-        #expect(opened("omp-old") == [.plain("OMP can’t resume this conversation.")])
+        #expect(opened("omp-old") == [.plain("OMP can’t resume this conversation.")], "\(opened("omp-old"))")
+        var refused = world.agents[try #require(world.agents.firstIndex { $0.id == "omp-old" })]
+        refused.because["resume"] = "An invented reason, proven."
+        #expect(AgentReading(refused, thread: nil, runs: RunsIn { _ in [] }).opened == [.plain("An invented reason, proven.")])
         #expect(opened("claude-slides") == [.plain("The invented model refused the turn."), .fact("Model", "Sonnet"), .fact("On Its Own", "plan")], "\(opened("claude-slides"))")
         #expect(opened("antigravity-site") == [.plain("something sees it running, not what it does. It doesn’t guess.")])
         // In place, one at a time, its state said to VoiceOver.
@@ -173,7 +202,7 @@ struct AcceptanceAgents {
         let home = stage.home.places.home.path
         var world = Self.world(home)
         var found: (() -> Void)?
-        info.look = { _, done in found = done }
+        info.look = { _, done in found = { done(true) } }
         func finish() throws {
             let done = try #require(found)
             done()

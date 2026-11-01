@@ -626,7 +626,9 @@ struct AcceptanceShell {
         }
         // Esc with the focus in the panel closes it; ⌘I opens it again and closes it; ✕ too.
         #expect(shell.window.makeFirstResponder(panel.subviews.first ?? panel))
-        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: shell.window.windowNumber,
+                                                   context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+        #expect(shell.escape(escape))
         #expect(!shell.infoShown && (shell.controls[Shell.info] as? ToolButton)?.pressed == false)
         // The page takes back the 320 points Info held, at Default's size like the width read open.
         await Stage.alone {
@@ -646,7 +648,7 @@ struct AcceptanceShell {
         #expect(!shell.infoShown, "✕")
     }
 
-    /// Info also holds what an agent a space started offers: its model, effort, mode and commands, from what it lists;
+    /// Info's model also holds what an agent a space started offers: its model, effort, mode and commands, from what it lists;
     /// and once it has a conversation, Continue in Terminal, which stops it and hands Terminal a command file.
     @Test("Info: an agent's settings and Continue in Terminal") func agentSettings() async throws {
         let stage = try Stage("shell-settings")

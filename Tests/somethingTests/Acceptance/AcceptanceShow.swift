@@ -482,7 +482,7 @@ struct AcceptanceShow {
         #expect(said.last == "Restored the version of Yesterday 21:05" && history.title(history.versions[0]) == said.last)
 
         // Esc with the focus in it closes it; the page takes its width back.
-        shell.window.firstResponder?.doCommand(by: #selector(NSResponder.cancelOperation(_:)))
+        #expect(shell.escape(try #require(arrow(53))))
         #expect(!shell.infoShown)
         await Stage.alone {
             #expect(await wait(10) { shell.window.layoutIfNeeded(); return shell.inspector.isCollapsed && brief.web.frame.width == wide },

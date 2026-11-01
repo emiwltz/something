@@ -30,15 +30,18 @@ struct AgentsPanel: View {
     private var home: String { info.places.home.path }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                section(top: 10) { sentence }
-                if assistant.place.space == info.space?.name { section { assistantRow } }
-                section { sees }
-                section { others }
+        ScrollViewReader { scroller in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    section(top: 10) { sentence }
+                    if assistant.place.space == info.space?.name { section { assistantRow } }
+                    section { sees }
+                    section { others }
+                }
             }
+            // What Look Again found may stand below the fold, and its halo with it.
+            .onChange(of: info.fresh) { if let first = info.fresh.first { withAnimation { scroller.scrollTo(first) } } }
         }
-        .scrollIndicators(.never)
     }
 
     /// The sentence, the same as New Space's, or why it cannot be said.
@@ -53,28 +56,42 @@ struct AgentsPanel: View {
         }
     }
 
-    /// Its assistant: an agent with a job, on the same row. Asleep it has no tag: it runs nowhere.
+    /// Its assistant: an agent with a job, on the same row. Stuck or waking, it says so in the card's words. Asleep or
+    /// gone it has no tag: it runs nowhere.
     private var assistantRow: some View {
-        let presence = assistant.presence, asleep = [.sleep, .limit].contains(presence.state)
-        return AgentRow(info: info, id: "assistant", title: Words.possessive(title) + " assistant", word: presence.state.word,
-                        under: "\(assistant.name) · \(Words.path(info.places.spaces.path, home: home))", tag: asleep ? nil : "In something") {
+        let presence = assistant.presence
+        return AgentRow(info: info, id: "assistant", title: Words.possessive(title) + " assistant", word: presence.rowWord,
+                        under: "\(assistant.name) · \(Words.path(info.places.spaces.path, home: home))", tag: presence.runs ? "In something" : nil) {
             PageSign(state: presence.state, side: 20, lands: false, motion: motion).frame(width: 20, height: 20).accessibilityHidden(true)
         } details: {
             OpenedAgent(lines: [assistant.agent?.error.map { .plain($0.message) },
                                 .fact("Model", [assistant.modelWords.model, assistant.modelWords.effort].compactMap { $0 }.joined(separator: " · ")),
-                                !asleep ? nil : .plain(assistant.resumes ? "It wakes on your next message." : "\(assistant.name) can’t resume. Your next message starts a new conversation.")].compactMap { $0 })
+                                resting(presence).map { .plain($0) }].compactMap { $0 })
         }
     }
 
-    /// This Space Sees: exactly the page's list.
+    /// What a stopped assistant's next step is: why it is stuck, or what the next message does.
+    private func resting(_ presence: Presence) -> String? {
+        if let notice = presence.notice { return notice.text }
+        guard presence.state == .sleep else { return nil }
+        if assistant.resumes { return "It wakes on your next message." }
+        return assistant.agentResumes ? "Your next message starts a new conversation." : "\(assistant.name) can’t resume. Your next message starts a new conversation."
+    }
+
+    /// This Space Sees: exactly the page's list, and a quiet line for the assistants it holds, which have their own row
+    /// and only their state there.
     private var sees: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Heading(words: "This Space Sees", count: info.level == Grant.Level.none ? nil : info.shown.count)
+        let assistants = info.seenAssistants, also = "\(assistants) assistant\(assistants == 1 ? ", its" : "s, their") state only"
+        return VStack(alignment: .leading, spacing: 7) {
+            Heading(words: "This Space Sees", count: info.level == Grant.Level.none ? nil : info.shown.count + assistants).padding(.horizontal, 4)
                 .frame(minHeight: 24)
-            if info.shown.isEmpty {
-                Text("This space sees no agent.").font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink2.ui).padding(.horizontal, 4)
-            } else {
+            if !info.shown.isEmpty {
                 VStack(spacing: 1) { ForEach(info.shown, id: \.id) { row($0, out: false) } }
+            }
+            if assistants > 0 {
+                Text(info.shown.isEmpty ? also + "." : "and " + also + ".").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(.horizontal, 4)
+            } else if info.shown.isEmpty {
+                Text("This space sees no agent.").font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink2.ui).padding(.horizontal, 4)
             }
         }
     }
@@ -84,11 +101,11 @@ struct AgentsPanel: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 if info.others.isEmpty {
-                    Heading(words: "Others on This Mac", count: 0)
+                    Heading(words: "Others on This Mac", count: 0).padding(.horizontal, 4)
                 } else {
                     Button { info.othersOpen = info.othersFolded } label: {
                         HStack(spacing: 4) {
-                            Heading(words: "Others on This Mac", count: info.others.count)
+                            Heading(words: "Others on This Mac", count: info.others.count).padding(.leading, 4)
                             Image(systemName: info.othersFolded ? "chevron.right" : "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
                         }
                         .contentShape(Rectangle())
@@ -121,13 +138,14 @@ struct AgentsPanel: View {
     private func row(_ reading: AgentReading, out: Bool) -> some View {
         let folder = out ? nil : reading.folder.map { Words.path($0, home: home) }
         let under = [reading.named ? reading.program : nil, folder].compactMap { $0 }.joined(separator: " · ")
-        let helpers = reading.agent.subagents?.count ?? 0
+        let helpers = reading.agent.subagents?.filter { $0.status == "running" }.count ?? 0
         return AgentRow(info: info, id: reading.id, title: reading.title, helpers: helpers, word: reading.word, under: under, tag: reading.tag,
                         ended: reading.phase == .ended, fresh: info.fresh.contains(reading.key), motion: motion) {
             MiniEyes(state: reading.eyes).frame(width: 18, height: 18).accessibilityHidden(true)
         } details: {
             OpenedAgent(lines: reading.opened)
         }
+        .id(reading.key)
     }
 
     /// A part of the tab, above a line.
@@ -137,13 +155,14 @@ struct AgentsPanel: View {
     }
 }
 
-/// A section's heading in small capitals, its count after it.
-private struct Heading: View {
-    let words: String, count: Int?
+/// A heading in small capitals, its count after it: the tab's sections and Info's parts.
+struct Heading: View {
+    let words: String
+    var count: Int? = nil
 
     var body: some View {
         Text(words.uppercased() + (count.map { " · \($0)" } ?? "")).font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.525)
-            .foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 4).accessibilityAddTraits(.isHeader)
+            .foregroundStyle(Look.Token.ink3.ui).accessibilityAddTraits(.isHeader)
             .accessibilityLabel(words + (count.map { ", \($0)" } ?? ""))
     }
 }
@@ -204,6 +223,13 @@ private struct AgentRow<Mark: View, Details: View>: View {
     }
 }
 
+extension Presence {
+    /// An assistant's word on a row: its state's, but while it is stuck or waking, where the card's says more.
+    var rowWord: String { stuck == nil && now != .waking ? state.word : word }
+    /// Whether it runs in something: not asleep, gone or quit.
+    var runs: Bool { state != .sleep && ![.missing, .crashed].contains(stuck) }
+}
+
 extension AgentReading {
     /// A line of an opened row: one fact, or a sentence.
     enum Line: Hashable { case fact(String, String), plain(String) }
@@ -212,22 +238,25 @@ extension AgentReading {
     /// what it runs with or where to find it. What acts on an agent comes with its slice.
     var opened: [Line] {
         let error = [agent.error.map { Line.plain($0.message) }].compactMap { $0 }
-        let never = Registry.app.agent(agent.kind).map { $0.neverAsks || $0.asksNothingByDefault } ?? false, by = "Never asks, by design."
+        let program = Registry.app.agent(agent.kind)
+        let never = program?.neverAsks == true ? "Never asks, by design." : program?.asksNothingByDefault == true ? "Never asks by default." : nil
         func said(_ value: String?, _ list: [Option]?) -> String? { list?.first { $0.value == value }?.label ?? value }
         switch phase {
         case .here:
             let model = [said(agent.model, agent.options.model), said(agent.effort, agent.options.effort)].compactMap { $0 }.joined(separator: " · ")
-            return error + (model.isEmpty ? [] : [.fact("Model", model)]) + [.fact("On Its Own", never ? by : said(agent.mode, agent.options.mode) ?? "Its own settings")]
+            return error + (model.isEmpty ? [] : [.fact("Model", model)]) + [.fact("On Its Own", never ?? said(agent.mode, agent.options.mode) ?? "Its own settings")]
         case .away:
-            return error + [.fact("On Its Own", never ? by : "Its own settings"), .plain("It runs \(tag.map { "in " + $0.dropFirst(3) } ?? "outside something"). Answer it there.")]
+            return error + [.fact("On Its Own", never ?? "Its own settings"), .plain("It runs \(tag.map { "in " + $0.dropFirst(3) } ?? "outside something"). Answer it there.")]
         case .asleep: return error + [.plain("Its conversation is closed.")]
-        case .ended: return error + [.plain("\(program) can’t resume this conversation.")]
-        case .seen: return error + [.plain("something sees it running, not what it does. It doesn’t guess.")]
+        // The state holds the proven reason: something may not be able to continue what the program itself could.
+        case .ended: return error + [.plain(agent.because["resume"] ?? "\(self.program) can’t resume this conversation.")]
+        // Only a process proves it runs: a conversation whose holder is unknown may have ended.
+        case .seen: return error + [.plain(agent.thread == nil ? "something sees it running, not what it does. It doesn’t guess." : "something can’t tell whether it still runs. It doesn’t guess.")]
         }
     }
 }
 
-/// The lines of an opened row.
+/// The lines of an opened row: a sentence, or a fact with its name in a narrow column.
 private struct OpenedAgent: View {
     let lines: [AgentReading.Line]
 
@@ -235,33 +264,16 @@ private struct OpenedAgent: View {
         VStack(alignment: .leading, spacing: 9) {
             ForEach(lines, id: \.self) { line in
                 switch line {
-                case .fact(let key, let value): KeyValue(key: key, value: value)
-                case .plain(let words): Plain(words)
+                case .plain(let words):
+                    Text(words).font(Look.font(.ui, size: 12).ui).lineSpacing(2).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
+                case .fact(let key, let value):
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(key).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).frame(width: 64, alignment: .leading)
+                        Text(value).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink.ui).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
-    }
-}
-
-/// A plain line of an opened row.
-private struct Plain: View {
-    let words: String
-    init(_ words: String) { self.words = words }
-
-    var body: some View {
-        Text(words).font(Look.font(.ui, size: 12).ui).lineSpacing(2).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// One fact of an opened row, its name in a narrow column.
-private struct KeyValue: View {
-    let key: String, value: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(key).font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).frame(width: 64, alignment: .leading)
-            Text(value).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink.ui).fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
     }
 }

@@ -27,6 +27,8 @@ import SwiftUI
     @ObservationIgnored var select: (Content) -> Void = { _ in }
     /// Hears how many agents the page sees and what their eyes say, at each reading: the window's panel button.
     @ObservationIgnored var counted: (Int, [Sign.State]) -> Void = { _, _ in }
+    /// Whether the panel shows: closed, only what its button counts is read.
+    @ObservationIgnored var showing: () -> Bool = { true }
     /// Asks the person for Run's folder and gives it on; a test answers in its place.
     @ObservationIgnored var pick: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
     /// Opens a command file in Terminal; a test sets it.
@@ -60,6 +62,8 @@ import SwiftUI
     private(set) var shown: [AgentReading] = []
     private(set) var others: [AgentReading] = []
     private(set) var folders: [String] = []
+    /// How many assistants its page sees: their own row says them, their state is all it gets.
+    private(set) var seenAssistants = 0
     /// The warning that replaces the sentence's lock line, when an agent in reach never asks.
     private(set) var warning: String?
     /// The launched agents leaving for Terminal, by id, from the click on: each goes once. Ids are not reused in a run.
@@ -69,7 +73,7 @@ import SwiftUI
     private(set) var said: String?
     private(set) var fresh: Set<String> = []
     /// Looks at the Mac now, then calls back; a test gives what is found.
-    @ObservationIgnored var look: (Engine, @escaping () -> Void) -> Void = { $0.lookNow(then: $1) }
+    @ObservationIgnored var look: (Engine, @escaping (Bool) -> Void) -> Void = { $0.lookNow(then: $1) }
     /// The row opened in place and the row under the pointer, by id; and Others, folded or not, once the person chose.
     var opened: String?
     var hovered: String?
@@ -90,7 +94,7 @@ import SwiftUI
 
     /// Shows `space`, or nothing when no space is open. Read again at each change: it is a few small files.
     func show(_ space: Space?) {
-        if space?.name != self.space?.name { (opened, othersOpen, said, fresh) = (nil, nil, nil, []) }
+        if space?.name != self.space?.name { (opened, othersOpen, said, fresh, looking) = (nil, nil, nil, [], false) }
         self.space = space
         history.show(space)
         (about, level, folder, problem, changed, size, rules) = (nil, nil, nil, nil, nil, nil, [])
@@ -124,7 +128,8 @@ import SwiftUI
     func refresh() {
         let view = open(), state = view?.engine.state
         let sees = Set(view.map { Bridge.visible($0).agents.map(\.id) } ?? []), mine = view?.engine.assistants ?? []
-        let agents = (state?.agents ?? []).filter { !mine.contains($0.id) }
+        let wanted = showing()
+        let agents = (state?.agents ?? []).filter { !mine.contains($0.id) && (wanted || sees.contains($0.id)) }
         let threads = Dictionary((state?.threads ?? []).map { ($0.agent, $0) }) { first, _ in first }
         let readings = agents.map { AgentReading($0, thread: threads[$0.id], known: titles[Rights.key($0)], runs: runs) }
         for reading in readings where reading.named { titles[reading.key] = reading.title }
@@ -136,6 +141,7 @@ import SwiftUI
         if seen != shown { shown = seen }
         if rest != others { others = rest }
         if warns != warning { warning = warns }
+        if sees.intersection(mine).count != seenAssistants { seenAssistants = sees.intersection(mine).count }
         if known != folders { folders = known }
         counted(seen.count, seen.map(\.eyes))
     }
@@ -161,11 +167,16 @@ import SwiftUI
 
     /// Look Again: reads the Mac now, then says what it found since this look began, its rows lit for a moment.
     func lookAgain() {
-        guard !looking, let engine = open()?.engine else { return }
+        guard !looking, let name = space?.name, let engine = open()?.engine else { return }
         let before = Set((shown + others).map(\.key))
         (looking, said) = (true, nil)
-        look(engine) { [weak self] in
-            guard let self else { return }
+        look(engine) { [weak self] whole in
+            // Another space took the panel meanwhile: this look speaks of nothing there.
+            guard let self, looking, space?.name == name else { return }
+            guard whole else {
+                (looking, said) = (false, "Couldn’t look just now.")
+                return
+            }
             refresh()
             let found = (shown + others).filter { !before.contains($0.key) }
             looking = false
@@ -302,10 +313,9 @@ import SwiftUI
     private func open() -> SpaceView? { current().flatMap { $0.space.name == space?.name ? $0 : nil } }
 }
 
-/// The panel's controller: Esc closes it while the focus is in it, ↑ ↓ move History's choice, and Space held shows it
+/// The panel's controller: ↑ ↓ move History's choice, and Space held shows it
 /// over the page.
 final class InfoController: NSHostingController<InspectorView> {
-    override func cancelOperation(_ sender: Any?) { rootView.info.close() }
     override func moveUp(_ sender: Any?) { if rootView.info.content == .history { rootView.info.history.move(-1) } }
     override func moveDown(_ sender: Any?) { if rootView.info.content == .history { rootView.info.history.move(1) } }
 
@@ -314,7 +324,6 @@ final class InfoController: NSHostingController<InspectorView> {
         case (.history, 126): moveUp(nil)
         case (.history, 125): moveDown(nil)
         case (.history, 49): if !event.isARepeat { hold() }
-        case (_, 53): cancelOperation(nil) // Escape, which no field of the panel took
         default: super.keyDown(with: event)
         }
     }
@@ -371,6 +380,7 @@ extension Shell {
         inspector.isCollapsed = !shown
         (controls[Shell.info] as? ToolButton)?.pressed = shown
         titleLine.held = shown && tab == .info
+        if shown { info.refresh() }
     }
 
     /// Shows History in the panel, while a space is open, with the keys: ↑ ↓, Space and Esc are History's at once.
@@ -530,8 +540,7 @@ struct InspectorView: View {
     /// A part of the panel, above a line: its title in small capitals, then its content.
     private func part(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            Text(title.uppercased()).font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.525)
-                .foregroundStyle(Look.Token.ink3.ui).accessibilityAddTraits(.isHeader).accessibilityLabel(title)
+            Heading(words: title)
             content()
         }
         .padding(EdgeInsets(top: 14, leading: 16, bottom: 14, trailing: 16)).frame(maxWidth: .infinity, alignment: .leading)

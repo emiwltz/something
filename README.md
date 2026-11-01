@@ -131,7 +131,7 @@ runs them in its shell instead. What "without asking" means for each:
 - **OpenCode** asks as your OpenCode settings say. **OMP** too, and its own default asks nothing.
 - **pi** and **Amp** never ask when something launches them, by design (a tool your Amp settings would ask for, Amp
   refuses by itself): they can run any command on your Mac. The first lines of each conversation say so, and so does a
-  space's Run, where you choose it and in Info.
+  space's Run, where you choose it and in the panel.
 
 "Ask Before Every Change", for Claude Code and Codex, in the assistant card's menu or Settings › Permissions (Your
 assistant asks before every change), turns the exception off from the next conversation. No space can see what you say to your assistant, or write
@@ -152,9 +152,9 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   declares; Don't Allow is kept, and it does not ask again by itself. What a space declares above its level stays
   refused, without asking again. Its memory needs no permission: it stays with the space. The panel (⌘I) opens on
   that sentence: a click on a word changes it at once, and the list under it, This Space Sees, is the page's own list.
-  Its Info tab holds the file, its size, Export, its memory, its versions and who built it. Settings › Permissions lists
-  every space with its level, and changes one the same way; Settings › Permissions › Folders lists each folder your
-  spaces run agents in, with those spaces.
+  Its Info tab holds the file, its size, Export, its memory, its versions and
+  the agent its assistant works with. Settings › Permissions lists every space with its level, and changes one the same
+  way; Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
   sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
   assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is

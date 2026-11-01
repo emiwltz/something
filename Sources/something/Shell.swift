@@ -134,6 +134,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         info.close = { [weak self] in self?.showInfo(false) }
         titleLine.opened = { [weak self] in self?.toggleTitle() }
         info.select = { [weak self] in self?.show(tab: $0) }
+        info.showing = { [weak self] in self?.infoShown ?? false }
         info.counted = { [weak self] count, eyes in
             guard let self else { return }
             agents(count: count, eyes: Info.mood(eyes + [assistant.presence.state]))
@@ -539,8 +540,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func forget(_ name: String) { unread[name] = nil }
 
     /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
-    /// all; else nothing while a name in the sidebar is being edited; else a floating sidebar; else the panel when it has the keys (History's); else point mode's step back; else a margin note, the top
-    /// thing over the page. Returns whether one closed, the key then used up (the assistant's nudge waits for an Esc
+    /// all; else nothing while a name in the sidebar is being edited; else a floating sidebar; else the panel when it has
+    /// the keys; else point mode's step back; else a margin note; else the card; else the panel, even from a page; else
+    /// Page Full Screen. Returns whether one closed, the key then used up (the assistant's nudge waits for an Esc
     /// nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }

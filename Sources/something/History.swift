@@ -1,5 +1,4 @@
-// History: the open space's versions in the docked panel, in Info's place (Inspector.swift), at the same width and
-// under the same header. Each row is a version: the page's picture, the sentence that made it, when and who; the
+// History: the open space's versions, the panel's third tab (Inspector.swift), at the same width. Each row is a version: the page's picture, the sentence that made it, when and who; the
 // newest says Now. A change no turn claims reads "Edited outside something", with a pencil, and the newest such edit
 // also says what it changed in its files; the first capture of the space, while it is still kept, is the space as
 // something first kept it, never an edit on disk. Six rows show (seven when the newest is that edit), then a row that

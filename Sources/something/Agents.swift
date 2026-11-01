@@ -73,7 +73,7 @@ struct AgentReading: Equatable {
     }
 }
 
-/// The app each agent runs in, read once per process, only for the agents the panel shows.
+/// The app each agent runs in, read once per process, for the agents the panel reads.
 final class RunsIn {
     private let find: (Agent) -> URL?
     private var kept: [String: URL?] = [:]

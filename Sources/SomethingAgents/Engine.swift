@@ -81,11 +81,12 @@ public final class Engine {
     }
 
     /// Reads the Mac's agents now rather than at the next tick, walking the readers' folders, then calls `then` on the
-    /// main queue, the state up to date. It looks for no program: `lookAgain` does.
-    public func lookNow(then: @escaping () -> Void) {
-        watch.look { [weak self] seen in
+    /// main queue, the state up to date, with false when the Mac's processes could not be read. It looks for no program:
+    /// `lookAgain` does.
+    public func lookNow(then: @escaping (Bool) -> Void) {
+        watch.look { [weak self] seen, walked in
             self?.saw(seen)
-            then()
+            then(walked)
         }
     }
 

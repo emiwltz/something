@@ -139,6 +139,19 @@ import Testing
         #expect(launches.ids == ["shop": ["claude-t1", "claude-2"], "brief": ["codex-1"]], "an agent only in scope gives no space a sight")
     }
 
+    /// An assistant's row never says Ended of one that retries, and no state of one whose program is gone.
+    @Test func anAssistantsRowSaysWhatItsCardSays() {
+        var retrying = Agent(id: "a", kind: "claude", origin: "launched")
+        (retrying.alive, retrying.state) = (true, "working")
+        retrying.detail["apiRetry"] = .object(["attempt": .number(2)])
+        let late = Presence(.init(name: "Claude Code"), agent: retrying, turn: nil, now: Date())
+        #expect(late.rowWord == "Retrying · can’t reach its model" && late.runs)
+        let gone = Presence(.init(name: "Claude Code", installed: false), agent: nil, turn: nil, now: Date())
+        #expect(gone.rowWord == "Claude Code isn’t on this Mac" && !gone.runs)
+        let waking = Presence(.init(name: "Claude Code", waking: true), agent: nil, turn: nil, now: Date())
+        #expect(waking.rowWord == "Waking up…" && !waking.runs)
+    }
+
     @Test func thePanelOpensAtOnce() async throws {
         let test = Home(prefix: "something-info-")
         defer { test.remove() }

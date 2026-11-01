@@ -152,12 +152,13 @@ package final class Watch {
     }
 
     /// One tick now rather than at the next beat, a walk of the readers' folders, whose result goes to `seen` on the main
-    /// queue. Runs on the watch's queue, as a tick does, and waits for no reader past `lookLimit`.
-    func look(_ seen: @escaping (Seen) -> Void) {
+    /// queue with whether the tick could look at all. Runs on the watch's queue, as a tick does, and waits for no reader
+    /// past `lookLimit`.
+    func look(_ seen: @escaping (Seen, Bool) -> Void) {
         queue.async { [self] in
             ticks = 0
-            let result = tick(now: Date(), within: Watch.lookLimit)
-            DispatchQueue.main.async { seen(result) }
+            let result = tick(now: Date(), within: Watch.lookLimit), walked = ticks > 0
+            DispatchQueue.main.async { seen(result, walked) }
         }
     }
 
