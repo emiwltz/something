@@ -264,7 +264,8 @@ struct SettingsSection: Identifiable {
     /// The model and its effort, when the agent takes one, beside the program: the same chip and picker as anywhere an
     /// agent is chosen, for new spaces.
     private func model(of kind: String) -> SettingsRow {
-        let preferences = preferences, models = models, effort = !(Registry.app.limits[kind] ?? []).contains("effort")
+        let preferences = preferences, models = models, limits = Registry.app.limits[kind] ?? []
+        let effort = preferences.listed[kind]?.model != nil && !limits.contains("model") && !limits.contains("effort")
         return SettingsRow(title: effort ? "Model and effort" : "Model", note: "", control: .model(
             { ModelChoice(defaultsOf: kind, preferences, reading: models?.readingModels.contains(kind) == true) },
             read: { models?.readModels(of: kind) }))

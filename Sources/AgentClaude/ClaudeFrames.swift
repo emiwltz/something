@@ -24,8 +24,7 @@ extension ClaudeDriver {
     static func questions(_ input: [String: Any]) -> [Question] {
         (input["questions"] as? [[String: Any]] ?? []).compactMap { question in
             guard let text = question["question"] as? String else { return nil }
-            let options = (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
-            return Question(header: question["header"] as? String, text: text, options: options, multiple: question["multiSelect"] as? Bool == true)
+            return Question(header: question["header"] as? String, text: text, listed: question["options"], multiple: question["multiSelect"] as? Bool == true)
         }
     }
 

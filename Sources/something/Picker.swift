@@ -35,7 +35,7 @@ final class Popover: NSHostingView<AnyView> {
         popover.rootView = AnyView(content(popover))
         (popover.anchor, popover.part, popover.keys, popover.before) = (anchor, part, keys, window.firstResponder)
         popover.sizingOptions = [.intrinsicContentSize]
-        (root.subviews.lazy.compactMap { $0 as? WindowLayer }.first ?? WindowLayer(over: root)).hold(popover)
+        (root.subviews.compactMap { $0 as? WindowLayer }.last ?? WindowLayer(over: root)).hold(popover)
         popover.place()
         window.makeFirstResponder(popover)
         popover.clicks = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak popover] event in

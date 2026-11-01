@@ -91,7 +91,7 @@ struct AcceptanceAgents {
         shell.toggleTitle()
         #expect(shell.infoShown && info.content == .info && shell.titleLine.held)
         let tab = await AccessibilityTests.walk(shell.inspector.viewController.view) { $0.contains("Move to Trash…") }.words
-        for words in ["This space: Info", "Export", "Memory", "Versions", "Show History", "Assistant", "Move to Trash…"] {
+        for words in ["This space: Info", "Export…", "Memory", "Versions", "Show History", "Assistant", "Move to Trash…"] {
             #expect(tab.contains(words), "the Info tab reads \(words): \(tab)")
         }
         #expect(info.memory == "It keeps no memory.")

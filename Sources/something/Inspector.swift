@@ -324,6 +324,7 @@ final class InfoController: NSHostingController<InspectorView> {
         case (.history, 126): moveUp(nil)
         case (.history, 125): moveDown(nil)
         case (.history, 49): if !event.isARepeat { hold() }
+        case (_, 53): rootView.info.close() // Escape, which no field of the panel took
         default: super.keyDown(with: event)
         }
     }
