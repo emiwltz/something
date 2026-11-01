@@ -279,9 +279,12 @@ struct PageSign: NSViewRepresentable {
             ["Your agents live on your Mac. A space shows them your way: one HTML file, blank at first, locked off the network, yours to export.",
              "An agent is a conversation with a coding program on your Mac. You ask in plain words; it reads, writes and runs commands in a folder of yours.",
              "Both are agents of yours. They don’t get the same things.",
-             "A space and an agent do what you allow, except pi, Amp and OMP, which never ask; everything else comes to you, in a window of your Mac no space can draw or answer.",
+             "A space and an agent do what you allow, except \(Words.list(Beat.neverAsk, "and")), which never ask; everything else comes to you, in a window of your Mac no space can draw or answer.",
              "Say what you want in a sentence. You watch it being built, and you can leave while it works."][rawValue]
         }
+
+        /// The programs that act without asking, the only exception to "only you answer".
+        static var neverAsk: [String] { Registry.app.agents.filter { $0.neverAsks || $0.asksNothingByDefault }.map(\.name) }
 
         var lit: [Hero.Piece]? { [[.page], [.agents], [.assistant, .agents], [.panel], nil][rawValue] }
     }
