@@ -466,8 +466,11 @@ import WebKit
         let bin = home.root.appendingPathComponent("bin"), arguments = home.root.appendingPathComponent("arguments")
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
         let claude = bin.appendingPathComponent("claude")
-        try "#!/bin/sh\necho \"$@\" > \(arguments.path)\nwhile IFS= read -r line; do :; done\n".write(to: claude, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: claude.path)
+        let pi = bin.appendingPathComponent("pi"), others = home.root.appendingPathComponent("others")
+        for (program, file) in [(claude, arguments), (pi, others)] {
+            try "#!/bin/sh\necho \"$@\" > \(file.path)\nwhile IFS= read -r line; do :; done\n".write(to: program, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program.path)
+        }
         let declared = #"{"contract": 1, "title": "Board", "rights": ["state", "launch"]}"#
         let space = try home.space("board", page(declared, "")), other = try home.space("other", page(declared, ""))
         ask.answer = { _ in LevelChoice(level: .run, scope: .all, start: Grant.Start(kind: "claude", model: "invented", effort: "high"), folder: .blank) }
@@ -481,6 +484,9 @@ import WebKit
         #expect(view.granted.agents == .all && view.granted.rights.contains("launch:claude"))
         _ = try view.launch("claude", folder: try #require(grant.folder), model: nil, mode: nil, effort: nil)
         #expect(await wait(until: { (try? String(contentsOf: arguments, encoding: .utf8))?.contains("invented") == true }), "the model chosen in the sentence")
+        _ = try view.launch("pi", folder: try #require(grant.folder), model: nil, mode: nil, effort: nil)
+        #expect(await wait(until: { FileManager.default.fileExists(atPath: others.path) }))
+        #expect(try String(contentsOf: others, encoding: .utf8).contains("invented") == false, "for that agent only")
         var stopped = false
         view.engine.stopAll(within: 6) { stopped = true }
         #expect(await wait(until: { stopped }))
@@ -496,6 +502,19 @@ import WebKit
         refused.open()
         try await ready(refused)
         #expect(ask.questions.count == 2, "the sheet does not come back")
+
+        // Answers given right by right stay as they are: Don't Allow refuses what was asked and widens nothing.
+        let older = try home.space("older", page(#"{"contract": 1, "title": "Older", "rights": ["send"]}"#, ""))
+        var before = Grant(declared: Asked(Declaration(name: "older")), at: "2026-10-17T09:00:00Z")
+        (before.declared.rights, before.granted) = (["send:claude"], ["send:claude"])
+        try Grants(home.places.grants).update { $0.spaces["older"] = before }
+        let third = try await home.window(older, ask)
+        defer { third.close() }
+        third.open()
+        try await ready(third)
+        let after = try #require(try AppFile.read(home.places.grants).spaces["older"])
+        #expect(ask.questions.count == 3 && after.level == nil && after.granted == ["send:claude"] && after.refused == ["send"], "\(after)")
+        #expect(third.granted.rights == ["send:claude"] && third.granted.refused == ["send"])
     }
 
     /// The level sheet: pre-set to what the page needs, Allow ready; Return and Escape press Don't Allow, which holds the

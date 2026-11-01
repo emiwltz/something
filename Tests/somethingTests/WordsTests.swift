@@ -111,6 +111,12 @@ import Testing
         var below = named
         below.level = .talk
         #expect(Ask.rights(below, home: "/Users/example").answer() == LevelChoice(level: .talk), "only Run has an agent and a folder")
+        // At start the line and the warning read the scope the grant will take, not the page's.
+        let widened = LevelChoice(level: .run, scope: .all, start: Grant.Start(kind: "claude"), folder: .path("/Users/example/a"))
+        #expect(Levels.also(widened, home: "/Users/example") == "It also sees and writes to all your agents.")
+        #expect(Levels.also(LevelChoice(level: .run, scope: .folders(["/Users/example/a"]), folder: .path("/Users/example/a")), home: "/Users/example") == nil)
+        #expect(Levels.also(LevelChoice(level: .run, scope: .folders([])), home: "/Users/example") == nil && Levels.also(LevelChoice(level: .talk, scope: .all), home: "/Users/example") == nil)
+        #expect(said(widened, reach: widened.scope) == "Reading list, Shop tests, OMP and Elsewhere never ask: this space can make them act without you.")
         var choice = LevelChoice(level: .run)
         let any = Sentence("This space", choice: Binding(get: { choice }, set: { choice = $0 }), folders: [], home: "/Users/example", warning: nil, agents: ["pi"], anyAgent: true)
         #expect(any.agentMenu.rows.map(\.title) == ["Any agent", "pi"] && any.agentMenu.rows[0].on)

@@ -356,15 +356,21 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         // Forgotten answers (a space deleted, then made again under its name): the agents kept under that name are
         // not this space's.
         if grant == nil { launched = [] }
-        guard !Rights.toAsk(declaration, since: grant).isEmpty else { return grant }
+        let asked = Rights.toAsk(declaration, since: grant)
+        guard !asked.isEmpty else { return grant }
         let answer = ask.rights(question(declaration, grant)), at = iso8601.string(from: Date())
         let folder = answer?.folder == .blank ? places.blank(space.name) : answer?.folder.path
         // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.
         func answered(_ before: Grant?) -> Grant {
             if let answer { return Rights.leveled(answer.level, folder: folder, declaration: declaration, at: at, after: before, start: answer.start, scope: answer.scope) }
-            // Don't Allow is kept, so that the sheet does not come back: what it had stays, or None; Run without a
-            // folder, which would ask again, stops at Talk.
-            let had = before.map(Rights.level(of:)) ?? .none
+            // Don't Allow is kept, so that the sheet does not come back. Answers given right by right stay as they are,
+            // what was asked refused: a level would widen them. A level stays, or None; Run without a folder, which
+            // would ask again, stops at Talk.
+            if let before, before.level == nil {
+                let refused = asked.rights + (asked.folder ? declaration.rights.filter { $0.hasPrefix("launch") } : [])
+                return Rights.answered(declaration, allowed: [], refused: refused, folder: nil, at: at, after: before)
+            }
+            let had = before?.level ?? .none
             return Rights.leveled(had == .run && before?.folder == nil ? .talk : had, folder: nil, declaration: declaration, at: at, after: before)
         }
         do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {

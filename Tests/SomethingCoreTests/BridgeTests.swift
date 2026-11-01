@@ -213,6 +213,13 @@ struct BridgeTests {
         #expect(host.confirmed == ["acceptEdits", "acceptEdits", "acceptEdits"])
     }
 
+    /// "May start pi" holds at the bridge: another kind is refused under the grant Run writes.
+    @Test func aNamedAgentIsTheOnlyOneStarted() throws {
+        let run = Rights.leveled(.run, folder: "/Users/example/code/shop", declaration: Declaration(name: "a"), at: "", after: nil, start: Grant.Start(kind: "claude"))
+        let host = try FakeHost(run.granted)
+        #expect(code("launch", ["kind": "claude"], host) == "ok" && code("launch", ["kind": "omp"], host) == "RIGHT_NOT_GRANTED")
+    }
+
     @Test func launchStaysInTheGrantedFolder() throws {
         let host = try FakeHost(["launch:claude", "launch:opencode", "launch:omp"])
         #expect(code("launch", ["kind": "claude"], host) == "ok")

@@ -79,6 +79,12 @@ enum Levels {
         let usual = kinds.last.flatMap(Registry.app.agent)?.neverAsks == false
         return "\(last) never asks\(usual ? " by default" : ""): this space can make it act without you."
     }
+    /// What a page keeps at Run besides starting, in a sheet, where its own scope stays: nil when that is only the
+    /// folder, or nothing.
+    static func also(_ choice: LevelChoice, home: String) -> String? {
+        guard choice.level == .run, let scope = choice.scope, ![.folders([]), .folders([choice.folder.path].compactMap { $0 })].contains(scope) else { return nil }
+        return "It also sees and writes to \(LevelChoice.agents(scope, home: home))."
+    }
     static let sheetFine = "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."
 
     /// `text` under the choice, a quiet line after its mark: a warning, read before choosing, never an alarm; or, by a
@@ -208,10 +214,10 @@ struct LevelSheetView: View {
         VStack(alignment: .leading, spacing: 6) {
             // The sheet's own line says what a level never covers.
             Sentence("This space", choice: $answer.choice, folders: question.folders, home: home,
-                     warning: Levels.warning(chosen, agents: question.agents, reach: question.scope), agents: question.kinds.isEmpty ? nil : question.kinds,
+                     warning: Levels.warning(chosen, agents: question.agents, reach: chosen.scope), agents: question.kinds.isEmpty ? nil : question.kinds,
                      space: question.name, locks: false, anyAgent: question.kinds.count != 1)
-            if chosen.level == .run, ![.folders([]), .folders([chosen.folder.path].compactMap { $0 })].contains(question.scope) {
-                Text("It also sees and writes to \(LevelChoice.agents(question.scope, home: home)).").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+            if let also = Levels.also(chosen, home: home) {
+                Text(also).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
             }
         }
         // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.
