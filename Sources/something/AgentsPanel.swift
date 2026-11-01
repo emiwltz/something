@@ -64,9 +64,10 @@ struct AgentsPanel: View {
                         under: "\(assistant.name) · \(Words.path(info.places.spaces.path, home: home))", tag: presence.runs ? "In something" : nil) {
             PageSign(state: presence.state, side: 20, lands: false, motion: motion).frame(width: 20, height: 20).accessibilityHidden(true)
         } details: {
-            OpenedAgent(lines: [assistant.agent?.error.map { .plain($0.message) },
-                                .fact("Model", [assistant.modelWords.model, assistant.modelWords.effort].compactMap { $0 }.joined(separator: " · ")),
-                                resting(presence).map { .plain($0) }].compactMap { $0 })
+            VStack(alignment: .leading, spacing: 9) {
+                AgentChips(model: assistant, compact: true)
+                OpenedAgent(lines: [assistant.agent?.error.map { .plain($0.message) }, resting(presence).map { .plain($0) }].compactMap { $0 })
+            }
         }
     }
 
@@ -143,9 +144,42 @@ struct AgentsPanel: View {
                         ended: reading.phase == .ended, fresh: info.fresh.contains(reading.key), motion: motion) {
             MiniEyes(state: reading.eyes).frame(width: 18, height: 18).accessibilityHidden(true)
         } details: {
-            OpenedAgent(lines: reading.opened)
+            controlled(reading)
         }
         .id(reading.key)
+    }
+
+    /// What an opened row says, and what the person can change of an agent something launched: the chips, which say what
+    /// its facts would, its own commands, and Continue in Terminal.
+    @ViewBuilder private func controlled(_ reading: AgentReading) -> some View {
+        let agent = reading.agent, live = agent.origin == "launched" && agent.alive != false && agent.can.send
+        VStack(alignment: .leading, spacing: 9) {
+            OpenedAgent(lines: live ? reading.opened.filter { if case .fact = $0 { false } else { true } } : reading.opened)
+            if live {
+                RowChips(agent: { [info] in info.shown.first { $0.id == agent.id }?.agent ?? agent }) { info.set(agent, model: $0, mode: $1, effort: $2) }
+                commands(agent)
+            }
+            if info.terminalWords(reading) != nil {
+                let busy = agent.alive != false && ["working", "waiting"].contains(agent.state), moving = info.moving.contains(agent.id)
+                Button { info.continueInTerminal(reading) } label: {
+                    Label("Continue in Terminal", systemImage: "terminal").font(Look.font(.ui, size: 12.5, weight: .medium).ui).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(Secondary(height: 30)).disabled(busy || moving)
+                .help(moving ? "It is moving to Terminal." : busy ? "It can continue in Terminal once this turn ends." : "something stops this agent, and Terminal continues its conversation.")
+            }
+        }
+    }
+
+    /// The agent's own commands, as it lists them.
+    @ViewBuilder private func commands(_ agent: Agent) -> some View {
+        if let list = agent.commands, !list.isEmpty {
+            HStack(spacing: 8) {
+                Text("Command").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
+                Spacer(minLength: 0)
+                Menu("Choose…") { ForEach(list, id: \.value) { option in Button(option.label) { info.command(option.value, to: agent) } } }
+                    .menuStyle(.borderlessButton).fixedSize().font(Look.font(.ui, size: 12).ui).accessibilityLabel("Command")
+            }
+        }
     }
 
     /// A part of the tab, above a line.
@@ -235,7 +269,7 @@ extension AgentReading {
     enum Line: Hashable { case fact(String, String), plain(String) }
 
     /// What an opened row adds, by where the agent stands, dropping what its line says: why it stopped when it says, then
-    /// what it runs with or where to find it. What acts on an agent comes with its slice.
+    /// what it runs with or where to find it. What acts on an agent is AgentsPanel's.
     var opened: [Line] {
         let error = [agent.error.map { Line.plain($0.message) }].compactMap { $0 }
         let program = Registry.app.agent(agent.kind)

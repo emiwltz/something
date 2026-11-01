@@ -266,7 +266,7 @@ struct SettingsSection: Identifiable {
     private func model(of kind: String) -> SettingsRow {
         let preferences = preferences, models = models, effort = !(Registry.app.limits[kind] ?? []).contains("effort")
         return SettingsRow(title: effort ? "Model and effort" : "Model", note: "", control: .model(
-            { ModelChoice(defaultsOf: kind, preferences, reading: models?.reading.contains(kind) == true) },
+            { ModelChoice(defaultsOf: kind, preferences, reading: models?.readingModels.contains(kind) == true) },
             read: { models?.readModels(of: kind) }))
     }
 

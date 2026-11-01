@@ -164,7 +164,7 @@ import SomethingCore
     var asleep: Bool { session.asleep }
     private(set) var askEverything: Bool
     /// The kinds whose models are being read, for the model chip.
-    private(set) var reading: Set<String> = []
+    private(set) var readingModels: Set<String> = []
     /// The kinds read in this run: a failed read does not start a program at each opening of the chip.
     @ObservationIgnored private var triedModels: Set<String> = []
     /// Full Access in Settings › Permissions, kept here so that the first lines follow it while they show.
@@ -901,10 +901,10 @@ import SomethingCore
     /// something: the model chip says "Reading its models…" meanwhile, and what it says after a failure.
     func readModels(of chosen: String? = nil) {
         guard let kind = chosen ?? (agent == nil || agent?.alive == false ? self.kind : nil), Preferences.at(places).listed[kind] == nil,
-              Registry.app.limits[kind]?.contains("model") != true, !reading.contains(kind), triedModels.insert(kind).inserted else { return }
-        reading.insert(kind)
+              Registry.app.limits[kind]?.contains("model") != true, !readingModels.contains(kind), triedModels.insert(kind).inserted else { return }
+        readingModels.insert(kind)
         engine.peek(kind, folder: places.spaces.path) { [self] in
-            reading.remove(kind)
+            readingModels.remove(kind)
             if let options = $0 { Preferences.at(places).listed[kind] = AssistantModel.kept(options) }
         }
     }

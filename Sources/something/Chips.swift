@@ -100,7 +100,7 @@ extension AssistantModel {
     /// its next turn; an effort the running agent no longer offers is what it reports instead.
     var modelChoice: ModelChoice {
         let offered = offered, list = offered.model ?? [], kind = kind ?? "", running = awake(session)
-        let known: ModelChoice.Models = ownModel ? .own : reading.contains(kind) ? .reading : list.isEmpty ? .unread : .rows
+        let known: ModelChoice.Models = ownModel ? .own : readingModels.contains(kind) ? .reading : list.isEmpty ? .unread : .rows
         var choice = ModelChoice(name: name, models: known, list: list, rows: ModelChoice.rows(list, name: name, plain: !running), chosen: session.model ?? agent?.model)
         if Registry.app.limits[kind]?.contains("effort") != true {
             choice.efforts = offered.effort ?? []
