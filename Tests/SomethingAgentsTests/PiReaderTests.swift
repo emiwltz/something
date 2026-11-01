@@ -19,7 +19,10 @@ final class PiHome {
     let root: URL
     let now: Date
     let pi: PiReader, omp: OMPReader
-    private(set) var opened: [String] = []
+    /// The paths the readers opened. The watch runs pi's and OMP's readers on two queues at once.
+    var opened: [String] { lock.withLock { paths } }
+    private var paths: [String] = []
+    private let lock = NSLock()
 
     /// `prefix` names the folder in $TMPDIR, as ClaudeHome's does.
     init(now: Date = Date(), prefix: String = "pi-home-") throws {
@@ -31,8 +34,9 @@ final class PiHome {
         try Data("invented".utf8).write(to: root.appendingPathComponent(".omp/agent/agent.db"))
         pi = PiReader(environment: ["HOME": root.path])
         omp = OMPReader(environment: ["HOME": root.path])
-        pi.opened = { [unowned self] in opened.append($0) }
-        omp.opened = { [unowned self] in opened.append($0) }
+        let note: (String) -> Void = { [unowned self] path in lock.withLock { paths.append(path) } }
+        pi.opened = note
+        omp.opened = note
         // The shop's second log was written last; every log within the hour.
         for (log, age) in [(log(PiHome.shopA), 600.0), (log(PiHome.shopB), 30), (log(PiHome.blog), 1200), (log(PiHome.notes), 900),
                            (ompLog(PiHome.ompShop), 60), (ompLog(PiHome.ompBlog), 1800)] {
