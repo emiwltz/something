@@ -630,7 +630,9 @@ struct AcceptanceShow {
         let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last { $0.shown })
         #expect(toast.words == "Daily brief changed outside something" && announced.last == toast.words)
         let toastRead = await AcceptanceBuild.read(toast) { $0.contains("Show What Changed") }
-        #expect(toastRead.contains("Show What Changed") && !toastRead.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(toastRead)")
+        // Read again without the awaited words, which end the first read before the rest may be there.
+        let whole = await AcceptanceBuild.read(toast)
+        #expect(toastRead.contains("Show What Changed") && !whole.contains { $0.range(of: #"\bAllow\b"#, options: .regularExpression) != nil }, "\(whole)")
         await Picture.settle(brief)
         await Stage.alone {
             NSApp.appearance = NSAppearance(named: .aqua)

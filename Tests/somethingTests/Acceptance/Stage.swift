@@ -513,6 +513,13 @@ enum Picture {
     /// when it is refused too, the scenario ends cancelled, said in the log: no verdict, neither a pass nor a false red.
     /// The fast reading never refuses, but misreads what the scenarios assert word for word. Any other error is thrown.
     static func lines(_ rep: NSBitmapImageRep) async throws -> [(words: String, box: CGRect)] {
+        let read = try await reading(rep)
+        // A reading is a long await: the interface may have left Default meanwhile.
+        await Stage.aside()
+        return read
+    }
+
+    private static func reading(_ rep: NSBitmapImageRep) async throws -> [(words: String, box: CGRect)] {
         let image = try #require(rep.cgImage)
         let (wide, high) = (CGFloat(image.width), CGFloat(image.height))
         func place(_ box: CGRect) -> CGRect {
