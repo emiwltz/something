@@ -154,10 +154,10 @@ import Testing
         // Default's sizes: read in Stage's drawing turn, which no size test of another suite holds at Large meanwhile.
         await Stage.alone {
             shell.window.layoutIfNeeded()
-            #expect(shell.inspector.viewController.view.frame.width == 320 && shell.center.frame.width == 1200 - 236 - 320)
+            #expect(shell.inspector.viewController.view.frame.width == 320 && shell.center.frame.width == 1200 - shell.column.constant - 320)
             info.close()
             shell.window.layoutIfNeeded()
-            #expect(!shell.infoShown && shell.center.frame.width == 1200 - 236)
+            #expect(!shell.infoShown && shell.center.frame.width == 1200 - shell.column.constant)
         }
     }
 }

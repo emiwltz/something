@@ -230,6 +230,7 @@ struct SidebarView: View {
     /// The state of the space of that name's assistant, read from its own conversation.
     let eyes: (String) -> Sign.State
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var state: SidebarState { library.sidebar }
     /// Greys as the mockup's glass mixes them: the ink at less strength.
@@ -312,7 +313,7 @@ struct SidebarView: View {
             .accessibilityLabel("Spaces, pages of your own")
             .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 0)
-            action("folder.badge.plus", "New Group", help: "New Group") { library.addGroup() }.opacity(state.hovered == .nav("head") ? 1 : 0)
+            action("folder.badge.plus", "New Group", help: "New Group") { library.addGroup() }.opacity(state.hovered == .nav("head") || voiceOver ? 1 : 0)
             if state.room {
                 action("pin", state.kept ? "Let It Float" : "Keep Open", help: state.kept ? "Let It Float" : "Keep Open", turned: 45) { state.pin() }
                     .background(state.kept ? selected : .clear, in: RoundedRectangle(cornerRadius: Look.control))

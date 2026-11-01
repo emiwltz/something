@@ -1,12 +1,8 @@
-// The sidebar, one host at every size: a card of glass over the columns, in the Shell's `chrome` layer, 250 points wide
-// and 10 from the window's edges. In a space the page takes the whole window, and the sidebar comes over it: the pointer
-// resting on the left edge (PageFull.swift's strip), a click there, or ⌃⌘S. It leaves 0.32 s after the pointer, with Esc,
-// with ⌃⌘S again or with a click on the page, never during a menu, a rename, a sheet or an Undo toast. On New Space and
-// Templates it stays open beside the page until a build starts, and the pin keeps it there everywhere: the center then
-// starts to its right, so what follows the center's width (the toast, the sticker, the sheets) needs nothing else. Docked or floating it is the same view. Where there is no room, either full screen or a window under
-// 860 points, it floats and the pin hides. The page behind is blurred by the window server, then tinted; at night the
-// tint lies over 50 % black, which darkens a light page first. No picture can show that blur (cacheDisplay never draws
-// a visual effect), so it is checked by hand.
+// The sidebar, one host at every size: a card of glass over the columns, in the Shell's `chrome` layer. It comes over
+// the page by the left edge (PageFull.swift's strip) or ⌃⌘S, and never leaves during a menu, a rename, a sheet or an
+// Undo toast. Docked, on New Space, on Templates or by the pin, the center starts to its right, so what follows the
+// center's width (the toast, the sticker, the sheets) needs nothing else. The page behind is blurred by the window
+// server, then tinted; no picture can show that blur (cacheDisplay never draws a visual effect): checked by hand.
 import AppKit
 import SwiftUI
 
@@ -94,6 +90,8 @@ final class Drawer: NSView {
     private weak var before: NSResponder?
     /// What keeps it from leaving now, a sheet or an Undo toast; the Shell's.
     var busy: () -> Bool = { false }
+    /// What takes the keys when what had them is gone: the page.
+    var fallback: () -> NSResponder? = { nil }
     /// Called after each change of `state`.
     var moved: () -> Void = {}
     /// The app's motion setting, and the sidebar button of the toolbar, whose click is its own.
@@ -118,7 +116,7 @@ final class Drawer: NSView {
         NSLayoutConstraint.activate([place, wide, tops.under, host.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Drawer.margin),
                                      blur.leadingAnchor.constraint(equalTo: host.leadingAnchor), blur.trailingAnchor.constraint(equalTo: host.trailingAnchor),
                                      blur.topAnchor.constraint(equalTo: host.topAnchor), blur.bottomAnchor.constraint(equalTo: host.bottomAnchor)])
-        setAccessibilityElement(true)
+        setAccessibilityElement(state.shown)
         setAccessibilityRole(.group)
         setAccessibilityLabel("Sidebar")
         NotificationCenter.default.addObserver(self, selector: #selector(menuBegan), name: NSMenu.didBeginTrackingNotification, object: nil)
@@ -134,7 +132,9 @@ final class Drawer: NSView {
     func change(_ body: (inout DrawerState) -> Void) {
         let was = state
         body(&state)
+        if state.dock { state.peek = false }
         guard state != was else { return }
+        setAccessibilityElement(state.shown)
         if !state.peek { leaving?.invalidate() }
         if was.shown != state.shown {
             if !state.shown { focusBack() }
@@ -143,27 +143,31 @@ final class Drawer: NSView {
         moved()
     }
 
-    /// The sidebar comes over the page; `keys`, it takes them, for ↑ and ↓.
-    func open(keys: Bool = false) {
+    /// The sidebar comes over the page.
+    func open() {
         guard !state.dock else { return }
         leaving?.invalidate()
-        if !state.peek { before = window?.firstResponder }
+        remember()
         inside = pointerOver
         change { $0.peek = true }
-        if keys { window?.makeFirstResponder(host) }
     }
 
     func close() { change { $0.peek = false } }
 
-    /// ⌃⌘S and the toolbar's button.
+    /// ⌃⌘S and the toolbar's button; over the page it takes the keys, for ↑ and ↓.
     func toggle() {
         let peeked = state.peek
-        if !peeked { before = window?.firstResponder }
+        remember()
         change { $0.toggle() }
         if state.peek, !peeked { window?.makeFirstResponder(host) }
     }
 
-    /// Follows the window: where its top is free the card starts 10 points from it.
+    /// Notes what has the keys, to give them back, unless that is the sidebar itself.
+    private func remember() {
+        if let held = window?.firstResponder, (held as? NSView)?.isDescendant(of: self) != true { before = held }
+    }
+
+    /// Follows the window and the interface size: where its top is free the card starts 10 points from it.
     func follow(topFree: Bool) {
         tops.under.isActive = !topFree
         tops.top.isActive = topFree
@@ -171,11 +175,13 @@ final class Drawer: NSView {
     }
 
     private func slide(_ on: Bool) {
-        let rest = on ? Drawer.margin : -Drawer.width - 24, calm = window == nil ? 0 : Look.duration(on ? 0.36 : 0.24, Look.motion(motion()))
+        // A window not on the screen yet, at launch or in a test, has nothing to slide.
+        let rest = on ? Drawer.margin : -Drawer.width - 24, calm = window?.isVisible == true ? Look.duration(on ? 0.36 : 0.24, Look.motion(motion())) : 0
         if on { [blur, host].forEach { $0.isHidden = false } }
         let settled = { [weak self] in
             guard let self, !state.shown else { return }
             [blur, host].forEach { $0.isHidden = true }
+            needsDisplay = true
         }
         guard calm > 0 else {
             place.constant = rest
@@ -188,7 +194,7 @@ final class Drawer: NSView {
         guard let window else { return }
         let focused = (window.firstResponder as? NSTextView).flatMap { $0.isFieldEditor ? $0.delegate as? NSView : nil } ?? window.firstResponder
         guard (focused as? NSView)?.isDescendant(of: self) == true else { return }
-        window.makeFirstResponder((before as? NSView)?.window === window || before is NSWindow ? before : window.contentView)
+        window.makeFirstResponder((before as? NSView)?.window === window ? before : fallback() ?? window.contentView)
     }
 
     // MARK: The pointer
@@ -223,21 +229,25 @@ final class Drawer: NSView {
         if state.peek { leave() }
     }
 
-    /// Leaves after `seconds`, looking again while something holds it; the timer also runs while a menu tracks. A menu
-    /// that ended sees for itself whether the pointer came back (`menu`): it sends no entry.
-    func leave(after seconds: TimeInterval = 0.32, menu: Bool = false) {
+    /// Leaves after 0.32 s, looking again while something holds it; the timer also runs while a menu tracks. What held
+    /// it sent no entry: it sees for itself whether the pointer came back.
+    func leave() {
         leaving?.invalidate()
-        let timer = Timer(timeInterval: seconds, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.32, repeats: false) { [weak self] _ in
             guard let self, state.peek, !inside else { return }
-            if menuOpen || isRenaming || busy() { return leave(menu: menuOpen || menu) }
-            if menu, pointerOver { return }
+            if held { return leave() }
+            if pointerOver {
+                inside = true
+                return
+            }
             close()
         }
         RunLoop.main.add(timer, forMode: .common)
         leaving = timer
     }
 
-    private var isRenaming: Bool { host.rootView.library.sidebar.renaming != nil }
+    /// Whether something open keeps it where it is.
+    private var held: Bool { menuOpen || host.rootView.library.sidebar.renaming != nil || busy() }
     @objc private func menuBegan() { menuOpen = true }
     @objc private func menuEnded() { menuOpen = false }
 
@@ -245,7 +255,7 @@ final class Drawer: NSView {
 
     /// A click in the window off the sidebar and off its own toolbar button sends a floating sidebar away.
     func clicked(_ event: NSEvent) {
-        guard state.peek, let window, event.window === window, let frame = window.contentView?.superview,
+        guard state.peek, !held, let window, event.window === window, let frame = window.contentView?.superview,
               let hit = frame.hitTest(event.locationInWindow), !hit.isDescendant(of: self), button().map({ !hit.isDescendant(of: $0) }) ?? true else { return }
         inside = false
         close()
@@ -268,7 +278,7 @@ final class Drawer: NSView {
 
     /// The float shadow and ring; the glass inside them is the window server's, the tint the list's.
     override func draw(_ dirtyRect: NSRect) {
-        guard state.shown else { return }
+        guard !host.isHidden else { return }
         Look.drawFloat(card, radius: Drawer.radius, fill: .side, ring: false, appearance: effectiveAppearance, hollow: true)
         Look.Token.line2.color.setStroke()
         let ring = NSBezierPath(roundedRect: card.insetBy(dx: -0.25, dy: -0.25), xRadius: Drawer.radius, yRadius: Drawer.radius)
@@ -280,13 +290,14 @@ final class Drawer: NSView {
 extension Shell {
     /// Lets the window's state reach the sidebar: whether there is room, the pin of Settings, and a build on New Space.
     func arrange() {
-        let room = !full && !pageFull && window.frame.width >= Shell.narrow, pinned = library.preferences.pinned, building = assistant.building
+        let room = !full && !pageFull && window.frame.width >= Shell.narrow * Look.scale.size.factor, pinned = library.preferences.pinned, building = assistant.building
         drawer.change {
             if $0.pinned != pinned { $0.set(pinned: pinned) }
             $0.room = room
             $0.build(building)
         }
         drawer.follow(topFree: full || pageFull)
+        drawerMoved()
     }
 
     /// The sidebar changed: the center makes its room or takes it back, and the edge, the pin and the toolbar's button
@@ -317,7 +328,11 @@ extension Shell {
 
 extension App {
     /// ⌃⌘S. NSWindow answers toggleSidebar: itself, ahead of the app: this one has a selector of its own.
-    @objc func showSidebar(_ sender: Any?) { shell.drawer.toggle() }
+    @objc func showSidebar(_ sender: Any?) {
+        if Keys.enabled("sidebar", situation) { shell.drawer.toggle() }
+    }
     /// View › Keep Sidebar Open.
-    @objc func keepSidebarOpen(_ sender: Any?) { shell.keepSidebar() }
+    @objc func keepSidebarOpen(_ sender: Any?) {
+        if Keys.enabled("keepSidebar", situation) { shell.keepSidebar() }
+    }
 }

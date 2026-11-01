@@ -249,7 +249,8 @@ struct AcceptanceShell {
         #expect(library.stops() == [.newSpace], "no header shows while no space is listed")
         #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
         let drawn = try await stage.drawn(shell)
-        #expect(SidebarView.empty == "Your spaces appear here", "drawn in b6's picture: Vision misses its grey on the offscreen copy")
+        let said = await AcceptanceBuild.read(shell.drawer.host, whole: true) { $0.contains("Your spaces appear here") }
+        #expect(said.contains("Your spaces appear here"), "the sidebar says where the spaces will be: \(said)")
         #expect(!drawn.contains { ["Work", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
         #expect(shell.drawer.state.dock && shell.column.constant == Drawer.column, "held open, the page beside it")
         try await stage.appearances { suffix in
@@ -1198,6 +1199,12 @@ struct AcceptanceShell {
         // The word alone, no sign: the sign with eyes is the assistant's.
         let whole = try stage.sidebar(shell, taller: 200), lines = try await Picture.lines(whole), drawn = lines.map(\.words)
         #expect(drawn.contains("something"), "the foot says something alone: \(drawn)")
+        func foot() async throws -> CGFloat {
+            let rep = try stage.sidebar(shell), lines = try await Picture.lines(rep), scale = CGFloat(rep.pixelsHigh) / rep.size.height
+            let templates = try #require(lines.first { $0.words.hasSuffix("Templates") }), word = try #require(lines.first { $0.words == "something" })
+            #expect(word.box.minY > templates.box.maxY, "something stands under Templates")
+            return (word.box.midY - templates.box.midY) / scale
+        }
         #expect(drawn.contains { $0.hasSuffix("Templates") } && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
         // The list is longer than its column, and it ends on a whole row that fades out above Templates. Drawn as the
         // window shows the column, below the title bar: the last row read above Templates spans what it spans at the
@@ -1220,12 +1227,13 @@ struct AcceptanceShell {
         }
         // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24, and Templates.
         #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
-        #expect(SidebarView.nav == 30 && Drawer.width == 250)
+        let normal = try await foot()
         try await Stage.alone {
             Look.scale.size = .larger
             _ = try stage.sidebar(shell)
             #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
-            #expect(abs(SidebarView.nav - 30 * 1.24) < 0.01 && abs(Drawer.width - 250 * 1.24) < 0.01)
+            let larger = try await foot()
+            #expect(larger > normal, "Templates' row and the foot grow with the words: \(larger) from \(normal)")
         }
     }
 
@@ -1330,12 +1338,16 @@ struct AcceptanceShell {
         let rested = Date()
         edge.mouseEntered(with: try Self.pointer(true, edge))
         #expect(!drawer.state.shown && edge.subviews.count == 1 && edge.subviews[0].frame.width == 7, "not at once")
+        #expect(!drawer.isAccessibilityElement(), "closed, VoiceOver finds no empty group")
         #expect(await wait(until: { drawer.state.peek }) && Date().timeIntervalSince(rested) >= 0.2)
         #expect(await wait(until: { drawer.card.minX == Drawer.margin }))
         shell.window.layoutIfNeeded()
         let card = Self.inWindow(drawer, drawer.card)
         #expect(card.minX == 10 && card.width == 250 && card.minY == under + 10 && card.maxY == shell.window.frame.height - 10, "\(card)")
         #expect(edge.isHidden && drawer.accessibilityLabel() == "Sidebar" && shell.column.constant == 0, "over the page, which does not move")
+        #expect(edge.subviews[0].alphaValue == 0 && drawer.isAccessibilityElement(), "the mark went with its coming")
+        let order = shell.split.view.accessibilityChildrenInNavigationOrder() as? [NSView]
+        #expect(order?.first === shell.chrome, "VoiceOver reads the sidebar before the page")
         #expect(view.web.frame.width == Stage.Size.main.width)
         let sidebar = try #require(MenuBar(builders: nil).submenu("View")?.items.first { $0.identifier?.rawValue == "sidebar" })
         shell.retitle(sidebar)
@@ -1346,10 +1358,6 @@ struct AcceptanceShell {
             try await Picture.window(shell, library: library, web: view.web, "r4-2" + suffix, root: stage.home.root)
         }
         library.sidebar.hovered = nil
-        // The drawn head: the word, no New Space or Go to… row.
-        let drawn = try stage.drawn(shell)
-        for line in ["Spaces", "pages of your own", "Needs You", "Templates", "something"] { #expect(drawn.contains { $0.contains(line) }, "\(line): \(drawn)") }
-        #expect(!drawn.contains { $0.contains("Go to") || $0.contains("New Space") }, "\(drawn)")
         // The pointer leaves it: it goes a moment later.
         let left = Date()
         drawer.mouseEntered(with: try Self.pointer(true, drawer))
@@ -1366,26 +1374,57 @@ struct AcceptanceShell {
         await wait(0.6)
         #expect(drawer.state.peek, "a menu is open")
         NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: NSMenu())
+        func click(_ x: CGFloat, _ y: CGFloat) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: x, y: y), modifierFlags: [], timestamp: 0,
+                                            windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        let page = try click(700, 300)
         library.beginRename(.group("Work"))
         await wait(0.6)
-        #expect(drawer.state.peek, "a name is being edited")
+        drawer.clicked(page)
+        #expect(drawer.state.peek, "a name is being edited, a click keeps it")
         library.cancelRename()
         shell.layer.announce = { _ in }
         let undo = shell.toast("Trashed", action: Toast.Action(label: "Undo") {}, seconds: 60)
         await wait(0.6)
-        #expect(drawer.state.peek && shell.holdsDrawer, "an Undo toast is up")
+        drawer.clicked(page)
+        #expect(drawer.state.peek && shell.holdsDrawer, "an Undo toast is up, a click keeps it")
         undo.leave(now: true)
+        let sheet = Sheet(icon: nil, title: "A sheet", actions: [])
+        shell.window.beginSheet(sheet) { _ in }
+        await wait(0.6)
+        drawer.clicked(page)
+        #expect(drawer.state.peek, "a sheet is up")
+        Shell.endSheets(of: shell.window)
         #expect(await wait(until: { !drawer.state.peek }), "then it leaves")
+        // A rename in Page Full Screen: Esc is the field's, and the mode stays.
+        shell.pageFullScreen(true)
+        drawer.open()
+        library.beginRename(.group("Work"))
+        #expect(!shell.escape(try Self.escape(shell)) && shell.pageFull && drawer.state.peek)
+        library.cancelRename()
+        drawer.close()
+        shell.pageFullScreen(false)
         // ⌃⌘S brings it with the keys; Esc takes it away, the keys back on the page; a click on the page too.
         shell.window.makeFirstResponder(view.web)
         drawer.toggle()
         #expect(drawer.state.peek && shell.window.firstResponder === drawer.host)
         #expect(shell.escape(try Self.escape(shell)) && !drawer.state.peek && shell.window.firstResponder === view.web, "Esc")
         drawer.toggle()
-        let page = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 700, y: 300), modifierFlags: [], timestamp: 0,
-                                                   windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        drawer.clicked(try click(100, 300))
+        #expect(drawer.state.peek, "a click on the card is the card's")
+        let button = try #require(drawer.button()), middle = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+        drawer.clicked(try click(middle.x, middle.y))
+        #expect(drawer.state.peek, "the toolbar's button toggles it itself")
         drawer.clicked(page)
         #expect(!drawer.state.peek, "a click on the page")
+        // ⌃⌘S goes to the app, and waits under what covers the window.
+        #expect(Keys.command("sidebar")?.action == #selector(App.showSidebar(_:)) && Keys.command("keepSidebar")?.action == #selector(App.keepSidebarOpen(_:)))
+        #expect(Keys.enabled("sidebar", Keys.Situation()) && !Keys.enabled("sidebar", Keys.Situation(covered: true)) && !Keys.enabled("keepSidebar", Keys.Situation(covered: true)))
+        // The drawn head: the word, no New Space or Go to… row.
+        let drawn = try await stage.drawn(shell)
+        for line in ["Spaces", "pages of your own", "Needs You", "Templates", "something"] { #expect(drawn.contains { $0.contains(line) }, "\(line): \(drawn)") }
+        #expect(!drawn.contains { $0.contains("Go to") || $0.contains("New Space") }, "\(drawn)")
     }
 
     /// The pin (R4.3): the pin keeps the sidebar, the same card, and the page narrows beside it, the toolbar where it
@@ -1414,6 +1453,20 @@ struct AcceptanceShell {
         #expect(shell.titleLine.convert(shell.titleLine.bounds, to: nil).minX == title, "the toolbar does not move")
         #expect(drawer.card.minX == 10 && drawer.card.width == 250, "the same card")
         #expect(Preferences(stage.home.places).pinned, "kept for the next start")
+        #expect(shell.leftEdge.isHidden, "docked, no edge")
+        // Hiding it gives the keys to the page, even when the sidebar held them.
+        shell.window.makeFirstResponder(drawer.host)
+        drawer.toggle()
+        #expect(shell.window.firstResponder === view.web, "the page takes the keys")
+        drawer.toggle()
+        shell.window.makeFirstResponder(drawer.host)
+        shell.pageFullScreen(true)
+        #expect(shell.window.firstResponder === view.web, "in Page Full Screen too")
+        shell.pageFullScreen(false)
+        // Info opening keeps the sidebar's layer over the columns, the window layer over it.
+        shell.showInfo(true)
+        #expect(Array(shell.split.view.subviews.suffix(2)) == [shell.chrome, shell.layer])
+        shell.showInfo(false)
         let bar = MenuBar(builders: nil), menu = try #require(bar.submenu("View"))
         let keep = try #require(menu.items.first { $0.identifier?.rawValue == "keepSidebar" })
         shell.retitle(keep)
@@ -1445,6 +1498,14 @@ struct AcceptanceShell {
         shell.window.setContentSize(NSSize(width: 860, height: 760))
         shell.window.layoutIfNeeded()
         #expect(drawer.state.dock && library.sidebar.room && start() == 270)
+        // The line grows with the interface size.
+        try await Stage.alone {
+            shell.window.setContentSize(NSSize(width: 900, height: 760))
+            Look.scale.size = .larger
+            #expect(await wait(until: { !library.sidebar.room }), "Larger at 900 wide")
+            Look.scale.size = .standard
+            #expect(await wait(until: { library.sidebar.room }))
+        }
         shell.window.setContentSize(Stage.Size.main)
         // Settings' row is the same bit; a second click on the pin floats it.
         library.preferences.pinned = false

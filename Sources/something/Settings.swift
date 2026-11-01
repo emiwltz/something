@@ -136,7 +136,7 @@ struct SettingsSection: Identifiable {
         look()
     }
 
-    /// Reads again what lives elsewhere than in the preferences: the window's sidebar, the levels, the versions seen.
+    /// Reads again what lives elsewhere than in the preferences: the levels, the versions seen.
     func look() {
         (spaceLevels, seen, lasting) = (levels(), versions(), rules())
     }

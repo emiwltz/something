@@ -348,6 +348,7 @@ struct AcceptanceBuild {
             }
             let words = await Self.read(host, until: says)
             #expect(says(words), "\(words)")
+            #expect(await wait(until: { !shell.drawer.state.dock }), "pressing Build sends the sidebar away")
             shell.drawer.open()
             let side = await Self.read(shell.drawer.host) { $0.contains("Who is waiting for me, building, 50 %") }
             #expect(side.contains("Who is waiting for me, building, 50 %"), "\(side)")
@@ -558,6 +559,10 @@ struct AcceptanceBuild {
         #expect(await wait(until: { made != nil }))
         let name = try #require(made)
         #expect(name == "waiting-room" && library.fresh == nil)
+        // The build over, New Space holds the sidebar again: the app's `ended` opens the space in the same turn, this
+        // test a moment later, so the sign is measured beside it.
+        #expect(await wait(until: { shell.drawer.state.dock }))
+        shell.window.layoutIfNeeded()
         let ask = FakeAsk()
         let room = try await stage.home.window(try #require(library.entry(name)?.space), ask)
         defer { room.close() }
@@ -574,7 +579,7 @@ struct AcceptanceBuild {
         model.place = AssistantModel.place(room)
         // It starts on the sign of 52 points, its arm and stroke the sign's, its eyes on.
         #expect(arrival.start.face && abs(arrival.start.arm - 52 * 0.31) < 0.01 && arrival.start.stroke == 35)
-        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && [Stage.Size.main.width, Stage.Size.main.width - Drawer.column].contains { abs(arrival.start.rect.midX - $0 / 2) < 1 }, "from New Space's sign, the sidebar back or not yet: \(arrival.start.rect)")
+        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && abs(arrival.start.rect.midX - (Stage.Size.main.width - Drawer.column) / 2) < 1, "from New Space's sign, beside the sidebar: \(arrival.start.rect)")
         arrival.progress = 0.6
         let shape = arrival.shape
         #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)

@@ -113,7 +113,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         split.splitView.setPosition(1200 - 320, ofDividerAt: 0)
         inspector.isCollapsed = true
         window.contentMinSize = NSSize(width: 640, height: 480)
-        // The toolbar lies over the columns' own backgrounds, with the window's under the center.
+        // The toolbar lies over the window's background.
         (window.backgroundColor, window.titlebarAppearsTransparent, window.titleVisibility) = (Look.Token.bg.color, true, .hidden)
         NotificationCenter.default.addObserver(self, selector: #selector(columnsMoved), name: NSSplitView.didResizeSubviewsNotification, object: split.splitView)
         window.isReleasedWhenClosed = false
@@ -157,6 +157,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         drawer.motion = { [weak library] in library?.preferences.motion ?? .calm }
         drawer.button = { [weak self] in self?.toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view }
         library.sidebar.pin = { [weak self] in self?.keepSidebar() }
+        drawer.fallback = { [weak self] in self?.space?.web ?? self?.shown }
+        split.view.setAccessibilityChildrenInNavigationOrder([chrome] + split.splitView.arrangedSubviews + [layer])
         show(nil)
         followDrawer()
     }
@@ -168,7 +170,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             DispatchQueue.main.async { self?.followDrawer() }
         }
         arrange()
-        drawerMoved()
     }
 
     /// ⌘J: shows or hides the conversation, opening the card when it was closed.
@@ -189,7 +190,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// may have added after them; Info shown, a note leaves the right edge to it.
     @objc private func columnsMoved() {
         titleLine.invalidateIntrinsicContentSize()
-        if split.view.subviews.last !== layer {
+        if split.view.subviews.suffix(2) != [chrome, layer] {
             split.view.addSubview(chrome, positioned: .above, relativeTo: nil)
             split.view.addSubview(layer, positioned: .above, relativeTo: nil)
         }
@@ -272,8 +273,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
         space?.web.pageZoom = now.factor
         (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
-        drawer.follow(topFree: full || pageFull)
-        drawerMoved()
+        arrange()
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -526,14 +526,16 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func forget(_ name: String) { unread[name] = nil }
 
     /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
-    /// all; else a floating sidebar, unless a name in it is being edited; else the panel when it has the keys (History's); else point mode's step back; else a margin note, the top
+    /// all; else nothing while a name in the sidebar is being edited; else a floating sidebar; else the panel when it has the keys (History's); else point mode's step back; else a margin note, the top
     /// thing over the page. Returns whether one closed, the key then used up (the assistant's nudge waits for an Esc
     /// nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
         if ScrimCard.close(in: layer) { return true }
         guard window.attachedSheet == nil else { return false }
-        if drawer.state.peek, library.sidebar.renaming == nil {
+        // A name being edited takes its own Esc.
+        if library.sidebar.renaming != nil { return false }
+        if drawer.state.peek {
             drawer.close()
             return true
         }

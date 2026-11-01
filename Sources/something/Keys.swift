@@ -223,6 +223,8 @@ enum Keys {
         var pointable = true
         /// The interface size: the largest greys Bigger, the default Smaller and Default Size.
         var size = Look.Size.standard
+        /// Whether something covers the main window or it lost the keys: a sheet, the palette, Settings.
+        var covered = false
     }
 
     /// What still acts while the welcome is open: the app's own items, Show Request (the panel then takes the keys) and
@@ -242,6 +244,7 @@ enum Keys {
         case "ask": return situation.agent
         case "showreq": return situation.waiting
         case "pointpart": return situation.pointable
+        case "sidebar", "keepSidebar": return !situation.covered
         // ⌘⌫ deletes text in a field; the item steps aside (MenuBar also takes its key away).
         case "trash": return !situation.editingText
         default: return true

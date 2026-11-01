@@ -79,7 +79,6 @@ extension Shell {
         topEdge.came = { [weak self] in self?.toolbar(true) }
         topEdge.went = { [weak self] in if self?.pageFull == true { self?.toolbar(false) } }
         leftEdge.came = { [weak self] in self?.drawer.open() }
-        leftEdge.motion = { [weak self] in self?.library.preferences.motion ?? .calm }
         reveals()
     }
 
@@ -113,8 +112,6 @@ final class Reveal: NSView {
     }
     private var timer: Timer?
     private let mark = EdgeMark()
-    /// The app's motion setting, for the mark.
-    var motion: () -> Look.Motion = { .calm }
 
     init(delay: TimeInterval, leave: TimeInterval = 0, clicks: Bool) {
         (self.delay, self.leave, self.clicks) = (delay, leave, clicks)
@@ -145,7 +142,11 @@ final class Reveal: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         if clicks { arm(at: convert(event.locationInWindow, from: nil).y) }
-        after(delay, came)
+        // What comes hides the strip, which then hears no exit: the mark goes first.
+        after(delay) { [weak self] in
+            self?.mark.alphaValue = 0
+            self?.came()
+        }
     }
     override func mouseExited(with event: NSEvent) {
         mark.alphaValue = 0
@@ -159,7 +160,7 @@ final class Reveal: NSView {
 
     /// The mark comes where the pointer rests, 4 × 40 and 3 points from the edge, growing out of a third of its height.
     private func arm(at y: CGFloat) {
-        let place = NSRect(x: 2, y: y - 22, width: 7, height: 44), calm = Look.duration(0.2, Look.motion(motion()))
+        let place = NSRect(x: 2, y: y - 22, width: 7, height: 44), calm = Look.duration(0.2, Look.motion(.calm))
         mark.frame = place.insetBy(dx: 0, dy: 13)
         Look.animate(calm, Look.out) { [mark] in
             mark.moving.alphaValue = 1

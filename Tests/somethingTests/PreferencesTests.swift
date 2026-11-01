@@ -83,6 +83,7 @@ import Testing
         values.listed = ["pi": Options()]
         values.commands = ["claude": [Option(value: "review", label: "Review the page")]]
         (values.askEverything, values.fullAccess, values.resume, values.toured, values.hinted) = (true, true, false, true, ["ask"])
+        values.pinned = true
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.size) = ("new", .dark, .reduced, .larger)
