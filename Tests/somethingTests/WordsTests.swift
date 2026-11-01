@@ -64,10 +64,38 @@ import Testing
         #expect(Grant.Level.allCases.map(\.sentence) == ["It shows no agent.", "It sees your agents: their state, folder and last messages.",
                                                           "It sees them and writes to them: send a message, stop one, change its model.",
                                                           "It sees them, writes to them, and starts one in a folder you pick."])
-        #expect(Grant.Level.run.line(folder: "/Users/example/code/shop", home: home) == "[something] With your agents: Run, in ~/code/shop.")
-        #expect(Grant.Level.watch.line(folder: "/Users/example/code/shop", home: home) == "[something] With your agents: Watch.")
+        #expect(Grant.Level.guess("A page that shows who is waiting for me, oldest first") == .watch && Grant.Level.guessed("My reading list") == nil)
+        #expect(Grant.Level.guess("Who’s working right now?") == .watch)
+        #expect(Grant.Level.allCases.map(\.word) == ["not see", "watch", "talk to", "start"])
+        let shop = "/Users/example/code/shop", claude = Grant.Start(kind: "claude")
+        #expect(LevelChoice(level: .run, start: claude, folder: .path(shop)).line(home: home) == "[something] With your agents: Run, starts Claude Code, in ~/code/shop.")
+        #expect(LevelChoice(level: .run, start: Grant.Start(kind: "pi"), folder: .blank).line(home: home) == "[something] With your agents: Run, starts pi, in a blank folder of its own.")
+        #expect(LevelChoice(level: .watch, scope: .all).line(home: home) == "[something] With your agents: Watch.")
+        #expect(LevelChoice(level: .talk, scope: .folders([shop])).line(home: home) == "[something] With your agents: Talk, in ~/code/shop.")
+        #expect(LevelChoice().line(home: home) == "[something] With your agents: None.")
+        #expect(LevelChoice(level: .none).said(home: home) == "This space may not see your agents.")
+        #expect(LevelChoice(level: .talk, scope: .folders([shop, home])).said(home: home, subject: "A new space") == "A new space may talk to the agents in 2 folders.")
+        #expect(LevelChoice(level: .run, start: Grant.Start(kind: "pi", model: "invented")).said(home: home) == "This space may start pi · invented.")
         #expect(AssistantModel.shown("[something] No space is open: the person is on the blank page.\n[something] With your agents: Watch.\nA countdown.")
                 == ("on the blank page", "A countdown."), "the conversation shows the person's words only")
+    }
+
+    /// The warning names who never asks, among the live agents the sentence reaches, or the agent it starts; else none.
+    @Test func theWarningNamesWhoNeverAsks() {
+        func agent(_ kind: String, _ name: String?, folder: String = "/Users/example/a", state: String = "idle", alive: Bool? = true) -> Agent {
+            var agent = Agent(id: name ?? kind, kind: kind, origin: "elsewhere")
+            (agent.name, agent.folder, agent.state, agent.alive) = (name, folder, state, alive)
+            return agent
+        }
+        let agents = [agent("pi", "Reading list"), agent("amp", "Shop tests"), agent("omp", nil), agent("pi", "Asleep", state: "sleep"), agent("pi", "Gone", alive: false),
+                      agent("claude", "Careful"), agent("pi", "Elsewhere", folder: "/Users/example/b")]
+        let talk = LevelChoice(level: .talk)
+        #expect(Levels.warning(talk, agents: []) == nil && Levels.warning(LevelChoice(level: .watch), agents: agents) == nil)
+        #expect(Levels.warning(talk, agents: agents) == "Reading list, Shop tests, OMP and Elsewhere never ask: this space can make them act without you.")
+        #expect(Levels.warning(LevelChoice(level: .talk, scope: .folders(["/Users/example/b"])), agents: agents) == "Elsewhere never asks: this space can make it act without you.")
+        #expect(Levels.warning(LevelChoice(level: .run, start: Grant.Start(kind: "claude")), agents: agents) == nil, "at start, only the agent it starts")
+        #expect(Levels.warning(LevelChoice(level: .run, start: Grant.Start(kind: "amp")), agents: []) == "Amp never asks: this space can make it act without you.")
+        #expect(Levels.warning(LevelChoice(level: .run), agents: []) == Levels.runWarning, "no agent named: any launch")
     }
 
     /// A request in words: its effect by the tool's kind and the space, in the mockup's words, how long ago it was

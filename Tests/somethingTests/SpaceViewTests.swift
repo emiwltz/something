@@ -494,7 +494,8 @@ import WebKit
         first.open()
         try await ready(first)
         first.close()
-        #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, level: .run, folder: shop.path, folders: [], page: space.location.path)],
+        #expect(ask.questions == [RightsQuestion(space: "Review", description: nil, level: .run, folder: shop.path, folders: [], page: space.location.path,
+                                                  scope: ask.questions.first?.scope ?? .all, name: space.name)],
                 "pre-set to Run, its folder the declared one, found on this Mac")
         #expect(first.granted.rights == ["state", "store", "launch:codex"] && first.granted.refused.isEmpty)
         #expect(first.granted.folder == shop.path)

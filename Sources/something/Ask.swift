@@ -24,11 +24,18 @@ struct RightsQuestion: Equatable {
     var made = false
     /// The space's page (its file, or its folder), absolute, shown under the title; nil shows none.
     var page: String? = nil
+    /// The agents the scope pre-set shows, as the page declares it: what the sentence says.
+    var scope = Scope.all
+    /// The space's file name, for its blank folder, and the agents that never ask, for the warning.
+    var name: String? = nil
+    var agents: [Agent] = []
 }
 
 /// The person's answer: the level, and the folder in force for launches when it is Run.
 struct RightsAnswer: Equatable {
     var level: Grant.Level, folder: String?
+    /// No Folder was chosen: the space's blank folder, and what else the sentence changed.
+    var blank = false, scope: Scope? = nil, start: Grant.Start? = nil
 }
 
 protocol Asking: AnyObject {

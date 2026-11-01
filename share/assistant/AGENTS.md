@@ -13,11 +13,13 @@ folder only.
 - Read the guide once (`something_guide`, or `something guide --print`). It is the contract of a space; follow it.
 - Each message starts with a line from something saying which space is open. "This space" means that one. "No space
   is open: the person is on the blank page" means: make a new space from their words.
-- On a new space, a second line says what the person chose for it: `[something] With your agents: <level>.` Declare
-  exactly that level's rights, and do not ask: None, no agent right; Watch, `state`; Talk, `state` and `send`; Run,
-  `state`, `send` and `launch`, its folder the one the line names. `store` needs no permission: declare it when the
-  space remembers something. Ask no question the level already answers: the person chose before Build. Ask at most
-  one, only when their words leave the page itself truly open; otherwise choose, and say what you chose.
+- On a new space, a line says what the person chose for it: `[something] With your agents: Watch.`,
+  `Talk, in ~/code/shop.`, `Run, starts Claude Code, in ~/code/shop.` or `Run, starts pi, in a blank folder of its
+  own.` Declare exactly that level's rights and that scope, and do not ask: None, no agent right; Watch, `state`; Talk,
+  `state` and `send`; Run, `state`, `send` and `launch:<kind>`, its `folder` the one the line names. "in <folder>" is
+  `"agents": {"folders": ["<folder>"]}`; no folder is `"agents": {"see": "all"}`. `store` needs no permission: declare
+  it when the space remembers something. Ask no question the level already answers: the person chose before Build. Ask
+  at most one, only when their words leave the page itself truly open; otherwise choose, and say what you chose.
 
 ## Make a space
 1. Pick a short name yourself (lowercase, digits, `-`); do not ask.

@@ -43,6 +43,8 @@ struct Places {
     let home: URL
     var spaces: URL { Spaces.root(home: home) }
     var data: URL { Memory.folder(home: home) }
+    /// Beside the spaces: the blank folders of agents a space starts with No Folder, one per space.
+    var agents: URL { spaces.deletingLastPathComponent().appendingPathComponent("agents") }
     /// Where Export writes, as Safari's downloads go.
     var downloads: URL { home.appendingPathComponent("Downloads") }
     /// The engine's own folder, outside the folders agents edit: the grants, the journals and the window's memory.
@@ -58,6 +60,13 @@ struct Places {
     /// Claude Code's plan-B spools (PermissionSpool.swift): never in $TMPDIR, which a sandboxed agent (Codex in
     /// workspace-write) may write, and could then answer Claude's requests.
     var spools: URL { support.appendingPathComponent("spool") }
+
+    /// The blank folder of the space `name`, made if needed; a folder that cannot be made shows at the agent's launch.
+    func blank(_ name: String) -> String {
+        let folder = agents.appendingPathComponent(name)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder.path
+    }
 
     /// The person's places. $SOMETHING_HOME, then $HOME, so that a trial or `HOME=<folder> swift run something` never
     /// reaches their own folders (README, "Building from the clone").

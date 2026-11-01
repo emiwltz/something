@@ -1,13 +1,34 @@
 // A space's level with the person's agents (None · Watch · Talk · Run), as the app says and asks it: each level's
-// words, the level a description suggests, New Space's row (the choice made there is the consent), and the one-line
-// level sheet a space made elsewhere shows at its first opening. The rights a level grants are the core's
-// (Grant.Level); here are only its words and its controls.
+// words, the level a description suggests, New Space's card (the choice made there is the consent), and the level
+// sheet a space made elsewhere shows at its first opening; both draw the sentence (Sentence.swift). The rights a level
+// grants are the core's (Grant.Level); here are only its words.
 import AppKit
+import SomethingAgents
 import SomethingCore
 import SwiftUI
 
 extension Grant.Level {
     var title: String { rawValue.capitalized }
+
+    /// The level in the sentence and its menus: None, Talk and Run stay the contract's nouns.
+    var word: String {
+        switch self {
+        case .none: "not see"
+        case .watch: "watch"
+        case .talk: "talk to"
+        case .run: "start"
+        }
+    }
+
+    /// What the level's row says in its menu.
+    var note: String {
+        switch self {
+        case .none: "Sees nothing."
+        case .watch: "Sees your agents."
+        case .talk: "Sees and writes to them."
+        case .run: "Sees, writes, starts them."
+        }
+    }
 
     /// What the level lets a space do, in one sentence.
     var sentence: String {
@@ -19,28 +40,46 @@ extension Grant.Level {
         }
     }
 
-    /// The level a description in English suggests: starting an agent, then writing to one, then only seeing them.
-    /// A hint the person sees and changes in one click; words it does not know suggest `otherwise` (Settings › Agents).
-    static func guess(_ words: String, otherwise: Grant.Level = .none) -> Grant.Level {
+    /// The level a description in English suggests: starting an agent, then writing to one, then only seeing them,
+    /// which words that ask who is waiting or working do too; nil when the words say nothing of agents.
+    static func guessed(_ words: String) -> Grant.Level? {
         func says(_ pattern: String) -> Bool { words.range(of: "\\b(\(pattern))\\b", options: [.regularExpression, .caseInsensitive]) != nil }
         return says("start|starts|launch|launches|run|runs|spin up") ? .run : says("talk|tell|send|write to|ask|nudge") ? .talk
-            : says("agent|agents") ? .watch : otherwise
+            : says("agent|agents|who is (waiting|working)|who['’]s (waiting|working)|waiting for me|who needs me") ? .watch : nil
     }
 
-    /// The line something adds to the first message of a build, for the assistant to declare exactly these rights. Run's
-    /// folder is always known by then: New Space sends only once it is chosen.
-    func line(folder: String?, home: String) -> String {
-        "[something] With your agents: \(title)\(self == .run ? folder.map { ", in " + Words.path($0, home: home) } ?? "" : "")."
-    }
+    /// A hint the person sees and changes in one click; words it does not know suggest `otherwise` (Settings › Agents).
+    static func guess(_ words: String, otherwise: Grant.Level = .none) -> Grant.Level { guessed(words) ?? otherwise }
 }
 
 enum Levels {
-    /// What a level never covers, said under the choice.
-    static let fine = "Nothing else to allow when it opens. Whatever an agent asks still waits for you."
+    /// What a level never covers, said under the sentence.
+    static let fine = "Whatever an agent asks still waits for you."
     /// What a person must read before choosing Run, when an agent here acts without asking; else nil.
     static var runWarning: String? { Ask.warning(for: "launch").map { $0 + "." } }
     /// That warning under Run, when there is one.
     @ViewBuilder static var runNote: some View { if let runWarning { note(runWarning, warns: true) } }
+    /// The one warning that replaces that line: at Talk, the agents the choice reaches that never ask, by their names;
+    /// at Run, the agent it starts when that one never asks, or, with none named, what any launch may reach. Else nil.
+    static func warning(_ choice: LevelChoice, agents: [Agent]) -> String? {
+        func loose(_ kind: String) -> Bool { Registry.app.agent(kind).map { $0.neverAsks || $0.asksNothingByDefault } ?? false }
+        let names: [String]
+        switch choice.level {
+        case .none, .watch: return nil
+        case .run:
+            guard let start = choice.start else { return runWarning }
+            names = loose(start.kind) ? [Registry.app.name(of: start.kind)] : []
+        case .talk:
+            let reached = agents.filter { loose($0.kind) && $0.alive != false && $0.state != "sleep" && $0.state != "ended" && Rights.contains(choice.scope ?? .all, $0.folder) }
+            names = reached.reduce(into: []) { names, agent in
+                let name = agent.name ?? Registry.app.name(of: agent.kind)
+                if !names.contains(name) { names.append(name) }
+            }
+        }
+        guard let last = names.last else { return nil }
+        if names.count == 1 { return "\(last) never asks: this space can make it act without you." }
+        return "\(names.dropLast().joined(separator: ", ")) and \(last) never ask: this space can make them act without you."
+    }
     static let sheetFine = "Whatever an agent asks still waits for you, in a window of your Mac: Allow Once or Deny. Its memory needs no permission."
 
     /// `text` under the choice, a quiet line after its mark: a warning, read before choosing, never an alarm; or, by a
@@ -50,7 +89,8 @@ enum Levels {
             Image(systemName: warns ? "exclamationmark.triangle" : "lock").font(.system(size: 9.5)).accessibilityHidden(true)
             Text(text)
         }
-        .font(Look.small.font.ui).foregroundStyle((warns ? Look.Token.ink2 : .ink3).ui).fixedSize(horizontal: false, vertical: true)
+        .font(warns ? Look.font(.ui, size: 12, weight: .medium).ui : Look.small.font.ui).foregroundStyle((warns ? Look.Token.ink : .ink3).ui)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// The folders the Mac's agents work in, as `state` knows them, each once, in order: Run's choices.
@@ -119,83 +159,64 @@ struct FolderChip: View {
     }
 }
 
-/// New Space's row, under the field: "With your agents" and the four levels, Run's folder after them, the level's
-/// sentence and whether the words pre-set it or the person chose it, and what the choice means.
-struct LevelRow: View {
+/// New Space's card, under the field: "With your agents", whether the words pre-set it, the person chose it or it is
+/// their default, and the sentence.
+struct LevelCard: View {
     @Bindable var model: AssistantModel
 
     var body: some View {
-        let level = model.level, home = model.places.home.path
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                // The picker says it to VoiceOver, with the choice.
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
                 Text("With your agents").font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                    .accessibilityHidden(true)
-                LevelPicker(level: Binding(get: { model.level }, set: { model.chosenLevel = $0 }))
-                if level == .run {
-                    Text("in").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-                    FolderChip(folder: model.runFolder, folders: Levels.folders(model.engine.state), home: home) { (model.runFolder, model.chosenLevel) = ($0, .run) }
-                }
-                Spacer(minLength: 0)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
                 Spacer(minLength: 8)
-                // Before any words, nothing was pre-set from them.
-                if model.chosenLevel != nil || !model.draft.isEmpty {
-                    Text(model.chosenLevel != nil ? "Your choice" : "Pre-set from your words").font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
-                }
+                tag
             }
-            .accessibilityElement(children: .combine)
-            if level == .run { Levels.runNote }
-            Levels.note(Levels.fine)
+            Sentence("This space", choice: $model.choice, folders: Levels.folders(model.engine.state), home: model.places.home.path,
+                     warning: model.warning, agents: model.entries.filter(\.enabled).map(\.id))
         }
-        .padding(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
+        .padding(EdgeInsets(top: 12, leading: 14, bottom: 11, trailing: 14))
         .boxed(RoundedRectangle(cornerRadius: 12, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
         .disabled(model.blocked)
     }
+
+    /// Where the sentence comes from; a default can be changed where it is set.
+    @ViewBuilder private var tag: some View {
+        let words = Text(model.origin).font(Look.font(.ui, size: 11).ui).foregroundStyle(Look.Token.ink3.ui)
+        if model.origin == AssistantModel.defaultOrigin {
+            Button { Keys.send("defaults") } label: { words }.buttonStyle(.plain).help("Set in Settings")
+        } else {
+            words
+        }
+    }
 }
 
-/// The level sheet's choice while it is open: the level, pre-set to what the page needs, and Run's folder.
+/// The level sheet's choice while it is open, pre-set to what the page needs.
 @Observable final class LevelAnswer {
-    var level: Grant.Level
-    var folder: String?
+    var choice: LevelChoice
     /// Whether Allow may be pressed: Run needs its folder.
-    var ready: Bool { level != .run || folder != nil }
-    init(level: Grant.Level, folder: String?) { (self.level, self.folder) = (level, folder) }
+    var ready: Bool { choice.level != .run || choice.folder != .none }
+    init(_ choice: LevelChoice) { self.choice = choice }
 }
 
-/// What the level sheet holds under its title: the four levels, the level's sentence, and for Run the folder agents
-/// start in. `changed` hears each change, once the view drew it.
+/// What the level sheet holds under its title: the sentence. `changed` hears each change, once the view drew it.
 struct LevelSheetView: View {
     @Bindable var answer: LevelAnswer
-    let folders: [String], home: String, width: CGFloat, changed: () -> Void
+    let question: RightsQuestion, home: String, width: CGFloat, changed: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            LevelPicker(level: $answer.level)
-            Text(answer.level.sentence).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-                .fixedSize(horizontal: false, vertical: true)
-            if answer.level == .run {
-                HStack(spacing: 8) {
-                    Text("Starts agents in").font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui)
-                    FolderChip(folder: answer.folder, folders: folders, home: home) { answer.folder = $0 }
-                    Spacer(minLength: 0)
-                }
-                Levels.runNote
-            }
-        }
-        // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.
-        .frame(width: width, alignment: .leading)
-        .padding(.top, 4)
-        .onChange(of: answer.level) { DispatchQueue.main.async(execute: changed) }
-        .onChange(of: answer.folder) { DispatchQueue.main.async(execute: changed) }
+        // The sheet's own line says what a level never covers.
+        Sentence("This space", choice: $answer.choice, folders: question.folders, home: home,
+                 warning: Levels.warning(answer.choice, agents: question.agents), space: question.name, locks: false)
+            // As wide as the sheet's text, so that a sentence wraps there and the sheet measures its height.
+            .frame(width: width, alignment: .leading)
+            .padding(.top, 4)
+            .onChange(of: answer.choice) { DispatchQueue.main.async(execute: changed) }
     }
 }
 
 extension Ask {
     /// The level sheet, not yet shown, and the answer it holds once it closed with Allow: "<Space> would like to work
-    /// with your agents", where its page is, the four levels pre-set to what the page needs, and Run's folder. Allow
+    /// with your agents", where its page is, the sentence pre-set to what the page needs, and Run's folder. Allow
     /// waits for Run's folder; Return and Escape press Don't Allow, which holds the focus. Paths are shown from `home`.
     /// Built apart from showing it, so that a test can draw it without showing it.
     static func rights(_ question: RightsQuestion, home: String = NSHomeDirectory()) -> (sheet: Sheet, answer: () -> RightsAnswer) {
@@ -217,9 +238,9 @@ extension Ask {
         }
         if let description = question.description { lines.addArrangedSubview(Sheet.label([(description, false)], Look.medium, color: .ink2, width: text)) }
         if let last = lines.arrangedSubviews.last { lines.setCustomSpacing(14, after: last) }
-        let answer = LevelAnswer(level: question.level, folder: question.folder)
+        let answer = LevelAnswer(LevelChoice(level: question.level, scope: question.scope, folder: question.folder.map { .path($0) } ?? .none))
         var refit: () -> Void = {}
-        let choice = NSHostingView(rootView: LevelSheetView(answer: answer, folders: question.folders, home: home, width: text) { refit() })
+        let choice = NSHostingView(rootView: LevelSheetView(answer: answer, question: question, home: home, width: text) { refit() })
         lines.addArrangedSubview(choice)
         choice.widthAnchor.constraint(equalToConstant: text).isActive = true
         let sheet = Sheet(icon: .symbol("person.2"), title: "\(question.space) would like to work with your agents", block: lines, fine: Levels.sheetFine,
@@ -230,7 +251,12 @@ extension Ask {
             allow.enable(answer.ready)
             sheet?.refit()
         }
-        return (sheet, { RightsAnswer(level: answer.level, folder: answer.level == .run ? answer.folder : nil) })
+        return (sheet, {
+            let chosen = answer.choice
+            // A scope left as the page declares it follows the page: only a change of the person's is kept.
+            return RightsAnswer(level: chosen.level, folder: chosen.level == .run ? chosen.folder.path : nil, blank: chosen.level == .run && chosen.folder == .blank,
+                                scope: chosen.scope == question.scope ? nil : chosen.scope, start: chosen.start)
+        })
     }
 
     /// How wide the level sheet is, as the mockup's sheets.

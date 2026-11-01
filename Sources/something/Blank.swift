@@ -1,7 +1,7 @@
 // New Space (⌘N), the center when no space is open: the sign lands, "What do you want to make?", a flat field whose
-// Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model and Build; under it, the
-// space's level with your agents (Levels.swift), pre-set from the words, which is the consent; and three suggestions
-// that each fill the field. Without a coding agent, the notice takes the field's place.
+// Return builds (⇧Return adds a line) with, in its bar, who builds it and with which model, Build Now and Continue;
+// under it, the sentence of what the space may do with your agents (Levels.swift), pre-set from the words, which is the
+// consent; and three suggestions that each fill the field. Without a coding agent, the notice takes the field's place.
 // Build makes it a build of its own, which the page then shows: its name for now as the title, the sentence sent held
 // in the field with the level chosen under it, the ladder saying what it does (Ladder.swift); the person may leave, it
 // goes on, and its row in the sidebar brings it back here. A build stopped leaves its ladder and the sentence back in
@@ -17,7 +17,7 @@ struct BlankView: View {
         ("A small game for my breaks", "A small game I can play in a minute between two tasks, with my best score kept.", "play"),
         ("My reading list", "My reading list: what I want to read, a line on each, the ones I finished folded away.", "bookmark"),
     ]
-    static let placeholder = "A page that shows who is waiting for me, oldest first…"
+    static let placeholder = "A space that shows who is waiting for me, oldest first…"
     /// The field's width, as the mockup's.
     static let width: CGFloat = 640
 
@@ -55,7 +55,7 @@ struct BlankView: View {
                         if let reply, ladder == nil { answer(reply).frame(width: field).padding(.top, 30) }
                         BuildField(model: model, sent: sent).frame(width: field).padding(.top, model.building ? 34 : reply == nil || ladder != nil ? 30 : 14)
                         if let build = model.before { chosen(build).frame(width: field, alignment: .leading).padding(.top, 10) }
-                        if !model.building { LevelRow(model: model).frame(width: field).padding(.top, 12) }
+                        if !model.building { LevelCard(model: model).frame(width: field).padding(.top, 12) }
                         if let ladder { LadderView(ladder: ladder, model: model, motion: library.preferences.motion).frame(width: field).padding(.top, 22) }
                         // The question the page answers needs no notice sending the person to the panel.
                         if let notice = model.notice, model.asked == nil { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
@@ -186,7 +186,7 @@ struct Key: View {
 }
 
 /// New Space's field: flat, bg2 in a line2 ring that turns ink with the focus, no shadow; Onest 16, two lines high;
-/// its bar under the words: who builds it and with which model in one chip, what ⇧Return does, and Build, greyed while
+/// its bar under the words: who builds it and with which model in one chip, then Build Now and Continue, greyed while
 /// nothing is written. Return builds, ⇧Return adds a line, and Return that confirms what an input method composes
 /// builds nothing. While it builds it holds `sent`, read only, and its bar steps aside.
 struct BuildField: View {
@@ -217,17 +217,30 @@ struct BuildField: View {
         .boxed(shape, busy ? Color.clear : Look.Token.bg2.ui, ring: busy ? Look.Token.line.ui : typing ? Look.Token.ink.ui : Look.Token.line2.ui)
     }
 
-    /// The agent and its model in one chip, ⇧↵ new line, and Build.
+    /// The agent and its model in one chip, Build Now ⌘↵ and Continue ↵. Both build, until a reading of the words
+    /// stands between them.
     private var bar: some View {
         HStack(spacing: 8) {
             AgentModelChip(model: model)
             Spacer(minLength: 8)
-            HStack(spacing: 4) { Key("⇧↵"); Text("new line") }
-                .font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
-                .accessibilityElement(children: .combine)
+            Button { model.send() } label: {
+                HStack(spacing: 5) {
+                    Text("Build Now")
+                    Key("⌘↵")
+                }
+                .font(Look.font(.ui, size: 12.5, weight: .medium).ui).foregroundStyle(Look.Token.ink2.ui)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canSend)
+            .opacity(model.canSend ? 1 : 0.45)
+            .keyboardShortcut(.return, modifiers: .command)
+            .help("Build Now (⌘Return)")
+            .accessibilityLabel("Build Now")
+            .padding(.trailing, 6)
             Button { model.send() } label: {
                 HStack(spacing: 6) {
-                    Text("Build")
+                    Text("Continue")
                     Text("↵").opacity(0.7)
                 }
                 .font(Look.font(.ui, size: 12.5, weight: .semibold).ui).foregroundStyle(Look.Token.actfg.ui)
@@ -237,8 +250,8 @@ struct BuildField: View {
             }
             .buttonStyle(.plain)
             .disabled(!model.canSend)
-            .help("Build (Return)")
-            .accessibilityLabel("Build")
+            .help("Continue (Return)")
+            .accessibilityLabel("Continue")
         }
         .padding(EdgeInsets(top: 0, leading: 10, bottom: 8, trailing: 8))
     }

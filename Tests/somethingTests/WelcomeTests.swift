@@ -210,6 +210,26 @@ import Testing
         #expect(answers.prefix(2) == [1, 1] && second.rows.filter { $0 == .reply("Invented reply.") }.count == 2,
                 "the space made keeps its build's conversation, the question's before it; New Space begins a new one")
         #expect(arrived == ["second · Second"] && model.notice == nil)
+
+        // The whole sentence is the consent: its agent, a blank folder made for the space, and the scope it said.
+        model.place = .blank
+        making = ("started", "Starts one")
+        (model.chosenLevel, model.runFolder, model.chosenStart) = (.run, .blank, Grant.Start(kind: "pi"))
+        model.send("A page")
+        #expect(await wait(until: { !model.building }))
+        let started = try #require(try AppFile.read(home.places.grants).spaces["started"])
+        #expect(started.level == .run && started.start == Grant.Start(kind: "pi") && started.scope == nil && started.granted.last == "launch:pi")
+        #expect(started.folder == home.places.agents.appendingPathComponent("started").path && FileManager.default.fileExists(atPath: started.folder ?? ""))
+        making = ("told", "Told")
+        (model.chosenLevel, model.chosenScope) = (.talk, .folders(["/Users/example/code/shop"]))
+        model.send("A page")
+        #expect(await wait(until: { !model.building }))
+        #expect(try AppFile.read(home.places.grants).spaces["told"]?.scope == .folders(["/Users/example/code/shop"]))
+        making = ("everyone", "Everyone")
+        model.send("A page of my agents")
+        #expect(await wait(until: { !model.building }))
+        #expect(try AppFile.read(home.places.grants).spaces["everyone"]?.scope == .all, "said all, it means all")
+
         await assistants.finish(home, model)
 
         let question = RightsQuestion(space: "Second", description: "Invented.", level: .watch, folder: nil, made: true)

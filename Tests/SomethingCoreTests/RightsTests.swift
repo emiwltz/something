@@ -125,6 +125,39 @@ struct RightsTests {
         #expect(Rights.granted(reading, none, limits: [:], home: home).rights == ["store"] && none.folder == nil)
     }
 
+    /// "May start pi" is what the bridge enforces: Run keeps the agent and grants only its kind, under a wider
+    /// declaration too; a later change of level keeps it while Run lasts, and a grants file without these keys still reads.
+    @Test func theSentenceNarrowsWhatIsGranted() throws {
+        var reading = DeclarationReading()
+        reading.declaration = declaration(["state", "launch"], agents: .folders(["~/code/shop"]))
+        let declared = try #require(reading.declaration), at = "2026-11-01T09:00:00Z", pi = Grant.Start(kind: "pi", model: "invented")
+        let run = Rights.leveled(.run, folder: "/Users/example/code/shop", declaration: declared, at: at, after: nil, start: pi)
+        #expect(run.granted == ["state", "send", "launch:pi"] && run.start == pi)
+        let given = Rights.granted(reading, run, limits: [:], home: home)
+        #expect(given.rights == ["state", "launch:pi"], "\(given.rights)")
+        #expect(Rights.covers(given.rights, "launch:pi") && !Rights.covers(given.rights, "launch:claude"))
+        #expect(Rights.leveled(.run, folder: nil, declaration: declared, at: at, after: run).granted == run.granted, "kept like its folder")
+        #expect(Rights.leveled(.talk, folder: nil, declaration: declared, at: at, after: run).start == nil)
+        #expect(Rights.leveled(.run, folder: "/Users/example/a", declaration: declared, at: at, after: nil).granted == ["state", "send", "launch"], "no agent named: as before")
+
+        #expect(Rights.granted(reading, nil, limits: [:], home: home).agents == .folders(["/Users/example/code/shop"]), "nil follows the declaration")
+        let all = Rights.leveled(.watch, folder: nil, declaration: declared, at: at, after: nil, scope: .all)
+        #expect(Rights.granted(reading, all, limits: [:], home: home).agents == .all, "the person's scope wins, wider")
+        let narrow = Rights.leveled(.talk, folder: nil, declaration: declared, at: at, after: all, scope: .folders(["/Users/example/b"]))
+        #expect(Rights.granted(reading, narrow, limits: [:], home: home).agents == .folders(["/Users/example/b"]), "or narrower")
+        #expect(Rights.leveled(.none, folder: nil, declaration: declared, at: at, after: narrow).scope == narrow.scope, "it survives a change of level")
+
+        var file = AppFile()
+        file.spaces["a"] = run
+        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("rights-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try file.write(url)
+        #expect(try AppFile.read(url) == file)
+        try Data(#"{"app": 1, "spaces": {"a": {"declared": {"rights": [], "agents": {"see": "all"}}, "granted": [], "refused": [], "remap": {}, "at": ""}}}"#.utf8).write(to: url)
+        let older = try #require(try AppFile.read(url).spaces["a"])
+        #expect(older.start == nil && older.scope == nil, "older files still read")
+    }
+
     /// The level is the consent: nothing is asked again, whatever the page declares later, except a folder Run lacks.
     @Test func aLevelAsksNothingAgain() {
         let first = declaration(["state"], agents: .folders(["~/code"]))

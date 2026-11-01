@@ -20,6 +20,11 @@ public struct Grant: Codable, Equatable, Sendable {
     public var level: Level?
     /// The commands the person allowed "Always for this space" (optional, so that an older grants file still reads).
     public var rules: [Rule]?
+    /// The agents `state` shows, as the person's sentence says: it wins over the declared scope; nil follows the declared
+    /// one (optional, as `level` is, and so is `start`).
+    public var scope: Scope?
+    /// The one agent Run may start, when the person named it.
+    public var start: Start?
     public init(declared: Asked, at: String) { (self.declared, self.at) = (declared, at) }
 }
 
@@ -31,6 +36,12 @@ public struct Rule: Codable, Hashable, Sendable {
 }
 
 extension Grant {
+    /// An agent of `kind` a space may start, with the model and effort a launch that names none takes.
+    public struct Start: Codable, Equatable, Sendable {
+        public var kind: String, model: String?, effort: String?
+        public init(kind: String, model: String? = nil, effort: String? = nil) { (self.kind, self.model, self.effort) = (kind, model, effort) }
+    }
+
     /// How far a space may work with the person's agents, one choice for all its rights: none, see them (`state`), see
     /// and write to them (`send`), or also start them in a folder the person picks (`launch`). Its memory (`store`)
     /// needs no level: it never leaves the space. A level is how the person answers; the rights stay the contract's words.
@@ -144,11 +155,16 @@ public enum Rights {
 
     /// The grant once the person chose `level` for the space declaring `declaration`: the level's words allowed, the
     /// others refused, `folder` in force for Run (kept from before when nil). A later declaration asks nothing more: a
-    /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares.
-    public static func leveled(_ level: Grant.Level, folder: String?, declaration: Declaration, at: String, after grant: Grant?) -> Grant {
+    /// right above the level stays refused, and Run's folder is the one chosen, whatever the page then declares. `start`,
+    /// kept like the folder, narrows Run's `launch` to that kind, so that "may start pi" is what the bridge enforces;
+    /// `scope` replaces the scope in force when given.
+    public static func leveled(_ level: Grant.Level, folder: String?, declaration: Declaration, at: String, after grant: Grant?,
+                               start: Grant.Start? = nil, scope: Scope? = nil) -> Grant {
         var next = grant ?? Grant(declared: Asked(declaration), at: at)
         (next.declared, next.at, next.level) = (Asked(declaration), at, level)
-        (next.granted, next.refused) = (level.words, leveled.filter { !level.words.contains($0) })
+        next.start = level == .run ? start ?? next.start : nil
+        next.scope = scope ?? next.scope
+        (next.granted, next.refused) = (level.words.map { $0 == "launch" ? next.start.map { "launch:" + $0.kind } ?? $0 : $0 }, leveled.filter { !level.words.contains($0) })
         next.folder = level == .run ? folder ?? next.folder : nil
         return next
     }
@@ -206,7 +222,8 @@ public enum Rights {
             else { granted.rights += allowed.filter { covers([right], $0) && !granted.rights.contains($0) } }
             if !covers(allowed, right), covers(refused, right) { granted.refused.append(right) }
         }
-        if case .folders(let folders) = declaration.agents { granted.agents = .folders(folders.map { grant?.remap[$0] ?? Declaration.expand($0, home: home) ?? $0 }) }
+        if let scope = grant?.scope { granted.agents = scope }
+        else if case .folders(let folders) = declaration.agents { granted.agents = .folders(folders.map { grant?.remap[$0] ?? Declaration.expand($0, home: home) ?? $0 }) }
         else { granted.agents = .all }
         return granted
     }

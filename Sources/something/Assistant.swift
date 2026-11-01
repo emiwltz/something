@@ -167,7 +167,9 @@ import SomethingCore
         let id: Int, spaces: Set<String>, session: Session, turn: String?, at: Date, sentence: String
         var seen: [String: Date] = [:]
         /// What the space may do with the person's agents, chosen before Build: written as its grant once it appears.
-        var level = Grant.Level.none, folder: String?
+        var choice = LevelChoice()
+        var level: Grant.Level { choice.level }
+        var folder: String? { choice.folder.path }
     }
     /// The builds running, oldest first, each watched until the turn that followed ends (answered, stopped, failed, or
     /// never started).
@@ -542,8 +544,29 @@ import SomethingCore
     /// Settings' "A new space may". The choice is the consent: the space it builds opens with it, nothing asked.
     var level: Grant.Level { chosenLevel ?? Grant.Level.guess(draft, otherwise: Preferences.at(places).level) }
     var chosenLevel: Grant.Level?
+    /// Which agents it shows, and which it starts, once the person chose; the assistant's own program until then.
+    var chosenScope: Scope?
+    var chosenStart: Grant.Start?
     /// The folder agents start in at Run, chosen on New Space.
-    var runFolder: String?
+    var runFolder = LevelChoice.Folder.none
+    /// New Space's sentence. Any word the person changes makes all of it their choice.
+    var choice: LevelChoice {
+        get { choice(at: level) }
+        set {
+            (chosenLevel, chosenScope) = (newValue.level, newValue.scope)
+            if newValue.level == .run { (chosenStart, runFolder) = (newValue.start, newValue.folder) }
+        }
+    }
+    /// The sentence at `level`: only Run has an agent and a folder.
+    private func choice(at level: Grant.Level) -> LevelChoice {
+        let run = level == .run
+        return LevelChoice(level: level, scope: chosenScope, start: run ? chosenStart ?? kind.map { Grant.Start(kind: $0) } : nil, folder: run ? runFolder : .none)
+    }
+    /// The tag of the sentence: who set it. A default is said as such, so that it can be changed where it is set.
+    var origin: String { chosenLevel != nil ? "Your choice" : Grant.Level.guessed(draft) != nil ? "Pre-set from your words" : Self.defaultOrigin }
+    static let defaultOrigin = "Your default"
+    /// What replaces the sentence's lock line. Assistants are no agent of a space: none can write to them.
+    var warning: String? { Levels.warning(choice, agents: engine.state.agents.filter { !engine.assistants.contains($0.id) }) }
     /// Asks Run's folder when Build finds none; a test answers in its place.
     @ObservationIgnored var chooseFolder: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
 
@@ -593,14 +616,13 @@ import SomethingCore
         guard !text.isEmpty, kind != nil, !blocked else { return }
         let blankBuild = place == .blank && before == nil, level = chosenLevel ?? Grant.Level.guess(text, otherwise: Preferences.at(places).level)
         // Run starts agents in a folder: the build waits for one.
-        if blankBuild, level == .run, runFolder == nil {
+        if blankBuild, level == .run, runFolder == .none {
             return chooseFolder { [weak self] folder in
                 guard let self else { return }
-                (runFolder, chosenLevel) = (folder, .run)
+                (runFolder, chosenLevel) = (.path(folder), .run)
                 send(sentence)
             }
         }
-        let folder = level == .run ? runFolder : nil
         if sentence == nil { draft = "" }
         fromTemplate = nil
         halted = nil
@@ -615,14 +637,15 @@ import SomethingCore
             // afresh for the next one. The level goes with it, said to the agent on a line of its own.
             let spaces = Set(Spaces(root: places.spaces).list().map(\.name)), built = session
             numbered += 1
-            builds.append(Build(id: numbered, spaces: spaces, session: built, turn: built.turn?.id, at: clock(), sentence: text, level: level, folder: folder))
+            builds.append(Build(id: numbered, spaces: spaces, session: built, turn: built.turn?.id, at: clock(), sentence: text, choice: choice(at: level)))
             sessions[.build(numbered)] = built
             // What is still written in the field (a suggestion was sent) stays with New Space.
             let next = fresh(after: built)
             (next.draft, built.draft) = (built.draft, "")
             sessions[.new] = next
-            (watched, threadShown, chosenLevel) = (numbered, true, nil)
-            return deliver([AssistantModel.context(place, home: places.home.path), level.line(folder: folder, home: places.home.path), text].joined(separator: "\n"), to: built)
+            let line = choice(at: level).line(home: places.home.path)
+            (watched, threadShown, chosenLevel, chosenScope, chosenStart) = (numbered, true, nil, nil, nil)
+            return deliver([AssistantModel.context(place, home: places.home.path), line, text].joined(separator: "\n"), to: built)
         }
         deliver(message)
     }
@@ -952,7 +975,7 @@ import SomethingCore
         guard let new = found else { return nil }
         ending = nil
         made.insert(new.id)
-        consent(new.id, before.level, folder: before.folder)
+        consent(new.id, before.choice)
         hand(before.session, to: new.id)
         if place == .blank, shown || (watched == nil && sessions[.new]?.draft.isEmpty != false) {
             revealing = new.id
@@ -1028,20 +1051,22 @@ import SomethingCore
 
     /// The level `build` was chosen with, on New Space again with its words.
     private func keepLevel(_ build: Build) {
-        chosenLevel = build.level
-        if build.level == .run, let folder = build.folder { runFolder = folder }
+        choice = build.choice
     }
 
     /// Writes the level chosen on New Space as the grant of the space `name` it built: the choice is the consent, so
     /// its first opening asks nothing. A page that cannot be read yet is asked at its opening instead.
-    private func consent(_ name: String, _ level: Grant.Level, folder: String?) {
+    private func consent(_ name: String, _ choice: LevelChoice) {
         // The name was free when the build began: agents kept under it were launched by a space since deleted, and
         // the grant written here would hide that from the opening, which drops them only when it finds no grant.
         launches.ids[name] = nil
         guard let space = Spaces(root: places.spaces).list().first(where: { $0.name == name }),
               let declaration = Declaration.read(space, home: places.home, kinds: Registry.app.kinds).declaration else { return }
+        let folder = choice.folder == .blank ? places.blank(name) : choice.folder.path
+        // Said "all your agents", it means all: never the narrower scope the page happens to declare.
+        let scope = [.watch, .talk].contains(choice.level) ? choice.scope ?? .all : nil
         try? Grants(places.grants).update {
-            $0.spaces[name] = Rights.leveled(level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: nil)
+            $0.spaces[name] = Rights.leveled(choice.level, folder: folder, declaration: declaration, at: iso8601.string(from: clock()), after: nil, start: choice.start, scope: scope)
         }
     }
 

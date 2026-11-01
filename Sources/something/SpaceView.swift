@@ -359,7 +359,8 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
         guard !Rights.toAsk(declaration, since: grant).isEmpty, let answer = ask.rights(question(declaration, grant)) else { return grant }
         // Applied to the grant as the file holds it after the sheet, so that a change made meanwhile stays.
         func answered(_ before: Grant?) -> Grant {
-            Rights.leveled(answer.level, folder: answer.folder, declaration: declaration, at: iso8601.string(from: Date()), after: before)
+            Rights.leveled(answer.level, folder: answer.blank ? places.blank(space.name) : answer.folder, declaration: declaration,
+                           at: iso8601.string(from: Date()), after: before, start: answer.start, scope: answer.scope)
         }
         do { return try grants.update { $0.spaces[space.name] = answered($0.spaces[space.name]) }.spaces[space.name] } catch {
             ask.tell(error.sentence)
@@ -372,9 +373,11 @@ final class SpaceView: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMes
     func question(_ declaration: Declaration, _ grant: Grant?) -> RightsQuestion {
         // An older grant, answered right by right, starts from the level it reached, never below what the page needs.
         let needed = Grant.Level.needed(by: declaration.rights), found = Levels.onThisMac(declaration.folder, home: places.home)
+        let scope = reading.map { Rights.granted($0, grant, limits: [:], home: places.home).agents } ?? declaration.agents
         return RightsQuestion(space: declaration.title, description: declaration.description,
                               level: grant.map { max(Rights.level(of: $0), needed) } ?? needed, folder: grant?.folder ?? found,
-                              folders: Levels.folders(engine.state), made: made, page: space.location.path)
+                              folders: Levels.folders(engine.state), made: made, page: space.location.path, scope: scope, name: space.name,
+                              agents: engine.state.agents.filter { !engine.assistants.contains($0.id) })
     }
 
     /// Tells the page the state it sees changed. Called at most four times a second (App.swift); the same state twice

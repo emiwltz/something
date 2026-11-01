@@ -64,7 +64,9 @@ extension SpaceView: BridgeHost, WKScriptMessageHandlerWithReply {
     }
 
     func launch(_ kind: String, folder: String, model: String?, mode: String?, effort: String?) throws -> String {
-        let id = try engine.launch(kind, folder: folder, model: model, mode: mode, effort: effort)
+        // What the person chose in the sentence, for a launch whose page names none.
+        let start = (try? Grants(places.grants).read().spaces[space.name]?.start).flatMap { $0 }.flatMap { $0.kind == kind ? $0 : nil }
+        let id = try engine.launch(kind, folder: folder, model: model ?? start?.model, mode: mode, effort: effort ?? start?.effort)
         launched.insert(id)
         return id
     }
