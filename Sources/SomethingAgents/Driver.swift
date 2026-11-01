@@ -61,8 +61,16 @@ public struct Prompt: Equatable, Sendable {
 
 public struct Question: Equatable, Sendable {
     public var header: String?, text: String, options: [String], multiple: Bool
-    public init(header: String?, text: String, options: [String], multiple: Bool) {
-        (self.header, self.text, self.options, self.multiple) = (header, text, options, multiple)
+    /// What each option means, as the agent wrote it, beside `options`; empty when it wrote none.
+    public var details: [String?]
+    public init(header: String?, text: String, options: [String], multiple: Bool, details: [String?] = []) {
+        (self.header, self.text, self.options, self.multiple, self.details) = (header, text, options, multiple, details)
+    }
+
+    /// `listed`, an agent's options: their `label`s, one without a label left out, and their `description`s.
+    package init(header: String?, text: String, listed: Any?, multiple: Bool) {
+        let rows = (listed as? [[String: Any]] ?? []).compactMap { row in (row["label"] as? String).map { ($0, row["description"] as? String) } }
+        self.init(header: header, text: text, options: rows.map(\.0), multiple: multiple, details: rows.contains { $0.1 != nil } ? rows.map(\.1) : [])
     }
 }
 

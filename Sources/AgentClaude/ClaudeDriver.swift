@@ -210,7 +210,7 @@ final class ClaudeDriver: Driver {
         }
         let allow = allowed != nil
         let reply: [String: Any] = allowed.map { ["behavior": "allow", "updatedInput": $0] }
-            ?? ["behavior": "deny", "message": question ? "The person chose not to answer." : "The person refused this in something."]
+            ?? ["behavior": "deny", "message": question ? "The person skipped this question: decide yourself, and say what you chose." : "The person refused this in something."]
         if ask.hook {
             switch spool?.answer(ask.claudeID, reply) ?? .gone {
             case .written: asks[request] = nil
@@ -602,7 +602,7 @@ extension Driving {
                                 modes: [Option(value: "default", label: "Ask before acting"), Option(value: "acceptEdits", label: "Accept edits"),
                                         Option(value: "plan", label: "Plan only"), Option(value: "auto", label: "Auto (Claude decides what is safe)"),
                                         Option(value: "dontAsk", label: "Never ask (refuse what is not allowed)")],
-                                effortOnlyWhenOffered: true, command: { ClaudeDriver.command($0) },
+                                listsCommands: true, effortOnlyWhenOffered: true, command: { ClaudeDriver.command($0) },
                                 planB: { try ClaudeDriver.command($0, host: $1) },
                                 refusesSignIn: { ClaudeDriver.refusesSignIn(status: $0, error: $1) },
                                 driver: { ClaudeDriver($0, write: $1, emit: $2, now: $3) })

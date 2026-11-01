@@ -43,9 +43,10 @@ Info and Point each have one too, once, at a later opening. ⌘J shows the conve
 the assistant. Its three chips, "Claude Code", "Sonnet 5.5 · High" and "Accepts
 Edits", change the program, the model and its effort, and what it does on its own, for that space's conversation: each
 model says in one line what it is, under the name the agent gives it, and for a program something has not run yet the
-chip says "Reading its models…" while something starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them (↑↓, Return
-sends one as you wrote it, Tab leaves it for its text); something remembers each agent's list for the next time it is
-not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
+chip says "Reading its models…" while something starts it, without a message, to read its list. "/" at the start of its field lists the agent's own commands as the agent lists them, from the first try (↑↓, Return
+sends one as you wrote it, Tab leaves it for its text; a command that needs text waits for it). Codex, pi and Amp give
+no list: "/" says so, and you can type a command yourself. something remembers each agent's list for the next time it
+is not running. Templates (⇧⌘T) are six finished spaces to start from, and need no agent. ⌘P goes or asks: type a space's
 name to go there, or a sentence for an assistant. The line "Goes to" says once where it goes (this space, a New Space
 built from it, or another space), Tab changes it, and nothing is sent before Return. ⌘/ lists the shortcuts.
 
@@ -157,9 +158,7 @@ Every decision is yours, in a window of the Mac that a space cannot draw, imitat
   the agent its assistant works with. Settings › Permissions lists every space with its level, and changes one the same
   way; Settings › Permissions › Folders lists each folder your spaces run agents in, with those spaces.
 - **Permissions.** Each permission an agent something launched asks for opens a panel: "Allow Once" or "Deny". A space
-  sees that the agent waits, and can never answer. One question is answered elsewhere: the one your
-  assistant asks while it builds, which New Space shows with its choices while it shows that build (elsewhere, it is
-  the panel's); its permissions still open the panel, across the window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
+  sees that the agent waits, and can never answer. A question comes the same way: each answer says what it means, you may type your own, and Skip lets the agent decide and say so. What your assistant asks before or while it builds is answered on New Space while it shows that build (elsewhere, in that window); its permissions still open the window, across the main window's top right corner. The Dock's badge counts every request waiting, and the sidebar's Needs You
   lists the spaces they come from; while something is in the background, its icon bounces once for each new one. A notification of
   the Mac says who waits and in which space only if you turn on "Notify me when an agent asks" (Settings › Permissions), and
   never the command.

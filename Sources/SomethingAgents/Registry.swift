@@ -65,6 +65,9 @@ public struct Registry: Sendable {
     /// Per kind, the `can` entries that are always false here: `granted.limits`. A kind without any is left out.
     public var limits: [String: [String]] { launchable.mapValues { $0.limits.keys.sorted() }.filter { !$0.value.isEmpty } }
 
+    /// Whether the program `kind` gives a list of its own commands.
+    public func listsCommands(_ kind: String) -> Bool { launchable[kind]?.listsCommands == true }
+
     /// Whether choosing `mode` for an agent of `kind` makes it ask the person less than its default, so that the app
     /// asks the person first. Every mode is taken as one that lowers asking, but those known to ask
     /// as much or more: a mode something does not know (one the person wrote, a kind without a driver)

@@ -407,6 +407,21 @@ import Testing
         await AssistantTests().finish(home, model)
     }
 
+    /// Skip denies the question, and the build goes on: the agent decides. Before its answers have armed, it waits too.
+    @Test func skipLetsTheAgentDecide() async throws {
+        let (home, model) = try await assistant("ask")
+        defer { home.remove() }
+        model.send("Who is waiting for me")
+        #expect(await wait(until: { model.asked != nil }))
+        model.skip()
+        #expect(await wait(until: { model.arming(now: model.clock()) >= 1 }))
+        if model.asked != nil { model.skip() }
+        #expect(await wait(until: { model.asked == nil && model.engine.state.requests.isEmpty }))
+        var stopped = false
+        model.engine.stopAll(within: 6) { stopped = true }
+        _ = await wait(until: { stopped })
+    }
+
     /// Stopping while the build asks: the question it withdraws later never reaches the panel. Leaving New Space stops
     /// nothing: away, the question goes to the panel.
     @Test(arguments: [false, true]) func aStoppedBuildsQuestionNeverReachesThePanel(leaving: Bool) async throws {

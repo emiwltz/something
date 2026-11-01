@@ -47,7 +47,7 @@ import SomethingCore
                                               "options": [["label": "Blue", "description": "Calm"], ["label": "Green", "description": "Fresh"]]]]]]])
         let request = try #require(replay.fold.requests.first)
         #expect(request == Request(id: "claude-1:q-1", agent: "claude-1", kind: "question", tool: "AskUserQuestion", about: "Which colour?", at: "2026-10-17T09:00:00Z"))
-        #expect(replay.agent.driver.prompt(request.id)?.questions == [Question(header: "Colour", text: "Which colour?", options: ["Blue", "Green"], multiple: true)])
+        #expect(replay.agent.driver.prompt(request.id)?.questions == [Question(header: "Colour", text: "Which colour?", options: ["Blue", "Green"], multiple: true, details: ["Calm", "Fresh"])])
         #expect(replay.fold.agent.waiting == "answer")
         // Several labels are joined as Claude's own panel joins them.
         #expect(try replay.agent.driver.answer(request.id, .choice([["Blue", "Green"]])))
@@ -494,9 +494,9 @@ import SomethingCore
         let replay = Replay()
         replay.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": [
             "commands": [["name": "review", "description": "Invented: reviews the changes", "argumentHint": ""], ["name": "goal", "description": "", "argumentHint": "Describe the goal"],
-                         ["name": "plain"], ["description": "Invented: no name"], "garbage"]]]] as [String: Any])
-        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: reviews the changes"), Option(value: "goal", label: "Describe the goal"),
-                                               Option(value: "plain", label: "plain")])
+                         ["name": "plain"], ["name": "optional", "description": "Invented", "argumentHint": "[what]"], ["description": "Invented: no name"], "garbage"]]]] as [String: Any])
+        #expect(replay.fold.agent.commands == [Option(value: "review", label: "Invented: reviews the changes"), Option(value: "goal", label: "Describe the goal", about: "Describe the goal"),
+                                               Option(value: "plain", label: "plain"), Option(value: "optional", label: "Invented")])
         let other = Replay()
         other.feed(["type": "control_response", "response": ["subtype": "success", "request_id": "something-1", "response": ["commands": "garbage"]]] as [String: Any])
         #expect(other.fold.agent.commands == nil)

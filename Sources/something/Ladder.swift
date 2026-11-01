@@ -34,8 +34,8 @@ struct Ladder: Equatable {
     /// The question the agent asks; nil while it asks none.
     var say: String?
     var eyes: Sign.State
-    /// The labels of the question asked, in its order.
-    var choices: [String] = []
+    /// The labels of the question asked, in its order, and what each means, when the agent says.
+    var choices: [String] = [], details: [String?] = []
     /// The page written, by its file's name; and whether it used a tool that may have changed something: any but reading
     /// and checking, unless it failed.
     var wrote: String?, ran = false
@@ -98,7 +98,7 @@ struct Ladder: Equatable {
         if let asked, let waiting = ladder.steps.firstIndex(where: { $0.mark != .done }) {
             ladder.steps[waiting].mark = .waits
             ladder.steps[waiting].lines.append(Line(text: "Waits for your answer", mark: .waits))
-            (ladder.say, ladder.choices, ladder.eyes) = (asked.text, asked.options, .wait)
+            (ladder.say, ladder.choices, ladder.details, ladder.eyes) = (asked.text, asked.options, asked.details, .wait)
         }
         return ladder
     }
@@ -168,6 +168,11 @@ struct Ladder: Equatable {
 
     /// The choice a key answers: a digit from 1 to 9 typed with no modifier while no text is edited, which keeps a
     /// digit typed in Go to or a sheet's field from answering the agent; nil otherwise.
+    /// Whether a key skips the build's question: Tab, when no text is edited.
+    static func skips(_ keyCode: UInt16, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Bool {
+        keyCode == 48 && !editing && modifiers.isDisjoint(with: [.command, .control, .option, .shift])
+    }
+
     static func choice(_ characters: String?, modifiers: NSEvent.ModifierFlags, editing: Bool) -> Int? {
         guard !editing, modifiers.isDisjoint(with: [.command, .control, .option]), let digit = characters.flatMap(Int.init),
               (1...9).contains(digit) else { return nil }

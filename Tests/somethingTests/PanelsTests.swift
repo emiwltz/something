@@ -348,7 +348,7 @@ final class FakeNotifier: Notifier {
     }
 
     /// A lone question of one choice: one click on an option answers; typed text answers; Escape in the field first
-    /// empties it; Don't Answer denies.
+    /// empties it; Skip denies.
     @Test func aLoneQuestionIsAnsweredByOneClick() throws {
         var answers: [Answer] = []
         let panel = RequestPanel { answers.append($0) }
@@ -358,8 +358,8 @@ final class FakeNotifier: Notifier {
                             questions: [Question(header: nil, text: "Which color?", options: ["Blue", "Green", "Red"], multiple: false)])
         panel.show(prompt, who: Asker(program: "Claude Code"), age: nil)
         #expect(panel.boxes[0].map(\.number) == [1, 2, 3] && panel.boxes[0].allSatisfy { $0.toggles == nil })
-        #expect(PanelsTests.texts(panel.contentView).last == "The space can't see this window.")
-        #expect(panel.denyButton.title == "Don't Answer" && panel.denyButton.keyEquivalent.isEmpty)
+        #expect(PanelsTests.texts(panel.contentView).last == "No space can see or click this window.")
+        #expect(panel.denyButton.title == "Skip" && panel.denyButton.keyEquivalent.isEmpty)
         time += 0.4
         panel.boxes[0][1].performClick(nil)
         #expect(answers.isEmpty && panel.boxes[0][1].state == .off, "a click before the panel armed answers nothing")

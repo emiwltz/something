@@ -111,7 +111,8 @@ public struct Options: Codable, Equatable, Sendable, EveryKey {
 
 public struct Option: Codable, Equatable, Sendable, EveryKey {
     public var value: String, label: String, about: String?
-    /// `about`: one line on what it is, when its agent says.
+    /// `about`: one line on what it is, when its agent says; for a command, what it waits for as its text, nil when it
+    /// needs none.
     public init(value: String, label: String, about: String? = nil) { (self.value, self.label, self.about) = (value, label, about) }
 }
 

@@ -1584,5 +1584,5 @@ struct AcceptanceShell {
     @Test("f3-3: Halo, rise, fade", .disabled("not built yet: S10")) func f3_3() async throws {}
     @Test("f6-2: Import, checked first", .disabled("not built yet: C9")) func f6_2() async throws {}
     @Test("f6-2b: A file dropped on the window", .disabled("not built yet: C9")) func f6_2b() async throws {}
-    @Test("f6-3: The white tile", .disabled("not built yet: S10")) func f6_3() async throws {}
+    @Test("f6-3: The white tile", .disabled("not built yet: FIN3")) func f6_3() async throws {}
 }

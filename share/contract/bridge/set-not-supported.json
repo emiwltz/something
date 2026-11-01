@@ -38,17 +38,20 @@
           "model": [
             {
               "value": "claude-example-model",
-              "label": "Example model"
+              "label": "Example model",
+              "about": null
             }
           ],
           "mode": [
             {
               "value": "default",
-              "label": "Ask before acting"
+              "label": "Ask before acting",
+              "about": null
             },
             {
               "value": "plan",
-              "label": "Plan only"
+              "label": "Plan only",
+              "about": null
             }
           ],
           "effort": null

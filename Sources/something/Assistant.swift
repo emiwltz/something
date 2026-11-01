@@ -127,7 +127,11 @@ import SomethingCore
     /// What the field holds: the open place's own, so a message half written goes to the agent it was written for.
     var draft: String {
         get { session.draft }
-        set { if newValue != session.draft { commandPick = 0 }; session.draft = newValue }
+        set {
+            if newValue != session.draft { commandPick = 0 }
+            session.draft = newValue
+            if newValue == "/" { readCommands() }
+        }
     }
     /// The command chosen in the "/" list; -1 once Esc closed it, until the field changes.
     var commandPick = 0
@@ -201,6 +205,8 @@ import SomethingCore
     /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
     struct Asked: Equatable { let request: String, question: Question }
     private(set) var asked: Asked?
+    /// The person's own answer to it, as typed.
+    var ownAnswer = ""
     /// When the blank page first showed `asked`: its choices take a click or a digit only RequestPanel.arming later,
     /// so that one meant for the page as the question grows under it does not answer the agent.
     private(set) var askedShown: Date?
@@ -222,6 +228,9 @@ import SomethingCore
     /// The spaces made while the person waited for one: their level sheet says the agent made them.
     private(set) var made: Set<String> = []
     @ObservationIgnored private var preferred: String?
+    /// The programs being read for what they offer, without a message, and those read since the app started.
+    private(set) var reading: Set<String> = []
+    @ObservationIgnored private var lookedAt: Set<String> = []
     /// something's own program, which runs and serves the tools a builder is lent; a trial gives another.
     @ObservationIgnored var program = Bundle.main.executableURL
     /// Moved by a one-shot timer when time alone changes the presence (Stop offered 10 s into a turn, "Changed …" gone
@@ -412,12 +421,27 @@ import SomethingCore
         return min(1, max(0, now.timeIntervalSince(askedShown) / RequestPanel.arming))
     }
 
-    /// Answers the build's question with its choice `index`, once its choices have armed; before, nothing happens. An
-    /// answer that did not reach the agent is its failure.
+    /// Answers the build's question with its choice `index`.
     func answer(_ index: Int) {
-        guard let asked, asked.question.options.indices.contains(index), arming(now: clock()) >= 1 else { return }
-        self.asked = nil
-        do { try engine.answer(asked.request, .choice([[asked.question.options[index]]])) } catch { before?.session.failure = error.sentence }
+        guard let asked, asked.question.options.indices.contains(index) else { return }
+        reply(.choice([[asked.question.options[index]]]))
+    }
+
+    /// Answers the build's question with the person's own words, `ownAnswer`.
+    func answerOwn() {
+        let words = ownAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !words.isEmpty { reply(.choice([[words]])) }
+    }
+
+    /// Skip: the agent decides, and says so.
+    func skip() { reply(.deny) }
+
+    /// Answers the build's question, once its choices have armed; before, nothing happens. An answer that did not
+    /// reach the agent is its failure.
+    private func reply(_ answer: Answer) {
+        guard let asked, arming(now: clock()) >= 1 else { return }
+        (self.asked, ownAnswer) = (nil, "")
+        do { try engine.answer(asked.request, answer) } catch { before?.session.failure = error.sentence }
     }
 
     /// Sets the one-shot timer for the next moment a presence changes by itself, the card's or a space's in the
@@ -553,8 +577,7 @@ import SomethingCore
             if presence.stuck == .cannotReachModel { return "Write now · sent when the model answers" }
             // Waiting for an answer, the way on is the request's own window, not this field: it reads as usual.
             if light == .working { return "Write the next one · sent when this one ends" }
-            // Asleep, its commands are not listed yet, but "/" says so, and the header says it wakes (X1.3).
-            return commands.isEmpty && presence.state != .sleep ? "Ask for a change…" : "Ask for a change · / for " + Words.possessive(name) + " commands"
+            return gaveNoList ? "Ask for a change…" : "Ask for a change · / for " + Words.possessive(name) + " commands"
         case .blank: return "Describe the space you want…"
         case .templates: return "Ask \(name) about templates, or anything about something…"
         }
@@ -645,7 +668,7 @@ import SomethingCore
     /// conversation has none.
     func send(_ sentence: String? = nil) {
         let text = (sentence ?? draft).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, kind != nil, !blocked else { return }
+        guard !text.isEmpty, kind != nil, !blocked, sentence != nil || unfinished == nil else { return }
         let blankBuild = place == .blank && before == nil, level = chosenLevel ?? Grant.Level.guess(text, otherwise: Preferences.at(places).level)
         // Run starts agents in a folder: the build waits for one.
         if blankBuild, level == .run, runFolder == .none {
@@ -902,10 +925,17 @@ import SomethingCore
     func readModels(of chosen: String? = nil) {
         guard let kind = chosen ?? (agent == nil || agent?.alive == false ? self.kind : nil), Preferences.at(places).listed[kind] == nil,
               Registry.app.limits[kind]?.contains("model") != true, !readingModels.contains(kind), triedModels.insert(kind).inserted else { return }
-        readingModels.insert(kind)
-        engine.peek(kind, folder: places.spaces.path) { [self] in
+        peek(kind)
+    }
+
+    /// Reads what `kind` offers, once at a time, and keeps it for the chips and "/" before its first run.
+    private func peek(_ kind: String) {
+        guard readingModels.insert(kind).inserted else { return }
+        engine.peek(kind, folder: places.spaces.path) { [self] options, commands in
             readingModels.remove(kind)
-            if let options = $0 { Preferences.at(places).listed[kind] = AssistantModel.kept(options) }
+            if let options { Preferences.at(places).listed[kind] = AssistantModel.kept(options) }
+            if let commands { Preferences.at(places).commands[kind] = commands }
+            lookedAt.insert(kind)
         }
     }
 
@@ -914,6 +944,12 @@ import SomethingCore
         var options = options
         options.effort = options.effort.map { _ in options.levels }
         return options
+    }
+
+    /// "/" typed for a program whose commands something has not read: it reads them now, once this launch.
+    private func readCommands() {
+        guard place != .blank, agent == nil, commands.isEmpty, let kind, Registry.app.listsCommands(kind), installed[kind] == true, !lookedAt.contains(kind) else { return }
+        peek(kind)
     }
 
     /// Build With ▸: the builder of new spaces from now on, kept as the default. New Space's conversation takes it

@@ -215,14 +215,14 @@ public final class Engine {
         return try launch(kind, folder: folder, model: model, mode: mode, effort: effort, planB: false)
     }
 
-    /// Starts an agent of `kind` in `folder` only to read what it offers, and calls `then` on the main queue with that,
-    /// or nil when it could not start or listed nothing within `seconds`. It gets no message, so it asks its model
-    /// nothing; it is stopped as soon as its list settled, and never joins the state.
-    public func peek(_ kind: String, folder: String, within seconds: TimeInterval = 10, then: @escaping (Options?) -> Void) {
+    /// Starts an agent of `kind` in `folder` only to read what it offers, and calls `then` on the main queue with its
+    /// options and its commands, each nil when it could not start or listed none within `seconds`. It gets no message,
+    /// so it asks its model nothing; it is stopped as soon as its list settled, and never joins the state.
+    public func peek(_ kind: String, folder: String, within seconds: TimeInterval = 10, then: @escaping (Options?, [Option]?) -> Void) {
         lookFor(kind) { [self] in
             let launch = Launch(agent: "\(kind)-peek", folder: HeldFiles.real(folder))
             guard let driving = try? registry.driving(kind), let program = try? found[kind]?.get(),
-                  let started = try? start(driving, launch, program, record: nil) else { return then(nil) }
+                  let started = try? start(driving, launch, program, record: nil) else { return then(nil, nil) }
             peeking.append(started.spawn)
             var open = true, settling = false
             let finish = { [self] in
@@ -231,12 +231,12 @@ public final class Engine {
                 started.agent.changed = {}
                 peeking.removeAll { $0 === started.spawn }
                 started.spawn.stop()
-                let options = started.agent.agent.options
-                then(options.model?.isEmpty == false ? options : nil)
+                let options = started.agent.agent.options, commands = started.agent.agent.commands
+                then(options.model?.isEmpty == false ? options : nil, commands?.isEmpty == false ? commands : nil)
             }
             // The efforts may follow the models: they get a moment.
             started.agent.changed = {
-                if started.agent.agent.alive == false { finish() } else if !settling, started.agent.agent.options.model?.isEmpty == false {
+                if started.agent.agent.alive == false { finish() } else if !settling, started.agent.agent.options.model?.isEmpty == false || started.agent.agent.commands?.isEmpty == false {
                     settling = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: finish)
                 }

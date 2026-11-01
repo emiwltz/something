@@ -114,9 +114,9 @@ struct BuildView: View {
         .accessibilityLabel("Your words: \(build.sentence). \(build.choice.said(home: library.places.home.path))")
     }
 
-    /// The agent's question in its voice, and its choices.
-    private func asked(_ question: String, _ ladder: Ladder) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+    /// The agent's question in its voice, in a card with its choices when it lists them.
+    @ViewBuilder private func asked(_ question: String, _ ladder: Ladder) -> some View {
+        if ladder.choices.isEmpty {
             HStack(alignment: .firstTextBaseline, spacing: 11) {
                 Image(nsImage: Sign.miniEyes(ladder.eyes)).renderingMode(.template)
                     .foregroundStyle(Look.Token.eyes.ui).frame(width: 16, height: 10)
@@ -127,35 +127,60 @@ struct BuildView: View {
             .padding(.leading, 4)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Your assistant: \(question)")
-            if !ladder.choices.isEmpty { choices(ladder.choices) }
+        } else {
+            choices(question, ladder)
         }
     }
 
-    /// The question's labels, two to a row, each answered by a click or its number once they have armed, which fills
-    /// them from the left as Allow Once fills (PanelButton.progress).
-    private func choices(_ labels: [String]) -> some View {
-        TimelineView(.animation(minimumInterval: 0.05, paused: model.arming(now: model.clock()) >= 1)) { _ in
-            let arming = model.arming(now: model.clock())
-            Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-                ForEach(Array(stride(from: 0, to: labels.count, by: 2)), id: \.self) { row in
-                    GridRow {
-                        ForEach(row..<min(row + 2, labels.count), id: \.self) { choice(labels[$0], $0, arming: arming) }
+    /// The question in the agent's voice with Skip, each answer with what it means, and the person's own. Its answers
+    /// take a click or their number once they have armed, which fills them from the left as Allow Once fills
+    /// (PanelButton.progress).
+    private func choices(_ question: String, _ ladder: Ladder) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(AssistantCard.markdown(question)).font(Look.font(.voice, size: 16.5).ui).foregroundStyle(Look.Token.ink.ui)
+                    .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityElement(children: .ignore).accessibilityLabel("Your assistant: \(question)")
+                Button { model.skip() } label: { HStack(spacing: 6) { Text("Skip"); Key("⇥") } }
+                    .buttonStyle(.plain).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).accessibilityLabel("Skip")
+            }
+            .padding(.bottom, 4)
+            TimelineView(.animation(minimumInterval: 0.05, paused: model.arming(now: model.clock()) >= 1)) { _ in
+                let arming = model.arming(now: model.clock())
+                VStack(spacing: 8) {
+                    ForEach(ladder.choices.indices, id: \.self) {
+                        choice(ladder.choices[$0], ladder.details.indices.contains($0) ? ladder.details[$0] : nil, $0, arming: arming)
                     }
                 }
             }
+            HStack(spacing: 6) {
+                TextField("", text: $model.ownAnswer, prompt: Text("Or type your answer").foregroundStyle(Look.Token.ink3.ui))
+                    .textFieldStyle(.plain).font(Look.font(.ui, size: 13).ui).onSubmit { model.answerOwn() }
+                    .padding(.horizontal, 10).frame(height: 30)
+                    .background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: Look.control))
+                    .accessibilityLabel("Or type your answer")
+                Button("Answer") { model.answerOwn() }.buttonStyle(Secondary())
+                    .disabled(model.ownAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
         }
+        .padding(14)
+        .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
     }
 
-    /// `label`, number `index`, shown, answered by a click or that key once `arming` reaches 1.
-    private func choice(_ label: String, _ index: Int, arming: Double) -> some View {
+    /// The answer `label`, what it means under it, number `index`, shown, taken by a click or that key once `arming`
+    /// reaches 1.
+    private func choice(_ label: String, _ detail: String?, _ index: Int, arming: Double) -> some View {
         Button { model.answer(index) } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Text(label).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(label).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                    if let detail { Text(detail).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui) }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Key("\(index + 1)")
             }
-            .padding(EdgeInsets(top: 11, leading: 13, bottom: 11, trailing: 12))
-            .frame(maxHeight: .infinity, alignment: .top)
+            .padding(EdgeInsets(top: 9, leading: 13, bottom: 9, trailing: 12))
             .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
             .overlay(alignment: .leading) {
                 if arming < 1 {
@@ -167,7 +192,7 @@ struct BuildView: View {
         }
         .buttonStyle(.plain)
         .disabled(arming < 1)
-        .accessibilityLabel("\(label), \(index + 1)")
+        .accessibilityLabel([label, detail, "\(index + 1)"].compactMap { $0 }.joined(separator: ", "))
     }
 
     private func steps(_ ladder: Ladder, now: Date) -> some View {

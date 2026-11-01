@@ -485,9 +485,9 @@ struct AcceptanceTrust {
         #expect(panel.title == "Claude Code asks you a question" && panel.header.kind == "Question")
         #expect(PanelsTests.texts(panel.contentView) == ["something", "·  Question", "", "Claude Code asks you a question",
                                                          "Daily brief · its assistant · just now", "Where should the weather corner go?",
-                                                         "", "The space can't see this window."])
+                                                         "", "No space can see or click this window."])
         #expect(panel.boxes[0].map(\.title) == options && panel.boxes[0].map(\.number) == [1, 2, 3])
-        #expect(panel.typed[0].placeholderString == "Or type your answer" && panel.denyButton.title == "Don't Answer")
+        #expect(panel.typed[0].placeholderString == "Or type your answer" && panel.denyButton.title == "Skip")
         let window = shell.window.frame, toolbar = window.height - shell.window.contentLayoutRect.maxY
         #expect(panel.frame.width == RequestPanel.width && panel.frame.minX < window.maxX && panel.frame.maxX > window.maxX)
         #expect(panel.frame.maxY == window.maxY - toolbar - 8 && !panel.isKeyWindow)

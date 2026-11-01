@@ -348,8 +348,7 @@ final class CodexDriver: Driver {
             // A question without an id or a text cannot be answered: it is left out, and so is its answer.
             let shown = (params["questions"] as? [[String: Any]] ?? []).compactMap { question -> (String, Question)? in
                 guard let id = question["id"] as? String, let text = question["question"] as? String else { return nil }
-                let options = (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
-                return (id, Question(header: question["header"] as? String, text: text, options: options, multiple: false))
+                return (id, Question(header: question["header"] as? String, text: text, listed: question["options"], multiple: false))
             }
             questionIDs = shown.map(\.0)
             questions = shown.map(\.1)

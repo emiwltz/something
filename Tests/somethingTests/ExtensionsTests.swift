@@ -15,6 +15,7 @@ import Testing
         #expect(InstallList.builders.map(\.command) == ["brew install --cask claude-code", "brew install --cask codex", "brew install opencode",
                                                          "npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
                                                          "curl -fsSL https://omp.sh/install | sh", "brew install ampcode/tap/ampcode"])
+        #expect(Registry.app.agents.map(\.kind).filter(Registry.app.listsCommands) == ["claude", "opencode", "omp"], "the others: \"/\" says they give no list")
         #expect(Registry.app.agents.filter(\.neverAsks).map(\.kind) == ["pi", "amp"])
         #expect(Registry.app.agents.filter(\.asksNothingByDefault).map(\.kind) == ["omp"])
         // Each agent's monogram, one for each; an agent without an extension goes by its name's initials.

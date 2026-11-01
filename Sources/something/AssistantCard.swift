@@ -36,6 +36,7 @@ struct AssistantCard: View {
                     }
                     if model.place != .blank, let shown = model.slashed { CommandList(model: model, shown: shown).padding(EdgeInsets(top: 0, leading: 8, bottom: 4, trailing: 8)) }
                 }
+                if model.place != .blank, model.slashed == nil, let command = model.unfinished { waits(command) }
                 if model.place != .blank { composer }
             }
             .frame(width: model.cardWidth)
@@ -319,6 +320,21 @@ struct AssistantCard: View {
         .padding(.bottom, 6)
     }
 
+    /// The line over the composer while a command waits for its text: the command, what it does, what to write.
+    private func waits(_ command: Option) -> some View {
+        HStack(spacing: 8) {
+            Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+            Text(command.label).font(Look.font(.ui, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
+            Text(command.about ?? "").font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9).frame(height: 26)
+        .background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: Look.control))
+        .padding(EdgeInsets(top: 0, leading: 10, bottom: 6, trailing: 10))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("/\(command.value) waits for its text: \(command.about ?? "")")
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: 0) {
             AgentChips(model: model).padding(.bottom, 4)
@@ -448,7 +464,7 @@ struct CommandList: View {
                     ForEach(Array(shown.enumerated()), id: \.offset) { index, command in
                         Button { model.use(command, send: true) } label: {
                             HStack(spacing: 8) {
-                                Text("/" + command.value).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).frame(width: 86, alignment: .leading)
+                                Text("/" + command.value + (command.about == nil ? "" : " …")).font(Look.font(.code, size: 11.5, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).frame(width: 86, alignment: .leading)
                                 Text(command.label).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
                                 Spacer(minLength: 0)
                             }
@@ -456,9 +472,9 @@ struct CommandList: View {
                             .background(index == at ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
                         }
                         .buttonStyle(.plain).id(index)
-                        .accessibilityLabel("/\(command.value), \(command.label)").accessibilityAddTraits(index == at ? .isSelected : [])
+                        .accessibilityLabel("/\(command.value)\(command.about == nil ? "" : ", needs text"), \(command.label)").accessibilityAddTraits(index == at ? .isSelected : [])
                     }
-                    if shown.isEmpty { Text(model.noCommands).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(8).frame(maxWidth: .infinity, alignment: .leading) }
+                    if shown.isEmpty { Text(model.noCommands).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink2.ui).padding(8).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true) }
                 }
             }
             .onChange(of: at) { list.scrollTo(at) } }
@@ -643,15 +659,29 @@ extension AssistantModel {
         return commands.filter { $0.value.lowercased().hasPrefix(draft.dropFirst().lowercased()) }
     }
 
-    /// Puts `command` in the field, and sends it as is with `send`, else leaves a space after it for its text.
+    /// Puts `command` in the field, and sends it as is with `send`, else leaves a space after it for its text, as
+    /// for a command that needs one.
     func use(_ command: Option, send: Bool) {
+        let send = send && command.about == nil
         draft = "/" + command.value + (send ? "" : " ")
         if send { self.send() }
     }
 
-    /// The list's line when no command shows: none starts so, or none is known yet.
+    /// Whether this conversation's program gives something no list of its commands.
+    var gaveNoList: Bool { kind.map { !Registry.app.listsCommands($0) } ?? false }
+
+    /// The command alone in the field that needs a text, which it waits for; nil otherwise.
+    var unfinished: Option? {
+        guard draft.first == "/" else { return nil }
+        let name = draft.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+        return commands.first { $0.value == name && $0.about != nil }
+    }
+
+    /// The list's line when no command shows: the program gives none, it is being read, or none starts so.
     var noCommands: String {
-        commands.isEmpty ? (agent == nil ? "Its commands show once it has started." : "\(name) lists no commands here.") : "No command of \(name) starts with that."
+        if gaveNoList { return "\(name) gives no list of its commands. Type one and send it: it goes as you wrote it." }
+        if commands.isEmpty { return kind.map { reading.contains($0) } == true ? "Reading its commands…" : "\(name) lists no commands here." }
+        return "No command of \(name) starts with that."
     }
 
     /// The agents something sees but does not launch, each with why.
@@ -702,7 +732,7 @@ extension AssistantModel {
     }
 
     /// Whether Send sends now, and whether it is Stop: while the agent works and nothing is written.
-    var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var canSend: Bool { kind != nil && !blocked && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && unfinished == nil }
     /// Not while its model does not answer: the card says Ended, and Try Again is the way on; nor while it waits for
     /// an answer, which its request's window gives.
     var stops: Bool { (light == .working || quickWorks(on: place.space)) && presence.stuck != .cannotReachModel && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

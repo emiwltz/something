@@ -59,6 +59,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDe
                 assistant.answer(index)
                 return nil
             }
+            if shell.window.isKeyWindow, shell.window.attachedSheet == nil, ScrimCard.shown(in: shell.layer) == nil, assistant.asked != nil,
+               Ladder.skips(event.keyCode, modifiers: event.modifierFlags, editing: shell.window.firstResponder is NSText) {
+                assistant.skip()
+                return nil
+            }
             // Escape closes the top thing in the window (Shell.escape); else it is the assistant's nudge.
             if shell.window.isKeyWindow, shell.escape(event) { return nil }
             // ⌘↵ sends the comments waiting over the space, wherever the focus is but in the composer.

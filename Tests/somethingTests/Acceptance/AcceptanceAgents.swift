@@ -407,8 +407,106 @@ struct AcceptanceAgents {
 
     @Test("r8-1: Full Access, the last rung", .disabled("not built yet: AG4")) func r8_1() async throws {}
     @Test("r8-2: The mark's two gestures", .disabled("not built yet: AG4")) func r8_2() async throws {}
-    @Test("f4-1: A build's question in full", .disabled("not built yet: AG5")) func f4_1() async throws {}
-    @Test("f4-1b: The same, in the window", .disabled("not built yet: AG5")) func f4_1b() async throws {}
-    @Test("f4-2: \"/\" from the first try", .disabled("not built yet: AG5")) func f4_2() async throws {}
+    /// F4.1: each answer with what it means, in the agent's words; a free answer, then Skip, which lets the agent
+    /// decide. The mockup's sketches beside the answers are for the reading of the person's words (C7): an agent's
+    /// question brings none.
+    @Test("f4-1: A build's question in full") func f4_1() async throws {
+        let (stage, shell, library, host) = try await AcceptanceBuild.building("ask")
+        defer { stage.remove() }
+        let model = shell.assistant
+        #expect(await wait(until: { model.asked != nil }))
+        let ladder = try #require(model.ladder)
+        #expect(ladder.choices.count == 2 && ladder.details.first == "Big and easy to scan.", "\(ladder.details)")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "f4-1" + suffix, root: stage.home.root)
+            let words = await AcceptanceBuild.read(host)
+            #expect(words.contains("Your assistant: Before I write it: which way should it read?") && words.contains("One card per agent, Big and easy to scan., 1")
+                    && words.contains("Skip") && words.contains("Answer"), "\(words)")
+        }
+        #expect(await wait { model.arming(now: model.clock()) >= 1 })
+        #expect(Ladder.skips(48, modifiers: [], editing: false) && !Ladder.skips(48, modifiers: [], editing: true) && !Ladder.skips(48, modifiers: .shift, editing: false))
+        model.ownAnswer = "  "
+        model.answerOwn()
+        #expect(model.asked != nil, "no empty answer")
+        model.ownAnswer = "Biggest first"
+        model.answerOwn()
+        #expect(await wait(until: { model.asked == nil && model.ownAnswer.isEmpty && model.ladder?.steps[1].mark == .now }))
+        await AcceptanceBuild.finish(model)
+    }
+
+    /// F4.1b: the window's options each say what they mean, the field stays, Skip takes Don't Answer's place.
+    @Test("f4-1b: The same, in the window") func f4_1b() async throws {
+        let stage = try Stage("trust")
+        defer { stage.remove() }
+        let (shell, library, _) = stage.window()
+        shell.window.setFrameOrigin(AcceptanceTrust.large)
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let source = FakePrompts()
+        let options = ["Top right, next to the date", "In the strip, after “In brief”", "Leave it out for now"]
+        let details = ["Always in view. The title moves over a little.", "Small and quiet, with the other headings.", "Nothing changes. You can ask again later."]
+        source.prompts = [Prompt(request: Request(id: "q1", agent: "a1", kind: "question", tool: "AskUserQuestion", about: nil, at: iso8601.string(from: Stage.now)),
+                                 questions: [Question(header: nil, text: "Where should the weather corner go?", options: options, multiple: false, details: details)])]
+        let panels = Panels(source: source, shows: false)
+        var time: TimeInterval = 100
+        (panels.now, panels.clock) = ({ Stage.now }, { time })
+        panels.who = { _ in App.who(Agent(id: "a1", kind: "claude", origin: "launched"), space: "Daily brief", home: "/Users/example", assistant: true) }
+        panels.counted = { _ in shell.waiting([], mine: 0) }
+        panels.refresh()
+        let panel = try #require(panels.panel)
+        panel.place(beside: shell.window, screen: AcceptanceTrust.desk)
+        #expect(panel.boxes[0].map(\.title) == options && panel.boxes[0].map(\.detail) == details)
+        #expect(panel.typed[0].placeholderString == "Or type your answer" && panel.denyButton.title == "Skip")
+        time += 1
+        panel.tick()
+        let rows = panel.boxes[0].map(\.frame.height)
+        #expect(rows.allSatisfy { $0 >= 46 }, "two lines each: \(rows)")
+        try await stage.appearances { suffix in
+            try await Picture.panel(panel, over: shell, library: library, web: brief.web, "f4-1b" + suffix, root: stage.home.root)
+        }
+        panel.denyButton.performClick(nil)
+        #expect(source.answers.map(\.1) == [.deny])
+    }
+
+    /// F4.2: Claude Code has never run: its field offers "/", and "/" reads the commands once, with no message. A command
+    /// that needs text says "…", stays in the field on Return, says what to write, and goes only with its text. A
+    /// program that gives no list says so.
+    @Test("f4-2: \"/\" from the first try") func f4_2() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        model.focus()
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(model.commands.isEmpty && model.agent == nil && model.placeholder == "Ask for a change · / for Claude Code’s commands")
+        model.draft = "/"
+        #expect(model.noCommands == "Reading its commands…")
+        #expect(await wait(until: { model.commands.count == 5 }), "read once, before any message")
+        #expect(model.rows.isEmpty && model.agent == nil && model.slashed?.count == 5 && Preferences(stage.home.places).commands["claude"]?.count == 5)
+        Preferences.at(stage.home.places).commands["claude"] = [Option(value: "goal", label: "Goals", about: "Describe the goal, then send.")]
+        model.draft = "/go"
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f4-2-list" + suffix, root: stage.home.root)
+        }
+        #expect(Field.slash(.return, model) == .handled && model.draft == "/goal " && model.unfinished?.value == "goal" && !model.canSend)
+        model.send()
+        #expect(model.draft == "/goal " && model.rows.isEmpty, "it waits for its text")
+        try await AcceptanceAssistant.fit(shell)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "f4-2" + suffix, root: stage.home.root)
+        }
+        model.draft = "/goal Keep the milestones in step with the repo"
+        #expect(model.unfinished == nil && model.canSend)
+        model.draft = ""
+        try await AcceptanceAssistant.stop(model)
+    }
+
     @Test("f4-4: My agents starts an agent", .disabled("not built yet: AG6")) func f4_4() async throws {}
 }

@@ -350,7 +350,7 @@ sentence for the person when something is off (for a kind something does not lau
 | `thread` | The id of its conversation in `threads`, what `resume` takes; or `null`. |
 | `model`, `mode`, `effort` | What the agent last reported, never what was asked, by the `value` of its `options` when they list it; each may be `null`. |
 | `options` | `{model, mode, effort}`: each a list of `{value, label, about}` the agent offers, or `null`; `about` is one line on what it is, `null` when the agent says nothing. |
-| `commands` | The agent's own commands, as it lists them: `[{value, label, about}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does. `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
+| `commands` | The agent's own commands, as it lists them: `[{value, label, about}]`, `value` the name without "/" (what `send`'s `command` takes), `label` what it does, `about` what it waits for as its text (`null` when it needs none). `null` until it lists them, and for a kind that lists none (below). A page draws its own "/" menu from it. |
 | `queue` | `[{id, text, at}]`: messages something holds for the agent's next turn. |
 | `subagents` | The sub-agents it started that its stream marks, oldest first, the last 50: `[{name, status}]`, `name` what it asked each to do, `status` `running`, `done`, `failed` or `null`, `null` when its end was not seen (its turn broke off or its agent stopped). `null` until one shows. Their work is in the thread, as items of kind `subagent`. |
 | `can` | `send steer queue interrupt model mode effort resume`: what a call would do now. Always booleans. |

@@ -48,7 +48,7 @@ struct ACPProfile: Sendable {
     /// queue), and an effort is offered only by a model that lists levels.
     var driving: Driving {
         Driving(kind: kind, tested: tested, limits: ["steer": steerLimit], modes: modes, listsMoreModes: listsMoreModes,
-                effortOnlyWhenOffered: true, picksThread: false,
+                listsCommands: true, effortOnlyWhenOffered: true, picksThread: false,
                 command: { [arguments, environment] _ in Command(arguments: arguments, adding: environment) },
                 driver: { [self] in ACPDriver(self, $0, write: $1, emit: $2, now: $3) })
     }

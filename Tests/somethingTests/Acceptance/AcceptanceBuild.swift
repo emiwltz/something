@@ -853,7 +853,7 @@ struct AcceptanceBuild {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d7" + suffix, root: stage.home.root)
             let words = await Self.read(host)
-            #expect(words.contains("One card per agent, 1") && words.contains("A single list, oldest first, 2")
+            #expect(words.contains("One card per agent, Big and easy to scan., 1") && words.contains("A single list, oldest first, Compact., 2")
                     && words.contains("Write, waits for you, Waits for your answer"), "\(words)")
         }
         model.answer(1)

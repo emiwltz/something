@@ -106,6 +106,8 @@ package struct Driving: Sendable {
     /// Whether `set` may also choose modes the agent lists itself, beyond `modes`: the bridge then checks a `set`
     /// against the agent's `options.mode`, after the person confirmed (Registry.lowersAsking).
     package var listsMoreModes: Bool
+    /// Whether the program gives something a list of its own commands.
+    package var listsCommands: Bool
     /// Whether an effort can be set only when `options.effort` lists levels.
     package var effortOnlyWhenOffered: Bool
     /// Whether the launch picks the conversation id (`Launch.thread`) for the program. When false, the thread is
@@ -128,13 +130,13 @@ package struct Driving: Sendable {
     package var driver: @Sendable (_ launch: Launch, _ write: @escaping (Data) throws -> Void, _ emit: @escaping (AgentEvent) -> Void,
                                    _ now: @escaping () -> String) -> any Driver
 
-    package init(kind: String, tested: String, limits: [String: String] = [:], modes: [Option] = [], listsMoreModes: Bool = false,
+    package init(kind: String, tested: String, limits: [String: String] = [:], modes: [Option] = [], listsMoreModes: Bool = false, listsCommands: Bool = false,
                  effortOnlyWhenOffered: Bool = false, picksThread: Bool = true, resumeFolder: (@Sendable (String) throws -> String)? = nil,
                  command: @escaping @Sendable (Launch) -> Command, planB: (@Sendable (Launch, HostFacts) throws -> Command)? = nil,
                  refusesSignIn: (@Sendable (Int?, String?) -> Bool)? = nil,
                  driver: @escaping @Sendable (Launch, @escaping (Data) throws -> Void, @escaping (AgentEvent) -> Void, @escaping () -> String) -> any Driver) {
         (self.kind, self.tested, self.limits, self.modes, self.listsMoreModes) = (kind, tested, limits, modes, listsMoreModes)
-        (self.effortOnlyWhenOffered, self.picksThread, self.resumeFolder) = (effortOnlyWhenOffered, picksThread, resumeFolder)
+        (self.listsCommands, self.effortOnlyWhenOffered, self.picksThread, self.resumeFolder) = (listsCommands, effortOnlyWhenOffered, picksThread, resumeFolder)
         (self.command, self.planB, self.refusesSignIn, self.driver) = (command, planB, refusesSignIn, driver)
     }
 }

@@ -8,7 +8,7 @@
 // pulse; when it goes away they go back to the window that had them. Closing it denies, and so does Escape while it has
 // the keys. The exact command is folded to four lines; ↕ or the grip at its bottom-right corner make the panel larger,
 // its footer always in sight.
-// A question shows in the same panel: its numbered options, a field for one's own answer, and Don't Answer. An option
+// A question shows in the same panel: its numbered options, each with what it means, a field for one's own answer, and Skip. An option
 // that answers a lone question by one click is armed like Allow Once: a click meant for the space may land on it.
 import AppKit
 import SomethingAgents
@@ -169,7 +169,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
         (boxes, typed) = ([], [])
         var views = [whoRow(title, Words.who(space: who.space, assistant: who.assistant, name: who.name, age: age, quick: who.quick), who.program, assistant: who.assistant)]
         if question {
-            denyButton = LinkButton("Don't Answer", size: 12, weight: .semibold, target: self, action: #selector(deny))
+            denyButton = LinkButton("Skip", size: 12, weight: .semibold, target: self, action: #selector(deny))
             views += ask(prompt.questions)
         } else {
             // An agent a space started works in its own folder, which Runs in says: the space is no place for it.
@@ -440,13 +440,14 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
     }
 
     /// Each question in the agent's voice, its numbered options, and a field for one's own answer, Answer beside the
-    /// last; then Don't Answer, and why typing here is safe. Only a lone question of one choice is answered by a click.
+    /// last; then Skip, and why typing here is safe. Only a lone question of one choice is answered by a click.
     private func ask(_ questions: [Question]) -> [NSView] {
         let lone = questions.count == 1 && !questions[0].multiple
         var views: [NSView] = []
         for (index, question) in questions.enumerated() {
             let options = question.options.enumerated().map {
-                OptionButton($0.offset + 1, $0.element, toggles: lone ? nil : question.multiple, target: self, action: #selector(chose))
+                OptionButton($0.offset + 1, $0.element, detail: question.details.indices.contains($0.offset) ? question.details[$0.offset] : nil,
+                             toggles: lone ? nil : question.multiple, target: self, action: #selector(chose))
             }
             let list = NSStackView(views: options)
             (list.orientation, list.alignment, list.spacing) = (.vertical, .width, 6)
@@ -467,7 +468,7 @@ class RequestPanel: NSPanel, NSTextFieldDelegate {
                       Self.text(question.text, Look.Style(face: .voice, size: 15, weight: .regular, leading: 1.42)),
                       options.isEmpty ? nil : Box(list), Box(own)].compactMap { $0 }
         }
-        let last = NSStackView(views: [denyButton, Self.lock("The space can't see this window.")])
+        let last = NSStackView(views: [denyButton, Self.lock("No space can see or click this window.")])
         last.distribution = .equalSpacing
         // The mockup's spacing around the row, measured on its picture.
         return views + [Box(last, insets: NSEdgeInsets(top: 13, left: 0, bottom: 16, right: 0))]
@@ -658,15 +659,15 @@ final class LinkButton: KeyableButton {
     override func draw(_ dirtyRect: NSRect) { words.draw(at: NSPoint(x: 0, y: ((bounds.height - words.size().height) / 2).rounded())) }
 }
 
-/// One option of a question: its number in a small tile, its label, in a ringed row. `toggles` nil, a click answers;
+/// One option of a question: its number in a small tile, its label and what it means, in a ringed row. `toggles` nil, a click answers;
 /// true, it turns on and off; false, it is one choice among its question's options. Its label wraps, since the agent
 /// writes it: the person reads the whole answer before a click sends it.
 final class OptionButton: NSButton {
-    let number: Int, toggles: Bool?
+    let number: Int, toggles: Bool?, detail: String?
     private var hovered = false { didSet { needsDisplay = true } }
 
-    init(_ number: Int, _ title: String, toggles: Bool?, target: AnyObject, action: Selector) {
-        (self.number, self.toggles) = (number, toggles)
+    init(_ number: Int, _ title: String, detail: String? = nil, toggles: Bool?, target: AnyObject, action: Selector) {
+        (self.number, self.toggles, self.detail) = (number, toggles, detail)
         super.init(frame: .zero)
         (self.title, self.target, self.action, isBordered) = (title, target, action, false)
         if let toggles { setButtonType(toggles ? .pushOnPushOff : .radio) }
@@ -679,7 +680,9 @@ final class OptionButton: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false }
 
     private var words: NSAttributedString {
-        NSAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 12.8, weight: .medium), .foregroundColor: Look.Token.ink.color])
+        let words = NSMutableAttributedString(string: title, attributes: [.font: Look.font(.ui, size: 12.8, weight: .medium), .foregroundColor: Look.Token.ink.color])
+        if let detail { words.append(NSAttributedString(string: "\n" + detail, attributes: [.font: Look.font(.ui, size: 11.5), .foregroundColor: Look.Token.ink2.color])) }
+        return words
     }
 
     /// The label's height at a row's width: 38 points before it, 10 after.
