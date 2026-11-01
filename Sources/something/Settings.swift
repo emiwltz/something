@@ -89,9 +89,6 @@ struct SettingsSection: Identifiable {
     @ObservationIgnored var apply: (Preferences.Appearance) -> Void = { NSApp.appearance = Look.appearance($0) }
     /// Applies the interface size to the whole app (Look.scale); tests record it instead.
     @ObservationIgnored var resize: (Look.Size) -> Void = { Look.scale.size = $0 }
-    /// Whether the window's sidebar floats (its column hidden), and making it so: the window's.
-    @ObservationIgnored var floating: () -> Bool = { false }
-    @ObservationIgnored var float: (Bool) -> Void = { _ in }
     /// Shows the shortcuts (⌘/) over the window.
     @ObservationIgnored var shortcuts: () -> Void = {}
     /// Each space's level, and the person's choice of one (Info.choose, which asks for Run's folder).
@@ -121,7 +118,6 @@ struct SettingsSection: Identifiable {
     private(set) var seen: [String: String] = [:]
     /// When the last look ended, by `clock`; nil while none has.
     private(set) var looked: Date?
-    private(set) var floats = false
     /// The tab shown.
     var tab = SettingsTab.general
     private(set) var spaceLevels: [SpaceLevel] = []
@@ -142,7 +138,7 @@ struct SettingsSection: Identifiable {
 
     /// Reads again what lives elsewhere than in the preferences: the window's sidebar, the levels, the versions seen.
     func look() {
-        (floats, spaceLevels, seen, lasting) = (floating(), levels(), versions(), rules())
+        (spaceLevels, seen, lasting) = (levels(), versions(), rules())
     }
 
     /// Look Again: the engine looks for the programs again, and so does this window, which says it is looking meanwhile.
@@ -202,11 +198,7 @@ struct SettingsSection: Identifiable {
     private func general() -> [SettingsSection] {
         let preferences = preferences
         let sidebar = SettingsRow.Control.choice([.init(value: "pinned", label: "Pinned"), .init(value: "floating", label: "Floating")],
-                                                 get: { [self.floats ? "floating" : "pinned"] }, set: { [weak self] in
-            guard let self else { return }
-            float($0 == "floating")
-            floats = floating()
-        })
+                                                 get: { [preferences.pinned ? "pinned" : "floating"] }, set: { preferences.pinned = $0 == "pinned" })
         return [
             SettingsSection(title: "Start", rows: [SettingsRow(title: "When something opens", note: "What you see first.", control: opening())]),
             SettingsSection(title: "Look", rows: [
@@ -217,8 +209,8 @@ struct SettingsSection: Identifiable {
                             note: "The whole app grows: sidebar, toolbar, assistant, sheets, palette, and your spaces.",
                             control: choice(\.size, Look.Size.allCases.map { ($0, $0.label) }) { [weak self] in self?.resize(preferences.size) },
                             style: .tiles, wrap: true, keys: [("⌘+", "bigger"), ("⌘−", "smaller"), ("⌘0", "default, from anywhere")]),
-                SettingsRow(title: "Sidebar", note: floats ? "Over the page when the pointer rests on the window’s left edge."
-                                : "Always beside your spaces. ⌃⌘S hides it for a while.", control: sidebar, style: .segments),
+                SettingsRow(title: "Sidebar", note: preferences.pinned ? "Always beside your spaces. ⌃⌘S hides it for a while."
+                                : "Over the page when the pointer rests on the window’s left edge.", control: sidebar, style: .segments),
             ]),
             SettingsSection(title: "", rows: [
                 SettingsRow(title: "Keyboard shortcuts", note: "⌘/ shows them all, wherever you are.",
@@ -432,8 +424,6 @@ extension App {
     @MainActor private func makeSettings() -> SettingsWindow {
         let model = SettingsModel(preferences: library.preferences, places: places)
         model.spaces = { [weak self] in self?.library.order().filter(\.isSpace).map { ($0.id, $0.title) } ?? [] }
-        model.floating = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed ?? false }
-        model.float = { [weak self] in self?.shell.split.splitViewItems[0].isCollapsed = $0 }
         model.shortcuts = { [weak self] in self?.showKeys(nil) }
         model.levels = { [weak self] in self?.library.levels() ?? [] }
         model.setLevel = { [weak self] name, level in

@@ -348,7 +348,8 @@ struct AcceptanceBuild {
             }
             let words = await Self.read(host, until: says)
             #expect(says(words), "\(words)")
-            let side = await Self.read(shell.split.splitViewItems[0].viewController.view) { $0.contains("Who is waiting for me, building, 50 %") }
+            shell.drawer.open()
+            let side = await Self.read(shell.drawer.host) { $0.contains("Who is waiting for me, building, 50 %") }
             #expect(side.contains("Who is waiting for me, building, 50 %"), "\(side)")
         }
         // j3-4-stopped: Stop mid-Write leaves the ladder saying what stays on disk, the sentence back in the field with the
@@ -505,7 +506,8 @@ struct AcceptanceBuild {
         #expect(library.sections().first { $0.group == "Notes" }?.entries.contains { $0.id == "waiting-room" } == true)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "x3-2" + suffix, root: stage.home.root)
-            let side = await Self.read(shell.split.splitViewItems[0].viewController.view) { $0.contains("Waiting room, building, 50 %") }
+            shell.drawer.open()
+            let side = await Self.read(shell.drawer.host) { $0.contains("Waiting room, building, 50 %") }
             #expect(side.contains("Waiting room, building, 50 %") && !side.contains("Who is waiting for me, building, 50 %"), "\(side)")
         }
         // Its row shows the build on New Space again.
@@ -572,7 +574,7 @@ struct AcceptanceBuild {
         model.place = AssistantModel.place(room)
         // It starts on the sign of 52 points, its arm and stroke the sign's, its eyes on.
         #expect(arrival.start.face && abs(arrival.start.arm - 52 * 0.31) < 0.01 && arrival.start.stroke == 35)
-        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && abs(arrival.start.rect.midX - arrival.room.midX) < 1, "\(arrival.start.rect)")
+        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && [Stage.Size.main.width, Stage.Size.main.width - Drawer.column].contains { abs(arrival.start.rect.midX - $0 / 2) < 1 }, "from New Space's sign, the sidebar back or not yet: \(arrival.start.rect)")
         arrival.progress = 0.6
         let shape = arrival.shape
         #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)
@@ -671,7 +673,7 @@ struct AcceptanceBuild {
         #expect(words == said, "\(words)")
         // Under the toolbar, centred over the space beside the sidebar.
         let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
-        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == shell.split.splitViewItems[0].viewController.view.frame.width)
+        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == (shell.drawer.state.dock ? Drawer.column : 0))
         try await stage.appearances { suffix in
             try await Picture.sheet(sheet, over: shell, library: library, web: nil, "d4" + suffix, root: stage.home.root)
         }

@@ -31,6 +31,8 @@ import SomethingCore
         var askEverything = false, resume = true, toured = false
         /// Full Access: something allows every permission the person's assistant asks, by itself (Settings › Permissions).
         var fullAccess = false
+        /// Whether the sidebar stays beside the page: Settings › General's Pinned, its own pin, View › Keep Sidebar Open.
+        var pinned = false
         /// The hints already shown (Hint.swift), each once.
         var hinted: [String] = []
         var groups: [Group] = [], folded: [String] = [], names: [String: String] = [:], recents: [String] = []
@@ -56,7 +58,8 @@ import SomethingCore
         var versionsKept = 50, storageLimit = 500
 
         enum CodingKeys: String, CodingKey, CaseIterable {
-            case lastOpen, assistant, model, effort, listed, commands, askEverything, fullAccess, resume, toured, hinted, groups, folded, names,
+            case lastOpen, assistant, model, effort, listed, commands, askEverything, fullAccess, pinned, resume, toured, hinted, groups, folded,
+                 names,
                  recents, openAtStart, appearance, motion, size, notify, level, exportMemory, memoryExport, askFirst, sticker, sleepAfter,
                  awakeAtMost,
                  versionsKept, storageLimit

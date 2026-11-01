@@ -290,7 +290,7 @@ struct AcceptanceShow {
         shell.inspector.isCollapsed = true
 
         // A narrow window: under the part, the page whole; Esc dismisses it.
-        shell.window.setContentSize(NSSize(width: 760, height: 680))
+        shell.window.setContentSize(NSSize(width: 720, height: 680))
         shell.window.layoutIfNeeded()
         await Picture.settle(brief)
         let found = await Pointing.rects([part.path], in: brief.web, frame: try #require(brief.frame))
@@ -307,7 +307,7 @@ struct AcceptanceShow {
         shell.window.setContentSize(NSSize(width: 1200, height: 760))
         shell.window.layoutIfNeeded()
         #expect(narrow.side == .margin && brief.web.frame.width == brief.area.bounds.width - MarginNote.margin && narrow.card.frame.width == 252)
-        shell.window.setContentSize(NSSize(width: 760, height: 680))
+        shell.window.setContentSize(NSSize(width: 720, height: 680))
         shell.window.layoutIfNeeded()
         #expect(narrow.side == .under && brief.web.frame.width == brief.area.bounds.width && narrow.card.frame.width == 268)
         // Esc through the window's key handling, wherever the focus is.

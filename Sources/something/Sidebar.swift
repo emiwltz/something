@@ -1,4 +1,5 @@
-// The sidebar: New Space and Go to… first; SPACES with New Group; Needs You, the spaces whose requests wait for the
+// The sidebar's list, which Drawer.swift holds: its head, Spaces · pages of your own, New Group under the pointer, the
+// pin and New Space; Needs You, the spaces whose requests wait for the
 // person, oldest first, each still in its group too (so ⌘1–9 never move); the spaces in their groups, each group
 // folding under its header, which keeps its count; Templates pinned at the bottom, then the word "something" and
 // Settings. Groups are only a view, kept in the preferences: the files never move. A row is a name: the title, and "…"
@@ -11,6 +12,7 @@
 // it; a group is renamed in place too, or by a double click. Its rows are drawn here, not by a List: the mockup's
 // 25-point rows and the identity's quiet selection, which a sidebar List's own 32-point rows and highlight would
 // cover; ↑ and ↓ move through New Space, the headers and the rows shown, Return folds the header the keys rest on.
+// Inside the glass the greys are the ink at less strength, so they stay readable over any page.
 import AppKit
 import SwiftUI
 
@@ -21,7 +23,7 @@ import SwiftUI
     /// Where ↑ and ↓ stop.
     enum Stop: Hashable { case newSpace, group(String), space(String) }
 
-    /// What can be under the pointer: one of the fixed rows ("new", "palette", "tpls"), a group's header, a space's row,
+    /// What can be under the pointer: one of the fixed rows ("head", "tpls"), a group's header, a space's row,
     /// a space's row in Needs You, apart so that a space named like a fixed row, or listed twice, lights only its own.
     enum Hover: Hashable { case nav(String), group(String), space(String), needs(String) }
 
@@ -38,6 +40,11 @@ import SwiftUI
     var draft = ""
     /// The bottoms of the list's rows, in the list's own space: where its shown part may end (SidebarView.shown).
     var ends: [CGFloat] = []
+    /// Whether the pin is pressed, and whether it shows: where there is no room for a docked sidebar it hides.
+    var kept = false
+    var room = true
+    /// What the pin does: the Shell's.
+    @ObservationIgnored var pin: () -> Void = {}
 
     /// A menu began: the row or header under the pointer is the one it was opened on (the menu bar's are over none).
     func menuOpened() {
@@ -222,19 +229,19 @@ struct SidebarView: View {
     let assistant: AssistantModel
     /// The state of the space of that name's assistant, read from its own conversation.
     let eyes: (String) -> Sign.State
-    /// Whether it is the floating sidebar's glass: its colour at 76 % over the blur behind it (SidebarOver).
-    var glass = false
-
     @Environment(\.colorScheme) private var scheme
 
     var state: SidebarState { library.sidebar }
-    /// The group names, their counts and the SPACES row: ink2 at night, where ink3 reads too faint (the mockup's 2.9).
-    private var quiet: Look.Token { scheme == .dark ? .ink2 : .ink3 }
+    /// Greys as the mockup's glass mixes them: the ink at less strength.
+    private var ink2: Color { Look.Token.ink.ui.opacity(0.74) }
+    private var ink3: Color { Look.Token.ink.ui.opacity(0.6) }
+    private var hoverFill: Color { Look.Token.ink.ui.opacity(0.07) }
+    private var selected: Color { Look.Token.ink.ui.opacity(0.11) }
     /// What the list says while there is no space, and no group header shows: the center invites to make one.
     static let empty = "Your spaces appear here"
     /// The height of the list's fade, the mockup's 22 points: most of the last row shown.
     static let fade: CGFloat = 22
-    /// New Space, Go to… and Templates' height, at the interface size.
+    /// Templates' height, at the interface size.
     static var nav: CGFloat { 30 * Look.scale.size.factor }
 
     /// How tall the list is drawn in `room`: all of it when it fits; else down to the end of the last row that fits
@@ -246,35 +253,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // New Space is a way in, never a place the list holds: it is not drawn chosen while its page shows.
-            nav("new", label: "New Space", on: false, open: newSpace) {
-                // The identity's ink, never the system's accent: a rounded square of ink with its plus.
-                Image(systemName: "plus").font(Look.icon(10, weight: .semibold)).foregroundStyle(Look.Token.actfg.ui)
-                    .frame(width: 20 * Look.scale.size.factor, height: 20 * Look.scale.size.factor)
-                    .background(Look.Token.act.ui, in: RoundedRectangle(cornerRadius: 6)).padding(.leading, -2)
-            }
-            // Go to… sends its command, and stays greyed until the command has its action (G2).
-            nav("palette", label: "Go to…", on: false, open: { Keys.send("palette") }) {
-                Image(systemName: "magnifyingglass").font(Look.icon(13)).foregroundStyle(Look.Token.ink2.ui)
-            }
-            .disabled(Keys.command("palette")?.action == nil)
-            HStack {
-                // The word, said once where every space is listed.
-                HStack(spacing: 6) {
-                    Text("SPACES").font(Look.font(.ui, size: 10.5, weight: .semibold).ui).kerning(0.5)
-                    Text("pages of your own").font(Look.font(.ui, size: 11).ui).opacity(0.8).lineLimit(1)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Spaces, pages of your own")
-                .accessibilityAddTraits(.isHeader)
-                Spacer()
-                Button { library.addGroup() } label: {
-                    Image(systemName: "folder.badge.plus").font(Look.icon(12)).frame(width: 24, height: 22).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).help("New Group").accessibilityLabel("New Group")
-            }
-            .foregroundStyle(quiet.ui)
-            .padding(EdgeInsets(top: 16, leading: 8, bottom: 4, trailing: 2))
+            head
             // A list longer than the sidebar ends on a whole row, which fades out above Templates, rather than being
             // cut through a row; scrolled to its end, the last row clears the fade.
             GeometryReader { box in
@@ -289,13 +268,10 @@ struct SidebarView: View {
                 })
                 .frame(height: Self.shown(box.size.height, ends: state.ends))
             }
-            nav("tpls", label: "Templates", on: library.selection == .templates && !library.previewing, open: { library.select(.templates) }) {
-                Image(systemName: "square.grid.2x2").font(Look.icon(13)).foregroundStyle(Look.Token.ink2.ui)
-            }
+            templates
             footer
         }
-        // The mockup's New Space starts 49 points down the window, just above where the toolbar's safe area ends.
-        .padding(EdgeInsets(top: -5, leading: 10, bottom: 10, trailing: 10))
+        .padding(EdgeInsets(top: 6, leading: 8, bottom: 8, trailing: 8))
         .font(Look.body.font.ui)
         .foregroundStyle(Look.Token.ink.ui)
         .focusable()
@@ -306,8 +282,55 @@ struct SidebarView: View {
         // A right click or "…" opens a menu over the row under the pointer; SwiftUI says neither, the menu's tracking does.
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)) { _ in state.menuOpened() }
         .onReceive(NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)) { _ in state.menued = nil }
-        // Opaque, the identity's sidebar colour: no vibrancy lets the desktop through; the floating one is glass.
-        .background(Look.Token.side.ui.opacity(glass ? 0.76 : 1).ignoresSafeArea())
+        .background(tint.ignoresSafeArea())
+        .overlay { lip.allowsHitTesting(false) }
+    }
+
+    /// What lies over the blur: at night black first, which darkens a light page, then the sidebar's colour.
+    @ViewBuilder private var tint: some View {
+        ZStack {
+            if scheme == .dark { Color.black.opacity(0.5) }
+            Look.Token.side.ui.opacity(scheme == .dark ? 0.74 : 0.72)
+        }
+    }
+
+    /// The glass's fine light edge, which detaches it from the page.
+    private var lip: some View {
+        let light = Color.white.opacity(scheme == .dark ? 0.1 : 0.5)
+        return RoundedRectangle(cornerRadius: Drawer.radius, style: .continuous).strokeBorder(light, lineWidth: 0.5)
+            .overlay(alignment: .top) { Rectangle().fill(light).frame(height: 1).padding(.horizontal, Drawer.radius) }
+    }
+
+    /// The head, 30 points: the word, New Group under the pointer, the pin where there is room, and New Space.
+    private var head: some View {
+        HStack(spacing: 0) {
+            HStack(spacing: 7) {
+                Text("Spaces").font(Look.font(.ui, size: 13, weight: .semibold).ui).kerning(-0.13).foregroundStyle(Look.Token.ink.ui)
+                Text("pages of your own").font(Look.font(.ui, size: 11).ui).foregroundStyle(ink3).lineLimit(1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Spaces, pages of your own")
+            .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            action("folder.badge.plus", "New Group", help: "New Group") { library.addGroup() }.opacity(state.hovered == .nav("head") ? 1 : 0)
+            if state.room {
+                action("pin", state.kept ? "Let It Float" : "Keep Open", help: state.kept ? "Let It Float" : "Keep Open", turned: 45) { state.pin() }
+                    .background(state.kept ? selected : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+            }
+            action("plus", "New Space", help: Keys.tooltip("new", "New Space")) { newSpace() }
+        }
+        .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: 30 * Look.scale.size.factor).padding(.bottom, 4)
+        .contentShape(Rectangle())
+        .onHover { hover(.nav("head"), $0) }
+    }
+
+    /// A button of the head, 22 points wide.
+    private func action(_ symbol: String, _ label: String, help: String, turned: Double = 0, run: @escaping () -> Void) -> some View {
+        Button(action: run) {
+            Image(systemName: symbol).font(Look.icon(12)).foregroundStyle(ink2).rotationEffect(.degrees(turned))
+                .frame(width: 22, height: 24).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).help(help).accessibilityLabel(label)
     }
 
     /// The groups and their rows, or, with no space at all, only the words that say where they will be.
@@ -317,7 +340,7 @@ struct SidebarView: View {
         let builds = VStack(alignment: .leading, spacing: 1) { ForEach(pending) { building($0).rowEnd() } }
         if library.entries.isEmpty {
             if pending.isEmpty {
-                Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
+                Text(Self.empty).font(Look.font(.ui, size: 12).ui).foregroundStyle(ink3)
                     .padding(.horizontal, 10).padding(.vertical, 8).frame(maxWidth: .infinity, alignment: .leading).rowEnd()
             } else { builds }
         } else {
@@ -333,7 +356,7 @@ struct SidebarView: View {
                         if section.group.map(library.folded) != true {
                             ForEach(section.entries) { space($0).rowEnd() }
                             if section.entries.isEmpty {
-                                Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                                Text("No spaces in this group").font(Look.small.font.ui).foregroundStyle(ink3)
                                     .padding(EdgeInsets(top: 4, leading: 33, bottom: 6, trailing: 8)).rowEnd()
                             }
                         }
@@ -368,26 +391,26 @@ struct SidebarView: View {
                 ForEach(spaces) { space($0, needs: true).rowEnd() }
             }
             .padding(EdgeInsets(top: 2, leading: 0, bottom: 6, trailing: 0))
-            .overlay(alignment: .bottom) { Rectangle().fill(Look.Token.line.ui).frame(height: 1) }
+            .overlay(alignment: .bottom) { Rectangle().fill(selected).frame(height: 1) }
         }
     }
 
     /// The word "something", and Settings.
     private var footer: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Look.Token.line.ui).frame(height: 1)
+            Rectangle().fill(selected).frame(height: 1)
             HStack(spacing: 8) {
-                Text("something").font(Look.font(.title, size: 16, weight: .bold).ui).kerning(-0.4)
+                Text("something").font(Look.font(.title, size: 15, weight: .bold).ui).kerning(-0.4)
                 Spacer(minLength: 0)
                 Button { Keys.send("settings") } label: {
-                    Image(systemName: "gearshape").font(Look.icon(15)).foregroundStyle(Look.Token.ink2.ui).frame(width: 24, height: 24)
+                    Image(systemName: "gearshape").font(Look.icon(15)).foregroundStyle(ink2).frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).help(Keys.tooltip("settings", "Settings")).accessibilityLabel("Settings")
             }
-            .padding(EdgeInsets(top: 10, leading: 8, bottom: 0, trailing: 4))
+            .padding(EdgeInsets(top: 9, leading: 9, bottom: 0, trailing: 5))
         }
-        .padding(.top, 8)
+        .padding(.top, 6)
     }
 
     func newSpace() {
@@ -408,12 +431,12 @@ struct SidebarView: View {
         let title = AssistantModel.provisional(build.sentence)
         return HStack(spacing: 7) {
             BuildRing(progress: progress)
-            Text(title).font(Self.title(on: on).ui).foregroundStyle(Look.Token.ink2.ui)
+            Text(title).font(Self.title(on: on).ui).foregroundStyle(ink2)
             Spacer(minLength: 0)
         }
         .lineLimit(1)
         .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
-        .background(on ? Look.Token.sel.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .background(on ? selected : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .contentShape(Rectangle())
         .onTapGesture { follow(build.id) }
         .accessibilityElement(children: .ignore)
@@ -436,21 +459,23 @@ struct SidebarView: View {
         if inside { state.hovered = key } else if state.hovered == key { state.hovered = nil }
     }
 
-    /// New Space, Go to… and Templates: 30 points, medium, their shortcut shown under the pointer and on the selected one.
-    private func nav(_ key: String, label: String, on: Bool, open: @escaping () -> Void, @ViewBuilder icon: () -> some View) -> some View {
-        Button(action: open) {
+    /// Templates: 30 points, medium, its shortcut shown under the pointer and while its page shows.
+    private var templates: some View {
+        let on = library.selection == .templates && !library.previewing, hovered = state.hovered == .nav("tpls")
+        return Button { library.select(.templates) } label: {
             HStack(spacing: 9) {
-                icon().frame(width: 16)
-                Text(label).font(Look.font(.ui, size: 13, weight: .medium).ui)
+                Image(systemName: "square.grid.2x2").font(Look.icon(13)).foregroundStyle(ink2).frame(width: 16)
+                Text("Templates").font(Look.font(.ui, size: 13, weight: .medium).ui)
                 Spacer(minLength: 0)
-                if on || state.hovered == .nav(key) { Text(Keys.shown(key)).font(Look.small.font.ui).foregroundStyle(Look.Token.ink3.ui) }
+                if on || hovered { Text(Keys.shown("tpls")).font(Look.small.font.ui).foregroundStyle(ink3) }
             }
-            .padding(.horizontal, 8).frame(height: Self.nav)
-            .background(on ? Look.Token.sel.ui : state.hovered == .nav(key) ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+            .padding(.horizontal, 9).frame(height: Self.nav)
+            .background(on ? selected : hovered ? hoverFill : .clear, in: RoundedRectangle(cornerRadius: Look.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .onHover { hover(.nav(key), $0) }
+        .padding(.top, 4)
+        .onHover { hover(.nav("tpls"), $0) }
         .accessibilityAddTraits(on ? .isSelected : [])
     }
 
@@ -475,9 +500,9 @@ struct SidebarView: View {
                 }
         }
         .font(Look.font(.ui, size: 11.5, weight: .semibold).ui)
-        .foregroundStyle(lit ? Look.Token.ink2.ui : quiet.ui)
+        .foregroundStyle(lit ? ink2 : ink3)
         .padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 6)).frame(height: 25 * Look.scale.size.factor)
-        .background(lit ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .background(lit ? hoverFill : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .contentShape(Rectangle())
         // The double click first, so that SwiftUI waits for it and a rename does not fold the group on the way.
         .onTapGesture(count: 2) { library.beginRename(.group(group)) }
@@ -515,29 +540,29 @@ struct SidebarView: View {
             if state.renaming == .space(entry.id) && !needs {
                 RenameField(state: state, target: .space(entry.id), commit: library.commitRename, cancel: library.cancelRename).font(Self.title(on: true).ui)
             } else {
-                Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : Look.Token.ink3.ui)
+                Text(entry.title).font(Self.title(on: on).ui).foregroundStyle(entry.isSpace ? Look.Token.ink.ui : ink3)
                 if assistant.ready.contains(entry.id) { Circle().fill(Look.Token.ink.ui).frame(width: 6, height: 6).accessibilityHidden(true) }
                 Spacer(minLength: 4)
                 if hovered && !needs {
                     Menu { Self.items(menu, live: false) } label: {
-                        Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(Look.Token.ink2.ui)
+                        Image(systemName: "ellipsis").font(.system(size: 12, weight: .bold)).foregroundStyle(ink2)
                     }
                     .plainMenu().frame(width: 22, height: 20)
                     .accessibilityLabel("More for \(entry.title)")
                 }
                 if !entry.isSpace {
-                    Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(Look.Token.ink3.ui)
+                    Text("not a space yet").font(Look.xs.font.ui).foregroundStyle(ink3)
                 }
             }
         }
         .lineLimit(1)
         .padding(EdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 6)).frame(height: Look.row)
-        .background(on ? Look.Token.sel.ui : hovered ? Look.Token.hover.ui : .clear, in: RoundedRectangle(cornerRadius: Look.control))
+        .background(on ? selected : hovered ? hoverFill : .clear, in: RoundedRectangle(cornerRadius: Look.control))
         .overlay(alignment: .leading) {
             if needs { RoundedRectangle(cornerRadius: 2).fill(Look.Token.need.ui).frame(width: 3).padding(.vertical, 8).offset(x: 1) }
         }
         .overlay {
-            if menued { RoundedRectangle(cornerRadius: Look.control).strokeBorder(Look.Token.ink2.ui, lineWidth: 1.5).allowsHitTesting(false) }
+            if menued { RoundedRectangle(cornerRadius: Look.control).strokeBorder(ink2, lineWidth: 1.5).allowsHitTesting(false) }
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: open)

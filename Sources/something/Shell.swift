@@ -1,5 +1,5 @@
-// The one window: a split view with the sidebar, the center and Info (the inspector, hidden at first), the window layer
-// over all three, and a calm toolbar: the sidebar toggle at the sidebar's edge, the space's name alone (a click on it
+// The one window: a split view with the center and Info (the inspector, hidden at first), the center moved right by a
+// docked sidebar; over both the `chrome` layer, which holds the sidebar (Drawer.swift), and over it the window layer. A calm toolbar: the sidebar's button beside the space's name alone (a click on it
 // opens Info), Point (pressed while the person points at the space's parts: PointOverlay.swift; a Quick Change leaves
 // its frames at work, QuickFrame.swift, and an answer without a change in a note, MarginNote.swift), Info (pressed
 // while it shows) and Page Full Screen (PageFull.swift); before them, while Full Access is on, its orange mark, which
@@ -9,9 +9,8 @@
 // keeps a space from being shown, New Space or the templates; over a space, the glass, which holds the assistant
 // (Glass.swift). Off the spaces the assistant is away: New Space has its own field. While the welcome is open, the
 // window is out of sight; it arrives once it ends. In full screen the space is alone: the system hides the toolbar and
-// the menu bar until the pointer reaches the top, the sidebar steps aside and the space starts at the screen's top; ⌃⌘S
-// lays the sidebar over it (SidebarOver). Page Full Screen does the same inside the window, and a hidden sidebar floats
-// (PageFull.swift).
+// the menu bar until the pointer reaches the top, the sidebar floats and the space starts at the screen's top. Page
+// Full Screen does the same inside the window (PageFull.swift).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -19,7 +18,7 @@ import SwiftUI
 
 final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     let window: NSWindow
-    let split = Split()
+    let split = NSSplitViewController()
     /// The center: one of its three states at a time.
     let center = NSView()
     /// The docked panel at the right edge, Info or History (Inspector.swift), collapsed at first.
@@ -35,6 +34,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     private var unread: [String: (words: String, part: Pointing.Part)] = [:]
     /// The glass over the center, which holds the assistant: its sticker, or its card.
     let glass: Glass
+    /// What lies over the columns, under the window layer: the sidebar and the toolbar's lower edge.
+    let chrome: WindowLayer
+    let drawer: Drawer
+    /// The center's left side in its column: the room it leaves a docked sidebar.
+    let column: NSLayoutConstraint
     /// What covers the whole window: the toast, the palette and the shortcut sheet.
     let layer: WindowLayer
     static let sidebar = NSToolbarItem.Identifier("sidebar"), title = NSToolbarItem.Identifier("title"),
@@ -58,52 +62,55 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var made: String?
     /// The window's undo manager: typing, and the changes of the spaces (Changes.swift).
     let undo = WindowUndo()
-    /// Whether the window is in full screen, or entering it; the sidebar's own state before, given back after (also
-    /// by Page Full Screen).
+    /// Whether the window is in full screen, or entering it.
     private(set) var full = false
-    var sideHidden = false
     /// Whether the page fills the window (Page Full Screen), and whether it will once the Mac's full screen is left.
     var pageFull = false, pageAfterFull = false
     /// The strips at the center's top and left edges that bring back the toolbar in Page Full Screen and the floating
     /// sidebar (PageFull.swift); the toolbar's height, measured while it shows.
     let topEdge = Reveal(delay: 0, leave: 0.6, clicks: false), leftEdge = Reveal(delay: 0.2, clicks: true)
     var bar: CGFloat = 52
-    /// The watch on the sidebar column's collapse, which makes it float or not.
-    var collapse: NSKeyValueObservation?
     /// The left edge's top: under the toolbar, or the window's top in Page Full Screen.
     var leftTop: (under: NSLayoutConstraint, top: NSLayoutConstraint)?
     /// What holds the top of what the center shows: the toolbar's lower edge, or in full screen the window's top.
     var top: NSLayoutConstraint?
-    /// The toolbar's lower edge, over the center only.
+    /// The toolbar's lower edge, across the window.
     let edge = NSBox()
 
-    /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
+    /// A window under this width has no room for a docked sidebar.
+    static let narrow: CGFloat = 860
+
+    /// `autosave` keeps the window's frame in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
         (self.assistant, self.library, self.info) = (assistant, library, info)
         let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
-        let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
-        (sidebar.minimumThickness, sidebar.maximumThickness) = Shell.sideRange
+        drawer = Drawer(list)
         let content = NSViewController()
-        content.view = center
+        content.view = NSView()
+        center.translatesAutoresizingMaskIntoConstraints = false
+        content.view.addSubview(center)
+        column = center.leadingAnchor.constraint(equalTo: content.view.leadingAnchor)
+        NSLayoutConstraint.activate([column, center.topAnchor.constraint(equalTo: content.view.topAnchor), center.bottomAnchor.constraint(equalTo: content.view.bottomAnchor),
+                                     center.trailingAnchor.constraint(equalTo: content.view.trailingAnchor)])
         inspector = NSSplitViewItem(inspectorWithViewController: InfoController(rootView: InspectorView(info: info, library: library, assistant: assistant)))
         (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
         // The toolbar stays one band across the window: the panel begins under it, as the mockup draws it.
         inspector.allowsFullHeightLayout = false
-        [sidebar, NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
-        window = MainWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
+        [NSSplitViewItem(viewController: content), inspector].forEach(split.addSplitViewItem)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1200, height: 760),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        chrome = WindowLayer(over: split.view)
+        (drawer.frame, drawer.autoresizingMask) = (chrome.bounds, [.width, .height])
+        chrome.hold(drawer)
         layer = WindowLayer(over: split.view)
         glass = Glass(over: center, model: assistant)
         super.init()
-        split.over = { [unowned self] in sidebarOver() }
-        split.laid = { [unowned self] in full || pageFull ? SidebarOver.shown(in: layer) != nil : nil }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
         window.layoutIfNeeded()
-        split.splitView.setPosition(236, ofDividerAt: 0)
-        split.splitView.setPosition(1200 - 320, ofDividerAt: 1)
+        split.splitView.setPosition(1200 - 320, ofDividerAt: 0)
         inspector.isCollapsed = true
         window.contentMinSize = NSSize(width: 640, height: 480)
         // The toolbar lies over the columns' own backgrounds, with the window's under the center.
@@ -119,10 +126,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.toolbar = toolbar
         window.toolbarStyle = .unified
         window.center()
-        if autosave {
-            window.setFrameAutosaveName("main")
-            split.splitView.autosaveName = "main"
-        }
+        if autosave { window.setFrameAutosaveName("main") }
         followSize(Look.scale.size)
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
@@ -141,14 +145,30 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         let preferences = library.preferences
         glass.spot = preferences.sticker
         glass.moved = { [weak preferences] in preferences?.sticker = $0 }
-        // The toolbar's lower edge, over the center only: the sidebar runs up to the window's top.
+        // The toolbar's lower edge, across the window, whatever lies under it.
         (edge.boxType, edge.borderWidth, edge.fillColor, edge.translatesAutoresizingMaskIntoConstraints) = (.custom, 0, Look.Token.line.color, false)
-        center.addSubview(edge)
-        NSLayoutConstraint.activate([edge.heightAnchor.constraint(equalToConstant: 1), edge.leadingAnchor.constraint(equalTo: center.leadingAnchor),
-                                     edge.trailingAnchor.constraint(equalTo: center.trailingAnchor),
-                                     edge.bottomAnchor.constraint(equalTo: center.safeAreaLayoutGuide.topAnchor)])
+        chrome.addSubview(edge)
+        NSLayoutConstraint.activate([edge.heightAnchor.constraint(equalToConstant: 1), edge.leadingAnchor.constraint(equalTo: chrome.leadingAnchor),
+                                     edge.trailingAnchor.constraint(equalTo: chrome.trailingAnchor),
+                                     edge.bottomAnchor.constraint(equalTo: chrome.safeAreaLayoutGuide.topAnchor)])
         edges()
+        drawer.busy = { [weak self] in self?.holdsDrawer ?? false }
+        drawer.moved = { [weak self] in self?.drawerMoved() }
+        drawer.motion = { [weak library] in library?.preferences.motion ?? .calm }
+        drawer.button = { [weak self] in self?.toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view }
+        library.sidebar.pin = { [weak self] in self?.keepSidebar() }
         show(nil)
+        followDrawer()
+    }
+
+    /// Follows what the sidebar reads from outside the window: the pin kept in the preferences, Settings' row writing it
+    /// too, and a build on New Space.
+    private func followDrawer() {
+        withObservationTracking { _ = (assistant.building, library.preferences.pinned) } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.followDrawer() }
+        }
+        arrange()
+        drawerMoved()
     }
 
     /// ⌘J: shows or hides the conversation, opening the card when it was closed.
@@ -165,23 +185,29 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         closed()
     }
 
-    /// The columns moved: the title measures the room it has again; Info shown, a note leaves the right edge to it.
+    /// The columns moved: the title measures the room it has again, and the layers stay above a column the split view
+    /// may have added after them; Info shown, a note leaves the right edge to it.
     @objc private func columnsMoved() {
         titleLine.invalidateIntrinsicContentSize()
+        if split.view.subviews.last !== layer {
+            split.view.addSubview(chrome, positioned: .above, relativeTo: nil)
+            split.view.addSubview(layer, positioned: .above, relativeTo: nil)
+        }
         reveals()
         if !inspector.isCollapsed { space?.note?.dismiss() }
     }
 
-    /// The window changed size, which does not always move the columns: the title measures its room again.
+    /// The window changed size, which does not always move the columns: the title measures its room again, and the
+    /// sidebar sees whether it still has room.
     func windowDidResize(_ notification: Notification) {
         titleLine.invalidateIntrinsicContentSize()
+        arrange()
     }
 
     /// something's sheets hang under the toolbar, centred over the space beside the sidebar; the system's own where
     /// it puts them.
     func window(_ window: NSWindow, willPositionSheet sheet: NSWindow, using rect: NSRect) -> NSRect {
-        let side = split.splitViewItems.first.flatMap { $0.isCollapsed ? nil : $0.viewController.view.frame.width } ?? 0
-        return sheet is Sheet ? Sheet.place(in: window, sidebar: side) : rect
+        sheet is Sheet ? Sheet.place(in: window, sidebar: drawer.state.dock ? Drawer.column : 0) : rect
     }
 
     /// Full screen hides the toolbar with the menu bar, as a Mac app's space alone: both come down at the top edge.
@@ -199,7 +225,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         if pageAfterFull { pageFullScreen(true) }
     }
 
-    /// Lays the window out for full screen (`on`) or back: the sidebar steps aside and comes back as it was, the space
+    /// Lays the window out for full screen (`on`) or back: the sidebar floats there and docks again after, the space
     /// starts at the window's top, which the hidden toolbar no longer holds, and the Full Screen button turns to leave
     /// it. Pinned to the top rather than to the safe area, the page does not move when the toolbar comes down over it.
     /// The sticker is discreet there.
@@ -207,10 +233,8 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         guard on != full else { return }
         if on { pageFullScreen(false) }
         full = on
-        _ = SidebarOver.close(in: layer)
-        let side = split.splitViewItems[0]
-        if on { sideHidden = side.isCollapsed }
-        side.isCollapsed = on || sideHidden
+        drawer.close()
+        arrange()
         top?.isActive = false
         top = shown.map(pin)
         top?.isActive = true
@@ -219,31 +243,15 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         reveals()
     }
 
-    /// ⌃⌘S in full screen: lays the sidebar over the space, or takes it away. In Page Full Screen the floating sidebar
-    /// comes or goes. Returns false elsewhere, where the sidebar column shows or hides as usual: a floating sidebar laid over is kept.
-    private func sidebarOver() -> Bool {
-        if pageFull {
-            if !SidebarOver.close(in: layer) { float() }
-            return true
-        }
-        guard full else {
-            _ = SidebarOver.close(in: layer)
-            return false
-        }
-        layOver(floating: false)
-        return true
-    }
-
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { undo }
 
     func windowDidChangeOcclusionState(_ notification: Notification) { visible(window.occlusionState.contains(.visible)) }
 
-    /// The sidebar's least and greatest widths, and Info's width, at the interface size.
-    static var sideRange: (CGFloat, CGFloat) { (190 * Look.scale.size.factor, 320 * Look.scale.size.factor) }
+    /// Info's width, at the interface size.
     static var infoWidth: CGFloat { 320 * Look.scale.size.factor }
 
     /// Follows the interface size from `size`: the views that read Look draw again by themselves; the toolbar's name,
-    /// the columns' widths and the page's zoom are set here.
+    /// Info's width, the sidebar's and the page's zoom are set here.
     private func followSize(_ size: Look.Size) {
         let now = Look.scale.size
         withObservationTracking { _ = Look.scale.size } onChange: { [weak self] in
@@ -263,14 +271,13 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         glass.place()
         heading(window.title, window.subtitle, space: titleLine.space, point: space?.pointable ?? false)
         space?.web.pageZoom = now.factor
-        let side = split.splitViewItems[0], width = side.viewController.view.frame.width
         (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
-        (side.minimumThickness, side.maximumThickness) = Shell.sideRange
-        if !side.isCollapsed { split.splitView.setPosition(width * now.factor / size.factor, ofDividerAt: 0) }
+        drawer.follow(topFree: full || pageFull)
+        drawerMoved()
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools]
+        [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -305,9 +312,10 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             return item
         // The system's own sidebar item would sit by the traffic lights, in a capsule.
         case Shell.sidebar:
-            let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Sidebar"), Keys.command("sidebar")?.action)
-            (sidebar.view as? NSButton)?.target = split
-            sidebar.target = split
+            let sidebar = item(id, "Sidebar", "sidebar.left", Keys.tooltip("sidebar", "Show Sidebar"), #selector(sidebarButton))
+            (sidebar.view as? NSButton)?.target = self
+            sidebar.target = self
+            (sidebar.view as? ToolButton)?.pressed = drawer.state.shown
             return sidebar
         case Shell.tools:
             // One item, since the toolbar would put its own gap between items: the mockup's are 4 points apart.
@@ -358,14 +366,19 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         }
     }
 
+    /// The toolbar's sidebar button, ⌃⌘S.
+    @objc private func sidebarButton() { drawer.toggle() }
+
     /// What View's and Space's Info items say: what they will do.
     var infoWords: String { infoShown && info.content == .info ? "Hide Info" : "Show Info" }
 
     /// Names a menu item as it reads now: the Info items, in View and Space, say Hide Info while Info shows; Page Full
-    /// Screen's says Exit while it is on.
+    /// Screen's says Exit while it is on; the sidebar's says what it will do, and Keep Sidebar Open is checked while pinned.
     func retitle(_ item: NSMenuItem) {
         if item.identifier?.rawValue == "insp" { item.title = infoWords }
         if item.identifier?.rawValue == "pagefull" { item.title = pageFull ? "Exit Page Full Screen" : "Enter Page Full Screen" }
+        if item.identifier?.rawValue == "sidebar" { item.title = drawer.state.shown ? "Hide Sidebar" : "Show Sidebar" }
+        if item.identifier?.rawValue == "keepSidebar" { item.state = drawer.state.kept ? .on : .off }
     }
 
     /// The requests waiting: `spaces`, the spaces they belong to, oldest first, go to the sidebar's Needs You; `mine`,
@@ -388,8 +401,9 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func show(_ space: SpaceView?, templates: Bool = false) {
         library.previewing = false
         self.space = space
-        // A space picked in the sidebar laid over the page takes its place; off the spaces, the page's full screen ends.
-        _ = SidebarOver.close(in: layer)
+        // Off the spaces, the page's full screen ends.
+        let inside = drawer.inside, writing = space.map { assistant.build(writing: $0.space.name) != nil } ?? false
+        drawer.change { $0.viewed(page: space != nil, inside: inside, writing: writing) }
         HintBubble.close(in: layer)
         if space == nil { pageFullScreen(false) }
         // A reload keeps point mode and its picks (the overlay asks again once the page loaded); only a page that
@@ -512,13 +526,18 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     func forget(_ name: String) { unread[name] = nil }
 
     /// Esc typed in this window, wherever the focus is, closes the top thing: the shortcut sheet or the palette, over
-    /// all; else the panel when it has the keys (History's); else point mode's step back; else a margin note, the top
+    /// all; else a floating sidebar, unless a name in it is being edited; else the panel when it has the keys (History's); else point mode's step back; else a margin note, the top
     /// thing over the page. Returns whether one closed, the key then used up (the assistant's nudge waits for an Esc
     /// nothing took).
     func escape(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, event.windowNumber == window.windowNumber else { return false }
         if ScrimCard.close(in: layer) { return true }
-        guard window.attachedSheet == nil, let space else { return false }
+        guard window.attachedSheet == nil else { return false }
+        if drawer.state.peek, library.sidebar.renaming == nil {
+            drawer.close()
+            return true
+        }
+        guard let space else { return false }
         if !inspector.isCollapsed, let held = window.firstResponder as? NSView, held.isDescendant(of: inspector.viewController.view) {
             showInfo(false)
             return true
@@ -647,41 +666,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         (welcoming ?? window).makeKeyAndOrderFront(nil)
         NSApp.activate()
         visible(true)
-    }
-}
-
-/// The split view of the window: ⌃⌘S and the toolbar's toggle ask `over` first, which lays the sidebar over the space
-/// in full screen instead of showing its column.
-final class Split: NSSplitViewController {
-    var over: () -> Bool = { false }
-    /// Whether the sidebar is laid over the space, nil where it is not laid over but shown as a column.
-    var laid: () -> Bool? = { nil }
-    override func toggleSidebar(_ sender: Any?) {
-        if !over() { super.toggleSidebar(sender) }
-    }
-    /// ⌃⌘S says what it does: "Hide Sidebar" while the sidebar shows, as a column or laid over, else "Show Sidebar".
-    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        guard item.action == #selector(toggleSidebar(_:)) else { return super.validateUserInterfaceItem(item) }
-        let laid = laid(), shown = laid ?? !(splitViewItems.first?.isCollapsed ?? true)
-        (item as? NSMenuItem)?.title = shown ? "Hide Sidebar" : "Show Sidebar"
-        return laid != nil || super.validateUserInterfaceItem(item)
-    }
-}
-
-/// The main window. NSWindow answers toggleSidebar: itself, without the split view's override, whenever nothing in the
-/// split view has the focus: ⌃⌘S would then never lay the sidebar over the space.
-/// The menu validates ⌃⌘S against this window then too: NSWindow's own validation reaches the split view today, but
-/// privately, so the window asks it itself.
-final class MainWindow: NSWindow {
-    @objc func toggleSidebar(_ sender: Any?) { (contentViewController as? Split)?.toggleSidebar(sender) }
-    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
-        guard item.action == #selector(Split.toggleSidebar(_:)), let split = contentViewController as? Split else {
-            return super.validateUserInterfaceItem(item)
-        }
-        return split.validateUserInterfaceItem(item)
-    }
-    override func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        item.action == #selector(Split.toggleSidebar(_:)) ? validateUserInterfaceItem(item) : super.validateMenuItem(item)
     }
 }
 

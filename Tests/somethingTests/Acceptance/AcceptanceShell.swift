@@ -1,7 +1,7 @@
 // Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen (b1, b3, b5,
-// b6; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2), Info in three parts (x5-1 and x5-2, which
-// retired b4), and round 2's calm window: the toolbar and Needs You (x9-1); the floating sidebar (2-1),
-// its pin and the View menu (2-2), Page Full Screen (2-6) and ⌘K in it (2-8). It also draws the frame of
+// b6; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2), Info in three parts (x5-1 to x5-3, which
+// retired b4), round 2's calm window: the toolbar and Needs You (x9-1), Page Full Screen (2-6) and ⌘K in it (2-8), and
+// round 4's sidebar: by the edge or ⌃⌘S (r4-2), the pin (r4-3), night (r4-4). It also draws the frame of
 // b1 alone, with and without a toast, and a long name in a narrow window.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
@@ -24,9 +24,8 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, _) = stage.window()
         #expect(shell.window.contentView?.frame.size == Stage.Size.main)
-        #expect(shell.split.splitViewItems.count == 3 && shell.inspector.isCollapsed)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title,
-                                                                       .flexibleSpace, Shell.tools])
+        #expect(shell.split.splitViewItems.count == 2 && shell.inspector.isCollapsed)
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
         let items = shell.toolbarItems
         #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         let titles = Stage.templates.map(\.1) + ["Oracle"]
@@ -62,7 +61,7 @@ struct AcceptanceShell {
 
     /// Gives the rows of `shell` the eyes of `states`, as the sessions would; a space it does not name is asleep.
     static func eyes(_ shell: Shell, _ states: [String: Sign.State]) throws {
-        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+        let host = shell.drawer.host
         host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { states[$0] ?? .sleep })
     }
 
@@ -147,7 +146,7 @@ struct AcceptanceShell {
             #expect(drawn.contains { $0.contains(line) }, "the drawn sidebar shows \(line): \(drawn)")
         }
         #expect(!drawn.contains { $0.contains("Pebble") || $0.contains("Stack") }, "a folded group's rows are not drawn: \(drawn)")
-        let seen = try await Picture.lines(try stage.sidebar(shell, shown: true))
+        let seen = try await Picture.lines(try stage.sidebar(shell))
         let breaks = try #require(seen.first { $0.words == "Breaks" }?.box, "\(seen.map(\.words))")
         #expect(seen.contains { $0.words == "2" && abs($0.box.midY - breaks.midY) < 4 }, "a folded group keeps its count at rest")
         library.sidebar.hovered = .space("project")
@@ -166,8 +165,8 @@ struct AcceptanceShell {
         library.rename("oracle", to: "Seer")
         #expect(shell.window.title == "Morning paper", "another space's name leaves the toolbar alone")
     }
-    /// Full screen (W5): the system hides the toolbar with the menu bar; the sidebar steps aside and the space starts
-    /// at the window's top; ⌃⌘S lays the sidebar over the space, and Esc, a click outside or a space picked takes it
+    /// Full screen (W5): the system hides the toolbar with the menu bar; the sidebar has no room there and the space
+    /// starts at the window's top; ⌃⌘S lays the sidebar over the space, and Esc, ⌃⌘S again or a space picked takes it
     /// away. A window never shown cannot enter a real full screen: the layout comes from its flag, and the pictures
     /// leave out the toolbar and the lights the system hides (the hand trial checks a real one). b5-sidebar is the
     /// sidebar laid over, which the mockup's screen shows only once ⌃⌘S is pressed.
@@ -181,61 +180,54 @@ struct AcceptanceShell {
         #expect(command.action == #selector(NSWindow.toggleFullScreen(_:)) && command.key == "f" && command.modifiers == [.command, .control])
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        let side = shell.split.splitViewItems[0], height = Stage.Size.main.height
+        let drawer = shell.drawer, height = Stage.Size.main.height
         func top() -> CGFloat? { shell.shown.map { $0.convert($0.bounds, to: nil).maxY } }
         shell.window.layoutIfNeeded()
         #expect(top() == shell.window.contentLayoutRect.maxY && shell.window.contentLayoutRect.maxY < height, "under the toolbar")
+        shell.keepSidebar()
         shell.fullScreen(true)
         shell.window.layoutIfNeeded()
-        #expect(shell.full && side.isCollapsed && shell.space === brief)
+        #expect(shell.full && !drawer.state.dock && !drawer.state.shown && shell.column.constant == 0 && shell.space === brief, "no room: the pin waits")
         #expect(top() == height && brief.web.frame.width == Stage.Size.main.width, "the space alone, from the window's top")
         // The toolbar's last button stays Page Full Screen, the sticker discreet.
         #expect(shell.controls[Shell.full]?.image?.accessibilityDescription == "Page Full Screen" && shell.glass.discreet)
-        // ⌃⌘S lays the sidebar over the space, its column still away; it takes the keys, and gives them back.
-        func over() -> SidebarOver? { SidebarOver.shown(in: shell.layer) }
+        // ⌃⌘S lays the sidebar over the space, 10 points from the window's top; it takes the keys, and gives them back.
         shell.window.makeFirstResponder(brief.web)
-        shell.split.toggleSidebar(nil)
-        let laid = try #require(over())
-        // It arrives from the window's edge.
-        _ = await wait(until: { laid.alphaValue == 1 })
-        laid.layoutSubtreeIfNeeded()
-        #expect(side.isCollapsed && laid.card.frame == NSRect(x: 0, y: 0, width: SidebarOver.width, height: height), "\(laid.card.frame)")
-        #expect(laid.accessibilityLabel() == "Sidebar" && shell.window.firstResponder === laid.card)
-        #expect(shell.layer.hitTest(NSPoint(x: 600, y: 300)) === laid, "a click outside lands on the layer, which closes it")
+        drawer.toggle()
+        drawer.layoutSubtreeIfNeeded()
+        #expect(await wait(until: { drawer.card.minX == Drawer.margin }), "\(drawer.card)")
+        #expect(drawer.state.peek && shell.column.constant == 0 && drawer.card == NSRect(x: 10, y: 10, width: 250, height: height - 20), "\(drawer.card)")
+        #expect(drawer.accessibilityLabel() == "Sidebar" && shell.window.firstResponder === drawer.host)
+        #expect(shell.chrome.hitTest(NSPoint(x: 600, y: 300)) == nil, "the page keeps its clicks")
         let escape = try Self.escape(shell)
-        #expect(shell.escape(escape) && over() == nil && shell.window.firstResponder === brief.web, "Esc")
-        shell.split.toggleSidebar(nil)
-        shell.split.toggleSidebar(nil)
-        #expect(over() == nil, "⌃⌘S again")
-        shell.split.toggleSidebar(nil)
-        let click = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 600, y: 300), modifierFlags: [], timestamp: 0,
-                                                    windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
-        try #require(over()).mouseDown(with: click)
-        #expect(over() == nil, "a click outside")
-        shell.split.toggleSidebar(nil)
+        #expect(shell.escape(escape) && !drawer.state.peek && shell.window.firstResponder === brief.web, "Esc")
+        drawer.toggle()
+        drawer.toggle()
+        #expect(!drawer.state.peek, "⌃⌘S again")
+        drawer.toggle()
         shell.show(brief)
-        #expect(over() == nil, "a space picked")
+        #expect(!drawer.state.peek, "a space picked")
         shell.window.toolbar?.isVisible = false
         [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].forEach { shell.window.standardWindowButton($0)?.isHidden = true }
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "b5" + suffix, root: stage.home.root, keyed: false)
-            shell.split.toggleSidebar(nil)
+            drawer.toggle()
+            #expect(await wait(until: { drawer.card.minX == Drawer.margin }))
             try await Picture.window(shell, library: library, web: brief.web, "b5-sidebar" + suffix, root: stage.home.root, keyed: false)
-            #expect(SidebarOver.close(in: shell.layer))
+            drawer.close()
         }
         shell.window.toolbar?.isVisible = true
-        // Out of full screen, the sidebar comes back as it was, the space under the toolbar, and ⌃⌘S hides the column.
+        // Out of full screen, a pinned sidebar docks again, the space under the toolbar.
         shell.fullScreen(false)
         shell.window.layoutIfNeeded()
-        #expect(!shell.full && !side.isCollapsed && top() == shell.window.contentLayoutRect.maxY && !shell.glass.discreet)
-        shell.split.toggleSidebar(nil)
-        #expect(over() == nil)
-        #expect(await wait(until: { side.isCollapsed }), "the column hides")
+        #expect(!shell.full && drawer.state.dock && shell.column.constant == 270 && top() == shell.window.contentLayoutRect.maxY && !shell.glass.discreet)
+        shell.keepSidebar()
         shell.fullScreen(true)
         shell.fullScreen(false)
-        #expect(side.isCollapsed, "a sidebar hidden before stays hidden after")
+        #expect(!drawer.state.shown, "a floating sidebar stays away")
     }
-    /// No space yet (W2, the center AB12's): the sidebar says only where the spaces will be, New Space selected.
+    /// No space yet (W2, the center AB12's): the sidebar stays open beside New Space, 10 points from the window's edges,
+    /// and says only where the spaces will be.
     @Test("b6: no space yet") func b6() async throws {
         let stage = try Stage("shell-b6")
         defer { stage.remove() }
@@ -257,8 +249,9 @@ struct AcceptanceShell {
         #expect(library.stops() == [.newSpace], "no header shows while no space is listed")
         #expect(library.sections().allSatisfy { $0.entries.isEmpty } && !shell.assistant.building, "the list says \(SidebarView.empty)")
         let drawn = try await stage.drawn(shell)
-        #expect(drawn.contains { $0.contains("Your spaces appear here") }, "the drawn sidebar says where the spaces will be: \(drawn)")
+        #expect(SidebarView.empty == "Your spaces appear here", "drawn in b6's picture: Vision misses its grey on the offscreen copy")
         #expect(!drawn.contains { ["Work", "Notes", "Breaks"].contains(where: $0.contains) }, "no group header is drawn: \(drawn)")
+        #expect(shell.drawer.state.dock && shell.column.constant == Drawer.column, "held open, the page beside it")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "b6" + suffix, root: stage.home.root)
         }
@@ -284,7 +277,7 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.calm(stage)
         defer { brief.close() }
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
         #expect(shell.toolbarItems.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         #expect(shell.toolbarItems.allSatisfy { !["reload", "chip"].contains($0.itemIdentifier.rawValue) })
         let title = shell.titleLine
@@ -299,7 +292,8 @@ struct AcceptanceShell {
         // Needs You, then the groups; My agents in both, so ⌘1–9 keep the groups' order.
         #expect(library.needing().map(\.title) == ["My agents"] && library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
         #expect(library.order().map(\.title) == ["Daily brief", "My agents", "Project watch", "Logbook", "Oracle", "Pebble", "Stack"])
-        let host = shell.split.splitViewItems[0].viewController.view
+        shell.drawer.open()
+        let host = shell.drawer.host
         let read = await AcceptanceBuild.read(host) { $0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
         let rows = read.filter { $0.contains(", ") && !$0.lowercased().contains("space") }
         #expect(rows == ["My agents, Waiting for You", "Daily brief, Working", "My agents, Waiting for You", "Project watch, Idle",
@@ -314,8 +308,8 @@ struct AcceptanceShell {
         let bar = MenuBar(builders: nil)
         let view = try #require(bar.submenu("View")), space = try #require(bar.submenu("Space"))
         let sidebar = try #require(view.items.first { $0.identifier?.rawValue == "sidebar" })
-        shell.window.makeFirstResponder(nil)
-        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Hide Sidebar")
+        shell.retitle(sidebar)
+        #expect(sidebar.title == "Hide Sidebar")
         // The Info items, in View and Space, are named as the app's validation names them: Show, then Hide while Info shows.
         let infos = [view, space].compactMap { menu in menu.items.first { $0.identifier?.rawValue == "insp" } }
         #expect(infos.count == 2)
@@ -325,7 +319,7 @@ struct AcceptanceShell {
         shell.showInfo(false)
         infos.forEach(shell.retitle)
         let lines = Mockup.lines(view)
-        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
+        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Keep Sidebar Open", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
                           "# Interface Size · Default", "Make Interface Bigger  ⌘+", "Make Interface Smaller  ⌘−", "Default Size  ⌘0", "---",
                           "Enter Page Full Screen  ⇧⌘F", "Enter Full Screen  ⌃⌘F"], "\(lines)")
         #expect(!space.items.contains { $0.identifier?.rawValue == "reload" }, "Reload lives in View only")
@@ -337,9 +331,10 @@ struct AcceptanceShell {
             try await Picture.window(shell, library: library, web: brief.web, "x9-1" + suffix, root: stage.home.root)
         }
         // Hidden, the sidebar's item says Show Sidebar; the request answered, Needs You goes.
-        shell.split.splitViewItems[0].isCollapsed = true
-        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Show Sidebar")
-        shell.split.splitViewItems[0].isCollapsed = false
+        shell.drawer.close()
+        shell.retitle(sidebar)
+        #expect(sidebar.title == "Show Sidebar")
+        shell.drawer.open()
         shell.waiting([], mine: 0)
         #expect(library.needing().isEmpty)
         let after = await AcceptanceBuild.read(host) { !$0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
@@ -474,8 +469,7 @@ struct AcceptanceShell {
         #expect(model.level == .none && model.chosenLevel == nil)
         let drawn = try await stage.drawn(shell)
         #expect(drawn.contains { $0.contains("pages of your own") }, "the drawn sidebar explains the word: \(drawn)")
-        let side = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
-        let said = await AcceptanceBuild.read(side.view) { $0.contains("Spaces, pages of your own") }
+        let said = await AcceptanceBuild.read(shell.drawer.host) { $0.contains("Spaces, pages of your own") }
         #expect(said.contains("Spaces, pages of your own"), "\(said)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "x1-2" + suffix, root: stage.home.root)
@@ -993,121 +987,6 @@ struct AcceptanceShell {
         return NSRect(x: at.minX, y: height - at.maxY, width: at.width, height: at.height)
     }
 
-    /// The floating sidebar (2.1): the sidebar hidden, a strip at the window's left edge under the toolbar; the pointer
-    /// resting there 200 ms, or a click on it, lays the sidebar over the page, 8 points inside the window's edges, with
-    /// its pin; it leaves a third of a second after the pointer, and with Esc. 2-1-hidden is the window before.
-    @Test("2-1: the floating sidebar") func v2_1() async throws {
-        let stage = try Stage("shell-2-1")
-        defer { stage.remove() }
-        let (shell, library, brief) = try await Self.calm(stage)
-        defer { brief.close() }
-        let side = shell.split.splitViewItems[0]
-        #expect(!shell.floats && shell.leftEdge.isHidden && shell.topEdge.isHidden, "pinned: no edge")
-        shell.split.toggleSidebar(nil)
-        #expect(await wait(until: { side.isCollapsed && shell.center.convert(shell.center.bounds, to: nil).minX == 0 }), "⌃⌘S hides the column")
-        shell.window.layoutIfNeeded()
-        #expect(shell.floats && !shell.leftEdge.isHidden && !shell.leftEdge.isAccessibilityElement(), "the edge is no control for VoiceOver")
-        let strip = Self.inWindow(shell.leftEdge, shell.leftEdge.bounds)
-        #expect(strip.minX == 0 && strip.width == 8 && strip.minY == shell.window.frame.height - shell.window.contentLayoutRect.maxY
-                && strip.maxY == shell.window.frame.height, "\(strip)")
-        func over() -> SidebarOver? { SidebarOver.shown(in: shell.layer) }
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "2-1-hidden" + suffix, root: stage.home.root)
-        }
-        // The pointer rests on the edge: nothing at once, the sidebar after 200 ms.
-        let rested = Date()
-        shell.leftEdge.mouseEntered(with: try Self.pointer(true, shell.leftEdge))
-        #expect(over() == nil, "not at once")
-        #expect(await wait(until: { over() != nil }) && Date().timeIntervalSince(rested) >= 0.2)
-        let laid = try #require(over())
-        #expect(await wait(until: { laid.alphaValue == 1 }))
-        laid.layoutSubtreeIfNeeded()
-        #expect(laid.floats && side.isCollapsed && laid.accessibilityLabel() == "Sidebar")
-        let card = Self.inWindow(laid, laid.card.frame), toolbar = shell.window.frame.height - shell.window.contentLayoutRect.maxY
-        #expect(card.minX == 8 && card.width == 244 && card.minY == toolbar + 8 && card.maxY == shell.window.frame.height - 8, "\(card)")
-        let pin = try #require(laid.subviews.compactMap { $0 as? SidebarOver.Pin }.first)
-        #expect(pin.accessibilityLabel() == "Keep Sidebar" && pin.toolTip == "Keep Sidebar (⌃⌘S)")
-        let kept = Self.inWindow(pin, pin.bounds)
-        // The button's frame holds its bezel's insets: its middle is where the mockup's 26-point pin is.
-        #expect(abs(kept.midX - (card.maxX - 23)) <= 1 && abs(kept.midY - (card.minY + 20)) <= 1, "the pin at the head's right: \(kept) \(card)")
-        let menu = try #require(MenuBar(builders: nil).submenu("View")?.items.first { $0.identifier?.rawValue == "sidebar" })
-        #expect(shell.window.validateMenuItem(menu) && menu.title == "Show Sidebar", "the column stays hidden: floating")
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "2-1" + suffix, root: stage.home.root)
-            #expect(over() === laid)
-        }
-        // The pointer leaves it: it goes a moment later; it comes back by a click on the edge, and goes with Esc.
-        laid.mouseEntered(with: try Self.pointer(true, laid))
-        laid.mouseExited(with: try Self.pointer(false, laid))
-        #expect(over() != nil, "not at once")
-        #expect(await wait(until: { over() == nil }), "it leaves with the pointer")
-        shell.leftEdge.mouseDown(with: try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 3, y: 300), modifierFlags: [], timestamp: 0,
-                                                                       windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0,
-                                                                       clickCount: 1, pressure: 1)))
-        #expect(over() != nil, "a click on the edge, at once")
-        // A row's menu open keeps it, past the leaving delay, until the menu closes.
-        try #require(over()).mouseExited(with: try Self.pointer(false, laid))
-        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: NSMenu())
-        await wait(0.6)
-        #expect(over() != nil, "a menu is open")
-        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: NSMenu())
-        #expect(shell.escape(try Self.escape(shell)) && over() == nil, "Esc")
-        // Shown again, the column has no edge.
-        side.isCollapsed = false
-        #expect(await wait(until: { shell.leftEdge.isHidden }) && !shell.floats)
-    }
-
-    /// The pin, ⌃⌘S and View (2.2): the pin keeps the floating sidebar as a column, the page beside it; ⌃⌘S goes from
-    /// one to the other, and pins the sidebar laid over; View says what Hide or Show Sidebar will do, and lists Page Full
-    /// Screen (⇧⌘F) above the Mac's Full Screen (⌃⌘F). The menu's lines are written beside the picture as 2-2-view.txt.
-    @Test("2-2: the pin, ⌃⌘S and the View menu") func v2_2() async throws {
-        let stage = try Stage("shell-2-2")
-        defer { stage.remove() }
-        let (shell, library, brief) = try await Self.calm(stage)
-        defer { brief.close() }
-        let side = shell.split.splitViewItems[0]
-        func over() -> SidebarOver? { SidebarOver.shown(in: shell.layer) }
-        side.isCollapsed = true
-        shell.float()
-        let pin = try #require(over()?.subviews.compactMap { $0 as? SidebarOver.Pin }.first)
-        pin.performClick(nil)
-        #expect(over() == nil && !side.isCollapsed && !shell.floats && shell.leftEdge.isHidden, "pinned")
-        let bar = MenuBar(builders: nil), view = try #require(bar.submenu("View"))
-        let sidebar = try #require(view.items.first { $0.identifier?.rawValue == "sidebar" })
-        shell.window.makeFirstResponder(nil)
-        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Hide Sidebar")
-        shell.split.toggleSidebar(nil)
-        #expect(await wait(until: { side.isCollapsed && shell.center.convert(shell.center.bounds, to: nil).minX == 0 }) && shell.floats)
-        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Show Sidebar")
-        // Laid over from the edge, ⌃⌘S keeps it: the column comes, the sidebar over the page goes. The split view
-        // ignores a toggle while its last one still animates.
-        await wait(1)
-        shell.float()
-        #expect(over() != nil)
-        shell.split.toggleSidebar(nil)
-        #expect(over() == nil)
-        #expect(await wait(until: { !side.isCollapsed && shell.center.convert(shell.center.bounds, to: nil).minX > 200 }) && !shell.floats)
-        #expect(shell.window.validateMenuItem(sidebar) && sidebar.title == "Hide Sidebar")
-        let full = try #require(view.items.first { $0.identifier?.rawValue == "pagefull" })
-        shell.retitle(full)
-        let lines = Mockup.lines(view)
-        #expect(lines == ["Hide Sidebar  ⌃⌘S", "Show Info  ⌘I", "---", "Show History…", "Show Keyboard Shortcuts  ⌘/", "---", "Reload Space  ⌘R", "---",
-                          "# Interface Size · Default", "Make Interface Bigger  ⌘+", "Make Interface Smaller  ⌘−", "Default Size  ⌘0", "---",
-                          "Enter Page Full Screen  ⇧⌘F", "Enter Full Screen  ⌃⌘F"], "\(lines)")
-        #expect(Keys.enabled("pagefull", Keys.Situation(space: true)) && !Keys.enabled("pagefull", Keys.Situation(space: false)))
-        if let gallery {
-            try FileManager.default.createDirectory(at: gallery, withIntermediateDirectories: true)
-            try (lines.joined(separator: "\n") + "\n").write(to: gallery.appendingPathComponent("2-2-view.txt"), atomically: true, encoding: .utf8)
-        }
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "2-2" + suffix, root: stage.home.root)
-        }
-        shell.pageFullScreen(true)
-        shell.retitle(full)
-        #expect(full.title == "Exit Page Full Screen")
-        shell.pageFullScreen(false)
-    }
-
     /// Page Full Screen (2.6), ⇧⌘F or the toolbar's last button: the sidebar and Info step aside, the toolbar and the
     /// lights go, the page fills the window from its top, the sticker discreet; a hint says how to leave. The pointer
     /// at the top edge brings the toolbar back over the page (the picture), until it leaves it; ⌃⌘S floats the sidebar
@@ -1124,15 +1003,15 @@ struct AcceptanceShell {
         #expect(Keys.claim(typed) == .command("pagefull"), "the page never sees ⇧⌘F")
         let button = try #require(shell.controls[Shell.full] as? ToolButton)
         #expect(button.action == command.action && button.toolTip == "Page Full Screen (⇧⌘F)" && !button.pressed)
-        let side = shell.split.splitViewItems[0], height = shell.window.frame.height
+        let height = shell.window.frame.height
         func top() -> CGFloat? { shell.shown.map { $0.convert($0.bounds, to: nil).maxY } }
         func lights() -> [Bool] { [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { shell.window.standardWindowButton($0)?.isHidden } }
-        #expect(shell.infoShown && !side.isCollapsed)
+        #expect(shell.infoShown)
         var said: [String] = []
         shell.layer.announce = { said.append($0) }
         shell.pageFullScreen(true)
         shell.window.layoutIfNeeded()
-        #expect(shell.pageFull && side.isCollapsed && !shell.infoShown && shell.window.toolbar?.isVisible == false && lights() == [true, true, true])
+        #expect(shell.pageFull && shell.column.constant == 0 && !shell.infoShown && shell.window.toolbar?.isVisible == false && lights() == [true, true, true])
         #expect(top() == height && view.web.frame.width == shell.window.frame.width, "the page fills the window")
         #expect(!button.pressed && button.toolTip == "Exit Page Full Screen (esc)" && button.accessibilityLabel() == "Exit Page Full Screen")
         #expect(said == ["Page Full Screen · esc to leave · ⌘K assistant"] && shell.layer.subviews.contains { $0 is NSHostingView<PageFullHint> }, "\(said)")
@@ -1158,13 +1037,13 @@ struct AcceptanceShell {
         shell.topEdge.mouseExited(with: try Self.pointer(false, shell.topEdge))
         #expect(shell.window.toolbar?.isVisible == true, "not at once")
         #expect(await wait(until: { shell.window.toolbar?.isVisible == false }) && lights() == [true, true, true] && !shell.topEdge.filled)
-        // ⌃⌘S floats the sidebar from the window's top; its pin ends Page Full Screen, the sidebar a column.
-        shell.split.toggleSidebar(nil)
-        let laid = try #require(SidebarOver.shown(in: shell.layer))
-        laid.layoutSubtreeIfNeeded()
-        #expect(laid.floats && Self.inWindow(laid, laid.card.frame).minY == 8)
-        shell.split.toggleSidebar(nil)
-        #expect(SidebarOver.shown(in: shell.layer) == nil)
+        // ⌃⌘S floats the sidebar from the window's top; the pin is away: no room.
+        shell.drawer.toggle()
+        shell.drawer.layoutSubtreeIfNeeded()
+        #expect(shell.drawer.state.peek && !library.sidebar.room)
+        #expect(await wait(until: { shell.drawer.card.minX == Drawer.margin }) && Self.inWindow(shell.drawer, shell.drawer.card).minY == 10)
+        shell.drawer.toggle()
+        #expect(!shell.drawer.state.peek)
         // An input method's Esc ends its composition, not Page Full Screen.
         let typing = NSTextView(frame: NSRect(x: 0, y: 0, width: 100, height: 20))
         shell.center.addSubview(typing)
@@ -1177,7 +1056,7 @@ struct AcceptanceShell {
         // Esc leaves: the sidebar and the toolbar back, the page under the toolbar, the sticker as it was.
         #expect(shell.escape(try Self.escape(shell)))
         shell.window.layoutIfNeeded()
-        #expect(!shell.pageFull && !side.isCollapsed && shell.window.toolbar?.isVisible == true && lights() == [false, false, false])
+        #expect(!shell.pageFull && library.sidebar.room && shell.window.toolbar?.isVisible == true && lights() == [false, false, false])
         #expect(top() == shell.window.contentLayoutRect.maxY && !glass.discreet && glass.corner.width == Glass.side && sticker.sign.alphaValue == 1)
         let esc = try Self.escape(shell)
         #expect(!button.pressed && shell.topEdge.isHidden && !shell.escape(esc), "Esc is the page's again")
@@ -1188,7 +1067,7 @@ struct AcceptanceShell {
         shell.fullScreen(false)
         shell.pageFullScreen(true)
         shell.show(nil)
-        #expect(!shell.pageFull && !side.isCollapsed && shell.window.toolbar?.isVisible == true)
+        #expect(!shell.pageFull && shell.drawer.state.dock && shell.window.toolbar?.isVisible == true, "New Space holds it open")
         shell.pageFullScreen(true)
         #expect(!shell.pageFull && shell.controls[Shell.full]?.isEnabled == false)
     }
@@ -1232,8 +1111,8 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.calm(stage)
         defer { brief.close() }
-        let host = shell.split.splitViewItems[0].viewController.view
-        let said = await AcceptanceBuild.read(host) { $0.contains("Spaces, pages of your own") && $0.contains("Stack, Asleep") }
+        shell.drawer.open()
+        let said = await AcceptanceBuild.read(shell.drawer.host) { $0.contains("Spaces, pages of your own") && $0.contains("Stack, Asleep") }
         #expect(said.contains("Spaces, pages of your own") && said.contains("New Space") && said.contains("Templates"), "\(said)")
         #expect(library.sections().map(\.group) == ["Work", "Notes", "Breaks"])
         #expect(!said.contains { $0.hasPrefix("Agents,") }, "no group is called Agents: \(said)")
@@ -1294,13 +1173,13 @@ struct AcceptanceShell {
     }
 
     /// The sidebar's finish (2.9, in v6.2's window): bottom left the word "something" alone and a real gear for
-    /// Settings; a list longer than the column fades out above Templates instead of cutting a row in half. Six more
+    /// Settings; a list longer than the column fades out above Templates instead of cutting a row in half. Ten more
     /// spaces in Notes, in a window 1000 by 660.
     @Test("2-9: something, and a real gear") func v2_9() async throws {
         let stage = try Stage("shell-2-9")
         defer { stage.remove() }
         let more = [("garden", "Garden notes"), ("review", "Morning review"), ("reading", "Reading list"), ("recipes", "Recipes"),
-                    ("wins", "Tiny wins"), ("trips", "Trips")]
+                    ("wins", "Tiny wins"), ("trips", "Trips"), ("birds", "Bird log"), ("films", "Films"), ("plants", "Plants"), ("walks", "Walks")]
         for (name, title) in more {
             try stage.home.space(name, page(#"{"contract": 1, "title": "\#(title)"}"#, "<p>Invented.</p>"))
         }
@@ -1310,15 +1189,16 @@ struct AcceptanceShell {
         try Self.eyes(shell, Stage.moment)
         let brief = try await stage.open("brief", in: shell, library)
         defer { brief.close() }
-        #expect(library.sections().map(\.entries.count) == [3, 8, 2])
-        let host = shell.split.splitViewItems[0].viewController.view
+        #expect(library.sections().map(\.entries.count) == [3, 12, 2])
+        shell.drawer.open()
+        let host = shell.drawer.host
         let said = await AcceptanceBuild.read(host) { $0.contains("Settings") && $0.contains("Templates") }
         #expect(said.contains("Settings") && said.contains("Templates"), "\(said)")
         #expect(Keys.tooltip("settings", "Settings") == "Settings (⌘,)")
         // The word alone, no sign: the sign with eyes is the assistant's.
-        let whole = try stage.sidebar(shell), lines = try await Picture.lines(whole), drawn = lines.map(\.words)
-        #expect(drawn.last == "something", "the foot says something alone: \(drawn)")
-        #expect(drawn.contains("Templates") && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
+        let whole = try stage.sidebar(shell, taller: 200), lines = try await Picture.lines(whole), drawn = lines.map(\.words)
+        #expect(drawn.contains("something"), "the foot says something alone: \(drawn)")
+        #expect(drawn.contains { $0.hasSuffix("Templates") } && drawn.contains { $0.contains("Daily brief") }, "\(drawn)")
         // The list is longer than its column, and it ends on a whole row that fades out above Templates. Drawn as the
         // window shows the column, below the title bar: the last row read above Templates spans what it spans at the
         // sidebar's full height (not cut through), stands out less than there (faded), and nothing of a next row is
@@ -1326,7 +1206,7 @@ struct AcceptanceShell {
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
         let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first)
         #expect((list.documentView?.frame.height ?? 0) > list.contentView.bounds.height, "the list overflows its column")
-        let shown = try stage.sidebar(shell, shown: true), seen = try await Picture.lines(shown)
+        let shown = try stage.sidebar(shell), seen = try await Picture.lines(shown)
         let templates = try #require(seen.first { $0.words.hasSuffix("Templates") }?.box, "\(seen.map(\.words))")
         let last = try #require(seen.filter { $0.box.maxY < templates.minY }.max { $0.box.minY < $1.box.minY })
         let full = try #require(lines.first { $0.words == last.words }?.box, "\(last.words) is a row of the whole list")
@@ -1338,22 +1218,14 @@ struct AcceptanceShell {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "2-9" + suffix, root: stage.home.root)
         }
-        // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24, and the nav
-        // rows, 30 × 1.24: New Space's and Go to…'s tops, as drawn, one row apart (the same letters' caps, so the same
-        // height above each row's middle).
-        func row() async throws -> CGFloat {
-            let rep = try stage.sidebar(shell), lines = try await Picture.lines(rep), scale = CGFloat(rep.pixelsHigh) / rep.size.height
-            let new = try #require(lines.first { $0.words.contains("New Space") }), go = try #require(lines.first { $0.words.contains("Go to") })
-            return (go.box.minY - new.box.minY) / scale
-        }
+        // The chrome grows with the words at Larger (6.3): the first group's header, as drawn, 25 × 1.24, and Templates.
         #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25) < 0.5 }, "\(library.sidebar.ends)")
-        let normal = try await row()
-        #expect(abs(normal - 30) < 1, "\(normal)")
+        #expect(SidebarView.nav == 30 && Drawer.width == 250)
         try await Stage.alone {
             Look.scale.size = .larger
+            _ = try stage.sidebar(shell)
             #expect(await wait { abs((library.sidebar.ends.min() ?? 0) - 25 * 1.24) < 0.5 }, "\(library.sidebar.ends)")
-            let larger = try await row()
-            #expect(abs(larger - 30 * 1.24) < 1, "\(larger)")
+            #expect(abs(SidebarView.nav - 30 * 1.24) < 0.01 && abs(Drawer.width - 250 * 1.24) < 0.01)
         }
     }
 
@@ -1387,7 +1259,8 @@ struct AcceptanceShell {
             let bottom = try #require(library.sidebar.ends.max())
             return top <= bottom - 30 && top + visible.height - SidebarView.fade >= bottom - 1
         }
-        let host = shell.split.splitViewItems[0].viewController.view
+        shell.drawer.open()
+        let host = shell.drawer.host
         shell.window.layoutIfNeeded()
         #expect((library.sidebar.ends.max() ?? 0) > host.frame.height, "the list is longer than the column")
         #expect(try scrolls(host), "the sidebar scrolls to \(last.title)")
@@ -1396,7 +1269,7 @@ struct AcceptanceShell {
         }
         shell.window.setContentSize(NSSize(width: 640, height: 480))
         shell.window.layoutIfNeeded()
-        #expect(try scrolls(shell.split.splitViewItems[0].viewController.view), "the sidebar of the smallest window scrolls to \(last.title)")
+        #expect(try scrolls(host), "the sidebar of the smallest window scrolls to \(last.title)")
         // Go to… finds it by its title.
         let palette = PaletteModel(library: library, eyes: { _ in .sleep }, enabled: { _ in true })
         palette.query = last.title
@@ -1420,7 +1293,7 @@ struct AcceptanceShell {
         library.select(.templates)
         shell.show(nil, templates: true)
         #expect(shell.window.title == "Templates" && shown() == [false, false, false] && shell.titleLine.accessibilityRole() == .staticText)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "2-10" + suffix, root: stage.home.root)
         }
@@ -1432,9 +1305,228 @@ struct AcceptanceShell {
     // MARK: Round 4, the final mockup
 
     @Test("r4-1: At rest: the glass header, no rail", .disabled("not built yet: S3")) func r4_1() async throws {}
-    @Test("r4-2: The drawer by the edge or ⌃⌘S", .disabled("not built yet: S2")) func r4_2() async throws {}
-    @Test("r4-3: The pin", .disabled("not built yet: S2")) func r4_3() async throws {}
-    @Test("r4-4: Night, over a light page", .disabled("not built yet: S2")) func r4_4() async throws {}
+
+    /// The sidebar by the edge or ⌃⌘S (R4.2): at rest the page has the window; a strip at the left edge under the
+    /// toolbar, no control for VoiceOver; the pointer resting there shows a mark, and 200 ms later, or at a click, the
+    /// sidebar comes over the page, 250 wide, 10 from the edges, in glass. It leaves 0.32 s after the pointer, never
+    /// during a menu, a rename, a sheet's wait or an Undo toast; a click on the page sends it away and still reaches the
+    /// page. The blur behind it is the window server's: the picture shows the tint alone.
+    @Test("r4-2: The drawer by the edge or ⌃⌘S") func r4_2() async throws {
+        let stage = try Stage("shell-r4-2")
+        defer { stage.remove() }
+        let (shell, library, _, view) = try await Self.weekend(stage)
+        defer { view.close() }
+        shell.showInfo(false)
+        shell.waiting(["agents"], mine: 0)
+        try stage.moment(shell)
+        let drawer = shell.drawer, edge = shell.leftEdge
+        shell.window.layoutIfNeeded()
+        #expect(!drawer.state.shown && !edge.isHidden && !edge.isAccessibilityElement() && shell.column.constant == 0)
+        #expect(view.web.frame.width == Stage.Size.main.width, "in a space the page takes the whole window")
+        let strip = Self.inWindow(edge, edge.bounds), under = shell.window.frame.height - shell.window.contentLayoutRect.maxY
+        #expect(strip.minX == 0 && strip.width == 8 && strip.minY == under && strip.maxY == shell.window.frame.height, "\(strip)")
+        #expect(drawer.hitTest(NSPoint(x: 100, y: 300)) == nil, "away, it takes no click")
+        // The pointer rests on the edge: its mark at once, the sidebar after 200 ms.
+        let rested = Date()
+        edge.mouseEntered(with: try Self.pointer(true, edge))
+        #expect(!drawer.state.shown && edge.subviews.count == 1 && edge.subviews[0].frame.width == 7, "not at once")
+        #expect(await wait(until: { drawer.state.peek }) && Date().timeIntervalSince(rested) >= 0.2)
+        #expect(await wait(until: { drawer.card.minX == Drawer.margin }))
+        shell.window.layoutIfNeeded()
+        let card = Self.inWindow(drawer, drawer.card)
+        #expect(card.minX == 10 && card.width == 250 && card.minY == under + 10 && card.maxY == shell.window.frame.height - 10, "\(card)")
+        #expect(edge.isHidden && drawer.accessibilityLabel() == "Sidebar" && shell.column.constant == 0, "over the page, which does not move")
+        #expect(view.web.frame.width == Stage.Size.main.width)
+        let sidebar = try #require(MenuBar(builders: nil).submenu("View")?.items.first { $0.identifier?.rawValue == "sidebar" })
+        shell.retitle(sidebar)
+        #expect(sidebar.title == "Hide Sidebar")
+        #expect((shell.toolbarItems.first { $0.itemIdentifier == Shell.sidebar }?.view as? ToolButton)?.pressed == true)
+        library.sidebar.hovered = .space("logbook")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "r4-2" + suffix, root: stage.home.root)
+        }
+        library.sidebar.hovered = nil
+        // The drawn head: the word, no New Space or Go to… row.
+        let drawn = try stage.drawn(shell)
+        for line in ["Spaces", "pages of your own", "Needs You", "Templates", "something"] { #expect(drawn.contains { $0.contains(line) }, "\(line): \(drawn)") }
+        #expect(!drawn.contains { $0.contains("Go to") || $0.contains("New Space") }, "\(drawn)")
+        // The pointer leaves it: it goes a moment later.
+        let left = Date()
+        drawer.mouseEntered(with: try Self.pointer(true, drawer))
+        drawer.mouseExited(with: try Self.pointer(false, drawer))
+        #expect(drawer.state.peek, "not at once")
+        #expect(await wait(until: { !drawer.state.peek }) && Date().timeIntervalSince(left) >= 0.3, "it leaves with the pointer")
+        #expect(await wait(until: { drawer.host.isHidden && !edge.isHidden }), "the edge is back")
+        // A click on the edge: at once. A row's menu, a rename, an Undo toast, a sheet's wait each keep it.
+        edge.mouseDown(with: try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 3, y: 300), modifierFlags: [], timestamp: 0,
+                                                             windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)))
+        #expect(drawer.state.peek, "at once")
+        drawer.mouseExited(with: try Self.pointer(false, drawer))
+        NotificationCenter.default.post(name: NSMenu.didBeginTrackingNotification, object: NSMenu())
+        await wait(0.6)
+        #expect(drawer.state.peek, "a menu is open")
+        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: NSMenu())
+        library.beginRename(.group("Work"))
+        await wait(0.6)
+        #expect(drawer.state.peek, "a name is being edited")
+        library.cancelRename()
+        shell.layer.announce = { _ in }
+        let undo = shell.toast("Trashed", action: Toast.Action(label: "Undo") {}, seconds: 60)
+        await wait(0.6)
+        #expect(drawer.state.peek && shell.holdsDrawer, "an Undo toast is up")
+        undo.leave(now: true)
+        #expect(await wait(until: { !drawer.state.peek }), "then it leaves")
+        // ⌃⌘S brings it with the keys; Esc takes it away, the keys back on the page; a click on the page too.
+        shell.window.makeFirstResponder(view.web)
+        drawer.toggle()
+        #expect(drawer.state.peek && shell.window.firstResponder === drawer.host)
+        #expect(shell.escape(try Self.escape(shell)) && !drawer.state.peek && shell.window.firstResponder === view.web, "Esc")
+        drawer.toggle()
+        let page = try #require(NSEvent.mouseEvent(with: .leftMouseDown, location: NSPoint(x: 700, y: 300), modifierFlags: [], timestamp: 0,
+                                                   windowNumber: shell.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+        drawer.clicked(page)
+        #expect(!drawer.state.peek, "a click on the page")
+    }
+
+    /// The pin (R4.3): the pin keeps the sidebar, the same card, and the page narrows beside it, the toolbar where it
+    /// was; again, it floats and leaves with the pointer. ⌃⌘S hides a pinned sidebar for a while and brings it back
+    /// pinned. View › Keep Sidebar Open is the same bit, checked, and so is Settings' row, kept in the preferences. A
+    /// window under 860 points has no room: the pin hides and the sidebar floats. On New Space and Templates it stays
+    /// open beside the page, ⌃⌘S hiding it there too, and pressing Build sends it away. Sheets hang over the page.
+    @Test("r4-3: The pin") func r4_3() async throws {
+        let stage = try Stage("shell-r4-3")
+        defer { stage.remove() }
+        let (shell, library, _, view) = try await Self.weekend(stage)
+        defer { view.close() }
+        shell.showInfo(false)
+        shell.waiting(["agents"], mine: 0)
+        try stage.moment(shell)
+        let drawer = shell.drawer
+        func start() -> CGFloat { shell.center.convert(shell.center.bounds, to: nil).minX }
+        #expect(!library.preferences.pinned && !Preferences(stage.home.places).pinned, "Floating at first")
+        let title = shell.titleLine.convert(shell.titleLine.bounds, to: nil).minX
+        drawer.open()
+        #expect(await wait(until: { drawer.card.minX == Drawer.margin }))
+        shell.keepSidebar()
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.dock && drawer.state.kept && !drawer.state.peek && library.sidebar.kept && shell.column.constant == 270)
+        #expect(start() == 270 && view.web.frame.width == Stage.Size.main.width - 270, "the page beside it: \(start())")
+        #expect(shell.titleLine.convert(shell.titleLine.bounds, to: nil).minX == title, "the toolbar does not move")
+        #expect(drawer.card.minX == 10 && drawer.card.width == 250, "the same card")
+        #expect(Preferences(stage.home.places).pinned, "kept for the next start")
+        let bar = MenuBar(builders: nil), menu = try #require(bar.submenu("View"))
+        let keep = try #require(menu.items.first { $0.identifier?.rawValue == "keepSidebar" })
+        shell.retitle(keep)
+        #expect(keep.title == "Keep Sidebar Open" && keep.state == .on && keep.keyEquivalent.isEmpty)
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: view.web, "r4-3" + suffix, root: stage.home.root)
+        }
+        // ⌃⌘S: away for a while, and back pinned.
+        drawer.toggle()
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.away && !drawer.state.shown && shell.column.constant == 0 && start() == 0)
+        shell.retitle(keep)
+        #expect(keep.state == .off, "the pin is up while it is away")
+        drawer.open()
+        #expect(drawer.state.peek, "the edge still brings it")
+        drawer.toggle()
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.dock && drawer.state.pinned && !drawer.state.away && start() == 270)
+        // Sheets hang over the page beside it; toasts and the sticker follow the center.
+        let sheet = Sheet(icon: nil, title: "A sheet", actions: [])
+        #expect(shell.window(shell.window, willPositionSheet: sheet, using: .zero).minX == 270)
+        // A narrow window: no room, the pin hides, the sidebar floats; wide again it docks.
+        shell.window.setContentSize(NSSize(width: 859, height: 760))
+        shell.window.layoutIfNeeded()
+        #expect(!drawer.state.dock && !library.sidebar.room && shell.column.constant == 0 && start() == 0 && drawer.state.pinned)
+        drawer.toggle()
+        #expect(drawer.state.peek, "⌃⌘S floats it")
+        drawer.close()
+        shell.window.setContentSize(NSSize(width: 860, height: 760))
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.dock && library.sidebar.room && start() == 270)
+        shell.window.setContentSize(Stage.Size.main)
+        // Settings' row is the same bit; a second click on the pin floats it.
+        library.preferences.pinned = false
+        #expect(await wait(until: { !drawer.state.dock }) && !drawer.state.peek)
+        library.preferences.pinned = true
+        #expect(await wait(until: { drawer.state.dock }))
+        shell.keepSidebar()
+        #expect(!drawer.state.pinned && !library.preferences.pinned && !drawer.state.shown, "the pointer elsewhere: it leaves")
+        drawer.mouseEntered(with: try Self.pointer(true, drawer))
+        shell.keepSidebar()
+        shell.keepSidebar()
+        #expect(drawer.state.peek && !drawer.state.pinned, "the pointer on it: it stays until the pointer leaves")
+        drawer.mouseExited(with: try Self.pointer(false, drawer))
+        #expect(await wait(until: { !drawer.state.peek }))
+        // New Space and Templates hold it open; ⌃⌘S hides it there, the next view holds it again.
+        library.select(.newSpace)
+        shell.show(nil)
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.dock && drawer.state.held && start() == 270 && library.sidebar.kept == false)
+        drawer.toggle()
+        shell.window.layoutIfNeeded()
+        #expect(drawer.state.off && !drawer.state.shown && start() == 0)
+        shell.show(nil, templates: true)
+        #expect(drawer.state.dock, "Templates holds it")
+        drawer.toggle()
+        drawer.toggle()
+        #expect(drawer.state.dock)
+        // Back on a space it leaves, except from under the pointer, which it leaves with.
+        drawer.mouseEntered(with: try Self.pointer(true, drawer))
+        shell.show(view)
+        #expect(drawer.state.peek && !drawer.state.dock, "it stays under the pointer")
+        drawer.mouseExited(with: try Self.pointer(false, drawer))
+        #expect(await wait(until: { !drawer.state.peek }))
+        // Either full screen: the pin hides.
+        shell.pageFullScreen(true)
+        #expect(!library.sidebar.room)
+        shell.pageFullScreen(false)
+    }
+
+    /// The states of the pure value, the mockup's YW, row by row: what the window cannot reach in one scenario.
+    @Test func theSidebarsStateIsTheMockups() {
+        var state = DrawerState()
+        #expect(state.held && state.dock && state.shown, "New Space at first")
+        state.build(true)
+        #expect(!state.held && !state.dock, "pressing Build sends it away")
+        state.toggle()
+        #expect(state.peek && !state.dock, "⌃⌘S over a build")
+        state.build(false)
+        state.viewed(page: true, inside: false, writing: false)
+        #expect(!state.peek && !state.shown)
+        state.peek = true
+        state.viewed(page: true, inside: true, writing: true)
+        #expect(!state.peek, "a space being built takes the whole window, even under the pointer")
+        state.room = false
+        state.pin(inside: false)
+        #expect(state.pinned && !state.dock, "no room: the pin waits")
+        state.room = true
+        #expect(state.dock)
+        state.set(pinned: false)
+        #expect(!state.pinned && !state.shown)
+    }
+
+    /// Night, over a light page (R4.4): Daily brief keeps its light colours under the dark app. The names stay readable
+    /// on the tint alone, the worst case a picture can draw: over the page, unblurred. The tint is 74 % over 50 % black.
+    @Test("r4-4: Night, over a light page") func r4_4() async throws {
+        let stage = try Stage("shell-r4-4")
+        defer { stage.remove() }
+        let (shell, library, brief) = try await Self.calm(stage)
+        defer { brief.close() }
+        shell.drawer.open()
+        #expect(await wait(until: { shell.drawer.card.minX == Drawer.margin }))
+        library.sidebar.hovered = .space("logbook")
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "r4-4" + suffix, root: stage.home.root, page: NSAppearance(named: .aqua))
+        }
+        try await Stage.alone {
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+            #expect(await wait(until: { shell.window.effectiveAppearance.name == .darkAqua }))
+            let words = try await Picture.lines(try stage.sidebar(shell)).map(\.words)
+            for line in ["Spaces", "Needs You", "Logbook", "Oracle", "Templates"] { #expect(words.contains { $0.contains(line) }, "\(line): \(words)") }
+        }
+    }
     @Test("f3-1: What waits, the drawer closed: dot, count, ⌘P", .disabled("not built yet: AG8")) func f3_1() async throws {}
     @Test("r5-1: Delete Group…, Undo", .disabled("not built yet: S4")) func r5_1() async throws {}
     @Test("r5-2: The root on top, Move to ▸ No Group", .disabled("not built yet: S4")) func r5_2() async throws {}

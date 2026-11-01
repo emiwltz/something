@@ -181,8 +181,7 @@ final class Stage {
     /// a closure of the window (e14 and d4 show them following a session): a scenario whose engine runs the fake builder
     /// would forget fake sessions of the others at its next refresh, so the moment is given here, as data.
     func moment(_ shell: Shell) throws {
-        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
-        let own = host.rootView.eyes
+        let host = shell.drawer.host, own = host.rootView.eyes
         host.rootView = SidebarView(library: host.rootView.library, assistant: host.rootView.assistant, eyes: { Stage.moment[$0] ?? own($0) })
     }
 
@@ -192,14 +191,11 @@ final class Stage {
         try await Picture.text(sidebar(shell))
     }
 
-    /// The sidebar of `shell` drawn offscreen at its size, as `drawn` reads it; `shown`, at the size of its part below
-    /// the title bar, as the window's picture draws it, where a long list meets its fade.
-    func sidebar(_ shell: Shell, shown: Bool = false) throws -> NSBitmapImageRep {
-        let host = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+    /// The sidebar of `shell` drawn offscreen at its size, or `taller` points taller, as `drawn` reads it.
+    func sidebar(_ shell: Shell, taller: CGFloat = 0) throws -> NSBitmapImageRep {
+        let host = shell.drawer.host
         let offscreen = Offscreen(NSHostingView(rootView: host.rootView))
-        var size = host.view.bounds.size
-        if shown { size.height = min(host.view.convert(host.view.bounds, to: nil).maxY, shell.window.contentLayoutRect.maxY) }
-        offscreen.window.setContentSize(size)
+        offscreen.window.setContentSize(NSSize(width: host.bounds.width, height: host.bounds.height + taller))
         offscreen.view.layoutSubtreeIfNeeded()
         let rep = try #require(offscreen.view.bitmapImageRepForCachingDisplay(in: offscreen.view.bounds))
         offscreen.view.cacheDisplay(in: offscreen.view.bounds, to: rep)
@@ -215,8 +211,8 @@ final class Stage {
         library.relist()
         let shell = Shell(library: library, info: info, assistant: AssistantModel(engine: home.engine(), places: home.places), autosave: false)
         shell.window.setContentSize(size)
-        if lively, let host = shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView> {
-            let own = host.rootView.eyes
+        if lively {
+            let host = shell.drawer.host, own = host.rootView.eyes
             host.rootView = SidebarView(library: library, assistant: host.rootView.assistant, eyes: { [unowned library] in
                 library.selection == .space($0) ? own($0) : Stage.moment[$0] ?? own($0)
             })
@@ -309,14 +305,11 @@ final class Stage {
 @MainActor
 enum Picture {
     /// Draws the whole window of `shell`, title bar and toolbar included, into `name`.png at 2x; its lights gray when
-    /// it lost the keys (`keyed` false).
-    static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL, keyed: Bool = true) async throws {
+    /// it lost the keys (`keyed` false); `page` holds the page in an appearance of its own, as a page that keeps its
+    /// colours does.
+    static func window(_ shell: Shell, library: Library, web: WKWebView?, _ name: String, root: URL, keyed: Bool = true, page: NSAppearance? = nil) async throws {
         let inspector = try #require(shell.inspector.viewController as? NSHostingController<InspectorView>)
-        let sidebar = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
-        let columns: [(item: NSSplitViewItem, view: NSView)] = [
-            (shell.split.splitViewItems[0], NSHostingView(rootView: sidebar.rootView)),
-            (shell.inspector, NSHostingView(rootView: inspector.rootView)),
-        ].filter { !$0.0.isCollapsed }
+        let columns: [(item: NSSplitViewItem, view: NSView)] = [(shell.inspector, NSHostingView(rootView: inspector.rootView))].filter { !$0.0.isCollapsed }
         // A column's part below the title bar: all of a full-height one but the bar, all of one that starts under it.
         func shown(_ column: NSView) -> NSRect {
             var place = column.convert(column.bounds, to: nil)
@@ -339,6 +332,9 @@ enum Picture {
         // Made clear rather than hidden: hiding it would take the keys from what it holds (the palette's field).
         let alpha = shell.layer.alphaValue
         shell.layer.alphaValue = 0
+        // No drawing here reaches the sidebar's blur, which the window server does: it is made again below.
+        shell.drawer.blur.alphaValue = 0
+        defer { shell.drawer.blur.alphaValue = 1 }
         frame.cacheDisplay(in: frame.bounds, to: rep)
         shell.layer.alphaValue = alpha
         let apart = try columns.map { column in
@@ -357,8 +353,8 @@ enum Picture {
         // WebKit hands a page the window's appearance on its own time, after the window: wait until the page wears the
         // picture's, or a day picture shows the page in the Mac's night (or the reverse).
         if let web, web.superview != nil, web.url != nil {
-            let dark = (NSApp.appearance ?? web.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            if NSApp.appearance != nil { web.appearance = NSApp.appearance }
+            let dark = (page ?? NSApp.appearance ?? web.effectiveAppearance).bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            if NSApp.appearance != nil { web.appearance = page ?? NSApp.appearance }
             for _ in 0..<50 {
                 if (try? await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches")) as? Bool == dark { break }
                 _ = await wait(0.1)
@@ -385,7 +381,7 @@ enum Picture {
         }
         // In Page Full Screen the toolbar brought back lies over the page, on its band.
         let floating = covers + (web == nil ? [] : [shell.glass].filter { !$0.isHidden }) + [shell.topEdge].filter(\.filled)
-            + [shell.layer].filter { !$0.isHidden }
+            + [shell.chrome] + [shell.layer].filter { !$0.isHidden }
         let placed = floating.map { ($0, $0.convert($0.bounds, to: frame)) }
         let over = try placed.map { view, place in
             let drawn = try bitmap(view.bounds.size)
@@ -418,6 +414,13 @@ enum Picture {
                 // here reaches: the page is filtered as they would.
                 let filters = covers.compactMap { $0.layer?.backgroundFilters as? [CIFilter] }.flatMap { $0 }.compactMap { $0.copy() as? CIFilter }
                 filtered(snapshot, filters).draw(in: web.convert(web.bounds, to: frame))
+                // The sidebar's glass over the page, a reconstruction, not the window server's own pixels.
+                if shell.drawer.state.peek, let blur = CIFilter(name: "CIGaussianBlur", parameters: [kCIInputRadiusKey: 26]) {
+                    NSGraphicsContext.saveGraphicsState()
+                    NSBezierPath(roundedRect: shell.drawer.convert(shell.drawer.card, to: frame), xRadius: Drawer.radius, yRadius: Drawer.radius).addClip()
+                    filtered(snapshot, [blur]).draw(in: web.convert(web.bounds, to: frame))
+                    NSGraphicsContext.restoreGraphicsState()
+                }
             }
             for (image, place, alpha) in held { image.draw(in: place, from: .zero, operation: .sourceOver, fraction: alpha) }
             for (drawn, place) in over {

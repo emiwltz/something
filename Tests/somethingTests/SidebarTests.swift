@@ -200,7 +200,9 @@ import Testing
         side.cacheDisplay(in: side.bounds, to: rep)
         var count = 0
         for x in Int(Double(rep.pixelsWide) * left / 232)..<rep.pixelsWide - 8 {
-            for y in 0..<rep.pixelsHigh {
+            // Between the head and the foot, whose buttons lie at the rows' end.
+            let point = rep.pixelsHigh / Int(rep.size.height)
+            for y in 40 * point..<rep.pixelsHigh - 60 * point {
                 if let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5, color.brightnessComponent < 0.4 {
                     count += 1
                 }

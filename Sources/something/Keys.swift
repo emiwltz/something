@@ -71,7 +71,8 @@ enum Keys {
         Command(id: "full", title: "Enter Full Screen", key: "f", modifiers: [.command, .control], action: #selector(NSWindow.toggleFullScreen(_:)),
                 owner: "W5", area: .window, line: "Full screen", mine: true),
         Command(id: "sidebar", title: "Show Sidebar", key: "s", modifiers: [.command, .control],
-                action: #selector(NSSplitViewController.toggleSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
+                action: #selector(App.showSidebar(_:)), owner: "W2", area: .window, line: "Show or hide the sidebar", mine: true),
+        Command(id: "keepSidebar", title: "Keep Sidebar Open", action: #selector(App.keepSidebarOpen(_:)), owner: "S2"),
         // ⌘+ is ⇧= on a US layout; ⌘= is taken for it too (claim).
         Command(id: "bigger", title: "Make Interface Bigger", key: "+", action: #selector(App.biggerInterface(_:)), owner: "S7", area: .window,
                 line: "Bigger interface", mine: true),
@@ -165,7 +166,7 @@ enum Keys {
         ("File", [.item("new"), .item("tpls"), .separator, .item("import"), .item("export"), .separator,
                   .item("finder"), .item("trash"), .separator, .item("close")]),
         ("Edit", [.item("undo"), .item("redo"), .separator, .item("cut"), .item("copy"), .item("paste"), .item("selectAll")]),
-        ("View", [.item("sidebar"), .item("insp"), .separator, .item("history"), .item("keys"), .separator,
+        ("View", [.item("sidebar"), .item("keepSidebar"), .item("insp"), .separator, .item("history"), .item("keys"), .separator,
                   .item("reload"), .separator, .header("size"), .item("bigger"), .item("smaller"), .item("defaultSize"), .separator,
                   .item("pagefull"), .item("full")]),
         ("Go", [.item("palette"), .separator, .header("Spaces"), .spaces, .separator, .item("new"), .item("tpls")]),

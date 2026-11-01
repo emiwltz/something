@@ -469,6 +469,7 @@ await something.store.set("seen", [...seen, "a1"]);
   starting with ".", or it cannot be exported and imported whole. Import takes that file back whole, or an older
   `.something` file (JSON: its files in base64). On another Mac, the space asks for its level again and fills with that
   Mac's agents.
+- **The sidebar.** It may come over the left of your space, 250 points wide, and your page gets no `resize`; kept open, it narrows your space as the panel does.
 - **The assistant.** Your space's own assistant rests over it as a 44-point sticker, 16 points from its bottom right
   corner, and opens there into a card 412 points wide. The person may drag the sticker; it settles against the
   left or right edge. Keep what matters out of the 76 points along those two edges, or let it scroll. The first error

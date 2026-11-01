@@ -544,10 +544,9 @@ struct AcceptanceTrust {
         let bold = spoof.attributedStringValue
         #expect(bold.attribute(.font, at: 8, effectiveRange: nil) as? NSFont != Look.font(.code, size: 12, weight: .semibold))
         #expect(bold.attribute(.font, at: bold.length - 3, effectiveRange: nil) as? NSFont == Look.font(.code, size: 12, weight: .semibold))
-        // Under the toolbar, centred over the space and not over the whole window.
+        // Under the toolbar, over the space, which has the whole window.
         let hang = shell.window(shell.window, willPositionSheet: sheet, using: .zero)
-        let side = shell.split.splitViewItems[0].viewController.view.frame.width
-        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == side && hang.maxX == shell.window.frame.width && side > 0)
+        #expect(hang.minY == shell.window.contentLayoutRect.maxY && hang.minX == 0 && hang.maxX == shell.window.frame.width)
         try await stage.appearances { suffix in
             try await Picture.sheet(sheet, over: shell, library: library, web: brief.web, "e7" + suffix, root: stage.home.root)
         }
@@ -672,8 +671,6 @@ struct AcceptanceTrust {
         shell.window.setFrameOrigin(.zero)
         let agents = try await stage.open("agents", in: shell, library)
         defer { agents.close() }
-        shell.split.splitViewItems[0].isCollapsed = true
-        shell.window.layoutIfNeeded()
         var size = shell.window.contentRect(forFrameRect: shell.window.frame).size
         (size.width, size.height) = (size.width + screen.width - agents.web.frame.width, size.height + screen.height - agents.web.frame.height)
         shell.window.setContentSize(size)

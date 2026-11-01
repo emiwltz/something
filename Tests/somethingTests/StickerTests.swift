@@ -133,7 +133,7 @@ struct StickerTests {
             shell.library.opened = { [weak shell] in if $0 == .newSpace { shell?.show(nil); shell?.assistant.place = .blank } }
             model.open = true
             #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
-            let sidebar = try #require(shell.split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)
+            let sidebar = shell.drawer.host
             let keys = FieldKeys(shell.window) { [weak shell] in model.place == .blank ? shell?.shown : nil }
             sidebar.rootView.newSpace()
             shell.glass.card.layoutSubtreeIfNeeded()

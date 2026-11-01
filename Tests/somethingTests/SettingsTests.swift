@@ -19,8 +19,6 @@ import Testing
         model.spaces = { [("brief", "Daily brief"), ("logbook", "Logbook")] }
         model.apply = { effects.applied.append($0) }
         model.resize = { effects.sized.append($0) }
-        model.floating = { effects.floats }
-        model.float = { effects.floats = $0 }
         model.shortcuts = { effects.shortcuts += 1 }
         model.levels = {
             [.init(id: "brief", title: "Daily brief", level: .watch, folder: nil),
@@ -67,8 +65,8 @@ import Testing
         var listed = Options()
         (listed.model, listed.effort) = ([Option(value: "opus", label: "Opus 5.5")], [Option(value: "high", label: "High")])
         model.preferences.listed["claude"] = listed
-        // The sidebar, a space's level, the words and the buttons write no key: the window, the grants or nothing.
-        let expected: [String: String?] = ["When something opens": "openAtStart", "Theme": "appearance", "Interface size": "size", "Sidebar": nil,
+        // A space's level, the words and the buttons write no key: the window, the grants or nothing.
+        let expected: [String: String?] = ["When something opens": "openAtStart", "Theme": "appearance", "Interface size": "size", "Sidebar": "pinned",
                                            "Program · Model and effort": "assistant", "Model and effort": "model", "A new space may": "level",
                                            "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil, "/Users/example/code/atelier": nil,
                                            "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
@@ -106,7 +104,6 @@ import Testing
         #expect(seen == Set(expected.keys))
         #expect(effects.revealed == [home.places.spaces] && effects.shortcuts == 1)
         #expect(effects.applied == [.light] && effects.sized == [.large], "the theme and the size apply at once")
-        #expect(effects.floats && model.floats, "the sidebar floats at once")
         #expect(effects.levels.map(\.0) == ["brief", "watch"] && effects.levels.map(\.1) == [.none, .none], "each space's level, as Info changes it")
         #expect(effects.chosen == ["codex"] && effects.asking == [true], "the assistant takes the default agent and Ask Before Every Change")
         #expect(Preferences(home.places).values == model.preferences.values, "each change is on the disk")
@@ -126,7 +123,7 @@ import Testing
             case .nothing: shown[row.title] = row.note
             }
         }
-        #expect(shown == ["When something opens": "The last space you had open", "Theme": "Auto", "Interface size": "Default", "Sidebar": "Pinned",
+        #expect(shown == ["When something opens": "The last space you had open", "Theme": "Auto", "Interface size": "Default", "Sidebar": "Floating",
                           // Before Claude Code ever listed its models, nothing is guessed (rule 3).
                           "Program · Model": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
                           "Notify me when an agent asks": "off", "Daily brief": "Watch", "Project watch": "Run", "Unread": "Not known",

@@ -27,9 +27,8 @@ import Testing
             #expect(shell.window.contentView?.frame.size == NSSize(width: 1200, height: 760))
             #expect(shell.window.contentMinSize == NSSize(width: 640, height: 480))
             #expect(shell.inspector.minimumThickness == 320 && shell.inspector.maximumThickness == 320 && shell.inspector.isCollapsed)
-            #expect(shell.split.splitView.arrangedSubviews[0].frame.width == 236)
-            #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title,
-                                                                           .flexibleSpace, Shell.tools])
+            #expect(shell.column.constant == 270, "held open on New Space")
+            #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.sidebar, Shell.title, .flexibleSpace, Shell.tools])
             let items = shell.toolbarItems
             #expect(items.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full], "no Reload, no waiting chip")
             @MainActor func item(_ id: NSToolbarItem.Identifier) -> NSToolbarItem? { items.first { $0.itemIdentifier == id } }
@@ -72,7 +71,7 @@ import Testing
             let held = NSView(frame: NSRect(x: 500, y: 300, width: 200, height: 100))
             layer.hold(held)
             #expect(!layer.isHidden && layer.superview?.subviews.last === layer)
-            #expect(shell.split.splitView.arrangedSubviews.count == 3, "the layer is no pane")
+            #expect(shell.split.splitView.arrangedSubviews.count == 2, "the layer is no pane")
             #expect(root.hitTest(NSPoint(x: 550, y: 350)) === held)
             let beside = try #require(root.hitTest(NSPoint(x: 100, y: 100)))
             #expect(beside !== layer && !beside.isDescendant(of: layer))

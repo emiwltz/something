@@ -113,7 +113,7 @@ struct AcceptanceCommand {
         let shows = ["Start", "When something opens", "The last space you had open", "Look", "Theme", "Auto follows your Mac", "Auto", "Light",
                      "Dark", "Interface size", "Default", "Large", "Larger", "Sidebar", "Pinned", "Floating"]
         try await settings(.general, "x7-1", shows: shows, hears: ["When something opens: The last space you had open", "Interface size: Default",
-                                                                   "Sidebar: Pinned", "Light", "Show Shortcuts"]) { settings, _ in
+                                                                   "Sidebar: Floating", "Light", "Show Shortcuts"]) { settings, _ in
             let sections = settings.model.sections(.general)
             #expect(sections.map(\.title) == ["Start", "Look", ""])
             #expect(sections.flatMap(\.rows).map(\.title) == ["When something opens", "Theme", "Interface size", "Sidebar", "Keyboard shortcuts"])
@@ -624,14 +624,15 @@ struct AcceptanceCommand {
         defer { stage.remove() }
         let (shell, library, brief) = try await AcceptanceShell.calm(stage)
         defer { brief.close() }
-        let side = shell.split.splitViewItems[0]
-        func width() -> CGFloat { side.viewController.view.frame.width }
+        shell.keepSidebar()
+        shell.window.layoutIfNeeded()
+        func width() -> CGFloat { shell.column.constant }
         func inner() async -> Double { (try? await brief.web.evaluateJavaScript("innerWidth")) as? Double ?? 0 }
         let before = (width(), await inner())
         try await stage.appearances { suffix in
             Look.scale.size = .larger
             defer { Look.scale.size = .standard }
-            #expect(await wait(until: { abs(width() - before.0 * 1.24) <= 1 }), "the sidebar grows: \(width()) from \(before.0)")
+            #expect(await wait(until: { abs(width() - (250 * 1.24 + 20)) <= 1 }), "the sidebar grows: \(width()) from \(before.0)")
             let title = shell.titleLine.line.attribute(.font, at: 0, effectiveRange: nil) as? NSFont
             #expect(abs(Look.row - 31) < 0.01 && brief.web.pageZoom == 1.24 && abs(shell.inspector.minimumThickness - 396.8) < 0.01)
             #expect(abs((title?.pointSize ?? 0) - 13.5 * 1.24) < 0.01, "\(String(describing: title))")

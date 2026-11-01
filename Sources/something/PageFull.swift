@@ -1,20 +1,15 @@
-// More room for the page, inside the window. Page Full Screen (⇧⌘F, the toolbar's last button): the sidebar and Info
-// step aside, the toolbar and the lights go, and the page fills the window from its top; the pointer at the top edge
+// More room for the page, inside the window. Page Full Screen (⇧⌘F, the toolbar's last button): the sidebar floats, Info
+// closes, the toolbar and the lights go, and the page fills the window from its top; the pointer at the top edge
 // brings the toolbar back over the page until it leaves it, and Esc or ⇧⌘F again ends it. It is not the Mac's full
-// screen (⌃⌘F), which stays: asking for one leaves the other. The floating sidebar: a sidebar column the person hid
-// still floats at the window's left edge, where the pointer resting 200 ms, or a click, lays it over the page
-// (SidebarOver) until the pointer leaves it; its pin keeps it, as ⌃⌘S does, a column again. In Page Full Screen the
-// sidebar floats the same way. In both full screens the sticker is discreet (Glass).
+// screen (⌃⌘F), which stays: asking for one leaves the other. The window's left edge: while the sidebar is away, a
+// 4 × 40 mark shows where the pointer rests, and 200 ms later, or at a click, the sidebar comes over the page
+// (Drawer.swift). In both full screens the sticker is discreet (Glass).
 import AppKit
 import SwiftUI
 
 extension Shell {
-    /// Whether the sidebar floats: its column hidden in the window (not in the Mac's full screen), or the page in Page
-    /// Full Screen.
-    var floats: Bool { pageFull || (!full && split.splitViewItems[0].isCollapsed) }
-
     /// Puts the page in Page Full Screen (`on`) or back, only while a space is open; from the Mac's full screen, once
-    /// the window has left it. Info closes, the sidebar steps aside and comes back as it was, the toolbar and the lights
+    /// the window has left it. Info closes, the sidebar floats, the toolbar and the lights
     /// go, and a hint at the top says how to leave.
     func pageFullScreen(_ on: Bool) {
         pageAfterFull = false
@@ -23,15 +18,13 @@ extension Shell {
             pageAfterFull = true
             return window.toggleFullScreen(nil)
         }
-        let side = split.splitViewItems[0]
         if on {
-            sideHidden = side.isCollapsed
             showInfo(false)
             bar = max(window.frame.height - window.contentLayoutRect.maxY, 28)
         }
         pageFull = on
-        _ = SidebarOver.close(in: layer)
-        side.isCollapsed = on || sideHidden
+        drawer.close()
+        arrange()
         top?.isActive = false
         top = shown.map(pin)
         top?.isActive = true
@@ -69,33 +62,6 @@ extension Shell {
         topEdge.height?.constant = topEdge.filled ? bar : 6
     }
 
-    /// Lays the floating sidebar over the page from the left edge, its pin at the top; under the toolbar, or from the
-    /// window's top in Page Full Screen.
-    func float() {
-        guard floats, SidebarOver.shown(in: layer) == nil else { return }
-        layOver(floating: true)
-    }
-
-    /// Lays the window's sidebar list over the page, under the toolbar or in either full screen from the window's top,
-    /// or takes it away; `floating`, it is the floating sidebar with its pin. The column's own eyes, so that both lists
-    /// always say the same.
-    func layOver(floating: Bool) {
-        guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return }
-        let under = full || pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY
-        _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes), under: under,
-                        pin: floating ? { [weak self] in self?.keepSidebar() } : nil)
-        }
-    }
-
-    /// The pin: the floating sidebar becomes a column again, Page Full Screen ending for it.
-    func keepSidebar() {
-        _ = SidebarOver.close(in: layer)
-        sideHidden = false
-        if pageFull { return pageFullScreen(false) }
-        split.splitViewItems[0].isCollapsed = false
-    }
-
     /// The two edges, made once: each a strip over the page that the pointer brings something back from.
     func edges() {
         for strip in [topEdge, leftEdge] {
@@ -112,17 +78,15 @@ extension Shell {
                                      leftEdge.bottomAnchor.constraint(equalTo: center.bottomAnchor), leftEdge.widthAnchor.constraint(equalToConstant: 8)])
         topEdge.came = { [weak self] in self?.toolbar(true) }
         topEdge.went = { [weak self] in if self?.pageFull == true { self?.toolbar(false) } }
-        leftEdge.came = { [weak self] in self?.float() }
-        collapse = split.splitViewItems[0].observe(\.isCollapsed) { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.reveals() }
-        }
+        leftEdge.came = { [weak self] in self?.drawer.open() }
+        leftEdge.motion = { [weak self] in self?.library.preferences.motion ?? .calm }
         reveals()
     }
 
     /// Each edge only where it brings something back, above what the center shows.
     func reveals() {
         topEdge.isHidden = !pageFull
-        leftEdge.isHidden = !floats
+        leftEdge.isHidden = drawer.state.shown
         leftTop?.under.isActive = !pageFull
         leftTop?.top.isActive = pageFull
         for strip in [topEdge, leftEdge] where center.subviews.last !== strip && !strip.isHidden {
@@ -132,8 +96,9 @@ extension Shell {
 }
 
 /// A strip at an edge of the page that brings something back: the pointer resting on it for `delay`, or a click, calls
-/// `came`; leaving it for `leave` calls `went`. Empty, it lets every click but its own through; `filled`, it is the
-/// band behind the toolbar brought back over the page, the window's background, its lower edge and a soft shadow.
+/// `came`; leaving it for `leave` calls `went`. Empty, it lets every click but its own through, and one that takes
+/// clicks shows its mark where the pointer rests; `filled`, it is the band behind the toolbar brought back over the
+/// page, the window's background, its lower edge and a soft shadow.
 final class Reveal: NSView {
     let delay: TimeInterval, leave: TimeInterval
     var came: () -> Void = {}, went: () -> Void = {}
@@ -147,6 +112,9 @@ final class Reveal: NSView {
         }
     }
     private var timer: Timer?
+    private let mark = EdgeMark()
+    /// The app's motion setting, for the mark.
+    var motion: () -> Look.Motion = { .calm }
 
     init(delay: TimeInterval, leave: TimeInterval = 0, clicks: Bool) {
         (self.delay, self.leave, self.clicks) = (delay, leave, clicks)
@@ -158,6 +126,8 @@ final class Reveal: NSView {
         layer?.shadowColor = NSColor.black.cgColor
         layer?.shadowRadius = 15
         layer?.shadowOffset = CGSize(width: 0, height: -12)
+        mark.alphaValue = 0
+        if clicks { addSubview(mark) }
     }
 
     override func layout() {
@@ -173,11 +143,28 @@ final class Reveal: NSView {
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { after(delay, came) }
-    override func mouseExited(with event: NSEvent) { after(leave, went) }
+    override func mouseEntered(with event: NSEvent) {
+        if clicks { arm(at: convert(event.locationInWindow, from: nil).y) }
+        after(delay, came)
+    }
+    override func mouseExited(with event: NSEvent) {
+        mark.alphaValue = 0
+        after(leave, went)
+    }
     override func mouseDown(with event: NSEvent) {
         timer?.invalidate()
+        mark.alphaValue = 0
         came()
+    }
+
+    /// The mark comes where the pointer rests, 4 × 40 and 3 points from the edge, growing out of a third of its height.
+    private func arm(at y: CGFloat) {
+        let place = NSRect(x: 2, y: y - 22, width: 7, height: 44), calm = Look.duration(0.2, Look.motion(motion()))
+        mark.frame = place.insetBy(dx: 0, dy: 13)
+        Look.animate(calm, Look.out) { [mark] in
+            mark.moving.alphaValue = 1
+            mark.moving.frame = place
+        }
     }
 
     /// Calls `act` after `seconds`, in place of what waited; at once for none.
@@ -197,6 +184,16 @@ final class Reveal: NSView {
 
     /// The band takes nothing: the toolbar over it has the clicks. The strip at the left edge takes its click.
     override func hitTest(_ point: NSPoint) -> NSView? { filled || !clicks ? nil : super.hitTest(point) }
+}
+
+/// The left edge's mark: ink, with a ring of the page's background so that it shows over any page.
+private final class EdgeMark: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        Look.Token.bg.color.withAlphaComponent(0.8).setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 3, yRadius: 3).fill()
+        Look.Token.ink.color.setFill()
+        NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 2), xRadius: 2, yRadius: 2).fill()
+    }
 }
 
 /// Page Full Screen's hint, as the mockup's: a dark pill, its keys in caps.

@@ -22,6 +22,8 @@ final class Toast: NSView {
     private let button: NSButton?
     /// Whether it is in place or arriving, false once it starts to leave.
     private(set) var shown = false
+    /// Whether its action takes something back: the sidebar waits for it.
+    var offersUndo: Bool { shown && action?.label == "Undo" }
 
     /// Shows `words` in `layer`, centred at the bottom of `center`, in place of any toast there, and returns it. It
     /// always stands in that one place, as the mockup's does, over the open card if there is one: it leaves after
