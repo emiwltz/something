@@ -126,6 +126,14 @@ final class FullMark: NSButton {
     }
 }
 
+extension Shell {
+    /// Keeps `rule` for the space `name`, titled `title`, and says so in a quiet toast. Throws as `Grants.update`.
+    func keep(_ rule: Rule, in name: String, title: String, _ grants: Grants) throws {
+        try Rules.keep(rule, in: name, grants)
+        toast(Rules.kept(rule, title: title), quiet: true)
+    }
+}
+
 extension App {
     /// The panels hear of the rules and of Full Access: what "Always for this space" would keep, keeping it, and what
     /// something answers by itself.
@@ -138,10 +146,7 @@ extension App {
         }
         panels.keep = { [weak self] rule, request in
             guard let self, let name = space(ofAgent: request.agent) else { return }
-            do {
-                try Rules.keep(rule, in: name, Grants(places.grants))
-                shell.toast(Rules.kept(rule, title: library.entry(name)?.title ?? name), quiet: true)
-            } catch { ask.tell(error.sentence) }
+            do { try shell.keep(rule, in: name, title: library.entry(name)?.title ?? name, Grants(places.grants)) } catch { ask.tell(error.sentence) }
             if shell.infoShown { info.show(info.space) }
         }
         panels.alone = { [weak self] request, prompt in

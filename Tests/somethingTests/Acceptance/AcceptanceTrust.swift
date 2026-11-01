@@ -208,7 +208,7 @@ struct AcceptanceTrust {
         panels.offer = { request, prompt in
             Rules.offer(request, input: prompt.input, agent: agent, assistant: false, grant: try? grants.read().spaces["agents"], at: "2026-10-22T18:20:00Z")
         }
-        panels.keep = { rule, _ in try? Rules.keep(rule, in: "agents", grants) }
+        panels.keep = { rule, _ in try? shell.keep(rule, in: "agents", title: "My agents", grants) }
         panels.refresh()
         let panel = try #require(panels.panel), box = try #require(panel.always)
         panel.place(beside: shell.window, screen: Self.desk)
@@ -229,7 +229,7 @@ struct AcceptanceTrust {
         #expect(source.answers.map(\.1) == [.once])
         let kept = try grants.read().spaces["agents"]?.rules
         #expect(kept == [Rule(kind: "claude", command: "npm test", folder: shop, at: "2026-10-22T18:20:00Z")])
-        #expect(kept.map { $0.map { Rules.kept($0, title: "My agents") } } == ["Claude Code may now run npm test for My agents"])
+        #expect(shell.layer.subviews.compactMap { $0 as? Toast }.map(\.words) == ["Claude Code may now run npm test for My agents"])
     }
 
     /// X4.3: Project watch at Run in ~/code/atelier keeps one rule, `git log --oneline -20` for Claude Code: Info lists

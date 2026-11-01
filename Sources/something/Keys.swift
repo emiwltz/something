@@ -9,7 +9,7 @@ import AppKit
 enum Keys {
     struct Command {
         /// The shortcut sheet's areas, in its order.
-        enum Area: String, CaseIterable { case spaces = "Spaces", assistant = "Assistant", show = "Pointing", window = "Window" }
+        enum Area: String, CaseIterable { case spaces = "Spaces", assistant = "Assistant", pointing = "Pointing", window = "Window" }
 
         let id: String
         /// The menu's words.
@@ -62,10 +62,10 @@ enum Keys {
                 line: "Stop the assistant", mine: true),
         Command(id: "showreq", title: "Show Request", key: "p", modifiers: [.command, .option], action: #selector(App.showRequest(_:)),
                 owner: "T5", area: .assistant, line: "Show the request that waits", mine: true),
-        Command(id: "pointpart", title: "Point at a Part", key: "s", modifiers: [.command, .option], action: #selector(App.pointAtPart(_:)), owner: "T14", area: .show,
+        Command(id: "pointpart", title: "Point at a Part", key: "s", modifiers: [.command, .option], action: #selector(App.pointAtPart(_:)), owner: "T14", area: .pointing,
                 line: "Point at a part", mine: true, needsSpace: true),
-        Command(id: "point", title: "Point Inside a Drawn Frame", owner: "T14", area: .show, line: "Point inside a drawn frame", words: "hold ⌥"),
-        Command(id: "undo", title: "Undo", key: "z", action: Selector(("undo:")), owner: "T13", area: .show, line: "Undo the last change"),
+        Command(id: "point", title: "Point Inside a Drawn Frame", owner: "T14", area: .pointing, line: "Point inside a drawn frame", words: "hold ⌥"),
+        Command(id: "undo", title: "Undo", key: "z", action: Selector(("undo:")), owner: "T13", area: .pointing, line: "Undo the last change"),
         Command(id: "pagefull", title: "Enter Page Full Screen", key: "f", modifiers: [.command, .shift], action: #selector(App.pageFullScreen(_:)),
                 owner: "S6", area: .window, line: "Page full screen", mine: true, needsSpace: true),
         Command(id: "full", title: "Enter Full Screen", key: "f", modifiers: [.command, .control], action: #selector(NSWindow.toggleFullScreen(_:)),

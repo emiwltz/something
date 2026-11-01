@@ -182,7 +182,7 @@ import Testing
         #expect(listed.map(\.id) == Keys.commands.filter { $0.area != nil && $0.line != nil }.sorted {
             ShortcutColumns.columns.flatMap { $0 }.firstIndex(of: $0.area!)! < ShortcutColumns.columns.flatMap { $0 }.firstIndex(of: $1.area!)!
         }.map(\.id))
-        #expect(ShortcutColumns.columns == [[.spaces, .show], [.assistant, .window]])
+        #expect(ShortcutColumns.columns == [[.spaces, .pointing], [.assistant, .window]])
         #expect(ShortcutColumns.caps("⇧⌘T") == [.key("⇧"), .key("⌘"), .key("T")])
         #expect(ShortcutColumns.caps("esc") == [.key("esc")])
         #expect(ShortcutColumns.caps("hold ⌥") == [.word("hold"), .key("⌥")])

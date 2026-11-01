@@ -62,7 +62,9 @@ struct AssistantCard: View {
             VStack(alignment: .leading, spacing: 1) {
                 Menu { ConversationMenu(model: model) } label: {
                     HStack(spacing: 5) {
-                        Text(heading).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui)
+                        Text(heading).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle(Look.Token.ink.ui).lineLimit(1)
+                            // What the sign, the chevron, the two buttons and the grip leave it: a narrow card cuts its end.
+                            .frame(maxWidth: model.cardWidth - 156, alignment: .leading).fixedSize(horizontal: false, vertical: true)
                         Chevron()
                     }
                     .padding(.horizontal, 6).frame(height: 22).contentShape(Rectangle())

@@ -73,7 +73,7 @@ struct ShortcutColumns: View {
     /// What a key reads as: a keycap, or a word between them ("hold", "to").
     enum Cap: Equatable { case key(String), word(String) }
 
-    static let columns: [[Keys.Command.Area]] = [[.spaces, .show], [.assistant, .window]]
+    static let columns: [[Keys.Command.Area]] = [[.spaces, .pointing], [.assistant, .window]]
 
     /// The commands the sheet lists in `area`, in Keys' order.
     static func lines(_ area: Keys.Command.Area) -> [Keys.Command] { Keys.commands.filter { $0.area == area && $0.line != nil } }

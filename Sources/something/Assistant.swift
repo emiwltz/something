@@ -574,14 +574,14 @@ import SomethingCore
     /// Asks Run's folder when Build finds none; a test answers in its place.
     @ObservationIgnored var chooseFolder: (@escaping (String) -> Void) -> Void = Levels.chooseFolder
 
-    /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
-    /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     /// What the assistant says first on a template's copy, until the conversation has rows.
     var firstWord: String? {
         guard case .space(let title, let space, _) = place, space == fromTemplate, rows.isEmpty else { return nil }
         return "This is your copy of \(title). Tell me what to change, and I change it here."
     }
 
+    /// The conversation's first lines: where the agent works and how it asks, whether it can pick a conversation up,
+    /// and why a new one began. A conversation picked up after sleep said them when it began: it shows none.
     var firstLines: [String] {
         guard session.kept.isEmpty else { return [] }
         let agent = kind.flatMap(Registry.app.agent), full = fullAccess ? "Full Access is on: something allows what it asks." : nil

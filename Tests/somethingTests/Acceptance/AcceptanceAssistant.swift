@@ -611,7 +611,8 @@ struct AcceptanceAssistant {
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "x6-1" + suffix, root: stage.home.root)
         }
-        // A center too narrow for the card, the panel open: the card keeps its margins and nothing leaves it.
+        // A center too narrow for the card, the panel open (only its width counts): the card keeps its margins and its
+        // header stays inside it, the title cut, its two buttons there.
         shell.window.setContentSize(NSSize(width: 800, height: 700))
         shell.toggleInfo(spaceOpen: true)
         shell.window.layoutIfNeeded()
@@ -619,9 +620,48 @@ struct AcceptanceAssistant {
         #expect(room < AssistantCard.width + 2 * AssistantCard.margin, "\(room)")
         #expect(await wait { model.cardWidth == room - 2 * AssistantCard.margin && shell.glass.card.fittingSize.width == room })
         #expect(shell.glass.card.frame.width == room && shell.glass.card.frame.maxX == room)
+        await wait { shell.glass.card.frame.height > 0 }
+        let header = try await Self.words(shell.glass.card)
+        #expect(header.contains("Idle") && !header.contains("assistant"), "the title is cut rather than pushing the sign out: \(header)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "x6-1-narrow" + suffix, root: stage.home.root)
         }
+        try await AcceptanceAssistant.stop(model)
+    }
+
+    /// The words drawn in `view`, read off its picture.
+    static func words(_ view: NSView) async throws -> String {
+        let picture = try Picture.bitmap(view.bounds.size)
+        view.cacheDisplay(in: view.bounds, to: picture)
+        return try await Picture.text(picture).joined(separator: " ").replacingOccurrences(of: "’", with: "'")
+    }
+
+    /// D5, on: a template's copy, its card open: the assistant's first word, in its voice, gone once the person writes.
+    @Test("d5-word: a template's first word") func d5_word() async throws {
+        let stage = try Stage("assistant")
+        defer { stage.remove() }
+        try AcceptanceAssistant.fake(in: stage)
+        let (shell, library, _) = stage.window()
+        let model = shell.assistant
+        model.engine.changed = { model.refresh() }
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.kind == "claude" }))
+        model.fromTemplate = "brief"
+        let brief = try await stage.open("brief", in: shell, library)
+        defer { brief.close() }
+        let word = "This is your copy of Daily brief. Tell me what to change, and I change it here."
+        model.focus()
+        #expect(await wait { shell.glass.grown == true && !shell.glass.morphing })
+        #expect(model.threadShown && model.firstWord == word)
+        try await AcceptanceAssistant.fit(shell)
+        #expect(try await Self.words(shell.glass.card).contains("This is your copy of Daily brief"))
+        try await stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: brief.web, "d5-word" + suffix, root: stage.home.root)
+        }
+        model.draft = "Put the agents that wait for me first."
+        model.send()
+        #expect(await wait(until: { !model.rows.isEmpty }))
+        #expect(model.firstWord == nil)
         try await AcceptanceAssistant.stop(model)
     }
 
