@@ -12,9 +12,6 @@
 // the menu bar until the pointer reaches the top, the sidebar steps aside and the space starts at the screen's top; ⌃⌘S
 // lays the sidebar over it (SidebarOver). Page Full Screen does the same inside the window, and a hidden sidebar floats
 // (PageFull.swift).
-// A window narrower than 860 points has the rail in place of its sidebar (Rail.swift), until it is 880 wide again, so
-// that a window resized about the line does not flicker between the two: ⌃⌘S lays the whole sidebar over the space
-// there too, and the toolbar's own toggle goes (the rail has one).
 // Closing the window keeps the app and its agents running, and closes the open space: the Dock icon or `something`
 // shows the window again.
 import AppKit
@@ -79,19 +76,11 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     var top: NSLayoutConstraint?
     /// The toolbar's lower edge, over the center only.
     let edge = NSBox()
-    /// Whether the sidebar column is the rail; the column's own state before, given back after.
-    private(set) var rail = false
-    private var sideBefore: (hidden: Bool, width: CGFloat) = (false, 236)
-    /// Whether the columns' widths are kept in the defaults (`init`'s `autosave`), given back to the split view when
-    /// the rail goes.
-    private let autosave: Bool
-    /// Below `narrow` points the window takes the rail; it gives it up at `narrow + hysteresis`.
-    static let narrow: CGFloat = 860, hysteresis: CGFloat = 20
 
     /// `autosave` keeps the window's frame and the columns' widths in the app's defaults: never in a test, whose
     /// program has no bundle and would write them into the person's own preferences.
     init(library: Library, info: Info, assistant: AssistantModel, autosave: Bool) {
-        (self.assistant, self.library, self.info, self.autosave) = (assistant, library, info, autosave)
+        (self.assistant, self.library, self.info) = (assistant, library, info)
         let list = SidebarView(library: library, assistant: assistant, eyes: { [unowned assistant] in assistant.eyes(of: $0) })
         let sidebar = NSSplitViewItem(sidebarWithViewController: NSHostingController(rootView: list))
         (sidebar.minimumThickness, sidebar.maximumThickness) = Shell.sideRange
@@ -108,7 +97,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         glass = Glass(over: center, model: assistant)
         super.init()
         split.over = { [unowned self] in sidebarOver() }
-        split.laid = { [unowned self] in full || rail || pageFull ? SidebarOver.shown(in: layer) != nil : nil }
+        split.laid = { [unowned self] in full || pageFull ? SidebarOver.shown(in: layer) != nil : nil }
         window.contentViewController = split
         window.setContentSize(NSSize(width: 1200, height: 760))
         // The columns' first widths; collapsed, Info keeps its width for when it is shown.
@@ -123,8 +112,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.collectionBehavior.insert(.fullScreenPrimary)
-        // Its own identifier: toolbars of one identifier share their items, and the rail takes some away from this one.
-        let toolbar = NSToolbar(identifier: "main-" + UUID().uuidString)
+        let toolbar = NSToolbar(identifier: "main")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         window.toolbar = toolbar
@@ -134,9 +122,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
             window.setFrameAutosaveName("main")
             split.splitView.autosaveName = "main"
         }
-        // A frame kept narrow from the last time starts with the rail.
-        fit()
-        watchRailTip()
         followSize(Look.scale.size)
         assistant.answered = { [weak self] quick, words in self?.note(words, about: quick) }
         info.close = { [weak self] in self?.showInfo(false) }
@@ -189,7 +174,6 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 
     /// The window changed size, which does not always move the columns: the title measures its room again.
     func windowDidResize(_ notification: Notification) {
-        fit()
         titleLine.invalidateIntrinsicContentSize()
     }
 
@@ -221,10 +205,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
     /// The sticker is discreet there.
     func fullScreen(_ on: Bool) {
         guard on != full else { return }
-        if on {
-            pageFullScreen(false)
-            railed(false)
-        }
+        if on { pageFullScreen(false) }
         full = on
         _ = SidebarOver.close(in: layer)
         let side = split.splitViewItems[0]
@@ -235,62 +216,17 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         top?.isActive = true
         edge.isHidden = on
         glass.discreet = on
-        if !on { fit() }
         reveals()
     }
 
-    /// Whether a window `width` points wide has the rail, `now` being whether it has it: below 860 it takes it, and
-    /// keeps it until 880.
-    static func rail(_ width: CGFloat, now: Bool) -> Bool { width < narrow + (now ? hysteresis : 0) }
-
-    /// Takes the rail or gives it up for the window's width; never in either full screen, where the sidebar steps aside.
-    func fit() {
-        railed(!full && !pageFull && Shell.rail(window.frame.width, now: rail))
-    }
-
-    /// Turns the sidebar column into the rail (`on`), shown whatever the column was, or back into the sidebar as it
-    /// was before; the toolbar follows. The split view stops keeping its widths meanwhile: the rail's 64 points must
-    /// never become the person's saved width, nor its shown column a sidebar they had hidden.
-    func railed(_ on: Bool) {
-        guard on != rail else { return }
-        rail = on
-        _ = SidebarOver.close(in: layer)
-        let side = split.splitViewItems[0]
-        library.sidebar.cursor = nil
-        library.sidebar.rail = on
-        if on {
-            // At launch the column may not be laid out yet: a width under the sidebar's least is not the person's.
-            let width = side.viewController.view.frame.width
-            sideBefore = (side.isCollapsed, side.isCollapsed || width < 190 ? sideBefore.width : width)
-            split.splitView.autosaveName = nil
-            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Rail.width, Rail.width, false)
-            side.isCollapsed = false
-            split.splitView.setPosition(Rail.width, ofDividerAt: 0)
-        } else {
-            (side.minimumThickness, side.maximumThickness, side.canCollapse) = (Shell.sideRange.0, Shell.sideRange.1, true)
-            split.splitView.setPosition(sideBefore.width, ofDividerAt: 0)
-            side.isCollapsed = sideBefore.hidden
-            split.splitView.autosaveName = autosave ? "main" : nil
-        }
-        // The toggle goes with the separator that follows the sidebar's edge, removed: even hidden, the separator would
-        // keep the title well past the lights.
-        if let toolbar = window.toolbar {
-            if on {
-                for id in Shell.head { if let at = toolbar.items.firstIndex(where: { $0.itemIdentifier == id }) { toolbar.removeItem(at: at) } }
-            } else { Shell.head.reversed().forEach { toolbar.insertItem(withItemIdentifier: $0, at: 0) } }
-        }
-        reveals()
-    }
-
-    /// ⌃⌘S in full screen or beside the rail: lays the sidebar over the space, or takes it away; beside the rail, under
-    /// the toolbar, which would draw the title over it. In Page Full Screen the floating sidebar comes or goes. Returns
-    /// false elsewhere, where the sidebar column shows or hides as usual: a floating sidebar laid over is kept.
+    /// ⌃⌘S in full screen: lays the sidebar over the space, or takes it away. In Page Full Screen the floating sidebar
+    /// comes or goes. Returns false elsewhere, where the sidebar column shows or hides as usual: a floating sidebar laid over is kept.
     private func sidebarOver() -> Bool {
         if pageFull {
             if !SidebarOver.close(in: layer) { float() }
             return true
         }
-        guard full || rail else {
+        guard full else {
             _ = SidebarOver.close(in: layer)
             return false
         }
@@ -329,16 +265,12 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         space?.web.pageZoom = now.factor
         let side = split.splitViewItems[0], width = side.viewController.view.frame.width
         (inspector.minimumThickness, inspector.maximumThickness) = (Shell.infoWidth, Shell.infoWidth)
-        guard !rail else { return }
         (side.minimumThickness, side.maximumThickness) = Shell.sideRange
         if !side.isCollapsed { split.splitView.setPosition(width * now.factor / size.factor, ofDividerAt: 0) }
     }
 
-    /// The toolbar's items over the sidebar column, which the rail has not.
-    static let head: [NSToolbarItem.Identifier] = [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator]
-
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Shell.head + [Shell.title, .flexibleSpace, Shell.tools]
+        [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -710,7 +642,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
 }
 
 /// The split view of the window: ⌃⌘S and the toolbar's toggle ask `over` first, which lays the sidebar over the space
-/// in full screen or beside the rail instead of showing its column.
+/// in full screen instead of showing its column.
 final class Split: NSSplitViewController {
     var over: () -> Bool = { false }
     /// Whether the sidebar is laid over the space, nil where it is not laid over but shown as a column.
@@ -719,7 +651,6 @@ final class Split: NSSplitViewController {
         if !over() { super.toggleSidebar(sender) }
     }
     /// ⌃⌘S says what it does: "Hide Sidebar" while the sidebar shows, as a column or laid over, else "Show Sidebar".
-    /// It stays on beside the rail, whose column cannot collapse.
     override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
         guard item.action == #selector(toggleSidebar(_:)) else { return super.validateUserInterfaceItem(item) }
         let laid = laid(), shown = laid ?? !(splitViewItems.first?.isCollapsed ?? true)
@@ -729,7 +660,7 @@ final class Split: NSSplitViewController {
 }
 
 /// The main window. NSWindow answers toggleSidebar: itself, without the split view's override, whenever nothing in the
-/// split view has the focus: ⌃⌘S and the rail's toggle would then never lay the sidebar over the space.
+/// split view has the focus: ⌃⌘S would then never lay the sidebar over the space.
 /// The menu validates ⌃⌘S against this window then too: NSWindow's own validation reaches the split view today, but
 /// privately, so the window asks it itself.
 final class MainWindow: NSWindow {

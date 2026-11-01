@@ -1,6 +1,6 @@
 // The sign of something: four soft corner brackets and two tall low eyes, the eyes saying an assistant's state. One
 // drawing serves the sticker, the panel, the sidebar, menus, point frames and the arrival: a view that breathes and
-// blinks under Calm motion, a still image, the mini eyes (a 16x10 template for menus and the rail) and the hard
+// blinks under Calm motion, a still image, the mini eyes (a 16x10 template for menus) and the hard
 // "portée" shadow of what a person grabs. It is all drawn in draw(_:), so cacheDisplay pictures it as the screen does.
 import AppKit
 
@@ -225,7 +225,7 @@ enum Sign {
         return tile
     }
 
-    /// The mini eyes of `state`, 16x10 points, for menus and the rail: still (menus cannot animate), a template image
+    /// The mini eyes of `state`, 16x10 points, for menus: still (menus cannot animate), a template image
     /// by default so the menu colours it; with `template` false, in the identity's colours (red when stopped); with
     /// `joy`, the arcs of a smile, VoiceOver still saying the state.
     static func miniEyes(_ state: State, template: Bool = true, joy: Bool = false) -> NSImage {

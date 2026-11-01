@@ -75,10 +75,6 @@ import Testing
             let side = resolved(Look.Token.side.color, in: appearance).hex
             #expect(contrast(resolved(Look.Token.needInk.color, in: appearance).hex, side) >= 4.5, "\(appearance.name.rawValue)")
         }
-        // The rail's letters, white, on each tile colour, at 3:1: the mockup's palette (its amber, pink and teal fall
-        // between 3.7 and 4.1), kept because each tile is a single letter read as a glyph, its name said in full by
-        // the tooltip and VoiceOver, never a word to read.
-        for tone in Look.tiles { #expect(contrast(0xFFFFFF, tone) >= 3, "\(String(tone, radix: 16))") }
     }
 
     @Test func theSizesAndTheScaleAreTheMockups() async {

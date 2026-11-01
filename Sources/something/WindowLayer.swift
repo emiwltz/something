@@ -1,6 +1,6 @@
 // The layer above the whole window's split view, for what covers the window rather than one column: the toast, and
 // the cards on a scrim, the shortcut sheet (KeysSheet.swift) and the palette (Palette.swift); and the sidebar laid
-// over the space in full screen, beside the rail, or floating (SidebarOver). It takes the mouse only on what it holds,
+// over the space in full screen or floating (SidebarOver). It takes the mouse only on what it holds,
 // so the columns, their dividers and the toolbar's separators under it behave as if it were not there, and it is
 // hidden while it holds nothing. The glass over the center, which holds the assistant, is one too (Glass.swift).
 import AppKit
@@ -188,8 +188,8 @@ final class SidebarOver: ScrimCard {
     private var menuOpen = false, menus: [NSObjectProtocol] = []
 
     /// Lays out `list`, the window's own sidebar list: its first row 49 points down, under the 50-point band of the
-    /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar beside
-    /// the rail), its first row just under them. `pin`, when given, makes it the floating sidebar, its head 40 points
+    /// mockup's sidebar head, whatever safe area the full screen gives; `under` points from the top (the toolbar), its
+    /// first row just under them. `pin`, when given, makes it the floating sidebar, its head 40 points
     /// high holding the pin.
     init(_ list: SidebarView, under: CGFloat = 0, pin: (() -> Void)? = nil) {
         var list = list

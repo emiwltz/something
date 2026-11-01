@@ -23,7 +23,7 @@ enum Catalog {
 
     /// Every screen id and the slice that removes its `.disabled` trait (the plan's screen map, one owner each).
     static let owners: [(id: String, slice: String)] = [
-        ("b1", "W3"), ("b3", "W2"), ("b5", "W5"), ("b6", "W2"), ("b7", "W6"),
+        ("b1", "W3"), ("b3", "W2"), ("b5", "W5"), ("b6", "W2"),
         ("c1", "AB05"), ("c2", "AB04"), ("c3", "AB10"), ("c4", "AB07"), ("c5", "AB11"), ("c6", "AB09b"), ("c7", "AB05"),
         ("c8", "AB08"), ("c9", "AB06"), ("c10", "AB07"),
         ("d4", "AB16"), ("d5", "AB13"), ("d6", "AB13"), ("d7", "AB14"), ("d8", "AB14"),
@@ -37,7 +37,7 @@ enum Catalog {
     /// x3_1; "2-6" for 2.6, v2_6), and the slice that builds each.
     static let frozen: [(id: String, slice: String)] = [
         ("x1-2", "S2"), ("x3-1", "S2"), ("x5-1", "S3"), ("x5-2", "S3"), ("x5-3", "S3"),
-        ("x9-1", "S5"), ("x9-2", "S5"), ("j4-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
+        ("x9-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
         ("x2-1", "S12"), ("x2-2", "S12"), ("x2-3", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
@@ -71,6 +71,8 @@ enum Catalog {
         "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
         "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",
         "xe-1": "the whole mockup to try, every axis at Emi's letter: no screen of its own, each part asserted by its step",
+        "x9-2": "the rail's tiles: subject 4 C removes the rail, r4-2 proves the list",
+        "j4-1": "finding a space in the rail: subject 4 C removes it, r4-2 and ⌘P find a space",
         "f0-1": "a note for Emi, his choices: no screen",
         "f0-2": "a note for Emi, the vision: no screen",
         "f0-3": "a note for Emi, his recovered requests: no screen",
@@ -81,9 +83,10 @@ enum Catalog {
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3); a1, the film, and
     /// a2–a8, the welcome's five steps, gone with v6.2's one welcome (x2-1); e14, the panel over the welcome that stepped
     /// the window back (the welcome now stands alone; WelcomeTests keeps the panel floating over it); g3–g8 and g11,
-    /// Settings' seven tabs, gone with v6.2's four (x7-1 to x7-4); b2, La page, with its variants: the final mockup's
-    /// f3 steps are its screens. An old id whose heir is not built stays, and stays asserted, until the heir's slice retires it.
-    static let retired: Set<String> = ["d1", "b2", "b4", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14",
+    /// Settings' seven tabs, gone with v6.2's four (x7-1 to x7-4); b7, the rail, which subject 4 C removes; b2, La page,
+    /// with its variants: the final mockup's f3 steps are its screens. An old id whose heir is not built stays, and
+    /// stays asserted, until the heir's slice retires it.
+    static let retired: Set<String> = ["d1", "b2", "b4", "b7", "b8", "d2", "d3", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "e14",
                                        "g3", "g4", "g5", "g6", "g7", "g8", "g11"]
     /// Drawn in the mockup only after the plan: they count, and the gate waits for them until they are marked shot.
     /// f9–f11, the last ones, have their shots and are built (T18): none waits.

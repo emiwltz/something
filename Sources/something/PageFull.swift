@@ -9,9 +9,9 @@ import AppKit
 import SwiftUI
 
 extension Shell {
-    /// Whether the sidebar floats: its column hidden in the window (not the rail's, not in the Mac's full screen), or
-    /// the page in Page Full Screen.
-    var floats: Bool { pageFull || (!full && !rail && split.splitViewItems[0].isCollapsed) }
+    /// Whether the sidebar floats: its column hidden in the window (not in the Mac's full screen), or the page in Page
+    /// Full Screen.
+    var floats: Bool { pageFull || (!full && split.splitViewItems[0].isCollapsed) }
 
     /// Puts the page in Page Full Screen (`on`) or back, only while a space is open; from the Mac's full screen, once
     /// the window has left it. Info closes, the sidebar steps aside and comes back as it was, the toolbar and the lights
@@ -25,7 +25,6 @@ extension Shell {
         }
         let side = split.splitViewItems[0]
         if on {
-            railed(false)
             sideHidden = side.isCollapsed
             showInfo(false)
             bar = max(window.frame.height - window.contentLayoutRect.maxY, 28)
@@ -44,7 +43,7 @@ extension Shell {
         button?.toolTip = on ? "Exit Page Full Screen (esc)" : Keys.tooltip("pagefull", "Page Full Screen")
         button?.setAccessibilityLabel(on ? "Exit Page Full Screen" : "Page Full Screen")
         layer.subviews.filter { $0 is NSHostingView<PageFullHint> }.forEach { $0.removeFromSuperview() }
-        if on { hint() } else { fit() }
+        if on { hint() }
         reveals()
     }
 
@@ -84,7 +83,7 @@ extension Shell {
         guard let column = (split.splitViewItems[0].viewController as? NSHostingController<SidebarView>)?.rootView else { return }
         let under = full || pageFull ? 0 : window.frame.height - window.contentLayoutRect.maxY
         _ = SidebarOver.toggle(in: layer, motion: library.preferences.motion) {
-            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes, column: false), under: under,
+            SidebarOver(SidebarView(library: library, assistant: assistant, eyes: column.eyes), under: under,
                         pin: floating ? { [weak self] in self?.keepSidebar() } : nil)
         }
     }

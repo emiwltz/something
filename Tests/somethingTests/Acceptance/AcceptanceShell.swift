@@ -1,7 +1,6 @@
-// Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen and the rail
-// (b1, b3, b5–b7; b2, La page, waits for Emi; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2),
-// Info in three parts (x5-1 to x5-3, which retired b4), and round 2's calm window: the toolbar and Needs You (x9-1),
-// the list of names and the rail's letter tiles (x9-2), finding a space in the rail (j4-1); the floating sidebar (2-1),
+// Acceptance scenarios of the window around the spaces: the frame, the sidebar and its groups, full screen (b1, b3, b5,
+// b6; b8, the rows' eyes, left with v6.2), the word "space" explained (x1-2), Info in three parts (x5-1 to x5-3, which
+// retired b4), and round 2's calm window: the toolbar and Needs You (x9-1); the floating sidebar (2-1),
 // its pin and the View menu (2-2), Page Full Screen (2-6) and ⌘K in it (2-8). It also draws the frame of
 // b1 alone, with and without a toast, and a long name in a narrow window.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
@@ -265,89 +264,7 @@ struct AcceptanceShell {
         }
     }
 
-    /// The narrow window (W6), 760 by 680: the sidebar is a 64-point rail, one button per space in the sidebar's order
-    /// saying "Title, state", folded groups too, a line between groups; the toolbar's toggle goes. ⌃⌘S lays the whole
-    /// sidebar over the space under the toolbar. Below 860 points the window takes the rail and keeps it until 880; the
-    /// sidebar then comes back as it was. Its letter tiles are x9-2's.
-    @Test("b7: the rail") func b7() async throws {
-        let stage = try Stage("shell-b7")
-        defer { stage.remove() }
-        let (shell, library, _) = stage.window(NSSize(width: 760, height: 680))
-        library.preferences.groups = Stage.groups.map { Preferences.Group(name: $0.0, spaces: $0.1) }
-        library.preferences.fold("Breaks", true)
-        library.relist()
-        try Self.eyes(shell, Stage.moment)
-        shell.waiting(["agents"], mine: 0)
-        let brief = try await stage.open("brief", in: shell, library)
-        defer { brief.close() }
-        let side = shell.split.splitViewItems[0], host = side.viewController.view
-        shell.window.layoutIfNeeded()
-        #expect(shell.rail && library.sidebar.rail && !side.isCollapsed && host.frame.width == Rail.width, "\(host.frame)")
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.tools], "the rail has its own toggle")
-        #expect(shell.titleLine.line.string == "Daily brief")
-        // One button per space, in the sidebar's order, Breaks' rows too though it is folded; each says its title and
-        // state, and under the pointer its name and state.
-        let order = library.order()
-        let spaces = order.map { Library.label($0, Stage.moment[$0.id] ?? .sleep) }
-        let fixed = ["Show Sidebar", "New Space", "Go to…", "New Group", "Templates", "Settings"]
-        let said = await AcceptanceBuild.read(host) { words in (spaces + fixed).allSatisfy(words.contains) }
-        #expect(said.filter((spaces + fixed).contains) == Array(fixed.prefix(4)) + spaces + fixed.suffix(2), "\(said)")
-        // ↑ and ↓ go through New Space and every space, no header.
-        #expect(library.step(1) == .space("agents") && library.step(-1) == .space("brief") && library.sidebar.cursor == nil)
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "b7" + suffix, root: stage.home.root)
-        }
-        // ⌃⌘S, and the rail's toggle, lay the whole sidebar over the space, under the toolbar; Esc takes it away. The
-        // menu item stays on beside the rail, whose column cannot collapse, and goes the person's way: the responder
-        // chain from the window, to its delegate.
-        let action = try #require(Keys.command("sidebar")?.action)
-        let item = NSMenuItem(title: "Hide Sidebar", action: action, keyEquivalent: "s")
-        // Nothing in the split view has the focus: the menu picks the first in the window's responder chain that
-        // answers (the test's window is never key, so NSApp's own search would find nothing), the window itself.
-        shell.window.makeFirstResponder(nil)
-        var target = shell.window.firstResponder
-        while let responder = target, !responder.responds(to: action) { target = responder.nextResponder }
-        #expect(target === shell.window)
-        let validated = { (target as? NSMenuItemValidation)?.validateMenuItem(item) == true }
-        #expect(validated() && item.title == "Show Sidebar")
-        #expect(NSApp.sendAction(action, to: target, from: item))
-        let laid = try #require(SidebarOver.shown(in: shell.layer))
-        #expect(validated() && item.title == "Hide Sidebar")
-        _ = await wait(until: { laid.alphaValue == 1 })
-        laid.layoutSubtreeIfNeeded()
-        let band = shell.window.frame.height - shell.window.contentLayoutRect.maxY
-        #expect(laid.card.frame == NSRect(x: 0, y: 0, width: SidebarOver.width, height: 680 - band), "\(laid.card.frame)")
-        #expect(shell.rail && !side.isCollapsed && shell.window.firstResponder === laid.card)
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "b7-sidebar" + suffix, root: stage.home.root)
-        }
-        let escape = try Self.escape(shell)
-        #expect(shell.escape(escape) && SidebarOver.shown(in: shell.layer) == nil)
-        // The line, both ways: 20 points of hysteresis.
-        shell.window.setContentSize(NSSize(width: 870, height: 680))
-        #expect(shell.rail, "still the rail at 870")
-        shell.window.setContentSize(NSSize(width: 880, height: 680))
-        shell.window.layoutIfNeeded()
-        #expect(!shell.rail && !library.sidebar.rail && host.frame.width == 236, "\(host.frame)")
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
-        shell.window.setContentSize(NSSize(width: 870, height: 680))
-        #expect(!shell.rail, "still the sidebar at 870")
-        // A sidebar hidden before the window narrows is the rail all the same, and hidden again once it widens.
-        side.isCollapsed = true
-        shell.window.setContentSize(NSSize(width: 800, height: 680))
-        #expect(shell.rail && !side.isCollapsed)
-        shell.window.setContentSize(Stage.Size.main)
-        #expect(!shell.rail && side.isCollapsed)
-        // Full screen never has the rail.
-        side.isCollapsed = false
-        shell.window.setContentSize(NSSize(width: 800, height: 680))
-        shell.fullScreen(true)
-        #expect(!shell.rail && side.isCollapsed)
-        shell.fullScreen(false)
-        #expect(shell.rail && !side.isCollapsed)
-    }
-
-    /// The mockup's window for round 2 (X9.1, X9.2, J4.1): its groups (Work, Notes, Breaks), Daily brief open, My
+    /// The mockup's window for round 2 (X9.1): its groups (Work, Notes, Breaks), Daily brief open, My
     /// agents waiting for the answer to its request, the rows' states at the mockup's moment.
     static func calm(_ stage: Stage, _ size: NSSize = Stage.Size.main) async throws -> (Shell, Library, SpaceView) {
         let (shell, library, _) = stage.window(size)
@@ -367,7 +284,7 @@ struct AcceptanceShell {
         defer { stage.remove() }
         let (shell, library, brief) = try await Self.calm(stage)
         defer { brief.close() }
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools])
         #expect(shell.toolbarItems.suffix(3).map(\.itemIdentifier) == [Shell.point, Shell.info, Shell.full])
         #expect(shell.toolbarItems.allSatisfy { !["reload", "chip"].contains($0.itemIdentifier.rawValue) })
         let title = shell.titleLine
@@ -427,56 +344,6 @@ struct AcceptanceShell {
         #expect(library.needing().isEmpty)
         let after = await AcceptanceBuild.read(host) { !$0.contains("Needs You, 1 space") && $0.contains("Stack, Asleep") }
         #expect(!after.contains("Needs You, 1 space"), "\(after)")
-    }
-
-    /// The list of names in the narrow window (S5, X9.2), 760 by 680: the rail's tiles, a letter on the colour of
-    /// each space's name, in the sidebar's order, Daily brief's ringed; no eyes. Each tile says "Title, state" to
-    /// VoiceOver and "Title · state" under the pointer; the toolbar is the calm one.
-    @Test("x9-2: the list of names") func x9_2() async throws {
-        let stage = try Stage("shell-x9-2")
-        defer { stage.remove() }
-        let (shell, library, brief) = try await Self.calm(stage, NSSize(width: 760, height: 680))
-        defer { brief.close() }
-        let host = shell.split.splitViewItems[0].viewController.view
-        shell.window.layoutIfNeeded()
-        #expect(shell.rail && host.frame.width == Rail.width)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [Shell.title, .flexibleSpace, Shell.tools])
-        let order = library.order()
-        #expect(order.map { Rail.letter($0.title) } == ["D", "M", "P", "L", "O", "P", "S"])
-        #expect(order.map { Rail.tip($0, Stage.moment[$0.id] ?? .sleep) }.first == "Daily brief · Working")
-        // Eight spaces or fewer never share a colour in the rail.
-        let tones = Look.tiles(order.filter(\.isSpace).map(\.id))
-        #expect(order.count <= 8 && Set(tones.values.map(\.description)).count == tones.count, "\(tones)")
-        let spaces = order.map { Library.label($0, Stage.moment[$0.id] ?? .sleep) }
-        let said = await AcceptanceBuild.read(host) { words in spaces.allSatisfy(words.contains) }
-        #expect(said.filter(spaces.contains) == spaces && !said.contains("Needs You"), "\(said)")
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "x9-2" + suffix, root: stage.home.root)
-        }
-    }
-
-    /// Finding a space in the narrow window (S5, J4.1): the pointer over My agents' tile, whose assistant waits: the
-    /// tile lit, its tooltip its name and state (a tooltip cannot be drawn offscreen: its words are checked). The
-    /// sidebar laid over by ⌃⌘S shows Needs You first.
-    @Test("j4-1: find your spaces") func j4_1() async throws {
-        let stage = try Stage("shell-j4-1")
-        defer { stage.remove() }
-        let (shell, library, brief) = try await Self.calm(stage, NSSize(width: 760, height: 680))
-        defer { brief.close() }
-        let agents = try #require(library.entry("agents"))
-        #expect(Rail.tip(agents, .wait) == "My agents · Waiting for You" && Library.label(agents, .wait) == "My agents, Waiting for You")
-        library.sidebar.hovered = .space("agents")
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "j4-1" + suffix, root: stage.home.root)
-        }
-        library.sidebar.hovered = nil
-        shell.split.toggleSidebar(nil)
-        let laid = try #require(SidebarOver.shown(in: shell.layer))
-        _ = await wait(until: { laid.alphaValue == 1 })
-        let said = await AcceptanceBuild.read(laid) { $0.contains("Needs You, 1 space") }
-        let first = said.firstIndex(of: "Needs You, 1 space"), work = said.firstIndex(of: "Work, 3 spaces, open")
-        #expect(first != nil && work != nil && (first ?? 0) < (work ?? 0), "Needs You over the groups: \(said)")
-        #expect(SidebarOver.close(in: shell.layer))
     }
 
     /// Talking to an agent in full from a page (S8, J4.2; the page's look S14a): My agents, its Claude Code in pacman
@@ -1347,8 +1214,8 @@ struct AcceptanceShell {
         }
     }
 
-    /// Forty spaces in three groups, which no frozen step shows: the sidebar at the main size and the rail in the
-    /// smallest window each scroll to the last space, and Go to… finds it. Drawn as forty-sidebar and forty-rail.
+    /// Forty spaces in three groups, which no frozen step shows: the sidebar scrolls to the last space, at the main
+    /// size and in the smallest window, and Go to… finds it. Drawn as forty-sidebar.
     @Test("Forty spaces") func fortySpaces() async throws {
         let stage = try Stage("shell-forty")
         defer { stage.remove() }
@@ -1364,7 +1231,7 @@ struct AcceptanceShell {
         let last = try #require(library.order().last { names.contains($0.id) })
         #expect(library.order().filter { names.contains($0.id) }.count == 40)
         // The last row can be scrolled into view: scrolled to its end, the column shows its last row whole, the
-        // sidebar's above its fade (its bottom in the list, `ends`), the rail's lowest tile inside what the clip shows.
+        // sidebar's above its fade (its bottom in the list, `ends`).
         func all(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(all) }
         func scrolls(_ host: NSView) throws -> Bool {
             let list = try #require(all(host).compactMap { $0 as? NSScrollView }.first), clip = list.contentView
@@ -1372,12 +1239,6 @@ struct AcceptanceShell {
             clip.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - clip.bounds.height : 0))
             list.reflectScrolledClipView(clip)
             host.layoutSubtreeIfNeeded()
-            if shell.rail {
-                // The rail's last tile, the lowest in its list, whichever space it is.
-                let tiles = library.sidebar.tiles.values.compactMap(\.view).map { $0.convert($0.bounds, to: clip) }
-                let lowest = try #require(tiles.max { document.isFlipped ? $0.maxY < $1.maxY : $0.minY > $1.minY })
-                return tiles.count >= 40 && clip.bounds.insetBy(dx: -1, dy: -1).contains(lowest)
-            }
             // The visible part, measured from the list's top as `ends` are.
             let visible = clip.documentVisibleRect, top = document.isFlipped ? visible.minY : document.frame.height - visible.maxY
             let bottom = try #require(library.sidebar.ends.max())
@@ -1385,18 +1246,14 @@ struct AcceptanceShell {
         }
         let host = shell.split.splitViewItems[0].viewController.view
         shell.window.layoutIfNeeded()
-        #expect(!shell.rail && (library.sidebar.ends.max() ?? 0) > host.frame.height, "the list is longer than the column")
+        #expect((library.sidebar.ends.max() ?? 0) > host.frame.height, "the list is longer than the column")
         #expect(try scrolls(host), "the sidebar scrolls to \(last.title)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: brief.web, "forty-sidebar" + suffix, root: stage.home.root)
         }
         shell.window.setContentSize(NSSize(width: 640, height: 480))
         shell.window.layoutIfNeeded()
-        #expect(await wait { shell.rail }, "the smallest window has the rail")
-        #expect(try scrolls(shell.split.splitViewItems[0].viewController.view), "the rail scrolls to \(last.title)")
-        try await stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: brief.web, "forty-rail" + suffix, root: stage.home.root)
-        }
+        #expect(try scrolls(shell.split.splitViewItems[0].viewController.view), "the sidebar of the smallest window scrolls to \(last.title)")
         // Go to… finds it by its title.
         let palette = PaletteModel(library: library, eyes: { _ in .sleep }, enabled: { _ in true })
         palette.query = last.title
@@ -1420,7 +1277,7 @@ struct AcceptanceShell {
         library.select(.templates)
         shell.show(nil, templates: true)
         #expect(shell.window.title == "Templates" && shown() == [false, false, false] && shell.titleLine.accessibilityRole() == .staticText)
-        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == Shell.head + [Shell.title, .flexibleSpace, Shell.tools])
+        #expect(shell.window.toolbar?.items.map(\.itemIdentifier) == [.flexibleSpace, Shell.sidebar, .sidebarTrackingSeparator, Shell.title, .flexibleSpace, Shell.tools])
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "2-10" + suffix, root: stage.home.root)
         }

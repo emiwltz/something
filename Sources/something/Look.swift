@@ -65,27 +65,6 @@ enum Look {
         return NSColor(srgbRed: part(16), green: part(8), blue: part(0), alpha: alpha)
     }
 
-    /// The narrow rail's letter tiles: a white letter on one of these, picked by the mockup's hash of the space's file
-    /// name (`tiles(_:)` moves a later one on while eight are not all taken); the same by day and by night.
-    static let tiles: [UInt32] = [0xC2453A, 0x2F6FB4, 0x2A7D57, 0xB07A1A, 0x7A4FB4, 0xC25A8A, 0x3F8A8C, 0x5C5E66]
-
-    /// The tile colour of the space `name`: the mockup's hash of its name (h = h * 31 + each UTF-16 unit, from 7).
-    static func tile(_ name: String) -> NSColor { srgb(tiles[tileIndex(name)]) }
-    static func tileIndex(_ name: String) -> Int { Int(name.utf16.reduce(UInt32(7)) { $0 &* 31 &+ UInt32($1) } % UInt32(tiles.count)) }
-
-    /// The tile colours of the spaces `names`, in the rail's order: each its name's, else, while fewer than eight are
-    /// taken, the next one free, so that eight spaces or fewer never share one.
-    static func tiles(_ names: [String]) -> [String: NSColor] {
-        var used = Set<Int>(), tones: [String: NSColor] = [:]
-        for name in names {
-            var at = tileIndex(name)
-            while used.contains(at) && used.count < tiles.count { at = (at + 1) % tiles.count }
-            used.insert(at)
-            tones[name] = srgb(tiles[at])
-        }
-        return tones
-    }
-
     // MARK: Sizes
 
     /// Corner radii: cards and panels, controls, windows.

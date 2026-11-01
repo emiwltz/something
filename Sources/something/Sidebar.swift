@@ -36,14 +36,8 @@ import SwiftUI
     /// What is being renamed in place, and the name typed so far.
     var renaming: Target?
     var draft = ""
-    /// Whether the window is narrow enough that its sidebar column is the rail (Rail.swift); the Shell decides.
-    var rail = false
-    /// The rail's tiles, by space, where the Shell lays the name of the one under the pointer (RailTip).
-    @ObservationIgnored var tiles: [String: Weak] = [:]
     /// The bottoms of the list's rows, in the list's own space: where its shown part may end (SidebarView.shown).
     var ends: [CGFloat] = []
-    /// A view held without keeping it.
-    struct Weak { weak var view: NSView? }
 
     /// A menu began: the row or header under the pointer is the one it was opened on (the menu bar's are over none).
     func menuOpened() {
@@ -130,14 +124,10 @@ extension Library {
         }
     }
 
-    /// The rail's stops: New Space, then every space in the sidebar's order, folded or not, since the rail shows no
-    /// header and every row.
-    func railStops() -> [SidebarState.Stop] { [.newSpace] + order().map { .space($0.id) } }
-
     /// ↑ (-1) or ↓ (1): the keys rest on the next stop, which opens when it is a space or New Space. Returns the stop,
     /// nil when there is none to go to (on the Templates page, the keys are not in the list).
     @discardableResult func step(_ by: Int) -> SidebarState.Stop? {
-        let all = sidebar.rail ? railStops() : stops()
+        let all = stops()
         let here: SidebarState.Stop? = sidebar.cursor.map { .group($0) } ?? (selection == .newSpace ? .newSpace : selection.space.map { .space($0) })
         guard let here else { return nil }
         // An open space in a folded group (opened from the Go menu) is not a stop: the keys start from its header.
@@ -232,9 +222,6 @@ struct SidebarView: View {
     let assistant: AssistantModel
     /// The state of the space of that name's assistant, read from its own conversation.
     let eyes: (String) -> Sign.State
-    /// Whether this is the window's column, which turns into the rail in a narrow window; the sidebar laid over the
-    /// space is never one.
-    var column = true
     /// Whether it is the floating sidebar's glass: its colour at 76 % over the blur behind it (SidebarOver).
     var glass = false
 
@@ -258,14 +245,6 @@ struct SidebarView: View {
     }
 
     var body: some View {
-        if column && state.rail {
-            Rail(side: self)
-        } else {
-            whole
-        }
-    }
-
-    private var whole: some View {
         VStack(alignment: .leading, spacing: 0) {
             // New Space is a way in, never a place the list holds: it is not drawn chosen while its page shows.
             nav("new", label: "New Space", on: false, open: newSpace) {
