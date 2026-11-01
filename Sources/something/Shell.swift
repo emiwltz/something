@@ -135,6 +135,7 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         info.converse = { [weak self] in self?.converse() }
         library.renamed = { [weak self] name in if let space = self?.space, space.space.name == name { self?.heading(space) } }
         library.told = { [weak self] words in self?.toast(words, quiet: true) }
+        assistant.noted = { [weak self] words in self?.toast(words, quiet: true) }
         library.exported = { [weak self, weak library] url, memory in
             let words = "\(url.lastPathComponent) is in Downloads · one HTML file\(memory ? ", its memory inside" : "")"
             _ = self?.toast(words, action: Toast.Action(label: "Show") { library?.reveal(url) }, seconds: 6)

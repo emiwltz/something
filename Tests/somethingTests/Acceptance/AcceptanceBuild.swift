@@ -335,19 +335,19 @@ struct AcceptanceBuild {
         let ladder = try #require(model.ladder), build = try #require(model.before)
         let planned = "Planned: I’ll make “Waiting room”: one card per agent that waits for you, oldest first."
         #expect(ladder.steps.map(\.name) == ["Plan", "Write", "Check"] && ladder.steps.map(\.mark) == [.done, .now, .later])
-        #expect(ladder.steps[0].lines.map(\.text) == ["Read the guide", "Named it waiting-room", planned])
+        #expect(ladder.steps[0].lines.map(\.text) == ["Read the guide", planned])
         #expect(ladder.steps[1].lines == [.init(text: "Writing waiting-room.html", mark: .now)] && ladder.steps[2].note == "Opens it, reads it, looks for errors")
         #expect(ladder.eyes == .think && ladder.say == nil && ladder.progress == 0.5)
         #expect(model.builds.map(\.id) == [build.id] && model.watched == build.id && build.choice.level == .watch)
         #expect(build.choice.said(home: library.places.home.path) == "This space may watch all your agents.")
-        #expect(model.builder == "\(model.name) · \(model.modelWords.model)")
+        #expect(model.whoBuilds == "\(model.name) · \(model.modelWords.model)")
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "j3-4" + suffix, root: stage.home.root)
             let says = { (words: [String]) in
                 words.contains("Stop") && !words.contains("Build Now") && !words.contains("Continue") && !words.contains(BlankView.chips[0].0)
                     && words.contains("Your words: Who is waiting for me. This space may watch all your agents.")
-                    && words.contains("Building · \(model.builder)")
-                    && words.contains { $0.hasPrefix("Plan, done, Read the guide, Named it waiting-room, \(planned), ") }
+                    && words.contains("Building · \(model.whoBuilds)")
+                    && words.contains { $0.hasPrefix("Plan, done, Read the guide, \(planned), ") }
                     && words.contains { $0.hasPrefix("Write, now, Writing waiting-room.html, ") }
                     && words.contains("Check, to come, Opens it, reads it, looks for errors")
             }
@@ -358,12 +358,17 @@ struct AcceptanceBuild {
             let side = await Self.read(shell.drawer.host) { $0.contains("Who is waiting for me, building, 50 %") }
             #expect(side.contains("Who is waiting for me, building, 50 %"), "\(side)")
         }
+        // One column under 720 points of content, the foot's right side gone.
+        let wide = shell.window.frame.size
+        shell.window.setContentSize(NSSize(width: 640, height: 480))
+        try await stage.appearances { suffix in try await Picture.window(shell, library: library, web: nil, "j3-4-narrow" + suffix, root: stage.home.root) }
+        shell.window.setContentSize(wide)
         // Stop mid-Write goes back to the field: the words in it, the level they were built with, its row gone, a toast.
-        var noted: [String] = []
-        model.noted = { noted.append($0) }
         model.stop()
         #expect(!model.building && model.builds.isEmpty && model.draft == "Who is waiting for me" && model.level == .watch && model.ladder == nil)
-        #expect(noted == ["Stopped · waiting-room.html stays in your spaces folder, unchecked"])
+        let toast = try #require(shell.layer.subviews.compactMap { $0 as? Toast }.last)
+        #expect(toast.words == "Stopped · what it changed stays in your spaces folder", "the fake writes nothing to disk: the toast names no file")
+        toast.leave(now: true)
         let back = { (words: [String]) in words.contains("Build Now") && !words.contains("Stop") && !words.contains { $0.hasPrefix("Your assistant:") } }
         let words = await Self.read(host, until: back)
         #expect(back(words), "\(words)")
@@ -373,6 +378,21 @@ struct AcceptanceBuild {
     /// You may leave (S4, X3.2): the person goes to read Daily brief; the build goes on, its page already written, so
     /// its row has its name, in its group, with the ring at half; New Space shows its own field again, and the row
     /// brings the build back. Nothing is said: the toast comes when it is ready (x3-3's other end, LadderTests).
+    /// A live build that cannot go on is said as it is, with its notice: its model out of reach is no "Building".
+    @Test("A stuck build says so on its page") func stuckBuild() async throws {
+        let stage = try Stage("build")
+        defer { stage.remove() }
+        let (shell, _, host) = try await Self.newSpace(stage, builder: true)
+        let model = shell.assistant
+        model.send("Make the counters bigger")
+        #expect(await wait(until: { model.building && model.presence.stuck != nil }))
+        let notice = try #require(model.notice), word = model.presence.word
+        let says = { (words: [String]) in words.contains(word) && words.contains(notice.title) && !words.contains { $0.hasPrefix("Building") } }
+        let words = await Self.read(host, until: says)
+        #expect(says(words), "\(words)")
+        await Self.finish(model)
+    }
+
     /// R1.1, the sentence: under the field, "With your agents", its tag, "This space may [talk to] [all your agents].", each
     /// word a menu in the sentence's own words; the warning names the agents that never ask and replaces the lock line.
     /// The bar says Build Now ⌘↵ and Continue ↵. Words that ask for agents pre-set watch (promises E 31).
@@ -539,8 +559,7 @@ struct AcceptanceBuild {
         _ = await wait(until: { stopped })
     }
     /// It arrives and opens (S4, X3.3): the page written and the turn ended while New Space shows the build, the space
-    /// appears and opens, and the sign's frame grows from New Space's sign to the center's edges over a still of the
-    /// page left; drawn at 0.6 of its time (x3-3-growing). Then it plays to its end through `Arrival.open`, as App.open
+    /// appears and opens, and the sign's frame grows from the sign of the build's page to the center's edges; drawn at 0.6 of its time (x3-3-growing). Then it plays to its end through `Arrival.open`, as App.open
     /// calls it: the page is not loaded while it plays; once it is gone the page loads with the level chosen before
     /// Build, nothing asked, and the card opens on the conversation: the reply said short, its details folded (x3-3).
     /// A space no longer shown when its arrival ends is not opened, and a new opening ends an arrival still playing.
@@ -551,10 +570,12 @@ struct AcceptanceBuild {
         #expect(await wait(until: { model.ladder?.done == true }))
         // The page the fake says it wrote, then the end of its turn: the app's `ended` lists the spaces and opens the new one.
         try stage.home.space("waiting-room", Self.waitingRoom)
-        var made: String?
+        // As App does, the arrival is made in the same turn: its sign is the one the build's page still shows.
+        var made: String?, begun: Arrival?
         model.ended = {
             library.relist()
             made = model.appeared(library.entries)
+            begun = made.flatMap { Arrival.made($0, in: shell) }
         }
         try "".write(to: stage.home.root.appendingPathComponent("out/finish"), atomically: true, encoding: .utf8)
         #expect(await wait(until: { made != nil }))
@@ -568,19 +589,14 @@ struct AcceptanceBuild {
         let room = try await stage.home.window(try #require(library.entry(name)?.space), ask)
         defer { room.close() }
         room.made = true
-        // The still is taken once, in the appearance of the moment: the day's, for the picture.
-        let arrival = try await Stage.alone {
-            NSApp.appearance = NSAppearance(named: .aqua)
-            await wait { shell.window.effectiveAppearance.name == .aqua }
-            return try #require(Arrival.made(name, in: shell))
-        }
+        let arrival = try #require(begun)
         shell.show(room)
         #expect(shell.window.title == "Waiting room")
         // What App.open does around it: the conversation follows the space shown.
         model.place = AssistantModel.place(room)
-        // It starts on the sign of 52 points, its arm and stroke the sign's, its eyes on.
-        #expect(arrival.start.face && abs(arrival.start.arm - 52 * 0.31) < 0.01 && arrival.start.stroke == 35)
-        #expect(abs(arrival.start.rect.width - 52 * 0.88) < 0.5 && abs(arrival.start.rect.midX - (Stage.Size.main.width - Drawer.column) / 2) < 1, "from New Space's sign, beside the sidebar: \(arrival.start.rect)")
+        // It starts on the page's sign of 44 points, at its top left, its arm and stroke the sign's, its eyes on.
+        #expect(arrival.start.face && abs(arrival.start.arm - 44 * 0.31) < 0.01 && arrival.start.stroke == 35)
+        #expect(abs(arrival.start.rect.width - 44 * 0.88) < 0.5 && arrival.start.rect.midX < arrival.room.midX, "\(arrival.start.rect)")
         arrival.progress = 0.6
         let shape = arrival.shape
         #expect(shape.rect.width > arrival.start.rect.width && shape.rect.width < arrival.room.width - 28 && shape.eyes == 0)
@@ -835,7 +851,7 @@ struct AcceptanceBuild {
         let ladder = try #require(model.ladder)
         #expect(ladder.say == "Before I write it: which way should it read?" && ladder.choices == ["One card per agent", "A single list, oldest first"])
         #expect(ladder.steps[1].lines.last == .init(text: "Waits for your answer", mark: .waits))
-        #expect(ladder.steps.map(\.mark) == [.done, .waits, .later] && ladder.steps[1].note == "Waits for your answer" && ladder.eyes == .wait)
+        #expect(ladder.steps.map(\.mark) == [.done, .waits, .later] && ladder.eyes == .wait)
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d7" + suffix, root: stage.home.root)
             let words = await Self.read(host)
@@ -852,15 +868,15 @@ struct AcceptanceBuild {
         let (stage, shell, library, host) = try await Self.building("fail")
         defer { stage.remove() }
         let model = shell.assistant
-        #expect(await wait(until: { model.ladder?.steps[2].note == "Found problems · Fixing them…" || model.ladder?.steps[2].mark == .done }))
+        #expect(await wait(until: { model.ladder?.steps[2].lines.last?.text == "Found problems · Fixing them…" || model.ladder?.steps[2].mark == .done }))
         #expect(await wait(until: { model.ladder?.steps[2].mark == .done }))
         let ladder = try #require(model.ladder)
-        #expect(ladder.done && ladder.eyes == .done && ladder.steps[2].note == "Passed after 2 fixes")
+        #expect(ladder.done && ladder.steps[2].lines.last?.text == "Passed after 2 fixes")
         #expect(ladder.steps.allSatisfy { Ladder.took($0, now: model.clock()) != nil })
         try await stage.appearances { suffix in
             try await Picture.window(shell, library: library, web: nil, "d8" + suffix, root: stage.home.root)
             let words = await Self.read(host)
-            #expect(!words.contains("Stop") && words.contains { $0.hasPrefix("Check, done, Passed after 2 fixes, ") }, "\(words)")
+            #expect(words.contains("Stop") && words.contains("Checked · \(model.whoBuilds)") && words.contains { $0.hasPrefix("Check, done, Passed after 2 fixes, ") }, "\(words)")
         }
         await Self.finish(model)
     }

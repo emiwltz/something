@@ -1,8 +1,8 @@
 // The build's ladder: what the assistant does with the words sent from New Space, read from its build's turn as three
 // steps, Plan · Write · Check, each with its time and its real lines. The words stay true to what agents report, tools
-// and their end, never what a page holds or what they might be doing: "Read the guide" is its tool, "Named it" the first
-// page written, "Planned" the agent's own first words before writing, "Wrote" a write that ended and the file's size on
-// disk. Write begins with the first file written, Check with the first `something check`; a check followed by a write
+// and their end, never what a page holds or what they might be doing: "Read the guide" is its tool, "Named it" a new page
+// whose first write ended, "Planned" the agent's last words before Plan ended, "Wrote" a write that ended and the file's
+// size on disk. Write begins with the first file written, Check with the first `something check`; a check followed by a write
 // found problems, which the writes after it fix; a check passed only when its command says so (the lent tool reports a
 // page with problems as done, so it says "Checked"). A question the agent asks while it builds is answered on the
 // build's page (keys 1 to 9 while no text is edited, Ladder.choice), while its permissions still go to the panel
@@ -19,6 +19,8 @@ struct Ladder: Equatable {
     /// One thing observed in a step: under way, done or failed.
     struct Line: Equatable {
         var text: String, mark = Mark.done
+        /// Whether these are the agent's own words, which may hold a little Markdown; a file's name or a title never does.
+        var spoken = false
     }
 
     struct Step: Equatable {
@@ -34,7 +36,8 @@ struct Ladder: Equatable {
     var eyes: Sign.State
     /// The labels of the question asked, in its order.
     var choices: [String] = []
-    /// The page written, by its file's name; and whether it ran a command, which may have written anything.
+    /// The page written, by its file's name; and whether it used a tool that may have changed something: any but reading
+    /// and checking, unless it failed.
     var wrote: String?, ran = false
 
     var done: Bool { steps.allSatisfy { $0.mark == .done } }
@@ -47,9 +50,10 @@ struct Ladder: Equatable {
 
     /// The ladder of a build begun at `start` whose turn holds `items`, the times taken from `seen` (when something
     /// saw an item, or `<id>/<status>` its tool's end) or else the item's own; `asked` is the question waiting since
-    /// `askedAt`; `size` gives the bytes of a file written, by its name, when it can be read.
+    /// `askedAt`; `spaces` are the spaces there were before it, and `size` gives the bytes of a file written, by its
+    /// path, or its name in the spaces folder, when it can be read.
     static func read(_ items: [Item], seen: [String: Date], from start: Date, asked: Question? = nil, askedAt: Date? = nil,
-                     size: (String) -> Int? = { _ in nil }) -> Ladder {
+                     spaces: Set<String> = [], size: (String) -> Int? = { _ in nil }) -> Ladder {
         func at(_ item: Item, _ status: String? = nil) -> Date? {
             seen[status.map { "\(item.id)/\($0)" } ?? item.id] ?? seen[item.id] ?? iso8601.date(from: item.at)
         }
@@ -61,10 +65,15 @@ struct Ladder: Equatable {
         var plan = Step(name: "Plan", from: start, note: "Reads the guide, then plans the space")
         var write = Step(name: "Write", note: "Writes the space")
         var check = Step(name: "Check", note: "Opens it, reads it, looks for errors")
-        plan.lines = planned(items, tools, page: page)
         write.lines = written(tools, before: checks.first ?? tools.endIndex, size: size)
         plan.to = (writes.first ?? checks.first).flatMap { at(tools[$0]) } ?? askedAt
         plan.mark = plan.to == nil ? .now : .done
+        let named = page.flatMap { name in
+            name.hasSuffix(".html") && !spaces.contains(String(name.dropLast(5))) && writes.contains { file(tools[$0]) == name && tools[$0].tool?.status == "done" } ? name : nil
+        }
+        // Up to what ended Plan: a tool, or the question, which comes after the words.
+        let end = (writes.first ?? checks.first).flatMap { first in items.firstIndex { $0.id == tools[first].id } } ?? items.endIndex
+        plan.lines = planned(items[..<end], tools, named: named, over: plan.mark == .done)
         if let first = writes.first {
             (write.from, write.mark) = (at(tools[first]), .now)
             if let begun = checks.first { (write.to, write.mark) = (at(tools[begun]), .done) }
@@ -75,22 +84,21 @@ struct Ladder: Equatable {
             let passed = item.tool?.name.hasSuffix("something_check") == true
                 ? (fixes > 0 ? "Checked again \(after)" : "Checked") : (fixes > 0 ? "Passed \(after)" : "Passed, no errors")
             check.from = at(tools[first])
+            let said: String
             switch item.tool?.status {
-            case _ where writes.contains(where: { $0 > last }): (check.mark, check.note) = (.now, "Found problems · Fixing them…")
-            case "failed": (check.mark, check.note) = (.failed, "Found problems")
-            case "done": (check.mark, check.to, check.note) = (.done, at(item, "done"), passed)
-            default: (check.mark, check.note) = (.now, fixes > 0 ? "Checking again…" : "Checking, locked off the network")
+            case _ where writes.contains(where: { $0 > last }): (check.mark, said) = (.now, "Found problems · Fixing them…")
+            case "failed": (check.mark, said) = (.failed, "Found problems")
+            case "done": (check.mark, check.to, said) = (.done, at(item, "done"), passed)
+            default: (check.mark, said) = (.now, fixes > 0 ? "Checking again…" : "Checking, locked off the network")
             }
-            check.lines = [Line(text: check.note, mark: check.mark)]
+            check.lines = [Line(text: said, mark: check.mark)]
         }
         var ladder = Ladder(steps: [plan, write, check], eyes: .think, wrote: page)
-        ladder.ran = tools.contains { Presence.Step.of($0) == .command && !writing($0) }
+        ladder.ran = tools.contains { ![.read, .guide, .check].contains(Presence.Step.of($0)) && $0.tool?.status != "failed" }
         if let asked, let waiting = ladder.steps.firstIndex(where: { $0.mark != .done }) {
-            (ladder.steps[waiting].mark, ladder.steps[waiting].note) = (.waits, "Waits for your answer")
+            ladder.steps[waiting].mark = .waits
             ladder.steps[waiting].lines.append(Line(text: "Waits for your answer", mark: .waits))
             (ladder.say, ladder.choices, ladder.eyes) = (asked.text, asked.options, .wait)
-        } else if ladder.done {
-            ladder.eyes = .done
         }
         return ladder
     }
@@ -109,19 +117,19 @@ struct Ladder: Equatable {
         return (item.text as NSString).lastPathComponent
     }
 
-    /// Plan's lines: the guide read, the page named, and the agent's first words before it wrote anything.
-    private static func planned(_ items: [Item], _ tools: [Item], page: String?) -> [Line] {
+    /// Plan's lines: the guide read, the page `named`, and, once Plan is `over`, when any message is finished on every
+    /// driver, what the agent last said before it ended.
+    private static func planned(_ items: ArraySlice<Item>, _ tools: [Item], named: String?, over: Bool) -> [Line] {
         var lines: [Line] = []
         switch tools.first(where: { Presence.Step.of($0) == .guide })?.tool?.status {
         case "running": lines.append(Line(text: "Reading the guide", mark: .now))
         case "done": lines.append(Line(text: "Read the guide"))
         default: break
         }
-        if let page, page.hasSuffix(".html") { lines.append(Line(text: "Named it \(page.dropLast(5))")) }
-        let before = items.prefix { !($0.kind == "tool" && writing($0)) }
-        if let words = before.first(where: { $0.kind == "message" && $0.author == "agent" })?.text.components(separatedBy: "\n\n").first?
+        if let named { lines.append(Line(text: "Named it \(named.dropLast(5))")) }
+        if over, let words = items.last(where: { $0.kind == "message" && $0.author == "agent" })?.text.components(separatedBy: "\n\n").first?
             .trimmingCharacters(in: .whitespacesAndNewlines), !words.isEmpty {
-            lines.append(Line(text: "Planned: \(words)"))
+            lines.append(Line(text: "Planned: \(words)", spoken: true))
         }
         return lines
     }
@@ -129,16 +137,16 @@ struct Ladder: Equatable {
     /// Write's lines: one per file written before the check `before`, by what its last write says; a failed write or a
     /// status no agent told says nothing.
     private static func written(_ tools: [Item], before: Int, size: (String) -> Int?) -> [Line] {
-        var files: [String] = [], status: [String: String] = [:]
+        var files: [String] = [], status: [String: String] = [:], paths: [String: String] = [:]
         for tool in tools[..<before] where writing(tool) {
             guard let name = file(tool) else { continue }
             if status[name] == nil { files.append(name) }
-            status[name] = tool.tool?.status
+            (status[name], paths[name]) = (tool.tool?.status, tool.text.hasPrefix("/") ? tool.text : name)
         }
         return files.compactMap { name in
             switch status[name] {
             case "running": Line(text: "Writing \(name)", mark: .now)
-            case "done": Line(text: "Wrote \(name)" + (size(name).map { " · \(max(1, ($0 + 512) / 1024)) KB" } ?? ""))
+            case "done": Line(text: "Wrote \(name)" + (size(paths[name] ?? name).map { " · \(max(1, ($0 + 512) / 1024)) KB" } ?? ""))
             default: nil
             }
         }
@@ -152,9 +160,9 @@ struct Ladder: Equatable {
         return ladder
     }
 
-    /// What a Stop leaves, as the toast says it.
-    var stoppedWords: String {
-        if let wrote { return "Stopped · \(wrote) stays in your spaces folder\(steps[2].mark == .done ? "" : ", unchecked")" }
+    /// What a Stop leaves, as the toast says it: the page only when `exists` finds it.
+    func stoppedWords(exists: (String) -> Bool) -> String {
+        if let wrote, exists(wrote) { return "Stopped · \(wrote) stays in your spaces folder\(steps[2].mark == .done ? "" : ", unchecked")" }
         return ran ? "Stopped · what it changed stays in your spaces folder" : "Stopped before writing · nothing was saved · your words are back"
     }
 

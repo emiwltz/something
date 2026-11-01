@@ -806,9 +806,6 @@ extension AssistantModel {
         return (model, effort)
     }
 
-    /// Who works in this conversation, as a build's page says it: the agent, then its model once that has a name.
-    var builder: String { ownModel || (session.model ?? agent?.model) == nil ? name : "\(name) · \(modelWords.model)" }
-
     /// The model and effort `kind` would build with: modelWords for the kind chosen; for another, "Its own model" when
     /// it picks its own, else "Default model" until it has run, since something reads no agent's settings.
     func modelWords(of kind: String) -> (model: String, effort: String?) {

@@ -90,7 +90,7 @@ import SomethingCore
             if let space = place.space, space == fromTemplate { threadShown = true }
             // Leaving New Space stops nothing: its builds go on, followed from their rows.
             if oldValue == .blank, place != .blank {
-                (halted, nudged, watched) = (false, false, nil)
+                (nudged, watched) = (false, nil)
                 dropReading()
             }
             resolve()
@@ -121,7 +121,6 @@ import SomethingCore
     /// New Space shows the build `number`, or its own field for nil: a click on a building row, or on New Space.
     func watch(_ number: Int?) {
         watched = number.flatMap { n in builds.contains { $0.id == n } ? n : nil }
-        if watched != nil { halted = false }
         resolve()
         follow()
     }
@@ -189,10 +188,10 @@ import SomethingCore
     /// The build that just ended, while the window looks for the space it made (`appeared`), and whether New Space
     /// showed it then.
     @ObservationIgnored private var ending: (build: Build, shown: Bool)?
-    /// Whether the person just stopped a build shown on New Space: what it had said stays away from the field, until
-    /// they build again or leave.
-    private(set) var halted = false
-    /// Whether Esc was just pressed while the blank page builds: its ladder says how to stop, for a moment.
+    /// The conversation of the build the person stopped, when New Space went on with it: what it had said stays away from
+    /// the field, until they build again. Another conversation's reply there still shows.
+    private(set) weak var halted: Session?
+    /// Whether Esc was just pressed while the blank page builds: its foot says how to stop, for a moment.
     private(set) var nudged = false
     @ObservationIgnored private var nudges = 0
     /// The question the build asks, by its request, answered on the blank page (Panels leaves it there).
@@ -372,16 +371,17 @@ import SomethingCore
     /// Whether `request` comes from a reading's agent, stopped or not: it hears a no (`followReading`), nobody is asked.
     func reads(_ request: Request) -> Bool { engine.unseen.contains(request.agent) }
 
-    /// The ladder of the build New Space shows; nil when it shows none.
-    var ladder: Ladder? { before.map(ladder) }
-
     /// The ladder of `build` as it goes; its question only while New Space shows it, where it is answered.
     func ladder(_ build: Build) -> Ladder {
         let turn = build.session.turn.flatMap { $0.id == build.turn ? nil : $0 }
         let asked = build.id == watched ? asked : nil
-        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] }) { [places] file in
-            (try? FileManager.default.attributesOfItem(atPath: places.spaces.appendingPathComponent(file).path))?[.size] as? Int
-        }
+        return Ladder.read(turn?.items ?? [], seen: build.seen, from: build.at, asked: asked?.question, askedAt: asked.flatMap { build.seen[$0.request] },
+                           spaces: build.spaces, size: bytes)
+    }
+
+    /// The bytes of `file`, a path or a name in the spaces folder; nil when it is not there.
+    private func bytes(_ file: String) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: URL(fileURLWithPath: file, relativeTo: places.spaces).path))?[.size] as? Int
     }
 
     /// The space `build` writes, by its name, once its ladder names the page; nil before.
@@ -652,7 +652,7 @@ import SomethingCore
         }
         if sentence == nil { draft = "" }
         fromTemplate = nil
-        halted = false
+        halted = nil
         // While its turn runs, the app holds the message rather than the agent: Take Back and Stop can still give it back.
         // Behind messages already held it waits too, so they leave in the order they were written; and while a Quick
         // Change works on this space, until it ends.
@@ -696,7 +696,7 @@ import SomethingCore
         if place.space != nil { open = false }
     }
 
-    /// Esc while the blank page builds: never a stop, the ladder says for 2.6 s how to stop instead.
+    /// Esc while the blank page builds: never a stop, the foot says for 2.6 s how to stop instead.
     func nudge() {
         guard place == .blank, building else { return }
         nudges += 1
@@ -723,17 +723,18 @@ import SomethingCore
     }
 
     /// Stops the running turn, and `build`, asked from the blank page, with it: the page goes back to the field with the
-    /// words in it, to change or build again, and a toast says what stays on disk. The watch ends here: a space it began
+    /// words in it and the focus, to change or build again, and a toast says what stays on disk. The watch ends here: a space it began
     /// is not opened by itself.
     private func stop(_ build: Build?) {
         if let build {
             dropped = question(of: build)?.request
-            let left = ladder(build).stoppedWords
+            let left = ladder(build).stoppedWords { bytes($0) != nil }
             (asked, nudged) = (nil, false)
             remove(build)
             back(build)
             keepLevel(build)
-            halted = true
+            if session === build.session { halted = session }
+            wantsFocus = true
             noted(left)
         }
         takeBack()
@@ -758,7 +759,7 @@ import SomethingCore
             return resolve()
         }
         halt(session)
-        halted = false
+        halted = nil
         session = Session(kind: kind, model: session.model, effort: session.effort, space: session.space)
         sessions[session.space.map(Place.Key.space) ?? .new] = session
         save(session)

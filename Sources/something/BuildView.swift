@@ -1,7 +1,8 @@
 // A build's own page, what New Space shows of the build it follows: the sign, the title (the space's once it is named,
 // the person's words until then), who builds and with which model, Stop; on the left their words and the sentence they
 // chose, or the question the agent asks, and the ladder's steps with their real lines (Ladder.swift); on the right where
-// the space will show; at the foot where it is built and that leaving stops nothing, its row bringing it back. Esc never
+// the space will show; at the foot where it is built and that leaving stops nothing, its row bringing it back. An agent
+// stuck, or waiting in a window of the Mac, is said as it is, with its notice and actions: never "Building". Esc never
 // throws a build away: the foot says, for a moment, how to stop instead.
 import AppKit
 import SwiftUI
@@ -17,8 +18,8 @@ struct BuildView: View {
     var body: some View {
         GeometryReader { window in
             let inset: CGFloat = 44, wide = window.size.width - inset * 2 >= BuildView.narrow
-            // The mockup's columns, 1 and 1.05 of the width left by their gap; one column takes the whole width.
-            let right = wide ? (min(window.size.width, BuildView.widest) - inset * 2 - 24) * 1.05 / 2.05 : window.size.width - 48
+            // The mockup's columns, 1 and 1.05 of the width left by their gap.
+            let right = (min(window.size.width, BuildView.widest) - inset * 2 - 24) * 1.05 / 2.05
             let ladder = model.ladder(build), name = model.space(of: build).flatMap { library.entry($0)?.title }
             ScrollView {
                 VStack(alignment: .leading, spacing: wide ? 22 : 18) {
@@ -26,16 +27,19 @@ struct BuildView: View {
                     if wide {
                         HStack(alignment: .top, spacing: 24) {
                             left(ladder.titled(name))
-                            BuildSkeleton(width: right, motion: library.preferences.motion)
+                            BuildSkeleton(motion: library.preferences.motion).frame(width: right)
                         }
                         // As tall as they are: the foot takes what the page has left, never the choices.
                         .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        left(ladder.titled(name)).fixedSize(horizontal: false, vertical: true)
-                        BuildSkeleton(width: right, motion: library.preferences.motion)
+                        Group {
+                            left(ladder.titled(name))
+                            BuildSkeleton(motion: library.preferences.motion)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                    foot(ladder, wide: wide)
+                    foot(wide: wide)
                 }
                 .padding(wide ? EdgeInsets(top: 40, leading: inset, bottom: 32, trailing: inset) : EdgeInsets(top: 28, leading: 24, bottom: 24, trailing: 24))
                 .frame(maxWidth: BuildView.widest, minHeight: window.size.height)
@@ -45,18 +49,20 @@ struct BuildView: View {
         }
     }
 
-    /// The sign, the title and who builds, and Stop until all is done. A title that is still the person's words is
-    /// paler than the name the build gave it.
+    /// The sign, the title, how the build stands and Stop. A title that is still the person's words is paler than the
+    /// name the build gave it.
     private func head(_ ladder: Ladder, name: String?, wide: Bool) -> some View {
-        let state = ladder.eyes == .wait ? Sign.State.listen : ladder.eyes
+        let presence = model.presence, held = ladder.eyes != .wait && (presence.stuck != nil || presence.state == .wait)
+        let state = held ? presence.state : ladder.eyes == .wait ? .listen : Sign.State.think
         return HStack(spacing: 16) {
-            PageSign(state: state, joy: ladder.done, side: 44, lands: false, motion: library.preferences.motion)
+            PageSign(state: state, side: 44, lands: false, motion: library.preferences.motion)
             VStack(alignment: .leading, spacing: 6) {
                 Text(name ?? AssistantModel.provisional(build.sentence))
                     .font(Look.font(.title, size: wide ? 30 : 24, weight: .semibold).ui).kerning(wide ? -0.75 : -0.6)
                     .foregroundStyle((name == nil ? Look.Token.ink2 : .ink).ui).lineLimit(1).truncationMode(.tail)
                     .accessibilityAddTraits(.isHeader)
-                let status = ladder.done ? "Ready · checked" : (ladder.eyes == .wait ? "Waits for your answer · " : "Building · ") + model.builder
+                // Checked, not Ready: the lent tool ends as done on a page with problems, and the turn still runs.
+                let status = held ? presence.word : (ladder.eyes == .wait ? "Waits for your answer · " : ladder.done ? "Checked · " : "Building · ") + model.whoBuilds
                 HStack(spacing: 8) {
                     Monogram(name: model.name)
                     Text(status).font(Look.font(.ui, size: 12.5).ui).foregroundStyle(Look.Token.ink2.ui).lineLimit(1)
@@ -65,7 +71,7 @@ struct BuildView: View {
                 .accessibilityLabel(status)
             }
             Spacer(minLength: 8)
-            if !ladder.done { stop }
+            stop
         }
     }
 
@@ -81,13 +87,14 @@ struct BuildView: View {
         .accessibilityLabel("Stop")
     }
 
-    /// What was asked for, or the question the agent asks in its place, then the steps.
+    /// What was asked for, or the question the agent asks in its place, the steps, and what holds the agent up.
     private func left(_ ladder: Ladder) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             if let question = ladder.say { asked(question, ladder) } else { words }
             TimelineView(.animation(minimumInterval: 0.1, paused: !ladder.steps.contains { $0.mark == .now })) { _ in
                 steps(ladder, now: model.clock())
             }
+            if let notice = model.notice { NoticeView(notice: notice) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -174,14 +181,15 @@ struct BuildView: View {
         .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
     }
 
-    /// A step: its mark, its name, what it did or else what it is for, and its time.
+    /// A step: its mark, its name, what it did or, not done yet, what it is for, and its time. A step done with no line
+    /// says nothing: nobody saw what it did.
     private func row(_ step: Ladder.Step, now: Date) -> some View {
-        let lit = step.mark != .later, time = Ladder.took(step, now: now)
+        let lit = step.mark != .later, time = Ladder.took(step, now: now), said = step.lines.isEmpty ? step.mark == .done ? [] : [step.note] : step.lines.map(\.text)
         return HStack(alignment: .top, spacing: 12) {
             dot(step.mark, now: now).frame(width: 16, height: 16).padding(.top, 1).frame(width: 18, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 Text(step.name).font(Look.font(.ui, size: 13, weight: .semibold).ui).foregroundStyle((lit ? Look.Token.ink : .ink3).ui)
-                if step.lines.isEmpty {
+                if step.lines.isEmpty, step.mark != .done {
                     Text(step.note).font(Look.font(.ui, size: 12).ui).foregroundStyle(Look.Token.ink3.ui)
                 } else {
                     VStack(alignment: .leading, spacing: 3) { ForEach(step.lines, id: \.text, content: line) }.padding(.top, 3)
@@ -194,11 +202,10 @@ struct BuildView: View {
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(([step.name, Self.word(step.mark)] + (step.lines.isEmpty ? [step.note] : step.lines.map(\.text)) + [time].compactMap { $0 }).joined(separator: ", "))
+        .accessibilityLabel(([step.name, Self.word(step.mark)] + said + [time].compactMap { $0 }).joined(separator: ", "))
     }
 
-    /// A line: a tick once done, the eyes while under way, a cross when it failed. The agent's own words may hold a
-    /// little Markdown; a long plan keeps to three lines.
+    /// A line: a tick once done, the eyes while under way, a cross when it failed. A long plan keeps to three lines.
     private func line(_ line: Ladder.Line) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Group {
@@ -211,7 +218,7 @@ struct BuildView: View {
                 }
             }
             .frame(width: 13)
-            Text(AssistantCard.markdown(line.text)).font(Look.font(.ui, size: 12).ui).lineLimit(3)
+            Text(BuildView.shown(line)).font(Look.font(.ui, size: 12).ui).lineLimit(3)
                 .foregroundStyle((line.mark == .failed ? Look.Token.bad : line.mark == .done ? .ink2 : .ink).ui)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -247,6 +254,14 @@ struct BuildView: View {
         }
     }
 
+    /// `line` as drawn: only the agent's own words are Markdown, and a link in them takes nobody anywhere.
+    private static func shown(_ line: Ladder.Line) -> AttributedString {
+        guard line.spoken else { return AttributedString(line.text) }
+        var words = AssistantCard.markdown(line.text)
+        for run in words.runs where run.link != nil { words[run.range].link = nil }
+        return words
+    }
+
     private static func word(_ mark: Ladder.Mark) -> String {
         switch mark {
         case .later: "to come"
@@ -257,27 +272,25 @@ struct BuildView: View {
         }
     }
 
-    /// Where it is built, and that the person may leave; Esc's nudge in their place for a moment. Nothing on the right
-    /// once all is done.
-    private func foot(_ ladder: Ladder, wide: Bool) -> some View {
-        let nudged = model.nudged && !ladder.done
-        return HStack(spacing: 6) {
-            Image(systemName: nudged ? "info.circle" : "lock").font(.system(size: 10)).accessibilityHidden(true)
-            Text(nudged ? "Still building. To stop, press \(Keys.shown("stop")) or Stop." : "Built on this Mac, in \(model.folder)")
-                .foregroundStyle((nudged ? Look.Token.ink : .ink3).ui)
+    /// Where it is built, and that the person may leave; Esc's nudge in their place for a moment.
+    private func foot(wide: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: model.nudged ? "info.circle" : "lock").font(.system(size: 10)).accessibilityHidden(true)
+            Text(model.nudged ? "Still building. To stop, press \(Keys.shown("stop")) or Stop." : "Built on this Mac, in \(model.folder)")
+                .foregroundStyle((model.nudged ? Look.Token.ink : .ink3).ui)
             Spacer(minLength: 8)
             // Leaving stops nothing: the row in the sidebar brings it back.
-            if wide, !nudged, !ladder.done { Text("You can leave: it keeps building, its row shows how far it is.").lineLimit(1) }
+            if wide, !model.nudged { Text("You can leave: it keeps building, its row shows how far it is.").lineLimit(1) }
         }
         .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui)
         .padding(.horizontal, 2)
     }
 }
 
-/// Where the space will show, `width` wide in the mockup's proportions: a skeleton under a caption, never a guess at
-/// what the page holds. It shimmers while building; reduced motion keeps it still.
+/// Where the space will show, in the mockup's proportions: a skeleton under a caption, never a guess at what the page
+/// holds. It shimmers while building; reduced motion keeps it still.
 struct BuildSkeleton: View {
-    let width: CGFloat, motion: Look.Motion
+    let motion: Look.Motion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -286,15 +299,17 @@ struct BuildSkeleton: View {
                 Text("Your space shows here as soon as it exists")
             }
             .font(Look.font(.ui, size: 11.5).ui).foregroundStyle(Look.Token.ink3.ui).padding(.horizontal, 2)
-            let inner = width - 44
-            VStack(alignment: .leading, spacing: 12) {
-                bar(inner * 0.34).frame(height: 14)
-                bar(inner * 0.72).frame(height: 40)
-                bar(inner * 0.46).frame(height: 12)
-                bar(inner)
+            GeometryReader { box in
+                let inner = box.size.width - 44
+                VStack(alignment: .leading, spacing: 12) {
+                    bar(inner * 0.34).frame(height: 14)
+                    bar(inner * 0.72).frame(height: 40)
+                    bar(inner * 0.46).frame(height: 12)
+                    bar(inner)
+                }
+                .padding(22)
             }
-            .padding(22)
-            .frame(width: width, height: width * 650 / 1040, alignment: .topLeading)
+            .aspectRatio(1040.0 / 650.0, contentMode: .fit)
             .boxed(RoundedRectangle(cornerRadius: Look.card, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
             .accessibilityHidden(true)
         }
@@ -312,4 +327,9 @@ struct BuildSkeleton: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
+}
+
+extension AssistantModel {
+    /// Who works on the build shown: the agent, then its model once that has a name.
+    var whoBuilds: String { ownModel || (session.model ?? agent?.model) == nil ? name : "\(name) · \(modelWords.model)" }
 }

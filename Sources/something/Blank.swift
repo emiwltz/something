@@ -60,8 +60,7 @@ struct BlankView: View {
                         if let reply { answer(reply).frame(width: field).padding(.top, 30) }
                         BuildField(model: model).frame(width: field).padding(.top, reply == nil ? 30 : 14)
                         LevelCard(model: model).frame(width: field).padding(.top, 12)
-                        // The question the page answers needs no notice sending the person to the panel.
-                        if let notice = model.notice, model.asked == nil { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
+                        if let notice = model.notice { NoticeView(notice: notice).frame(width: field).padding(.top, 14) }
                         suggestions.padding(.top, 20)
                     }
                 }
@@ -101,7 +100,7 @@ struct BlankView: View {
     /// The last reply, when it came at or after row `since` and answers a message sent from the blank page; else nil.
     static func reply(in model: AssistantModel, since: Int) -> String? {
         let rows = model.rows
-        guard !model.building, !model.halted, let at = rows.lastIndex(where: { $0.reply != nil }), at >= since, let text = rows[at].reply,
+        guard !model.building, model.halted !== model.session, let at = rows.lastIndex(where: { $0.reply != nil }), at >= since, let text = rows[at].reply,
               !rows[at...].contains(where: { $0.mine != nil }), case .mine(let caption, _)? = rows[..<at].last(where: { $0.mine != nil }),
               caption == "on the blank page" else { return nil }
         return text
