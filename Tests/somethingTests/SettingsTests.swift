@@ -72,7 +72,7 @@ import Testing
                                            "Program · Model and effort": "assistant", "Model and effort": "model", "A new space may": "level",
                                            "Notify me when an agent asks": "notify", "Daily brief": nil, "Project watch": nil, "Unread": nil, "/Users/example/code/atelier": nil,
                                            "Where they live": nil, "Include a space’s memory when you export it": "exportMemory",
-                                           "Keep": "versionsKept", "Storage limit": "storageLimit",
+                                           "Keep": "versionsKept", "Ask me a few questions first": "askFirst", "Storage limit": "storageLimit",
                                            "Full Access": "fullAccess", "Your assistant asks before every change": "askEverything", "Agents a space starts": nil,
                                            "Resume each space’s conversation": "resume", "Put idle assistants to sleep after": "sleepAfter",
                                            "Keep at most": "awakeAtMost", "Keyboard shortcuts": nil]
@@ -131,7 +131,7 @@ import Testing
                           "Program · Model": "Claude Code", "Model": "Its models show after its first run", "A new space may": "None",
                           "Notify me when an agent asks": "off", "Daily brief": "Watch", "Project watch": "Run", "Unread": "Not known",
                           "Where they live": "Show in Finder", "Include a space’s memory when you export it": "off", "Keep": "50",
-                          "Storage limit": "500 MB", "Full Access": "off", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
+                          "Ask me a few questions first": "on", "Storage limit": "500 MB", "Full Access": "off", "Your assistant asks before every change": "off", "Agents a space starts": "Their Own Settings",
                           "Resume each space’s conversation": "on", "Put idle assistants to sleep after": "10 minutes", "Keep at most": "3",
                           "/Users/example/code/atelier": "Project watch", "Keyboard shortcuts": "Show Shortcuts"])
         #expect(SettingsTab.allCases.map(\.label) == ["General", "Spaces", "Agents", "Permissions"])

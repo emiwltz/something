@@ -15,7 +15,7 @@ import Testing
     /// own model and effort.
     static let mockup: [String: Any] = [
         "open": "last", "resume": true, "sleep": "10 minutes", "awake": "3", "askAll": false, "notify": false,
-        "motion": "Calm", "appearance": "System", "level": "None", "memory": false, "versions": "50", "limit": "500 MB",
+        "motion": "Calm", "appearance": "System", "level": "None", "memory": false, "askFirst": true, "versions": "50", "limit": "500 MB",
     ]
 
     /// The mockup's value of each preference, read from `values` in the mockup's words.
@@ -24,7 +24,7 @@ import Testing
         return ["open": values.openAtStart, "resume": values.resume,
                 "sleep": values.sleepAfter == 0 ? "Never" : "\(values.sleepAfter) minutes", "awake": "\(values.awakeAtMost)",
                 "askAll": values.askEverything, "notify": values.notify, "motion": capitalized(values.motion.rawValue),
-                "appearance": capitalized(values.appearance.rawValue), "level": values.level.title, "memory": values.exportMemory,
+                "appearance": capitalized(values.appearance.rawValue), "level": values.level.title, "memory": values.exportMemory, "askFirst": values.askFirst,
                 "versions": values.versionsKept == 0 ? "All" : "\(values.versionsKept)", "limit": "\(values.storageLimit) MB"]
     }
 
@@ -86,7 +86,7 @@ import Testing
         values.groups = [Preferences.Group(name: "Notes", spaces: ["garden", "pond"]), Preferences.Group(name: "Breaks", spaces: [])]
         (values.folded, values.names, values.recents) = (["Breaks"], ["garden": "My garden"], ["pond", "garden"])
         (values.openAtStart, values.appearance, values.motion, values.size) = ("new", .dark, .reduced, .larger)
-        (values.notify, values.level, values.exportMemory, values.memoryExport) = (true, .run, true, ["garden": false])
+        (values.notify, values.level, values.exportMemory, values.memoryExport, values.askFirst) = (true, .run, true, ["garden": false], false)
         values.sticker = Preferences.StickerPlace(trailing: false, bottom: false, offset: 120)
         (values.sleepAfter, values.awakeAtMost, values.versionsKept, values.storageLimit) = (0, 5, 0, 2000)
         // Each value differs from its default, so that a key not written would be seen.

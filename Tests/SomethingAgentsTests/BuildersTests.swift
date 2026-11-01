@@ -11,6 +11,15 @@ import SomethingCore
 
 @Suite struct BuildersTests {
     static let exchanges = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Exchanges")
+    /// The reading of the person's words before a build: one turn, one answer with its marked line, no tool, no request,
+    /// launched as asking everything with nothing lent. Amp and OMP wait for a real account, with Emi's go.
+    @Test(arguments: ["claude", "codex", "opencode", "pi"]) func aReadingIsOnePlainTurn(kind: String) throws {
+        let replay = try Replay.play("assistant-reading", kind: kind)
+        #expect(replay.fold.turns.count == 1 && replay.fold.turns[0].state == "done" && replay.fold.requests.isEmpty)
+        #expect(replay.items.map(\.kind) == ["message", "message"], "\(replay.items.map(\.kind))")
+        #expect(replay.items.last?.text.hasPrefix("[something] Questions: ") == true)
+    }
+
     /// The kinds the app drives, one per line of Tests/Exchanges/driven.txt.
     static let driven = ((try? String(contentsOf: exchanges.appendingPathComponent("driven.txt"), encoding: .utf8)) ?? "")
         .split(separator: "\n").map(String.init)

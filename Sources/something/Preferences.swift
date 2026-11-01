@@ -45,6 +45,8 @@ import SomethingCore
         var exportMemory = false
         /// What the person last answered, by space, at Include Its Memory.
         var memoryExport: [String: Bool] = [:]
+        /// Whether New Space reads the person's words and asks a few questions before a build (AssistantModel.read).
+        var askFirst = true
         /// nil while it rests at its first place, the bottom trailing corner.
         var sticker: StickerPlace?
         /// Minutes; 0 for never.
@@ -55,7 +57,8 @@ import SomethingCore
 
         enum CodingKeys: String, CodingKey, CaseIterable {
             case lastOpen, assistant, model, effort, listed, commands, askEverything, fullAccess, resume, toured, hinted, groups, folded, names,
-                 recents, openAtStart, appearance, motion, size, notify, level, exportMemory, memoryExport, sticker, sleepAfter, awakeAtMost,
+                 recents, openAtStart, appearance, motion, size, notify, level, exportMemory, memoryExport, askFirst, sticker, sleepAfter,
+                 awakeAtMost,
                  versionsKept, storageLimit
         }
 

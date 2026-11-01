@@ -11,8 +11,10 @@
 // temporary session of a space's assistant, the same kind with the same model and effort, told the parts pointed at; it
 // is stopped once its turn ends (never while one of its requests waits), its change kept as a quick version (its
 // answer a margin note when it changed nothing), and the space's own conversation, untouched, holds what the person
-// writes to it meanwhile. The engine keeps every space away from this agent (Bridge.visible); something writes to it
-// on its own only its context line, its pointing lines and Ask to Fix, never a page's text.
+// writes to it meanwhile. Before a build, a reading asks the same agent, in a throwaway conversation launched as asking
+// everything and lent nothing, what the person's words leave open (Brief); whatever goes wrong there means no question.
+// The engine keeps every space away from this agent (Bridge.visible); something writes to it on its own only its
+// context line, its pointing lines and Ask to Fix, never a page's text.
 import AppKit
 import Observation
 import SomethingAgents
@@ -87,7 +89,10 @@ import SomethingCore
             // A template's copy: opening the card shows its first word.
             if let space = place.space, space == fromTemplate { threadShown = true }
             // Leaving New Space stops nothing: its builds go on, followed from their rows.
-            if oldValue == .blank, place != .blank { (halted, nudged, watched) = (nil, false, nil) }
+            if oldValue == .blank, place != .blank {
+                (halted, nudged, watched) = (nil, false, nil)
+                dropReading()
+            }
             resolve()
             // The build's question is answered on New Space only: away, it is the panel's.
             follow()
@@ -148,6 +153,10 @@ import SomethingCore
     private(set) var session = Session(kind: nil)
     /// The Quick Change of each space, by its name: at work, or just ended while its frame and chip still show.
     private(set) var quicks: [String: Quick] = [:]
+    /// New Space's reading of its words: under way, or ended and waiting for Build.
+    private(set) var reading: Reading?
+    /// Every agent a reading launched, for as long as the app runs: one stopped may still ask as it goes.
+    @ObservationIgnored private var readers: Set<String> = []
     var kind: String? { session.kind }
     var id: String? { session.id }
     var agent: Agent? { session.agent }
@@ -286,6 +295,7 @@ import SomethingCore
         if !session.held.isEmpty, !quickWorks(on: place.space), light == .error || (light == .off && id != nil) { takeBack() }
         follow()
         followQuicks()
+        followReading()
         // Each build is concluded on the refresh where its turn ends, before a held message starts the next, wherever
         // the person went meanwhile.
         for build in builds where !build.session.launching && over(build.session, after: build.turn) { conclude(build) }
@@ -356,7 +366,10 @@ import SomethingCore
     }
 
     /// Whether `request` is answered on the blank page rather than in the panel: Panels' filter.
-    func answersInline(_ request: Request) -> Bool { request.id == dropped || inlineQuestion()?.request == request.id }
+    /// A reading's agent is covered too: it hears a no (`followReading`), the person never sees it.
+    func answersInline(_ request: Request) -> Bool {
+        request.id == dropped || readers.contains(request.agent) || inlineQuestion()?.request == request.id
+    }
 
     /// The ladder New Space shows: the build's it follows as it goes, or the one stopped there; nil when there is neither.
     var ladder: Ladder? { halted ?? before.map(ladder) }
@@ -404,11 +417,11 @@ import SomethingCore
     /// sidebar, or an assistant falls asleep, if there is one.
     private func keepTime() {
         let now = clock(), delay = sleepDelay
-        let at = sessions.values.flatMap { each -> [Date?] in
+        let at = (sessions.values.flatMap { each -> [Date?] in
             [[.working, .waiting].contains(light(each)) ? each.turn?.started.flatMap(iso8601.date).map { $0 + Presence.late }
                 : each.turn?.ended.flatMap(iso8601.date).map { $0 + Presence.changedFor },
              delay.flatMap { restful(each) ? each.active + $0 : nil }]
-        }.compactMap { $0 }.filter { $0 > now }.min()
+        } + [reading.flatMap { $0.brief == nil ? $0.until : nil }]).compactMap { $0 }.filter { $0 > now }.min()
         guard at != beatAt else { return }
         beatTimer?.invalidate()
         (beatTimer, beatAt) = (nil, at)
@@ -417,6 +430,7 @@ import SomethingCore
     }
 
     func tick() {
+        followReading()
         rest()
         keepTime()
         beat += 1
@@ -655,7 +669,9 @@ import SomethingCore
             sessions[.new] = next
             let line = choice(at: level).line(home: places.home.path)
             (watched, threadShown, chosenLevel, chosenScope, chosenStart) = (numbered, true, nil, nil, nil)
-            return deliver([AssistantModel.context(place, home: places.home.path), line, text].joined(separator: "\n"), to: built)
+            // A sentence sent from elsewhere leaves the field's reading alone.
+            let brief = sentence == nil ? briefed(text) : [Brief.nothing]
+            return deliver(([AssistantModel.context(place, home: places.home.path), line] + brief + [text]).joined(separator: "\n"), to: built)
         }
         deliver(message)
     }
@@ -825,6 +841,7 @@ import SomethingCore
             newConversation()
             keepDefault(chosen)
             (session.kind, session.model, session.effort) = (chosen, defaults(chosen).model, defaults(chosen).effort)
+            followReading()
         }
         if id != nil, agent?.alive != false, !session.stopped {
             confirmSwitch(name, Registry.app.name(of: chosen), switched)
@@ -873,6 +890,7 @@ import SomethingCore
         guard new.kind != chosen else { return "New spaces build with \(name)" }
         if new.id != nil || new.launching || new.hasHistory { return "New spaces build with \(name) from the next conversation" }
         (new.kind, new.model, new.effort) = (chosen, defaults(chosen).model, defaults(chosen).effort)
+        followReading()
         return "New spaces build with \(name)"
     }
 
@@ -1210,14 +1228,18 @@ import SomethingCore
         let number = session.launch
         engine.lookFor(kind) { [weak self] in
             // A launch ended by Stop, New Conversation or a switch while the program was looked for never starts.
-            guard let self, number == session.launch,
-                  sessions.values.contains(where: { $0 === session }) || quicks.values.contains(where: { $0.session === session }) else { self?.refresh(); return }
+            let reads = self?.reading?.session === session
+            guard let self, number == session.launch, reads || sessions.values.contains(where: { $0 === session })
+                    || quicks.values.contains(where: { $0.session === session }) else { self?.refresh(); return }
             let messages = session.queued
             session.queued = []
             do {
+                // Asking everything, an agent is lent nothing (Engine.launchAssistant): a reading can change no file unasked.
+                let asking = askEverything || reads
                 let id = try engine.launchAssistant(kind, folder: places.spaces.path, model: session.model, effort: session.effort,
-                                                    resume: resume, askEverything: askEverything, lent: lent(for: kind))
-                (session.id, session.asking, session.stopped, session.asleep) = (id, askEverything, false, false)
+                                                    resume: resume, askEverything: asking, lent: lent(for: kind))
+                if reads { readers.insert(id) }
+                (session.id, session.asking, session.stopped, session.asleep) = (id, asking, false, false)
                 for message in messages { _ = try engine.deliver(message, to: id, when: "next") }
             } catch { session.failure = error.sentence }
             // Only now: the launch changes the state, and a build watched must not see it ended with no agent yet.
@@ -1322,6 +1344,77 @@ import SomethingCore
         if let main = sessions[.space(quick.space)], !main.held.isEmpty, !main.launching, ![.working, .waiting].contains(light(main)) { release(main) }
     }
 
+    // MARK: Reading the words
+
+    /// A reading of New Space's words: what it read, in which throwaway conversation, until when it may take, and what
+    /// came of it. `brief` is nil while the agent reads; no question in it means there is nothing to ask.
+    @Observable final class Reading {
+        let words: String, session: Session, until: Date
+        var brief: Brief?
+        /// The person's answers, by question: a question not here was left as it is, and is not sent.
+        var answers: [Int: Brief.Answer] = [:]
+
+        init(words: String, session: Session, until: Date) { (self.words, self.session, self.until) = (words, session, until) }
+    }
+
+    /// How long a reading may take, the launch included, before it counts as nothing usable.
+    @ObservationIgnored var readingLimit: TimeInterval = 25
+
+    /// Starts reading the field's words when the person wants questions first. The same words with the same agent keep
+    /// what was read and answered, with no second turn; a change of level after it read does not ask again.
+    func read() {
+        let words = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Preferences.at(places).askFirst, place == .blank, before == nil, !words.isEmpty, let kind, !blocked else { return }
+        if let reading, reading.words == words, reading.session.kind == kind { return }
+        dropReading()
+        reading = nil
+        let turn = Reading(words: words, session: Session(kind: kind, model: session.model, effort: session.effort), until: clock() + readingLimit)
+        reading = turn
+        deliver(Brief.asking(words, line: choice.line(home: places.home.path)), to: turn.session)
+        keepTime()
+    }
+
+    /// Esc, or leaving New Space: a reading under way stops and is forgotten; one that ended stays for the same words.
+    func dropReading() {
+        guard let reading, reading.brief == nil else { return }
+        self.reading = nil
+        halt(reading.session)
+    }
+
+    /// Follows the reading on each change of the state and at its limit. Any request of a reader hears a no. A reading
+    /// whose agent chip changed is forgotten. One that ended, or can no longer end well (an error, a request, its time
+    /// gone), stops its agent and keeps what it read, which is nothing but for a clean end.
+    private func followReading() {
+        let state = engine.state
+        for request in state.requests where readers.contains(request.agent) { try? engine.answer(request.id, .deny) }
+        guard let reading else { return }
+        let each = reading.session
+        guard each.kind == sessions[.new]?.kind else {
+            self.reading = nil
+            if reading.brief == nil { halt(each) }
+            return
+        }
+        guard reading.brief == nil else { return }
+        each.read(state)
+        let asked = state.requests.contains { $0.agent == each.id }, late = clock() >= reading.until
+        guard asked || late || (!each.launching && over(each, after: nil)) else { return }
+        let last = each.turn?.items.last { $0.kind == "message" && $0.author != "person" }
+        let spaces = Set(Spaces(root: places.spaces).list().map(\.name))
+        // Before the halt, which changes the state: this reading ends once.
+        reading.brief = asked || late || trouble(each) ? Brief() : last.map { Brief.read($0, taken: spaces) } ?? Brief()
+        halt(each)
+    }
+
+    /// What the build of `words` is told of the reading, which ends here: its answers and its name, or that the agent
+    /// decides when there are none, or when the words changed since. A reading under way stops.
+    private func briefed(_ words: String) -> [String] {
+        guard let reading else { return [Brief.nothing] }
+        self.reading = nil
+        if reading.brief == nil { halt(reading.session) }
+        guard reading.words == words, let brief = reading.brief else { return [Brief.nothing] }
+        return brief.lines(reading.answers)
+    }
+
     // MARK: Comments
 
     /// Add Comment's comments on the space `place`, sent together in one message to that space's own conversation, as a
@@ -1408,6 +1501,7 @@ import SomethingCore
         let ours = { (line: Substring) in
             let number = line.dropFirst("[something] Comment ".count)
             return line.hasPrefix("[something] Pointing at ") || line.hasPrefix("[something] With your agents: ")
+                || line.hasPrefix("[something] Brief: ") || line.hasPrefix("[something] Name it: ")
                 || (line.hasPrefix("[something] Comment ") && number.first?.isNumber == true && number.drop { $0.isNumber }.hasPrefix(" is on "))
         }
         while ours(after) { after = after.drop { $0 != "\n" }.dropFirst() }

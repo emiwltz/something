@@ -1,5 +1,5 @@
 // Settings › Spaces: where the spaces live, whether an export carries their memory, how many versions each keeps,
-// and what something keeps weighs against the storage limit, in three parts (the spaces' versions, their memory, the
+// whether a new space's words bring a few questions first, and what something keeps weighs against the storage limit, in three parts (the spaces' versions, their memory, the
 // spaces themselves), measured off the main queue because a store of spaces can hold thousands of files. Past the
 // limit the oldest versions go first (Versions); spaces and their memory are never removed here.
 import AppKit
@@ -48,7 +48,7 @@ extension SettingsModel {
         }
     }
 
-    /// Spaces: where they live, the export's memory and the versions kept, then the store's weight against its limit.
+    /// Spaces: where they live, the export's memory and the versions kept, the questions first, then the store's weight against its limit.
     func storageSections() -> [SettingsSection] {
         let spaces = places.spaces
         return [
@@ -60,6 +60,9 @@ extension SettingsModel {
                             note: "Ticks Include Its Memory in File › Export Space… (⇧⌘E). Off: a file you hand to someone carries nothing it remembers.", control: toggle(\.exportMemory)),
                 SettingsRow(title: "Keep", note: "Each change is a version. ⌘Z goes back one; View › Show History… shows the others.",
                             control: number(\.versionsKept, [(20, "20"), (50, "50"), (100, "100"), (0, "All of them")]), trail: "versions of each space"),
+            ]),
+            SettingsSection(title: "New spaces", rows: [
+                SettingsRow(title: "Ask me a few questions first", note: "A few short choices before a build, all skippable. Off: Build starts at once.", control: toggle(\.askFirst)),
             ]),
             SettingsSection(title: "Storage", rows: [SettingsRow(title: "Storage limit", note: "", control: number(\.storageLimit, Storage.limits))], block: .storage),
         ]

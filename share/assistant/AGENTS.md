@@ -18,11 +18,15 @@ folder only.
   own.` Declare exactly that level's rights and that scope, and do not ask: None, no agent right; Watch, `state`; Talk,
   `state` and `send`; Run, `state`, `send` and `launch:<kind>`, its `folder` the one the line names. "in <folder>" is
   `"agents": {"folders": ["<folder>"]}`; no folder is `"agents": {"see": "all"}`. `store` needs no permission: declare
-  it when the space remembers something. Ask no question the level already answers: the person chose before Build. Ask
-  at most one, only when their words leave the page itself truly open; otherwise choose, and say what you chose.
+  it when the space remembers something.
+- A line `[something] Brief: <question> <answer>; …` gives what the person answered before Build. "skipped, decide and
+  say so", or `[something] Brief: none, decide and say so.`, means you decide, and say what you chose. Ask no question
+  the level or the brief already answers. A line `[something] Name it: <name>.` names the space.
+- While you build, ask only what you cannot decide. The person may skip it: then decide, and say what you chose.
+- A message that starts `[something] Questions first.` carries its own rules: follow them, and none of this file.
 
 ## Make a space
-1. Pick a short name yourself (lowercase, digits, `-`); do not ask.
+1. Use the name a line gives you, else pick a short one yourself (lowercase, digits, `-`); do not ask.
 2. Start from the closest template when one fits: `something new <name> --from <template>`; otherwise
    `something new <name>`. Templates: agents (who works, who waits), project (one folder's progress; write the
    project's folder in place of its placeholder `~/code/your-project`), brief (a morning paper), logbook (notes and
@@ -32,8 +36,9 @@ folder only.
    run `something open`.
 4. When it does what was asked: `something check <name>` until 0 errors and 0 warnings, then once
    `something check <name> --refuse <right>` per declared right. Look at the snapshot `check` writes here, in `.check/<name>.png`.
-5. Answer in two sentences: what is ready, and one thing to try in it. No right names, no check counts: put any detail
-   in a second paragraph, which something folds away.
+5. Answer in two sentences: what is ready, and one thing to try in it. If you decided something the person left open,
+   one more sentence says what you chose, in plain words. No right names, no check counts: put any detail in a second
+   paragraph, which something folds away.
 
 ## Change a space
 Edit its file. It reloads by itself. Run `something check <name>` after each change. Lines

@@ -24,9 +24,10 @@ final class Replay {
 
     /// A Claude launched in /Users/example/shop as agent claude-1; with `assistant`, the person's assistant, in
     /// /Users/example/something/spaces, lent something's tools over MCP.
-    init(mode: String = "default", assistant: Bool = false) {
-        var launch = Launch(agent: "claude-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
+    init(mode: String = "default", assistant: Bool = false, reading: Bool = false) {
+        var launch = Launch(agent: "claude-1", folder: assistant || reading ? Replay.spaces : "/Users/example/shop", mode: mode,
                             thread: "5b2e0000-0000-4000-8000-000000000001")
+        if reading { launch.assistant = .askingEverything }
         if assistant {
             launch.assistant = .building
             launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: Replay.server, refused: { _, _ in })
@@ -41,10 +42,10 @@ final class Replay {
 
     /// A Codex launched in /Users/example/shop as agent codex-1, continuing `resume` when given; with `assistant`, the
     /// person's assistant, in /Users/example/something/spaces, lent something's tools, served by an invented program.
-    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false) -> Replay {
-        var launch = Launch(agent: "codex-1", folder: assistant ? "/Users/example/something/spaces" : "/Users/example/shop", mode: mode,
+    static func codex(mode: String? = nil, effort: String? = nil, resume: String? = nil, assistant: Bool = false, reading: Bool = false) -> Replay {
+        var launch = Launch(agent: "codex-1", folder: assistant || reading ? spaces : "/Users/example/shop", mode: mode,
                             effort: effort, thread: resume ?? "", resume: resume != nil)
-        launch.assistant = assistant ? .building : nil
+        launch.assistant = assistant ? .building : reading ? .askingEverything : nil
         let replay = Replay(unstarted: ())
         if assistant {
             launch.lent = Lent(tools: LentTool.all, run: { _ in Lent.Reply(ok: false, text: "Invented: run by the server.") }, server: (["/Users/example/bin/something", "mcp"], ["TMPDIR": "/Users/example/tmp/"]),
@@ -58,15 +59,19 @@ final class Replay {
     /// person's assistant, in /Users/example/something/spaces, given something's MCP server with that environment (the
     /// one its recording's trial gave); with `driving`, driven as it says.
     static func launch(_ kind: String, model: String? = nil, effort: String? = nil, resume: String? = nil, server: [String: String]? = nil,
-                       driving: Driving? = nil) -> Replay {
-        var launch = Launch(agent: "\(kind)-1", folder: server == nil ? "/Users/example/shop" : "/Users/example/something/spaces", model: model,
+                       driving: Driving? = nil, reading: Bool = false) -> Replay {
+        var launch = Launch(agent: "\(kind)-1", folder: server == nil && !reading ? "/Users/example/shop" : spaces, model: model,
                             effort: effort, thread: resume ?? "", resume: resume != nil)
+        if reading { launch.assistant = .askingEverything }
         if let server {
             launch.assistant = .building
             launch.lent = Lent.own("/Users/example/tools/something", tools: LentTool.all, environment: server, refused: { _, _ in })
         }
         return Replay(kind, launch, driving: driving)
     }
+
+    /// Where the person's assistant works.
+    static let spaces = "/Users/example/something/spaces"
 
     /// The environment of something's MCP server in the recordings of `something try --assistant`.
     static let server = ["SOMETHING_HOME": "/Users/example", "TMPDIR": "/Users/example/tmp/"]
@@ -115,7 +120,8 @@ final class Replay {
     /// Plays an exchange file of `kind`; each mismatch is an issue that names the file and the line. A first row with
     /// "resume" makes a launch that continues that thread, "model" a launch with that model, "effort" one with that
     /// thinking level, and "assistant" the person's assistant, given something's MCP server with the environment its
-    /// "server" names (else `server`). `database` is the OpenCode database the driver reads at the end, as the engine
+    /// "server" names (else `server`), "reading" a launch as a reading of the person's words has: asking everything, lent
+    /// nothing. `database` is the OpenCode database the driver reads at the end, as the engine
     /// sets it; `driving` plays an OpenCode exchange with another agent over ACP; `once` answers each "once" of the
     /// exchange in its place (`.rule`: something allows by itself what the wire carries as the person's Allow Once).
     static func play(_ name: String, kind: String = "claude", database: String? = nil, driving: Driving? = nil, once: Answer = .once) throws -> Replay {
@@ -126,9 +132,10 @@ final class Replay {
         }
         let first = rows.first ?? [:], resume = first["resume"] as? String
         let assistant = first["assistant"] as? Bool ?? false
-        let replay = kind == "claude" ? Replay(assistant: assistant) : kind == "codex" ? codex(resume: resume, assistant: assistant)
+        let reading = first["reading"] as? Bool ?? false
+        let replay = kind == "claude" ? Replay(assistant: assistant, reading: reading) : kind == "codex" ? codex(resume: resume, assistant: assistant, reading: reading)
             : launch(kind, model: first["model"] as? String, effort: first["effort"] as? String, resume: resume,
-                     server: assistant ? first["server"] as? [String: String] ?? server : nil, driving: driving)
+                     server: assistant ? first["server"] as? [String: String] ?? server : nil, driving: driving, reading: reading)
         (replay.agent.driver as? ACPDriver)?.environment = database.map { ["OPENCODE_DB": $0] } ?? [:]
         var read = 0
         for (number, row) in rows.enumerated() {

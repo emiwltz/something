@@ -164,12 +164,12 @@ struct AcceptanceCommand {
         // Every value of the legend is read off the picture but Memory's "41 MB", which Vision misreads in the light
         // picture; VoiceOver hears it.
         let shows = ["Where they live", "something/spaces", "Show in Finder", "Include a space's memory when you export it", "Keep",
-                     "versions of each space", "Storage", "312 MB", "used of 500 MB", "Limit", "Versions", "248 MB", "Memory", "Spaces", "23 MB",
+                     "versions of each space", "New spaces", "Ask me a few questions first", "Storage", "312 MB", "used of 500 MB", "Limit", "Versions", "248 MB", "Memory", "Spaces", "23 MB",
                      "Free", "188 MB"]
         try await settings(.spaces, "x7-3", shows: shows, hears: ["Memory 41 MB", "312 MB used of 500 MB", "Keep: 50"]) { settings, _ in
             let sections = settings.model.sections(.spaces)
-            #expect(sections.map(\.title) == ["", "Storage"] && sections[1].block == .storage)
-            #expect(sections.flatMap(\.rows).map(\.title) == ["Where they live", "Include a space’s memory when you export it", "Keep", "Storage limit"])
+            #expect(sections.map(\.title) == ["", "New spaces", "Storage"] && sections[2].block == .storage)
+            #expect(sections.flatMap(\.rows).map(\.title) == ["Where they live", "Include a space’s memory when you export it", "Keep", "Ask me a few questions first", "Storage limit"])
             #expect(sections[0].rows[2].trail == "versions of each space" && settings.model.storage == Self.weights)
         }
     }

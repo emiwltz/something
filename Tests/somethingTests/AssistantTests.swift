@@ -23,7 +23,9 @@ import WebKit
     /// "wait for me first" edits brief.html with Opus 5.5 at high effort and answers, "weather corner" reads it,
     /// starts editing it and ends only once $HOME/out/finish appears, and "masthead smaller" reads and edits it, then
     /// checks it and never ends its turn; "counters match" answers, then asks a permission. An interrupt withdraws
-    /// the ladder's question and ends the running turn as Claude Code does. For the ladder, "Who is waiting for me" reads the guide, says what it makes and
+    /// the ladder's question and ends the running turn as Claude Code does. "Questions first" is a reading: it answers
+    /// the marked line, unless its words say "reading-slow" (nothing), "reading-asks" (a permission), "reading-fails" (an
+    /// error) or "reading-prose" (words with no mark). For the ladder, "Who is waiting for me" reads the guide, says what it makes and
     /// starts writing waiting-room.html 0.9 s later, never ending its turn; with "ask" in $HOME/out/ladder it asks
     /// which way the page should read (AskUserQuestion, then another permission once "permission" is in that file too)
     /// and writes once answered; with "fail" it writes, a check fails, two edits fix it and a second check passes, then
@@ -62,6 +64,21 @@ import WebKit
     while IFS= read -r line; do
       printf '%s\n' "$line" >> "$HOME/out/input"
       case "$line" in
+        *'Questions first'*'"type":"user"'*)
+          echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
+          case "$line" in
+            *'reading-slow'*) ;;
+            *'reading-asks'*) echo '{"type":"control_request","request_id":"rq8","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"ls"},"tool_use_id":"toolu_q8"}}' ;;
+            *'reading-fails'*)
+              echo '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}'
+              echo "$idle" ;;
+            *'reading-prose'*)
+              words r1 'I would rather just ask you in plain words.'
+              echo "$done"; echo "$idle" ;;
+            *)
+              echo '{"type":"assistant","message":{"id":"msg_r1","model":"opus","role":"assistant","content":[{"type":"text","text":"[something] Questions: {\"name\":\"week-end\",\"questions\":[{\"text\":\"Who is it for?\",\"options\":[{\"label\":\"Just me\",\"about\":\"A page for you alone.\"},{\"label\":\"The family\",\"about\":\"Everyone reads it.\"}],\"pick\":1,\"remember\":false}]}"}]},"parent_tool_use_id":null,"uuid":"u2","session_id":"s1"}'
+              echo "$done"; echo "$idle" ;;
+          esac ;;
         *'on this page:'*'go-wrong'*'"type":"user"'*)
           echo '{"type":"system","subtype":"session_state_changed","state":"running","uuid":"u1","session_id":"s1"}'
           later '{"type":"result","subtype":"success","is_error":true,"terminal_reason":"completed","result":"API Error: 500 Internal server error","session_id":"s1","uuid":"u3"}' "$idle" ;;
