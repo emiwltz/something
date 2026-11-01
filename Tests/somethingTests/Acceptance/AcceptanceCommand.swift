@@ -535,7 +535,7 @@ struct AcceptanceCommand {
     }
 
     /// X8.2, one part lit: Your assistant's button pressed (its number dark), the picture faded but for the assistant
-    /// and the panel, the page half; pressed again, all of it again. The welcome lights its parts the same way.
+    /// and the panel; pressed again, all of it again. The welcome lights its parts the same way.
     @Test("x8-2: one part lit") func x8_2() async throws {
         let stage = try Stage("command")
         defer { stage.remove() }
@@ -557,7 +557,7 @@ struct AcceptanceCommand {
     @Test("x0-1: the picture") func x0_1() async throws {
         let stage = try Stage("command")
         defer { stage.remove() }
-        let hero = Hero(light: HeroLight(), builder: "Claude Code · Sonnet 5.5", motion: .reduced)
+        let hero = Hero(builder: "Claude Code · Sonnet 5.5", motion: .reduced)
         #expect(hero.agents == ["Claude Code", "Codex", "OpenCode"])
         let view = NSHostingView(rootView: hero)
         view.frame.size = Hero.size

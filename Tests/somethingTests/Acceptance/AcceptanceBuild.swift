@@ -1,5 +1,4 @@
-// Acceptance scenarios of the first start and making a space: the welcome, the first space and the hints (x2-1 to
-// x2-4), New Space, the build ladder, the arrival, templates and the level sheet. The welcome is drawn alone, as it
+// Acceptance scenarios of the first start and making a space: the welcome, the first space and the hints, New Space, the build ladder, the arrival, templates and the level sheet. The welcome is drawn alone, as it
 // stands on the screen.
 // Each scenario renders offscreen from the Stage, asserts structure, words, enabled state, counts and accessibility
 // labels, and writes <id>.png and <id>-dark.png when SOMETHING_GALLERY is set. An unbuilt one stays disabled until
@@ -14,24 +13,8 @@ import WebKit
 
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-accept-build-"))
 struct AcceptanceBuild {
-    /// X2.1, the welcome (a1, the film, and a2–a8, the five steps, retired): alone, 900 by 560; "Welcome to
-    /// something", the title, the three numbered rows beside the picture, who builds already chosen (the first of the
-    /// six builders found), the promise and one button.
-    @Test("x2-1: the welcome, one screen") func x2_1() async throws {
-        let scene = try await Self.welcome()
-        defer { scene.remove() }
-        #expect(scene.window.title == "Welcome to something" && scene.window.contentView?.frame.size == Welcome.size)
-        #expect(scene.assistant.kind == "claude" && scene.assistant.entries.filter(\.enabled).count == 6)
-        // Shot with the whole picture lit, as the cycle ends.
-        scene.model.light.light(nil)
-        try await scene.draw("x2-1") { words in
-            #expect(words == Self.welcomeWords(scene.assistant, found: "Found on this Mac. 5 more to choose from."), "\(words)")
-        }
-    }
-
-    /// X2.2, who builds, changed: the chip opens New Space's own menus, the builders found then the model; choosing
-    /// Codex there makes it the builder of the first space, said in the third row and in the picture. A part lit by its
-    /// row lights its number.
+    /// X2.2, who builds, changed: choosing Codex makes it the builder of the first space, which New Space's menus
+    /// keep. The welcome's chips come back in beat 3 (S8, f1-3).
     @Test("x2-2: Built by, changed") func x2_2() async throws {
         let scene = try await Self.welcome()
         defer { scene.remove() }
@@ -39,9 +22,8 @@ struct AcceptanceBuild {
         #expect(model.entries.filter(\.enabled).map(\.id) == ["claude", "codex", "opencode", "pi", "omp", "amp"])
         model.choose("codex")
         #expect(model.kind == "codex" && model.newKind == "codex")
-        scene.model.light.light(.agents)
         try await scene.draw("x2-2") { words in
-            #expect(words == Self.welcomeWords(model, found: nil), "\(words)")
+            #expect(words == Self.beatWords(.page), "\(words)")
         }
         // The chip's menu is a system menu, drawn by the window server where no picture here reaches (cannot_native):
         // its agents and model are written beside the picture as x2-2-menu.txt.
@@ -51,30 +33,6 @@ struct AcceptanceBuild {
                 + (part.note.map { ["  \($0)"] } ?? []) }
             try (["BUILDS THIS SPACE"] + agents + models).joined(separator: "\n").appending("\n")
                 .write(to: gallery.appendingPathComponent("x2-2-menu.txt"), atomically: true, encoding: .utf8)
-        }
-    }
-
-    /// X2.3, the first space for real: Make My First Space (Return) ends the welcome, kept as seen; the window arrives
-    /// on New Space, its field asked for the keys, with the builder chosen. The space it builds then arrives alone in
-    /// the sidebar, opened, with nothing to allow.
-    @Test("x2-3: the first space, for real") func x2_3() async throws {
-        let scene = try await Self.welcome()
-        defer { scene.remove() }
-        let (shell, library, model) = (scene.shell, scene.library, scene.assistant)
-        scene.model.finished = { shell.welcomed() }
-        model.choose("codex")
-        model.open = false
-        WelcomeTests.press(scene.window, .return)
-        #expect(shell.welcoming == nil && library.preferences.toured && library.selection == .newSpace && model.newKind == "codex")
-        #expect(model.open, "its field is asked for the keys")
-        let room = try await Self.first(scene)
-        defer { room.close() }
-        #expect(shell.window.title == "Waiting room" && room.web.url != nil && shell.window.attachedSheet == nil)
-        #expect(library.order().map(\.title) == ["Waiting room"])
-        await Self.built(model, sticker: shell.glass.sticker)
-        model.open = false
-        try await scene.stage.appearances { suffix in
-            try await Picture.window(shell, library: library, web: room.web, "x2-3" + suffix, root: scene.stage.home.root)
         }
     }
 
@@ -142,14 +100,9 @@ struct AcceptanceBuild {
         #expect(HintBubble.shown(in: shell.layer) == nil)
     }
 
-    /// What VoiceOver reads of the welcome, the builder of `model` building; with `found`, the line that says it was
-    /// chosen for the person.
-    static func welcomeWords(_ model: AssistantModel, found: String?) -> [String] {
-        ["Welcome to something", "Pages of your own, that work with your agents.",
-         "1. A space, a page of your own. One HTML file on your Mac, blank at first. Export it in one click.",
-         "2. Your agents. The coding agents on this Mac. A space can watch them, talk to them or run them, if you say so.",
-         "3. Your assistant. One of your agents, \(model.name), builds the space and changes it when you ask.", Hero.label, "Built by",
-         AgentModelChip.label(model)] + (found.map { [$0] } ?? []) + ["Nothing leaves your Mac.", "Make My First Space"]
+    /// What VoiceOver reads of a beat's window, up to its footer.
+    static func beatWords(_ beat: WelcomeModel.Beat, schema: [String] = [PageSchema.label], back: Bool = false, right: [String] = ["Continue"]) -> [String] {
+        ["Welcome to something", beat.title, beat.sentence] + schema + ["\(beat.rawValue + 1) of 5", "Skip"] + (back ? ["Back"] : []) + right
     }
 
     @MainActor struct WelcomeScene {
@@ -905,12 +858,70 @@ struct AcceptanceBuild {
 
     // MARK: Round 4, the final mockup
 
-    @Test("f1-1: Beat 1, alone on the desktop, 980 × 640, footer \"1 of 5\", Skip", .disabled("not built yet: S7")) func f1_1() async throws {}
+    /// F1.1, the first beat: 980 by 640 alone, the words at the left, the schema *A space* on its paper, finished at
+    /// t = ∞ as Reduced motion draws it, the small map, the footer with no Back. ← stays here, → and ← walk the beats.
+    @Test("f1-1: Beat 1, alone on the desktop, 980 × 640, footer \"1 of 5\", Skip") func f1_1() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        #expect(scene.window.title == "Welcome to something" && Welcome.base == NSSize(width: 980, height: 640) && scene.window.contentView?.frame.size == Welcome.size)
+        #expect(scene.assistant.kind == "claude" && scene.model.beat == .page && WelcomeModel.Beat.allCases.count == 5)
+        try await scene.draw("f1-1") { words in
+            #expect(words == Self.beatWords(.page), "\(words)")
+        }
+        WelcomeTests.press(scene.window, .left)
+        #expect(scene.model.beat == .page)
+        WelcomeTests.press(scene.window, .right)
+        #expect(scene.model.beat == .agent && scene.model.forward)
+        WelcomeTests.press(scene.window, .left)
+        #expect(scene.model.beat == .page && !scene.model.forward)
+        // Each beat's lens stands inside the Hero, and the schema's first moment is a blank page.
+        for beat in WelcomeModel.Beat.allCases { #expect(beat.lit?.allSatisfy { CGRect(origin: .zero, size: Hero.size).contains(Hero.place($0)) } ?? true) }
+        #expect(WelcomeModel.Beat.whole.lit == nil && WelcomeModel.Beat.roles.lit == [.assistant, .agents])
+        #expect(Schemas.ease(0, 0.8, 0.9) == 0 && Schemas.ease(.infinity, 3, 0.8) == 1 && Schemas.ease(3.4, 3, 0.8) > 0.5)
+    }
+
     @Test("f1-2: Beat 2: a tile redraws the schema, the tag In iTerm", .disabled("not built yet: S8")) func f1_2() async throws {}
     @Test("f1-3: Beat 3: ≠, three chips, no Full Access rung here", .disabled("not built yet: S8")) func f1_3() async throws {}
     @Test("f1-4: Beat 4: Settings' map, the real window, the two powers", .disabled("not built yet: S8")) func f1_4() async throws {}
-    @Test("f1-5: Beat 5: \"Ready to build something today?\", the whole Hero, two doors", .disabled("not built yet: S7")) func f1_5() async throws {}
-    @Test("f1-6: Make My First Space: the window arrives on New Space", .disabled("not built yet: S7")) func f1_6() async throws {}
+    /// F1.5, the last beat: the title above the whole Hero, which now speaks, Back, the sentence that nothing starts, and
+    /// the two doors. → stays here; Return is the second door's neighbour, Make My First Space.
+    @Test("f1-5: Beat 5: \"Ready to build something today?\", the whole Hero, two doors") func f1_5() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        for _ in 0..<4 { WelcomeTests.press(scene.window, .right) }
+        #expect(scene.model.beat == .whole)
+        WelcomeTests.press(scene.window, .right)
+        #expect(scene.model.beat == .whole && scene.shell.welcoming != nil)
+        #expect(WelcomeModel.Beat.whole.title == "Ready to build something today?")
+        try await scene.draw("f1-5") { words in
+            #expect(words == Self.beatWords(.whole, schema: [Hero.label], back: true, right: ["No agent starts, nothing is spent.", "Open an Example", "Make My First Space"]), "\(words)")
+        }
+    }
+
+    /// F1.6, the window's first arrival: Return through the beats ends the welcome, kept as seen, on New Space, its field
+    /// asked for the keys, the builder chosen. The space it builds then arrives alone in the sidebar, opened, with nothing
+    /// to allow.
+    @Test("f1-6: Make My First Space: the window arrives on New Space") func f1_6() async throws {
+        let scene = try await Self.welcome()
+        defer { scene.remove() }
+        let (shell, library, model) = (scene.shell, scene.library, scene.assistant)
+        scene.model.finished = { shell.welcomed($0) }
+        model.choose("codex")
+        model.open = false
+        for _ in 0..<4 { WelcomeTests.press(scene.window, .return) }
+        #expect(shell.welcoming != nil && scene.model.beat == .whole)
+        WelcomeTests.press(scene.window, .return)
+        #expect(shell.welcoming == nil && library.preferences.toured && library.selection == .newSpace && model.newKind == "codex")
+        #expect(model.open, "its field is asked for the keys")
+        try await scene.stage.appearances { suffix in
+            try await Picture.window(shell, library: library, web: nil, "f1-6" + suffix, root: scene.stage.home.root)
+        }
+        let room = try await Self.first(scene)
+        defer { room.close() }
+        #expect(shell.window.title == "Waiting room" && room.web.url != nil && shell.window.attachedSheet == nil)
+        #expect(library.order().map(\.title) == ["Waiting room"])
+        await Self.built(model, sticker: shell.glass.sticker)
+    }
     @Test("f1-7: Five bubbles, once each, no counter", .disabled("not built yet: S9")) func f1_7() async throws {}
     @Test("f1-8: Open an Example: My agents, nothing started, no sheet", .disabled("not built yet: S9")) func f1_8() async throws {}
     @Test("f1-9: No program found: beats 2, 3 and 5, Look Again", .disabled("not built yet: S8")) func f1_9() async throws {}

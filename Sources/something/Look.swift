@@ -148,6 +148,9 @@ enum Look {
         return NSFont(descriptor: font.fontDescriptor.withMatrix(slant), size: font.pointSize) ?? font
     }
 
+    /// `font` at the mockup's `size` whatever the interface size, for a drawing that grows as one, by a single scale.
+    static func fixed(_ face: Face, size: CGFloat, weight: NSFont.Weight = .regular) -> Font { font(face, size: size / scale.size.factor, weight: weight).ui }
+
     /// The font of `face` at `size` and `weight`. The bundled families are variable: the weight is set on their wght
     /// axis exactly, and Fraunces's optical size follows the size as the mockup's `font-optical-sizing: auto` does.
     /// When a family is not registered it is the system's: New York for titles and the agent's voice (the mockup falls

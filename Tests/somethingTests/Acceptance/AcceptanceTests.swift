@@ -40,7 +40,7 @@ enum Catalog {
         ("x9-1", "S5"), ("j3-4", "S4"), ("x3-2", "S4"), ("x3-3", "S4"),
         ("2-1", "S6"), ("2-2", "S6"), ("2-6", "S6"), ("2-8", "S6"),
         ("j4-2", "S8"), ("x6-1", "S9"), ("x6-2", "S9"), ("x6-3", "S9"),
-        ("x2-1", "S12"), ("x2-2", "S12"), ("x2-3", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
+        ("x2-2", "S12"), ("x2-4", "S12"), ("x8-1", "S12"), ("x8-2", "S12"), ("x0-1", "S12"),
         ("6-1", "S7"), ("6-3", "S7"), ("x7-1", "S10"), ("x7-2", "S10"), ("x7-3", "S10"), ("x7-4", "S10"),
         ("x4-1", "S11"), ("x4-2", "S11"), ("x4-3", "S11"),
         ("x1-1", "S14b"), ("x1-3", "S14b"), ("2-9", "S14b"), ("2-10", "S14b"),
@@ -70,6 +70,8 @@ enum Catalog {
     /// is no screen of its own.
     static let retiredSteps: [String: String] = [
         "2-4": "the title's small card: v6.2's title opens Info itself (X9.1, S5), asserted by x9-1",
+        "x2-1": "the one-screen welcome: five beats replace it, f1-1 to f1-5",
+        "x2-3": "the first space, for real: f1-6 draws the arrival and goes on to the first space",
         "j4-4": "the card's mode chip and \"/\" chip: v6.2's minimal card has neither (X6.1–X6.3, S9); \"/\" in the field is x6-3, the mode Settings › Advanced (x7-4)",
         "x5-3": "Export in one click: the final mockup's export is one HTML file, asserted by f6-1",
         "xe-1": "the whole mockup to try, every axis at Emi's letter: no screen of its own, each part asserted by its step",
@@ -83,7 +85,7 @@ enum Catalog {
     ]
     /// The old ids whose screen a frozen step replaced: d1, New Space (x3-1); b4, Info (x5-1); b8, the rows' eyes,
     /// gone with v6.2's list of names (x9-1); d2, the build ladder (j3-4); d3, the arrival (x3-3); a1, the film, and
-    /// a2–a8, the welcome's five steps, gone with v6.2's one welcome (x2-1); e14, the panel over the welcome that stepped
+    /// a2–a8, the welcome's five steps, gone with v6.2's one welcome, itself gone with round 4's five beats (f1-1); e14, the panel over the welcome that stepped
     /// the window back (the welcome now stands alone; WelcomeTests keeps the panel floating over it); g3–g8 and g11,
     /// Settings' seven tabs, gone with v6.2's four (x7-1 to x7-4); b7, the rail, which subject 4 C removes; b2, La page,
     /// with its variants: the final mockup's f3 steps are its screens. An old id whose heir is not built stays, and

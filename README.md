@@ -19,8 +19,9 @@ something
 
 ## The first minutes
 
-`something` opens with one welcome screen, alone on your desktop: a space (a page of your own), your agents, and your
-assistant, beside one picture of how they meet. The coding agent found on your Mac is already chosen to build your
+`something` opens alone on your desktop, with five short steps, each one sentence and one drawing: pages of your own,
+what an agent is and where it lives, the one that builds and the ones you show, who answers, and your first space. Esc
+skips them. The coding agent found on your Mac is already chosen to build your
 spaces ("Built by"; change it there if you like, it starts none of them), and one button, Make My First Space, opens
 the window. Notifications (Settings › Permissions) stay off until you turn them on. Help › Welcome shows the welcome
 again, and Help › How something Works the picture, one part at a time if you like.

@@ -1,5 +1,5 @@
-// The welcome and the blank page: the welcome alone on the screen, done by keyboard, Look Again with no builder,
-// its end on New Space with no agent started, and the menus greyed while it is open, the request panel over it; the
+// The welcome and the blank page: the welcome alone on the screen, done by keyboard, Look Again with no builder at its
+// last beat, Skip, its end on New Space with no agent started, and the menus greyed while it is open, the request panel over it; the
 // space the assistant made opened or said ready, the level sheet's first line; and the hints, each once.
 import AppKit
 import Foundation
@@ -11,9 +11,9 @@ import Testing
 @MainActor @Suite(.serialized, .enabled(if: windowServer, windowServerMissing), .leavesNothing("something-tour-")) struct WelcomeTests {
     let assistants = AssistantTests()
 
-    /// With no builder, the welcome says so once the programs were looked for; Return then looks again (busy a
-    /// moment) and finds a builder installed meanwhile, and the rows come. Escape then ends it, kept as seen, and no
-    /// agent was started.
+    /// With no builder, the last beat's Return waits until the programs were looked for, then looks again (busy a
+    /// moment) and finds a builder installed meanwhile. Escape then ends it, kept as seen and skipped, and no agent was
+    /// started. With no builder at all Escape opens the example instead, which needs none.
     @Test func withoutABuilderLookAgainFindsOne() async throws {
         let (home, model) = try assistants.assistant([], prefix: "something-tour-")
         defer { home.remove() }
@@ -21,25 +21,27 @@ import Testing
         let window = Welcome.window(welcome, assistant: model, motion: .reduced)
         #expect(window.contentView?.frame.size == Welcome.size && window.title == "Welcome to something")
         #expect(welcome.searching(model), "nothing is said before the programs were looked for")
-        Self.press(window, .return)
-        #expect(!welcome.looking)
+        for _ in 0..<5 { Self.press(window, .return) }
+        #expect(!welcome.looking && welcome.beat == .whole)
         model.engine.lookAgain()
         #expect(await wait(until: { model.noAgent }))
+        var ended: [WelcomeModel.Ending] = []
+        welcome.finished = { ended.append($0) }
+        Self.press(window, .escape)
+        #expect(ended == [.example])
         try assistants.install("claude", in: home.root.appendingPathComponent("bin"))
         Self.press(window, .return)
         #expect(welcome.looking)
         #expect(await wait(until: { model.kind == "claude" && !welcome.looking }))
-        var ended = 0
-        welcome.finished = { ended += 1 }
         Self.press(window, .escape)
-        #expect(ended == 1 && Preferences(home.places).toured)
+        #expect(ended == [.example, .skipped] && Preferences(home.places).toured)
         #expect(model.engine.state.agents.isEmpty && model.engine.assistants.isEmpty)
     }
 
     /// The first start of a home with no space: the welcome stands alone, centred on the screen, the window out of
     /// sight on New Space. While it is open the menus grey the window's commands and leave Show Request; a request's
     /// panel floats over it, and Escape there answers the request, not the welcome. Return, a click inside it, Escape
-    /// and the close button all end it on New Space, its field asked for the keys; it does not open again at the next
+    /// (Skip) and the close button all end it on New Space, its field asked for the keys; it does not open again at the next
     /// start, and nothing was started.
     @Test func theWelcomeStandsAloneAndEndsOnNewSpace() async throws {
         let (home, model) = try assistants.assistant(["claude", "codex"], prefix: "something-tour-")
@@ -50,7 +52,7 @@ import Testing
         #expect(App.welcomes(library), "a first start: never welcomed, no space")
         await assistants.look(model)
         let welcome = WelcomeModel(places: home.places)
-        welcome.finished = { shell.welcomed() }
+        welcome.finished = { shell.welcomed($0) }
         let window = Self.shown(shell.welcome(welcome, onScreen: false))
         defer { window.orderOut(nil) }
         #expect(shell.welcoming === window && library.selection == .templates && window.firstResponder is WelcomeKeys, "what was shown stays until it ends")
@@ -65,6 +67,8 @@ import Testing
         Self.click(window, at: NSPoint(x: 200, y: 300))
         #expect(window.firstResponder is WelcomeKeys)
         model.open = false
+        for _ in 0..<4 { Self.send(window, .return) }
+        #expect(shell.welcoming === window && welcome.beat == .whole)
         Self.send(window, .return)
         #expect(shell.welcoming == nil && Preferences(home.places).toured && library.selection == .newSpace)
         #expect(model.open, "its field is asked for the keys")
@@ -72,7 +76,7 @@ import Testing
         #expect(!App.welcomes(Library(places: home.places, ask: FakeAsk(), share: Home.share)), "the welcome ended is kept")
         // Help › Welcome again: its close button ends it the same way.
         let again = WelcomeModel(places: home.places)
-        again.finished = { shell.welcomed() }
+        again.finished = { shell.welcomed($0) }
         let second = shell.welcome(again, onScreen: false)
         library.select(.templates)
         second.performClose(nil)

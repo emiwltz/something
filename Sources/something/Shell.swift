@@ -577,21 +577,23 @@ final class Shell: NSObject, NSToolbarDelegate, NSWindowDelegate {
         return welcome
     }
 
-    /// The welcome ended: it goes, and this window arrives on New Space, fading in under Calm motion, its field taking
-    /// the keys.
-    func welcomed() {
+    /// The welcome ended: it goes, and this window arrives, fading in under Calm motion, on the example or on New
+    /// Space, its field taking the keys. Skipped, it says where the story is. This window's first arrival.
+    func welcomed(_ ending: WelcomeModel.Ending = .made) {
         guard let welcome = welcoming else { return }
         welcoming = nil
         welcome.close()
-        library.select(.newSpace)
+        let example = ending == .example ? library.templates.first { $0.id == "agents" } : nil
+        if let example { library.use(example) } else { library.select(.newSpace) }
         let calm = Look.duration(0.45, Look.motion(library.preferences.motion))
         if !window.isVisible, calm > 0 { window.alphaValue = 0 }
         front()
-        assistant.focus()
+        if example == nil { assistant.focus() }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = calm
             window.animator().alphaValue = 1
         }
+        if ending == .skipped { toast("Help › Welcome shows this again", quiet: true) }
     }
 
     /// The toolbar's title and subtitle when no space is shown, its space's items hidden, and Info closed.
