@@ -890,8 +890,8 @@ struct AcceptanceBuild {
         let scene = try await Self.welcome()
         defer { scene.remove() }
         scene.model.locate = { .success("/Users/example/bin/\($0)") }
-        scene.model.find(["claude", "codex"])
-        #expect(await wait(until: { scene.model.paths.count == 2 }))
+        await scene.model.find(["claude", "codex"])
+        #expect(scene.model.paths.count == 2)
         scene.model.go(1)
         #expect(scene.assistant.entries.count == 6 && Registry.app.agent("codex")?.home == "~/.codex")
         func label(_ name: String, _ home: String, _ kind: String) -> String {
@@ -901,9 +901,16 @@ struct AcceptanceBuild {
         try await scene.draw("f1-2") { words in
             #expect(words == Self.beatWords(.agent, schema: tiles + [label("Claude Code", "~/.claude", "claude"), "Antigravity, Cursor: something sees them, and can’t start them."], back: true), "\(words)")
         }
-        scene.model.look = "codex"
+        // Tab reaches the programs, ← → walk them round and the schema follows; Return still goes on.
+        WelcomeTests.press(scene.window, .tab)
+        WelcomeTests.press(scene.window, .right)
+        #expect(scene.model.beat == .agent && scene.model.look == "codex")
         let words = await Self.read(try #require(scene.window.contentView?.subviews.first), whole: true)
         #expect(words.contains(label("Codex", "~/.codex", "codex")), "\(words)")
+        for _ in 0..<2 { WelcomeTests.press(scene.window, .left) }
+        #expect(scene.model.look == "amp")
+        WelcomeTests.press(scene.window, .return)
+        #expect(scene.model.beat == .roles && !scene.model.walking)
     }
 
     /// F1.3, the third beat: both roles joined by ≠, the assistant's chips (today's chip until the three land), the line
@@ -913,10 +920,12 @@ struct AcceptanceBuild {
         defer { scene.remove() }
         for _ in 0..<2 { scene.model.go(1) }
         try await scene.draw("f1-3") { words in
-            for line in ["Your assistant", "Agents a space shows", "They live on your Mac. A space only shows them.", "An agent with a job: it builds a space. Each space has its own.",
-                         "is not the same as", AgentModelChip.label(scene.assistant), "Your assistant’s folder gives a space nothing."] { #expect(words.contains(line), "\(line) in \(words)") }
+            #expect(words == Self.beatWords(.roles, schema: Self.rolesWords + [AgentModelChip.label(scene.assistant), "Your assistant’s folder gives a space nothing."], back: true), "\(words)")
         }
     }
+
+    static let rolesWords = ["Your assistant, An agent with a job: it builds a space. Each space has its own., Works in this folder, May change your spaces and run something’s own commands, Anything else asks you",
+                             "is not the same as", "Agents a space shows, They live on your Mac. A space only shows them., Work in your project folders, This space may watch these agents. You choose, for each space, They keep their own settings", "Your assistant"]
 
     /// F1.4, the fourth beat: one image for VoiceOver, the same map as Settings, the programs that never ask named.
     @Test("f1-4: Beat 4: Settings' map, the real window, the two powers") func f1_4() async throws {
@@ -976,12 +985,15 @@ struct AcceptanceBuild {
         let stage = try Stage("build")
         let (home, model) = try AssistantTests().assistant([], prefix: "something-accept-build-")
         defer { stage.remove(); home.remove() }
-        model.engine.lookAgain()
-        #expect(await wait(until: { model.noAgent }))
         let welcome = WelcomeModel(places: home.places)
         welcome.go(1)
         let window = Welcome.window(welcome, assistant: model, motion: .reduced)
         defer { window.close() }
+        // While the look runs nothing says there is no program.
+        let looking = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
+        #expect(looking.contains("Looking for programs on this Mac…") && !looking.contains("No program yet. something sees them all and changes nothing."), "\(looking)")
+        model.engine.lookAgain()
+        #expect(await wait(until: { model.noAgent }))
         try await stage.appearances { suffix in
             try await Picture.alone(window, "f1-9" + suffix, root: home.root)
             let words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
@@ -990,7 +1002,7 @@ struct AcceptanceBuild {
         }
         welcome.go(1)
         var words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
-        #expect(words.contains("An agent you install, with a job: it builds a space. Each space has its own."), "\(words)")
+        #expect(words.contains { $0.contains("An agent you install, with a job: it builds a space. Each space has its own.") }, "\(words)")
         for _ in 0..<2 { welcome.go(1) }
         words = await Self.read(try #require(window.contentView?.subviews.first), whole: true)
         #expect(words.suffix(3) == ["No agent starts, nothing is spent.", "Open an Example", "Look Again"], "\(words)")

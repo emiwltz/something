@@ -204,10 +204,22 @@ extension Schemas {
             .background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 5))
     }
 
-    /// A monogram in ink: the program a drawing is about.
-    static func mark(_ name: String, side: CGFloat) -> some View {
-        Text(Monogram.letters(name)).font(Look.fixed(.ui, size: side * 0.42, weight: .semibold)).foregroundStyle(Look.Token.bg2.ui).frame(width: side, height: side)
-            .background(Look.Token.ink.ui, in: RoundedRectangle(cornerRadius: side * 0.28))
+    /// The sign, listening, still.
+    static func sign(_ side: CGFloat) -> some View { PageSign(state: .listen, side: side, lands: false, motion: .reduced).frame(width: side, height: side) }
+
+    /// A word of a sentence that is a choice elsewhere.
+    static func pill(_ words: String) -> some View {
+        Text(words).fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui).padding(.horizontal, 5).padding(.vertical, 1)
+            .background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 5)).fixedSize()
+    }
+
+    /// `folder` drawn: filled and ringed, or in dashes for what is not there yet.
+    static func folderBox(_ width: CGFloat, _ height: CGFloat, tab: CGFloat = 62, dashed: Bool = false) -> some View {
+        ZStack {
+            folder(width, height, tab: tab).fill(dashed ? Color.clear : Look.Token.bg2.ui)
+            folder(width, height, tab: tab).stroke(Look.Token.line2.ui, style: StrokeStyle(lineWidth: 1.5, dash: dashed ? [5, 4] : []))
+        }
+        .frame(width: width, height: height)
     }
 
     /// The arrow of a plain line, with its word above it, pointing left or right.
@@ -238,7 +250,7 @@ struct AgentSchema: View {
                 Line(path: "M252 100 C 252 128 146 118 146 146", arrow: true).stroke(line, style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
                 Line(path: "M344 100 C 344 128 450 118 450 146", arrow: true).stroke(line, lineWidth: 1.8)
                 if !none {
-                    Line(path: "M146 322 V 272", arrow: true).stroke(Look.Token.ink3.ui, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, dash: [0.5, 5]))
+                    Line(path: "M146 322 V 272", arrow: true).stroke(line, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, dash: [0.5, 6]))
                     Line(path: "M450 268 V 296").stroke(Look.Token.ink3.ui, style: StrokeStyle(lineWidth: 1.5, dash: [3, 4]))
                 }
             }
@@ -275,7 +287,7 @@ struct AgentSchema: View {
     private var programCard: some View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         return HStack(spacing: 10) {
-            if let program { Schemas.mark(program.name, side: 32) } else { Monogram(name: "?", side: 32, fixed: true) }
+            Monogram(name: program?.name ?? "?", side: 32, fixed: true, ink: program != nil)
             VStack(alignment: .leading, spacing: 3) {
                 Text("The program").font(Look.fixed(.ui, size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
                 Text(program?.name ?? "No program yet").font(Look.fixed(.title, size: 15, weight: .semibold)).foregroundStyle((program == nil ? Look.Token.ink2 : .ink).ui)
@@ -288,15 +300,13 @@ struct AgentSchema: View {
     }
 
     private func folder<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        let outline = Schemas.folder(244, 122)
-        return ZStack(alignment: .topLeading) {
-            outline.fill(program == nil ? Color.clear : Look.Token.bg2.ui)
-            outline.stroke(Look.Token.line2.ui, style: StrokeStyle(lineWidth: 1.5, dash: program == nil ? [5, 4] : []))
+        ZStack(alignment: .topLeading) {
+            Schemas.folderBox(244, 122, dashed: program == nil)
             VStack(alignment: .leading, spacing: 6) {
                 Text(title).font(Look.fixed(.ui, size: 11, weight: .semibold)).foregroundStyle(Look.Token.ink3.ui)
                 content()
             }
-            .padding(EdgeInsets(top: 18, leading: 14, bottom: 10, trailing: 12))
+            .padding(EdgeInsets(top: 18, leading: 14, bottom: 0, trailing: 12))
         }
         .frame(width: 244, height: 122)
     }
@@ -309,7 +319,7 @@ struct AgentSchema: View {
                 ForEach([("gearshape", "Settings"), ("message", "Its conversations stay with \(program.name)")], id: \.0) { symbol, words in
                     HStack(spacing: 6) {
                         Image(systemName: symbol).font(.system(size: 10)).foregroundStyle(Look.Token.ink3.ui)
-                        Text(words).font(Look.fixed(.ui, size: 12.5)).foregroundStyle(Look.Token.ink2.ui).lineLimit(2)
+                        Text(words).font(Look.fixed(.ui, size: 12.5)).foregroundStyle(Look.Token.ink2.ui).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -333,7 +343,7 @@ struct AgentSchema: View {
 
     private var something: some View {
         HStack(spacing: 11) {
-            PageSign(state: .listen, side: 28, lands: false, motion: .reduced).frame(width: 28, height: 28)
+            Schemas.sign(28)
             VStack(alignment: .leading, spacing: 2) {
                 Text("something").font(Look.fixed(.ui, size: 13, weight: .semibold))
                 Text("Sees them all. Changes nothing.").font(Look.fixed(.ui, size: 12)).foregroundStyle(Look.Token.ink2.ui).fixedSize()
@@ -352,7 +362,7 @@ struct AgentSchema: View {
             Text("✓ 12 passed").foregroundStyle(Schemas.color(0x7BC79B)).opacity(Schemas.ease(t, 2.8, 0.3))
         }
         .font(Look.fixed(.code, size: 11, weight: .medium)).lineSpacing(1).foregroundStyle(Schemas.color(0xC9CAC6)).padding(.horizontal, 12)
-        .frame(width: 244, height: 86, alignment: .leading).background(Schemas.color(0x17181C), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .frame(width: 244, height: 86, alignment: .leading).boxed(RoundedRectangle(cornerRadius: 10, style: .continuous), Schemas.color(0x17181C), ring: .white.opacity(0.08))
     }
 }
 
@@ -365,25 +375,26 @@ struct RolesSchema<Chips: View>: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
-                card(sign: AnyView(PageSign(state: .listen, side: 40, lands: false, motion: .reduced).frame(width: 40, height: 40)), verb: "builds", path: "~/something/spaces",
-                     inside: AnyView(ForEach(0..<3) { _ in page(24, 30, Look.Token.line2.ui, 1) }),
+                card(sign: Schemas.sign(40), verb: "builds", path: "~/something/spaces",
+                     inside: ForEach(0..<3) { _ in page(24, 30, Look.Token.line2.ui, 1) },
                      title: "Your assistant", line: none ? "An agent you install, with a job: it builds a space. Each space has its own." : "An agent with a job: it builds a space. Each space has its own.") {
                     row("folder", "Works in this folder")
                     row("pencil", "May change your spaces and run something’s own commands")
                     row("hand.raised", "Anything else asks you")
                 }
                 Spacer(minLength: 0)
-                card(sign: AnyView(page(38, 46, Look.Token.ink.ui, 1.5)), verb: "shows", path: "~/code/shop",
-                     inside: AnyView(ForEach(Registry.app.agents.prefix(3).map(\.name), id: \.self) { Monogram(name: $0, side: 24, fixed: true) }),
+                card(sign: page(38, 46, Look.Token.ink.ui, 1.5), verb: "shows", path: "~/code/shop",
+                     inside: ForEach(Registry.app.agents.prefix(3).map(\.name), id: \.self) { Monogram(name: $0, side: 24, fixed: true) },
                      title: "Agents a space shows", line: "They live on your Mac. A space only shows them.") {
                     row("folder", "Work in your project folders")
                     HStack(alignment: .top, spacing: 9) {
-                        Image(systemName: "eye").font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui).frame(width: 14)
+                        Image(systemName: "eye").font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui).frame(width: 14).accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
-                            HStack(spacing: 4) { Text("This space may"); word("watch") }
-                            HStack(spacing: 0) { word("these agents"); Text(".") }
+                            HStack(spacing: 4) { Text("This space may"); Schemas.pill("watch") }
+                            HStack(spacing: 0) { Schemas.pill("these agents"); Text(".") }
                             Text("You choose, for each space").font(Look.fixed(.ui, size: 12)).foregroundStyle(Look.Token.ink2.ui)
                         }
+                        .accessibilityElement(children: .ignore).accessibilityLabel("This space may watch these agents. You choose, for each space")
                     }
                     row("gearshape", "They keep their own settings")
                 }
@@ -399,34 +410,29 @@ struct RolesSchema<Chips: View>: View {
 
     private func page(_ width: CGFloat, _ height: CGFloat, _ ring: Color, _ line: CGFloat) -> some View {
         Image(systemName: "doc").font(.system(size: width > 30 ? 15 : 11)).foregroundStyle(Look.Token.ink3.ui).frame(width: width, height: height)
-            .boxed(RoundedRectangle(cornerRadius: width > 30 ? 7 : 5), Look.Token.bg.ui, ring: ring, width: line)
-    }
-
-    private func word(_ words: String) -> some View {
-        Text(words).fontWeight(.semibold).padding(.horizontal, 5).padding(.vertical, 1).background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 5)).fixedSize()
+            .boxed(RoundedRectangle(cornerRadius: width > 30 ? 7 : 5), Look.Token.bg.ui, ring: ring, width: line).accessibilityHidden(true)
     }
 
     private func row(_ symbol: String, _ words: String) -> some View {
         HStack(alignment: .top, spacing: 9) {
-            Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui).frame(width: 14)
+            Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(Look.Token.ink3.ui).frame(width: 14).accessibilityHidden(true)
             Text(words).lineSpacing(1.5).fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func card<Rows: View>(sign: AnyView, verb: String, path: String, inside: AnyView, title: String, line: String, @ViewBuilder rows: () -> Rows) -> some View {
+    private func card<Sign: View, Inside: View, Rows: View>(sign: Sign, verb: String, path: String, inside: Inside, title: String, line: String, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
                 sign
                 Schemas.arrow(verb, width: 46)
                 ZStack(alignment: .top) {
-                    Schemas.folder(136, 104, tab: 36).fill(Look.Token.bg2.ui)
-                    Schemas.folder(136, 104, tab: 36).stroke(Look.Token.line2.ui, lineWidth: 1.5)
+                    Schemas.folderBox(136, 104, tab: 36)
                     HStack(spacing: 5) { inside }.padding(.top, 24)
                     Text(path).font(Look.fixed(.code, size: 10.5, weight: .medium)).foregroundStyle(Look.Token.ink2.ui).frame(maxHeight: .infinity, alignment: .bottom).padding(.bottom, 12)
                 }
                 .frame(width: 136, height: 104)
             }
-            .frame(height: 106).padding(.bottom, 12)
+            .frame(height: 106).padding(.bottom, 12).accessibilityHidden(true)
             Text(title).font(Look.fixed(.title, size: 20, weight: .semibold)).kerning(-0.24)
             Text(line).font(Look.fixed(.ui, size: 12)).foregroundStyle(Look.Token.ink3.ui).fixedSize(horizontal: false, vertical: true).padding(.top, 2)
             Rectangle().fill(Look.Token.line.ui).frame(height: 1).padding(.vertical, 12)
@@ -435,6 +441,7 @@ struct RolesSchema<Chips: View>: View {
         }
         .padding(EdgeInsets(top: 16, leading: 16, bottom: 14, trailing: 16)).frame(width: 266, height: 362, alignment: .topLeading)
         .boxed(RoundedRectangle(cornerRadius: 13, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -445,7 +452,9 @@ struct PowersMap: View {
     static let size = CGSize(width: 470, height: 102)
     static let label = "A space shows your agents, as its sentence says. Its assistant builds it, and no space can write to its assistant. "
         + "An agent does what On Its Own says, in something or in another app. Everything else comes to you, in a window of your Mac: Allow Once or Deny."
-    var full = false
+    /// A part of the map to ring: Settings' section under the pointer.
+    enum Part { case space, agents, you }
+    var full = false, lit: Part?
     static let orange = Color(nsColor: Rules.orange)
 
     var body: some View {
@@ -457,7 +466,7 @@ struct PowersMap: View {
                 Image(systemName: "doc").font(.system(size: 10)).foregroundStyle(Look.Token.ink2.ui).frame(width: 20, height: 20).background(Look.Token.sunk.ui, in: RoundedRectangle(cornerRadius: 5))
                 Text("A space").font(Look.fixed(.ui, size: 12, weight: .semibold))
             }
-            .frame(width: 84, height: 82).boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui).offset(y: 20)
+            .frame(width: 84, height: 82).boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: (lit == .space ? Look.Token.ink : .line2).ui, width: lit == .space ? 1.5 : 1).offset(y: 20)
             Schemas.arrow("builds", width: 36, left: true).offset(x: 87, y: 26)
             Schemas.arrow("shows", width: 36).offset(x: 87, y: 70)
             Schemas.arrow("asks", width: 28).offset(x: 341, y: 26).opacity(full ? 0.3 : 1)
@@ -490,7 +499,7 @@ struct PowersMap: View {
         VStack(spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 HStack(spacing: 6) {
-                    if let mono = row.mono { Monogram(name: mono, side: 16, fixed: true) } else { PageSign(state: .listen, side: 14, lands: false, motion: .reduced).frame(width: 14, height: 14) }
+                    if let mono = row.mono { Monogram(name: mono, side: 16, fixed: true) } else { Schemas.sign(14) }
                     Text(row.name).font(Look.fixed(.ui, size: 11.5, weight: .medium)).lineLimit(1)
                     Spacer(minLength: 4)
                     if !row.tag.isEmpty { Schemas.tag(row.tag) }
@@ -499,7 +508,7 @@ struct PowersMap: View {
             }
         }
         .padding(.horizontal, 8).frame(width: 212).frame(maxHeight: .infinity)
-        .boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line2.ui)
+        .boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: (lit == .agents ? Look.Token.ink : .line2).ui, width: lit == .agents ? 1.5 : 1)
     }
 }
 
@@ -523,8 +532,8 @@ struct AnswerSchema: View {
             space.offset(x: 28, y: 200).opacity(Schemas.ease(t, 0.5, 0.5) * 0.9)
             window(who).offset(x: 232, y: 172).rising(Schemas.ease(t, 2.7, 0.5))
             HStack(spacing: 10) {
-                power("What may a space do?") { Text("This space may"); word("watch"); word("these agents"); Text(".") }
-                power("What may an agent do on its own?") { Text("On Its Own"); word("Accepts Edits") }
+                power("What may a space do?") { Text("This space may"); Schemas.pill("watch"); Schemas.pill("these agents"); Text(".") }
+                power("What may an agent do on its own?") { Text("On Its Own"); Schemas.pill("Accepts Edits") }
             }
             .frame(width: 568).offset(x: 14, y: 422)
             VStack(alignment: .leading, spacing: 2) {
@@ -535,10 +544,6 @@ struct AnswerSchema: View {
         }
         .frame(width: Schemas.paper.width, height: Schemas.paper.height, alignment: .topLeading)
         .accessibilityElement(children: .ignore).accessibilityLabel(Self.label).accessibilityAddTraits(.isImage)
-    }
-
-    private func word(_ words: String) -> some View {
-        Text(words).fontWeight(.semibold).foregroundStyle(Look.Token.ink.ui).padding(.horizontal, 5).padding(.vertical, 1).background(Look.Token.hover.ui, in: RoundedRectangle(cornerRadius: 5))
     }
 
     private func power<Line: View>(_ question: String, @ViewBuilder _ line: () -> Line) -> some View {
@@ -565,9 +570,9 @@ struct AnswerSchema: View {
                 Text("my-agents.html").font(Look.fixed(.code, size: 10)).foregroundStyle(Look.Token.ink3.ui).padding(.leading, 6)
             }
             .padding(.horizontal, 8).frame(height: 22).frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 32) {
                 Text("My agents").font(Look.fixed(.title, size: 18, weight: .semibold)).foregroundStyle(Schemas.brown)
-                ForEach([0.7, 0.54, 0.7], id: \.self) { Capsule().fill(Schemas.brown.opacity(0.2)).frame(width: 268 * $0, height: 8) }
+                ForEach(Array([0.7, 0.54, 0.7].enumerated()), id: \.offset) { Capsule().fill(Schemas.brown.opacity(0.2)).frame(width: 268 * $1, height: 8) }
             }
             .padding(EdgeInsets(top: 14, leading: 16, bottom: 0, trailing: 16)).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Schemas.gradient([(0xFBE6CC, 0), (0xF2B79C, 1)]))
@@ -580,16 +585,16 @@ struct AnswerSchema: View {
         let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                ForEach([Color.red.opacity(0.75), Look.Token.mist.ui, Look.Token.mist.ui], id: \.self) { Circle().fill($0).frame(width: 12, height: 12) }
+                ForEach(0..<3) { Circle().fill($0 == 0 ? Schemas.color(0xFF5F57) : Look.Token.mist.ui).frame(width: 12, height: 12) }
                 Spacer()
-                PageSign(state: .listen, side: 13, lands: false, motion: .reduced).frame(width: 13, height: 13)
+                Schemas.sign(13)
                 Text("something").fontWeight(.semibold)
                 Text("·  Permission").foregroundStyle(Look.Token.ink2.ui)
                 Spacer()
             }
             .font(Look.fixed(.ui, size: 11.5)).padding(.horizontal, 14).frame(height: 32).background(Look.Token.sunk.ui)
             HStack(alignment: .top, spacing: 12) {
-                PageSign(state: .listen, side: 36, lands: false, motion: .reduced).frame(width: 36, height: 36)
+                Schemas.sign(36)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(who) wants to run a command").font(Look.fixed(.title, size: 16.5, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
                     Text("My agents · in ~/code/shop · just now").font(Look.fixed(.ui, size: 11.5)).foregroundStyle(Look.Token.ink2.ui)

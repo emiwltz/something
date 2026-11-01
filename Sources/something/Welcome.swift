@@ -58,10 +58,15 @@ final class WelcomeKeys: NSView, NSWindowDelegate {
     override func keyDown(with event: NSEvent) { interpretKeyEvents([event]) }
     override func insertNewline(_ sender: Any?) { model.next(assistant) }
     override func cancelOperation(_ sender: Any?) { model.skip(assistant) }
-    override func moveRight(_ sender: Any?) { model.go(1) }
-    override func moveLeft(_ sender: Any?) { model.go(-1) }
-    /// Tab and ⇧Tab still move the focus through the window's key loop.
-    override func insertTab(_ sender: Any?) { window?.selectNextKeyView(sender) }
+    override func moveRight(_ sender: Any?) { move(1) }
+    override func moveLeft(_ sender: Any?) { move(-1) }
+    /// ← → walk the beats, or the programs once Tab reached them.
+    private func move(_ step: Int) { if model.walking { model.walk(assistant.entries.map(\.id), by: step) } else { model.go(step) } }
+    /// Tab first reaches beat 2's programs, whatever the system's Keyboard Navigation says, then moves the focus on
+    /// through the window's key loop.
+    override func insertTab(_ sender: Any?) {
+        if model.beat == .agent, !assistant.entries.isEmpty, !model.walking { model.walking = true } else { model.walking = false; window?.selectNextKeyView(sender) }
+    }
     override func insertBacktab(_ sender: Any?) { window?.selectPreviousKeyView(sender) }
     /// Any other command of the text system does nothing, without the beep.
     override func doCommand(by selector: Selector) { if responds(to: selector) { super.doCommand(by: selector) } }
@@ -107,6 +112,9 @@ struct WelcomeView: View {
         .ignoresSafeArea()
     }
 
+    /// Whether the look ended and found no program; while it runs, nothing says there is none.
+    private var none: Bool { assistant.noAgent }
+
     /// The picture's builder: none named before one is found.
     private var builder: String { assistant.kind == nil ? "An agent you install" : "\(assistant.name) · \(assistant.modelWords.model)" }
 
@@ -128,7 +136,7 @@ struct WelcomeView: View {
             switch beat {
             case .page: Schemas.playing(from: model.since, for: PageSchema.length, motion: motion) { PageSchema(t: $0) }
             case .agent: agent
-            case .roles: RolesSchema(none: assistant.kind == nil) { chips }
+            case .roles: RolesSchema(none: none) { chips }
             case .answer: Schemas.playing(from: model.since, for: AnswerSchema.length, motion: motion) { AnswerSchema(t: $0) }
             case .whole: EmptyView()
             }
@@ -145,7 +153,7 @@ struct WelcomeView: View {
 
     /// The Hero, small with a lens on each part lit; on the last beat it grows to its whole size and speaks.
     private func smallMap(_ beat: WelcomeModel.Beat, _ whole: Bool) -> some View {
-        Hero(lit: beat.lit, builder: builder, motion: motion, none: assistant.kind == nil)
+        Hero(lit: beat.lit, builder: builder, motion: motion, none: none)
             .scaleEffect(whole ? 1 : Self.map, anchor: .topLeading)
             .animation(Look.motion(motion) == .calm ? Look.douce.animation(0.7) : nil, value: whole)
             .overlay(alignment: .topLeading) {
@@ -178,7 +186,7 @@ struct WelcomeView: View {
     /// Beat 2's paper: the programs found and the one looked at, its schema, and who is only seen; with none, the schema
     /// in dashes, Look Again and the install commands.
     private var agent: some View {
-        let found = assistant.entries, kind = model.look.flatMap { look in found.first { $0.id == look } }?.id ?? found.first?.id
+        let found = assistant.entries, kind = model.look(found.map(\.id))
         return ZStack(alignment: .topLeading) {
             if let kind {
                 (Text("Programs on this Mac").foregroundColor(Look.Token.ink2.ui) + Text("   \(found.count)").foregroundColor(Look.Token.ink3.ui))
@@ -186,42 +194,43 @@ struct WelcomeView: View {
                 HStack(spacing: 0) {
                     ForEach(Array(found.enumerated()), id: \.offset) { index, entry in
                         if index > 0 { Spacer(minLength: 5) }
-                        tile(Registry.app.name(of: entry.id), on: entry.id == kind) { model.look = entry.id }
+                        tile(Registry.app.name(of: entry.id), on: entry.id == kind) { (model.look, model.walking) = (entry.id, false) }
                     }
                 }
                 .frame(width: 564).offset(x: 16, y: 34)
-                .onMoveCommand { direction in
-                    let at = found.firstIndex { $0.id == kind } ?? 0
-                    if direction == .left || direction == .right { model.look = found[(at + (direction == .right ? 1 : found.count - 1)) % found.count].id }
-                }
-                Schemas.playing(from: model.since, for: AgentSchema.length, motion: motion) { AgentSchema(program: program(kind), t: $0) }.offset(y: 76)
+                // Read once, not at each frame; the folders are those of the moment the beat arrived.
+                let shown = program(kind)
+                Schemas.playing(from: model.since, for: AgentSchema.length, motion: motion) { AgentSchema(program: shown, t: $0) }.offset(y: 76)
                 seen.offset(x: 18, y: 500)
+            } else if !none {
+                Text("Looking for programs on this Mac…").font(Look.fixed(.ui, size: 13, weight: .semibold)).foregroundStyle(Look.Token.ink2.ui).offset(x: 18, y: 24)
             } else {
                 HStack {
                     Text("No coding program found on this Mac yet").font(Look.fixed(.ui, size: 13, weight: .semibold))
                     Spacer()
                     let searching = model.searching(assistant)
                     Button { model.lookAgain(assistant) } label: {
-                        HStack(spacing: 6) { Image(systemName: "arrow.clockwise").font(.system(size: 11)); Text(searching ? "Looking…" : "Look Again") }.font(Look.fixed(.ui, size: 12.5, weight: .semibold))
+                        HStack(spacing: 6) { Image(systemName: "arrow.clockwise").font(.system(size: 11)).accessibilityHidden(true); Text(searching ? "Looking…" : "Look Again") }
+                            .font(Look.fixed(.ui, size: 12.5, weight: .semibold))
                     }
                     .buttonStyle(Secondary()).disabled(searching)
                 }
                 .frame(width: 562, height: 40).offset(x: 18, y: 14)
-                AgentSchema(program: nil, t: .infinity).offset(y: 76)
+                Schemas.playing(from: model.since, for: AgentSchema.length, motion: motion) { AgentSchema(program: nil, t: $0) }.offset(y: 76)
                 install.offset(x: 16, y: 362)
             }
         }
-        .task(id: found.map(\.id)) { model.find(found.map(\.id)) }
+        .task(id: found.map(\.id)) { await model.find(found.map(\.id)) }
     }
 
     private func tile(_ name: String, on: Bool, _ pick: @escaping () -> Void) -> some View {
         Button(action: pick) {
             HStack(spacing: 6) {
-                if on { Schemas.mark(name, side: 20) } else { Monogram(name: name, side: 20, fixed: true) }
+                Monogram(name: name, side: 20, fixed: true, ink: on)
                 Text(name).font(Look.fixed(.ui, size: 12.5, weight: .medium)).fixedSize()
             }
             .padding(.leading, 6).padding(.trailing, 9).frame(height: 32)
-            .boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: (on ? Look.Token.ink : .line).ui, width: on ? 1.5 : 1).contentShape(Rectangle())
+            .boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: (on ? Look.Token.ink : .line).ui, width: on ? (model.walking ? 2.5 : 1.5) : 1).contentShape(Rectangle())
         }
         .buttonStyle(.plain).accessibilityLabel(name).accessibilityAddTraits(on ? [.isSelected] : [])
     }
@@ -230,7 +239,8 @@ struct WelcomeView: View {
     private func program(_ kind: String) -> AgentSchema.Program {
         let agent = Registry.app.agent(kind)
         let folders = Array(Set(assistant.engine.state.agents.filter { $0.kind == kind }.compactMap(\.folder))).sorted().map { Words.path($0, home: model.places.home.path) }
-        return AgentSchema.Program(name: agent?.name ?? kind, path: model.paths[kind] ?? "Path not known", home: agent?.home ?? "Not known", folders: folders)
+        let path = model.paths[kind].map { Words.path($0, home: model.places.home.path) }
+        return AgentSchema.Program(name: agent?.name ?? kind, path: path ?? "Path not known", home: agent?.home ?? "Not known", folders: folders)
     }
 
     /// The agents something sees and does not start.
@@ -254,7 +264,11 @@ struct WelcomeView: View {
                         .accessibilityElement(children: .ignore).accessibilityLabel("\(row.name): \(row.command)")
                     Button { model.copy(row.command, with: assistant.copy) } label: {
                         let done = model.copied == row.command
-                        Text(done ? "Copied" : "Copy").font(Look.fixed(.ui, size: 12, weight: .semibold)).foregroundStyle((done ? Look.Token.ok : .ink).ui)
+                        HStack(spacing: 5) {
+                            Image(systemName: "doc.on.doc").font(.system(size: 10.5)).accessibilityHidden(true)
+                            Text(done ? "Copied" : "Copy").font(Look.fixed(.ui, size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle((done ? Look.Token.ok : .ink).ui)
                     }
                     .buttonStyle(Secondary(height: 26, leading: 9, trailing: 9))
                     .accessibilityLabel("Copy the command that installs \(row.name)")
@@ -263,7 +277,7 @@ struct WelcomeView: View {
                 .boxed(RoundedRectangle(cornerRadius: 9, style: .continuous), Look.Token.bg2.ui, ring: Look.Token.line.ui)
             }
             HStack(spacing: 5) {
-                Image(systemName: "questionmark.circle").font(.system(size: 11))
+                Image(systemName: "questionmark.circle").font(.system(size: 11)).accessibilityHidden(true)
                 Text("Install one in Terminal, with your own account. something never installs one for you.").font(Look.fixed(.ui, size: 12))
             }
             .foregroundStyle(Look.Token.ink3.ui).padding(.top, 6)
@@ -387,6 +401,8 @@ struct PageSign: NSViewRepresentable {
     private(set) var copied: String?
     /// The program beat 2 shows, nil for the first found; where each program is, once known.
     var look: String?
+    /// Whether ← → walk the programs, once Tab reached them.
+    var walking = false
     private(set) var paths: [String: String] = [:]
     /// Where a kind's program is, or why not; off the main queue, as a login shell may be read. A test fakes it.
     @ObservationIgnored var locate: @Sendable (String) -> Result<String, CodedError> = Found.outcome
@@ -406,7 +422,7 @@ struct PageSign: NSViewRepresentable {
     /// Moves `step` beats, stopping at both ends.
     func go(_ step: Int) {
         guard let next = Beat(rawValue: beat.rawValue + step) else { return }
-        (beat, since, forward) = (next, Date(), step > 0)
+        (beat, since, forward, walking) = (next, Date(), step > 0, false)
         announce("\(next.title) \(next.sentence)")
     }
 
@@ -428,13 +444,21 @@ struct PageSign: NSViewRepresentable {
         }
     }
 
-    /// Finds where the programs of `kinds` are.
-    func find(_ kinds: [String]) {
+    /// The program beat 2 shows among `kinds`.
+    func look(_ kinds: [String]) -> String? { kinds.first { $0 == look } ?? kinds.first }
+
+    /// Moves `step` along `kinds`, round at both ends.
+    func walk(_ kinds: [String], by step: Int) {
+        guard let kind = look(kinds), let at = kinds.firstIndex(of: kind) else { return }
+        look = kinds[(at + step + kinds.count) % kinds.count]
+    }
+
+    /// Finds where the programs of `kinds` are; one not found stays unknown.
+    func find(_ kinds: [String]) async {
         let locate = locate
-        Task { @MainActor [weak self] in
-            let found = await Task.detached { kinds.compactMap { kind in (try? locate(kind).get()).map { (kind, $0) } } }.value
-            self?.paths = Dictionary(found) { $1 }
-        }
+        let found = await Task.detached { kinds.compactMap { kind in (try? locate(kind).get()).map { (kind, $0) } } }.value
+        guard !Task.isCancelled else { return }
+        paths.merge(found) { $1 }
     }
 
     /// Copies an install command with `copy`; its button says Copied for a moment.

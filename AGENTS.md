@@ -46,7 +46,7 @@ packaging/, tools/         Info.plist, the icon, the Homebrew formula and the ta
 
 ## Adding an agent
 
-1. **Its descriptor** (`AgentDescriptor`): its kind, name, install sentence, what it never does, and why something
+1. **Its descriptor** (`AgentDescriptor`): its kind, name, install sentence, usual home folder, what it never does, and why something
    does not launch it (`unavailable`) when it does not. Pure data.
 2. **How it is driven**, if it is: an agent that speaks ACP is an `ACPProfile` in `AgentACP` (data and a few small
    closures); any other is a `Driving` and a `Driver` in its family's target, or in a new `Agent<Name>` target added

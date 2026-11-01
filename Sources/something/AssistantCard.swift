@@ -545,8 +545,8 @@ struct NoticeView: View {
 struct Monogram: View {
     let name: String
     var side: CGFloat = 18
-    /// Inside a drawing that grows as one (Look.fixed).
-    var fixed = false
+    /// Inside a drawing that grows as one (Look.fixed); in ink, the program a drawing is about.
+    var fixed = false, ink = false
     @Environment(\.colorScheme) private var scheme
 
     static func letters(_ name: String) -> String {
@@ -573,9 +573,9 @@ struct Monogram: View {
 
     var body: some View {
         Text(Monogram.letters(name)).font(fixed ? Look.fixed(.ui, size: side * 0.5, weight: .semibold) : Look.font(.ui, size: side * 0.5, weight: .semibold).ui)
-            .foregroundStyle(Look.Token.ink2.ui)
+            .foregroundStyle((ink ? Look.Token.bg2 : .ink2).ui)
             .frame(width: side, height: side)
-            .background((scheme == .dark ? Look.Token.mist : .sunk).ui, in: RoundedRectangle(cornerRadius: side * 0.28))
+            .background((ink ? Look.Token.ink : scheme == .dark ? .mist : .sunk).ui, in: RoundedRectangle(cornerRadius: side * 0.28))
             .accessibilityHidden(true)
     }
 }

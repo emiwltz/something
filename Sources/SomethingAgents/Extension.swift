@@ -49,7 +49,7 @@ public struct AgentDescriptor: Sendable {
     public var unavailable: String?
     /// The words that continue conversation `id` in a terminal, in its folder; nil for a kind whose way is not proven.
     public var terminal: (@Sendable (_ id: String) -> [String])?
-    /// The folder it keeps its settings and conversations in, for the person ("~/.claude"); nil where it is not known.
+    /// The folder it usually keeps its settings and conversations in, for the person; nil where it is not known.
     public var home: String?
     /// Its mark beside its name in the app's chips and menus, one or two letters ("CC"); nil for its name's initials.
     public var monogram: String?
