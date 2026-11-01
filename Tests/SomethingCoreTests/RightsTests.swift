@@ -241,4 +241,15 @@ struct RightsTests {
         grant.remap = ["~/code/shop": "/Users/example/work/shop"]
         #expect(Rights.granted(reading, grant, limits: [:], home: home).agents == .folders(["/Users/example/work/shop", "/Users/example/code/blog"]))
     }
+
+    /// An agent's key lasts across its launches: program and conversation; without a conversation, its id.
+    @Test func anAgentsKeyIsItsProgramAndItsConversation() {
+        var agent = Agent(id: "claude-3", kind: "claude", origin: "launched")
+        #expect(Rights.key(agent) == "claude-3")
+        agent.thread = "t1"
+        #expect(Rights.key(agent) == "claude:t1")
+        agent = Agent(id: "claude-t1", kind: "claude", origin: "elsewhere")
+        agent.thread = "t1"
+        #expect(Rights.key(agent) == "claude:t1")
+    }
 }

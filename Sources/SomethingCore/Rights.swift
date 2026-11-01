@@ -120,6 +120,9 @@ public struct ToAsk: Equatable, Sendable {
 }
 
 public enum Rights {
+    /// What an agent stays across its launches: its program and its conversation, else its id, which lasts as its process does.
+    public static func key(_ agent: Agent) -> String { agent.thread.map { "\(agent.kind):\($0)" } ?? agent.id }
+
     /// The words a level grants or refuses; `store` is never asked.
     static let leveled = Grant.Level.run.words
 

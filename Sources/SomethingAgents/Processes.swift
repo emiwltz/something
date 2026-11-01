@@ -133,6 +133,33 @@ public final class Processes {
         return Running(pid: pid, parent: Int32(info.pbi_ppid), group: Int32(info.pbi_pgid), started: started, name: name)
     }
 
+    /// The executable paths from `pid` outward, at most 32 hops, ending at launchd or at the first parent the system
+    /// hides; a path it hides is left out, and the walk goes on through it. It reads no process's arguments or environment.
+    public static func lineage(_ pid: Int32, parent: (Int32) -> Int32? = Processes.parent, path: (Int32) -> String? = Processes.path) -> [String] {
+        var paths: [String] = [], next: Int32? = pid
+        for _ in 0..<32 {
+            guard let current = next, current > 0 else { break }
+            if let found = path(current) { paths.append(found) }
+            next = parent(current)
+        }
+        return paths
+    }
+
+    /// The parent of `pid`, or nil when it is gone. The short record answers for root's processes too (a terminal's
+    /// `login`), where the full one of `info` is refused.
+    public static func parent(_ pid: Int32) -> Int32? {
+        var info = proc_bsdshortinfo()
+        let size = Int32(MemoryLayout<proc_bsdshortinfo>.size)
+        return proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 0, &info, size) == size ? Int32(info.pbsi_ppid) : nil
+    }
+
+    /// The path of `pid`'s executable, or nil when the system does not give it.
+    public static func path(_ pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self) : nil
+    }
+
     /// The arguments of `pid`, the program's first, or nil when the system does not give them (another user's process).
     static func arguments(_ pid: Int32) -> [String]? {
         var mib = [CTL_KERN, KERN_ARGMAX], longest: Int32 = 0, size = MemoryLayout<Int32>.size

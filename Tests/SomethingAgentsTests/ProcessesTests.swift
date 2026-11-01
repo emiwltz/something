@@ -32,6 +32,18 @@ import Testing
         #expect(processes.snapshot()[sleeper.processIdentifier]?.arguments == ["/bin/sleep", "30"])
     }
 
+    /// The walk outward, with invented processes: a parent only the short record gives (a root process), a path the
+    /// system hides, a chain that never ends. This test's own process proves the two reads.
+    @Test func aLineageGoesFromAProcessOutward() {
+        let parents: [Int32: Int32] = [40: 30, 30: 20, 20: 1, 1: 0], paths: [Int32: String] = [40: "/bin/agent", 20: "/Applications/Terminal.app/Terminal", 1: "/sbin/launchd"]
+        #expect(Processes.lineage(40, parent: { parents[$0] }, path: { paths[$0] }) == ["/bin/agent", "/Applications/Terminal.app/Terminal", "/sbin/launchd"], "through a hidden path")
+        #expect(Processes.lineage(40, parent: { $0 == 40 ? 30 : nil }, path: { paths[$0] }) == ["/bin/agent"], "stops at a parent it cannot read")
+        #expect(Processes.lineage(40, parent: { $0 + 1 }, path: { "/\($0)" }).count == 32, "at most 32 hops")
+        #expect(Processes.lineage(0, parent: { _ in 0 }, path: { _ in "/never" }).isEmpty)
+        #expect(Processes.parent(getpid()) == getppid())
+        #expect(Processes.path(getpid())?.hasPrefix("/") == true)
+    }
+
     @Test func openFilesAreGivenForTheProcessAskedFor() throws {
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("open-\(UUID().uuidString).jsonl").path
         FileManager.default.createFile(atPath: path, contents: Data("{}\n".utf8))
